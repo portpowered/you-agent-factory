@@ -1,8 +1,21 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { cleanup, render } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
 import type { ReactNode } from "react";
 
+import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
+import { buildGraphEdges } from "../lib/react-flow-current-activity-card-edges";
+import {
+  buildActiveGraphHighlights,
+  buildActiveItemLabelsByPlaceId,
+  buildCurrentActivityNodes,
+  buildHandleAssignments,
+  buildVisibleGraphEdges,
+  EMPTY_NODE_POSITIONS,
+} from "../lib/react-flow-current-activity-card-graph";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 let reactFlowErrorToReport: { errorId: string; message: string } | null = null;
@@ -117,7 +130,7 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
     reactFlowErrorToReport = {
       errorId: "008",
       message:
-        'Couldn\'t create edge for source handle id: "out-review", edge id: hidden-edge.',
+        'Couldn\'t create edge for source handle id: "missing-review-source", edge id: hidden-edge.',
     };
 
     expect(() => renderViewport()).toThrow(
@@ -133,12 +146,12 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
           source: "workstation:review",
           sourceHandle: "workstation-output-source",
           target: "place:story:done",
-          targetHandle: "workstation-output-target",
+          targetHandle: "work-state-input-target",
         },
       ],
       nodes: [
         semanticNode("workstation:review", "workstation-output-source"),
-        semanticNode("place:story:done", "workstation-output-target"),
+        semanticNode("place:story:done", "work-state-input-target"),
       ],
     });
 
@@ -147,24 +160,77 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
     ).toContain("workstation-output:workstation:review->place:story:done");
   });
 
-  it("throws when legacy observe-mode endpoints target semantic graph nodes", () => {
+  it("throws when missing observe-mode endpoints target semantic graph nodes", () => {
     expect(() =>
       renderViewport({
         edges: [
           {
             id: "workstation-output:workstation:review->place:story:done",
             source: "workstation:review",
-            sourceHandle: "out-0",
+            sourceHandle: "missing-review-source",
             target: "place:story:done",
-            targetHandle: "in-0",
+            targetHandle: "missing-done-target",
           },
         ],
         nodes: [
           semanticNode("workstation:review", "workstation-output-source"),
-          semanticNode("place:story:done", "workstation-output-target"),
+          semanticNode("place:story:done", "work-state-input-target"),
         ],
       }),
     ).toThrow(/React Flow factory graph endpoint error 008/);
+  });
+
+  it("renders the sample factory graph with relationship-specific endpoint handles", async () => {
+    const sampleFactory = JSON.parse(
+      readFileSync(resolve(process.cwd(), "../factory/factory.json"), "utf-8"),
+    ) as CanonicalFactoryDefinition;
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(sampleFactory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const handleAssignments = buildHandleAssignments(
+      visibleGraphEdges,
+      graphLayout.nodes,
+    );
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-28T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: {
+        factory: sampleFactory,
+        runtime: { place_token_counts: {} },
+        topology: { workstation_nodes_by_id: {} },
+      } as never,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const edges = buildGraphEdges(
+      buildActiveGraphHighlights([], visibleGraphEdges),
+      handleAssignments,
+      new Set(),
+      visibleGraphEdges,
+    );
+
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceHandle: expect.stringMatching(/-source$/),
+          targetHandle: expect.stringMatching(/-target$/),
+        }),
+      ]),
+    );
+    expect(
+      edges.some(
+        (edge) =>
+          edge.sourceHandle === "workstation-source" ||
+          edge.targetHandle === "workstation-target",
+      ),
+    ).toBe(false);
+    expect(() => renderViewport({ edges, nodes })).not.toThrow();
   });
 });
 

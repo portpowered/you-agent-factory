@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: current activity graph projection helpers remain grouped around shared node and edge fixtures.
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -5,6 +6,7 @@ import type {
 import type {
   GraphLayout,
   PositionedEdge,
+  PositionedNode,
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
@@ -31,8 +33,6 @@ export const EMPTY_GRAPH_LAYOUT: GraphLayout = {
 export const EMPTY_NODE_POSITIONS: GraphNodePositions = {};
 
 export interface HandleAssignments {
-  incomingHandleCounts: Map<string, number>;
-  outgoingHandleCounts: Map<string, number>;
   sourceHandlesByEdgeId: Map<string, string>;
   targetHandlesByEdgeId: Map<string, string>;
 }
@@ -53,6 +53,64 @@ function edgeTouchesResource(edge: PositionedEdge): boolean {
 
 function edgeReturnsToResource(edge: PositionedEdge): boolean {
   return edge.targetPlaceKind === "resource";
+}
+
+function resourceNodeNames(nodes: GraphLayout["nodes"]): ReadonlySet<string> {
+  const names = new Set<string>();
+
+  for (const node of nodes) {
+    if (node.nodeKind === "resource" && node.nodeId.startsWith("resource:")) {
+      names.add(node.nodeId.slice("resource:".length));
+    }
+  }
+
+  return names;
+}
+
+function canonicalResourceAliasNodeId(
+  nodeId: string,
+  resourceNames: ReadonlySet<string>,
+): string | null {
+  const workStateMatch = /^work-state:([^:]+):(.+)$/.exec(nodeId);
+  if (workStateMatch && resourceNames.has(workStateMatch[1] ?? "")) {
+    return `resource:${workStateMatch[1]}`;
+  }
+
+  const placeMatch = /^place:([^:]+):(.+)$/.exec(nodeId);
+  if (placeMatch && resourceNames.has(placeMatch[1] ?? "")) {
+    return `resource:${placeMatch[1]}`;
+  }
+
+  return null;
+}
+
+function resourceAliasNodeIds(
+  nodes: GraphLayout["nodes"],
+): ReadonlySet<string> {
+  const names = resourceNodeNames(nodes);
+  const aliases = new Set<string>();
+
+  for (const node of nodes) {
+    if (canonicalResourceAliasNodeId(node.nodeId, names)) {
+      aliases.add(node.nodeId);
+      continue;
+    }
+    if (
+      node.nodeId.startsWith("work-type:") &&
+      names.has(node.nodeId.slice("work-type:".length))
+    ) {
+      aliases.add(node.nodeId);
+    }
+  }
+
+  return aliases;
+}
+
+function canonicalRenderedNodeId(
+  nodeId: string,
+  resourceNames: ReadonlySet<string>,
+): string {
+  return canonicalResourceAliasNodeId(nodeId, resourceNames) ?? nodeId;
 }
 
 function activeTokenLabel(
@@ -76,32 +134,30 @@ function placeGraphNodeId(placeId: string): string {
 
 export function buildHandleAssignments(
   edges: PositionedEdge[],
+  nodes: PositionedNode[] = [],
 ): HandleAssignments {
-  const incomingHandleCounts = new Map<string, number>();
-  const outgoingHandleCounts = new Map<string, number>();
   const sourceHandlesByEdgeId = new Map<string, string>();
   const targetHandlesByEdgeId = new Map<string, string>();
+  const nodeKindsById = new Map(
+    nodes.map((node) => [node.nodeId, node.nodeKind]),
+  );
 
   for (const edge of edges) {
-    const sourceIndex = outgoingHandleCounts.get(edge.fromNodeId) ?? 0;
-    const targetIndex = incomingHandleCounts.get(edge.toNodeId) ?? 0;
-    const supportedHandles = supportedSemanticHandleIdsForEdge(edge);
+    const supportedHandles = supportedSemanticHandleIdsForEdge(
+      edge,
+      nodeKindsById,
+    );
+    if (!supportedHandles) {
+      throw new Error(
+        `Expected semantic handle ids for current activity edge "${edge.edgeId}".`,
+      );
+    }
 
-    sourceHandlesByEdgeId.set(
-      edge.edgeId,
-      supportedHandles?.sourceHandleId ?? `out-${sourceIndex}`,
-    );
-    targetHandlesByEdgeId.set(
-      edge.edgeId,
-      supportedHandles?.targetHandleId ?? `in-${targetIndex}`,
-    );
-    outgoingHandleCounts.set(edge.fromNodeId, sourceIndex + 1);
-    incomingHandleCounts.set(edge.toNodeId, targetIndex + 1);
+    sourceHandlesByEdgeId.set(edge.edgeId, supportedHandles.sourceHandleId);
+    targetHandlesByEdgeId.set(edge.edgeId, supportedHandles.targetHandleId);
   }
 
   return {
-    incomingHandleCounts,
-    outgoingHandleCounts,
     sourceHandlesByEdgeId,
     targetHandlesByEdgeId,
   };
@@ -178,7 +234,46 @@ export function buildActiveGraphHighlights(
 export function buildVisibleGraphEdges(
   graphLayout: GraphLayout,
 ): PositionedEdge[] {
-  return graphLayout.edges.filter((edge) => !edgeReturnsToResource(edge));
+  const names = resourceNodeNames(graphLayout.nodes);
+  const edgesById = new Map<string, PositionedEdge>();
+
+  for (const edge of graphLayout.edges) {
+    const fromNodeId = canonicalRenderedNodeId(edge.fromNodeId, names);
+    const toNodeId = canonicalRenderedNodeId(edge.toNodeId, names);
+    if (fromNodeId === toNodeId) {
+      continue;
+    }
+
+    const canonicalKind =
+      edge.edgeId.startsWith("workstation-input:") &&
+      fromNodeId.startsWith("resource:")
+        ? "workstation-resource"
+        : edge.edgeId.split(":")[0];
+    const edgeId =
+      fromNodeId === edge.fromNodeId &&
+      toNodeId === edge.toNodeId &&
+      canonicalKind === edge.edgeId.split(":")[0]
+        ? edge.edgeId
+        : `${canonicalKind}:${fromNodeId}->${toNodeId}`;
+    const nextEdge = {
+      ...edge,
+      edgeId,
+      fromNodeId,
+      sourcePlaceKind: fromNodeId.startsWith("resource:")
+        ? "resource"
+        : edge.sourcePlaceKind,
+      targetPlaceKind: toNodeId.startsWith("resource:")
+        ? "resource"
+        : edge.targetPlaceKind,
+      toNodeId,
+    } satisfies PositionedEdge;
+
+    if (!edgeReturnsToResource(nextEdge)) {
+      edgesById.set(nextEdge.edgeId, nextEdge);
+    }
+  }
+
+  return [...edgesById.values()];
 }
 
 export function buildActiveItemLabelsByPlaceId(
@@ -235,7 +330,6 @@ interface BuildCurrentActivityNodesInput {
   activeGraphHighlights: ActiveGraphHighlights;
   activeItemLabelsByPlaceId: Map<string, string[]>;
   graphLayout: GraphLayout;
-  handleAssignments: HandleAssignments;
   locale?: string;
   now: number;
   onSelectStateNode: (placeId: string) => void;
@@ -285,18 +379,12 @@ function buildPlaceNode(
           nodeId: factoryGraphNode.nodeId,
           nodeKind: factoryGraphNode.kind,
         })
-      : undefined,
-    incomingHandleCount:
-      input.handleAssignments.incomingHandleCounts.get(positionedNode.nodeId) ??
-      1,
+      : [],
     locale: input.locale,
     muted:
       place.kind !== "resource" &&
       input.activeGraphHighlights.hasActiveFlow &&
       !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
-    outgoingHandleCount:
-      input.handleAssignments.outgoingHandleCounts.get(positionedNode.nodeId) ??
-      1,
     selectedStateNode:
       input.selection?.kind === "state-node" &&
       input.selection.placeId === place.place_id,
@@ -324,6 +412,32 @@ function buildPlaceNode(
       data: { ...basePlaceData, kind: "resource" as const, place },
       selectable: false,
       type: "resource",
+    };
+  }
+
+  if (factoryGraphNode?.kind === "worker") {
+    return {
+      ...basePlaceNode,
+      data: {
+        ...basePlaceData,
+        kind: "worker" as const,
+        place,
+      },
+      selectable: false,
+      type: "worker",
+    };
+  }
+
+  if (factoryGraphNode?.kind === "work-type") {
+    return {
+      ...basePlaceNode,
+      data: {
+        ...basePlaceData,
+        kind: "work-type" as const,
+        place,
+      },
+      selectable: false,
+      type: "workType",
     };
   }
 
@@ -378,10 +492,6 @@ function buildWorkstationNode(
         nodeId: positionedNode.nodeId,
         nodeKind: "workstation",
       }),
-      incomingHandleCount:
-        input.handleAssignments.incomingHandleCounts.get(
-          positionedNode.nodeId,
-        ) ?? 1,
       kind: "workstation",
       locale: input.locale,
       muted:
@@ -390,10 +500,6 @@ function buildWorkstationNode(
       now: input.now,
       onSelectWorkID: input.onSelectWorkID,
       onSelectWorkstation: input.onSelectWorkstation,
-      outgoingHandleCount:
-        input.handleAssignments.outgoingHandleCounts.get(
-          positionedNode.nodeId,
-        ) ?? 1,
       selectedWorkID:
         input.selection?.kind === "work-item" &&
         input.selection.nodeId === workstation.node_id
@@ -426,7 +532,6 @@ export function buildCurrentActivityNodes({
   activeItemLabelsByPlaceId,
   editor,
   graphLayout,
-  handleAssignments,
   locale,
   now,
   onSelectStateNode,
@@ -437,13 +542,13 @@ export function buildCurrentActivityNodes({
   storedNodePositions,
 }: BuildCurrentActivityNodesInput): CurrentActivityNode[] {
   const nextNodes: CurrentActivityNode[] = [];
+  const resourceAliases = resourceAliasNodeIds(graphLayout.nodes);
   const input = {
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
     editor,
     graphLayout,
-    handleAssignments,
     locale,
     now,
     onSelectStateNode,
@@ -455,6 +560,10 @@ export function buildCurrentActivityNodes({
   } satisfies BuildCurrentActivityNodesInput;
 
   for (const positionedNode of graphLayout.nodes) {
+    if (resourceAliases.has(positionedNode.nodeId)) {
+      continue;
+    }
+
     if (positionedNode.nodeKind !== "workstation") {
       nextNodes.push(
         buildPlaceNode(positionedNode as PositionedPlaceNode, input),
@@ -469,6 +578,47 @@ export function buildCurrentActivityNodes({
     if (workstationNode) {
       nextNodes.push(workstationNode);
     }
+  }
+
+  return dedupeNodesByFactoryGraphNodeId(nextNodes);
+}
+
+function dedupeNodesByFactoryGraphNodeId(
+  nodes: CurrentActivityNode[],
+): CurrentActivityNode[] {
+  const selectedNodeByFactoryGraphId = new Map<string, CurrentActivityNode>();
+  const selectedIndexByFactoryGraphId = new Map<string, number>();
+  const nextNodes: CurrentActivityNode[] = [];
+
+  for (const node of nodes) {
+    const factoryGraphNodeId = node.data.factoryGraphNodeId;
+    if (!factoryGraphNodeId) {
+      nextNodes.push(node);
+      continue;
+    }
+
+    const selectedNode = selectedNodeByFactoryGraphId.get(factoryGraphNodeId);
+    if (!selectedNode) {
+      selectedNodeByFactoryGraphId.set(factoryGraphNodeId, node);
+      selectedIndexByFactoryGraphId.set(factoryGraphNodeId, nextNodes.length);
+      nextNodes.push(node);
+      continue;
+    }
+
+    if (
+      selectedNode.id === factoryGraphNodeId ||
+      node.id !== factoryGraphNodeId
+    ) {
+      continue;
+    }
+
+    const selectedIndex = selectedIndexByFactoryGraphId.get(factoryGraphNodeId);
+    if (selectedIndex === undefined) {
+      continue;
+    }
+
+    selectedNodeByFactoryGraphId.set(factoryGraphNodeId, node);
+    nextNodes[selectedIndex] = node;
   }
 
   return nextNodes;

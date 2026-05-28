@@ -55,18 +55,5 @@ export function resolveFactoryGraphPlaceNode(
 export function currentActivityNodeIdForFactoryGraphKey(
   key: FactoryGraphNodeKey,
 ): string {
-  if (key.kind === "workstation") {
-    return `workstation:${key.name}`;
-  }
-  if (key.kind === "resource") {
-    return `place:${key.name}:available`;
-  }
-  if (key.kind === "worker" || key.kind === "work-type") {
-    return `place:${key.kind}:${key.name}`;
-  }
-  if (key.kind === "work-state") {
-    return `place:${key.workTypeName}:${key.stateName}`;
-  }
-
-  return `place:${key.name}`;
+  return nodeKeyId(key);
 }

@@ -299,22 +299,22 @@ describe("factory graph editor edge labels", () => {
         expect.objectContaining({
           id: "workstation-output:review->story:done",
           sourceHandle: "workstation-output-source",
-          targetHandle: "workstation-output-target",
+          targetHandle: "work-state-input-target",
         }),
         expect.objectContaining({
           id: "workstation-on-failure:review->story:queued",
           sourceHandle: "workstation-on-failure-source",
-          targetHandle: "workstation-on-failure-target",
+          targetHandle: "work-state-input-target",
         }),
         expect.objectContaining({
           id: "workstation-on-continue:review->story:retry",
           sourceHandle: "workstation-on-continue-source",
-          targetHandle: "workstation-on-continue-target",
+          targetHandle: "work-state-input-target",
         }),
         expect.objectContaining({
           id: "workstation-on-rejection:review->story:rejected",
           sourceHandle: "workstation-on-rejection-source",
-          targetHandle: "workstation-on-rejection-target",
+          targetHandle: "work-state-input-target",
         }),
       ]),
     );

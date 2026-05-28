@@ -138,7 +138,7 @@ describe("factory graph operations", () => {
       draft: createEmptyFactoryGraphDraft(),
       sourceAnchorId: "workstation-on-failure-source",
       sourceNodeId: "workstation:draft",
-      targetAnchorId: "workstation-on-continue-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:done",
     });
     expect(invalidConnection).toMatchObject({
@@ -163,7 +163,7 @@ describe("factory graph operations", () => {
       draft: createEmptyFactoryGraphDraft(),
       sourceAnchorId: "workstation-on-failure-source",
       sourceNodeId: "workstation:draft",
-      targetAnchorId: "workstation-on-failure-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:done",
     });
 

@@ -28,12 +28,10 @@ export type FactoryGraphReactFlowNode = Node<
     connectionHint: string;
     draftStatus: "addition" | "none" | "removal";
     focused: boolean;
-    incomingHandleCount: number;
     kind: FactoryGraphNodeKind;
     kindLabel: string;
     label: string;
     muted: boolean;
-    outgoingHandleCount: number;
     pendingLabel: string;
     removingLabel: string;
     selectedWorkId: string | null;
@@ -118,7 +116,6 @@ export function projectFactoryGraphToReactFlow(
   const input = normalizeProjectionOptions(options);
   const messages = getFactoryGraphEditorMessages(input.locale);
   const rowCounts = new Map<number, number>();
-  const counts = countHandles(input.topology);
   const validationMessages = validationMessagesByNodeId(
     input.editor?.validationErrors ?? [],
   );
@@ -152,12 +149,10 @@ export function projectFactoryGraphToReactFlow(
           connectionHint: messages.flowConnectionHint,
           draftStatus: draftStatusForNode(node.id, input.editor),
           focused: input.runtime?.focusedNodeIds?.has(node.id) ?? false,
-          incomingHandleCount: counts.incoming.get(node.id) ?? 1,
           kind: node.kind,
           kindLabel: messages.kindLabel(node.kind),
           label: node.label,
           muted: input.runtime?.mutedNodeIds?.has(node.id) ?? false,
-          outgoingHandleCount: counts.outgoing.get(node.id) ?? 1,
           pendingLabel: messages.flowPendingLabel,
           removingLabel: messages.flowRemovingLabel,
           selectedWorkId: input.runtime?.selectedWorkId ?? null,
@@ -313,9 +308,15 @@ function getNodeHandleId(
   edgeKind: FactoryGraphEdge["kind"],
   role: "source" | "target",
 ) {
+  if (edgeKind === "work-type-state") {
+    return null;
+  }
+
   return (
     getFactoryGraphConnectionAnchors(nodeKind).find(
-      (anchor) => anchor.role === role && anchor.edgeKind === edgeKind,
+      (anchor) =>
+        anchor.role === role &&
+        (anchor.edgeKinds ?? [anchor.edgeKind]).includes(edgeKind),
     )?.id ?? null
   );
 }
@@ -385,18 +386,6 @@ function buildNodeHandles(input: {
             : "muted",
     } satisfies ActivityGraphNodeHandle;
   });
-}
-
-function countHandles(topology: FactoryGraphTopology) {
-  const incoming = new Map<string, number>();
-  const outgoing = new Map<string, number>();
-
-  for (const edge of topology.edges) {
-    incoming.set(edge.targetId, (incoming.get(edge.targetId) ?? 0) + 1);
-    outgoing.set(edge.sourceId, (outgoing.get(edge.sourceId) ?? 0) + 1);
-  }
-
-  return { incoming, outgoing };
 }
 
 function findNode(topology: FactoryGraphTopology, nodeId: string) {

@@ -126,7 +126,6 @@ function useCurrentActivityBaseNodes({
   activeItemLabelsByPlaceId,
   editor,
   graphLayout,
-  handleAssignments,
   locale,
   now,
   onSelectStateNode,
@@ -153,7 +152,6 @@ function useCurrentActivityBaseNodes({
   activeItemLabelsByPlaceId: ReturnType<typeof buildActiveItemLabelsByPlaceId>;
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   graphLayout: GraphLayout;
-  handleAssignments: ReturnType<typeof buildHandleAssignments>;
   storedNodePositions: typeof EMPTY_NODE_POSITIONS;
 }) {
   return useMemo<CurrentActivityNode[]>(
@@ -170,7 +168,6 @@ function useCurrentActivityBaseNodes({
           pendingConnectionSource: editor.pendingConnectionSource,
         },
         graphLayout,
-        handleAssignments,
         locale,
         now,
         onSelectStateNode,
@@ -186,7 +183,6 @@ function useCurrentActivityBaseNodes({
       activeItemLabelsByPlaceId,
       editor,
       graphLayout,
-      handleAssignments,
       locale,
       now,
       onSelectStateNode,
@@ -245,8 +241,8 @@ export function useCurrentActivityGraphViewModel({
     [editor.draftState.draft, graphLayout],
   );
   const handleAssignments = useMemo(
-    () => buildHandleAssignments(visibleGraphEdges),
-    [visibleGraphEdges],
+    () => buildHandleAssignments(visibleGraphEdges, graphLayout.nodes),
+    [graphLayout.nodes, visibleGraphEdges],
   );
   const activeGraphHighlights = useActiveGraphHighlights({
     activeExecutions,
@@ -263,7 +259,6 @@ export function useCurrentActivityGraphViewModel({
     activeItemLabelsByPlaceId,
     editor,
     graphLayout,
-    handleAssignments,
     locale,
     now,
     onSelectStateNode,

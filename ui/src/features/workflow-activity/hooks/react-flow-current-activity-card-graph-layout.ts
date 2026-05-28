@@ -1,10 +1,9 @@
 import { useMemo } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { buildGraphLayout, type GraphLayout } from "../../flowchart/lib/layout";
+import type { GraphLayout } from "../../flowchart/lib/layout";
 import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
 import { EMPTY_GRAPH_LAYOUT } from "../lib/react-flow-current-activity-card-graph";
-import { currentActivityTopologyKey } from "../lib/react-flow-current-activity-card-keys";
 import {
   createWorkflowTopologyAsyncCache,
   useWorkflowTopologyAsyncCache,
@@ -30,11 +29,10 @@ export function useCurrentActivityGraphLayoutForFactory(
             kind: "factory" as const,
           }
         : {
-            key: currentActivityTopologyKey(snapshot.topology),
-            kind: "topology" as const,
-            topology: snapshot.topology,
+            key: "missing-factory",
+            kind: "missing-factory" as const,
           },
-    [factory, snapshot.topology],
+    [factory],
   );
 
   return useWorkflowTopologyAsyncCache({
@@ -45,7 +43,7 @@ export function useCurrentActivityGraphLayoutForFactory(
     loadLayout: () =>
       layoutSource.kind === "factory"
         ? buildCurrentActivityGraphLayoutFromFactory(layoutSource.factory)
-        : buildGraphLayout(layoutSource.topology),
+        : Promise.resolve(EMPTY_GRAPH_LAYOUT),
     mapResolvedLayout: identityGraphLayout,
     topologyKey: layoutSource.key,
   });

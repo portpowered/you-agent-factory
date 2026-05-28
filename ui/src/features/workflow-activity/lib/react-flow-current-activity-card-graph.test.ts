@@ -1,8 +1,17 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: shared graph-handle and pending-edge coverage stays grouped around one layout fixture seam.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: shared graph-handle and pending-edge coverage stays grouped around one layout fixture seam.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { resolveDashboardSelection } from "../../current-selection/state/dashboardSelection";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
+import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
-import { buildCurrentActivityGraphLayoutFromFactory } from "./current-activity-factory-graph-layout";
+import {
+  buildCurrentActivityGraphLayoutFromFactory,
+  dashboardWorkstationFromFactory,
+} from "./current-activity-factory-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
   buildEditorHandles,
@@ -17,7 +26,242 @@ import {
   EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
 
+function loadSampleFactoryDefinition(): CanonicalFactoryDefinition {
+  return JSON.parse(
+    readFileSync(resolve(process.cwd(), "../factory/factory.json"), "utf-8"),
+  ) as CanonicalFactoryDefinition;
+}
+
+function buildSampleFactorySnapshot(
+  factory: CanonicalFactoryDefinition,
+): DashboardSnapshot {
+  const workstations = (factory.workstations ?? []).map(
+    dashboardWorkstationFromFactory,
+  );
+
+  return {
+    factory,
+    factory_state: "IDLE",
+    runtime: {
+      active_executions_by_dispatch_id: {},
+      current_work_items_by_place_id: {},
+      place_occupancy_work_items_by_place_id: {},
+      place_token_counts: {},
+      session: {
+        completed_count: 0,
+        dispatched_count: 0,
+        failed_count: 0,
+        has_data: true,
+        provider_sessions: [],
+      },
+      workstation_requests_by_dispatch_id: {},
+    },
+    tick_count: 0,
+    topology: {
+      edges: [],
+      workstation_node_ids: workstations.map(
+        (workstation) => workstation.node_id,
+      ),
+      workstation_nodes_by_id: Object.fromEntries(
+        workstations.map((workstation) => [workstation.node_id, workstation]),
+      ),
+    },
+    uptime_seconds: 0,
+  };
+}
+
+function resourceFamilyNodeIds(nodeIds: string[], resourceName: string) {
+  return nodeIds.filter(
+    (nodeId) =>
+      nodeId === `resource:${resourceName}` ||
+      nodeId === `work-type:${resourceName}` ||
+      nodeId === `work-state:${resourceName}:available`,
+  );
+}
+
 describe("current activity graph editor handles", () => {
+  it("keeps a sample factory terminal state selected instead of falling back to the first workstation", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const resolvedSelection = resolveDashboardSelection({
+      selection: { kind: "state-node", placeId: "task:complete" },
+      snapshot,
+    });
+
+    if (
+      !resolvedSelection ||
+      resolvedSelection.kind === "work-item" ||
+      resolvedSelection.kind === "workstation-request"
+    ) {
+      throw new Error(
+        "Expected a graph-compatible current activity selection.",
+      );
+    }
+
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: resolvedSelection,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(resolvedSelection).toEqual({
+      kind: "state-node",
+      placeId: "task:complete",
+    });
+    expect(
+      nodes.find((node) => node.id === "work-state:task:complete")?.data,
+    ).toMatchObject({
+      kind: "work-state",
+      selectedStateNode: true,
+    });
+    expect(
+      nodes.find((node) => node.id === "workstation:process")?.data,
+    ).toMatchObject({
+      kind: "workstation",
+      selectedWorkstation: false,
+    });
+  });
+
+  it("models sample factory resource relationships through the canonical resource node", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+
+    expect(graphLayout.nodes.map((node) => node.nodeId)).toEqual(
+      expect.arrayContaining(["resource:executor-slot"]),
+    );
+    expect(graphLayout.nodes.map((node) => node.nodeId)).not.toContain(
+      "place:executor-slot:available",
+    );
+    expect(visibleGraphEdges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          edgeId:
+            "workstation-resource:resource:executor-slot->workstation:process",
+          fromNodeId: "resource:executor-slot",
+          toNodeId: "workstation:process",
+        }),
+        expect.objectContaining({
+          edgeId:
+            "workstation-resource:resource:executor-slot->workstation:review",
+          fromNodeId: "resource:executor-slot",
+          toNodeId: "workstation:review",
+        }),
+      ]),
+    );
+    expect(visibleGraphEdges.map((edge) => edge.fromNodeId)).not.toContain(
+      "place:executor-slot:available",
+    );
+  });
+
+  it("constrains sample factory resource availability aliases to one rendered node", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const legacyResourceAvailabilityFactory = {
+      ...factory,
+      workTypes: [
+        ...(factory.workTypes ?? []),
+        {
+          name: "executor-slot",
+          states: [
+            { name: "available", type: "INITIAL" as const },
+            { name: "reserved", type: "PROCESSING" as const },
+          ],
+        },
+      ],
+      workstations: (factory.workstations ?? []).map((workstation) =>
+        workstation.name === "process"
+          ? {
+              ...workstation,
+              inputs: [
+                ...(workstation.inputs ?? []),
+                { state: "available", workType: "executor-slot" },
+              ],
+            }
+          : workstation,
+      ),
+    } satisfies CanonicalFactoryDefinition;
+    const rawTopology = buildFactoryGraphTopologyFromDefinition(
+      legacyResourceAvailabilityFactory,
+    );
+
+    expect(
+      resourceFamilyNodeIds(
+        rawTopology.nodes.map((node) => node.id),
+        "executor-slot",
+      ),
+    ).toEqual([
+      "resource:executor-slot",
+      "work-state:executor-slot:available",
+      "work-type:executor-slot",
+    ]);
+
+    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(
+      legacyResourceAvailabilityFactory,
+    );
+    const renderedResourceFamilyNodes = resourceFamilyNodeIds(
+      graphLayout.nodes.map((node) => node.nodeId),
+      "executor-slot",
+    );
+
+    expect(renderedResourceFamilyNodes).toEqual(["resource:executor-slot"]);
+    expect(graphLayout.nodes).toHaveLength(10);
+    expect(graphLayout.edges.map((edge) => edge.edgeId)).toContain(
+      "workstation-resource:resource:executor-slot->workstation:process",
+    );
+    expect(graphLayout.edges.map((edge) => edge.edgeId)).not.toContain(
+      "workstation-input:work-state:executor-slot:available->workstation:process",
+    );
+  });
+
+  it("renders sample factory work types through the semantic work-type node", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(nodes.find((node) => node.id === "work-type:task")).toMatchObject({
+      data: {
+        factoryGraphNodeId: "work-type:task",
+        kind: "work-type",
+      },
+      type: "workType",
+    });
+  });
+
   it("uses semantic handles for visible worker and resource relationships in editor mode", async () => {
     const factory = {
       ...baseFactoryDefinition,
@@ -49,7 +293,6 @@ describe("current activity graph editor handles", () => {
         },
       },
       graphLayout,
-      handleAssignments,
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
@@ -68,30 +311,24 @@ describe("current activity graph editor handles", () => {
     expect(edges).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "worker-resource:place:gpu:available->place:worker:writer",
+          id: "worker-resource:resource:gpu->worker:writer",
           sourceHandle: "worker-resource-source",
-          targetHandle: "worker-resource-target",
+          targetHandle: "worker-input-target",
         }),
         expect.objectContaining({
-          id: "worker-assignment:place:worker:writer->workstation:draft",
+          id: "worker-assignment:worker:writer->workstation:draft",
           sourceHandle: "worker-assignment-source",
           targetHandle: "worker-assignment-target",
         }),
         expect.objectContaining({
-          id: "workstation-resource:place:gpu:available->workstation:draft",
+          id: "workstation-resource:resource:gpu->workstation:draft",
           sourceHandle: "workstation-resource-source",
           targetHandle: "workstation-resource-target",
         }),
       ]),
     );
-    expect(edges).toEqual(
-      expect.not.arrayContaining([
-        expect.objectContaining({ sourceHandle: "out-0" }),
-        expect.objectContaining({ targetHandle: "in-0" }),
-      ]),
-    );
     expect(
-      nodes.find((node) => node.id === "place:gpu:available")?.data,
+      nodes.find((node) => node.id === "resource:gpu")?.data,
     ).toMatchObject({
       factoryGraphNodeId: "resource:gpu",
       handles: expect.arrayContaining([
@@ -101,18 +338,79 @@ describe("current activity graph editor handles", () => {
       kind: "resource",
     });
     expect(
-      nodes.find((node) => node.id === "place:worker:writer")?.data,
+      nodes.find((node) => node.id === "worker:writer")?.data,
     ).toMatchObject({
       factoryGraphNodeId: "worker:writer",
       handles: expect.arrayContaining([
         expect.objectContaining({
-          id: "worker-resource-target",
+          id: "worker-input-target",
           variant: "valid-target",
         }),
         expect.objectContaining({ id: "worker-assignment-source" }),
       ]),
       kind: "worker",
     });
+  });
+
+  it("dedupes legacy resource-place aliases when canonical resource nodes are present", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      resources: [{ capacity: 1, name: "gpu" }],
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          name: "draft",
+          resources: [{ capacity: 1, name: "gpu" }],
+        },
+      ],
+    };
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const resourceNode = graphLayout.nodes.find(
+      (node) => node.nodeId === "resource:gpu" && node.nodeKind === "resource",
+    );
+    if (!resourceNode || resourceNode.nodeKind !== "resource") {
+      throw new Error("Expected canonical resource node in graph layout.");
+    }
+
+    const graphLayoutWithLegacyAlias = {
+      ...graphLayout,
+      nodes: [
+        {
+          ...resourceNode,
+          nodeId: "place:gpu:available",
+          place: {
+            kind: "resource" as const,
+            place_id: "gpu:available",
+            state_value: "available",
+            type_id: "gpu",
+          },
+        },
+        ...graphLayout.nodes,
+      ],
+    };
+    const visibleGraphEdges = buildVisibleGraphEdges(
+      graphLayoutWithLegacyAlias,
+    );
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout: graphLayoutWithLegacyAlias,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: semanticWorkflowDashboardSnapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(
+      nodes.filter((node) => node.data.factoryGraphNodeId === "resource:gpu"),
+    ).toHaveLength(1);
+    expect(nodes.find((node) => node.id === "resource:gpu")).toBeTruthy();
+    expect(nodes.find((node) => node.id === "place:gpu:available")).toBeFalsy();
   });
 
   it("binds shared workstation and work-state edges to the editor anchor ids", async () => {
@@ -136,7 +434,6 @@ describe("current activity graph editor handles", () => {
         },
       },
       graphLayout,
-      handleAssignments,
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
@@ -159,7 +456,7 @@ describe("current activity graph editor handles", () => {
       (edge) =>
         edge.source === "workstation:review" &&
         edge.sourceHandle === "workstation-output-source" &&
-        edge.targetHandle === "workstation-output-target",
+        edge.targetHandle === "work-state-input-target",
     );
     const stateNode = nodes.find((node) => node.id === outputEdge?.target);
 
@@ -201,16 +498,16 @@ describe("current activity graph editor handles", () => {
           type: "source",
         }),
         expect.objectContaining({
-          id: "workstation-output-target",
-          label: "Success",
+          id: "work-state-input-target",
+          label: "Input",
           type: "target",
         }),
       ]),
     );
-    expect(stateNode?.data.handles).toHaveLength(5);
+    expect(stateNode?.data.handles).toHaveLength(2);
     expect(outputEdge).toMatchObject({
       sourceHandle: "workstation-output-source",
-      targetHandle: "workstation-output-target",
+      targetHandle: "work-state-input-target",
     });
   });
 
@@ -225,7 +522,6 @@ describe("current activity graph editor handles", () => {
       activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
       activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
       graphLayout,
-      handleAssignments,
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
@@ -245,7 +541,7 @@ describe("current activity graph editor handles", () => {
       (edge) =>
         edge.source === "workstation:review" &&
         edge.sourceHandle === "workstation-output-source" &&
-        edge.targetHandle === "workstation-output-target",
+        edge.targetHandle === "work-state-input-target",
     );
     const workstationNode = nodes.find(
       (node) => node.id === "workstation:review",
@@ -253,12 +549,6 @@ describe("current activity graph editor handles", () => {
     const stateNode = nodes.find((node) => node.id === outputEdge?.target);
 
     expect(outputEdge).toBeTruthy();
-    expect(edges).toEqual(
-      expect.not.arrayContaining([
-        expect.objectContaining({ sourceHandle: "out-0" }),
-        expect.objectContaining({ targetHandle: "in-0" }),
-      ]),
-    );
     expect(workstationNode?.data.handles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -272,7 +562,7 @@ describe("current activity graph editor handles", () => {
       expect.arrayContaining([
         expect.objectContaining({
           hidden: true,
-          id: "workstation-output-target",
+          id: "work-state-input-target",
           type: "target",
         }),
       ]),
@@ -296,7 +586,7 @@ describe("current activity graph editor handles", () => {
       }),
     ).toEqual({
       sourceHandleId: "workstation-on-rejection-source",
-      targetHandleId: "workstation-on-rejection-target",
+      targetHandleId: "work-state-input-target",
     });
 
     expect(
@@ -315,7 +605,7 @@ describe("current activity graph editor handles", () => {
       }),
     ).toEqual({
       sourceHandleId: "workstation-on-failure-source",
-      targetHandleId: "workstation-on-failure-target",
+      targetHandleId: "work-state-input-target",
     });
   });
 
@@ -338,7 +628,7 @@ describe("current activity graph editor handles", () => {
     });
 
     const successTarget = handles.find(
-      (handle) => handle.id === "workstation-output-target",
+      (handle) => handle.id === "work-state-input-target",
     );
 
     expect(successTarget?.variant).toBe("valid-target");
@@ -346,7 +636,7 @@ describe("current activity graph editor handles", () => {
     successTarget?.onButtonClick();
 
     expect(onConnectionAnchorClick).toHaveBeenCalledWith({
-      anchorId: "workstation-output-target",
+      anchorId: "work-state-input-target",
       nodeId: "work-state:story:done",
     });
   });

@@ -20,9 +20,9 @@ describe("getActivityGraphMessages", () => {
     expect(messages.placeKindLabel(place({ state_category: "TERMINAL" }))).toBe(
       "Terminal",
     );
-    expect(messages.placeSemanticIconLabel(place({ state_category: "PROCESSING" }))).toBe(
-      "Processing state",
-    );
+    expect(
+      messages.placeSemanticIconLabel(place({ state_category: "PROCESSING" })),
+    ).toBe("Processing state");
     expect(messages.tokenCountLabel(place({ kind: "resource" }), 2)).toBe(
       "2 resource tokens",
     );
@@ -33,7 +33,7 @@ describe("getActivityGraphMessages", () => {
     const messages = getActivityGraphMessages("zh-CN");
 
     expect(messages.graphSemanticIconLabel("active-work")).toBe("活动工作");
-    expect(messages.workstationIconLabel("repeater")).toBe("重复器工作站");
+    expect(messages.workstationIconLabel("REPEATER")).toBe("重复器工作站");
     expect(messages.placeKindLabel(place({ state_category: "FAILED" }))).toBe(
       "失败状态",
     );

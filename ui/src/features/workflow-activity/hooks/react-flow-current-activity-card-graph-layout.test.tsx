@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { GraphLayout } from "../../flowchart/lib/layout";
@@ -36,46 +36,19 @@ describe("useCurrentActivityGraphLayout", () => {
     window.localStorage.clear();
   });
 
-  it("falls back to the empty graph outcome when a replacement current-activity layout fails", async () => {
-    const loadedSnapshot = structuredClone(singleNodeDashboardSnapshot);
-    const rejectedSnapshot = structuredClone(singleNodeDashboardSnapshot);
-    rejectedSnapshot.topology.workstation_nodes_by_id[
-      rejectedSnapshot.topology.workstation_node_ids[0]
-    ].workstation_name = "Rejected layout workstation";
+  it("returns an empty graph when no canonical factory is available", async () => {
+    const snapshot = structuredClone(singleNodeDashboardSnapshot);
+    snapshot.factory = undefined;
 
-    mockBuildGraphLayout.mockImplementation(async (topology) => {
-      if (topology === rejectedSnapshot.topology) {
-        throw new Error("layout failed");
-      }
-
-      if (actualBuildGraphLayoutRef.current === null) {
-        throw new Error("expected buildGraphLayout to be available");
-      }
-
-      return actualBuildGraphLayoutRef.current(topology);
-    });
-
-    const { result, rerender } = renderHook(
-      ({ snapshot }) => useCurrentActivityGraphLayout(snapshot),
-      {
-        initialProps: {
-          snapshot: loadedSnapshot,
-        },
-      },
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphLayout(snapshot),
     );
-
-    await waitFor(() => {
-      expect(result.current.nodes.length).toBeGreaterThan(0);
-    });
-
-    await act(async () => {
-      rerender({ snapshot: rejectedSnapshot });
-    });
 
     await waitFor(() => {
       expect(result.current.nodes).toHaveLength(0);
       expect(result.current.edges).toHaveLength(0);
     });
+    expect(mockBuildGraphLayout).not.toHaveBeenCalled();
   });
 
   it("builds observer graph layout from the snapshot factory graph when available", async () => {
@@ -130,19 +103,19 @@ describe("useCurrentActivityGraphLayout", () => {
 
     expect(mockBuildGraphLayout).not.toHaveBeenCalled();
     expect(result.current.nodes.map((node) => node.nodeId).sort()).toEqual([
-      "place:gpu:available",
-      "place:story:done",
-      "place:story:queued",
-      "place:work-type:story",
-      "place:worker:writer",
+      "resource:gpu",
+      "work-state:story:done",
+      "work-state:story:queued",
+      "work-type:story",
+      "worker:writer",
       "workstation:Draft",
     ]);
     expect(result.current.edges.map((edge) => edge.edgeId).sort()).toEqual([
-      "worker-assignment:place:worker:writer->workstation:Draft",
-      "worker-resource:place:gpu:available->place:worker:writer",
-      "workstation-input:place:story:queued->workstation:Draft",
-      "workstation-output:workstation:Draft->place:story:done",
-      "workstation-resource:place:gpu:available->workstation:Draft",
+      "worker-assignment:worker:writer->workstation:Draft",
+      "worker-resource:resource:gpu->worker:writer",
+      "workstation-input:work-state:story:queued->workstation:Draft",
+      "workstation-output:workstation:Draft->work-state:story:done",
+      "workstation-resource:resource:gpu->workstation:Draft",
     ]);
   });
 });
@@ -199,10 +172,10 @@ describe("useCurrentActivityGraphLayout legacy routes", () => {
     });
 
     expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
-      "workstation-on-continue:workstation:Draft->place:story:retry",
+      "workstation-on-continue:workstation:Draft->work-state:story:retry",
     );
     expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
-      "workstation-on-failure:workstation:Draft->place:story:failed",
+      "workstation-on-failure:workstation:Draft->work-state:story:failed",
     );
   });
 });

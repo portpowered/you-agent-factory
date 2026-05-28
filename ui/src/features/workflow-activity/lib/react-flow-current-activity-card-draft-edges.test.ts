@@ -1,14 +1,16 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: shared draft-edge coverage stays grouped around one projection seam and compact custom layouts.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: shared draft-edge coverage stays grouped around one projection seam and compact custom layouts.
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
-import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
+import { buildCurrentActivityGraphLayoutFromFactory } from "./current-activity-factory-graph-layout";
 import { buildVisibleGraphEdgesWithDraft } from "./react-flow-current-activity-card-draft-edges";
+import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
   buildActiveGraphHighlights,
   buildHandleAssignments,
   buildVisibleGraphEdges,
 } from "./react-flow-current-activity-card-graph";
+
 describe("current activity graph draft edges", () => {
   it("adds supported pending draft routes onto the shared observer graph surface", async () => {
     const graphLayout = await buildGraphLayout(
@@ -57,9 +59,7 @@ describe("current activity graph draft edges", () => {
     );
 
     expect(pendingAdditionEdgeIds).toEqual(
-      new Set([
-        "workstation-output:workstation:review->place:story:blocked",
-      ]),
+      new Set(["workstation-output:workstation:review->place:story:blocked"]),
     );
     expect(edges).toEqual(
       expect.arrayContaining([
@@ -72,7 +72,7 @@ describe("current activity graph draft edges", () => {
             strokeDasharray: "9 4",
           }),
           target: "place:story:blocked",
-          targetHandle: "workstation-output-target",
+          targetHandle: "work-state-input-target",
         }),
       ]),
     );
@@ -287,9 +287,9 @@ describe("current activity graph draft edges", () => {
       });
 
     expect(pendingAdditionEdgeIds.size).toBe(0);
-    expect(visibleGraphEdges.some((edge) => edge.edgeId === removedEdgeId)).toBe(
-      false,
-    );
+    expect(
+      visibleGraphEdges.some((edge) => edge.edgeId === removedEdgeId),
+    ).toBe(false);
     expect(visibleGraphEdges).toHaveLength(baseVisibleGraphEdges.length - 1);
   });
 
@@ -457,5 +457,80 @@ describe("current activity graph draft edges", () => {
         toNodeId: "workstation:review",
       }),
     ]);
+  });
+
+  it("projects resource availability draft inputs onto the canonical resource edge", async () => {
+    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory({
+      name: "resource-availability-draft",
+      resources: [{ capacity: 1, name: "executor-slot" }],
+      workTypes: [
+        {
+          name: "executor-slot",
+          states: [{ name: "available", type: "INITIAL" }],
+        },
+      ],
+      workstations: [
+        {
+          id: "process",
+          inputs: [],
+          name: "process",
+          outputs: [],
+          type: "MODEL_WORKSTATION",
+          worker: "processor",
+        },
+      ],
+      workers: [{ name: "processor", type: "MODEL_WORKER" }],
+    } as never);
+    const { pendingAdditionEdgeIds, visibleGraphEdges } =
+      buildVisibleGraphEdgesWithDraft({
+        draft: {
+          additions: {
+            resources: [],
+            workers: [],
+            workStates: [],
+            workTypes: [],
+            workstations: [],
+          },
+          edgeChanges: {
+            additions: [
+              {
+                kind: "workstation-input",
+                source: {
+                  kind: "work-state",
+                  stateName: "available",
+                  workTypeName: "executor-slot",
+                },
+                target: { kind: "workstation", name: "process" },
+              },
+            ],
+            removals: [],
+          },
+          removals: {
+            resources: [],
+            workers: [],
+            workStates: [],
+            workTypes: [],
+            workstations: [],
+          },
+        },
+        graphLayout,
+      });
+
+    expect(pendingAdditionEdgeIds).toEqual(
+      new Set([
+        "workstation-resource:resource:executor-slot->workstation:process",
+      ]),
+    );
+    expect(visibleGraphEdges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          edgeId:
+            "workstation-resource:resource:executor-slot->workstation:process",
+          fromNodeId: "resource:executor-slot",
+          sourcePlaceKind: "resource",
+          toNodeId: "workstation:process",
+        }),
+      ]),
+    );
   });
 });

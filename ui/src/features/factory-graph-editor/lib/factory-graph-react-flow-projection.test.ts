@@ -43,7 +43,7 @@ describe("factory graph React Flow projection", () => {
         expect.objectContaining({
           id: "workstation-output:workstation:draft->work-state:story:done",
           sourceHandle: "workstation-output-source",
-          targetHandle: "workstation-output-target",
+          targetHandle: "work-state-input-target",
         }),
       ]),
     );
@@ -184,7 +184,7 @@ describe("factory graph React Flow projection", () => {
     });
     expect(
       queuedNode?.data.connectionAnchors.find(
-        (anchor) => anchor.id === "workstation-output-target",
+        (anchor) => anchor.id === "work-state-input-target",
       ),
     ).toMatchObject({
       buttonDisabled: true,

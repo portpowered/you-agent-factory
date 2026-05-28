@@ -1447,18 +1447,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
     });
 
     await waitFor(() => {
+      expect(document.querySelector('[data-id="worker:writer"]')).toBeTruthy();
       expect(
-        document.querySelector('[data-id="place:worker:writer"]'),
+        document.querySelector('[data-id="worker:reviewer"]'),
       ).toBeTruthy();
-      expect(
-        document.querySelector('[data-id="place:worker:reviewer"]'),
-      ).toBeTruthy();
-      expect(
-        document.querySelector('[data-id="place:worker:stalled"]'),
-      ).toBeTruthy();
-      expect(
-        document.querySelector('[data-id="place:gpu:available"]'),
-      ).toBeTruthy();
+      expect(document.querySelector('[data-id="worker:stalled"]')).toBeTruthy();
+      expect(document.querySelector('[data-id="resource:gpu"]')).toBeTruthy();
     });
   });
 
@@ -1527,14 +1521,14 @@ function registerCurrentActivityCardTestLifecycle(): void {
     ).not.toHaveLength(0);
     expect(
       screen.getAllByRole("button", {
-        name: "Receive a successful workstation output.",
+        name: "Receive workstation output into this work state.",
       }),
     ).not.toHaveLength(0);
     expect(
-      screen.queryAllByRole("button", {
+      screen.getAllByRole("button", {
         name: "Assign this worker to a workstation.",
       }),
-    ).toHaveLength(0);
+    ).not.toHaveLength(0);
     expect(
       screen.getAllByRole("button", {
         name: "Accept a worker assignment for this workstation.",
@@ -1664,7 +1658,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
         name: "Select writer worker",
       }),
     ).toBeNull();
-    expect(screen.queryByText("writer")).toBeNull();
+    expect(screen.getByText("writer")).toBeTruthy();
     expect(
       await screen.findByRole("button", {
         name: "Select Review workstation",

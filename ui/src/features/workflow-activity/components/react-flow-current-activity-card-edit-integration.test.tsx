@@ -104,8 +104,8 @@ vi.mock("@xyflow/react", async () => {
               isValidConnection?.({
                 source: workstationNodeId,
                 sourceHandle: "workstation-output-source",
-                target: "place:story:qa",
-                targetHandle: "workstation-output-target",
+                target: "work-state:story:qa",
+                targetHandle: "work-state-input-target",
               }) ?? false,
             )}
           </output>
@@ -114,8 +114,8 @@ vi.mock("@xyflow/react", async () => {
               onConnect?.({
                 source: workstationNodeId,
                 sourceHandle: "workstation-output-source",
-                target: "place:story:qa",
-                targetHandle: "workstation-output-target",
+                target: "work-state:story:qa",
+                targetHandle: "work-state-input-target",
               })
             }
             type="button"
@@ -127,8 +127,8 @@ vi.mock("@xyflow/react", async () => {
               onConnect?.({
                 source: workstationNodeId,
                 sourceHandle: "workstation-output-source",
-                target: "place:story:qa",
-                targetHandle: "workstation-on-failure-target",
+                target: "work-state:story:qa",
+                targetHandle: "workstation-input-target",
               })
             }
             type="button"
@@ -254,14 +254,14 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     renderCurrentActivity();
 
     const edge = await screen.findByRole("button", {
-      name: "workstation-output:workstation:review->place:story:done",
+      name: "workstation-output:workstation:review->work-state:story:done",
     });
 
     expect(edge.getAttribute("data-source-handle")).toBe(
       "workstation-output-source",
     );
     expect(edge.getAttribute("data-target-handle")).toBe(
-      "workstation-output-target",
+      "work-state-input-target",
     );
     expect(edge.getAttribute("data-source-handle")).not.toMatch(/^out-/);
     expect(edge.getAttribute("data-target-handle")).not.toMatch(/^in-/);
@@ -284,10 +284,10 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
     expect(
-      await screen.findByRole("button", { name: "place:essay:queued" }),
+      await screen.findByRole("button", { name: "work-state:essay:queued" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "place:work-type:essay" }),
+      screen.getByRole("button", { name: "work-type:essay" }),
     ).toBeTruthy();
   });
 
@@ -317,7 +317,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     renderCurrentActivity();
     enterEditorMode();
 
-    await screen.findByRole("button", { name: "place:story:qa" });
+    await screen.findByRole("button", { name: "work-state:story:qa" });
     fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(screen.getByTestId("valid-qa-output-connection").textContent).toBe(
@@ -328,13 +328,13 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     );
 
     const edge = await screen.findByRole("button", {
-      name: "workstation-output:workstation:review->place:story:qa",
+      name: "workstation-output:workstation:review->work-state:story:qa",
     });
     expect(edge.getAttribute("data-source-handle")).toBe(
       "workstation-output-source",
     );
     expect(edge.getAttribute("data-target-handle")).toBe(
-      "workstation-output-target",
+      "work-state-input-target",
     );
   });
 
@@ -345,7 +345,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
 
     expect(
       screen.queryByRole("button", {
-        name: "workstation-output:workstation:review->place:story:qa",
+        name: "workstation-output:workstation:review->work-state:story:qa",
       }),
     ).toBeNull();
 
@@ -356,12 +356,12 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     expect(await screen.findByText("Connection blocked")).toBeTruthy();
     expect(
       screen.getByText(
-        "Success connections from review cannot connect to Failure on story:qa.",
+        "Choose a compatible source and target anchor before creating a connection.",
       ),
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", {
-        name: "workstation-output:workstation:review->place:story:qa",
+        name: "workstation-output:workstation:review->work-state:story:qa",
       }),
     ).toBeNull();
   });
@@ -403,7 +403,7 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "workstation-output:workstation:review->place:story:qa",
+        name: "workstation-output:workstation:review->work-state:story:qa",
       }),
     ).toBeTruthy();
 

@@ -5,15 +5,18 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationNode,
 } from "../../../api/dashboard/types";
-import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
+import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
-import { getActivityGraphMessages } from "../messages/activity-graph";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
-import { workstationIconMetadata } from "../lib/workstation-icon-metadata";
+import {
+  REPEATER_WORKSTATION_KIND,
+  workstationIconMetadata,
+} from "../lib/workstation-icon-metadata";
+import { getActivityGraphMessages } from "../messages/activity-graph";
 import {
   ActivityGraphNodeBadge,
   activityGraphNodeTitleClassName,
@@ -27,13 +30,11 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   executions: DashboardActiveExecution[];
   factoryGraphNodeId?: string;
-  handles?: ActivityGraphNodeHandle[];
-  incomingHandleCount: number;
+  handles: ActivityGraphNodeHandle[];
   kind?: "workstation";
   locale?: string;
   muted: boolean;
   now: number;
-  outgoingHandleCount: number;
   selectedWorkID: string | null;
   selectedWorkstation: boolean;
   workstation: DashboardWorkstationNode;
@@ -83,7 +84,7 @@ export function WorkstationNodeView({
       ? "border-dashed border-af-danger-border"
       : "border-af-info-border",
     !exhaustionRule &&
-      semanticIconMetadata.semanticKind === "repeater" &&
+      semanticIconMetadata.semanticKind === REPEATER_WORKSTATION_KIND &&
       "border-double",
     !exhaustionRule &&
       data.active &&
@@ -105,9 +106,7 @@ export function WorkstationNodeView({
     <ActivityGraphNodeShell
       className={nodeClassName}
       handles={data.handles}
-      incomingHandleCount={data.incomingHandleCount}
       nodeType="workstation"
-      outgoingHandleCount={data.outgoingHandleCount}
     >
       {exhaustionRule ? (
         <ExhaustionRuleNodeButton
@@ -290,11 +289,11 @@ function ActiveWorkstationNodeContent({
           );
         })}
       </ul>
-          {workstationOverflowMarkers(
-            workItemEntries.length,
-            visibleWorkItemEntries.length,
-            data.locale,
-          )}
+      {workstationOverflowMarkers(
+        workItemEntries.length,
+        visibleWorkItemEntries.length,
+        data.locale,
+      )}
     </div>
   );
 }

@@ -70,7 +70,7 @@ describe("CurrentActivityGraphViewport", () => {
     {
       expectedNodeId: "work-type:story",
       kind: "work-type",
-      renderedNodeId: "place:work-type:story",
+      renderedNodeId: "work-type:story",
     },
     {
       expectedNodeId: "worker:writer",
@@ -80,7 +80,7 @@ describe("CurrentActivityGraphViewport", () => {
     {
       expectedNodeId: "resource:gpu",
       kind: "resource",
-      renderedNodeId: "place:gpu:available",
+      renderedNodeId: "resource:gpu",
     },
   ])("maps rendered $kind nodes to factory graph ids before editor node deletion", ({
     expectedNodeId,
@@ -113,18 +113,16 @@ describe("CurrentActivityGraphViewport", () => {
   it.each([
     {
       expectedEdgeId: "worker-resource:resource:gpu->worker:writer",
-      renderedEdgeId:
-        "worker-resource:place:gpu:available->place:worker:writer",
-      source: "place:gpu:available",
+      renderedEdgeId: "worker-resource:resource:gpu->place:worker:writer",
+      source: "resource:gpu",
       sourceFactoryGraphNodeId: "resource:gpu",
       target: "place:worker:writer",
       targetFactoryGraphNodeId: "worker:writer",
     },
     {
       expectedEdgeId: "workstation-resource:resource:gpu->workstation:review",
-      renderedEdgeId:
-        "workstation-resource:place:gpu:available->workstation:review",
-      source: "place:gpu:available",
+      renderedEdgeId: "workstation-resource:resource:gpu->workstation:review",
+      source: "resource:gpu",
       sourceFactoryGraphNodeId: "resource:gpu",
       target: "workstation:review",
       targetFactoryGraphNodeId: "workstation:review",
@@ -221,8 +219,8 @@ describe("CurrentActivityGraphViewport", () => {
       editorMode: false,
       edges: [
         {
-          id: "worker-resource:place:gpu:available->place:worker:writer",
-          source: "place:gpu:available",
+          id: "worker-resource:resource:gpu->place:worker:writer",
+          source: "resource:gpu",
           target: "place:worker:writer",
         },
       ],
@@ -232,7 +230,7 @@ describe("CurrentActivityGraphViewport", () => {
             factoryGraphNodeId: "work-type:story",
             kind: "work-type",
           },
-          id: "place:work-type:story",
+          id: "work-type:story",
           position: { x: 0, y: 0 },
         },
       ],
@@ -240,12 +238,10 @@ describe("CurrentActivityGraphViewport", () => {
       onEditorNodeClick: handleEditorNodeClick,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "place:work-type:story" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "work-type:story" }));
     fireEvent.click(
       screen.getByRole("button", {
-        name: "worker-resource:place:gpu:available->place:worker:writer",
+        name: "worker-resource:resource:gpu->place:worker:writer",
       }),
     );
 

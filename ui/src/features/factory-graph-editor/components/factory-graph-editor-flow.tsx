@@ -77,14 +77,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
 
 function FactoryGraphEditorNodeView({
   data,
-}: NodeProps<
-  FactoryGraphEditorNode & {
-    data: FactoryGraphEditorNode["data"] & {
-      incomingHandleCount: number;
-      outgoingHandleCount: number;
-    };
-  }
->) {
+}: NodeProps<FactoryGraphEditorNode>) {
   return (
     <ActivityGraphNodeShell
       className={cn(
@@ -95,9 +88,7 @@ function FactoryGraphEditorNodeView({
           "border-af-danger-border bg-af-danger-surface ring-2 ring-af-danger-border",
       )}
       handles={data.connectionAnchors}
-      incomingHandleCount={data.incomingHandleCount}
       nodeType={data.kind === "workstation" ? "workstation" : "resource"}
-      outgoingHandleCount={data.outgoingHandleCount}
     >
       <div className="grid h-full min-w-0 content-start gap-2.5">
         <div className="flex items-start justify-between gap-2">

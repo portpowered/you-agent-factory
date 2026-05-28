@@ -7,8 +7,21 @@ import type {
   StateCategory,
 } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
+import type {
+  FactoryGraphEdge,
+  FactoryGraphNode,
+  FactoryGraphNodeKind,
+  FactoryGraphTopology,
+} from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";
+import {
+  CRON_WORKSTATION_KIND,
+  POLLER_WORKSTATION_KIND,
+  REPEATER_WORKSTATION_KIND,
+  STANDARD_WORKSTATION_KIND,
+} from "../../flowchart/lib/workstation-icon-metadata";
 
 const WORKSTATION_NODE_WIDTH = 156;
 const WORKSTATION_NODE_HEIGHT = 196;
@@ -65,16 +78,8 @@ type DashboardWorkstationKind = NonNullable<
   DashboardWorkstationNode["workstation_kind"]
 >;
 
-function workstationGraphNodeId(workstation: FactoryWorkstation): string {
-  return `workstation:${workstation.name}`;
-}
-
 function workStatePlaceId(workType: string, state: string): string {
   return `${workType}:${state}`;
-}
-
-function placeGraphNodeId(placeId: string): string {
-  return `place:${placeId}`;
 }
 
 function factoryEntityPlace(
@@ -111,22 +116,6 @@ function stateCategoryByName(factory: CanonicalFactoryDefinition) {
   return categories;
 }
 
-function workStatePlace(
-  io: LegacyFactoryWorkstationIO,
-  categories: ReadonlyMap<string, StateCategory>,
-): DashboardPlaceRef {
-  const workType = workstationIOWorkType(io);
-  const placeId = workStatePlaceId(workType, io.state);
-
-  return {
-    kind: "work_state",
-    place_id: placeId,
-    state_category: categories.get(placeId),
-    state_value: io.state,
-    type_id: workType,
-  };
-}
-
 function factoryWorkTypes(factory: CanonicalFactoryDefinition) {
   const legacyFactory = factory as LegacyFactoryDefinition;
   return legacyFactory.workTypes ?? legacyFactory.work_types ?? [];
@@ -141,14 +130,14 @@ function dashboardWorkstationKind(
 ): DashboardWorkstationKind {
   switch (behavior) {
     case "CRON":
-      return "cron";
+      return CRON_WORKSTATION_KIND;
     case "POLLER":
-      return "poller";
+      return POLLER_WORKSTATION_KIND;
     case "REPEATER":
-      return "repeater";
+      return REPEATER_WORKSTATION_KIND;
     case "STANDARD":
     case undefined:
-      return "standard";
+      return STANDARD_WORKSTATION_KIND;
   }
 }
 
@@ -167,6 +156,45 @@ function dashboardWorkstationOutputRoutes(
   ];
 }
 
+function normalizeFactoryDefinitionForGraph(
+  factory: CanonicalFactoryDefinition,
+): CanonicalFactoryDefinition {
+  const legacyFactory = factory as LegacyFactoryDefinition;
+  return {
+    ...factory,
+    workTypes: factory.workTypes ?? legacyFactory.work_types ?? [],
+    workstations: (factory.workstations ?? []).map((workstation) => {
+      const legacyWorkstation = workstation as LegacyFactoryWorkstation;
+      return {
+        ...workstation,
+        inputs: normalizedWorkstationRoute(workstation.inputs) ?? [],
+        onContinue:
+          normalizedWorkstationRoute(workstation.onContinue) ??
+          normalizedWorkstationRoute(legacyWorkstation.on_continue),
+        onFailure:
+          normalizedWorkstationRoute(workstation.onFailure) ??
+          normalizedWorkstationRoute(legacyWorkstation.on_failure),
+        onRejection:
+          normalizedWorkstationRoute(workstation.onRejection) ??
+          normalizedWorkstationRoute(legacyWorkstation.on_rejection),
+        outputs: normalizedWorkstationRoute(workstation.outputs) ?? [],
+      };
+    }),
+  };
+}
+
+function normalizedWorkstationRoute(
+  routes: FactoryWorkstationRoute,
+): FactoryWorkstationIO[] | undefined {
+  const routeIOs = workstationRouteIOs(routes);
+  return routeIOs.length > 0
+    ? routeIOs.map((io) => ({
+        ...io,
+        workType: workstationIOWorkType(io),
+      }))
+    : undefined;
+}
+
 function workstationRouteIOs(
   routes: FactoryWorkstationRoute,
 ): LegacyFactoryWorkstationIO[] {
@@ -176,203 +204,241 @@ function workstationRouteIOs(
   return Array.isArray(routes) ? routes : [routes];
 }
 
-function addNode(
-  nodes: Map<string, FactoryGraphSeedNode>,
-  node: FactoryGraphSeedNode,
-) {
-  if (!nodes.has(node.nodeId)) {
-    nodes.set(node.nodeId, node);
+function placeForFactoryGraphNode(node: FactoryGraphNode): DashboardPlaceRef {
+  switch (node.key.kind) {
+    case "resource":
+      return factoryEntityPlace("resource", "resource", node.key.name);
+    case "worker":
+      return factoryEntityPlace("constraint", "worker", node.key.name);
+    case "work-state":
+      return {
+        kind: "work_state",
+        place_id: workStatePlaceId(node.key.workTypeName, node.key.stateName),
+        state_value: node.key.stateName,
+        type_id: node.key.workTypeName,
+      };
+    case "work-type":
+      return factoryEntityPlace("constraint", "work-type", node.key.name);
+    case "workstation":
+      return factoryEntityPlace("constraint", "workstation", node.key.name);
   }
 }
 
-function addPlaceNode(
-  nodes: Map<string, FactoryGraphSeedNode>,
-  place: DashboardPlaceRef,
-) {
-  addNode(nodes, {
-    height:
-      place.kind === "resource" ? RESOURCE_NODE_HEIGHT : STATE_NODE_HEIGHT,
-    id: placeGraphNodeId(place.place_id),
-    nodeId: placeGraphNodeId(place.place_id),
-    nodeKind: place.kind === "resource" ? "resource" : "state_position",
-    place,
-    width: place.kind === "resource" ? RESOURCE_NODE_WIDTH : STATE_NODE_WIDTH,
-  });
+function nodeKindForFactoryGraphNode(
+  node: FactoryGraphNode,
+): FactoryGraphSeedNode["nodeKind"] {
+  switch (node.kind) {
+    case "resource":
+      return "resource";
+    case "work-state":
+      return "state_position";
+    case "worker":
+    case "work-type":
+      return "constraint";
+    case "workstation":
+      return "workstation";
+  }
 }
 
-function addAuxiliaryNode(
-  nodes: Map<string, FactoryGraphSeedNode>,
-  place: DashboardPlaceRef,
-) {
-  addNode(nodes, {
-    height: AUXILIARY_NODE_HEIGHT,
-    id: placeGraphNodeId(place.place_id),
-    nodeId: placeGraphNodeId(place.place_id),
-    nodeKind: "constraint",
-    place,
-    width: AUXILIARY_NODE_WIDTH,
-  });
+function nodeDimensionsForFactoryGraphNode(node: FactoryGraphNode) {
+  switch (node.kind) {
+    case "resource":
+      return { height: RESOURCE_NODE_HEIGHT, width: RESOURCE_NODE_WIDTH };
+    case "work-state":
+      return { height: STATE_NODE_HEIGHT, width: STATE_NODE_WIDTH };
+    case "worker":
+    case "work-type":
+      return { height: AUXILIARY_NODE_HEIGHT, width: AUXILIARY_NODE_WIDTH };
+    case "workstation":
+      return { height: WORKSTATION_NODE_HEIGHT, width: WORKSTATION_NODE_WIDTH };
+  }
 }
 
-function addWorkstationNode(
-  nodes: Map<string, FactoryGraphSeedNode>,
-  workstation: FactoryWorkstation,
-) {
-  const nodeId = workstationGraphNodeId(workstation);
-  addNode(nodes, {
-    height: WORKSTATION_NODE_HEIGHT,
-    id: nodeId,
-    nodeId,
-    nodeKind: "workstation",
-    width: WORKSTATION_NODE_WIDTH,
-    workstationNodeId: workstation.id || workstation.name,
-  });
+function seedNodeFromFactoryGraphNode(
+  node: FactoryGraphNode,
+): FactoryGraphSeedNode {
+  const dimensions = nodeDimensionsForFactoryGraphNode(node);
+  if (node.kind === "workstation") {
+    return {
+      height: dimensions.height,
+      id: node.id,
+      nodeId: node.id,
+      nodeKind: "workstation",
+      width: dimensions.width,
+      workstationNodeId: node.label,
+    };
+  }
+
+  return {
+    height: dimensions.height,
+    id: node.id,
+    nodeId: node.id,
+    nodeKind: nodeKindForFactoryGraphNode(node),
+    place: placeForFactoryGraphNode(node),
+    width: dimensions.width,
+  };
 }
 
-function addEdge(
-  edges: Map<string, FactoryGraphSeedEdge>,
-  edge: Omit<FactoryGraphSeedEdge, "id">,
-) {
-  edges.set(edge.edgeId, {
-    ...edge,
-    id: edge.edgeId,
-  });
+function placeKindForFactoryGraphNodeKind(
+  kind: FactoryGraphNodeKind,
+): DashboardPlaceKind | undefined {
+  switch (kind) {
+    case "resource":
+      return "resource";
+    case "work-state":
+      return "work_state";
+    case "worker":
+    case "work-type":
+      return "constraint";
+    case "workstation":
+      return undefined;
+  }
 }
 
-function routeOutcome(
-  routeKind:
-    | "workstation-on-continue"
-    | "workstation-on-failure"
-    | "workstation-on-rejection"
-    | "workstation-output",
-): DashboardEdgeOutcomeKind {
-  switch (routeKind) {
+function stateCategoryForFactoryGraphNode(
+  node: FactoryGraphNode | undefined,
+  categories: ReadonlyMap<string, StateCategory>,
+) {
+  if (node?.key.kind !== "work-state") {
+    return undefined;
+  }
+
+  return categories.get(
+    workStatePlaceId(node.key.workTypeName, node.key.stateName),
+  );
+}
+
+function edgeLabelForFactoryGraphEdge(
+  targetNode: FactoryGraphNode | undefined,
+) {
+  return targetNode?.kind === "work-state" ? targetNode.label : "";
+}
+
+function resourceAvailabilityWorkTypeNames(
+  factory: CanonicalFactoryDefinition,
+) {
+  const resourceNames = new Set(
+    (factory.resources ?? []).map((resource) => resource.name),
+  );
+  const resourceAvailabilityWorkTypes = new Set<string>();
+
+  for (const workType of factoryWorkTypes(factory)) {
+    if (!resourceNames.has(workType.name)) {
+      continue;
+    }
+    if (workType.states.some((state) => state.name === "available")) {
+      resourceAvailabilityWorkTypes.add(workType.name);
+    }
+  }
+
+  return resourceAvailabilityWorkTypes;
+}
+
+function resourceAvailabilityNodeName(
+  node: FactoryGraphNode | undefined,
+  resourceAvailabilityWorkTypes: ReadonlySet<string>,
+) {
+  if (
+    node?.key.kind === "work-state" &&
+    resourceAvailabilityWorkTypes.has(node.key.workTypeName)
+  ) {
+    return node.key.workTypeName;
+  }
+
+  return null;
+}
+
+function isResourceAvailabilityWorkTypeNode(
+  node: FactoryGraphNode,
+  resourceAvailabilityWorkTypes: ReadonlySet<string>,
+) {
+  return (
+    node.key.kind === "work-type" &&
+    resourceAvailabilityWorkTypes.has(node.key.name)
+  );
+}
+
+function edgeOutcomeKind(edge: FactoryGraphEdge): DashboardEdgeOutcomeKind {
+  switch (edge.kind) {
     case "workstation-on-continue":
       return "continue";
     case "workstation-on-failure":
       return "failed";
     case "workstation-on-rejection":
       return "rejected";
+    case "worker-assignment":
+    case "worker-resource":
+    case "workstation-input":
     case "workstation-output":
+    case "workstation-resource":
+    case "work-type-state":
       return "accepted";
   }
 }
 
-function appendInputEdges(
-  workstation: FactoryWorkstation,
+function seedEdgeFromFactoryGraphEdge(
+  edge: FactoryGraphEdge,
+  topology: FactoryGraphTopology,
   categories: ReadonlyMap<string, StateCategory>,
-  nodes: Map<string, FactoryGraphSeedNode>,
-  edges: Map<string, FactoryGraphSeedEdge>,
-) {
-  const workstationNodeId = workstationGraphNodeId(workstation);
-
-  for (const input of workstation.inputs ?? []) {
-    const place = workStatePlace(input, categories);
-    addPlaceNode(nodes, place);
-    const fromNodeId = placeGraphNodeId(place.place_id);
-    const edgeId = `workstation-input:${fromNodeId}->${workstationNodeId}`;
-    addEdge(edges, {
-      edgeId,
-      fromNodeId,
-      label: "",
-      outcomeKind: "accepted",
-      sourcePlaceKind: "work_state",
-      stateCategory: place.state_category,
-      targetPlaceKind: undefined,
-      toNodeId: workstationNodeId,
-    });
-  }
-}
-
-function appendRouteEdges(
-  workstation: FactoryWorkstation,
-  routeKind:
-    | "workstation-on-continue"
-    | "workstation-on-failure"
-    | "workstation-on-rejection"
-    | "workstation-output",
-  routes: FactoryWorkstationRoute,
-  categories: ReadonlyMap<string, StateCategory>,
-  nodes: Map<string, FactoryGraphSeedNode>,
-  edges: Map<string, FactoryGraphSeedEdge>,
-) {
-  const workstationNodeId = workstationGraphNodeId(workstation);
-
-  for (const output of workstationRouteIOs(routes)) {
-    const place = workStatePlace(output, categories);
-    addPlaceNode(nodes, place);
-    const toNodeId = placeGraphNodeId(place.place_id);
-    const edgeId = `${routeKind}:${workstationNodeId}->${toNodeId}`;
-    addEdge(edges, {
-      edgeId,
-      fromNodeId: workstationNodeId,
-      label: place.place_id,
-      outcomeKind: routeOutcome(routeKind),
-      sourcePlaceKind: undefined,
-      stateCategory:
-        routeKind === "workstation-on-failure"
-          ? "FAILED"
-          : place.state_category,
-      targetPlaceKind: "work_state",
-      toNodeId,
-    });
-  }
-}
-
-function appendResourceEdges(
-  workstation: FactoryWorkstation,
-  nodes: Map<string, FactoryGraphSeedNode>,
-  edges: Map<string, FactoryGraphSeedEdge>,
-) {
-  const workstationNodeId = workstationGraphNodeId(workstation);
-
-  for (const resource of workstation.resources ?? []) {
-    const place = factoryEntityPlace("resource", "resource", resource.name);
-    addPlaceNode(nodes, place);
-    const fromNodeId = placeGraphNodeId(place.place_id);
-    const edgeId = `workstation-resource:${fromNodeId}->${workstationNodeId}`;
-    addEdge(edges, {
-      edgeId,
-      fromNodeId,
-      label: "",
-      outcomeKind: "accepted",
-      sourcePlaceKind: "resource",
-      stateCategory: undefined,
-      targetPlaceKind: undefined,
-      toNodeId: workstationNodeId,
-    });
-  }
-}
-
-function appendWorkerEdge(
-  workstation: FactoryWorkstation,
-  nodes: Map<string, FactoryGraphSeedNode>,
-  edges: Map<string, FactoryGraphSeedEdge>,
-) {
-  if (!workstation.worker) {
-    return;
+  resourceAvailabilityWorkTypes: ReadonlySet<string>,
+): FactoryGraphSeedEdge | null {
+  if (edge.kind === "work-type-state") {
+    return null;
   }
 
-  const workerPlace = factoryEntityPlace(
-    "constraint",
-    "worker",
-    workstation.worker,
+  const sourceNode = topology.nodes.find((node) => node.id === edge.sourceId);
+  const targetNode = topology.nodes.find((node) => node.id === edge.targetId);
+  if (!sourceNode || !targetNode) {
+    return null;
+  }
+  const sourceResourceName = resourceAvailabilityNodeName(
+    sourceNode,
+    resourceAvailabilityWorkTypes,
   );
-  addAuxiliaryNode(nodes, workerPlace);
-  const fromNodeId = placeGraphNodeId(workerPlace.place_id);
-  const toNodeId = workstationGraphNodeId(workstation);
-  const edgeId = `worker-assignment:${fromNodeId}->${toNodeId}`;
+  const targetResourceName = resourceAvailabilityNodeName(
+    targetNode,
+    resourceAvailabilityWorkTypes,
+  );
+  const fromNodeId = sourceResourceName
+    ? `resource:${sourceResourceName}`
+    : edge.sourceId;
+  const toNodeId = targetResourceName
+    ? `resource:${targetResourceName}`
+    : edge.targetId;
+  if (fromNodeId === toNodeId) {
+    return null;
+  }
+  const canonicalEdgeKind =
+    edge.kind === "workstation-input" && sourceResourceName
+      ? "workstation-resource"
+      : edge.kind;
+  const edgeId =
+    canonicalEdgeKind === edge.kind &&
+    fromNodeId === edge.sourceId &&
+    toNodeId === edge.targetId
+      ? edge.id
+      : `${canonicalEdgeKind}:${fromNodeId}->${toNodeId}`;
+  const targetPlaceKind = targetResourceName
+    ? "resource"
+    : placeKindForFactoryGraphNodeKind(targetNode.kind);
 
-  addEdge(edges, {
+  return {
     edgeId,
     fromNodeId,
-    label: "",
-    outcomeKind: "accepted",
-    sourcePlaceKind: "constraint",
-    stateCategory: undefined,
-    targetPlaceKind: undefined,
+    id: edgeId,
+    label: targetResourceName ? "" : edgeLabelForFactoryGraphEdge(targetNode),
+    outcomeKind: edgeOutcomeKind(edge),
+    sourcePlaceKind: sourceResourceName
+      ? "resource"
+      : placeKindForFactoryGraphNodeKind(sourceNode.kind),
+    stateCategory: targetResourceName
+      ? undefined
+      : edge.kind === "workstation-on-failure"
+        ? "FAILED"
+        : stateCategoryForFactoryGraphNode(targetNode, categories),
+    targetPlaceKind,
     toNodeId,
-  });
+  };
 }
 
 function toPositionedNode(
@@ -481,101 +547,32 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
 ): Promise<GraphLayout> {
   const nodes = new Map<string, FactoryGraphSeedNode>();
   const edges = new Map<string, FactoryGraphSeedEdge>();
-  const categories = stateCategoryByName(factory);
+  const normalizedFactory = normalizeFactoryDefinitionForGraph(factory);
+  const categories = stateCategoryByName(normalizedFactory);
+  const resourceAvailabilityWorkTypes =
+    resourceAvailabilityWorkTypeNames(normalizedFactory);
+  const topology = buildFactoryGraphTopologyFromDefinition(normalizedFactory);
 
-  for (const resource of factory.resources ?? []) {
-    addPlaceNode(
-      nodes,
-      factoryEntityPlace("resource", "resource", resource.name),
-    );
-  }
-
-  for (const worker of factory.workers ?? []) {
-    addAuxiliaryNode(
-      nodes,
-      factoryEntityPlace("constraint", "worker", worker.name),
-    );
-    for (const resource of worker.resources ?? []) {
-      const resourcePlace = factoryEntityPlace(
-        "resource",
-        "resource",
-        resource.name,
-      );
-      const workerPlace = factoryEntityPlace(
-        "constraint",
-        "worker",
-        worker.name,
-      );
-      addPlaceNode(nodes, resourcePlace);
-      const fromNodeId = placeGraphNodeId(resourcePlace.place_id);
-      const toNodeId = placeGraphNodeId(workerPlace.place_id);
-      addEdge(edges, {
-        edgeId: `worker-resource:${fromNodeId}->${toNodeId}`,
-        fromNodeId,
-        label: "",
-        outcomeKind: "accepted",
-        sourcePlaceKind: "resource",
-        stateCategory: undefined,
-        targetPlaceKind: "constraint",
-        toNodeId,
-      });
+  for (const node of topology.nodes) {
+    if (
+      resourceAvailabilityNodeName(node, resourceAvailabilityWorkTypes) ||
+      isResourceAvailabilityWorkTypeNode(node, resourceAvailabilityWorkTypes)
+    ) {
+      continue;
     }
+    nodes.set(node.id, seedNodeFromFactoryGraphNode(node));
   }
 
-  for (const workType of factoryWorkTypes(factory)) {
-    addAuxiliaryNode(
-      nodes,
-      factoryEntityPlace("constraint", "work-type", workType.name),
+  for (const edge of topology.edges) {
+    const seedEdge = seedEdgeFromFactoryGraphEdge(
+      edge,
+      topology,
+      categories,
+      resourceAvailabilityWorkTypes,
     );
-    for (const state of workType.states) {
-      addPlaceNode(nodes, {
-        kind: "work_state",
-        place_id: workStatePlaceId(workType.name, state.name),
-        state_category: state.type,
-        state_value: state.name,
-        type_id: workType.name,
-      });
+    if (seedEdge) {
+      edges.set(seedEdge.edgeId, seedEdge);
     }
-  }
-
-  for (const workstation of factory.workstations ?? []) {
-    const legacyWorkstation = workstation as LegacyFactoryWorkstation;
-    addWorkstationNode(nodes, workstation);
-    appendWorkerEdge(workstation, nodes, edges);
-    appendResourceEdges(workstation, nodes, edges);
-    appendInputEdges(workstation, categories, nodes, edges);
-    appendRouteEdges(
-      workstation,
-      "workstation-output",
-      workstation.outputs,
-      categories,
-      nodes,
-      edges,
-    );
-    appendRouteEdges(
-      workstation,
-      "workstation-on-continue",
-      workstation.onContinue ?? legacyWorkstation.on_continue,
-      categories,
-      nodes,
-      edges,
-    );
-    appendRouteEdges(
-      workstation,
-      "workstation-on-rejection",
-      workstation.onRejection ?? legacyWorkstation.on_rejection,
-      categories,
-      nodes,
-      edges,
-    );
-    appendRouteEdges(
-      workstation,
-      "workstation-on-failure",
-      workstation.onFailure ?? legacyWorkstation.on_failure,
-      categories,
-      nodes,
-      edges,
-    );
   }
 
   return layoutFactoryGraphSeeds(nodes, edges);

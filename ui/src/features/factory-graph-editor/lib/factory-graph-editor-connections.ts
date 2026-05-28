@@ -1,3 +1,4 @@
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {
   FactoryGraphDraft,
   FactoryGraphDraftEdgeChange,
@@ -7,11 +8,11 @@ import type {
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
 import { edgeChangeId } from "./factory-graph-draft-types";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export interface FactoryGraphConnectionAnchor {
   description: string;
   edgeKind: FactoryGraphDraftEdgeChange["kind"];
+  edgeKinds?: readonly FactoryGraphDraftEdgeChange["kind"][];
   id: string;
   label: string;
   role: "source" | "target";
@@ -49,7 +50,7 @@ const ANCHORS_BY_KIND: Record<
     {
       description: "",
       edgeKind: "worker-resource",
-      id: "worker-resource-target",
+      id: "worker-input-target",
       label: "",
       role: "target",
       side: "left",
@@ -75,31 +76,13 @@ const ANCHORS_BY_KIND: Record<
     {
       description: "",
       edgeKind: "workstation-output",
-      id: "workstation-output-target",
-      label: "",
-      role: "target",
-      side: "left",
-    },
-    {
-      description: "",
-      edgeKind: "workstation-on-continue",
-      id: "workstation-on-continue-target",
-      label: "",
-      role: "target",
-      side: "left",
-    },
-    {
-      description: "",
-      edgeKind: "workstation-on-failure",
-      id: "workstation-on-failure-target",
-      label: "",
-      role: "target",
-      side: "left",
-    },
-    {
-      description: "",
-      edgeKind: "workstation-on-rejection",
-      id: "workstation-on-rejection-target",
+      edgeKinds: [
+        "workstation-output",
+        "workstation-on-continue",
+        "workstation-on-failure",
+        "workstation-on-rejection",
+      ],
+      id: "work-state-input-target",
       label: "",
       role: "target",
       side: "left",
@@ -254,8 +237,15 @@ export function isCompatibleFactoryGraphConnectionAnchors(
   return (
     sourceAnchor.role === "source" &&
     targetAnchor.role === "target" &&
-    sourceAnchor.edgeKind === targetAnchor.edgeKind
+    anchorSupportsEdgeKind(targetAnchor, sourceAnchor.edgeKind)
   );
+}
+
+function anchorSupportsEdgeKind(
+  anchor: FactoryGraphConnectionAnchor,
+  edgeKind: FactoryGraphDraftEdgeChange["kind"],
+) {
+  return (anchor.edgeKinds ?? [anchor.edgeKind]).includes(edgeKind);
 }
 
 export function applyFactoryGraphEdgeAddition(

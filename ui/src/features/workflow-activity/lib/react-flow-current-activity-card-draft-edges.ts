@@ -28,6 +28,12 @@ function resolveVisibleNodeId(
   if (graphLayout.nodes.some((node) => node.nodeId === preferredNodeId)) {
     return preferredNodeId;
   }
+  if (key.kind === "work-state") {
+    const resourceNodeId = `resource:${key.workTypeName}`;
+    if (graphLayout.nodes.some((node) => node.nodeId === resourceNodeId)) {
+      return resourceNodeId;
+    }
+  }
   const legacyNodeId = legacyCurrentActivityNodeIdForFactoryGraphKey(key);
   if (graphLayout.nodes.some((node) => node.nodeId === legacyNodeId)) {
     return legacyNodeId;
@@ -77,20 +83,28 @@ function supportedCurrentActivityDraftEdge(
   if (!sourceNodeId || !targetNodeId) {
     return null;
   }
+  const sourceResourceAlias =
+    edgeChange.source.kind === "work-state" &&
+    sourceNodeId === `resource:${edgeChange.source.workTypeName}`;
+  const edgeKind =
+    edgeChange.kind === "workstation-input" && sourceResourceAlias
+      ? "workstation-resource"
+      : edgeChange.kind;
 
   return {
-    edgeId: `${edgeChange.kind}:${sourceNodeId}->${targetNodeId}`,
+    edgeId: `${edgeKind}:${sourceNodeId}->${targetNodeId}`,
     fromNodeId: sourceNodeId,
     label:
-      edgeChange.target.kind === "work-state"
+      edgeChange.target.kind === "work-state" && !sourceResourceAlias
         ? `${edgeChange.target.workTypeName}:${edgeChange.target.stateName}`
         : "",
     labelX: 0,
     labelY: 0,
     outcomeKind: positionedEdgeOutcomeKind(edgeChange.kind),
     path: "",
-    sourcePlaceKind:
-      edgeChange.source.kind === "work-state"
+    sourcePlaceKind: sourceResourceAlias
+      ? "resource"
+      : edgeChange.source.kind === "work-state"
         ? "work_state"
         : edgeChange.source.kind === "resource"
           ? "resource"
@@ -98,8 +112,7 @@ function supportedCurrentActivityDraftEdge(
               edgeChange.source.kind === "work-type"
             ? "constraint"
             : undefined,
-    stateCategory:
-      edgeChange.kind === "workstation-on-failure" ? "FAILED" : undefined,
+    stateCategory: edgeKind === "workstation-on-failure" ? "FAILED" : undefined,
     targetPlaceKind:
       edgeChange.target.kind === "work-state"
         ? "work_state"

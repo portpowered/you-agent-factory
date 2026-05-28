@@ -1,10 +1,15 @@
 import { Handle, Position } from "@xyflow/react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
 
-export type PlaceNodeType = "constraint" | "resource" | "statePosition";
+export type PlaceNodeType =
+  | "constraint"
+  | "resource"
+  | "statePosition"
+  | "worker"
+  | "workType";
 
 export interface ActivityGraphNodeHandle {
   buttonAriaLabel?: string;
@@ -24,24 +29,18 @@ export interface ActivityGraphNodeHandle {
 interface ActivityGraphNodeShellProps {
   children: ReactNode;
   className?: string;
-  handles?: ActivityGraphNodeHandle[];
-  incomingHandleCount: number;
+  handles: ActivityGraphNodeHandle[];
   nodeType: "workstation" | PlaceNodeType;
-  outgoingHandleCount: number;
 }
 
 export function ActivityGraphNodeShell({
   children,
   className = "",
   handles,
-  incomingHandleCount,
   nodeType,
-  outgoingHandleCount,
 }: ActivityGraphNodeShellProps) {
-  const leftHandles = handles?.filter((handle) => handle.side === "left") ?? [];
-  const rightHandles =
-    handles?.filter((handle) => handle.side === "right") ?? [];
-  const renderPositionalHandles = handles === undefined;
+  const leftHandles = handles.filter((handle) => handle.side === "left");
+  const rightHandles = handles.filter((handle) => handle.side === "right");
 
   return (
     <article
@@ -58,21 +57,6 @@ export function ActivityGraphNodeShell({
           top={handlePosition(handleNumber, leftHandles.length)}
         />
       ))}
-      {renderPositionalHandles &&
-        Array.from({ length: incomingHandleCount }, (_, handleNumber) => {
-          const top = handlePosition(handleNumber, incomingHandleCount);
-          const handleId = `in-${handleNumber}`;
-          return (
-            <Handle
-              className="pointer-events-none opacity-0"
-              id={handleId}
-              key={`incoming-${top}`}
-              position={Position.Left}
-              style={{ top }}
-              type="target"
-            />
-          );
-        })}
       {rightHandles.map((handle, handleNumber) => (
         <NodeHandleBadge
           handle={handle}
@@ -80,21 +64,6 @@ export function ActivityGraphNodeShell({
           top={handlePosition(handleNumber, rightHandles.length)}
         />
       ))}
-      {renderPositionalHandles &&
-        Array.from({ length: outgoingHandleCount }, (_, handleNumber) => {
-          const top = handlePosition(handleNumber, outgoingHandleCount);
-          const handleId = `out-${handleNumber}`;
-          return (
-            <Handle
-              className="pointer-events-none opacity-0"
-              id={handleId}
-              key={`outgoing-${top}`}
-              position={Position.Right}
-              style={{ top }}
-              type="source"
-            />
-          );
-        })}
       {children}
     </article>
   );
@@ -128,34 +97,20 @@ function NodeHandleBadge({
     handle.side === "left"
       ? "-translate-x-1 flex-row"
       : "translate-x-1 flex-row-reverse";
-  const buttonClassName = cn(
-    "nodrag nopan inline-flex min-h-6 items-center rounded-full border px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.08em] shadow-sm transition focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed",
-    handle.variant === "selected" &&
-      "border-af-accent-border bg-af-accent-surface text-af-accent",
-    handle.variant === "valid-target" &&
-      "border-af-success-border bg-af-success-surface text-af-success",
-    handle.variant === "muted" &&
-      "border-af-border bg-af-surface-subtle text-af-text-subtle",
-    (handle.variant === undefined || handle.variant === "default") &&
-      "border-af-border-strong bg-af-surface-raised text-af-text-muted hover:border-af-accent-border hover:text-af-text",
-  );
+  const dotClassName = handleDotClassName(handle);
+  const dotStyle = handleDotStyle(handle);
 
   return (
     <div
       className={cn(
-        "pointer-events-none absolute top-0 z-20 flex -translate-y-1/2 items-center gap-1.5",
+        "pointer-events-none absolute top-0 z-20 flex -translate-y-1/2 items-center",
         handle.side === "left" ? "left-0" : "right-0",
         wrapperClassName,
       )}
       style={{ top }}
     >
       <Handle
-        className={cn(
-          "pointer-events-auto !h-3.5 !w-3.5 !border-2 !border-af-surface !bg-af-border-strong transition",
-          handle.connectable && "!bg-af-accent-border",
-          handle.variant === "selected" && "!bg-af-accent",
-          handle.variant === "valid-target" && "!bg-af-success",
-        )}
+        className={cn("pointer-events-auto !h-2.5 !w-2.5 !border-0 opacity-0")}
         id={handle.id}
         isConnectable={handle.connectable ?? true}
         position={position}
@@ -164,13 +119,76 @@ function NodeHandleBadge({
       <GraphNodeButton
         aria-label={handle.buttonAriaLabel}
         aria-pressed={handle.buttonPressed}
-        className={cn("pointer-events-auto", buttonClassName)}
+        className={cn(
+          "pointer-events-auto -m-1 grid h-5 w-5 place-items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-af-focus-ring disabled:cursor-not-allowed disabled:opacity-45",
+        )}
         disabled={handle.buttonDisabled}
         onClick={handle.onButtonClick}
         title={handle.buttonTitle}
       >
-        {handle.label}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "block h-2.5 w-2.5 rounded-full border border-af-surface shadow-sm transition",
+            dotClassName,
+            handle.variant === "selected" &&
+              "scale-125 shadow-[0_0_0_3px_var(--color-af-accent-surface)]",
+            handle.variant === "valid-target" &&
+              "scale-125 shadow-[0_0_0_3px_var(--color-af-success-surface)]",
+          )}
+          style={dotStyle}
+        />
       </GraphNodeButton>
     </div>
   );
+}
+
+function handleDotStyle(
+  handle: ActivityGraphNodeHandle,
+): CSSProperties | undefined {
+  if (
+    handle.id === "workstation-resource-source" ||
+    handle.id === "workstation-resource-target"
+  ) {
+    return {
+      backgroundColor: "var(--color-af-text-inverse)",
+      borderColor: "var(--color-af-text)",
+    };
+  }
+
+  return undefined;
+}
+
+function handleDotClassName(handle: ActivityGraphNodeHandle): string {
+  if (handle.variant === "muted") {
+    return "bg-af-border-strong";
+  }
+
+  if (
+    handle.id === "workstation-resource-source" ||
+    handle.id === "workstation-resource-target"
+  ) {
+    return "";
+  }
+  if (handle.id.includes("on-continue")) {
+    return "bg-af-info";
+  }
+  if (handle.id.includes("on-failure")) {
+    return "bg-af-danger";
+  }
+  if (handle.id.includes("on-rejection")) {
+    return "bg-af-warning";
+  }
+  if (handle.id.includes("worker")) {
+    return "bg-af-worker";
+  }
+  if (
+    handle.id.includes("input") ||
+    handle.id.includes("output") ||
+    handle.id.includes("resource")
+  ) {
+    return "bg-af-success";
+  }
+
+  return "bg-af-border-strong";
 }

@@ -82,28 +82,28 @@ describe("current activity graph editor controllers", () => {
     {
       edgeKind: "workstation-output",
       sourceAnchorId: "workstation-output-source",
-      targetAnchorId: "workstation-output-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:done",
       targetStateName: "done",
     },
     {
       edgeKind: "workstation-on-continue",
       sourceAnchorId: "workstation-on-continue-source",
-      targetAnchorId: "workstation-on-continue-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:queued",
       targetStateName: "queued",
     },
     {
       edgeKind: "workstation-on-failure",
       sourceAnchorId: "workstation-on-failure-source",
-      targetAnchorId: "workstation-on-failure-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:queued",
       targetStateName: "queued",
     },
     {
       edgeKind: "workstation-on-rejection",
       sourceAnchorId: "workstation-on-rejection-source",
-      targetAnchorId: "workstation-on-rejection-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:done",
       targetStateName: "done",
     },
@@ -182,7 +182,7 @@ describe("current activity graph editor controllers", () => {
 
     act(() => {
       result.current.handleConnectionAnchorClick({
-        anchorId: "workstation-output-target",
+        anchorId: "work-state-input-target",
         nodeId: "work-state:story:done",
       });
     });
@@ -196,7 +196,7 @@ describe("current activity graph editor controllers", () => {
         source: "workstation:review",
         sourceHandle: "workstation-on-failure-source",
         target: "work-state:story:done",
-        targetHandle: "workstation-on-continue-target",
+        targetHandle: "work-state-input-target",
       });
     });
 

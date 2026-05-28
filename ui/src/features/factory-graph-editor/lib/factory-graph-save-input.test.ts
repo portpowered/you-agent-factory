@@ -169,7 +169,7 @@ describe("factory graph save input", () => {
           connect(disconnectRoutesAndResources(), {
             sourceAnchorId: "workstation-output-source",
             sourceNodeId: "workstation:draft",
-            targetAnchorId: "workstation-output-target",
+            targetAnchorId: "work-state-input-target",
             targetNodeId: "work-state:story:done",
           }),
           ["worker-assignment:worker:writer->workstation:draft"],
