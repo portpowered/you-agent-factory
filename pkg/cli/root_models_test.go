@@ -2,7 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
@@ -33,6 +36,49 @@ func TestModelsListCommand_DefaultPortAndJSONFlagMapToConfig(t *testing.T) {
 	}
 	if !got.JSON {
 		t.Fatal("expected --json to map to ListConfig.JSON")
+	}
+}
+
+func TestModelsListCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr(t *testing.T) {
+	originalListModels := listModels
+	defer func() {
+		listModels = originalListModels
+	}()
+
+	listModels = func(cfg modelscli.ListConfig) error {
+		if !cfg.Verbose {
+			t.Fatal("expected verbose config")
+		}
+		if cfg.Diagnostics == nil {
+			t.Fatal("expected diagnostics writer")
+		}
+		if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: models list"); err != nil {
+			return err
+		}
+		_, err := fmt.Fprintln(cfg.Output, `{"results":[]}`)
+		return err
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"models", "list", "--json", "--verbose"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute models list --json --verbose: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("stdout is not parseable JSON: %v\n%s", err, stdout.String())
+	}
+	if _, ok := payload["results"]; !ok {
+		t.Fatalf("stdout JSON = %#v, want results key", payload)
+	}
+	if got := stderr.String(); !strings.Contains(got, "diagnostic: models list") {
+		t.Fatalf("stderr = %q, want diagnostics", got)
 	}
 }
 

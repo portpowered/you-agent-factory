@@ -113,6 +113,79 @@ func TestQuery_WritesJSONNamedFactory(t *testing.T) {
 	}
 }
 
+func TestQuery_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T) {
+	factoryID := "customer-factory"
+	srv := currentFactoryServer(t, factoryapi.Factory{
+		Name: "beta",
+		Id:   &factoryID,
+	})
+	defer srv.Close()
+
+	var out bytes.Buffer
+	var diagnostics bytes.Buffer
+	if err := Query(QueryConfig{
+		Port:        serverPort(t, srv),
+		JSON:        true,
+		Verbose:     true,
+		Output:      &out,
+		Diagnostics: &diagnostics,
+	}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	var got factoryapi.Factory
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("json output is not valid Factory JSON: %v\n%s", err, out.String())
+	}
+	diag := diagnostics.String()
+	for _, want := range []string{
+		"factory query request",
+		"endpointPath=/factory-sessions/~default/factory",
+		"port=",
+		"factory query response",
+		"status=200",
+		"factoryKind=named",
+		`factoryName="beta"`,
+	} {
+		if !strings.Contains(diag, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, diag)
+		}
+	}
+}
+
+func TestQuery_VerboseLogsFailureStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Code:    factoryapi.NOTFOUND,
+			Message: "Current factory not found.",
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	var diagnostics bytes.Buffer
+	err := Query(QueryConfig{
+		Port:        serverPort(t, srv),
+		JSON:        true,
+		Verbose:     true,
+		Output:      &out,
+		Diagnostics: &diagnostics,
+	})
+	if !errors.Is(err, ErrCurrentFactoryNotFound) {
+		t.Fatalf("Query error = %v, want ErrCurrentFactoryNotFound", err)
+	}
+	diag := diagnostics.String()
+	if !strings.Contains(diag, "factory query response") || !strings.Contains(diag, "status=404") {
+		t.Fatalf("diagnostics missing failure status:\n%s", diag)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should stay empty on failure, got %q", out.String())
+	}
+}
+
 func TestQuery_ReturnsActionableCurrentFactoryNotFoundError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/factory-sessions/~default/factory" {

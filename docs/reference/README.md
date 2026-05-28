@@ -19,6 +19,30 @@ complete customer-facing contract.
 | `batch-work` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
 
+## CLI Output And Diagnostics
+
+Default command output is the customer-facing command result. Commands that emit
+JSON must keep parseable JSON on stdout, and any troubleshooting diagnostics
+from `--verbose` or `--debug` must use stderr unless an existing command-owned
+diagnostics stream is explicitly documented.
+
+`--verbose` is for concise operational context that helps diagnose a command
+without changing its result. Verbose diagnostics may include paths, endpoint
+URLs or paths, request or trace IDs, status codes, counts, durations, byte
+sizes, output paths, and selected option summaries. `--debug` is for
+lower-level development diagnostics where a command supports that mode, and
+debug mode implies verbose command diagnostics.
+
+Verbose and debug diagnostics must not include full prompts, full work payloads,
+access tokens, full model input text, full successful response bodies,
+sensitive generated content, or full command stdout or stderr unless an
+existing explicit failure policy already permits a bounded preview.
+
+CLI verbose diagnostics are separate from service runtime logs controlled by
+`you run --runtime-log-*`. Runtime logs are structured service-owned logs;
+command diagnostics explain the CLI invocation and transport or filesystem work
+around that invocation.
+
 ## Canonical Concept Owners
 
 - [Factory JSON and work configuration](work.md) owns work types, work states,

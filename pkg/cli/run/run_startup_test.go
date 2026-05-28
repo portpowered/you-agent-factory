@@ -169,6 +169,91 @@ func TestRun_AutoPortResolvesBusyPreferredPortBeforeServiceBuildAndStartupOutput
 	}
 }
 
+func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	dir, _ := writeDashboardRunFixture(t)
+	busyListener, busyPort := listenOnBusyTCPPort(t)
+	defer busyListener.Close()
+
+	var capturedPort int
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		capturedPort = cfg.Port
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+
+	var diagnostics bytes.Buffer
+	err := Run(context.Background(), RunConfig{
+		Dir:                        dir,
+		Workflow:                   "workflow-1",
+		RunnerID:                   "codex",
+		Port:                       busyPort,
+		AutoPort:                   true,
+		DisableDefaultRecording:    true,
+		RuntimeLogDir:              "logs/runtime",
+		MockWorkersEnabled:         true,
+		SuppressDashboardRendering: true,
+		Verbose:                    true,
+		Diagnostics:                &diagnostics,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if capturedPort == busyPort {
+		t.Fatalf("service port = busy port %d, want auto-resolved fallback", busyPort)
+	}
+
+	got := diagnostics.String()
+	for _, want := range []string{
+		"run startup",
+		`factoryDir="` + dir + `"`,
+		`configuredDir="` + dir + `"`,
+		"runtimeMode=BATCH",
+		`workflow="workflow-1"`,
+		"runnerOverride=true",
+		"mockWorkers=true",
+		"recording=disabled",
+		`runtimeLogDir="logs/runtime"`,
+		"dashboardPort=",
+		"requestedDashboardPort=",
+		"autoPort=fallback",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRun_StartupDiagnosticsStaySilentWhenVerboseDisabled(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+	}
+
+	var diagnostics bytes.Buffer
+	err := Run(context.Background(), RunConfig{
+		DisableDefaultRecording: true,
+		Diagnostics:             &diagnostics,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if diagnostics.Len() != 0 {
+		t.Fatalf("diagnostics = %q, want empty when verbose is disabled", diagnostics.String())
+	}
+}
+
 func TestRun_StartupOutputSkipsDashboardOpenWhenOutputIsNonInteractive(t *testing.T) {
 	originalBuilder := buildFactoryService
 	originalOpener := dashboardOpener

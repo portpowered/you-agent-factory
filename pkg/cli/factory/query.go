@@ -14,6 +14,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
@@ -31,9 +32,12 @@ type QueryCurrentConfig struct {
 
 // QueryConfig holds parameters for the factory query command.
 type QueryConfig struct {
-	Port   int
-	JSON   bool
-	Output io.Writer
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 // Query prints the active factory from a running factory service.
@@ -42,7 +46,11 @@ func Query(cfg QueryConfig) error {
 		cfg.Output = os.Stdout
 	}
 
-	current, err := QueryCurrent(QueryCurrentConfig{Port: cfg.Port})
+	current, err := queryCurrent(queryCurrentOptions{
+		Port:        cfg.Port,
+		Verbose:     cfg.Verbose,
+		Diagnostics: cfg.Diagnostics,
+	})
 	if err != nil {
 		return renderQueryCurrentError(err)
 	}
@@ -55,15 +63,28 @@ func Query(cfg QueryConfig) error {
 
 // QueryCurrent requests the active factory from a running factory service.
 func QueryCurrent(cfg QueryCurrentConfig) (factoryapi.Factory, error) {
+	return queryCurrent(queryCurrentOptions{Port: cfg.Port})
+}
+
+type queryCurrentOptions struct {
+	Port        int
+	Verbose     bool
+	Diagnostics io.Writer
+}
+
+func queryCurrent(cfg queryCurrentOptions) (factoryapi.Factory, error) {
 	endpoint := url.URL{
 		Scheme: "http",
 		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
 		Path:   sessionpath.CurrentFactoryPath(""),
 	}
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query request endpointPath=%s endpoint=%s port=%d", endpoint.Path, endpoint.String(), cfg.Port)
 
 	client := &http.Client{Timeout: queryCurrentRequestTimeout}
+	started := time.Now()
 	resp, err := client.Get(endpoint.String())
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, time.Since(started).Milliseconds())
 		return factoryapi.Factory{}, fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
@@ -74,6 +95,7 @@ func QueryCurrent(cfg QueryCurrentConfig) (factoryapi.Factory, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds(), len(body))
 		return factoryapi.Factory{}, queryCurrentError(resp.StatusCode, body)
 	}
 
@@ -81,6 +103,7 @@ func QueryCurrent(cfg QueryCurrentConfig) (factoryapi.Factory, error) {
 	if err := json.Unmarshal(body, &result); err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("parse current factory response: %w", err)
 	}
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s status=%d durationMillis=%d responseBytes=%d factoryKind=%s factoryName=%q", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds(), len(body), currentFactoryKind(result), result.Name)
 	return result, nil
 }
 
