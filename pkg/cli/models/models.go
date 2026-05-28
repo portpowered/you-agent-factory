@@ -25,33 +25,45 @@ const (
 var ErrModelNotFound = errors.New("model not found")
 
 type ListConfig struct {
-	Port   int
-	JSON   bool
-	Output io.Writer
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 type InspectConfig struct {
-	ModelName string
-	Port      int
-	JSON      bool
-	Output    io.Writer
+	ModelName   string
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 type InvokeConfig struct {
-	ModelName  string
-	Operation  string
-	Text       string
-	OutputPath string
-	Port       int
-	JSON       bool
-	Output     io.Writer
+	ModelName   string
+	Operation   string
+	Text        string
+	OutputPath  string
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 type PullConfig struct {
-	ModelName string
-	Port      int
-	JSON      bool
-	Output    io.Writer
+	ModelName   string
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 func List(cfg ListConfig) error {

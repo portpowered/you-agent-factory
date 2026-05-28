@@ -21,6 +21,9 @@ type SubmitConfig struct {
 	Payload      string
 	Port         int
 	SessionID    string
+	Verbose      bool
+	Debug        bool
+	Diagnostics  io.Writer
 }
 
 // Submit posts work to a running factory via HTTP.

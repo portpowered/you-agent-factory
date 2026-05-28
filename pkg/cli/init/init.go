@@ -3,6 +3,7 @@ package initcmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,9 +13,12 @@ import (
 
 // InitConfig holds parameters for the init command.
 type InitConfig struct {
-	Dir      string
-	Type     string
-	Executor string
+	Dir         string
+	Type        string
+	Executor    string
+	Verbose     bool
+	Debug       bool
+	Diagnostics io.Writer
 }
 
 const (

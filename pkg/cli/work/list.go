@@ -20,15 +20,18 @@ const listRequestTimeout = 10 * time.Second
 
 // ListConfig holds parameters for the work list command.
 type ListConfig struct {
-	Port       int
-	SessionID  string
-	StateName  string
-	StateType  string
-	SortBy     string
-	MaxResults int
-	NextToken  string
-	JSON       bool
-	Output     io.Writer
+	Port        int
+	SessionID   string
+	StateName   string
+	StateType   string
+	SortBy      string
+	MaxResults  int
+	NextToken   string
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 // List requests available work from a running factory via HTTP.

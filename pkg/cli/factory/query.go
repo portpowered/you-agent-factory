@@ -31,9 +31,12 @@ type QueryCurrentConfig struct {
 
 // QueryConfig holds parameters for the factory query command.
 type QueryConfig struct {
-	Port   int
-	JSON   bool
-	Output io.Writer
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 // Query prints the active factory from a running factory service.

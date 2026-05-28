@@ -11,14 +11,20 @@ import (
 
 // FactoryConfigFlattenConfig holds parameters for the config flatten command.
 type FactoryConfigFlattenConfig struct {
-	Path   string
-	Output io.Writer
+	Path        string
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 // FactoryConfigExpandConfig holds parameters for the config expand command.
 type FactoryConfigExpandConfig struct {
-	Path   string
-	Output io.Writer
+	Path        string
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 // FlattenFactoryConfig writes the canonical single-file factory config for a
