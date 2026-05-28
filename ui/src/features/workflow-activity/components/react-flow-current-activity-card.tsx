@@ -125,6 +125,7 @@ function useCurrentActivityBaseNodes({
   activeGraphHighlights,
   activeItemLabelsByPlaceId,
   editor,
+  factoryDefinition,
   graphLayout,
   locale,
   now,
@@ -151,6 +152,7 @@ function useCurrentActivityBaseNodes({
   activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
   activeItemLabelsByPlaceId: ReturnType<typeof buildActiveItemLabelsByPlaceId>;
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+  factoryDefinition?: DashboardSnapshot["factory"];
   graphLayout: GraphLayout;
   storedNodePositions: typeof EMPTY_NODE_POSITIONS;
 }) {
@@ -167,6 +169,7 @@ function useCurrentActivityBaseNodes({
           onConnectionAnchorClick: editor.handleConnectionAnchorClick,
           pendingConnectionSource: editor.pendingConnectionSource,
         },
+        factoryDefinition,
         graphLayout,
         locale,
         now,
@@ -182,6 +185,7 @@ function useCurrentActivityBaseNodes({
       activeGraphHighlights,
       activeItemLabelsByPlaceId,
       editor,
+      factoryDefinition,
       graphLayout,
       locale,
       now,
@@ -258,6 +262,10 @@ export function useCurrentActivityGraphViewModel({
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
     editor,
+    factoryDefinition:
+      editor.editorMode && hasPendingGraphEntityShapeChanges(editor)
+        ? (editor.draftState.pendingFactoryDefinition ?? undefined)
+        : snapshot.factory,
     graphLayout,
     locale,
     now,

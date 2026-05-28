@@ -1,3 +1,7 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: integration flows share one mocked React Flow harness.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -208,6 +212,18 @@ const editableFactoryDocument: CurrentFactoryDocument = {
   },
 };
 
+function loadSampleFactoryDocument(): CurrentFactoryDocument {
+  return {
+    ...JSON.parse(
+      readFileSync(resolve(process.cwd(), "../factory/factory.json"), "utf-8"),
+    ),
+    version: {
+      logical: "sample",
+      physical: "2026-05-28T00:00:00Z",
+    },
+  } as CurrentFactoryDocument;
+}
+
 const importController: CurrentActivityImportController = {
   activateImport: vi.fn().mockResolvedValue(undefined),
   activationState: { status: "idle" },
@@ -289,6 +305,74 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     expect(
       screen.getByRole("button", { name: "work-type:essay" }),
     ).toBeTruthy();
+  });
+
+  it.each([
+    {
+      expectedNodeNames: ["resource:sandbox-slot"],
+      fields: [{ label: "Identifier", value: "sandbox-slot" }],
+      menuAction: "Resource",
+    },
+    {
+      expectedNodeNames: ["worker:analyst"],
+      fields: [
+        { label: "Identifier", value: "analyst" },
+        { label: "Model", value: "gpt-5.1" },
+      ],
+      menuAction: "Worker",
+    },
+    {
+      expectedNodeNames: ["work-type:incident", "work-state:incident:open"],
+      fields: [
+        { label: "Identifier", value: "incident" },
+        { label: "First state", value: "open" },
+      ],
+      menuAction: "Work type",
+    },
+    {
+      expectedNodeNames: ["work-state:task:blocked"],
+      fields: [{ label: "Identifier", value: "blocked" }],
+      menuAction: "Work state",
+    },
+    {
+      expectedNodeNames: ["workstation:summarize"],
+      fields: [
+        { label: "Identifier", value: "summarize" },
+        { label: "Prompt body", value: "Summarize the task state." },
+      ],
+      menuAction: "Workstation",
+    },
+  ])("renders newly added $menuAction nodes from the sample factory toolbar flow", async ({
+    expectedNodeNames,
+    fields,
+    menuAction,
+  }) => {
+    const sampleFactoryDocument = loadSampleFactoryDocument();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: sampleFactoryDocument,
+      error: null,
+      status: "success",
+    } as never);
+
+    renderCurrentActivity(createSnapshot(sampleFactoryDocument));
+    enterEditorMode();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open add entity menu" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: menuAction }));
+    for (const field of fields) {
+      fireEvent.change(screen.getByRole("textbox", { name: field.label }), {
+        target: { value: field.value },
+      });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
+
+    for (const expectedNodeName of expectedNodeNames) {
+      expect(
+        await screen.findByRole("button", { name: expectedNodeName }),
+      ).toBeTruthy();
+    }
   });
 
   it("removes a graph node from the rendered graph without delete confirmation", async () => {

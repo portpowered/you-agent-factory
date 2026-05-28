@@ -329,6 +329,7 @@ interface BuildCurrentActivityNodesInput {
   >;
   activeGraphHighlights: ActiveGraphHighlights;
   activeItemLabelsByPlaceId: Map<string, string[]>;
+  factoryDefinition?: DashboardSnapshot["factory"];
   graphLayout: GraphLayout;
   locale?: string;
   now: number;
@@ -462,7 +463,7 @@ function buildWorkstationNode(
       positionedNode.workstationNodeId
     ] ??
     findFactoryWorkstationByNodeId(
-      input.snapshot.factory,
+      input.factoryDefinition ?? input.snapshot.factory,
       positionedNode.workstationNodeId,
     );
   if (!workstation) {
@@ -530,6 +531,7 @@ export function buildCurrentActivityNodes({
   activeExecutionsByWorkstationNodeID,
   activeGraphHighlights,
   activeItemLabelsByPlaceId,
+  factoryDefinition,
   editor,
   graphLayout,
   locale,
@@ -548,6 +550,7 @@ export function buildCurrentActivityNodes({
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
     editor,
+    factoryDefinition,
     graphLayout,
     locale,
     now,
