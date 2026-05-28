@@ -931,3 +931,39 @@ func TestRunCommand_VerboseFlagMapsToRunConfig(t *testing.T) {
 		t.Fatal("expected run command to set logger")
 	}
 }
+
+func TestRunCommand_VerboseDiagnosticsUseStderr(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		if !cfg.Verbose {
+			t.Fatal("expected verbose run config")
+		}
+		if cfg.Diagnostics == nil {
+			t.Fatal("expected diagnostics writer")
+		}
+		_, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: run startup")
+		return err
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"run", "--verbose"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --verbose: %v", err)
+	}
+
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want no diagnostic output", stdout.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "diagnostic: run startup") {
+		t.Fatalf("stderr = %q, want run diagnostics", got)
+	}
+}

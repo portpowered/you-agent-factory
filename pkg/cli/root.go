@@ -512,6 +512,7 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, verbose, debug bool) e
 	cfg.Logger = logger
 	cfg.Verbose = verbose || debug
 	cfg.StartupOutput = cmd.OutOrStdout()
+	cfg.Diagnostics = cmd.ErrOrStderr()
 
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
