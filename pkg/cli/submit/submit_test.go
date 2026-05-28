@@ -80,6 +80,54 @@ func TestSubmit_VerboseLogsRequestAndResponseMetadataWithoutPayloadContent(t *te
 	}
 }
 
+func TestSubmit_VerboseLogsJSONPayloadMetadataWithoutPayloadContentOrToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "trace-json"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	payloadPath := filepath.Join(t.TempDir(), "work.json")
+	payload := []byte(`{"title":"deploy task","prompt":"full JSON work payload must stay private","accessToken":"ghp_successPathToken1234567890"}`)
+	if err := os.WriteFile(payloadPath, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var diagnostics bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "json-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Port:         mustServerPort(t, srv.URL),
+		Verbose:      true,
+		Diagnostics:  &diagnostics,
+	})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	got := diagnostics.String()
+	for _, want := range []string{
+		"payloadType=json",
+		"payloadBytes=" + strconv.Itoa(len(payload)),
+		`requestName="json-submit"`,
+		`workTypeName="task"`,
+		"traceId=trace-json",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{"deploy task", "full JSON work payload", "ghp_successPathToken1234567890"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("diagnostics leaked JSON payload or token %q:\n%s", forbidden, got)
+		}
+	}
+}
+
 func TestSubmit_VerboseLogsFailureStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

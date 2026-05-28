@@ -186,9 +186,9 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		case "/models/OMNIVOICE_Q4_K_M":
 			_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
 		case "/models/OMNIVOICE_Q4_K_M/invocations":
-			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","worker":"tts-worker","operation":"TTS","providerLocality":"LOCAL","content":[{"type":"AUDIO","file":"artifacts/output.wav"}],"bindings":[]}`)
+			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","worker":"tts-worker","operation":"TTS","providerLocality":"LOCAL","content":[{"type":"AUDIO","file":"artifacts/sensitive-generated-output.wav"}],"bindings":[]}`)
 		case "/models/OMNIVOICE_Q4_K_M/pull":
-			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/OMNIVOICE_Q4_K_M/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}]}`)
+			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/ghp_successResponseToken1234567890/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}]}`)
 		default:
 			t.Fatalf("unexpected path %q", r.URL.Path)
 		}
@@ -219,7 +219,47 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		"outcome=PULLED",
 		"downloadedFiles=1",
 	})
-	if strings.Contains(diag, "secret direct input") || strings.Contains(diag, "artifacts/output.wav") {
+	for _, forbidden := range []string{"secret direct input", "sensitive-generated-output.wav", "ghp_successResponseToken1234567890"} {
+		if strings.Contains(diag, forbidden) {
+			t.Fatalf("diagnostics leaked model input, response content, or token %q:\n%s", forbidden, diag)
+		}
+	}
+}
+
+func TestModelsVerboseFailureUsesBoundedNonJSONErrorPreview(t *testing.T) {
+	longFailureBody := strings.Repeat("x", modelsErrorBodyPreviewSize+30)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, longFailureBody)
+	}))
+	defer server.Close()
+
+	var diagnostics bytes.Buffer
+	_, err := queryModel(queryOptions{
+		Port:        server.Listener.Addr().(*net.TCPAddr).Port,
+		ModelName:   "broken",
+		Verbose:     true,
+		Diagnostics: &diagnostics,
+	})
+	if err == nil {
+		t.Fatal("expected queryModel to fail")
+	}
+	gotErr := err.Error()
+	wantPreview := longFailureBody[:modelsErrorBodyPreviewSize] + "..."
+	if !strings.Contains(gotErr, wantPreview) {
+		t.Fatalf("error = %q, want bounded preview %q", gotErr, wantPreview)
+	}
+	if strings.Contains(gotErr, longFailureBody) {
+		t.Fatalf("error included full response body")
+	}
+	diag := diagnostics.String()
+	assertDiagnosticsContains(t, diag, []string{
+		"models inspect response",
+		"endpointPath=/models/broken",
+		"status=502",
+		"responseBytes=230",
+	})
+	if strings.Contains(diag, longFailureBody[:40]) {
 		t.Fatalf("diagnostics leaked model input or response content:\n%s", diag)
 	}
 }

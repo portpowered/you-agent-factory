@@ -354,7 +354,7 @@ func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 		Port:      cfg.Port,
 		ModelName: strings.TrimSpace(cfg.ModelName),
 		SummaryFunc: func() string {
-			return fmt.Sprintf("outcome=%s downloadedFiles=%d cachePath=%s", response.Outcome, len(response.DownloadedFiles), response.CachePath)
+			return fmt.Sprintf("outcome=%s downloadedFiles=%d", response.Outcome, len(response.DownloadedFiles))
 		},
 	}); err != nil {
 		return factoryapi.ModelPullResponse{}, err
