@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import type { AgentBentoLayoutItem } from "../../../components/ui";
 import { getCurrentSelectionShellMessages } from "../../current-selection/messages/current-selection-shell";
 import {
   CurrentSelectionWidget,
@@ -38,7 +37,7 @@ import {
   type DashboardWidgetPickerWidgetType,
   getDashboardWidgetPickerAvailability,
 } from "../lib/dashboard-widget-picker";
-import type { AgentBentoLayoutCard } from "./agent-bento";
+import type { AgentBentoLayoutCard, AgentBentoLayoutItem } from "./agent-bento";
 import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
 
 export interface DashboardCardBuilderArgs {

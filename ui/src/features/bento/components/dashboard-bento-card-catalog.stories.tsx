@@ -9,10 +9,6 @@ import type {
 } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import type {
-  AgentBentoLayoutCard,
-  AgentBentoLayoutItem,
-} from "../../../components/ui";
 import "../../../styles.css";
 import {
   CurrentSelectionWidget,
@@ -48,7 +44,11 @@ import {
   type DashboardWidgetPickerWidgetType,
   getDashboardWidgetPickerAvailability,
 } from "../lib/dashboard-widget-picker";
-import { AgentBentoLayout } from "./agent-bento";
+import {
+  AgentBentoLayout,
+  type AgentBentoLayoutCard,
+  type AgentBentoLayoutItem,
+} from "./agent-bento";
 import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
 
 const STORY_NOW = Date.parse("2026-04-08T12:05:00Z");

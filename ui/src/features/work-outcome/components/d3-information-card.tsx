@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { DASHBOARD_WIDGET_CLASS } from "../../../components/dashboard/widget-board";
-import { AgentBentoCard } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
+import { AgentBentoCard } from "../../bento/public";
 import { getDashboardWorkChartSeriesDefinitions } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";

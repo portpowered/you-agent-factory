@@ -1,4 +1,7 @@
-import { DEFAULT_DASHBOARD_LAYOUT, DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
+import {
+  DASHBOARD_WIDGET_IDS,
+  DEFAULT_DASHBOARD_LAYOUT,
+} from "../hooks/dashboardLayoutSchema";
 import {
   DUPLICATE_CAPABLE_DASHBOARD_WIDGET_TYPES,
   getDashboardWidgetPickerAvailability,
@@ -6,7 +9,9 @@ import {
 
 describe("getDashboardWidgetPickerAvailability", () => {
   it("keeps duplicate-capable widgets enabled after they already exist", () => {
-    const availability = getDashboardWidgetPickerAvailability(DEFAULT_DASHBOARD_LAYOUT);
+    const availability = getDashboardWidgetPickerAvailability(
+      DEFAULT_DASHBOARD_LAYOUT,
+    );
 
     expect(DUPLICATE_CAPABLE_DASHBOARD_WIDGET_TYPES).toEqual([
       DASHBOARD_WIDGET_IDS.terminalWork,
@@ -26,7 +31,9 @@ describe("getDashboardWidgetPickerAvailability", () => {
   });
 
   it("disables non-duplicate widgets once they already exist in the layout", () => {
-    const availability = getDashboardWidgetPickerAvailability(DEFAULT_DASHBOARD_LAYOUT);
+    const availability = getDashboardWidgetPickerAvailability(
+      DEFAULT_DASHBOARD_LAYOUT,
+    );
 
     expect(
       availability.find(
