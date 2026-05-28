@@ -206,7 +206,27 @@ describe("current activity graph editor controllers", () => {
     expect(editableGraph.actions.connectNodes).toHaveBeenCalledTimes(1);
   });
 
-  it("opens removable edge confirmations and applies confirmed edge removals", () => {
+  it.each([
+    {
+      confirmLabel: "Remove review success route",
+      edgeId: "workstation-output:workstation:review->work-state:story:done",
+      title: "Remove review success route?",
+    },
+    {
+      confirmLabel: "Remove gpu resource link",
+      edgeId: "workstation-resource:resource:gpu->workstation:review",
+      title: "Remove gpu resource link?",
+    },
+    {
+      confirmLabel: "Remove writer assignment",
+      edgeId: "worker-assignment:worker:writer->workstation:review",
+      title: "Remove writer assignment?",
+    },
+  ])("opens removable $edgeId confirmations and applies confirmed edge removals", ({
+    confirmLabel,
+    edgeId,
+    title,
+  }) => {
     const reset = vi.fn();
     const draftState = createDraftState();
     const editableGraph = createEditableGraph();
@@ -225,24 +245,20 @@ describe("current activity graph editor controllers", () => {
     );
 
     act(() => {
-      result.current.handleEditorEdgeDelete(
-        "workstation-output:workstation:review->work-state:story:done",
-      );
+      result.current.handleEditorEdgeDelete(edgeId);
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
     expect(result.current.pendingRemovalIntent).toMatchObject({
-      confirmLabel: "Remove review success route",
-      title: "Remove review success route?",
+      confirmLabel,
+      title,
     });
 
     act(() => {
       result.current.handleConfirmRemoval();
     });
 
-    expect(editableGraph.actions.disconnectEdge).toHaveBeenCalledWith(
-      "workstation-output:workstation:review->work-state:story:done",
-    );
+    expect(editableGraph.actions.disconnectEdge).toHaveBeenCalledWith(edgeId);
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
@@ -284,24 +300,99 @@ describe("current activity graph editor controllers", () => {
     );
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
+
+  it.each([
+    {
+      confirmLabel: "Delete cache resource",
+      nodeId: "resource:cache",
+      title: "Remove cache resource?",
+    },
+    {
+      confirmLabel: "Delete editor worker",
+      nodeId: "worker:editor",
+      title: "Remove editor worker?",
+    },
+  ])("opens removable $nodeId confirmations and applies confirmed node removals", ({
+    confirmLabel,
+    nodeId,
+    title,
+  }) => {
+    const reset = vi.fn();
+    const unassignedDefinition: CanonicalFactoryDefinition = {
+      ...baseFactoryDefinition,
+      resources: [
+        ...(baseFactoryDefinition.resources ?? []),
+        { capacity: 1, name: "cache" },
+      ],
+      workers: [
+        ...(baseFactoryDefinition.workers ?? []),
+        {
+          model: "gpt-5",
+          name: "editor",
+          type: "MODEL_WORKER",
+        },
+      ],
+    };
+    const draftState = createDraftState({
+      baseFactoryDefinition: unassignedDefinition,
+    });
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        saveEditableDefinition: {
+          reset,
+          status: "idle",
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete(nodeId);
+    });
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(result.current.pendingRemovalIntent).toMatchObject({
+      confirmLabel,
+      title,
+    });
+
+    act(() => {
+      result.current.handleConfirmRemoval();
+    });
+
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(nodeId);
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
 });
 
 function createDraftState({
+  baseFactoryDefinition: factoryDefinition = baseFactoryDefinition,
   draft = createEmptyFactoryGraphDraft(),
-  graph = buildFactoryGraphTopologyFromDefinition(baseFactoryDefinition),
+  graph = buildFactoryGraphTopologyFromDefinition(factoryDefinition),
   updateDraft = vi.fn(),
 }: {
+  baseFactoryDefinition?: CanonicalFactoryDefinition;
   draft?: FactoryGraphDraft;
   graph?: FactoryGraphTopology;
   updateDraft?: ReturnType<typeof vi.fn>;
 } = {}) {
+  const document = {
+    ...factoryDefinition,
+    version: editableDocument.version,
+  };
+
   return {
-    baseDocument: editableDocument,
+    baseDocument: document,
     draft,
     graph,
     hasChanges: false,
-    latestDocument: editableDocument,
-    pendingFactoryDefinition: baseFactoryDefinition,
+    latestDocument: document,
+    pendingFactoryDefinition: factoryDefinition,
     replaceDraft: vi.fn(),
     resetDraft: vi.fn(),
     source: "current-factory" as const,

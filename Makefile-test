@@ -1,0 +1,318 @@
+BINARY_NAME := you
+CMD_PATH    := ./cmd/factory/
+BIN_DIR     := bin
+GO          ?= go
+INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
+NPM         ?= npm
+BUN_BIN     := $(shell command -v bun 2>/dev/null)
+UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
+UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
+UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install --frozen-lockfile,$(NPM) install --no-package-lock)
+FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
+FUNCTIONAL_DEFAULT_JOBS ?= 2
+FUNCTIONAL_LONG_TAGS ?= functionallong
+FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
+MODEL_LONG_TEST_TIMEOUT ?= 20m
+SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion
+SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT ?= 100
+SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT ?= 120s
+CRON_TIME_WORK_SMOKE_TEST := TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews
+CRON_TIME_WORK_SMOKE_COUNT ?= 10
+CRON_TIME_WORK_SMOKE_TIMEOUT ?= 120s
+CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST := TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory
+CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT ?= 1
+CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT ?= 120s
+
+ifeq ($(OS),Windows_NT)
+	BINARY_NAME := you.exe
+endif
+
+# Detect git worktree environment
+# In a worktree, --git-common-dir points to the main repo's .git directory,
+# while --git-dir points to the worktree's .git file. When they differ, we're
+# in a worktree and must force a full rebuild to avoid stale build cache.
+_GIT_COMMON_DIR := $(shell git rev-parse --git-common-dir 2>/dev/null)
+_GIT_DIR := $(shell git rev-parse --git-dir 2>/dev/null)
+IS_WORKTREE :=
+ifneq ($(_GIT_COMMON_DIR),$(_GIT_DIR))
+	IS_WORKTREE := 1
+endif
+
+# When in a worktree, add -a flag to force rebuild all packages
+WORKTREE_FLAGS :=
+ifdef IS_WORKTREE
+	WORKTREE_FLAGS := -a
+endif
+
+GO_TEST_TIMEOUT ?= 300s
+GO_COVERAGE_MIN ?= 80.0
+PACKAGE_FILE_COUNT_ROOT ?= .
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count deadcode
+
+define run_verification_step
+	@printf '%s\n' "==> $(2) [make $(1)]"
+	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
+endef
+
+define run_timed_step
+	@start=$$(date +%s); \
+	if $(1); then \
+		status=0; \
+	else \
+		status=$$?; \
+	fi; \
+	end=$$(date +%s); \
+	elapsed=$$((end - start)); \
+	printf '%s\n' "[ui-coverage] $(2) elapsed: $${elapsed}.00s"; \
+	exit $$status
+endef
+
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+
+default:
+	$(MAKE) generate-api
+	$(MAKE) build
+	$(MAKE) test
+	$(MAKE) lint
+
+build:
+	$(GO) build $(WORKTREE_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_PATH)
+
+install:
+	$(GO) build $(WORKTREE_FLAGS) -o $(INSTALL_DIR)/$(BINARY_NAME) $(CMD_PATH)
+
+bundle-api:
+	node scripts/run-quiet-api-command.js bundle:rest ./api/openapi-main.yaml ./api/openapi.yaml
+
+generate-api: bundle-api generate-go-api generate-ui-api
+
+generate-go-api: generate-go-server-api generate-go-client-api
+
+generate-go-server-api:
+	$(GO) generate -tags=interfaces ./pkg/api
+
+generate-go-client-api:
+	$(GO) generate -tags=interfaces ./pkg/generatedclient
+
+generate-ui-api:
+	cd ui && node ./node_modules/openapi-typescript/bin/cli.js ../api/openapi.yaml -o src/api/generated/openapi.ts
+
+api-smoke:
+	node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
+	$(MAKE) generate-api
+	$(MAKE) generate-api
+	node scripts/check-api-generated-drift.js
+	$(GO) test ./pkg/api -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./tests/functional/runtime_api -run TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+docs-reference-check:
+	$(GO) run ../markdown-linter/cmd/markdown-linter docs/README.md docs/reference
+
+docs-reference-smoke:
+	$(MAKE) docs-reference-check
+	$(GO) test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test:
+	$(GO) test -short ./... -timeout $(GO_TEST_TIMEOUT)
+
+test-full:
+	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
+
+test-functional:
+	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test-functional-long:
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+verify-fast:
+	@printf '%s\n' "Running fast verification tier: typecheck + short UI/unit suite + short Go suite"
+	$(call run_verification_step,typecheck,dashboard typecheck)
+	$(call run_verification_step,ui-test,short UI/unit suite)
+	$(call run_verification_step,test,short Go suite)
+
+verify-pr:
+	@printf '%s\n' "Running pull-request verification tier: build contracts + required CI-equivalent test lanes"
+	$(call run_verification_step,verify-build-contracts,build contracts and static verification)
+	$(call run_verification_step,verify-tests,required CI-equivalent test lanes)
+
+verify-extended:
+	@printf '%s\n' "Running extended verification tier: required PR verification + opt-in long and specialty suites"
+	$(call run_verification_step,verify-pr,pull-request verification tier)
+	$(call run_verification_step,long-tests,opt-in long and specialty suites)
+
+test-ui-coverage:
+	$(MAKE) ui-test-coverage
+	$(MAKE) ui-replay-coverage-check
+
+test-ui-browser-integration:
+	$(MAKE) ui-integration-test
+
+test-backend-coverage:
+	$(MAKE) test-backend-verification
+
+test-backend-verification:
+	$(MAKE) test-coverage-go
+
+test-backend-functional:
+	@printf '%s\n' "Backend functional verification is merged into make test-backend-verification; rerun that target for the required PR lane."
+	$(MAKE) test-backend-verification
+
+long-tests:
+	@printf '%s\n' "Running opt-in long and specialty suites: managed runtime coverage + real local inference coverage"
+	$(call run_verification_step,long-tests-managed-runtime,Managed Runtime specialty lane)
+	$(call run_verification_step,long-tests-functional-runtime,Real Local Inference specialty lane)
+
+long-tests-managed-runtime:
+	$(GO) test ./pkg/service -run 'Test(InvokeModelHTTP_UsesManagedLocalModelRuntimePath|InvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle|LoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath|OmniVoiceLocalRuntime_)' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+long-tests-functional-runtime:
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/runtime_api -run 'TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio' -count=1 -timeout $(MODEL_LONG_TEST_TIMEOUT)
+
+test-coverage-go:
+	$(GO) run ./cmd/gocoveragecheck -min $(GO_COVERAGE_MIN) -timeout $(GO_TEST_TIMEOUT)
+
+script-timeout-companion-smoke-100:
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/providers -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
+
+cron-time-work-smoke:
+	$(GO) test ./tests/functional/runtime_api -run $(CRON_TIME_WORK_SMOKE_TEST) -count=$(CRON_TIME_WORK_SMOKE_COUNT) -timeout $(CRON_TIME_WORK_SMOKE_TIMEOUT)
+
+current-factory-watcher-switch-smoke:
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/bootstrap_portability -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
+
+artifact-contract-closeout:
+	$(GO) test ./pkg/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(MAKE) release-surface-smoke
+	$(GO) test ./pkg/api ./pkg/config ./pkg/replay ./tests/adhoc ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_|LegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly)" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+lint:
+	@for target in $(LINT_TARGETS); do \
+		$(MAKE) $$target || exit $$?; \
+	done
+
+backend-size:
+	$(GO) run ./cmd/backendsizecheck
+
+pkg-maint:
+	$(GO) run ./cmd/pkgmaintcheck ./pkg
+
+pkg-file-count:
+	$(GO) run ./cmd/pkgfilecountcheck -root $(PACKAGE_FILE_COUNT_ROOT)
+
+deadcode:
+	$(GO) run ./cmd/deadcodecheck
+
+ui-deadcode:
+	cd ui && $(UI_SCRIPT) deadcode
+
+verify-build-contracts:
+	$(MAKE) typecheck
+	$(MAKE) ui-build
+	$(MAKE) build
+	$(MAKE) lint
+	$(MAKE) api-smoke
+
+verify-tests:
+	@printf '%s\n' "Running required CI-equivalent test lanes: UI coverage + browser integration + backend verification"
+	$(call run_verification_step,test-ui-coverage,UI Coverage lane)
+	$(call run_verification_step,ui-integration-test,UI Browser Integration lane)
+	$(call run_verification_step,test-backend-verification,Backend Verification lane)
+
+verify:
+	@printf '%s\n' "make verify is a compatibility alias for the canonical pull-request tier; prefer make verify-pr"
+	$(MAKE) verify-pr
+
+dashboard-verify:
+	$(MAKE) ui-build
+	$(MAKE) lint
+	$(MAKE) test
+
+typecheck:
+	cd ui && $(UI_SCRIPT) tsc
+
+ci: ci-typecheck ci-verify-build-contracts ci-verify-tests
+
+ci-typecheck:
+	$(MAKE) ui-deps
+	$(MAKE) typecheck
+
+ci-verify-build-contracts: ci-typecheck
+	$(MAKE) ui-build
+	$(MAKE) build
+	$(MAKE) lint
+	$(MAKE) api-smoke
+
+ci-verify-tests: ci-verify-build-contracts
+	$(MAKE) ui-install-playwright
+	$(MAKE) test-ui-coverage
+	$(MAKE) ui-integration-test
+	$(MAKE) test-backend-verification
+
+release:
+	$(GO) run ./cmd/releaseprep -version $(VERSION)
+
+ui-deps:
+	cd ui && $(UI_INSTALL)
+
+ui-lint:
+	cd ui && $(UI_SCRIPT) lint
+
+test-race:
+	$(GO) test ./... -race -timeout 30s -v
+
+fmt:
+	$(GO) fmt ./...
+
+vet:
+	$(GO) vet ./...
+
+deps:
+	$(GO) mod download
+
+deps-tidy:
+	$(GO) mod tidy
+
+ui-build:
+ifeq ($(BUN_BIN),)
+	cd ui && $(NPM) exec tsc -b && $(NPM) exec vite build && node scripts/normalize-dist-output.mjs
+else
+	cd ui && $(UI_SCRIPT) build
+endif
+
+ui-test:
+ifeq ($(BUN_BIN),)
+	cd ui && $(NPM) exec vitest run --exclude 'integration/*.integration.test.mjs'
+else
+	cd ui && $(UI_SCRIPT) test:unit
+endif
+
+ui-integration-test:
+ifeq ($(BUN_BIN),)
+	cd ui && $(NPM) run test:integration
+else
+	cd ui && $(UI_SCRIPT) test:integration
+endif
+
+ui-test-coverage:
+	cd ui && $(UI_SCRIPT) test:coverage
+
+ui-replay-coverage-check:
+ifeq ($(BUN_BIN),)
+	$(call run_timed_step,cd ui && $(NPM) exec tsx scripts/write-replay-coverage-report.ts --check,Replay coverage check)
+else
+	$(call run_timed_step,cd ui && $(UI_SCRIPT) replay:coverage:check,Replay coverage check)
+endif
+
+ui-install-playwright:
+	cd ui && $(UI_EXEC) playwright install chromium
+
+ui-storybook:
+	cd ui && $(UI_SCRIPT) build-storybook
+
+ui-test-storybook:
+	cd ui && $(UI_SCRIPT) test-storybook
+
+clean:
+	$(GO) clean ./...
+	rm -rf $(BIN_DIR)
