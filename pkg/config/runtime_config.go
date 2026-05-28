@@ -922,10 +922,10 @@ func writeNamedFactoryLayout(targetDir string, cfg *interfaces.FactoryConfig, ca
 	if err := os.WriteFile(factoryPath, formatted, 0o644); err != nil {
 		return nil, fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
 	}
-	if err := writeExpandedWorkerFiles(targetDir, cfg.Workers); err != nil {
+	if _, err := writeExpandedWorkerFiles(targetDir, cfg.Workers); err != nil {
 		return nil, err
 	}
-	if err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations); err != nil {
+	if _, _, err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations); err != nil {
 		return nil, err
 	}
 	replacements, err := materializePortableBundledFiles(targetDir, cfg)

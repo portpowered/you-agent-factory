@@ -1,6 +1,7 @@
 package initcmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -132,6 +133,36 @@ func TestInit_Idempotent(t *testing.T) {
 	if err := Init(InitConfig{Dir: base}); err != nil {
 		t.Fatalf("second init: %v", err)
 	}
+}
+
+func TestInit_VerboseLogsFilesystemMetadataWithoutContents(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "factory")
+
+	var diagnostics bytes.Buffer
+	if err := Init(InitConfig{Dir: base, Type: string(DefaultScaffoldType), Executor: string(StarterExecutorClaude), Verbose: true, Diagnostics: &diagnostics}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	got := diagnostics.String()
+	requireContainsAll(t, "init diagnostics", got, []string{
+		"init request",
+		"targetDir=" + base,
+		"scaffoldType=default",
+		"executor=claude",
+		"directoryExisted=false",
+		"init complete",
+		"generatedFactoryConfigs=1",
+		"generatedWorkerFiles=",
+		"generatedWorkstationFiles=",
+		"generatedInputFiles=",
+		"generatedDocs=",
+		"inputDir=" + filepath.Join(base, interfaces.InputsDir, "task", interfaces.DefaultChannelName),
+	})
+	requireOmitsAll(t, "init diagnostics", got, []string{
+		defaultProcessorSystemBody,
+		`"workTypes"`,
+	})
 }
 
 func TestInit_DoesNotOverwriteExistingFactoryJSON(t *testing.T) {

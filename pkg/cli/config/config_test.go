@@ -37,6 +37,85 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	assertDeterministicExpandIsIdempotent(t, factoryPath, canonical, workerAgentsPath, workstationAgentsPath)
 }
 
+func TestExpandFactoryConfig_VerboseLogsWrittenPathCountsWithoutChangingStdout(t *testing.T) {
+	dir := t.TempDir()
+	factoryPath := filepath.Join(dir, "factory.json")
+	writeDeterministicExpandFixture(t, dir, factoryPath)
+
+	var out bytes.Buffer
+	var diagnostics bytes.Buffer
+	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: &out, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+		t.Fatalf("ExpandFactoryConfig: %v", err)
+	}
+
+	if got := out.String(); !strings.HasPrefix(got, "Expanded factory config into "+dir) {
+		t.Fatalf("stdout = %q, want normal expand output", got)
+	}
+	got := diagnostics.String()
+	if !containsAll(
+		got,
+		"config expand request",
+		"inputPath="+factoryPath,
+		"outputMode=filesystem",
+		"config expand complete",
+		"outputDir="+dir,
+		"writtenFactoryConfigs=1",
+		"writtenWorkerAgents=1",
+		"writtenWorkstationAgents=1",
+		"writtenPromptFiles=1",
+		"replacedBundledFiles=0",
+	) {
+		t.Fatalf("diagnostics missing expected metadata:\n%s", got)
+	}
+	if strings.Contains(got, "Complete {{ .WorkID }} deterministically.") {
+		t.Fatalf("diagnostics should not include prompt body:\n%s", got)
+	}
+}
+
+func TestFlattenFactoryConfig_VerboseLogsInputAndOutputMetadata(t *testing.T) {
+	dir := t.TempDir()
+	factoryPath := filepath.Join(dir, "factory.json")
+	writeDeterministicExpandFixture(t, dir, factoryPath)
+
+	var out bytes.Buffer
+	var diagnostics bytes.Buffer
+	if err := FlattenFactoryConfig(FactoryConfigFlattenConfig{Path: factoryPath, Output: &out, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+		t.Fatalf("FlattenFactoryConfig: %v", err)
+	}
+
+	decodeConfigPayload(t, out.Bytes(), "flatten stdout")
+	got := diagnostics.String()
+	if !containsAll(
+		got,
+		"config flatten request",
+		"inputPath="+factoryPath,
+		"layoutSource=file",
+		"outputMode=stdout",
+		"config flatten complete",
+		"outputBytes=",
+	) {
+		t.Fatalf("diagnostics missing expected metadata:\n%s", got)
+	}
+	if strings.Contains(got, "You are the expanded executor.") {
+		t.Fatalf("diagnostics should not include worker body:\n%s", got)
+	}
+}
+
+func TestFlattenFactoryConfig_VerboseLogsParseFailurePhase(t *testing.T) {
+	dir := t.TempDir()
+	factoryPath := filepath.Join(dir, "factory.json")
+	writeCLITestFile(t, factoryPath, `{`)
+
+	var diagnostics bytes.Buffer
+	err := FlattenFactoryConfig(FactoryConfigFlattenConfig{Path: factoryPath, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics})
+	if err == nil {
+		t.Fatal("expected invalid config to fail")
+	}
+	if got := diagnostics.String(); !containsAll(got, "config flatten failed", "inputPath="+factoryPath, "phase=parse") {
+		t.Fatalf("diagnostics missing parse failure phase:\n%s", got)
+	}
+}
+
 func writeDeterministicExpandFixture(t *testing.T, dir, factoryPath string) (string, string) {
 	t.Helper()
 

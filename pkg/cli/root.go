@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
@@ -309,12 +310,18 @@ func newDocsTopicCommand(topic string, diagnostics *cliDiagnosticsOptions) *cobr
 		Short: fmt.Sprintf("Print the packaged %s reference page", topic),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_ = diagnostics.writer(cmd)
+			diagnosticsOutput := diagnostics.writer(cmd)
+			clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs request topic=%s", topic)
 			markdown, err := docscli.Markdown(topic)
 			if err != nil {
+				clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs failed topic=%s phase=resolve-topic", topic)
 				return err
 			}
+			clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs resolved topic=%s contentBytes=%d", topic, len(markdown))
 			_, err = io.WriteString(cmd.OutOrStdout(), markdown)
+			if err != nil {
+				clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs failed topic=%s phase=write-output", topic)
+			}
 			return err
 		},
 	}
