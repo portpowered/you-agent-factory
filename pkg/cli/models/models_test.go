@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -147,7 +148,9 @@ func TestPull_JSONWritesPullMetadataResponse(t *testing.T) {
 }
 
 func TestModelsList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T) {
+	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
 		if r.URL.Path != "/models" {
 			t.Fatalf("path = %q, want /models", r.URL.Path)
 		}
@@ -178,12 +181,17 @@ func TestModelsList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *tes
 		"status=200",
 		"resultCount=1",
 	})
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("requests = %d, want 1", got)
+	}
 }
 
 func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testing.T) {
+	var inspectRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/models/OMNIVOICE_Q4_K_M":
+			inspectRequests.Add(1)
 			_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
 		case "/models/OMNIVOICE_Q4_K_M/invocations":
 			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","worker":"tts-worker","operation":"TTS","providerLocality":"LOCAL","content":[{"type":"AUDIO","file":"artifacts/sensitive-generated-output.wav"}],"bindings":[]}`)
@@ -223,6 +231,9 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		if strings.Contains(diag, forbidden) {
 			t.Fatalf("diagnostics leaked model input, response content, or token %q:\n%s", forbidden, diag)
 		}
+	}
+	if got := inspectRequests.Load(); got != 1 {
+		t.Fatalf("inspect requests = %d, want 1", got)
 	}
 }
 

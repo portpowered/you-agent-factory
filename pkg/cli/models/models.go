@@ -71,14 +71,11 @@ func List(cfg ListConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
-	response, err := QueryList(cfg.Port)
-	if cfg.Verbose {
-		response, err = queryList(queryOptions{
-			Port:        cfg.Port,
-			Verbose:     cfg.Verbose,
-			Diagnostics: cfg.Diagnostics,
-		})
-	}
+	response, err := queryList(queryOptions{
+		Port:        cfg.Port,
+		Verbose:     cfg.Verbose,
+		Diagnostics: cfg.Diagnostics,
+	})
 	if err != nil {
 		return err
 	}
@@ -92,15 +89,12 @@ func Inspect(cfg InspectConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
-	model, err := QueryModel(cfg.Port, cfg.ModelName)
-	if cfg.Verbose {
-		model, err = queryModel(queryOptions{
-			Port:        cfg.Port,
-			ModelName:   cfg.ModelName,
-			Verbose:     cfg.Verbose,
-			Diagnostics: cfg.Diagnostics,
-		})
-	}
+	model, err := queryModel(queryOptions{
+		Port:        cfg.Port,
+		ModelName:   cfg.ModelName,
+		Verbose:     cfg.Verbose,
+		Diagnostics: cfg.Diagnostics,
+	})
 	if err != nil {
 		return err
 	}
@@ -182,10 +176,6 @@ func Pull(cfg PullConfig) error {
 		return json.NewEncoder(cfg.Output).Encode(response)
 	}
 	return RenderPull(response, cfg.Output)
-}
-
-func QueryList(port int) (factoryapi.ListModelsResponse, error) {
-	return queryList(queryOptions{Port: port})
 }
 
 type queryOptions struct {
