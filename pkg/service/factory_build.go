@@ -23,7 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
-	"github.com/portpowered/infinite-you/pkg/service/localmodel"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -315,8 +315,8 @@ func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) (*localModelRes
 	return modelResources, modelAssets, newManagedLocalModelManager(modelAssets, localModelRuntime)
 }
 
-func localModelHooks() localmodel.Hooks {
-	return localmodel.Hooks{
+func localModelHooks() localmodels.Hooks {
+	return localmodels.Hooks{
 		MarkResourceWaitStarted:  markModelExecutionResourceWaitStarted,
 		MarkResourceWaitFinished: markModelExecutionResourceWaitFinished,
 		MarkLoadRequested:        markModelExecutionLoadRequested,
@@ -326,15 +326,15 @@ func localModelHooks() localmodel.Hooks {
 }
 
 func newLocalModelResourceLimiter() *localModelResourceLimiter {
-	return localmodel.NewResourceLimiter(localModelHooks())
+	return localmodels.NewResourceLimiter(localModelHooks())
 }
 
 func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localModelRuntime) *managedLocalModelManager {
-	return localmodel.NewManager(assetPuller, runtime, localModelHooks())
+	return localmodels.NewManager(assetPuller, runtime, localModelHooks())
 }
 
 func newOmniVoiceLocalRuntime(runner workers.CommandRunner) localModelRuntime {
-	return localmodel.NewOmniVoiceRuntime(runner)
+	return localmodels.NewOmniVoiceRuntime(runner)
 }
 
 func buildRuntimeRecorder(

@@ -1,4 +1,4 @@
-package localmodel
+package localmodels
 
 import (
 	"context"
@@ -44,10 +44,6 @@ type Handle interface {
 type Runtime interface {
 	Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool
 	Load(context.Context, LoadRequest) (Handle, error)
-}
-
-type AssetPuller interface {
-	ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error)
 }
 
 type Hooks struct {
@@ -241,10 +237,6 @@ func RuntimeResource(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces
 }
 
 func CanonicalBackendName(value string) string {
-	return strings.ToUpper(strings.TrimSpace(value))
-}
-
-func canonicalModelName(value string) string {
 	return strings.ToUpper(strings.TrimSpace(value))
 }
 

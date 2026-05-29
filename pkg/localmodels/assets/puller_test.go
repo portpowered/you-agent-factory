@@ -1,4 +1,4 @@
-package modelassets
+package assets
 
 import (
 	"context"

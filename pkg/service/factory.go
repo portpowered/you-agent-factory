@@ -23,7 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
-	"github.com/portpowered/infinite-you/pkg/service/localmodel"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/workers"
 
 	"go.uber.org/zap"
@@ -66,13 +66,13 @@ var ErrInvalidNamedFactory = apisurface.ErrInvalidNamedFactory
 // could be resolved for canonical current-factory reads.
 var ErrCurrentFactoryNotFound = apisurface.ErrCurrentFactoryNotFound
 
-type localModelCacheLayout = localmodel.CacheLayout
-type localModelLoadRequest = localmodel.LoadRequest
-type localModelInvocationRequest = localmodel.InvocationRequest
-type localModelHandle = localmodel.Handle
-type localModelRuntime = localmodel.Runtime
-type localModelResourceLimiter = localmodel.ResourceLimiter
-type managedLocalModelManager = localmodel.Manager
+type localModelCacheLayout = localmodels.CacheLayout
+type localModelLoadRequest = localmodels.LoadRequest
+type localModelInvocationRequest = localmodels.InvocationRequest
+type localModelHandle = localmodels.Handle
+type localModelRuntime = localmodels.Runtime
+type localModelResourceLimiter = localmodels.ResourceLimiter
+type managedLocalModelManager = localmodels.Manager
 
 type replacementFactoryRuntime struct {
 	dir            string

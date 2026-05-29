@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
@@ -322,7 +323,7 @@ func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef
 		if _, ok := seen[resource.Name]; ok {
 			continue
 		}
-		summaries = append(summaries, generatedModelResourceSummary(resource))
+		summaries = append(summaries, localmodels.ResourceSummary(resource))
 		seen[resource.Name] = struct{}{}
 	}
 	if len(summaries) == 0 {

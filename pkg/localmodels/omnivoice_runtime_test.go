@@ -1,4 +1,4 @@
-package localmodel
+package localmodels
 
 import (
 	"context"
