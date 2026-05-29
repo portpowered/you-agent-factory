@@ -86,6 +86,7 @@
         "src/features/current-selection/work-state-selection/components/state-node-detail.test.tsx",
         "src/features/current-selection/work-selection/components/work-item-card.test.tsx",
         "src/features/current-selection/worker-selection/components/worker-detail-card.test.tsx",
+        "src/features/current-selection/worker-selection/hooks/use-worker-detail-state.test.tsx",
         "src/features/current-selection/workstation-selection/components/workstation-detail-card.editable-configuration.test.tsx",
         "src/features/current-selection/workstation-selection/components/workstation-detail-card.test.tsx",
         "src/features/current-selection/workstation-selection/components/workstation-prompt-monaco.test.ts",

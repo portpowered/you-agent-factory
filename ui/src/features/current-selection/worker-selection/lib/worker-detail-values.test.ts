@@ -36,4 +36,23 @@ describe("worker-detail-values", () => {
       workstationNamesReferencingWorkerInFactoryDefinition(factory, "reviewer"),
     ).toEqual(["Review", "Plan"]);
   });
+
+  it("returns undefined when the worker is missing from the factory document", () => {
+    expect(findWorkerInFactoryDefinition(factory, "missing")).toBeUndefined();
+  });
+
+  it("omits workstations with blank names from the referencing list", () => {
+    expect(
+      workstationNamesReferencingWorkerInFactoryDefinition(
+        {
+          ...factory,
+          workstations: [
+            { id: "blank", name: "", worker: "reviewer" },
+            { id: "review", name: "Review", worker: "reviewer" },
+          ],
+        },
+        "reviewer",
+      ),
+    ).toEqual(["Review"]);
+  });
 });

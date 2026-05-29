@@ -80,7 +80,6 @@ function buildFactoryDocument(
   };
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: worker detail card coverage groups loading, summary, and editable field regressions together.
 describe("WorkerDetailCard", () => {
   beforeEach(() => {
     mockFactoryDocumentQuery();
@@ -585,6 +584,174 @@ describe("WorkerDetailCard", () => {
     expect(screen.getByLabelText("Command")).toBeTruthy();
     expect(screen.getByLabelText("Body")).toBeTruthy();
     expect(screen.getByLabelText("Args")).toBeTruthy();
+  });
+
+  it("shows empty referencing workstations copy when none reference the worker", () => {
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument({
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CURSOR",
+            name: "orphan",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [],
+      }),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(<WorkerDetailCard workerName="orphan" />);
+
+    expect(
+      screen.getByText(
+        "No workstations reference this worker in the running factory definition.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows stale-version save warning without discarding the worker draft", () => {
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={{
+          canSave: true,
+          draft: {
+            argsText: "",
+            body: "",
+            command: "",
+            executorProvider: null,
+            model: "gpt-5.5",
+            modelLocality: null,
+            modelProvider: "CURSOR",
+            provider: null,
+            type: "MODEL_WORKER",
+          },
+          hasValidationErrors: false,
+          initialValues: {
+            args: [],
+            body: null,
+            command: null,
+            executorProvider: null,
+            model: "gpt-5.5",
+            modelLocality: null,
+            modelProvider: "CURSOR",
+            provider: null,
+            type: "MODEL_WORKER",
+            workerName: "reviewer",
+            workstationNames: ["Review"],
+          },
+          isDirty: true,
+          markChangesSaved: vi.fn(),
+          onArgsTextChange: vi.fn(),
+          onBodyChange: vi.fn(),
+          onCommandChange: vi.fn(),
+          onExecutorProviderChange: vi.fn(),
+          onModelChange: vi.fn(),
+          onModelLocalityChange: vi.fn(),
+          onModelProviderChange: vi.fn(),
+          onProviderChange: vi.fn(),
+          onResetToLatest: vi.fn(),
+          onTypeChange: vi.fn(),
+          overwriteFieldNames: [],
+          pendingFactoryDefinition: buildFactoryDocument(),
+          status: "ready",
+          validationErrors: {},
+        }}
+        saveState={{
+          message:
+            "Current factory definition is stale. Refresh the graph before saving.",
+          status: "warning",
+        }}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Current factory definition is stale",
+    );
+    expect(
+      screen.getByText(
+        "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows scoped save error feedback when persistence fails", () => {
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={{
+          canSave: true,
+          draft: {
+            argsText: "",
+            body: "",
+            command: "",
+            executorProvider: null,
+            model: "gpt-5.5",
+            modelLocality: null,
+            modelProvider: "CURSOR",
+            provider: null,
+            type: "MODEL_WORKER",
+          },
+          hasValidationErrors: false,
+          initialValues: {
+            args: [],
+            body: null,
+            command: null,
+            executorProvider: null,
+            model: "gpt-5.5",
+            modelLocality: null,
+            modelProvider: "CURSOR",
+            provider: null,
+            type: "MODEL_WORKER",
+            workerName: "reviewer",
+            workstationNames: ["Review"],
+          },
+          isDirty: true,
+          markChangesSaved: vi.fn(),
+          onArgsTextChange: vi.fn(),
+          onBodyChange: vi.fn(),
+          onCommandChange: vi.fn(),
+          onExecutorProviderChange: vi.fn(),
+          onModelChange: vi.fn(),
+          onModelLocalityChange: vi.fn(),
+          onModelProviderChange: vi.fn(),
+          onProviderChange: vi.fn(),
+          onResetToLatest: vi.fn(),
+          onTypeChange: vi.fn(),
+          overwriteFieldNames: [],
+          pendingFactoryDefinition: buildFactoryDocument(),
+          status: "ready",
+          validationErrors: {},
+        }}
+        saveState={{
+          errorMessage: "The running factory could not be saved.",
+          status: "error",
+        }}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain("Saving failed.");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "The running factory could not be saved.",
+    );
   });
 
   it("disables save and shows field errors while validation is unresolved", () => {
