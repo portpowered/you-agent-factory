@@ -1,5 +1,5 @@
 import {
-  formatTimeOfDay,
+  formatLocalDateTime,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
 import { formatDashboardPlaceLabel } from "../../../../components/ui/place-labels";
@@ -131,7 +131,8 @@ function StatePositionWorkListItem({
           dateTime={startedAt}
           title={startedAt}
         >
-          {messages.startedAtLabel} {formatTimeOfDay(startedAt, locale)}
+          {messages.startedAtLabel}{" "}
+          {formatLocalDateTime(startedAt, messages.timestampUnavailable, locale)}
         </time>
       ) : null}
       {hasFailureReason || hasFailureMessage ? (
