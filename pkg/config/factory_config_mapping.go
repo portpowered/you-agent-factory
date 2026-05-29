@@ -315,6 +315,9 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 	if normalized.Worktree != "" {
 		apiWorkstation.Worktree = stringPtr(normalized.Worktree)
 	}
+	if normalized.OpenCodeAgent != "" {
+		apiWorkstation.OpenCodeAgent = stringPtr(normalized.OpenCodeAgent)
+	}
 	return apiWorkstation
 }
 
@@ -460,6 +463,7 @@ func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.W
 		Operations:       modelOperationsAPIFromInternal(def.Operations),
 		Resources:        resourceRequirementsAPIFromInternal(def.Resources),
 		SkipPermissions:  boolPtrIfTrue(def.SkipPermissions),
+		OpenCodeAgent:    stringPtrIfNotEmpty(def.OpenCodeAgent),
 		StopToken:        stringPtrIfNotEmpty(def.StopToken),
 		Timeout:          stringPtrIfNotEmpty(def.Timeout),
 	}

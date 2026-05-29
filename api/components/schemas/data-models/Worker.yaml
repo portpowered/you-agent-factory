@@ -54,6 +54,12 @@ properties:
   skipPermissions:
     type: boolean
     description: When true, bypasses permission checks for providers that support permission gating.
+  openCodeAgent:
+    type: string
+    description: >-
+      Optional OpenCode agent profile name for model workers that dispatch through the OpenCode
+      runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent
+      names with `opencode agent list` (see https://opencode.ai/docs/cli/).
   auth:
     $ref: './HostedWorkerAuth.yaml'
     description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.

@@ -991,6 +991,69 @@ describe("worker modelProvider validation", () => {
   );
 });
 
+describe("normalizeFactoryDefinition openCodeAgent", () => {
+  it("accepts non-empty openCodeAgent on workers and workstations", () => {
+    const normalized = normalizeFactoryDefinition({
+      name: "opencode-agent-factory",
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "init", type: "INITIAL" },
+            { name: "complete", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workers: [
+        {
+          name: "executor",
+          type: "MODEL_WORKER",
+          modelProvider: "OPENCODE",
+          openCodeAgent: "reviewer",
+        },
+      ],
+      workstations: [
+        {
+          name: "execute-story",
+          worker: "executor",
+          openCodeAgent: "implementer",
+          inputs: [{ workType: "story", state: "init" }],
+          outputs: [{ workType: "story", state: "complete" }],
+        },
+      ],
+    });
+
+    expect(normalized.workers?.[0]?.openCodeAgent).toBe("reviewer");
+    expect(normalized.workstations?.[0]?.openCodeAgent).toBe("implementer");
+  });
+
+  it("rejects blank openCodeAgent values", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "opencode-agent-factory",
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "init", type: "INITIAL" },
+              { name: "complete", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workers: [{ name: "executor", type: "MODEL_WORKER", openCodeAgent: "   " }],
+        workstations: [
+          {
+            name: "execute-story",
+            worker: "executor",
+            inputs: [{ workType: "story", state: "init" }],
+            outputs: [{ workType: "story", state: "complete" }],
+          },
+        ],
+      }),
+    ).toThrow(/openCodeAgent must be a non-empty string/);
+  });
+});
+
 describe("isCanonicalFactoryDefinition", () => {
   it("returns true for canonical generated payloads", () => {
     expect(

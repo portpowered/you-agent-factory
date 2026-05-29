@@ -35,6 +35,12 @@ properties:
   runner:
     $ref: './RunnerID.yaml'
     description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner.
+  openCodeAgent:
+    type: string
+    description: >-
+      Optional OpenCode agent profile override for this workstation. When set, overrides the
+      worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover
+      agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
   promptFile:
     type: string
     description: Path to a prompt template file loaded for model-oriented workstation execution.

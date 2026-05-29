@@ -110,6 +110,10 @@ func validateOpenCodeAgentInFrontmatter(frontmatter map[string]any, path string)
 	if !ok {
 		return fmt.Errorf("%s.openCodeAgent must be a string", path)
 	}
+	return validateOpenCodeAgentField(path, agent)
+}
+
+func validateOpenCodeAgentField(path, agent string) error {
 	if strings.TrimSpace(agent) == "" {
 		return fmt.Errorf("%s.openCodeAgent must be a non-empty string", path)
 	}
