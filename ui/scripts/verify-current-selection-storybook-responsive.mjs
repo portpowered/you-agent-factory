@@ -55,12 +55,18 @@ export async function verifyCurrentSelectionPromptHint({
     throw new Error("Prompt variable help disclosure should be removed.");
   }
 
-  const removedHelpPanelCount = await currentSelection
-    .getByText("Available variables")
-    .count();
-  if (removedHelpPanelCount > 0) {
-    throw new Error("Prompt variable help panel content should be removed.");
-  }
+  await expectVisible(
+    currentSelection.getByRole("heading", { name: "Available variables" }),
+    "Prompt available variables heading",
+  );
+  await expectVisible(
+    currentSelection.getByText(".WorkID", { exact: true }),
+    "Prompt available variable path",
+  );
+  await expectVisible(
+    currentSelection.getByRole("heading", { name: "Unavailable access" }),
+    "Prompt unavailable access heading",
+  );
 
   const legacySquiggleOverlayCount = await currentSelection
     .locator("mark")

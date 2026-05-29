@@ -1,3 +1,5 @@
+import { describe, expect, it } from "vitest";
+
 import { SUPPORTED_LOCALES } from "../../../i18n";
 import {
   getCurrentSelectionDetailMessages,
@@ -115,6 +117,8 @@ const invokeWorkstationDetail = (
     case "editableConfigurationSaveConflictConfirmationDescription":
     case "runnerInheritanceFactoryLabel":
       return [formatter("prompt" as never)];
+    case "editableConfigurationSharedWorkerScopeHint":
+      return [formatter("Worker A" as never, "Review, Implement" as never)];
     case "localizeWorkstationBehavior":
       return [
         formatter("STANDARD" as never),

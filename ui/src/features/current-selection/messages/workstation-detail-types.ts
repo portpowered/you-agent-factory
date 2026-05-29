@@ -12,6 +12,8 @@ export interface WorkstationDetailMessages {
   editableConfigurationDirtyStatus: string;
   editableConfigurationDraftNote: string;
   editableConfigurationModelSharedWorkerHint: string;
+  editableConfigurationResetAction: string;
+  editableConfigurationServerFieldChangedHint: string;
   editableConfigurationOverwriteWarning: (fields: string) => string;
   editableConfigurationOverwriteWarningDetail: string;
   editableConfigurationSaveAction: string;
@@ -24,6 +26,7 @@ export interface WorkstationDetailMessages {
   ) => string;
   editableConfigurationSaveConfirmationTitle: string;
   editableConfigurationSaveErrorPrefix: string;
+  editableConfigurationSaveStaleVersionDetail: string;
   editableConfigurationSaveSuccess: string;
   editableConfigurationValidationStatus: string;
   editableConfigurationBehaviorPollerWorkerUnsupported: string;
@@ -47,10 +50,16 @@ export interface WorkstationDetailMessages {
     inputCount: number,
   ) => string;
   editableConfigurationPromptAutocompleteDetail: string;
+  editableConfigurationPromptAvailableVariablesHeading: string;
+  editableConfigurationPromptUnavailableAccessHeading: string;
   editableConfigurationSaveFallbackError: string;
   editableConfigurationWorkerMissing: string;
   editableConfigurationWorkerOptionsEmpty: string;
   editableConfigurationWorkerRequired: string;
+  editableConfigurationSharedWorkerScopeHint: (
+    workerName: string,
+    workstationNames: string,
+  ) => string;
   editableConfigurationWorkerUnavailable: string;
   editableConfigurationWorkerUnavailablePrefix: string;
   modelFieldLabel: string;

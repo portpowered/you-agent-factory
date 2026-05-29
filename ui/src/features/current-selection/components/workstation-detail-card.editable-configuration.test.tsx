@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import type { EditableWorkstationOverwriteField } from "./detail-card-types";
 import { WorkstationDetailCard } from "./workstation-detail-card";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
@@ -83,6 +84,8 @@ function buildReadyEditableConfigurationState(overrides?: {
         };
         status: "ready";
       };
+  sharedWorkerWorkstationNames?: string[];
+  overwriteFieldNames?: EditableWorkstationOverwriteField[];
   validationErrors?: {
     behavior?: string;
     prompt?: string;
@@ -113,6 +116,12 @@ function buildReadyEditableConfigurationState(overrides?: {
       prompt: "Review the latest story changes before approval.",
       runnerName: "gemini",
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      sharedWorkerWorkstationNamesByWorkerName: {
+        planner: ["Plan", "Code"],
+        reviewer: overrides?.sharedWorkerWorkstationNames ?? [],
+      },
+      sharedWorkerWorkstationNames:
+        overrides?.sharedWorkerWorkstationNames ?? [],
       workerName: "reviewer",
       workerOptions: ["reviewer", "planner"],
       workerTypeByName: {
@@ -135,9 +144,10 @@ function buildReadyEditableConfigurationState(overrides?: {
     },
     onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
+    onResetToLatest: vi.fn(),
     onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
-    overwriteFieldNames: [],
+    overwriteFieldNames: overrides?.overwriteFieldNames ?? [],
     pendingFactoryDefinition: null,
     promptDiagnostics: overrides?.promptDiagnostics ?? [],
     promptHelpState: overrides?.promptHelpState ?? {
@@ -418,6 +428,130 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
   });
 
+  it("marks server-changed fields and resets the draft to the latest values", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const onResetToLatest = vi.fn();
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...buildReadyEditableConfigurationState({
+            overwriteFieldNames: ["prompt", "worker"],
+            prompt: "Keep this local prompt draft.",
+          }),
+          isDirty: true,
+          onResetToLatest,
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(
+      screen.getAllByText(
+        "The running factory changed this field while you were editing. Reset to latest to discard the local draft value.",
+      ),
+    ).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset to latest" }));
+
+    expect(onResetToLatest).toHaveBeenCalledTimes(1);
+  });
+
+  it("identifies shared workers and keeps worker-owned fields out of the workstation form", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(screen.queryByText(/also used by/i)).toBeNull();
+    expect(screen.queryByLabelText("Model")).toBeNull();
+    expect(screen.queryByLabelText("Template")).toBeNull();
+  });
+
+  it("makes shared-worker scope explicit without exposing worker-owned settings", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          sharedWorkerWorkstationNames: ["Plan", "Code"],
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "Worker reviewer is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Model")).toBeNull();
+    expect(screen.queryByLabelText("Template")).toBeNull();
+  });
+
+  it("keeps the shared-worker scope hint visible after reassigning to another shared worker", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "planner",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "Worker planner is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("localizes behavior options in zh-CN while keeping canonical option values", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -512,13 +646,23 @@ describe("WorkstationDetailCard editable configuration", () => {
         "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
       ),
     ).toBeTruthy();
+    expect(screen.getByText("Available variables")).toBeTruthy();
+    expect(screen.getByText(".WorkID")).toBeTruthy();
+    expect(screen.getByText("{{ .WorkID }}")).toBeTruthy();
+    expect(
+      screen.getByText("The current work item identifier."),
+    ).toBeTruthy();
+    expect(screen.getByText("Unavailable access")).toBeTruthy();
+    expect(screen.getByText(".Inputs[1].Payload")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Only input 0 is available for this workstation.",
+      ),
+    ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Open prompt variable help" }),
     ).toBeNull();
     expect(screen.queryByText("Prompt variable help")).toBeNull();
-    expect(screen.queryByText("Available variables")).toBeNull();
-    expect(screen.queryByText(".WorkID")).toBeNull();
-    expect(screen.queryByText("{{ .WorkID }}")).toBeNull();
   });
 
   it("renders inline prompt diagnostics with squiggle feedback for invalid variables", () => {

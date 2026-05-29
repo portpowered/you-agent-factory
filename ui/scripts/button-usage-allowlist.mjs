@@ -106,13 +106,6 @@ export const approvedButtonUsageAllowlist = [
     relativeFilePath: "src/features/current-selection/components/workstation-detail-card.tsx",
   },
   {
-    rawButtonFingerprints: ['messages.editableConfigurationCollapseActionLabel'],
-    rawButtonReason:
-      "Editable workstation configuration uses a disclosure toggle for an expandable semantic section.",
-    relativeFilePath:
-      "src/features/current-selection/components/workstation-editable-configuration-section.tsx",
-  },
-  {
     rawButtonFingerprints: ['aria-controls={panelID} aria-expanded={expanded}'],
     rawButtonReason:
       "Transcript code blocks use a disclosure toggle for expandable inline code content.",

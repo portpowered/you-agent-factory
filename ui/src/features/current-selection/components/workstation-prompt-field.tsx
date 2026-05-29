@@ -126,6 +126,86 @@ function EditableConfigurationPromptAutocompleteFeedback({
       >
         {messages.editableConfigurationPromptAutocompleteDetail}
       </p>
+      <div className="grid gap-2">
+        {state.promptHelpState.contract.availableVariables.length > 0 ? (
+          <PromptContractList
+            heading={messages.editableConfigurationPromptAvailableVariablesHeading}
+            items={state.promptHelpState.contract.availableVariables.map(
+              (variable) => ({
+                detail: variable.description,
+                example: variable.example,
+                key: `${variable.category}:${variable.path}:${variable.example}`,
+                label: variable.path,
+              }),
+            )}
+          />
+        ) : null}
+        {state.promptHelpState.contract.unavailableAccessPatterns.length > 0 ? (
+          <PromptContractList
+            heading={messages.editableConfigurationPromptUnavailableAccessHeading}
+            items={state.promptHelpState.contract.unavailableAccessPatterns.map(
+              (pattern) => ({
+                detail: pattern.reason,
+                example: pattern.example,
+                key: `${pattern.path}:${pattern.example}:${pattern.reason}`,
+                label: pattern.path,
+              }),
+            )}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PromptContractList({
+  heading,
+  items,
+}: {
+  heading: string;
+  items: Array<{
+    detail: string;
+    example: string;
+    key: string;
+    label: string;
+  }>;
+}) {
+  return (
+    <div className="grid gap-1">
+      <h5 className={cn("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>{heading}</h5>
+      <ul className="m-0 grid list-none gap-1 p-0">
+        {items.map((item) => (
+          <li
+            className="grid min-w-0 gap-1 rounded-lg border border-af-border bg-af-surface-raised p-2"
+            key={item.key}
+          >
+            <code
+              className={cn(
+                CURRENT_SELECTION_CODE_SUBTLE_CLASS,
+                "[overflow-wrap:anywhere]",
+              )}
+            >
+              {item.label}
+            </code>
+            <p
+              className={cn(
+                "m-0 text-af-text-subtle [overflow-wrap:anywhere]",
+                DASHBOARD_SUPPORTING_TEXT_CLASS,
+              )}
+            >
+              {item.detail}
+            </p>
+            <code
+              className={cn(
+                CURRENT_SELECTION_CODE_SUBTLE_CLASS,
+                "[overflow-wrap:anywhere]",
+              )}
+            >
+              {item.example}
+            </code>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -213,7 +293,12 @@ function EditableConfigurationPromptValidationFeedback({
                 {diagnostic.message}
               </p>
               {diagnostic.path ? (
-                <code className={CURRENT_SELECTION_CODE_SUBTLE_CLASS}>
+                <code
+                  className={cn(
+                    CURRENT_SELECTION_CODE_SUBTLE_CLASS,
+                    "[overflow-wrap:anywhere]",
+                  )}
+                >
                   {diagnostic.path}
                 </code>
               ) : null}

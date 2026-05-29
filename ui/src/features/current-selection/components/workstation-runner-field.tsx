@@ -43,6 +43,12 @@ export function EditableConfigurationRunnerField({
   return (
     <div className="grid gap-2">
       <Select
+        aria-describedby={
+          state.validationErrors.runnerName
+            ? "editable-workstation-runner-error"
+            : undefined
+        }
+        aria-invalid={state.validationErrors.runnerName ? "true" : undefined}
         className={DASHBOARD_BODY_TEXT_CLASS}
         id="editable-workstation-runner"
         onChange={(event) =>

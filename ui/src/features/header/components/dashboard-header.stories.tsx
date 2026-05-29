@@ -72,7 +72,7 @@ export const ResponsiveVerification = {
     },
   },
   render: () => (
-    <div style={{ maxWidth: "100%", width: "1280px" }}>
+    <div style={{ margin: "0 auto", maxWidth: "1280px", width: "100%" }}>
       <DashboardHeader />
     </div>
   ),

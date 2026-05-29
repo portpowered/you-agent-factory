@@ -1,3 +1,4 @@
+import { Save } from "lucide-react";
 import { DashboardMutationDialog } from "../../workflow-activity/public";
 import { Button, DashboardActionButton } from "../../../components/ui";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
@@ -37,7 +38,7 @@ export function EditableWorkstationSaveHeaderAction({
       onClick={onClick}
       type="button"
     >
-      <SaveIcon />
+      <Save aria-hidden="true" className="size-4" />
     </DashboardActionButton>
   );
 }
@@ -100,30 +101,5 @@ export function EditableWorkstationSaveDialog({
     >
       <div />
     </DashboardMutationDialog>
-  );
-}
-
-function SaveIcon() {
-  return (
-    <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 16 16">
-      <path
-        d="M3 2.75h8.5L13.25 4.5v8.75H3z"
-        stroke="currentColor"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M5 2.75v3h5v-3"
-        stroke="currentColor"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M5.25 13.25v-4h5.5v4"
-        stroke="currentColor"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      />
-    </svg>
   );
 }

@@ -193,6 +193,107 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("keeps dirty drafts local while tracking newer server-backed field changes", async () => {
+    const { rerender, result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("Keep this local prompt draft.");
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          prompt: "Server refreshed prompt before local save.",
+          workerName: "planner",
+          workerOptions: [
+            { name: "planner", type: "MODEL_WORKER" },
+            { name: "reviewer", type: "MODEL_WORKER" },
+          ],
+        }),
+      ),
+    );
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        draft: {
+          prompt: "Keep this local prompt draft.",
+          workerName: "reviewer",
+        },
+        isDirty: true,
+        overwriteFieldNames: ["prompt", "worker"],
+        status: "ready",
+      });
+    });
+  });
+
+  it("resets dirty drafts to the latest server-backed values", async () => {
+    const { rerender, result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("Keep this local prompt draft.");
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          prompt: "Server refreshed prompt before local save.",
+          workerName: "planner",
+          workerOptions: [
+            { name: "planner", type: "MODEL_WORKER" },
+            { name: "reviewer", type: "MODEL_WORKER" },
+          ],
+        }),
+      ),
+    );
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        isDirty: true,
+        overwriteFieldNames: ["prompt", "worker"],
+        status: "ready",
+      });
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onResetToLatest();
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        prompt: "Server refreshed prompt before local save.",
+        workerName: "planner",
+      },
+      isDirty: false,
+      overwriteFieldNames: [],
+      status: "ready",
+    });
+  });
+
   it("resets the editable draft when the selected workstation changes", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(
@@ -260,6 +361,45 @@ describe("useEditableWorkstationConfigurationState", () => {
         isDirty: false,
         overwriteFieldNames: [],
         status: "ready",
+      });
+    });
+  });
+
+  it("blocks saving a dirty draft when the selected workstation disappears from the latest factory definition", async () => {
+    const { rerender, result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("Keep this local prompt draft.");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        prompt: "Keep this local prompt draft.",
+      },
+      isDirty: true,
+      status: "ready",
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(buildFactoryDefinitionWithoutReview()),
+    );
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        message:
+          "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
+        status: "empty",
       });
     });
   });
@@ -357,6 +497,50 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("uses the resolved authored workstation name for prompt help and validation", async () => {
+    const aliasedSelectedNode = {
+      ...selectedNode,
+      transition_id: "review-transition",
+      workstation_name: "Runtime Review Alias",
+    };
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult({
+        ...buildEditableFactoryDefinition(),
+        workstations: [
+          {
+            behavior: "STANDARD",
+            body: "Review the latest story changes before approval.",
+            id: "review-transition",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Canonical Review",
+            outputs: [{ state: "approved", workType: "story" }],
+            promptFile: "prompts/review.md",
+            runner: "gemini",
+            worker: "reviewer",
+          },
+        ],
+      }),
+    );
+
+    renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, aliasedSelectedNode),
+    );
+
+    await waitFor(() => {
+      expect(useCurrentWorkstationPromptTemplateContract).toHaveBeenLastCalledWith(
+        "Canonical Review",
+        true,
+      );
+      expect(
+        useCurrentWorkstationPromptTemplateValidation,
+      ).toHaveBeenLastCalledWith(
+        "Canonical Review",
+        "Review the latest story changes before approval.",
+        true,
+      );
+    });
+  });
+
   it("surfaces authoritative prompt diagnostics and blocks saving until the draft is fixed", async () => {
     vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
       data: {
@@ -429,6 +613,8 @@ describe("useEditableWorkstationConfigurationState", () => {
       prompt: "Review the story.",
       runnerName: null,
       runnerOptions: ["codex"],
+      sharedWorkerWorkstationNamesByWorkerName: {},
+      sharedWorkerWorkstationNames: [],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
       workerTypeByName: {
@@ -638,6 +824,37 @@ function buildMultiWorkstationEditableFactoryDefinition(): CurrentFactoryDocumen
         runner: "gemini",
         worker: "reviewer",
       },
+      {
+        body: "Plan the implementation.",
+        id: "plan",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "planned", workType: "story" }],
+        promptFile: "prompts/plan.md",
+        runner: "codex",
+        worker: "planner",
+      },
+    ],
+    workTypes: [],
+  };
+}
+
+function buildFactoryDefinitionWithoutReview(): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    runner: "codex",
+    version: {
+      logical: "8",
+      physical: "2026-05-23T15:53:00Z",
+    },
+    workers: [
+      {
+        model: "gpt-5.6",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
       {
         body: "Plan the implementation.",
         id: "plan",

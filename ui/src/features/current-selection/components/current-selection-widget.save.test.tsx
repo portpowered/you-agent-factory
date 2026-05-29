@@ -34,6 +34,7 @@ vi.mock("../hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused current-selection save regressions share one render harness and mocked save seam.
 describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
@@ -266,6 +267,92 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep this draft through a generic failure.",
+    );
+  });
+
+  it("shows a recoverable stale-write warning without discarding the dirty draft", async () => {
+    saveCurrentFactoryMutation.mockRejectedValue(
+      new CurrentFactoryDefinitionError(
+        "Current factory definition is stale. Refresh the graph before saving.",
+        {
+          code: "STALE_FACTORY_VERSION",
+          status: 409,
+          targets: [
+            {
+              id: "stale-version",
+              kind: "save",
+            },
+          ],
+        },
+      ),
+    );
+
+    renderWorkstationSelection();
+    expandEditableConfiguration();
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Keep this draft through a stale write." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Current factory definition is stale. Refresh the graph before saving.",
+        ),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.getByText(
+        "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
+      ),
+    ).toBeTruthy();
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
+      "Keep this draft through a stale write.",
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).toBeNull();
+  });
+
+  it("maps targeted save validation failures onto the affected workstation field", async () => {
+    saveCurrentFactoryMutation.mockRejectedValue(
+      new CurrentFactoryDefinitionError(
+        "Worker selection must reference a configured worker.",
+        {
+          code: "BAD_REQUEST",
+          status: 400,
+          targets: [
+            {
+              field: "factory.workstations[0].worker",
+              kind: "field",
+            },
+          ],
+        },
+      ),
+    );
+
+    renderWorkstationSelection();
+    expandEditableConfiguration();
+
+    fireEvent.change(screen.getByLabelText("Worker"), {
+      target: { value: "planner" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Saving failed. Worker selection must reference a configured worker.",
+        ),
+      ).toBeTruthy();
+    });
+    expect(screen.getByLabelText("Worker").getAttribute("aria-invalid")).toBe(
+      "true",
     );
   });
 

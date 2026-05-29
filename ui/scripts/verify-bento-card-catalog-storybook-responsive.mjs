@@ -116,7 +116,7 @@ export async function verifyBentoCardCatalogResponsive({
 
   const addWidgetButton = page
     .getByRole("article", { name: "Add widget" })
-    .getByRole("button", { exact: true, name: "Add widget" });
+    .getByRole("button", { name: /^Add widget:/ });
   await expectVisible(addWidgetButton, "Inline add-widget action");
   await expectFocusable(addWidgetButton, "Inline add-widget action");
 

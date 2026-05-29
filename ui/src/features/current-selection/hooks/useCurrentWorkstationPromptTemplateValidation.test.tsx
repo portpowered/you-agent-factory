@@ -7,6 +7,10 @@ import {
   validateCurrentFactoryWorkstationPromptTemplate,
 } from "../../../api/current-factory-prompt-template";
 import {
+  resetDashboardSessionStore,
+  useDashboardSessionStore,
+} from "../../dashboard/state/dashboardSessionStore";
+import {
   buildCurrentWorkstationPromptTemplateValidationQueryKey,
   useCurrentWorkstationPromptTemplateValidation,
 } from "./useCurrentWorkstationPromptTemplateValidation";
@@ -29,6 +33,7 @@ const promptTemplateValidationResult: PromptTemplateValidationResult = {
 
 describe("useCurrentWorkstationPromptTemplateValidation", () => {
   beforeEach(() => {
+    resetDashboardSessionStore();
     vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockReset();
   });
 
@@ -110,6 +115,32 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       "Review",
       "Use {{ .Prompt }}",
       { sessionID: "~default" },
+    );
+  });
+
+  it("validates the active prompt draft through the selected session", async () => {
+    useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
+    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockResolvedValue(
+      promptTemplateValidationResult,
+    );
+
+    const { result } = renderHook(
+      () =>
+        useCurrentWorkstationPromptTemplateValidation(
+          "Review",
+          "Use {{ .Prompt }}",
+        ),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+    });
+
+    expect(validateCurrentFactoryWorkstationPromptTemplate).toHaveBeenCalledWith(
+      "Review",
+      "Use {{ .Prompt }}",
+      { sessionID: "session-beta" },
     );
   });
 

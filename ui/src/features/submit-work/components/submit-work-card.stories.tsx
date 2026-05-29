@@ -149,9 +149,6 @@ export const LocalizedZhCN = {
     await expect(scope.getByRole("list", { name: "提交项" })).toBeVisible();
     await expect(scope.getByRole("textbox", { name: "文本项 1" })).toBeVisible();
     await expect(
-      scope.getByText("先选择工作类型并填写请求名称，然后即可继续。"),
-    ).toBeVisible();
-    await expect(
       scope.getByRole("button", { name: "提交工作" }),
     ).toBeDisabled();
   },

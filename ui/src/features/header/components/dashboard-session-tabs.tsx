@@ -28,9 +28,9 @@ import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 
 const SESSION_TABS_SHELL_CLASS = "grid min-w-0 max-w-full flex-1 gap-2";
 const SESSION_TABS_ROW_CLASS =
-  "flex min-w-0 max-w-full items-stretch gap-1 overflow-visible";
+  "flex min-w-0 max-w-full items-stretch gap-1 overflow-hidden";
 const SESSION_TAB_LIST_CLASS =
-  "flex min-w-0 items-left h-full gap-1 overflow-x-visible overflow-y-visible";
+  "flex h-full min-w-full w-max items-left gap-1";
 const SESSION_TAB_ITEM_CLASS =
   "group relative flex min-h-0 h-full min-w-0 shrink-0 items-stretch self-stretch transition-colors";
 const SESSION_TAB_BUTTON_CLASS =
@@ -292,7 +292,7 @@ function SessionTabsContent({
     <>
       <nav
         aria-label={messages.sessionTabsLabel}
-        className="min-w-0 overflow-visible"
+        className="min-w-0 overflow-x-auto overflow-y-hidden"
       >
         <div
           aria-orientation="horizontal"

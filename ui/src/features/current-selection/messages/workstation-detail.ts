@@ -34,6 +34,9 @@ const workstationDetailMessagesByLocale = {
       "Changes stay local to this edit session until you save the running factory.",
     editableConfigurationModelSharedWorkerHint:
       "Model edits are disabled here because this workstation shares its worker with other workstations.",
+    editableConfigurationResetAction: "Reset to latest",
+    editableConfigurationServerFieldChangedHint:
+      "The running factory changed this field while you were editing. Reset to latest to discard the local draft value.",
     editableConfigurationOverwriteWarning: (fields) =>
       `The running factory changed after you started editing. Saving now will overwrite newer server values for ${fields}.`,
     editableConfigurationOverwriteWarningDetail:
@@ -49,6 +52,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationTitle:
       "Overwrite the running factory definition?",
     editableConfigurationSaveErrorPrefix: "Saving failed.",
+    editableConfigurationSaveStaleVersionDetail:
+      "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
     editableConfigurationSaveSuccess:
       "Running factory saved. The editable workstation values were refreshed to the saved definition.",
     editableConfigurationLoading:
@@ -88,6 +93,10 @@ const workstationDetailMessagesByLocale = {
       `Autocomplete is ready with ${singularPlural(variableCount, "variable", "variables")} for ${singularPlural(inputCount, "authored input", "authored inputs")}.`,
     editableConfigurationPromptAutocompleteDetail:
       "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
+    editableConfigurationPromptAvailableVariablesHeading:
+      "Available variables",
+    editableConfigurationPromptUnavailableAccessHeading:
+      "Unavailable access",
     editableConfigurationSaveFallbackError:
       "The running factory could not be saved.",
     editableConfigurationWorkerMissing:
@@ -96,6 +105,11 @@ const workstationDetailMessagesByLocale = {
       "No current workers are available for this workstation. Add a worker to the factory before editing this field.",
     editableConfigurationWorkerRequired:
       "Select a worker before saving this workstation.",
+    editableConfigurationSharedWorkerScopeHint: (
+      workerName,
+      workstationNames,
+    ) =>
+      `Worker ${workerName} is also used by ${workstationNames}. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.`,
     editableConfigurationWorkerUnavailable:
       "The selected worker is no longer available. Choose another worker before saving this workstation.",
     editableConfigurationWorkerUnavailablePrefix:
@@ -204,6 +218,9 @@ const workstationDetailMessagesByLocale = {
       "変更は、実行中ファクトリーを保存するまでこの編集セッション内だけに保持されます。",
     editableConfigurationModelSharedWorkerHint:
       "このワークステーションは他のワークステーションと同じワーカーを共有しているため、ここではモデルを編集できません。",
+    editableConfigurationResetAction: "最新へ戻す",
+    editableConfigurationServerFieldChangedHint:
+      "編集中に実行中ファクトリーのこの項目が更新されました。最新へ戻すと、この下書きのローカル値を破棄します。",
     editableConfigurationOverwriteWarning: (fields) =>
       `編集開始後に実行中ファクトリーが変更されました。今保存すると、${fields} の新しいサーバー値を上書きします。`,
     editableConfigurationOverwriteWarningDetail:
@@ -219,6 +236,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationTitle:
       "実行中ファクトリー定義を上書きしますか？",
     editableConfigurationSaveErrorPrefix: "保存に失敗しました。",
+    editableConfigurationSaveStaleVersionDetail:
+      "最新の実行中ファクトリー値を再読み込みするか、この下書きを保持したままエディターの更新後に再試行してください。",
     editableConfigurationSaveSuccess:
       "実行中ファクトリーを保存しました。編集可能なワークステーション値は保存済み定義へ更新されました。",
     editableConfigurationLoading:
@@ -258,6 +277,8 @@ const workstationDetailMessagesByLocale = {
       `${inputCount} 件の入力コンテキストで ${variableCount} 件の補完候補を利用できます。`,
     editableConfigurationPromptAutocompleteDetail:
       "{{ ... }} の中で入力すると候補が表示され、エディターの補完コマンドで手動表示することもできます。",
+    editableConfigurationPromptAvailableVariablesHeading: "利用可能な変数",
+    editableConfigurationPromptUnavailableAccessHeading: "利用できないアクセス",
     editableConfigurationSaveFallbackError:
       "実行中ファクトリーを保存できませんでした。",
     editableConfigurationWorkerMissing:
@@ -266,6 +287,11 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションで利用できる現在のワーカーがありません。このフィールドを編集する前にファクトリーへワーカーを追加してください。",
     editableConfigurationWorkerRequired:
       "このワークステーションを保存する前にワーカーを選択してください。",
+    editableConfigurationSharedWorkerScopeHint: (
+      workerName,
+      workstationNames,
+    ) =>
+      `ワーカー ${workerName} は ${workstationNames} でも使用されています。provider、model、runner process、worker instruction の設定は worker 所有のままで、このワークステーションフォームからは編集されません。`,
     editableConfigurationWorkerUnavailable:
       "選択したワーカーは利用できなくなりました。保存前に別のワーカーを選択してください。",
     editableConfigurationWorkerUnavailablePrefix:
@@ -374,6 +400,9 @@ const workstationDetailMessagesByLocale = {
       "변경 사항은 실행 중인 팩토리를 저장할 때까지 이 편집 세션에만 로컬로 유지됩니다.",
     editableConfigurationModelSharedWorkerHint:
       "이 워크스테이션은 다른 워크스테이션과 같은 워커를 공유하므로 여기서는 모델을 편집할 수 없습니다.",
+    editableConfigurationResetAction: "최신값으로 재설정",
+    editableConfigurationServerFieldChangedHint:
+      "편집하는 동안 실행 중인 팩토리에서 이 필드가 변경되었습니다. 최신값으로 재설정하면 로컬 초안 값이 버려집니다.",
     editableConfigurationOverwriteWarning: (fields) =>
       `편집을 시작한 뒤 실행 중인 팩토리가 변경되었습니다. 지금 저장하면 ${fields}의 최신 서버 값을 덮어쓰게 됩니다.`,
     editableConfigurationOverwriteWarningDetail:
@@ -389,6 +418,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationTitle:
       "실행 중인 팩토리 정의를 덮어쓸까요?",
     editableConfigurationSaveErrorPrefix: "저장에 실패했습니다.",
+    editableConfigurationSaveStaleVersionDetail:
+      "최신 실행 중 팩토리 값을 다시 불러오거나, 이 초안을 유지한 채 편집기가 새로고침된 뒤 다시 시도하세요.",
     editableConfigurationSaveSuccess:
       "실행 중인 팩토리를 저장했습니다. 편집 가능한 워크스테이션 값이 저장된 정의로 새로 고쳐졌습니다.",
     editableConfigurationLoading:
@@ -428,6 +459,8 @@ const workstationDetailMessagesByLocale = {
       `${inputCount}개의 입력 컨텍스트에서 ${variableCount}개의 자동완성 변수를 사용할 수 있습니다.`,
     editableConfigurationPromptAutocompleteDetail:
       "{{ ... }} 안에서 입력하면 추천이 나타나고, 프롬프트 편집기 어디서나 Monaco 자동완성 명령으로 수동 호출할 수도 있습니다.",
+    editableConfigurationPromptAvailableVariablesHeading: "사용 가능한 변수",
+    editableConfigurationPromptUnavailableAccessHeading: "사용할 수 없는 접근",
     editableConfigurationSaveFallbackError:
       "실행 중인 팩토리를 저장할 수 없습니다.",
     editableConfigurationWorkerMissing:
@@ -436,6 +469,11 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션에서 사용할 수 있는 현재 워커가 없습니다. 이 필드를 편집하기 전에 팩토리에 워커를 추가하세요.",
     editableConfigurationWorkerRequired:
       "이 워크스테이션을 저장하기 전에 워커를 선택하세요.",
+    editableConfigurationSharedWorkerScopeHint: (
+      workerName,
+      workstationNames,
+    ) =>
+      `워커 ${workerName}는 ${workstationNames}에서도 사용됩니다. provider, model, runner process, worker instruction 설정은 워커 소유로 유지되며 이 워크스테이션 양식에서 편집되지 않습니다.`,
     editableConfigurationWorkerUnavailable:
       "선택한 워커를 더 이상 사용할 수 없습니다. 저장하기 전에 다른 워커를 선택하세요.",
     editableConfigurationWorkerUnavailablePrefix:
@@ -541,6 +579,9 @@ const workstationDetailMessagesByLocale = {
       "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
     editableConfigurationModelSharedWorkerHint:
       "此工作站与其他工作站共享同一个 worker，因此这里不能编辑模型。",
+    editableConfigurationResetAction: "重置为最新值",
+    editableConfigurationServerFieldChangedHint:
+      "你编辑期间，运行中的工厂已更新此字段。重置为最新值会丢弃当前本地草稿值。",
     editableConfigurationOverwriteWarning: (fields) =>
       `你开始编辑后，运行中的工厂已发生变化。现在保存将覆盖 ${fields} 的较新服务器值。`,
     editableConfigurationOverwriteWarningDetail:
@@ -555,6 +596,8 @@ const workstationDetailMessagesByLocale = {
       `保存将使用编辑器中当前草稿覆盖 ${fields} 的较新服务器值。`,
     editableConfigurationSaveConfirmationTitle: "要覆盖运行中的工厂定义吗？",
     editableConfigurationSaveErrorPrefix: "保存失败。",
+    editableConfigurationSaveStaleVersionDetail:
+      "请重新加载最新的运行中工厂值，或保留此草稿并在编辑器刷新后重试。",
     editableConfigurationSaveSuccess:
       "运行中的工厂已保存。可编辑的工作站值已刷新为保存后的定义。",
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
@@ -586,12 +629,19 @@ const workstationDetailMessagesByLocale = {
       `自动补全已就绪，可为 ${inputCount} 个已编写输入上下文提供 ${variableCount} 个变量候选。`,
     editableConfigurationPromptAutocompleteDetail:
       "在 {{ ... }} 内输入时会显示建议，也可以在提示词编辑器任意位置手动触发 Monaco 补全。",
+    editableConfigurationPromptAvailableVariablesHeading: "可用变量",
+    editableConfigurationPromptUnavailableAccessHeading: "不可用访问",
     editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
     editableConfigurationWorkerMissing:
       "所选工作站引用的工作器已不在当前工厂定义中。请重新加载当前选择并选择其他工作器。",
     editableConfigurationWorkerOptionsEmpty:
       "此工作站当前没有可用的工作器。请先向工厂添加工作器，再编辑此字段。",
     editableConfigurationWorkerRequired: "保存此工作站前请选择工作器。",
+    editableConfigurationSharedWorkerScopeHint: (
+      workerName,
+      workstationNames,
+    ) =>
+      `工作器 ${workerName} 也被 ${workstationNames} 使用。provider、model、runner process 和 worker instruction 设置仍归 worker 所有，不会从此工作站表单编辑。`,
     editableConfigurationWorkerUnavailable:
       "所选工作器已不可用。保存前请选择其他工作器。",
     editableConfigurationWorkerUnavailablePrefix: "工作器选择不可用。",

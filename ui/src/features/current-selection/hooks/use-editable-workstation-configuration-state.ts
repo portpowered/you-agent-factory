@@ -49,24 +49,24 @@ export function useEditableWorkstationConfigurationState(
   const isNodeSelection = selection?.kind === "node" && selectedNode != null;
   const messages = getWorkstationDetailMessages(locale);
   const editableDefinition = useCurrentFactoryDocument(isNodeSelection);
-  const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
-    selectedNode?.workstation_name,
-    isNodeSelection,
-  );
   const { selectedEditableValues, sessionState, setSessionState } =
     useEditableWorkstationSession(
       editableDefinition.data,
       selectedNode,
       selection,
     );
+  const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
+    selectedEditableValues?.workstationName,
+    isNodeSelection && selectedEditableValues != null,
+  );
   const shouldValidatePrompt =
     isNodeSelection &&
     sessionState != null &&
     workstationBehaviorRequiresPrompt(sessionState.draft.behavior);
   const promptValidation = useCurrentWorkstationPromptTemplateValidation(
-    selectedNode?.workstation_name,
+    selectedEditableValues?.workstationName,
     sessionState?.draft.prompt,
-    shouldValidatePrompt,
+    shouldValidatePrompt && selectedEditableValues != null,
   );
 
   if (!isNodeSelection) {
@@ -228,6 +228,7 @@ export function hasEditableWorkstationValidationErrors(
   return Boolean(
     validationErrors.behavior ||
       validationErrors.prompt ||
+      validationErrors.runnerName ||
       validationErrors.workerName,
   );
 }
@@ -336,6 +337,7 @@ function buildReadyEditableWorkstationConfigurationState({
         currentState
           ? {
               ...currentState,
+              latestDefinitionDraft: currentState.draft,
               sessionStartDraft: currentState.draft,
             }
           : currentState,
@@ -350,6 +352,17 @@ function buildReadyEditableWorkstationConfigurationState({
                 ...currentState.draft,
                 prompt: value,
               },
+            }
+          : currentState,
+      );
+    },
+    onResetToLatest: () => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              draft: currentState.latestDefinitionDraft,
+              sessionStartDraft: currentState.latestDefinitionDraft,
             }
           : currentState,
       );
@@ -394,6 +407,7 @@ function buildReadyEditableWorkstationConfigurationState({
       );
     },
     overwriteFieldNames: resolveEditableWorkstationOverwriteFields(
+      sessionState.sessionStartDraft,
       sessionState.draft,
       sessionState.latestDefinitionDraft,
     ),

@@ -1,6 +1,12 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: current-selection editable workstation fields stay colocated so save feedback, overwrite hints, and responsive form structure evolve together.
 import { type ReactNode, useId, useState } from "react";
 
-import { Select } from "../../../components/ui";
+import {
+  DashboardActionButton,
+  DashboardActionRow,
+  DisclosureButton,
+  Select,
+} from "../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -18,6 +24,7 @@ import {
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
+  EditableWorkstationValidationErrors,
   WorkstationDetailCardProps,
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
@@ -51,20 +58,20 @@ export function EditableConfigurationSection({
     >
       <CurrentSelectionSectionHeader
         action={
-          <button
+          <DisclosureButton
             aria-label={
               expanded
                 ? messages.editableConfigurationCollapseActionLabel
                 : messages.editableConfigurationExpandActionLabel
             }
-            aria-controls={contentId}
-            aria-expanded={expanded}
             className={HISTORY_TOGGLE_CLASS}
+            controlsID={contentId}
+            expanded={expanded}
             onClick={() => setExpanded((current) => !current)}
             type="button"
           >
             {expanded ? messages.collapseAction : messages.expandAction}
-          </button>
+          </DisclosureButton>
         }
         headingId={headingId}
         title={messages.editableConfigurationHeading}
@@ -114,6 +121,15 @@ function EditableConfigurationReadyForm({
     { status: "ready" }
   >;
 }) {
+  const validationErrors = mergeEditableValidationErrors(
+    state.validationErrors,
+    saveState,
+  );
+  const renderState = {
+    ...state,
+    validationErrors,
+  };
+
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
       <EditableConfigurationSaveFeedback
@@ -125,46 +141,99 @@ function EditableConfigurationReadyForm({
         overwriteFieldNames={state.overwriteFieldNames ?? []}
       />
       <EditableConfigurationDraftStatus messages={messages} state={state} />
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <EditableConfigurationField
           fieldId="editable-workstation-worker"
-          errorMessage={state.validationErrors.workerName}
+          errorMessage={validationErrors.workerName}
           input={
             <EditableConfigurationWorkerInput
               messages={messages}
-              state={state}
+              state={renderState}
             />
           }
           label={messages.workerFieldLabel}
+          supportingContent={
+            <>
+              <EditableConfigurationSharedWorkerHint
+                messages={messages}
+                state={state}
+              />
+              <EditableConfigurationServerChangedHint
+                fieldName="worker"
+                messages={messages}
+                state={state}
+              />
+            </>
+          }
         />
         <EditableConfigurationField
           fieldId="editable-workstation-kind"
-          errorMessage={state.validationErrors.behavior}
+          errorMessage={validationErrors.behavior}
           input={
             <EditableConfigurationBehaviorInput
+              messages={messages}
+              state={renderState}
+            />
+          }
+          label={messages.kindLabel}
+          supportingContent={
+            <EditableConfigurationServerChangedHint
+              fieldName="behavior"
               messages={messages}
               state={state}
             />
           }
-          label={messages.kindLabel}
         />
         <EditableConfigurationField
           fieldId="editable-workstation-runner"
-          input={<EditableConfigurationRunnerField messages={messages} state={state} />}
+          errorMessage={validationErrors.runnerName}
+          input={
+            <EditableConfigurationRunnerField
+              messages={messages}
+              state={renderState}
+            />
+          }
           label={messages.runnerFieldLabel}
+          supportingContent={
+            <EditableConfigurationServerChangedHint
+              fieldName="runner"
+              messages={messages}
+              state={state}
+            />
+          }
         />
       </div>
       <EditableConfigurationField
-        errorMessage={state.validationErrors.prompt}
+        errorMessage={validationErrors.prompt}
         fieldId="editable-workstation-prompt"
         input={
           <EditableConfigurationPromptInput
             messages={messages}
-            state={state}
+            state={renderState}
           />
         }
         label={messages.promptFieldLabel}
+        supportingContent={
+          <EditableConfigurationServerChangedHint
+            fieldName="prompt"
+            messages={messages}
+            state={state}
+          />
+        }
       />
+      {state.isDirty ? (
+        <DashboardActionRow
+          actions={
+            <DashboardActionButton
+              disabled={saveState?.status === "submitting"}
+              onClick={state.onResetToLatest}
+              type="button"
+            >
+              {messages.editableConfigurationResetAction}
+            </DashboardActionButton>
+          }
+        />
+      ) : null}
     </form>
   );
 }
@@ -188,6 +257,22 @@ function EditableConfigurationSaveFeedback({
     );
   }
 
+  if (saveState?.status === "warning") {
+    return (
+      <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
+        <p
+          className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
+          role="alert"
+        >
+          {saveState.message}
+        </p>
+        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          {messages.editableConfigurationSaveStaleVersionDetail}
+        </p>
+      </div>
+    );
+  }
+
   if (saveState?.status === "error") {
     return (
       <p
@@ -200,6 +285,20 @@ function EditableConfigurationSaveFeedback({
   }
 
   return null;
+}
+
+function mergeEditableValidationErrors(
+  validationErrors: EditableWorkstationValidationErrors,
+  saveState?: EditableWorkstationSaveState,
+): EditableWorkstationValidationErrors {
+  if (saveState?.status !== "error" || !saveState.fieldErrors) {
+    return validationErrors;
+  }
+
+  return {
+    ...validationErrors,
+    ...saveState.fieldErrors,
+  };
 }
 
 function EditableConfigurationDraftStatus({
@@ -349,6 +448,73 @@ function EditableConfigurationBehaviorInput({
         </option>
       ))}
     </Select>
+  );
+}
+
+function EditableConfigurationSharedWorkerHint({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  const sharedWorkstationNames = resolveSharedWorkerWorkstationNames(state);
+  if (sharedWorkstationNames.length === 0) {
+    return null;
+  }
+
+  return (
+    <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      {messages.editableConfigurationSharedWorkerScopeHint(
+        valueOrFallback(state.draft.workerName, messages.notConfiguredValue),
+        formatList(sharedWorkstationNames),
+      )}
+    </p>
+  );
+}
+
+function resolveSharedWorkerWorkstationNames(
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >,
+): string[] {
+  return (
+    state.initialValues.sharedWorkerWorkstationNamesByWorkerName[
+      state.draft.workerName
+    ] ??
+    []
+  );
+}
+
+function EditableConfigurationServerChangedHint({
+  fieldName,
+  messages,
+  state,
+}: {
+  fieldName: EditableWorkstationOverwriteField;
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  if (!state.overwriteFieldNames.includes(fieldName)) {
+    return null;
+  }
+
+  return (
+    <p
+      className={cn(
+        "m-0 text-af-warning-text",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
+    >
+      {messages.editableConfigurationServerFieldChangedHint}
+    </p>
   );
 }
 

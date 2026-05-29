@@ -7,6 +7,10 @@ import {
   type PromptTemplateContract,
 } from "../../../api/current-factory-prompt-template";
 import {
+  resetDashboardSessionStore,
+  useDashboardSessionStore,
+} from "../../dashboard/state/dashboardSessionStore";
+import {
   buildCurrentWorkstationPromptTemplateContractQueryKey,
   useCurrentWorkstationPromptTemplateContract,
 } from "./useCurrentWorkstationPromptTemplateContract";
@@ -37,6 +41,7 @@ const promptTemplateContract: PromptTemplateContract = {
 
 describe("useCurrentWorkstationPromptTemplateContract", () => {
   beforeEach(() => {
+    resetDashboardSessionStore();
     vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockReset();
   });
 
@@ -101,6 +106,28 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
       "Review",
       { sessionID: "~default" },
     );
+  });
+
+  it("loads prompt-template contract data through the selected session", async () => {
+    useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
+    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockResolvedValue(
+      promptTemplateContract,
+    );
+
+    const { result } = renderHook(
+      () => useCurrentWorkstationPromptTemplateContract("Review"),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+    });
+
+    expect(getCurrentFactoryWorkstationPromptTemplateContract).toHaveBeenCalledWith(
+      "Review",
+      { sessionID: "session-beta" },
+    );
+    expect(result.current.data).toBe(promptTemplateContract);
   });
 
   it("surfaces typed API failures from the prompt-template contract query", async () => {

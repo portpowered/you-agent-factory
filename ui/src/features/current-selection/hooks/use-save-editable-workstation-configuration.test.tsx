@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
+import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import * as currentFactoryFeature from "../../current-factory-definition/public";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkstationConfigurationState } from "../components/detail-card-types";
@@ -190,6 +191,91 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       expect(result.current.saveState).not.toEqual({ status: "submitting" });
     });
   });
+
+  it("keeps stale-version save failures recoverable as warnings", async () => {
+    const mutateAsync = vi.fn().mockRejectedValue(
+      new CurrentFactoryDefinitionError("Current factory definition is stale. Refresh the graph before saving.", {
+        code: "STALE_FACTORY_VERSION",
+        status: 409,
+        targets: [{ id: "stale-version", kind: "save" }],
+      }),
+    );
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState(),
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    act(() => {
+      result.current.beginSaveConfirmation();
+    });
+
+    await act(async () => {
+      await result.current.confirmSave();
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({
+        message: "Current factory definition is stale. Refresh the graph before saving.",
+        status: "warning",
+      });
+    });
+    expect(result.current.canSave).toBe(true);
+  });
+
+  it("maps targeted save validation failures onto workstation field errors", async () => {
+    const mutateAsync = vi.fn().mockRejectedValue(
+      new CurrentFactoryDefinitionError("Worker selection must reference a configured worker.", {
+        code: "BAD_REQUEST",
+        status: 400,
+        targets: [
+          {
+            field: "factory.workstations[0].worker",
+            kind: "field",
+          },
+        ],
+      }),
+    );
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState(),
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    act(() => {
+      result.current.beginSaveConfirmation();
+    });
+
+    await act(async () => {
+      await result.current.confirmSave();
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({
+        errorMessage: "Worker selection must reference a configured worker.",
+        fieldErrors: {
+          workerName: "Worker selection must reference a configured worker.",
+        },
+        status: "error",
+      });
+    });
+  });
 });
 
 function createQueryClientWrapper() {
@@ -225,6 +311,8 @@ function buildReadyEditableConfigurationState(overrides?: {
       prompt: overrides?.prompt ?? "Review the story.",
       runnerName: null,
       runnerOptions: ["codex"],
+      sharedWorkerWorkstationNamesByWorkerName: {},
+      sharedWorkerWorkstationNames: [],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
       workerTypeByName: {
@@ -240,6 +328,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     },
     onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
+    onResetToLatest: vi.fn(),
     onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
     overwriteFieldNames: [],
