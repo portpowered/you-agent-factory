@@ -664,7 +664,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.getByText("Workstation type unavailable")).toBeTruthy();
   });
 
-  it("renders localized unknown-kind fallback in the workstation summary", () => {
+  it("renders localized scheduling kind from editable draft behavior in the workstation summary", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = {
       ...snapshot.topology.workstation_nodes_by_id.review,
@@ -674,7 +674,9 @@ describe("WorkstationDetailCard editable configuration", () => {
     render(
       <WorkstationDetailCard
         activeExecutions={[]}
-        editableConfigurationState={buildReadyEditableConfigurationState()}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "REPEATER",
+        })}
         locale="zh-CN"
         now={DETAIL_CARD_NOW}
         providerSessions={[]}
@@ -683,7 +685,39 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(screen.getByRole("heading", { name: "工作站摘要" })).toBeTruthy();
-    expect(screen.getByText("未知种类：future-kind")).toBeTruthy();
+    expect(screen.getByText("重复器")).toBeTruthy();
+  });
+
+  it("shows workstation kind loading and unavailable copy for editable configuration states", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{ status: "loading" }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByText("Loading workstation kind...")).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          errorMessage: "Factory definition unavailable.",
+          status: "error",
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByText("Workstation kind unavailable")).toBeTruthy();
   });
 
   it("shows inline Monaco guidance from the current workstation contract", () => {

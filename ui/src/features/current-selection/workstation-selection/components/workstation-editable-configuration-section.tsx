@@ -33,6 +33,7 @@ import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstat
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationRunnerField } from "./workstation-runner-field";
 import {
+  resolveWorkstationSummaryKindValue,
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
 } from "./workstation-summary-field-values";
@@ -556,8 +557,10 @@ export function WorkstationSummary({
         />
         <WorkstationSummaryItem
           label={messages.kindLabel}
-          value={messages.localizeWorkstationKind(
-            selectedNode.workstation_kind || messages.kindDefaultValue,
+          value={resolveWorkstationSummaryKindValue(
+            editableConfigurationState,
+            selectedNode,
+            messages,
           )}
         />
         <WorkstationSummaryItem
