@@ -1309,6 +1309,119 @@ function responsiveCatalogDetailCards({
   ];
 }
 
+function HeaderConsistencyStory({ initialWidth }: { initialWidth: number }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const layout: AgentBentoLayoutItem[] = [
+    layoutFor(DASHBOARD_WIDGET_IDS.workTotals, {
+      h: 2,
+      id: "work-totals::header-consistency",
+      w: 4,
+      x: 0,
+      y: 0,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.providerSession, {
+      h: 5,
+      id: "provider-session::header-consistency",
+      w: 5,
+      x: 4,
+      y: 0,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.addWidget, {
+      h: 4,
+      id: "add-widget::header-consistency",
+      w: 3,
+      x: 9,
+      y: 0,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.submitWork, {
+      h: 6,
+      id: "submit-work::header-consistency",
+      w: 5,
+      x: 0,
+      y: 2,
+    }),
+  ];
+
+  return (
+    <div style={{ maxWidth: `${initialWidth}px`, padding: "1rem", width: "100%" }}>
+      <AgentBentoLayout
+        cards={[
+          {
+            children: (
+              <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />
+            ),
+            id: "work-totals::header-consistency",
+            widgetType: DASHBOARD_WIDGET_IDS.workTotals,
+          },
+          {
+            children: (
+              <ProviderSessionWidget
+                selectedProviderSession={populatedProviderSession}
+                widgetId="provider-session::header-consistency"
+              />
+            ),
+            id: "provider-session::header-consistency",
+            widgetType: DASHBOARD_WIDGET_IDS.providerSession,
+          },
+          {
+            children: (
+              <InlineAddWidgetCard
+                onPickerOpenChange={setPickerOpen}
+                onSelectWidget={() => undefined}
+                pickerAvailability={getDashboardWidgetPickerAvailability(layout)}
+                pickerOpen={pickerOpen}
+              />
+            ),
+            id: "add-widget::header-consistency",
+            widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+          },
+          {
+            children: (
+              <SubmitWorkCard
+                draft={{
+                  items: [
+                    {
+                      id: "submit-work-header-consistency-text",
+                      text: "Header consistency coverage",
+                      type: "text",
+                    },
+                  ],
+                  requestName: "Header consistency",
+                  workTypeName: "story",
+                }}
+                headerAction={
+                  <DashboardWidgetRemoveButton
+                    onClick={() => undefined}
+                    widgetTitle="Submit work"
+                  />
+                }
+                onAddItem={() => undefined}
+                onItemTextChange={() => undefined}
+                onRemoveItem={() => undefined}
+                onRequestNameChange={() => undefined}
+                onStageFileItems={() => undefined}
+                onSubmit={() => undefined}
+                onWorkTypeNameChange={() => undefined}
+                status={{
+                  kind: "guidance",
+                  message: "Header consistency story.",
+                }}
+                submitWorkTypeNames={["story"]}
+                widgetId="submit-work::header-consistency"
+              />
+            ),
+            id: "submit-work::header-consistency",
+            widgetType: DASHBOARD_WIDGET_IDS.submitWork,
+          },
+        ]}
+        initialWidth={initialWidth}
+        layout={layout}
+        responsiveMode="interactive"
+      />
+    </div>
+  );
+}
+
 function DashboardBentoResponsiveStory() {
   const currentSelection = useCurrentSelection({
     sessionID: DEFAULT_FACTORY_SESSION_ID,
@@ -2076,6 +2189,45 @@ export const InlineAddWidget = {
     );
     await expect(
       canvas.getByRole("button", { name: "Move Add widget" }),
+    ).toBeVisible();
+  },
+};
+
+export const HeaderConsistencyVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [providerSessionFetchMock],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => <HeaderConsistencyStory initialWidth={1180} />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    for (const cardName of [
+      "Work totals",
+      "Provider session",
+      "Add widget",
+      "Submit work",
+    ] as const) {
+      const card = await canvas.findByRole("article", { name: cardName });
+      const header = card.querySelector("header");
+      expect(header).toBeTruthy();
+      expect(
+        within(card).getByRole("heading", { level: 3, name: cardName }),
+      ).toBeVisible();
+      await expect(
+        within(card).getByRole("button", { name: `Move ${cardName}` }),
+      ).toBeVisible();
+    }
+
+    const submitWorkCard = await canvas.findByRole("article", {
+      name: "Submit work",
+    });
+    await expect(
+      within(submitWorkCard).getByRole("button", {
+        name: "Remove Submit work widget from dashboard",
+      }),
     ).toBeVisible();
   },
 };
