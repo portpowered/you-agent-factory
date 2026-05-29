@@ -1,0 +1,32 @@
+## Codebase Patterns
+- Register new packaged `you docs` topics in the single `topicDocuments` table in `pkg/cli/docs/docs.go` with canonical name, description, `displayOrder`, path, and optional aliases together so `SupportedTopics()`, index output, and unsupported-topic errors stay aligned.
+- Keep `docs/reference/*.md` and `pkg/cli/docs/reference/*.md` synchronized when adding customer-facing packaged topics; embedded markdown is loaded from `pkg/cli/docs/reference/` via `//go:embed`.
+- When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
+- When trimming `authoring-factories` after new topics land, point readers at `you docs mock-workers` and `you docs record-replay` and update `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` markers away from removed deep-dive strings.
+
+## 2026-05-29T14:50:44Z - docs-extensions-mock-workers-and-record-001
+- What was implemented: Added canonical `mock-workers` packaged docs topic with synchronized reference markdown, `docs.go` registration at display order 25, and test expectation updates for topic order and unsupported-topic errors.
+- Files changed: `docs/reference/mock-workers.md`, `pkg/cli/docs/reference/mock-workers.md`, `pkg/cli/docs/docs.go`, `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: New topics slot between existing `displayOrder` values (used 25 between config 20 and work 30); `TestMarkdown_ReturnsRawPackagedMarkdownForEachSupportedTopic` automatically covers new topics via `topicRegistry.ordered`.
+  - Gotchas encountered: `TestSupportedTopicCommands` and smoke unsupported-topic strings must include new canonical topics in deterministic order.
+  - Useful context: Mock-worker JSON contract and examples are consolidated from `authoring-factories.md` § Test Workflows With Mock Workers; story 003 will trim duplication there.
+---
+
+## 2026-05-29T15:12:00Z - docs-extensions-mock-workers-and-record-002
+- What was implemented: Added canonical `record-replay` packaged docs topic with synchronized reference markdown, `docs.go` registration at display order 26, focused `TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown`, and topic-order expectation updates across docs and smoke tests.
+- Files changed: `docs/reference/record-replay.md`, `pkg/cli/docs/reference/record-replay.md`, `pkg/cli/docs/docs.go`, `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: Record/replay customer content mirrors `authoring-factories.md` § Start the factory recording subsection; use `displayOrder` 26 immediately after `mock-workers` (25) before `work` (30).
+  - Gotchas encountered: Incompatible-flag bullets use markdown backticks (`--record` with `--replay`); test markers must include those backticks when asserting exact phrases.
+  - Useful context: `sample-run.replay.json` is referenced as an example path in docs but is not checked in; story 003 will add cross-links from config and trim authoring-factories duplication.
+---
+
+## 2026-05-29T16:05:00Z - docs-extensions-mock-workers-and-record-003
+- What was implemented: Trimmed duplicated mock-worker and record/replay depth from `authoring-factories`, added `Run Controls` brief mentions with canonical links in `config`, updated `docs/reference/README.md` packaged-topic table, and aligned `docs_test` authoring-factories markers with cross-links.
+- Files changed: `docs/reference/README.md`, `docs/reference/authoring-factories.md`, `docs/reference/config.md`, `pkg/cli/docs/reference/authoring-factories.md`, `pkg/cli/docs/reference/config.md`, `pkg/cli/docs/docs_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: After extracting topics, replace deep sections with `you docs <topic>` pointers and keep only quick-start `you run` commands needed for the walkthrough; sync `docs/reference/authoring-factories.md` to `pkg/cli/docs/reference/` with `cp` when they must stay identical.
+  - Gotchas encountered: `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` still asserted record/replay example commands removed from authoring-factories; update markers to `you docs mock-workers` / `you docs record-replay` when trimming.
+  - Useful context: Packaged `config` (`pkg/cli/docs/reference/config.md`) and layout `docs/reference/config.md` differ; both need run-control cross-links for story 003.
+---

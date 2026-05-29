@@ -230,65 +230,14 @@ you run --dir ./factory --with-mock-workers
 The command loads `factory.json`, resolves the split `AGENTS.md` files, starts
 continuous mode, and exposes the dashboard and API on the configured port.
 
-Normal live `you run` invocations record a replay-compatible artifact by
-default when you do not pass `--record` or `--replay`. The generated artifact
-root is:
+Live runs record a replay-compatible artifact by default. Use `--no-record`,
+`--record <path>`, or `--replay <path>` when you need to override capture or
+playback. Run `you docs record-replay` for generated paths, incompatible flag
+combinations, sensitivity warnings, and copy-pasteable record and replay
+examples.
 
-```text
-~/.you-agent-factory/recordings/YYYY-MM/YYYY-MM-DD/
-```
-
-The top-level session for a normal run writes a filename shaped like:
-
-```text
-factory-session-~default-HHMMSS-<unique-id>.json
-```
-
-Independent factory sessions opened later in the same service lifetime keep the
-same directory contract but replace `~default` with the owning session ID so
-their histories stay isolated in separate replay artifacts.
-
-Use these controls when you need to override the default behavior:
-
-- Pass `--no-record` to skip the default recording for one invocation.
-- Pass `--record <path>` to write the replay artifact to an explicit path you
-  own instead of the generated recordings directory.
-- Pass `--replay <path>` to replay an existing artifact instead of starting a
-  live run.
-
-For an explicit recording path, run:
-
-```bash
-you run --dir ./factory --record ./docs/examples/sample-run.replay.json
-```
-
-To replay that artifact later, run:
-
-```bash
-you run --dir ./factory --replay ./docs/examples/sample-run.replay.json
-```
-
-To run without writing the default recording, run:
-
-```bash
-you run --dir ./factory --no-record
-```
-
-Record mode starts a live run and writes the observed runtime history to a
-replay artifact. Replay mode reads an existing artifact and uses the recorded
-runtime history instead of dispatching live workers again. `--record` and
-`--replay` cannot be used together for the same invocation.
-
-The CLI reports the resolved generated path during shutdown with
-`Recording saved: ...` so the artifact is easy to find after a failure or an
-unexpected run. Replay artifacts are sensitive because they can contain
-prompts, payloads, stdout, stderr, and diagnostic metadata. The first version
-does not delete old artifacts automatically, so manage retention in your own
-home directory or CI workspace.
-
-Maintainers who need the internal event-log and fixture workflow can use
-[`docs/internal/development/record-replay.md`](../internal/development/record-replay.md);
-customer runs only need the CLI flags above.
+Run `you docs mock-workers` for the `--with-mock-workers` JSON contract,
+selection fields, and deterministic outcome examples beyond this quick start.
 
 ### 4. Submit work
 
@@ -660,68 +609,26 @@ V1 non-goals for poller authoring:
 Use mock workers when you want to verify routing, rejection loops, failure
 paths, and script side effects without making live provider calls.
 
-For the simplest validation run, omit the config path:
+Run `you docs mock-workers` for the full JSON contract, selection fields,
+`runType` values, and examples. For this review-loop walkthrough, start with:
 
 ```bash
 you run --dir ./factory --with-mock-workers
 ```
 
-That is equivalent to this config:
-
-```json
-{
-  "mockWorkers": []
-}
-```
-
-To target specific dispatches, pass a config path:
+To exercise the checked-in rejection example:
 
 ```bash
 you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json
 ```
 
-The reusable example in
-[`docs/examples/mock-workers.json`](../examples/mock-workers.json) matches a
-review dispatch and returns a deterministic rejection:
-
-```json
-{
-  "mockWorkers": [
-    {
-      "id": "reviewer-rejects-first-pass",
-      "workerName": "reviewer",
-      "workstationName": "review-story",
-      "workInputs": [
-        {
-          "workType": "story",
-          "state": "in-review",
-          "inputName": "work"
-        }
-      ],
-      "runType": "reject",
-      "rejectConfig": {
-        "stdout": "needs changes",
-        "stderr": "missing acceptance criteria",
-        "exitCode": 42
-      }
-    }
-  ]
-}
-```
-
-Selection fields combine as filters:
-
-| Field | Matches |
-|-------|---------|
-| `workerName` | Worker identity from `workers[].name` |
-| `workstationName` | Workstation currently executing |
-| `workInputs` | Consumed token fields such as `workType`, `state`, `inputName`, `traceId`, or `payloadHash` |
-
-Use `workerName` for the worker declared in `workers[].name`,
-`workstationName` for the workstation currently executing, `workInputs` for
-the consumed work filters, `runType` for the outcome, and the matching
-run-type config such as `rejectConfig` or `scriptConfig` for outcome details.
-If no entry matches, mock-worker mode returns the default accepted result.
+Reusable inputs live under [`docs/examples/`](../examples/README.md), including
+[`docs/examples/mock-workers.json`](../examples/mock-workers.json) and
+[`docs/examples/startup-work.json`](../examples/startup-work.json). The
+companion [`docs/examples/README.md`](../examples/README.md) shows how to combine
+startup work, mock-worker config, and record/replay commands with the checked-in
+[`examples/write-code-review`](../../examples/write-code-review/factory.json)
+factory.
 
 The checked-in
 [`examples/write-code-review/factory.json`](../../examples/write-code-review/factory.json)
@@ -746,6 +653,8 @@ review-loop workflow.
 
 ## Related
 
+- [Mock workers](mock-workers.md)
+- [Record and replay](record-replay.md)
 - [Factory JSON And Work Configuration](work.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)

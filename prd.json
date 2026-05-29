@@ -1,0 +1,84 @@
+{
+  "project": "Packaged CLI Docs for Mock Workers and Record/Replay",
+  "branchName": "ralph/docs-extensions-mock-workers-and-record",
+  "description": "Add dedicated you docs mock-workers and record-replay packaged topics so customers can discover how to use --with-mock-workers, mock-workers JSON, and the --record / --replay / --no-record run controls from the installed binary, with cross-links from existing topics and CLI smoke coverage.",
+  "context": {
+    "customerAsk": "The current ./bin/you docs does not document how customers are supposed to use mock-workers or record/replay commands. Please add support for this.",
+    "problem": "Mock-worker and record/replay guidance is buried inside the long authoring-factories topic and only summarized in config. you docs has no dedicated mock-workers or record-replay topics, so customers cannot discover complete command and JSON contract documentation from the installed CLI index.",
+    "solution": "Introduce two new canonical packaged docs topics (mock-workers and record-replay) with synchronized docs/reference and pkg/cli/docs/reference markdown, register them in pkg/cli/docs/docs.go, cross-link from authoring-factories and config, and extend focused CLI and functional smoke tests so the topics are listed and render stable command guidance outside the repository docs tree."
+  },
+  "acceptanceCriteria": [
+    "you docs lists mock-workers and record-replay with descriptions and you docs <topic> commands in the index.",
+    "you docs mock-workers returns a complete customer guide for --with-mock-workers, optional config paths, the mockWorkers JSON contract, selection fields, runType values, and example commands referencing docs/examples/mock-workers.json.",
+    "you docs record-replay returns a complete customer guide for default recording, generated artifact paths, --record, --replay, --no-record, sensitivity warnings, and incompatible flag combinations.",
+    "authoring-factories and config cross-link to the new topics without contradicting you run --help; docs/reference and pkg/cli/docs/reference copies stay synchronized.",
+    "Focused docs unit tests and functional cli_docs smoke tests prove index output and topic rendering from a working directory without a local docs tree.",
+    "Typecheck, lint, and tests pass for all changed packages."
+  ],
+  "userStories": [
+    {
+      "id": "docs-extensions-mock-workers-and-record-001",
+      "title": "Add mock-workers packaged docs topic",
+      "description": "As a factory author, I want you docs mock-workers to print a complete mock-worker guide so I can test routing and outcomes without live provider calls.",
+      "acceptanceCriteria": [
+        "docs/reference/mock-workers.md and pkg/cli/docs/reference/mock-workers.md match and document enabling with you run --dir <factory> --with-mock-workers (optional path), empty-config default accept behavior, the mockWorkers JSON array, selection fields, runType values accept/reject/script with their config objects, and default accept when no entry matches.",
+        "The page includes copy-pasteable you run commands and references docs/examples/mock-workers.json with a runnable example that uses docs/examples/startup-work.json when startup work is relevant.",
+        "pkg/cli/docs/docs.go registers canonical topic mock-workers with display order, packaged path, and index description; SupportedTopics() and unsupported-topic errors include it in deterministic order.",
+        "Running you docs lists mock-workers without listing compatibility aliases for it.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "docs-extensions-mock-workers-and-record-002",
+      "title": "Add record-replay packaged docs topic",
+      "description": "As a factory operator, I want you docs record-replay to explain record and replay run modes so I can capture, locate, and replay sensitive run artifacts safely.",
+      "acceptanceCriteria": [
+        "docs/reference/record-replay.md and pkg/cli/docs/reference/record-replay.md match and document default-on recording, generated paths under ~/.you-agent-factory/recordings/, session filename pattern, explicit --record, --replay, --no-record, Recording saved shutdown messaging, sensitivity warnings, no automatic retention cleanup in v1, and rejection of --record with --replay or --no-record with --record.",
+        "The page distinguishes record mode (live run writes history) from replay mode (reads artifact instead of live worker dispatch) without requiring maintainer event-log detail.",
+        "Includes copy-pasteable you run examples using docs/examples/sample-run.replay.json for explicit record and replay paths.",
+        "pkg/cli/docs/docs.go registers canonical topic record-replay with display order, packaged path, and index description.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "docs-extensions-mock-workers-and-record-003",
+      "title": "Cross-link existing packaged topics to new owners",
+      "description": "As a customer reading you docs config or you docs authoring-factories, I want clear pointers to the dedicated mock-worker and record/replay guides so I do not have to search a long workflow page.",
+      "acceptanceCriteria": [
+        "config retains brief mentions of --with-mock-workers, --record, --replay, and --no-record but links to you docs mock-workers and you docs record-replay as canonical owners.",
+        "authoring-factories keeps workflow sequencing but replaces duplicated deep mock-worker and record/replay sections with short summaries plus links to the new topics; quick-start commands for the review example remain.",
+        "authoring-factories still links to docs/examples/README.md and example JSON files with repository-relative paths that work from the docs tree.",
+        "docs/reference/README.md packaged-topic table includes mock-workers and record-replay with accurate scope descriptions.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "docs-extensions-mock-workers-and-record-004",
+      "title": "Prove packaged CLI docs behavior for new topics",
+      "description": "As a maintainer, I need automated checks that the installed docs command exposes the new topics reliably so regressions are caught before release.",
+      "acceptanceCriteria": [
+        "pkg/cli/docs/docs_test.go expects mock-workers and record-replay in supported-topic order, index markdown, and raw markdown markers for each new topic.",
+        "pkg/cli/root_docs_test.go and other root-command docs tests list the new topics in help or unsupported-topic error text where applicable.",
+        "tests/functional/smoke/cli_docs_smoke_test.go runs you docs mock-workers and you docs record-replay from a temp working directory without a local docs tree and asserts stable headings and command markers including --with-mock-workers, --record, --replay, --no-record, and example artifact paths.",
+        "Unsupported-topic errors list all canonical topics including mock-workers and record-replay in deterministic order.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

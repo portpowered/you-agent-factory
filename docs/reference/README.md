@@ -11,8 +11,10 @@ complete customer-facing contract.
 
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
-| `authoring-factories` | Practical factory authoring workflow, runnable examples, mock workers, and replay | [Author factories](authoring-factories.md) |
+| `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
 | `config` | Split layout and `factory.json` placement | [Factory JSON and work configuration](work.md) and [Author factories](authoring-factories.md) |
+| `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
+| `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
 | `work` | Work types, states, routing, resources, and portability fields | [Factory JSON and work configuration](work.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
@@ -76,9 +78,14 @@ Use these canonical concept owners when you need the current contract.
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces, the
   full variable inventory, and the JSON-versus-Markdown quoting rules.
-- [Author factories](authoring-factories.md) keeps factory sequencing,
-  mock-worker checks, replay recording guidance, reusable
-  [`docs/examples/`](../examples/README.md) inputs, and run commands.
+- [Mock workers](mock-workers.md) owns `--with-mock-workers`, the
+  `mockWorkers` JSON contract, selection fields, and `runType` outcomes.
+- [Record and replay](record-replay.md) owns default recording, generated
+  artifact paths, `--record`, `--replay`, `--no-record`, and incompatible flag
+  combinations.
+- [Author factories](authoring-factories.md) keeps factory sequencing, quick-start
+  run commands, reusable [`docs/examples/`](../examples/README.md) inputs, and
+  links to the dedicated mock-worker and record/replay guides.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
   placement, and prompt-authoring examples.
 

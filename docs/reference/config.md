@@ -140,8 +140,21 @@ and `LoadRuntimeConfig(...)` without redefining the manifest shape.
 This bundle slice is intentionally narrow. `config flatten` does not recurse
 through arbitrary project files outside the documented allowlist.
 
+## Run Controls
+
+`you run` supports optional mock-worker and record/replay flags:
+
+- `--with-mock-workers` — deterministic worker outcomes without live provider calls
+- `--record`, `--replay`, `--no-record` — control replay artifact capture and playback
+
+Canonical guides: [Mock workers](mock-workers.md) and
+[Record and replay](record-replay.md). For an end-to-end authoring walkthrough,
+see [Author factories](authoring-factories.md).
+
 ## Related
 
+- [Mock workers](mock-workers.md)
+- [Record and replay](record-replay.md)
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
 - [Author factories](authoring-factories.md)

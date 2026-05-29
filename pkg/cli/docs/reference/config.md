@@ -62,10 +62,16 @@ factory/
 workstation runtime content such as system prompts, prompt templates, timeout
 limits, and executor settings.
 
-For an end-to-end run walkthrough, including `--with-mock-workers`,
-`--record`, `--replay`, `--no-record`, and reusable files under
-`docs/examples/`, use
-[`docs/reference/authoring-factories.md`](../../../docs/reference/authoring-factories.md).
+## Run Controls
+
+`you run` supports optional mock-worker and record/replay flags:
+
+- `--with-mock-workers` — deterministic worker outcomes without live provider calls
+- `--record`, `--replay`, `--no-record` — control replay artifact capture and playback
+
+Canonical guides: `you docs mock-workers` and `you docs record-replay`. For an
+end-to-end authoring walkthrough and reusable files under `docs/examples/`, use
+`you docs authoring-factories`.
 
 ## Core Fields
 
@@ -113,6 +119,9 @@ For an end-to-end run walkthrough, including `--with-mock-workers`,
 
 ## Related
 
+- `you docs mock-workers`
+- `you docs record-replay`
+- `you docs authoring-factories`
 - `you docs workstations`
 - `you docs workers`
 - `you docs resources`
