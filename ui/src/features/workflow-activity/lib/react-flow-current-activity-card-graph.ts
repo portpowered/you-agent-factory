@@ -19,6 +19,10 @@ import type {
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
 import {
+  edgeTouchesSystemTimeNode,
+  isSystemTimeCurrentActivityNodeId,
+} from "./current-activity-system-time-graph";
+import {
   buildSemanticGraphHandles,
   type CurrentActivityEditorState,
   supportedSemanticHandleIdsForEdge,
@@ -240,7 +244,10 @@ export function buildVisibleGraphEdges(
   for (const edge of graphLayout.edges) {
     const fromNodeId = canonicalRenderedNodeId(edge.fromNodeId, names);
     const toNodeId = canonicalRenderedNodeId(edge.toNodeId, names);
-    if (fromNodeId === toNodeId) {
+    if (
+      fromNodeId === toNodeId ||
+      edgeTouchesSystemTimeNode(fromNodeId, toNodeId)
+    ) {
       continue;
     }
 
@@ -563,7 +570,10 @@ export function buildCurrentActivityNodes({
   } satisfies BuildCurrentActivityNodesInput;
 
   for (const positionedNode of graphLayout.nodes) {
-    if (resourceAliases.has(positionedNode.nodeId)) {
+    if (
+      resourceAliases.has(positionedNode.nodeId) ||
+      isSystemTimeCurrentActivityNodeId(positionedNode.nodeId)
+    ) {
       continue;
     }
 

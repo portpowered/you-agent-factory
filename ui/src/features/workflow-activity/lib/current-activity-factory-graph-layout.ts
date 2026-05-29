@@ -22,6 +22,7 @@ import {
   REPEATER_WORKSTATION_KIND,
   STANDARD_WORKSTATION_KIND,
 } from "../../flowchart/lib/workstation-icon-metadata";
+import { isSystemTimeFactoryGraphNode } from "./current-activity-system-time-graph";
 
 const WORKSTATION_NODE_WIDTH = 156;
 const WORKSTATION_NODE_HEIGHT = 196;
@@ -399,6 +400,12 @@ function seedEdgeFromFactoryGraphEdge(
     targetNode,
     resourceAvailabilityWorkTypes,
   );
+  if (
+    isSystemTimeFactoryGraphNode(sourceNode) ||
+    isSystemTimeFactoryGraphNode(targetNode)
+  ) {
+    return null;
+  }
   const fromNodeId = sourceResourceName
     ? `resource:${sourceResourceName}`
     : edge.sourceId;
@@ -555,6 +562,7 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
 
   for (const node of topology.nodes) {
     if (
+      isSystemTimeFactoryGraphNode(node) ||
       resourceAvailabilityNodeName(node, resourceAvailabilityWorkTypes) ||
       isResourceAvailabilityWorkTypeNode(node, resourceAvailabilityWorkTypes)
     ) {

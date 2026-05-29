@@ -12,6 +12,87 @@ import {
 } from "./react-flow-current-activity-card-graph";
 
 describe("current activity factory graph legacy replay layout", () => {
+  it("hides internal system-time state places and expiry routes from the activity graph", async () => {
+    const factory = {
+      name: "System time factory",
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+        {
+          name: "__system_time",
+          states: [{ name: "pending", type: "PROCESSING" }],
+        },
+      ],
+      workstations: [
+        {
+          id: "route-story",
+          inputs: [
+            { state: "new", workType: "story" },
+            { state: "pending", workType: "__system_time" },
+          ],
+          name: "Route story",
+          onContinue: [{ state: "pending", workType: "__system_time" }],
+          outputs: [
+            { state: "done", workType: "story" },
+            { state: "pending", workType: "__system_time" },
+          ],
+          worker: "router",
+        },
+        {
+          id: "__system_time:expire",
+          inputs: [{ state: "pending", workType: "__system_time" }],
+          name: "__system_time:expire",
+          outputs: [],
+          worker: "",
+        },
+      ],
+      workers: [{ name: "router", type: "MODEL_WORKER" }],
+    } as never;
+    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: semanticWorkflowDashboardSnapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(graphLayout.nodes.map((node) => node.nodeId)).not.toEqual(
+      expect.arrayContaining([
+        "work-state:__system_time:pending",
+        "work-type:__system_time",
+        "workstation:__system_time:expire",
+      ]),
+    );
+    expect(visibleGraphEdges.map((edge) => edge.edgeId)).not.toEqual(
+      expect.arrayContaining([
+        "workstation-input:work-state:__system_time:pending->workstation:__system_time:expire",
+      ]),
+    );
+    expect(nodes.map((node) => node.id)).not.toEqual(
+      expect.arrayContaining([
+        "work-state:__system_time:pending",
+        "workstation:__system_time:expire",
+      ]),
+    );
+    expect(
+      nodes.find((node) => node.id === "workstation:Route story"),
+    ).toBeTruthy();
+  });
+
   it("collapses resource availability work states into the canonical resource node", async () => {
     const graphLayout = await buildCurrentActivityGraphLayoutFromFactory({
       name: "Legacy resource availability factory",
