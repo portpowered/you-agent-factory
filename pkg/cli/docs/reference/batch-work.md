@@ -77,5 +77,5 @@ for explicit parent-aware lineage.
 ## Related
 
 - `you docs config`
-- `you docs workstation`
+- `you docs workstations`
 - `you docs templates`

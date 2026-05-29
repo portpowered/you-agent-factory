@@ -22,11 +22,15 @@ type docsSmokeTopic struct {
 }
 
 var docsSmokeTopics = []docsSmokeTopic{
+	{name: "authoring-factories", heading: "# Authoring Factories", markers: []string{"factory.json", "workers/<name>/AGENTS.md", "workstations/<name>/AGENTS.md", "you run --dir ./factory --with-mock-workers", "--record ./docs/examples/sample-run.replay.json", "--replay ./docs/examples/sample-run.replay.json"}},
 	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "supportingFiles", "bundledFiles", "share-time starter-work snapshots", "docs/reference/config.md", "docs/reference/work.md", "docs/reference/authoring-factories.md", "--with-mock-workers", "--record", "--replay", "--no-record", "you-agent-factory run"}, absent: []string{"Agent Factory run"}},
-	{name: "workstation", heading: "# Workstation", markers: []string{"inputs", "outputs", "LOGICAL_MOVE", "docs/reference/workstations.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
+	{name: "work", heading: "# Factory JSON And Work Configuration", markers: []string{"work types, states, workers, workstations, resources, and routing", "supportingFiles", "## Work Types", "## Resources", "[Workstations](workstations.md)", "batch-inputs.md"}},
+	{name: "workstations", heading: "# Workstations Reference", markers: []string{"workstation authoring contract", "MODEL_WORKSTATION", "CLASSIFIER_WORKSTATION", "LOGICAL_MOVE"}},
+	{name: "workstation", heading: "# Workstations Reference", markers: []string{"workstation authoring contract", "MODEL_WORKSTATION", "CLASSIFIER_WORKSTATION", "LOGICAL_MOVE"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
 	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider", "docs/reference/workers.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
 	{name: "resources", heading: "# Resources", markers: []string{"capacity", "workstations", "agent-slot", "docs/reference/resources.md"}},
-	{name: "batch-work", heading: "# Batch Work", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "docs/reference/batch-inputs.md"}, absent: []string{"docs/reference/batch-work.md"}},
+	{name: "batch-inputs", heading: "# Batch Inputs", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "PARENT_CHILD", "factory/inputs/BATCH/default/<request_id>.json"}},
+	{name: "batch-work", heading: "# Batch Inputs", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "PARENT_CHILD", "factory/inputs/BATCH/default/<request_id>.json"}, absent: []string{"# Batch Work", "docs/reference/batch-work.md"}},
 	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "docs/reference/templates.md", "text/template"}, absent: []string{"docs/reference/prompt-variables.md"}},
 }
 
@@ -70,11 +74,35 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 		t.Fatalf("temp working dir unexpectedly contains docs tree %q", missingDocsTree)
 	}
 
-	help := executeDocsSmokeCommand(t, workingDir, "docs")
-	for _, want := range []string{"Print packaged markdown reference topics", "Use one of the supported topic subcommands"} {
-		if !strings.Contains(help, want) {
-			t.Fatalf("docs help missing %q:\n%s", want, help)
+	index := executeDocsSmokeCommand(t, workingDir, "docs")
+	for _, want := range []string{"# Docs", "`authoring-factories` - Practical factory authoring workflow", "`config` - Factory configuration", "`work` - Work types", "`batch-inputs` - Batch input files", "`workstations` - Workstation kinds", "`you docs authoring-factories`", "`you docs config`", "`you docs work`", "`you docs batch-inputs`", "`you docs workstations`"} {
+		if !strings.Contains(index, want) {
+			t.Fatalf("docs index missing %q:\n%s", want, index)
 		}
+	}
+	for _, alias := range []string{"`batch-work`", "`workstation`"} {
+		if strings.Contains(index, alias) {
+			t.Fatalf("docs index should list canonical topics without %s alias noise:\n%s", alias, index)
+		}
+	}
+
+	var unsupportedStdout bytes.Buffer
+	runInWorkingDirectory(t, workingDir, func() {
+		root := agentcli.NewRootCommand()
+		root.SetOut(&unsupportedStdout)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"docs", "unknown"})
+
+		err := root.Execute()
+		if err == nil {
+			t.Fatal("expected unsupported docs topic to fail")
+		}
+		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, work, workstations, workers, resources, models, batch-inputs, templates)` {
+			t.Fatalf("unexpected unsupported topic error %q", got)
+		}
+	})
+	if got := unsupportedStdout.String(); got != "" {
+		t.Fatalf("unsupported docs topic should not write stdout, got %q", got)
 	}
 
 	for _, topic := range docsSmokeTopics {

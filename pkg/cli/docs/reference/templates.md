@@ -74,6 +74,6 @@ Task:
 
 ## Related
 
-- `you docs workstation`
+- `you docs workstations`
 - `you docs workers`
 - `you docs batch-work`

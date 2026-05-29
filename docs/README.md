@@ -2,17 +2,25 @@ This is the table of contents for the Agent Factory documentation.
 
 The installed CLI also packages a fixed reference surface under
 `you docs`. Run `you docs` to list the packaged topics, or
-run `you docs <topic>` for one of `config`, `workstation`, `workers`,
-`resources`, `batch-work`, or `templates`.
+run `you docs <topic>` for one of `authoring-factories`, `config`, `work`,
+`workstations`, `workers`, `resources`, `models`, `batch-inputs`, or
+`templates`.
 
 ## Packaged CLI Reference Topics
 
 These are the fixed topic names accepted by `you docs <topic>`.
 
+- `authoring-factories` is the packaged practical factory authoring guide. Use
+  [Author factories](reference/authoring-factories.md) for workflow sequencing,
+  runnable examples, mock-worker checks, and replay recording.
 - `config` is the packaged `factory.json` layout reference. Use
   [Factory JSON and work configuration](reference/work.md) for the canonical
   work and topology contract.
-- `workstation` is the packaged workstation quick reference. Use
+- `work` is the packaged work configuration reference. Use
+  [Factory JSON and work configuration](reference/work.md) for work types,
+  states, routing, resources, and portability fields.
+- `workstations` is the packaged workstation reference. `workstation` remains
+  accepted as a compatibility alias for the same raw markdown. Use
   [Workstations](reference/workstations.md) for the canonical workstation
   guide.
 - `workers` is the packaged worker quick reference. Use
@@ -21,16 +29,20 @@ These are the fixed topic names accepted by `you docs <topic>`.
   [Resources](reference/resources.md) for the resource slice and
   [Factory JSON and work configuration](reference/work.md) for top-level
   topology.
-- `batch-work` is the packaged batch-request reference. Use
+- `models` is the packaged model operations quick reference. Use
+  [Models and model operations](reference/models.md) for model discovery,
+  invocation, and local or hosted model setup.
+- `batch-inputs` is the packaged batch-request reference. Use
   [Batch inputs](reference/batch-inputs.md) for submitted payload fields and
-  watched-file placement.
+  watched-file placement. `batch-work` remains accepted as a compatibility
+  alias for the same raw markdown.
 - `templates` is the packaged template syntax reference. Use
   [Templates](reference/templates.md) for template surfaces, the complete
   variable inventory, and JSON-versus-Markdown quoting rules.
 
 ## Customer Guides
 
-- [CLI reference](reference/README.md) is the package-owned topic index for the stable `config`, `workstation`, `workers`, `resources`, `batch-work`, and `templates` reference pages.
+- [CLI reference](reference/README.md) is the package-owned topic index for the stable `authoring-factories`, `config`, `work`, `workstations`, `workers`, `resources`, `models`, `batch-inputs`, and `templates` reference pages.
 - Canonical concept guides:
   - [Factory JSON and work configuration](reference/work.md) owns work types, work states, top-level `factory.json`, routing, resources, and portability fields.
   - [Workstations reference](reference/workstations.md) owns workstation kinds, route fields, runtime step behavior, and workstation-scoped execution settings.

@@ -48,7 +48,7 @@ Use `make long-tests` for real OMNIVOICE local inference coverage. Set
 
 ## Related
 
-- `you docs workstation`
+- `you docs workstations`
 - `you docs workers`
 - `you docs resources`
 - `you docs config`

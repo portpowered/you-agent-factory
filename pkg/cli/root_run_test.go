@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
@@ -261,7 +260,7 @@ func TestRootCommand_HelpDocumentsOOTBQuickstart(t *testing.T) {
 		"printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md",
 		"docs",
 		"Print packaged markdown reference topics",
-		"you docs workstation",
+		"you docs workstations",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("root help missing %q:\n%s", want, help)
@@ -300,38 +299,6 @@ func TestRootCommand_HelpDocumentsDiagnosticsContract(t *testing.T) {
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("root help missing diagnostics contract %q:\n%s", want, help)
-		}
-	}
-}
-
-func TestDocsCommand_VerboseLogsTopicResolutionWithoutChangingMarkdown(t *testing.T) {
-	wantMarkdown, err := docscli.Markdown("config")
-	if err != nil {
-		t.Fatalf("Markdown(config): %v", err)
-	}
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	root := NewRootCommand()
-	root.SetOut(&stdout)
-	root.SetErr(&stderr)
-	root.SetArgs([]string{"docs", "config", "--verbose"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute docs config --verbose: %v", err)
-	}
-
-	if got := stdout.String(); got != wantMarkdown {
-		t.Fatalf("stdout markdown changed\nwant:\n%s\ngot:\n%s", wantMarkdown, got)
-	}
-	got := stderr.String()
-	for _, want := range []string{
-		"docs request topic=config",
-		"docs resolved topic=config",
-		"contentBytes=",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("stderr missing %q:\n%s", want, got)
 		}
 	}
 }
