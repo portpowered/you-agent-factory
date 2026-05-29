@@ -237,6 +237,18 @@ func TestBuildRuntimeLoggerCreatesUTCSeparatedPathUnderConfiguredRoot(t *testing
 	after := time.Now().UTC()
 
 	assertRuntimeLogPathFormat(t, sink.Path(), logDir, "runtime-path-format", before, after)
+	if sink.RootDir() != logDir {
+		t.Fatalf("RootDir() = %q, want %q", sink.RootDir(), logDir)
+	}
+	if sink.StartTimeUTC().IsZero() {
+		t.Fatal("StartTimeUTC() is zero")
+	}
+	if sink.StartTimeUTC().Location() != time.UTC {
+		t.Fatalf("StartTimeUTC() location = %s, want UTC", sink.StartTimeUTC().Location())
+	}
+	if sink.StartTimeUTC().Before(before.Add(-time.Second)) || sink.StartTimeUTC().After(after.Add(time.Second)) {
+		t.Fatalf("StartTimeUTC() = %s, want between %s and %s", sink.StartTimeUTC(), before, after)
+	}
 }
 
 func TestBuildRuntimeLoggerUsesCanonicalDefaultLogDirectoryAsRoot(t *testing.T) {

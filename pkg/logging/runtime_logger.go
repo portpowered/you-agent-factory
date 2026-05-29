@@ -61,10 +61,12 @@ func DefaultRuntimeLogConfig() RuntimeLogConfig {
 
 // RuntimeLogSink owns the file-backed runtime logger and its rolling writer.
 type RuntimeLogSink struct {
-	logger *zap.Logger
-	writer io.Closer
-	path   string
-	config RuntimeLogConfig
+	logger       *zap.Logger
+	writer       io.Closer
+	path         string
+	rootDir      string
+	startTimeUTC time.Time
+	config       RuntimeLogConfig
 }
 
 // Logger returns the zap logger enriched with runtime logging fields and the
@@ -82,6 +84,23 @@ func (s *RuntimeLogSink) Path() string {
 		return ""
 	}
 	return s.path
+}
+
+// RootDir returns the runtime log root selected by caller configuration or the
+// default home-directory policy.
+func (s *RuntimeLogSink) RootDir() string {
+	if s == nil {
+		return ""
+	}
+	return s.rootDir
+}
+
+// StartTimeUTC returns the UTC timestamp used to organize the active log path.
+func (s *RuntimeLogSink) StartTimeUTC() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	return s.startTimeUTC
 }
 
 // Config returns the normalized rolling-file policy applied to the sink.
@@ -168,7 +187,8 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 		}
 		runtimeLogDir = dir
 	}
-	path := runtimeLogPath(runtimeLogDir, runtimeInstanceID, time.Now().UTC(), uuid.NewString())
+	startTimeUTC := time.Now().UTC()
+	path := runtimeLogPath(runtimeLogDir, runtimeInstanceID, startTimeUTC, uuid.NewString())
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create runtime log dir %s: %w", filepath.Dir(path), err)
 	}
@@ -194,10 +214,12 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 	})).With(zap.String("runtime_instance_id", runtimeInstanceID))
 
 	return &RuntimeLogSink{
-		logger: logger,
-		writer: writer,
-		path:   path,
-		config: runtimeLogConfig,
+		logger:       logger,
+		writer:       writer,
+		path:         path,
+		rootDir:      runtimeLogDir,
+		startTimeUTC: startTimeUTC,
+		config:       runtimeLogConfig,
 	}, nil
 }
 

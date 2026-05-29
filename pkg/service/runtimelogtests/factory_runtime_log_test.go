@@ -79,9 +79,7 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 		}
 
 		foundStartup = true
-		if record["runtime_log_path"] != logPath {
-			t.Fatalf("runtime_log_path = %#v, want %q", record["runtime_log_path"], logPath)
-		}
+		assertRuntimeStartupLogSelection(t, record, logPath, logDir)
 		if record["runtime_log_appender"] != logging.RuntimeLogAppenderZapRollingFile {
 			t.Fatalf("runtime_log_appender = %#v, want %q", record["runtime_log_appender"], logging.RuntimeLogAppenderZapRollingFile)
 		}
@@ -112,6 +110,28 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 	}
 	if !foundStartup {
 		t.Fatalf("expected factory started record in runtime log:\n%s", data)
+	}
+}
+
+func assertRuntimeStartupLogSelection(t *testing.T, record map[string]any, logPath, logDir string) {
+	t.Helper()
+
+	if record["runtime_log_path"] != logPath {
+		t.Fatalf("runtime_log_path = %#v, want %q", record["runtime_log_path"], logPath)
+	}
+	if record["runtime_log_root"] != logDir {
+		t.Fatalf("runtime_log_root = %#v, want %q", record["runtime_log_root"], logDir)
+	}
+	startTime, ok := record["runtime_log_start_time_utc"].(string)
+	if !ok || startTime == "" {
+		t.Fatalf("runtime_log_start_time_utc = %#v, want non-empty RFC3339 timestamp", record["runtime_log_start_time_utc"])
+	}
+	parsedStartTime, err := time.Parse(time.RFC3339Nano, startTime)
+	if err != nil {
+		t.Fatalf("runtime_log_start_time_utc = %q, want RFC3339 timestamp: %v", startTime, err)
+	}
+	if parsedStartTime.Location() != time.UTC {
+		t.Fatalf("runtime_log_start_time_utc location = %s, want UTC", parsedStartTime.Location())
 	}
 }
 

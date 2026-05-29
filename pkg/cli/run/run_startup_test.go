@@ -123,6 +123,95 @@ func TestRun_StartupOutputReportsDashboardWhenAutoOpenDisabled(t *testing.T) {
 	}
 }
 
+func TestRun_StartupOutputReportsRuntimeLogPathAndUTCStartTime(t *testing.T) {
+	originalBuilder := buildFactoryService
+	originalOpener := dashboardOpener
+	originalInteractive := interactiveOutput
+	defer func() {
+		buildFactoryService = originalBuilder
+		dashboardOpener = originalOpener
+		interactiveOutput = originalInteractive
+	}()
+
+	startedAt := time.Date(2026, 5, 29, 4, 45, 3, 0, time.UTC)
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			runtimeLogDiagnostics: service.RuntimeLogDiagnostics{
+				Path:         "/tmp/runtime-logs/2026-05/2026-05-29/044503-runtime.log",
+				RootDir:      "/tmp/runtime-logs",
+				StartTimeUTC: startedAt,
+			},
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+	dashboardOpener = func(_ context.Context, _ string) error {
+		t.Fatal("dashboard opener should not be called when auto-open is disabled")
+		return nil
+	}
+	interactiveOutput = func(io.Writer) bool {
+		return true
+	}
+
+	var out bytes.Buffer
+	err := Run(context.Background(), RunConfig{
+		Dir:           "factory",
+		Port:          7437,
+		StartupOutput: &out,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Runtime log: /tmp/runtime-logs/2026-05/2026-05-29/044503-runtime.log") {
+		t.Fatalf("startup output = %q, want runtime log path", output)
+	}
+	if !strings.Contains(output, "Runtime log start (UTC): 2026-05-29 04:45:03 UTC") {
+		t.Fatalf("startup output = %q, want UTC runtime log start", output)
+	}
+	if strings.Contains(output, "0001-01-01") {
+		t.Fatalf("startup output = %q, must not expose Go zero-time output", output)
+	}
+}
+
+func TestRun_StartupOutputUsesFallbackForMissingRuntimeLogStartTime(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			runtimeLogDiagnostics: service.RuntimeLogDiagnostics{
+				Path: "/tmp/runtime.log",
+			},
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+
+	var out bytes.Buffer
+	err := Run(context.Background(), RunConfig{
+		Dir:           "factory",
+		Port:          0,
+		StartupOutput: &out,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Runtime log start (UTC): n/a") {
+		t.Fatalf("startup output = %q, want n/a for missing runtime log start", output)
+	}
+	if strings.Contains(output, "0001-01-01") {
+		t.Fatalf("startup output = %q, must not expose Go zero-time output", output)
+	}
+}
+
 func TestRun_AutoPortResolvesBusyPreferredPortBeforeServiceBuildAndStartupOutput(t *testing.T) {
 	originalBuilder := buildFactoryService
 	defer func() {

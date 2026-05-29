@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -79,6 +80,10 @@ type RunConfig struct {
 
 type factoryServiceRunner interface {
 	Run(ctx context.Context) error
+}
+
+type runtimeLogDiagnosticsProvider interface {
+	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
 }
 
 var buildFactoryService = func(
@@ -277,7 +282,7 @@ func Run(ctx context.Context, cfg RunConfig) error {
 		return err
 	}
 
-	shouldOpenDashboard := emitStartupMessages(cfg)
+	shouldOpenDashboard := emitStartupMessages(cfg, runtimeLogDiagnosticsForRunner(factorySvc))
 	waitForDashboardOpen := func() {}
 	if shouldOpenDashboard {
 		waitForDashboardOpen = openDashboardWhenServerReady(ctx, cfg, dashboardReady)
@@ -486,7 +491,15 @@ func DashboardURL(port int) string {
 	return fmt.Sprintf("http://localhost:%d/dashboard/ui", port)
 }
 
-func emitStartupMessages(cfg RunConfig) bool {
+func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) service.RuntimeLogDiagnostics {
+	provider, ok := runner.(runtimeLogDiagnosticsProvider)
+	if !ok {
+		return service.RuntimeLogDiagnostics{}
+	}
+	return provider.RuntimeLogDiagnostics()
+}
+
+func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics) bool {
 	if cfg.StartupOutput == nil {
 		return false
 	}
@@ -497,6 +510,10 @@ func emitStartupMessages(cfg RunConfig) bool {
 	}
 	if cfg.Continuously {
 		fmt.Fprintln(cfg.StartupOutput, "Runtime mode: continuous")
+	}
+	if strings.TrimSpace(runtimeLog.Path) != "" {
+		fmt.Fprintf(cfg.StartupOutput, "Runtime log: %s\n", runtimeLog.Path)
+		fmt.Fprintf(cfg.StartupOutput, "Runtime log start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.StartTimeUTC))
 	}
 	if cfg.Port <= 0 {
 		fmt.Fprintln(cfg.StartupOutput, "Dashboard server disabled")
