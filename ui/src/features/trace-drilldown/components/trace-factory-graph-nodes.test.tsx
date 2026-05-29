@@ -125,6 +125,50 @@ describe("Trace factory graph node components", () => {
     expect(node.className).toContain("bg-af-surface");
   });
 
+  it("renders resource and worker relation semantic icons", () => {
+    render(
+      <RelationNode
+        {...relationNodeProps({
+          connectionAnchors: [],
+          displayLabel: "Worker A",
+          endpointKey: "worker-a",
+          factoryNodeId: "worker:worker-a",
+          kind: "worker",
+          kindLabel: "Worker",
+          locale: "en",
+          relationStates: [],
+          relationTypes: [],
+          selectable: false,
+        })}
+      />,
+    );
+    expect(
+      screen.getByLabelText("Worker").getAttribute("data-graph-semantic-icon"),
+    ).toBe("active-work");
+
+    cleanup();
+
+    render(
+      <RelationNode
+        {...relationNodeProps({
+          connectionAnchors: [],
+          displayLabel: "GPU",
+          endpointKey: "resource-gpu",
+          factoryNodeId: "resource:gpu",
+          kind: "resource",
+          kindLabel: "Resource",
+          locale: "en",
+          relationStates: [],
+          relationTypes: [],
+          selectable: false,
+        })}
+      />,
+    );
+    expect(
+      screen.getByLabelText("Resource").getAttribute("data-graph-semantic-icon"),
+    ).toBe("resource");
+  });
+
   it("invokes onSelectWorkID for selectable relation endpoints", () => {
     const onSelectWorkID = vi.fn();
 

@@ -75,6 +75,15 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
     );
   });
 
+  it("passes locale through dispatch node data", () => {
+    const flow = buildTraceDispatchFactoryGraphFlow(
+      [buildDispatch("dispatch-plan")],
+      "zh",
+    );
+
+    expect(flow.nodes[0]?.data.locale).toBe("zh");
+  });
+
   it("registers only factory graph React Flow node types", () => {
     const flow = buildTraceDispatchFactoryGraphFlow([
       buildDispatch("dispatch-plan"),

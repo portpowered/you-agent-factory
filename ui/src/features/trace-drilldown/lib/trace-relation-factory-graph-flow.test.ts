@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "../components/trace-relation-factory-graph-node";
@@ -76,5 +76,85 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
     expect(
       flow.edges.every((edge) => edge.type === "factoryEditorEdge"),
     ).toBe(true);
+  });
+
+  it("styles relations without required state from relation type defaults", () => {
+    const parentChildFlow = buildTraceRelationFactoryGraphFlow([
+      {
+        request_id: "request-parent-child-plain",
+        source_work_id: "work-a",
+        source_work_name: "Story A",
+        target_work_id: "work-b",
+        target_work_name: "Story B",
+        type: "PARENT_CHILD",
+      },
+    ]);
+    const relatedFlow = buildTraceRelationFactoryGraphFlow([
+      {
+        request_id: "request-related",
+        source_work_id: "work-c",
+        source_work_name: "Story C",
+        target_work_id: "work-d",
+        target_work_name: "Story D",
+        type: "RELATED_TO",
+      },
+    ]);
+
+    expect(parentChildFlow.edges[0]?.style).toMatchObject({
+      stroke: "var(--color-af-accent)",
+      strokeDasharray: undefined,
+      strokeWidth: 1.7,
+    });
+    expect(relatedFlow.edges[0]?.style).toMatchObject({
+      stroke: "var(--color-af-edge-muted)",
+      strokeDasharray: undefined,
+      strokeWidth: 1.7,
+    });
+  });
+
+  it("styles warning and danger relation edges from required state tones", () => {
+    const warningFlow = buildTraceRelationFactoryGraphFlow([
+      {
+        request_id: "request-blocked",
+        required_state: "BLOCKED",
+        source_work_id: "work-a",
+        source_work_name: "Story A",
+        target_work_id: "work-b",
+        target_work_name: "Story B",
+        type: "DEPENDS_ON",
+      },
+    ]);
+    const dangerFlow = buildTraceRelationFactoryGraphFlow([
+      {
+        request_id: "request-rejected",
+        required_state: "REJECTED",
+        source_work_id: "work-c",
+        source_work_name: "Story C",
+        target_work_id: "work-d",
+        target_work_name: "Story D",
+        type: "RETRY",
+      },
+    ]);
+
+    expect(warningFlow.edges[0]?.style?.stroke).toBe(
+      "var(--color-af-warning-text)",
+    );
+    expect(dangerFlow.edges[0]?.style?.stroke).toBe(
+      "var(--color-af-danger-text)",
+    );
+  });
+
+  it("marks relation nodes selectable when onSelectWorkID is provided", () => {
+    const onSelectWorkID = vi.fn();
+    const flow = buildTraceRelationFactoryGraphFlow(RELATIONS, {
+      onSelectWorkID,
+    });
+
+    expect(
+      flow.nodes.find((node) => node.id === "work-implement")?.data.selectable,
+    ).toBe(true);
+    expect(
+      flow.nodes.find((node) => node.id === "work-implement")?.data.onSelectWorkID,
+    ).toBe(onSelectWorkID);
   });
 });
