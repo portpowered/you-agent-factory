@@ -28,7 +28,7 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 				support.HasWorkTokenInPlace(snapshot.Marking, fixture.throttledWork.WorkTypeID+":init", fixture.throttledWork.WorkID)
 		},
 	)
-	assertActiveThrottlePause(t, activeEngineState, workers.ModelProviderClaude, "claude-sonnet-4-5-20250514")
+	assertActiveThrottlePause(t, activeEngineState, interfaces.ModelProviderClaude, "claude-sonnet-4-5-20250514")
 	assertDashboardThrottlePausesMatchEngineState(t, "active pause dashboard", activeEngineState, fixture.server.GetDashboard(t))
 	submitThrottlePauseWork(t, fixture.server, fixture.unaffectedWork)
 
@@ -111,7 +111,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 			WorkTypeID:      "claude-task",
 			WorkerName:      "claude-worker",
 			WorkstationName: "process-claude",
-			Provider:        workers.ModelProviderClaude,
+			Provider:        interfaces.ModelProviderClaude,
 			Model:           "claude-sonnet-4-5-20250514",
 			PromptBody:      "Process the Claude lane task.\n",
 		},
@@ -119,7 +119,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 			WorkTypeID:      "codex-task",
 			WorkerName:      "codex-worker",
 			WorkstationName: "process-codex",
-			Provider:        workers.ModelProviderCodex,
+			Provider:        interfaces.ModelProviderCodex,
 			Model:           "gpt-5-codex",
 			PromptBody:      "Process the Codex lane task.\n",
 		},
@@ -162,7 +162,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 	testutil.AppendFactoryInferenceThrottleGuard(
 		t,
 		pauseHarness.Dir,
-		workers.ModelProviderClaude,
+		interfaces.ModelProviderClaude,
 		"claude-sonnet-4-5-20250514",
 		pauseDuration,
 	)
@@ -197,12 +197,12 @@ func assertThrottlePauseRequestSequence(t *testing.T, requests []workers.Command
 		t.Fatalf("provider command count = %d, want at least 4", len(requests))
 	}
 	for i := 0; i < 3; i++ {
-		if requests[i].Command != string(workers.ModelProviderClaude) {
-			t.Fatalf("request %d command = %q, want %q", i, requests[i].Command, workers.ModelProviderClaude)
+		if requests[i].Command != string(interfaces.ModelProviderClaude) {
+			t.Fatalf("request %d command = %q, want %q", i, requests[i].Command, interfaces.ModelProviderClaude)
 		}
 	}
-	if requests[3].Command != string(workers.ModelProviderCodex) {
-		t.Fatalf("request 3 command = %q, want %q", requests[3].Command, workers.ModelProviderCodex)
+	if requests[3].Command != string(interfaces.ModelProviderCodex) {
+		t.Fatalf("request 3 command = %q, want %q", requests[3].Command, interfaces.ModelProviderCodex)
 	}
 }
 
@@ -252,7 +252,7 @@ func waitForRuntimeAPIDashboardSnapshot(
 func assertActiveThrottlePause(
 	t *testing.T,
 	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	provider workers.ModelProvider,
+	provider interfaces.ModelProvider,
 	model string,
 ) {
 	t.Helper()

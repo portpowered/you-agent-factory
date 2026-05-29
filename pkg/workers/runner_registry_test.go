@@ -54,11 +54,11 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 	}
 
 	want := []string{
-		string(ModelProviderCodex),
-		string(ModelProviderGemini),
-		string(ModelProviderKiro),
-		string(ModelProviderCursor),
-		string(ModelProviderOpenCode),
+		string(interfaces.ModelProviderCodex),
+		string(interfaces.ModelProviderGemini),
+		string(interfaces.ModelProviderKiro),
+		string(interfaces.ModelProviderCursor),
+		string(interfaces.ModelProviderOpenCode),
 	}
 	if len(commands) != len(want) {
 		t.Fatalf("lookPath calls = %#v, want %#v", commands, want)

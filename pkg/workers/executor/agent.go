@@ -201,15 +201,15 @@ func modelProviderForExecution(workerModelProvider string, selection interfaces.
 func modelProviderForRunnerID(runnerID string) string {
 	switch interfaces.NormalizeRunnerID(runnerID) {
 	case interfaces.RunnerIDCodex:
-		return string(ModelProviderCodex)
+		return string(interfaces.ModelProviderCodex)
 	case interfaces.RunnerIDGemini:
-		return string(ModelProviderGemini)
+		return string(interfaces.ModelProviderGemini)
 	case interfaces.RunnerIDKiro:
-		return string(ModelProviderKiro)
+		return string(interfaces.ModelProviderKiro)
 	case interfaces.RunnerIDCursorCLI:
-		return string(ModelProviderCursor)
+		return string(interfaces.ModelProviderCursor)
 	case interfaces.RunnerIDOpenCode:
-		return string(ModelProviderOpenCode)
+		return string(interfaces.ModelProviderOpenCode)
 	default:
 		return ""
 	}

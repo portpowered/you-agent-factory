@@ -103,8 +103,8 @@ Process the task input.
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(workers.ModelProviderCodex) {
-		t.Fatalf("expected command %q, got %q", workers.ModelProviderCodex, call.Command)
+	if call.Command != string(interfaces.ModelProviderCodex) {
+		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderCodex, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "gpt-5-codex"})
 	if got := call.Args[len(call.Args)-1]; got != "-" {
@@ -159,8 +159,8 @@ Process the input task.
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(workers.ModelProviderClaude) {
-		t.Fatalf("expected command %q, got %q", workers.ModelProviderClaude, call.Command)
+	if call.Command != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderClaude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-exit-failure"})
 
@@ -216,8 +216,8 @@ Process the input task.
 		t.Fatalf("expected provider runner called 3 times, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(workers.ModelProviderClaude) {
-		t.Fatalf("expected command %q, got %q", workers.ModelProviderClaude, call.Command)
+	if call.Command != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderClaude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-retry-success"})
 }

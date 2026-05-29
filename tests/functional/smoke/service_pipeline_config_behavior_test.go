@@ -6,7 +6,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -68,7 +67,7 @@ func TestServicePipelineConfigBehavior_TwoStagePipelineCompletesAcrossBothWorker
 func writeSharedServicePipelineWorkerConfig(t *testing.T, dir, workerName string) {
 	t.Helper()
 
-	support.WriteAgentConfig(t, dir, workerName, support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, workerName, support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
 }
 
 func assertCompletedFactoryState(t *testing.T, harness *testutil.ServiceTestHarness) {

@@ -45,8 +45,8 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 
 	t.Run("ProviderOverrideIsAppliedBeforeServiceBuildForHTTPRuntime", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
-		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
+		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
 
 		runner := testutil.NewProviderCommandRunner(
 			workers.CommandResult{Stdout: []byte("first runtime step complete. COMPLETE")},
@@ -77,8 +77,8 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 			t.Fatalf("provider command runner calls = %d, want 2", got)
 		}
 		for i, req := range runner.Requests() {
-			if req.Command != string(workers.ModelProviderCodex) {
-				t.Fatalf("provider request %d command = %q, want %q", i, req.Command, workers.ModelProviderCodex)
+			if req.Command != string(interfaces.ModelProviderCodex) {
+				t.Fatalf("provider request %d command = %q, want %q", i, req.Command, interfaces.ModelProviderCodex)
 			}
 			if req.Execution.TraceID != traceID {
 				t.Fatalf("provider request %d trace ID = %q, want %q", i, req.Execution.TraceID, traceID)

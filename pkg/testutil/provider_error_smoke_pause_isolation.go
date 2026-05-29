@@ -15,7 +15,7 @@ type ProviderErrorSmokeLane struct {
 	WorkTypeID      string
 	WorkerName      string
 	WorkstationName string
-	Provider        workers.ModelProvider
+	Provider        interfaces.ModelProvider
 	Model           string
 	PromptBody      string
 }

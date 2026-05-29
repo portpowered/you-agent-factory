@@ -1853,8 +1853,8 @@ func assertCanonicalProviderCommandRequests(t *testing.T, requests []workers.Com
 	if len(requests) != 1 {
 		t.Fatalf("provider command runner request count = %d, want 1", len(requests))
 	}
-	if requests[0].Command != string(workers.ModelProviderCodex) {
-		t.Fatalf("provider command = %q, want %q", requests[0].Command, workers.ModelProviderCodex)
+	if requests[0].Command != string(interfaces.ModelProviderCodex) {
+		t.Fatalf("provider command = %q, want %q", requests[0].Command, interfaces.ModelProviderCodex)
 	}
 }
 

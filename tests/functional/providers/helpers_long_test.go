@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func buildModelWorkerConfig(provider workers.ModelProvider, model string) string {
+func buildModelWorkerConfig(provider interfaces.ModelProvider, model string) string {
 	return fmt.Sprintf(`---
 type: MODEL_WORKER
 model: %s

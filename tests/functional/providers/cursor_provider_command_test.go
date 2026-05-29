@@ -34,8 +34,8 @@ func TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt(t *testing.T) {
 	}
 
 	req := runner.LastRequest()
-	if req.Command != string(workers.ModelProviderCursor) {
-		t.Fatalf("command = %q, want %q", req.Command, workers.ModelProviderCursor)
+	if req.Command != string(interfaces.ModelProviderCursor) {
+		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p"})
 	support.AssertArgsContainSequence(t, req.Args, []string{"--model", "test-cursor-model"})
@@ -62,8 +62,8 @@ func TestCursorProviderCommand_SkipPermissionsPassesForceFlag(t *testing.T) {
 	}
 
 	req := runner.LastRequest()
-	if req.Command != string(workers.ModelProviderCursor) {
-		t.Fatalf("command = %q, want %q", req.Command, workers.ModelProviderCursor)
+	if req.Command != string(interfaces.ModelProviderCursor) {
+		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-f", "-p"})
 	assertProviderArgsPrompt(t, req, cursorMergedPrompt("Process the input task.", "Do the work."))
@@ -91,8 +91,8 @@ Process the input task.
 
 	h.Assert().HasTokenInPlace("task:complete")
 	req := runner.LastRequest()
-	if req.Command != string(workers.ModelProviderCursor) {
-		t.Fatalf("command = %q, want %q", req.Command, workers.ModelProviderCursor)
+	if req.Command != string(interfaces.ModelProviderCursor) {
+		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p", "--model", "test-cursor-model"})
 }
@@ -119,7 +119,7 @@ func buildCursorModelWorkerConfig(model string, skipPermissions bool) string {
 		"---",
 		"type: MODEL_WORKER",
 		"model: " + model,
-		"modelProvider: " + string(workers.ModelProviderCursor),
+		"modelProvider: " + string(interfaces.ModelProviderCursor),
 		"stopToken: COMPLETE",
 	}
 	if skipPermissions {

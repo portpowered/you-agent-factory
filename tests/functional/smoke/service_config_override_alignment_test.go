@@ -73,7 +73,7 @@ args:
   - "{{ (index .Inputs 0).Payload }}"
 ---
 `)
-	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkID:     "mixed-command-smoke-work",
 		WorkTypeID: "task",
@@ -109,8 +109,8 @@ func assertSharedCommandRunnerScriptRequest(t *testing.T, dir string, scriptReq 
 func assertSharedCommandRunnerProviderRequest(t *testing.T, dir string, providerReq workers.CommandRequest) {
 	t.Helper()
 
-	if providerReq.Command != string(workers.ModelProviderCodex) {
-		t.Fatalf("provider command = %q, want %q", providerReq.Command, workers.ModelProviderCodex)
+	if providerReq.Command != string(interfaces.ModelProviderCodex) {
+		t.Fatalf("provider command = %q, want %q", providerReq.Command, interfaces.ModelProviderCodex)
 	}
 	support.AssertArgsContainSequence(t, providerReq.Args, []string{"exec"})
 	support.AssertArgsContainSequence(t, providerReq.Args, []string{"--model", "gpt-5-codex"})

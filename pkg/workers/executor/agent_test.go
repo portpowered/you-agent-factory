@@ -416,7 +416,7 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				SessionID:     "session-1",
 			},
 		},
@@ -466,7 +466,7 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	if req.Worktree != request.Worktree || req.WorkingDirectory != request.WorkingDirectory {
 		t.Fatalf("request paths = worktree %q working_directory %q", req.Worktree, req.WorkingDirectory)
 	}
-	if req.Model != "claude-sonnet-4-20250514" || req.ModelProvider != string(ModelProviderClaude) || req.SessionID != "session-1" {
+	if req.Model != "claude-sonnet-4-20250514" || req.ModelProvider != string(interfaces.ModelProviderClaude) || req.SessionID != "session-1" {
 		t.Fatalf("request provider fields = model %q provider %q session %q", req.Model, req.ModelProvider, req.SessionID)
 	}
 	if req.EnvVars["PORTOS_TEST_ENV"] != "enabled" {
@@ -488,7 +488,7 @@ func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(
 		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				SessionID:     "claude-session-123",
 			},
 		},
@@ -515,7 +515,7 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 		response: interfaces.InferenceResponse{
 			Content: "The answer is 42.",
 			ProviderSession: &interfaces.ProviderSessionMetadata{
-				Provider: string(ModelProviderClaude),
+				Provider: string(interfaces.ModelProviderClaude),
 				Kind:     providerSessionKindSessionID,
 				ID:       "claude-session-123",
 			},
@@ -525,7 +525,7 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				SessionID:     "claude-session-123",
 			},
 		},
@@ -545,8 +545,8 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 	if result.ProviderSession == nil {
 		t.Fatal("expected provider session metadata on successful result")
 	}
-	if result.ProviderSession.Provider != string(ModelProviderClaude) {
-		t.Fatalf("provider session provider = %q, want %q", result.ProviderSession.Provider, ModelProviderClaude)
+	if result.ProviderSession.Provider != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("provider session provider = %q, want %q", result.ProviderSession.Provider, interfaces.ModelProviderClaude)
 	}
 	if result.ProviderSession.ID != "claude-session-123" {
 		t.Fatalf("provider session id = %q, want %q", result.ProviderSession.ID, "claude-session-123")
@@ -589,7 +589,7 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 		response: interfaces.InferenceResponse{
 			Content: "The answer is 42.",
 			ProviderSession: &interfaces.ProviderSessionMetadata{
-				Provider: string(ModelProviderCodex),
+				Provider: string(interfaces.ModelProviderCodex),
 				Kind:     providerSessionKindSessionID,
 				ID:       "sess_codex_123",
 			},
@@ -685,13 +685,13 @@ func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testi
 func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryableProviderMetadata(t *testing.T) {
 	provider := &agentMockProvider{
 		err: workerprovider.NormalizeProviderExitFailure(
-			string(ModelProviderCodex),
+			string(interfaces.ModelProviderCodex),
 			CommandResult{
 				ExitCode: codexWindowsProcessFailureExitCode,
 				Stderr:   []byte("OpenAI Codex v0.118.0 (research preview)\n--------\nERROR: Windows provider subprocess exited unexpectedly"),
 			},
 			&interfaces.ProviderSessionMetadata{
-				Provider: string(ModelProviderCodex),
+				Provider: string(interfaces.ModelProviderCodex),
 				Kind:     providerSessionKindSessionID,
 				ID:       "sess-codex-windows-4294967295",
 			},
@@ -700,7 +700,7 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
 		Workers: map[string]*interfaces.WorkerConfig{
-			"worker-a": {Model: "gpt-5.3-codex-spark", ModelProvider: string(ModelProviderCodex)},
+			"worker-a": {Model: "gpt-5.3-codex-spark", ModelProvider: string(interfaces.ModelProviderCodex)},
 		},
 	}, provider)
 	var sleeps []time.Duration
@@ -763,7 +763,7 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 				"auth failed",
 				nil,
 				&interfaces.ProviderSessionMetadata{
-					Provider: string(ModelProviderCodex),
+					Provider: string(interfaces.ModelProviderCodex),
 					Kind:     providerSessionKindSessionID,
 					ID:       "sess_codex_error_123",
 				},
@@ -825,7 +825,7 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 				"auth failed",
 				nil,
 				&interfaces.ProviderSessionMetadata{
-					Provider: string(ModelProviderClaude),
+					Provider: string(interfaces.ModelProviderClaude),
 					Kind:     providerSessionKindSessionID,
 					ID:       "claude-session-123",
 				},
@@ -836,7 +836,7 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				SessionID:     "claude-session-123",
 			},
 		},
@@ -856,8 +856,8 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 	if result.ProviderSession == nil {
 		t.Fatal("expected provider session metadata on failed result")
 	}
-	if result.ProviderSession.Provider != string(ModelProviderClaude) {
-		t.Fatalf("provider session provider = %q, want %q", result.ProviderSession.Provider, ModelProviderClaude)
+	if result.ProviderSession.Provider != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("provider session provider = %q, want %q", result.ProviderSession.Provider, interfaces.ModelProviderClaude)
 	}
 	if result.ProviderSession.ID != "claude-session-123" {
 		t.Fatalf("provider session id = %q, want %q", result.ProviderSession.ID, "claude-session-123")
