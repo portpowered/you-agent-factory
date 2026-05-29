@@ -36,6 +36,7 @@ var listWork = workcli.List
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
 var saveFactoryFromFile = factorycli.SaveFromFile
+var updateFactoryFromFile = factorycli.UpdateFromFile
 var listModels = modelscli.List
 var inspectModel = modelscli.Inspect
 var invokeModel = modelscli.Invoke
@@ -122,8 +123,39 @@ func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		newFactoryQueryCommand(diagnostics),
 		newFactoryListCommand(diagnostics),
 		newFactorySaveFromFileCommand(diagnostics),
+		newFactoryUpdateFromFileCommand(diagnostics),
 	)
 	return factoryCmd
+}
+
+func newFactoryUpdateFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.UpdateFromFileConfig{Dir: defaultcmd.FactoryDir}
+
+	cmd := &cobra.Command{
+		Use:   "update <name>",
+		Short: "Update an existing named factory from a config file",
+		Long: "Replace an existing named factory from an existing factory.json file.\n\n" +
+			"The command validates the payload, atomically replaces the named factory layout under " +
+			"the selected factory root, and leaves .current-factory unchanged when it already " +
+			"points at the updated name.",
+		Example: "  # Replace an existing named factory from a config file.\n" +
+			"  " + cliBinaryName + " factory update staging --from ./factory.json\n\n" +
+			"  # Emit structured confirmation for scripting.\n" +
+			"  " + cliBinaryName + " factory update staging --from ./factory.json --json",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Name = args[0]
+			cfg.Output = cmd.OutOrStdout()
+			return updateFactoryFromFile(cfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfg.From, "from", "", "path to an existing factory.json payload (required)")
+	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit structured confirmation JSON")
+	_ = cmd.MarkFlagRequired("from")
+	return cmd
 }
 
 func newFactorySaveFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
