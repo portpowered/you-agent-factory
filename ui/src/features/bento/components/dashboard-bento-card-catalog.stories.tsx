@@ -11,11 +11,9 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import "../../../styles.css";
 import { expectNoPageHorizontalOverflow } from "../../../stories/dashboardStorySupport";
-import {
-  CurrentSelectionWidget,
-  useCurrentSelection,
-  useCurrentSelectionDetails,
-} from "../../current-selection/public";
+import { CurrentSelectionWidget } from "../../current-selection/public";
+import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
+import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/public";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";

@@ -3,10 +3,8 @@ import { useEffect } from "react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useAppLocale } from "../../../i18n";
-import {
-  useCurrentSelection,
-  useCurrentSelectionDetails,
-} from "../../current-selection/public";
+import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
+import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/public";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
