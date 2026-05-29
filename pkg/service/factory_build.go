@@ -717,6 +717,13 @@ func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, 
 		}
 
 		selection := interfaces.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, workerModelProvider)
+		workerOpenCodeAgent := ""
+		if worker != nil {
+			workerOpenCodeAgent = worker.OpenCodeAgent
+		}
+		if err := interfaces.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, workerOpenCodeAgent, selection); err != nil {
+			return fmt.Errorf("workstations[%d](%s).openCodeAgent: %w", i, workstation.Name, err)
+		}
 		if !runnerSelectionRequiresValidation(selection) {
 			continue
 		}

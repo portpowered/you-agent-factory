@@ -752,6 +752,26 @@ func ResolveOpenCodeAgent(workstationAgent, workerAgent string) string {
 	return strings.TrimSpace(workerAgent)
 }
 
+// ValidateOpenCodeAgentForRunnerSelection reports a configuration error when a
+// non-empty OpenCode agent profile is configured for a dispatch that will not
+// use the OpenCode runner.
+func ValidateOpenCodeAgentForRunnerSelection(workstationAgent, workerAgent string, selection ResolvedRunnerSelection) error {
+	agent := ResolveOpenCodeAgent(workstationAgent, workerAgent)
+	if agent == "" {
+		return nil
+	}
+	runnerID := NormalizeRunnerID(selection.RunnerID)
+	if runnerID == RunnerIDOpenCode {
+		return nil
+	}
+	return fmt.Errorf(
+		"openCodeAgent %q requires runner %q, resolved runner %q",
+		agent,
+		RunnerIDOpenCode,
+		runnerID,
+	)
+}
+
 // ResolveRunnerSelection applies the v1 precedence rules for backend runtime
 // runner choice: workstation override, then factory override, then legacy
 // worker modelProvider compatibility, then the codex default.
