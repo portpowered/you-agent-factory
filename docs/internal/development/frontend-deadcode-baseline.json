@@ -1,10 +1,5 @@
 [
   {
-    "file": "src/components/dashboard/index.ts",
-    "kind": "file",
-    "name": "src/components/dashboard/index.ts"
-  },
-  {
     "file": "src/features/factory-graph-editor/lib/factory-graph-operations.ts",
     "kind": "export",
     "name": "validateFactoryGraphState"
