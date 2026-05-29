@@ -238,7 +238,7 @@ export function getFactoryGraphConnectionAnchor(
   );
 }
 
-function resolveConnectionAnchorContext(
+export function resolveFactoryGraphConnectionAnchorContext(
   node: FactoryGraphNode,
   resolver?: FactoryGraphConnectionResolver,
 ): FactoryGraphConnectionAnchorContext | undefined {
@@ -266,8 +266,14 @@ export function buildFactoryGraphEdgeChangeFromConnection(
     return null;
   }
 
-  const sourceContext = resolveConnectionAnchorContext(sourceNode, resolver);
-  const targetContext = resolveConnectionAnchorContext(targetNode, resolver);
+  const sourceContext = resolveFactoryGraphConnectionAnchorContext(
+    sourceNode,
+    resolver,
+  );
+  const targetContext = resolveFactoryGraphConnectionAnchorContext(
+    targetNode,
+    resolver,
+  );
   const sourceAnchor = getFactoryGraphConnectionAnchor(
     sourceNode.kind,
     endpoint.sourceAnchorId,
@@ -423,11 +429,11 @@ export function buildFactoryGraphConnectionNotice(options: {
   targetNode: FactoryGraphNode;
 }) {
   const messages = getFactoryGraphEditorMessages(options.locale);
-  const sourceContext = resolveConnectionAnchorContext(
+  const sourceContext = resolveFactoryGraphConnectionAnchorContext(
     options.sourceNode,
     options.resolver,
   );
-  const targetContext = resolveConnectionAnchorContext(
+  const targetContext = resolveFactoryGraphConnectionAnchorContext(
     options.targetNode,
     options.resolver,
   );

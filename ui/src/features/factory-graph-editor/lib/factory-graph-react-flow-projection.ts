@@ -9,10 +9,14 @@ import type {
   FactoryGraphNodeKind,
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
-import type { FactoryGraphConnectionEndpoint } from "./factory-graph-editor-connections";
+import type {
+  FactoryGraphConnectionEndpoint,
+  FactoryGraphConnectionResolver,
+} from "./factory-graph-editor-connections";
 import {
   getFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
+  resolveFactoryGraphConnectionAnchorContext,
 } from "./factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "./factory-graph-customer-display";
@@ -86,6 +90,7 @@ export interface ProjectFactoryGraphToReactFlowOptions {
   mode?: FactoryGraphReactFlowMode;
   runtime?: FactoryGraphReactFlowRuntimeOverlay;
   topology: FactoryGraphTopology;
+  workstationResolver?: FactoryGraphConnectionResolver;
 }
 
 const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
@@ -154,6 +159,7 @@ export function projectFactoryGraphToReactFlow(
             locale: input.locale,
             node,
             topology: displayTopology,
+            workstationResolver: input.workstationResolver,
           }),
           connectionHint: messages.flowConnectionHint,
           draftStatus: draftStatusForNode(node.id, input.editor),
@@ -221,7 +227,11 @@ function buildFactoryGraphReactFlowEdge(
     input.editor?.pendingRemovalEdgeIds.has(edge.id) ?? false;
   const active = input.runtime?.activeEdgeIds?.has(edge.id) ?? false;
   const edgeLabel = messages.edgeKindLabel(edge.kind);
-  const handleAssignment = getEdgeHandleAssignment(edge);
+  const handleAssignment = getEdgeHandleAssignment(
+    edge,
+    input.topology,
+    input.workstationResolver,
+  );
 
   return {
     animated:
@@ -303,9 +313,23 @@ function describeNodeKey(key: FactoryGraphEdge["source"]) {
 
 function getEdgeHandleAssignment(
   edge: FactoryGraphEdge,
+  topology: FactoryGraphTopology,
+  workstationResolver?: FactoryGraphConnectionResolver,
 ): { sourceHandle: string; targetHandle: string } | null {
-  const sourceHandle = getNodeHandleId(edge.source.kind, edge.kind, "source");
-  const targetHandle = getNodeHandleId(edge.target.kind, edge.kind, "target");
+  const sourceNode = findTopologyNode(topology, edge.sourceId);
+  const targetNode = findTopologyNode(topology, edge.targetId);
+  const sourceHandle = getNodeHandleId(
+    sourceNode,
+    edge.kind,
+    "source",
+    workstationResolver,
+  );
+  const targetHandle = getNodeHandleId(
+    targetNode,
+    edge.kind,
+    "target",
+    workstationResolver,
+  );
   if (!sourceHandle || !targetHandle) {
     return null;
   }
@@ -313,16 +337,22 @@ function getEdgeHandleAssignment(
 }
 
 function getNodeHandleId(
-  nodeKind: FactoryGraphNodeKind,
+  node: FactoryGraphNode,
   edgeKind: FactoryGraphEdge["kind"],
   role: "source" | "target",
+  workstationResolver?: FactoryGraphConnectionResolver,
 ) {
   if (edgeKind === "work-type-state") {
     return null;
   }
 
+  const anchorContext = resolveFactoryGraphConnectionAnchorContext(
+    node,
+    workstationResolver,
+  );
+
   return (
-    getFactoryGraphConnectionAnchors(nodeKind).find(
+    getFactoryGraphConnectionAnchors(node.kind, anchorContext).find(
       (anchor) =>
         anchor.role === role &&
         (anchor.edgeKinds ?? [anchor.edgeKind]).includes(edgeKind),
@@ -335,8 +365,13 @@ function buildNodeHandles(input: {
   locale?: string;
   node: FactoryGraphNode;
   topology: FactoryGraphTopology;
+  workstationResolver?: FactoryGraphConnectionResolver;
 }): ActivityGraphNodeHandle[] {
   const messages = getFactoryGraphEditorMessages(input.locale);
+  const anchorContext = resolveFactoryGraphConnectionAnchorContext(
+    input.node,
+    input.workstationResolver,
+  );
   const selectedSource =
     input.editor?.pendingConnectionSource?.nodeId === input.node.id
       ? input.editor.pendingConnectionSource
@@ -344,8 +379,21 @@ function buildNodeHandles(input: {
   const nodeIsPendingRemoval =
     input.editor?.pendingRemovalNodeIds.has(input.node.id) ?? false;
   const canEditConnections = input.editor?.canEditConnections ?? false;
+  const pendingSourceNode =
+    input.editor?.pendingConnectionSource !== null &&
+    input.editor?.pendingConnectionSource !== undefined
+      ? findNode(input.topology, input.editor.pendingConnectionSource.nodeId)
+      : null;
+  const pendingSourceWorkstation =
+    pendingSourceNode === null
+      ? undefined
+      : resolveFactoryGraphConnectionAnchorContext(
+          pendingSourceNode,
+          input.workstationResolver,
+        )?.workstation;
 
-  return getFactoryGraphConnectionAnchors(input.node.kind).map((anchor) => {
+  return getFactoryGraphConnectionAnchors(input.node.kind, anchorContext).map(
+    (anchor) => {
     const selected =
       selectedSource?.anchorId === anchor.id && anchor.role === "source";
     const compatible =
@@ -355,12 +403,11 @@ function buildNodeHandles(input: {
       anchor.role === "target" &&
       isValidFactoryGraphConnection({
         sourceAnchorId: input.editor.pendingConnectionSource.anchorId,
-        sourceNodeKind: findNode(
-          input.topology,
-          input.editor.pendingConnectionSource.nodeId,
-        ).kind,
+        sourceNodeKind: pendingSourceNode?.kind ?? input.node.kind,
+        sourceWorkstation: pendingSourceWorkstation,
         targetAnchorId: anchor.id,
         targetNodeKind: input.node.kind,
+        targetWorkstation: anchorContext?.workstation,
       });
 
     return {
@@ -394,7 +441,18 @@ function buildNodeHandles(input: {
             ? "default"
             : "muted",
     } satisfies ActivityGraphNodeHandle;
-  });
+    },
+  );
+}
+
+function findTopologyNode(topology: FactoryGraphTopology, nodeId: string) {
+  const node = topology.nodes.find((entry) => entry.id === nodeId);
+  if (!node) {
+    throw new Error(
+      `Expected graph node "${nodeId}" to exist in editor topology.`,
+    );
+  }
+  return node;
 }
 
 function findNode(topology: FactoryGraphTopology, nodeId: string) {

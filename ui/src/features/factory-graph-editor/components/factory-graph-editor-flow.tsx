@@ -13,7 +13,9 @@ import {
 import type {
   FactoryGraphNodeKind,
   FactoryGraphTopology,
+  FactoryWorkstation,
 } from "../lib/factory-graph-draft-types";
+import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
 import type { FactoryGraphConnectionEndpoint } from "../lib/factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
 import {
@@ -48,6 +50,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
   pendingRemovalEdgeIds: ReadonlySet<string>;
   pendingRemovalNodeIds: ReadonlySet<string>;
   topology: FactoryGraphTopology;
+  workstations?: readonly FactoryWorkstation[];
   workerStatusByName?: ReadonlyMap<string, FactoryGraphWorkerRuntimeStatus>;
 }): {
   edges: Edge[];
@@ -70,6 +73,9 @@ export function buildFactoryGraphEditorFlowModel(input: {
       workerStatusByName: input.workerStatusByName,
     },
     topology: input.topology,
+    workstationResolver: createFactoryGraphWorkstationResolver(
+      input.workstations,
+    ),
   });
 
   return projection;

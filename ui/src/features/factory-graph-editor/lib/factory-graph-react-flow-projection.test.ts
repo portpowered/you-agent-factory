@@ -312,4 +312,76 @@ describe("factory graph React Flow projection", () => {
         .some((nodeId) => nodeId?.includes(SYSTEM_TIME_WORK_TYPE_ID)),
     ).toBe(false);
   });
+
+  it("omits continue and reject handles for a standard processor without stopWords", () => {
+    const factoryWithoutStopWords = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations[0],
+          behavior: "STANDARD",
+          stopWords: undefined,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      factoryWithoutStopWords,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      topology,
+      workstationResolver: {
+        resolveWorkstation: (name) =>
+          factoryWithoutStopWords.workstations.find(
+            (workstation) => workstation.name === name,
+          ),
+      },
+    });
+    const anchorIds =
+      projection.nodes
+        .find((node) => node.id === "workstation:draft")
+        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+
+    expect(anchorIds).toEqual(
+      expect.arrayContaining([
+        "workstation-output-source",
+        "workstation-on-failure-source",
+      ]),
+    );
+    expect(anchorIds).not.toContain("workstation-on-continue-source");
+    expect(anchorIds).not.toContain("workstation-on-rejection-source");
+  });
+
+  it("exposes continue and reject handles when stopWords is configured", () => {
+    const factoryWithStopWords = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations[0],
+          behavior: "STANDARD",
+          stopWords: ["DONE"],
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      factoryWithStopWords,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      topology,
+      workstationResolver: {
+        resolveWorkstation: (name) =>
+          factoryWithStopWords.workstations.find(
+            (workstation) => workstation.name === name,
+          ),
+      },
+    });
+    const anchorIds =
+      projection.nodes
+        .find((node) => node.id === "workstation:draft")
+        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+
+    expect(anchorIds).toContain("workstation-on-continue-source");
+    expect(anchorIds).toContain("workstation-on-rejection-source");
+  });
 });

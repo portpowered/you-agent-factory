@@ -8,6 +8,7 @@ import {
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
 import type { FactoryGraphNodeFieldUpdate } from "../lib/factory-graph-field-operations";
 import { updateFactoryGraphNodeField } from "../lib/factory-graph-field-operations";
+import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
 import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,
@@ -38,14 +39,23 @@ export function useEditableFactoryGraph(
     draftState,
     locale: options.locale,
   });
-  const projection = useMemo(
-    () =>
-      projectFactoryGraphToReactFlow({
-        locale: options.locale ?? undefined,
-        topology: draftState.graph,
-      }),
-    [draftState.graph, options.locale],
-  );
+  const projection = useMemo(() => {
+    const factoryDefinition =
+      draftState.pendingFactoryDefinition ?? draftState.baseDocument ?? null;
+
+    return projectFactoryGraphToReactFlow({
+      locale: options.locale ?? undefined,
+      topology: draftState.graph,
+      workstationResolver: factoryDefinition
+        ? createFactoryGraphWorkstationResolver(factoryDefinition.workstations)
+        : undefined,
+    });
+  }, [
+    draftState.baseDocument,
+    draftState.graph,
+    draftState.pendingFactoryDefinition,
+    options.locale,
+  ]);
   const saveController = useEditableFactoryGraphSaveController({
     activeWorkCount: options.activeWorkCount ?? 0,
     draftState,

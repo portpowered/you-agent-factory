@@ -357,7 +357,15 @@ describe("factory graph operations", () => {
       "resource:gpu",
     );
 
-    const projection = projectFactoryGraphToReactFlow(state.graph);
+    const projection = projectFactoryGraphToReactFlow({
+      topology: state.graph,
+      workstationResolver: {
+        resolveWorkstation: (name) =>
+          state.pendingFactoryDefinition?.workstations?.find(
+            (workstation) => workstation.name === name,
+          ),
+      },
+    });
     expect(
       projection.nodes.find((node) => node.id === "work-state:story:done"),
     ).toEqual(
