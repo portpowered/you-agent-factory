@@ -67,6 +67,49 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
 }
 
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	req := map[string]any{
+		"name":         "generated-api-header-only",
+		"workTypeName": "task",
+		"items":        []map[string]any{},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal generated submit request: %v", err)
+	}
+	resp, err := http.Post(server.URL()+"/work", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work status = %d, want 201: %s", resp.StatusCode, string(payload))
+	}
+	var submitted factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&submitted); err != nil {
+		t.Fatalf("decode submit response: %v", err)
+	}
+	if submitted.TraceId == "" {
+		t.Fatalf("submit response trace_id is empty, want non-empty trace identifier")
+	}
+
+	workList := waitForGeneratedWorkComplete(t, server.URL(), submitted.TraceId, 10*time.Second)
+	if len(workList.Results) != 1 {
+		t.Fatalf("GET /work result count = %d, want 1", len(workList.Results))
+	}
+	work := workList.Results[0]
+	if work.Name != "generated-api-header-only" || stringPointerValue(work.WorkTypeName) != "task" {
+		t.Fatalf("GET /work = %#v, want header-only name and work type", work)
+	}
+	if work.Content != nil && len(*work.Content) != 0 {
+		t.Fatalf("GET /work content = %#v, want empty structured content", work.Content)
+	}
+}
+
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
