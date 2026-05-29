@@ -66,7 +66,8 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.Worksta
 		return missingWorkerWorkResult(request.Dispatch, workerType, time.Since(start)), nil
 	}
 
-	req := inferenceRequestForExecutionRequest(request, workerDef)
+	workstationDef, _ := ae.runtimeConfig.Workstation(inferenceWorkstationType(request))
+	req := inferenceRequestForExecutionRequest(request, workerDef, workstationDef)
 	diagnostics := workDiagnosticsForInferenceRequest(req)
 
 	resp, retryCount, err := ae.inferWithRetry(ctx, req)
@@ -152,7 +153,7 @@ func agentWorkMetrics(start time.Time, retryCount int) interfaces.WorkMetrics {
 	}
 }
 
-func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig) interfaces.ProviderInferenceRequest {
+func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig) interfaces.ProviderInferenceRequest {
 	req := interfaces.ProviderInferenceRequest{
 		Dispatch:                     interfaces.CloneWorkDispatch(request.Dispatch),
 		WorkerType:                   request.WorkerType,
@@ -182,6 +183,17 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 		if workerDef.SessionID != "" {
 			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, interfaces.RunnerOptionalCapabilitySessionResume)
 		}
+	}
+	if req.ModelProvider == string(interfaces.ModelProviderOpenCode) {
+		workstationAgent := ""
+		workerAgent := ""
+		if workstationDef != nil {
+			workstationAgent = workstationDef.OpenCodeAgent
+		}
+		if workerDef != nil {
+			workerAgent = workerDef.OpenCodeAgent
+		}
+		req.OpenCodeAgent = interfaces.ResolveOpenCodeAgent(workstationAgent, workerAgent)
 	}
 	return req
 }

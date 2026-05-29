@@ -78,6 +78,7 @@ type ProviderInferenceRequest struct {
 	ModelProvider                string                          `json:"model_provider,omitempty"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
+	OpenCodeAgent                string                          `json:"open_code_agent,omitempty"`
 }
 
 // SubprocessExecutionRequest is the command-boundary request derived from
