@@ -3705,14 +3705,23 @@ components:
         - WorkerModelProviderClaude
         - WorkerModelProviderCodex
         - WorkerModelProviderCursor
+        - WorkerModelProviderGemini
+        - WorkerModelProviderKiro
+        - WorkerModelProviderOpenCode
       enum:
         - CLAUDE
         - CODEX
         - CURSOR
+        - GEMINI
+        - KIRO
+        - OPENCODE
       x-enum-descriptions:
         - Claude model execution routed through the `claude` provider command.
         - Codex model execution routed through the `codex` provider command.
         - Cursor model execution routed through the `agent` provider command.
+        - Gemini model execution routed through the `gemini` provider command.
+        - Kiro model execution routed through the `kiro-cli` provider command.
+        - OpenCode model execution routed through the `opencode` provider command.
     WorkerModelLocality:
       type: string
       description: Provider locality for a model worker capability declaration.

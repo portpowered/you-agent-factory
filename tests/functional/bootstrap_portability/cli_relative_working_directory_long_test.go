@@ -77,8 +77,8 @@ Process {{ (index .Inputs 0).Name }} from the current working directory.
 	}
 
 	req := runner.LastRequest()
-	if req.Command != string(workers.ModelProviderCodex) {
-		t.Fatalf("command = %q, want %q", req.Command, workers.ModelProviderCodex)
+	if req.Command != string(interfaces.ModelProviderCodex) {
+		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCodex)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "-"})
 	if req.WorkDir != expectedWorkDir {

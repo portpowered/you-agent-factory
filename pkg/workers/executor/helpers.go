@@ -22,13 +22,6 @@ type Provider = workerprovider.Provider
 type ProviderError = workerprovider.ProviderError
 
 const (
-	ModelProviderClaude   = workerprovider.ModelProviderClaude
-	ModelProviderCodex    = workerprovider.ModelProviderCodex
-	ModelProviderGemini   = workerprovider.ModelProviderGemini
-	ModelProviderKiro     = workerprovider.ModelProviderKiro
-	ModelProviderCursor   = workerprovider.ModelProviderCursor
-	ModelProviderOpenCode = workerprovider.ModelProviderOpenCode
-
 	providerSessionKindSessionID       = "session_id"
 	codexWindowsProcessFailureExitCode = 4294967295
 

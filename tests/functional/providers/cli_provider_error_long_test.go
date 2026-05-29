@@ -18,7 +18,7 @@ import (
 type providerLongCase struct {
 	name              string
 	corpusEntry       string
-	provider          workers.ModelProvider
+	provider          interfaces.ModelProvider
 	model             string
 	wantCalls         int
 	wantPlace         string
@@ -40,18 +40,18 @@ func TestProviderErrorLong_ScriptWrapScenariosStayNormalizedAcrossProviders(t *t
 
 func providerErrorLongCases() []providerLongCase {
 	return []providerLongCase{
-		{name: "Claude_Throttled_RequeuesAfterBoundedRetries", corpusEntry: "claude_rate_limit_error", provider: workers.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init", wantThrottlePause: true},
-		{name: "Claude_TransientServerError_RequeuesAfterBoundedRetries", corpusEntry: "claude_internal_server_api_error", provider: workers.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Claude_Timeout_RequeuesAfterBoundedRetries", corpusEntry: "claude_timeout_waiting_for_provider", provider: workers.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Claude_PermanentBadRequest_FailsWithoutRetry", corpusEntry: "claude_invalid_request_error", provider: workers.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 1, wantPlace: "task:failed"},
-		{name: "Claude_Unknown_FailsWithoutRetry", provider: workers.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 1, wantPlace: "task:failed"},
-		{name: "Codex_Throttled_RequeuesAfterBoundedRetries", corpusEntry: "codex_status_429_too_many_requests", provider: workers.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init", wantThrottlePause: true},
-		{name: "Codex_TransientServerError_RequeuesAfterBoundedRetries", corpusEntry: "codex_internal_server_status_500", provider: workers.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Codex_HighDemandTemporaryServerError_RequeuesWithoutThrottlePause", corpusEntry: "codex_high_demand_temporary_errors", provider: workers.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Codex_Timeout_RequeuesAfterBoundedRetries", corpusEntry: "codex_timeout_waiting_for_provider", provider: workers.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Codex_PermanentBadRequest_FailsWithoutRetry", corpusEntry: "codex_invalid_request_error", provider: workers.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
-		{name: "Codex_AuthFailure_FailsWithoutRetry", corpusEntry: "codex_authentication_unauthorized", provider: workers.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
-		{name: "Codex_Unknown_FailsWithoutRetry", provider: workers.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Claude_Throttled_RequeuesAfterBoundedRetries", corpusEntry: "claude_rate_limit_error", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init", wantThrottlePause: true},
+		{name: "Claude_TransientServerError_RequeuesAfterBoundedRetries", corpusEntry: "claude_internal_server_api_error", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Claude_Timeout_RequeuesAfterBoundedRetries", corpusEntry: "claude_timeout_waiting_for_provider", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Claude_PermanentBadRequest_FailsWithoutRetry", corpusEntry: "claude_invalid_request_error", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Claude_Unknown_FailsWithoutRetry", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Codex_Throttled_RequeuesAfterBoundedRetries", corpusEntry: "codex_status_429_too_many_requests", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init", wantThrottlePause: true},
+		{name: "Codex_TransientServerError_RequeuesAfterBoundedRetries", corpusEntry: "codex_internal_server_status_500", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Codex_HighDemandTemporaryServerError_RequeuesWithoutThrottlePause", corpusEntry: "codex_high_demand_temporary_errors", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Codex_Timeout_RequeuesAfterBoundedRetries", corpusEntry: "codex_timeout_waiting_for_provider", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Codex_PermanentBadRequest_FailsWithoutRetry", corpusEntry: "codex_invalid_request_error", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Codex_AuthFailure_FailsWithoutRetry", corpusEntry: "codex_authentication_unauthorized", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Codex_Unknown_FailsWithoutRetry", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
 	}
 }
 
@@ -233,7 +233,7 @@ func assertDispatchProviderFailureMatchesExpected(
 func assertActiveThrottlePause(
 	t *testing.T,
 	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	provider workers.ModelProvider,
+	provider interfaces.ModelProvider,
 	model string,
 ) {
 	t.Helper()

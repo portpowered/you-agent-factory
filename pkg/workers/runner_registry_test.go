@@ -8,6 +8,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func TestBuiltInRunnerCommand_MatchesInternalModelProviderCLI(t *testing.T) {
+	cases := []struct {
+		runnerID string
+		command  string
+	}{
+		{interfaces.RunnerIDCodex, string(interfaces.ModelProviderCodex)},
+		{interfaces.RunnerIDGemini, string(interfaces.ModelProviderGemini)},
+		{interfaces.RunnerIDKiro, string(interfaces.ModelProviderKiro)},
+		{interfaces.RunnerIDCursorCLI, string(interfaces.ModelProviderCursor)},
+		{interfaces.RunnerIDOpenCode, string(interfaces.ModelProviderOpenCode)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.runnerID, func(t *testing.T) {
+			if got := builtInRunnerCommand(tc.runnerID); got != tc.command {
+				t.Fatalf("builtInRunnerCommand(%q) = %q, want %q", tc.runnerID, got, tc.command)
+			}
+		})
+	}
+}
+
 func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 	originalLookPath := lookPath
 	defer func() {
@@ -33,11 +54,11 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 	}
 
 	want := []string{
-		string(ModelProviderCodex),
-		string(ModelProviderGemini),
-		string(ModelProviderKiro),
-		string(ModelProviderCursor),
-		string(ModelProviderOpenCode),
+		string(interfaces.ModelProviderCodex),
+		string(interfaces.ModelProviderGemini),
+		string(interfaces.ModelProviderKiro),
+		string(interfaces.ModelProviderCursor),
+		string(interfaces.ModelProviderOpenCode),
 	}
 	if len(commands) != len(want) {
 		t.Fatalf("lookPath calls = %#v, want %#v", commands, want)

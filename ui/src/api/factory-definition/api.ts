@@ -130,6 +130,10 @@ const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
 const WORKER_MODEL_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["modelProvider"]>>([
   "CLAUDE",
   "CODEX",
+  "CURSOR",
+  "GEMINI",
+  "KIRO",
+  "OPENCODE",
 ]);
 const WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["executorProvider"]>>([
   "SCRIPT_WRAP",

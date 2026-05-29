@@ -15,7 +15,6 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // seedFileCounter provides unique filenames across concurrent test invocations.
@@ -318,7 +317,7 @@ func UpdateFactoryJSON(t *testing.T, dir string, mutate func(map[string]any)) {
 func AppendFactoryInferenceThrottleGuard(
 	t *testing.T,
 	dir string,
-	provider workers.ModelProvider,
+	provider interfaces.ModelProvider,
 	model string,
 	refreshWindow time.Duration,
 ) {

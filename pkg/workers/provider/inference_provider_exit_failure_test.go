@@ -35,21 +35,21 @@ func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 	return []exitFailureInferenceTestCase{
 		{
 			name:        "GeminiPrefersProcessOutputForThrottle",
-			provider:    string(ModelProviderGemini),
+			provider:    string(interfaces.ModelProviderGemini),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("resource exhausted by 429 quota")},
 			wantMessage: "resource exhausted by 429 quota",
 			wantType:    interfaces.ProviderErrorTypeThrottled,
 		},
 		{
 			name:        "KiroFallsBackToProviderExitCodeWhenOutputMissing",
-			provider:    string(ModelProviderKiro),
+			provider:    string(interfaces.ModelProviderKiro),
 			result:      CommandResult{ExitCode: 9},
 			wantMessage: "kiro-cli exited with code 9",
 			wantType:    interfaces.ProviderErrorTypeUnknown,
 		},
 		{
 			name:        "OpenCodeClassifiesAuthenticationOutput",
-			provider:    string(ModelProviderOpenCode),
+			provider:    string(interfaces.ModelProviderOpenCode),
 			result:      CommandResult{ExitCode: 1, Stdout: []byte("login required before continuing")},
 			wantMessage: "login required before continuing",
 			wantType:    interfaces.ProviderErrorTypeAuthFailure,
@@ -61,14 +61,14 @@ func codexDerivedExitFailureTestCases() []exitFailureInferenceTestCase {
 	return []exitFailureInferenceTestCase{
 		{
 			name:        "CursorUsesCodexErrorExtraction",
-			provider:    string(ModelProviderCursor),
+			provider:    string(interfaces.ModelProviderCursor),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from cursor upstream")},
 			wantMessage: "ERROR: unexpected status 500 from cursor upstream",
 			wantType:    interfaces.ProviderErrorTypeInternalServerError,
 		},
 		{
 			name:        "CodexUsesCodexErrorExtraction",
-			provider:    string(ModelProviderCodex),
+			provider:    string(interfaces.ModelProviderCodex),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from codex upstream")},
 			wantMessage: "ERROR: unexpected status 500 from codex upstream",
 			wantType:    interfaces.ProviderErrorTypeInternalServerError,

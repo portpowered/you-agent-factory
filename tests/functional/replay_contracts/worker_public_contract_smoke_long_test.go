@@ -101,8 +101,8 @@ func assertWorkerPublicContractInternalRuntime(
 	if worker.ExecutorProvider != "script_wrap" {
 		t.Fatalf("executor provider = %q, want script_wrap", worker.ExecutorProvider)
 	}
-	if worker.ModelProvider != string(workers.ModelProviderClaude) {
-		t.Fatalf("model provider = %q, want %q", worker.ModelProvider, workers.ModelProviderClaude)
+	if worker.ModelProvider != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("model provider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderClaude)
 	}
 	if worker.SessionID != "" {
 		t.Fatalf("session id = %q, want empty runtime-owned field", worker.SessionID)
@@ -126,8 +126,8 @@ func assertWorkerPublicContractPublicRuntime(t *testing.T, generated factoryapi.
 	if worker.ExecutorProvider != "script_wrap" {
 		t.Fatalf("generated runtime executor provider = %q, want script_wrap", worker.ExecutorProvider)
 	}
-	if worker.ModelProvider != string(workers.ModelProviderClaude) {
-		t.Fatalf("generated runtime model provider = %q, want %q", worker.ModelProvider, workers.ModelProviderClaude)
+	if worker.ModelProvider != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("generated runtime model provider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderClaude)
 	}
 	if worker.SessionID != "" {
 		t.Fatalf("generated runtime session id = %q, want empty", worker.SessionID)
@@ -144,8 +144,8 @@ func assertWorkerPublicContractProviderRequest(t *testing.T, runner *testutil.Pr
 		t.Fatalf("provider command runner call count = %d, want 2", runner.CallCount())
 	}
 	req := runner.Requests()[0]
-	if req.Command != string(workers.ModelProviderClaude) {
-		t.Fatalf("provider command = %q, want %q", req.Command, workers.ModelProviderClaude)
+	if req.Command != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("provider command = %q, want %q", req.Command, interfaces.ModelProviderClaude)
 	}
 	for _, arg := range req.Args {
 		if arg == "--resume" {

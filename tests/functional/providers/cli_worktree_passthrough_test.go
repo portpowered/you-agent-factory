@@ -62,8 +62,8 @@ Process the input task.
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(workers.ModelProviderClaude) {
-		t.Fatalf("expected command %q, got %q", workers.ModelProviderClaude, call.Command)
+	if call.Command != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderClaude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "my-feature-branch"})
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "test-model"})

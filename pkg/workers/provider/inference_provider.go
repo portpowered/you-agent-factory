@@ -353,7 +353,7 @@ func effectiveProviderSession(req interfaces.ProviderInferenceRequest, result Co
 	if session != nil {
 		return session
 	}
-	if (req.ModelProvider == string(ModelProviderClaude) || req.ModelProvider == string(ModelProviderCursor) || req.ModelProvider == string(ModelProviderOpenCode)) && req.SessionID != "" {
+	if (req.ModelProvider == string(interfaces.ModelProviderClaude) || req.ModelProvider == string(interfaces.ModelProviderCursor) || req.ModelProvider == string(interfaces.ModelProviderOpenCode)) && req.SessionID != "" {
 		return &interfaces.ProviderSessionMetadata{
 			Provider: req.ModelProvider,
 			Kind:     providerSessionKindSessionID,

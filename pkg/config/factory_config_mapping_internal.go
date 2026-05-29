@@ -532,9 +532,6 @@ const (
 	publicFactoryWorkerTypeModel                 = "MODEL_WORKER"
 	publicFactoryWorkerTypeScript                = "SCRIPT_WORKER"
 	publicFactoryWorkerTypeHosted                = "HOSTED_WORKER"
-	publicFactoryWorkerModelProviderClaude       = "CLAUDE"
-	publicFactoryWorkerModelProviderCodex        = "CODEX"
-	publicFactoryWorkerModelProviderCursor       = "CURSOR"
 	publicFactoryWorkerModelLocalityLocal        = "LOCAL"
 	publicFactoryWorkerModelLocalityCloud        = "CLOUD"
 	publicFactoryResourceTypeModel               = "MODEL"
@@ -694,16 +691,10 @@ func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelP
 	if value == nil {
 		return ""
 	}
-	switch interfaces.StrictPublicFactoryWorkerModelProvider(string(*value)) {
-	case publicFactoryWorkerModelProviderClaude:
-		return string(factoryapiToInternalModelProviderClaude())
-	case publicFactoryWorkerModelProviderCodex:
-		return string(factoryapiToInternalModelProviderCodex())
-	case publicFactoryWorkerModelProviderCursor:
-		return string(factoryapiToInternalModelProviderCursor())
-	default:
-		return strings.TrimSpace(string(*value))
+	if internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(*value); ok {
+		return string(internal)
 	}
+	return strings.TrimSpace(string(*value))
 }
 
 func internalFactoryWorkerModelLocalityFromPublic(value *factoryapi.WorkerModelLocality) string {
@@ -845,14 +836,3 @@ func internalFactoryGuardTypeFromPublic(value factoryapi.GuardType) interfaces.G
 	}
 }
 
-func factoryapiToInternalModelProviderClaude() string {
-	return "claude"
-}
-
-func factoryapiToInternalModelProviderCodex() string {
-	return "codex"
-}
-
-func factoryapiToInternalModelProviderCursor() string {
-	return "agent"
-}

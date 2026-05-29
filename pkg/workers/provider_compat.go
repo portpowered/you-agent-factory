@@ -15,17 +15,9 @@ type ScriptWrapProviderOption = workerprovider.ScriptWrapProviderOption
 type InferenceEventRecorder = workerprovider.InferenceEventRecorder
 type RecordingProvider = workerprovider.RecordingProvider
 type RecordingProviderOption = workerprovider.RecordingProviderOption
-type ModelProvider = workerprovider.ModelProvider
 type MockWorkerCommandRunner = mockworker.MockWorkerCommandRunner
 
 const (
-	ModelProviderClaude   = workerprovider.ModelProviderClaude
-	ModelProviderCodex    = workerprovider.ModelProviderCodex
-	ModelProviderGemini   = workerprovider.ModelProviderGemini
-	ModelProviderKiro     = workerprovider.ModelProviderKiro
-	ModelProviderCursor   = workerprovider.ModelProviderCursor
-	ModelProviderOpenCode = workerprovider.ModelProviderOpenCode
-
 	providerSessionKindSessionID       = "session_id"
 	providerSessionKindConversationID  = "conversation_id"
 	providerSessionKindResponseID      = "response_id"
