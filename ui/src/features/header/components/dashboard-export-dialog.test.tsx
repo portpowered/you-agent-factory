@@ -2,13 +2,12 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import type { FactoryValue } from "../../../api/named-factory";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
+import type { useCurrentFactoryExport } from "../../export/hooks/use-current-factory-export";
 import { DashboardExportDialog } from "./dashboard-export-dialog";
 
 const closeExportDialog = vi.fn();
 let isExportDialogOpen = false;
-let currentFactoryExportState: ReturnType<
-  typeof import("../../export/public").useCurrentFactoryExport
->;
+let currentFactoryExportState: ReturnType<typeof useCurrentFactoryExport>;
 
 vi.mock("../../export/state/exportDialogStore", () => ({
   useExportDialogStore: (
@@ -25,14 +24,9 @@ vi.mock("../../export/state/exportDialogStore", () => ({
     }),
 }));
 
-vi.mock("../../export/public", async () => {
-  const actual = await vi.importActual("../../export/public");
-
-  return {
-    ...actual,
-    useCurrentFactoryExport: vi.fn(() => currentFactoryExportState),
-  };
-});
+vi.mock("../../export/hooks/use-current-factory-export", () => ({
+  useCurrentFactoryExport: vi.fn(() => currentFactoryExportState),
+}));
 
 const factory = {
   name: "Factory Aurora",
