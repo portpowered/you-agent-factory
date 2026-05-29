@@ -212,8 +212,9 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	for _, want := range []string{
 		"# Authoring Factories",
 		"you run --dir ./factory --with-mock-workers",
-		"you run --dir ./factory --record ./docs/examples/sample-run.replay.json",
-		"you run --dir ./factory --replay ./docs/examples/sample-run.replay.json",
+		"you docs mock-workers",
+		"you docs record-replay",
+		"docs/examples/mock-workers.json",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(authoring-factories) missing %q:\n%s", want, got)
