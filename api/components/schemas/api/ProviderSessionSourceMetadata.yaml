@@ -6,7 +6,7 @@ required:
 properties:
   relativePath:
     type: string
-    description: Path to the loaded session file relative to the configured Codex sessions root.
+    description: Path to the loaded session file relative to the configured provider sessions root.
   sizeBytes:
     type: integer
     format: int64

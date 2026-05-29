@@ -341,7 +341,7 @@ export interface paths {
         };
         /**
          * Get provider session details
-         * @description Loads a known Codex provider-session file by provider-session metadata. The browser supplies provider, kind, and identifier values; the server resolves the matching rollout file under the configured Codex sessions root and never accepts a raw filesystem path.
+         * @description Returns parsed provider-session details using a provider-neutral response schema. The browser supplies provider, kind, and identifier query parameters; the server resolves the matching session file under the configured provider sessions root and never accepts a raw filesystem path. Only Codex (`codex`) sessions are currently loadable for this endpoint.
          */
         get: operations["getProviderSessionDetails"];
         put?: never;
@@ -866,7 +866,7 @@ export interface components {
          */
         LoadableProviderSessionKind: "session_id";
         ProviderSessionSourceMetadata: {
-            /** @description Path to the loaded session file relative to the configured Codex sessions root. */
+            /** @description Path to the loaded session file relative to the configured provider sessions root. */
             relativePath: string;
             /**
              * Format: int64

@@ -1630,7 +1630,7 @@ type ProviderSessionSourceMetadata struct {
 	// ModifiedAt Filesystem modification time when available.
 	ModifiedAt *time.Time `json:"modifiedAt,omitempty"`
 
-	// RelativePath Path to the loaded session file relative to the configured Codex sessions root.
+	// RelativePath Path to the loaded session file relative to the configured provider sessions root.
 	RelativePath string `json:"relativePath"`
 
 	// SizeBytes Size of the loaded session file in bytes.
