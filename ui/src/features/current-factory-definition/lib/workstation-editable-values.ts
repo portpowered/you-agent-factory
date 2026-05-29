@@ -10,6 +10,10 @@ import {
   resolveEditableWorkstationBehaviorOptions,
   type EditableWorkstationBehavior,
 } from "./workstation-behavior";
+import {
+  resolveEditableWorkstationType,
+  type EditableWorkstationType,
+} from "./workstation-type";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
@@ -30,6 +34,7 @@ export interface EditableWorkstationValues {
   workerName: string;
   workerOptions: string[];
   workstationName: string;
+  workstationType: EditableWorkstationType;
 }
 
 export interface EditableWorkstationDraft {
@@ -71,6 +76,7 @@ export function resolveEditableWorkstationValues(
     workerName: workstation.worker,
     workerOptions: resolveWorkerOptions(factory),
     workstationName: workstation.name,
+    workstationType: resolveEditableWorkstationType(workstation),
   };
 }
 

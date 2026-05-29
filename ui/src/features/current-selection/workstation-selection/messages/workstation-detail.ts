@@ -193,6 +193,7 @@ const workstationDetailMessagesByLocale = {
     unknownActiveWorkLabel: "Unknown active work",
     unavailableValue: "Unavailable",
     unavailableRunnerValue: "Runner unavailable",
+    unavailableWorkstationTypeValue: "Workstation type unavailable",
     unknownWorkerTypeValue: "Unknown",
     unknownWorkLabel: "Unknown work",
     workDetailsUnavailable: (dispatchId) =>
@@ -200,6 +201,8 @@ const workstationDetailMessagesByLocale = {
     workIdLabel: "Work ID",
     workSelectedAction: "Work selected",
     workerTypeLabel: "Worker type",
+    workstationTypeLabel: "Workstation type",
+    workstationTypeLoadingValue: "Loading workstation type...",
   },
   ja: {
     activeRunsLabel: "実行中のラン",
@@ -376,6 +379,7 @@ const workstationDetailMessagesByLocale = {
     unknownActiveWorkLabel: "不明なアクティブ作業",
     unavailableValue: "利用不可",
     unavailableRunnerValue: "runner は利用できません",
+    unavailableWorkstationTypeValue: "ワークステーション種別は利用できません",
     unknownWorkerTypeValue: "不明",
     unknownWorkLabel: "不明な作業",
     workDetailsUnavailable: (dispatchId) =>
@@ -383,6 +387,8 @@ const workstationDetailMessagesByLocale = {
     workIdLabel: "ワーク ID",
     workSelectedAction: "ワークを選択済み",
     workerTypeLabel: "ワーカータイプ",
+    workstationTypeLabel: "ワークステーション種別",
+    workstationTypeLoadingValue: "ワークステーション種別を読み込み中...",
   },
   ko: {
     activeRunsLabel: "활성 실행",
@@ -556,6 +562,7 @@ const workstationDetailMessagesByLocale = {
     unknownActiveWorkLabel: "알 수 없는 활성 작업",
     unavailableValue: "사용할 수 없음",
     unavailableRunnerValue: "runner 를 사용할 수 없음",
+    unavailableWorkstationTypeValue: "워크스테이션 유형을 사용할 수 없음",
     unknownWorkerTypeValue: "알 수 없음",
     unknownWorkLabel: "알 수 없는 작업",
     workDetailsUnavailable: (dispatchId) =>
@@ -563,6 +570,8 @@ const workstationDetailMessagesByLocale = {
     workIdLabel: "작업 ID",
     workSelectedAction: "작업 선택됨",
     workerTypeLabel: "워커 유형",
+    workstationTypeLabel: "워크스테이션 유형",
+    workstationTypeLoadingValue: "워크스테이션 유형 불러오는 중...",
   },
   "zh-CN": {
     activeRunsLabel: "活动运行",
@@ -721,6 +730,7 @@ const workstationDetailMessagesByLocale = {
     unknownActiveWorkLabel: "未知活动工作",
     unavailableValue: "不可用",
     unavailableRunnerValue: "runner 不可用",
+    unavailableWorkstationTypeValue: "工作站类型不可用",
     unknownWorkerTypeValue: "未知",
     unknownWorkLabel: "未知工作",
     workDetailsUnavailable: (dispatchId) =>
@@ -728,6 +738,8 @@ const workstationDetailMessagesByLocale = {
     workIdLabel: "工作 ID",
     workSelectedAction: "工作已选中",
     workerTypeLabel: "工作器类型",
+    workstationTypeLabel: "工作站类型",
+    workstationTypeLoadingValue: "正在加载工作站类型...",
   },
 } satisfies LocalizedMessages<WorkstationDetailCatalogMessages>;
 

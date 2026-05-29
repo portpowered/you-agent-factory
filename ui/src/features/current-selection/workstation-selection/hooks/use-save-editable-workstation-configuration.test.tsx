@@ -319,6 +319,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         reviewer: "MODEL_WORKER",
       },
       workstationName: "Review",
+      workstationType: "MODEL_WORKSTATION",
     },
     isDirty: true,
     markChangesSaved: overrides?.markChangesSaved ?? vi.fn(),

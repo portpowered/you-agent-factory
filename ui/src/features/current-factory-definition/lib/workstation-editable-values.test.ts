@@ -55,7 +55,65 @@ describe("resolveEditableWorkstationValues", () => {
         reviewer: "MODEL_WORKER",
       },
       workstationName: "Review",
+      workstationType: "MODEL_WORKSTATION",
     });
+  });
+
+  it("defaults omitted workstation type to MODEL_WORKSTATION", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review the latest story changes before approval.",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode)?.workstationType,
+    ).toBe("MODEL_WORKSTATION");
+  });
+
+  it("preserves explicit workstation implementation types", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Move work downstream.",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          type: "LOGICAL_MOVE",
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode)?.workstationType,
+    ).toBe("LOGICAL_MOVE");
   });
 
   it("falls back from transition id lookup to workstation name lookup", () => {
@@ -116,6 +174,7 @@ describe("resolveEditableWorkstationValues", () => {
       workerOptions: [],
       workerTypeByName: {},
       workstationName: "Review",
+      workstationType: "MODEL_WORKSTATION",
     });
   });
 
@@ -277,6 +336,7 @@ describe("resolveEditableWorkstationValues", () => {
         processor: "MODEL_WORKER",
       },
       workstationName: "Review",
+      workstationType: "MODEL_WORKSTATION",
     });
   });
 

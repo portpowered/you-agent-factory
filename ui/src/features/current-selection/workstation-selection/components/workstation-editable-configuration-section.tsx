@@ -31,10 +31,11 @@ import type {
 } from "../lib/detail-card-types";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { EditableConfigurationRunnerField } from "./workstation-runner-field";
 import {
-  EditableConfigurationRunnerField,
   resolveWorkstationSummaryRunnerValue,
-} from "./workstation-runner-field";
+  resolveWorkstationSummaryTypeValue,
+} from "./workstation-summary-field-values";
 import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({
@@ -538,6 +539,13 @@ export function WorkstationSummary({
         <WorkstationSummaryItem
           label={messages.workerTypeLabel}
           value={selectedNode.worker_type || messages.unknownWorkerTypeValue}
+        />
+        <WorkstationSummaryItem
+          label={messages.workstationTypeLabel}
+          value={resolveWorkstationSummaryTypeValue(
+            editableConfigurationState,
+            messages,
+          )}
         />
         <WorkstationSummaryItem
           label={messages.selectedRunnerLabel}
