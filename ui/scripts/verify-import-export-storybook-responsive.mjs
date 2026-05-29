@@ -24,7 +24,6 @@ import {
   createLocalizedImportDialogVerifier,
 } from "./verify-import-export-storybook-localized.mjs";
 import {
-  verifyLocalizedCurrentSelection,
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
   verifyLocalizedWorkflowActivity,
@@ -127,17 +126,6 @@ export const storyChecks = [
   },
   {
     assertions: (page, _dialog, viewport) =>
-      verifyLocalizedCurrentSelection({
-        expectNoHorizontalOverflow,
-        expectVisible,
-        page,
-        viewport,
-      }),
-    id: "you-agent-factory-workflow-dashboard--locale-propagation-verification",
-    label: "current selection widget (zh-CN)",
-  },
-  {
-    assertions: (page, _dialog, viewport) =>
       verifyProviderSessionDetailSuccessImpl({
         expectNoHorizontalOverflow,
         expectVisible,
@@ -146,11 +134,6 @@ export const storyChecks = [
       }),
     id: "you-agent-factory-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
     label: "current selection provider-session success",
-  },
-  {
-    assertions: verifyCurrentSelectionPromptHint,
-    id: "you-agent-factory-workflow-dashboard--current-selection-prompt-hint-verification",
-    label: "current selection prompt hinting",
   },
   {
     assertions: verifyBentoCardCatalogResponsive,

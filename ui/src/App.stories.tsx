@@ -636,6 +636,13 @@ function LocalePropagationControls() {
 export default {
   title: "you-agent-factory/Workflow Dashboard",
   component: App,
+  decorators: [
+    (Story: () => JSX.Element) => (
+      <div style={{ height: "960px", minHeight: "760px" }}>
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export const SemanticGraphComposition = {

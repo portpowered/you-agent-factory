@@ -289,6 +289,19 @@ func findRuntimeLogRecord(t *testing.T, path, eventName string) map[string]any {
 	return nil
 }
 
+func requireRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {
+	t.Helper()
+
+	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*-"+runtimeInstanceID+"-*.log"))
+	if err != nil {
+		t.Fatalf("glob runtime log path: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("runtime log paths for %q under %s = %v, want exactly one", runtimeInstanceID, logDir, matches)
+	}
+	return matches[0]
+}
+
 func containsEnv(env []string, expected string) bool {
 	for _, entry := range env {
 		if entry == expected {

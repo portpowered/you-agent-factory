@@ -461,10 +461,7 @@ function EditableConfigurationSharedWorkerHint({
     { status: "ready" }
   >;
 }) {
-  const sharedWorkstationNames =
-    state.draft.workerName === state.initialValues.workerName
-      ? state.initialValues.sharedWorkerWorkstationNames
-      : [];
+  const sharedWorkstationNames = resolveSharedWorkerWorkstationNames(state);
   if (sharedWorkstationNames.length === 0) {
     return null;
   }
@@ -476,6 +473,20 @@ function EditableConfigurationSharedWorkerHint({
         formatList(sharedWorkstationNames),
       )}
     </p>
+  );
+}
+
+function resolveSharedWorkerWorkstationNames(
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >,
+): string[] {
+  return (
+    state.initialValues.sharedWorkerWorkstationNamesByWorkerName[
+      state.draft.workerName
+    ] ??
+    []
   );
 }
 

@@ -497,6 +497,50 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("uses the resolved authored workstation name for prompt help and validation", async () => {
+    const aliasedSelectedNode = {
+      ...selectedNode,
+      transition_id: "review-transition",
+      workstation_name: "Runtime Review Alias",
+    };
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult({
+        ...buildEditableFactoryDefinition(),
+        workstations: [
+          {
+            behavior: "STANDARD",
+            body: "Review the latest story changes before approval.",
+            id: "review-transition",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Canonical Review",
+            outputs: [{ state: "approved", workType: "story" }],
+            promptFile: "prompts/review.md",
+            runner: "gemini",
+            worker: "reviewer",
+          },
+        ],
+      }),
+    );
+
+    renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, aliasedSelectedNode),
+    );
+
+    await waitFor(() => {
+      expect(useCurrentWorkstationPromptTemplateContract).toHaveBeenLastCalledWith(
+        "Canonical Review",
+        true,
+      );
+      expect(
+        useCurrentWorkstationPromptTemplateValidation,
+      ).toHaveBeenLastCalledWith(
+        "Canonical Review",
+        "Review the latest story changes before approval.",
+        true,
+      );
+    });
+  });
+
   it("surfaces authoritative prompt diagnostics and blocks saving until the draft is fixed", async () => {
     vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
       data: {
@@ -569,6 +613,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       prompt: "Review the story.",
       runnerName: null,
       runnerOptions: ["codex"],
+      sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
       workerName: "reviewer",
       workerOptions: ["reviewer"],

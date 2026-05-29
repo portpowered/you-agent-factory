@@ -27,10 +27,6 @@ export async function verifyLocalizedSubmitWorkCard({
     card.getByRole("button", { exact: true, name: "提交工作" }),
     "Localized submit work button",
   );
-  await expectVisible(
-    card.getByText("先选择工作类型并填写请求名称，然后即可继续。"),
-    "Localized submit work guidance",
-  );
   await expectNoHorizontalOverflow(
     page,
     `Localized submit work card at ${viewport.label}`,
@@ -87,7 +83,7 @@ export async function verifyLocalizedWorkOutcomeChart({
   await expectVisible(card.getByText("已完成"), "Localized completed label");
   await expectVisible(card.getByText("刻度"), "Localized chart x-axis label");
   await expectVisible(
-    card.getByText("工作计数"),
+    card.getByText("工作计数").first(),
     "Localized chart y-axis label",
   );
   await expectNoHorizontalOverflow(

@@ -6,7 +6,10 @@ import {
   resourceCountTimelineEvents,
 } from "./components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import { AgentBentoLayout } from "./features/bento/public";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
+import { DashboardHeader } from "./features/header/public";
+import { WorkTotalsWidget } from "./features/work-totals/public";
 import {
   activeStoryTrace,
   expectCompactedTopDashboardSection,
@@ -25,6 +28,13 @@ import {
 export default {
   title: "you-agent-factory/Workflow Dashboard",
   component: App,
+  decorators: [
+    (Story: () => JSX.Element) => (
+      <div style={{ height: "960px", minHeight: "760px" }}>
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 const defaultFactorySessionSummary = {
@@ -118,7 +128,7 @@ export const HeaderActionButtonsVerification = {
       ],
     },
   },
-  render: () => <App />,
+  render: () => <HeaderActionButtonsVerificationStory />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     try {
@@ -179,6 +189,35 @@ export const HeaderActionButtonsVerification = {
     }
   },
 };
+
+function HeaderActionButtonsVerificationStory() {
+  return (
+    <>
+      <DashboardHeader />
+      <AgentBentoLayout
+        cards={[
+          {
+            children: (
+              <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />
+            ),
+            id: "work-totals-verification",
+            widgetType: "workTotals",
+          },
+        ]}
+        layout={[
+          {
+            h: 3,
+            id: "work-totals-verification",
+            w: 12,
+            widgetType: "workTotals",
+            x: 0,
+            y: 0,
+          },
+        ]}
+      />
+    </>
+  );
+}
 
 export const HeaderTimelineAlignmentVerification = {
   tags: ["test"],

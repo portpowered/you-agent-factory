@@ -64,6 +64,18 @@ func assertServiceBundledFactoryEntryWithoutInline(t *testing.T, bundledFile fac
 	}
 }
 
+func serviceBundledFilesByTarget(t *testing.T, factory factoryapi.Factory) map[string]factoryapi.BundledFile {
+	t.Helper()
+	if factory.SupportingFiles == nil || factory.SupportingFiles.BundledFiles == nil {
+		t.Fatalf("factory %q missing supportingFiles.bundledFiles", factory.Name)
+	}
+	byTarget := make(map[string]factoryapi.BundledFile, len(*factory.SupportingFiles.BundledFiles))
+	for _, bundledFile := range *factory.SupportingFiles.BundledFiles {
+		byTarget[bundledFile.TargetPath] = bundledFile
+	}
+	return byTarget
+}
+
 func writePortableServiceBundledFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -83,6 +95,18 @@ func assertPortableServiceBundledFile(t *testing.T, path, want string) {
 	}
 	if string(got) != want {
 		t.Fatalf("file %s = %q, want %q", path, string(got), want)
+	}
+}
+
+func assertPortableServiceBundledFileMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat(%s): %v", path, err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("file %s mode = %v, want %v", path, got, want)
 	}
 }
 

@@ -123,6 +123,34 @@ func buildPrimaryServiceLogger(cfg *FactoryServiceConfig) (string, *zap.Logger, 
 	return factoryRootDir, baseLogger, logSink, logSink.Logger(), nil
 }
 
+// RuntimeLogDiagnostics describes the active runtime log selected during
+// service construction.
+type RuntimeLogDiagnostics struct {
+	Path         string
+	RootDir      string
+	StartTimeUTC time.Time
+}
+
+// RuntimeLogDiagnostics returns the selected runtime log metadata for startup
+// diagnostics without exposing the sink writer.
+func (fs *FactoryService) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
+	if fs == nil || fs.logSink == nil {
+		return RuntimeLogDiagnostics{}
+	}
+	return RuntimeLogDiagnostics{
+		Path:         fs.logSink.Path(),
+		RootDir:      fs.logSink.RootDir(),
+		StartTimeUTC: fs.logSink.StartTimeUTC(),
+	}
+}
+
+func runtimeLogStartTimeString(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
 func loadFactoryConfigForService(
 	cfg *FactoryServiceConfig,
 	logger *zap.Logger,

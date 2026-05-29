@@ -116,6 +116,10 @@ function buildReadyEditableConfigurationState(overrides?: {
       prompt: "Review the latest story changes before approval.",
       runnerName: "gemini",
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      sharedWorkerWorkstationNamesByWorkerName: {
+        planner: ["Plan", "Code"],
+        reviewer: overrides?.sharedWorkerWorkstationNames ?? [],
+      },
       sharedWorkerWorkstationNames:
         overrides?.sharedWorkerWorkstationNames ?? [],
       workerName: "reviewer",
@@ -517,6 +521,35 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeTruthy();
     expect(screen.queryByLabelText("Model")).toBeNull();
     expect(screen.queryByLabelText("Template")).toBeNull();
+  });
+
+  it("keeps the shared-worker scope hint visible after reassigning to another shared worker", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "planner",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "Worker planner is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
+      ),
+    ).toBeTruthy();
   });
 
   it("localizes behavior options in zh-CN while keeping canonical option values", () => {

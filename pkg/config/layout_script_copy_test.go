@@ -348,18 +348,39 @@ func TestPortableBundledTargetPath_MaterializesSupportedPortablePaths(t *testing
 func TestWriteExpandedFactoryLayout_RejectsUnsafePortableBundledFileTargetsBeforeWriting(t *testing.T) {
 	tests := []struct {
 		name       string
+		fileType   string
 		targetPath string
 		want       string
 	}{
 		{
 			name:       "absolute target location",
+			fileType:   interfaces.BundledFileTypeScript,
 			targetPath: filepath.Join(t.TempDir(), "outside.ps1"),
-			want:       "must be relative to the expand target",
+			want:       "must be factory-relative, not absolute",
 		},
 		{
 			name:       "escaping target location",
+			fileType:   interfaces.BundledFileTypeScript,
 			targetPath: "../outside.ps1",
-			want:       "cannot escape the expand target",
+			want:       "cannot escape the factory root",
+		},
+		{
+			name:       "script outside script root",
+			fileType:   interfaces.BundledFileTypeScript,
+			targetPath: "factory/docs/setup-workspace.py",
+			want:       `must stay under "factory/scripts/" for SCRIPT bundled files`,
+		},
+		{
+			name:       "unsupported root helper",
+			fileType:   interfaces.BundledFileTypeRootHelper,
+			targetPath: "README.md",
+			want:       "must be one of the supported root helper files",
+		},
+		{
+			name:       "input nested past starter file",
+			fileType:   interfaces.BundledFileTypeInput,
+			targetPath: "factory/inputs/task/default/nested/starter.md",
+			want:       "must use factory/inputs/<work-type>/<channel>/<file>",
 		},
 	}
 
@@ -371,7 +392,7 @@ func TestWriteExpandedFactoryLayout_RejectsUnsafePortableBundledFileTargetsBefor
 				ResourceManifest: &interfaces.PortableResourceManifestConfig{
 					BundledFiles: []interfaces.BundledFileConfig{
 						portableBundledFixtureFile(interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n"),
-						portableBundledFixtureFile(interfaces.BundledFileTypeScript, tt.targetPath, "Write-Output 'unsafe'\n"),
+						portableBundledFixtureFile(tt.fileType, tt.targetPath, "Write-Output 'unsafe'\n"),
 					},
 				},
 			}

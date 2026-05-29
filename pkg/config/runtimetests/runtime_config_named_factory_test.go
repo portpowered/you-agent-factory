@@ -85,6 +85,8 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, "docs", "README.md"), "# Portable factory\n")
 	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, "scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, "inputs", "task", "default", "starter.md"), "starter work\n")
+	assertRuntimeFactoryFileMode(t, filepath.Join(factoryDir, "scripts", "execute-story.ps1"), 0o755)
 
 	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
 	if err != nil {
@@ -99,8 +101,8 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 		t.Fatalf("expected supportingFiles object, got %#v", payload["supportingFiles"])
 	}
 	bundledFiles, ok := resourceManifest["bundledFiles"].([]any)
-	if !ok || len(bundledFiles) != 3 {
-		t.Fatalf("expected three bundled files, got %#v", resourceManifest["bundledFiles"])
+	if !ok || len(bundledFiles) != 4 {
+		t.Fatalf("expected four bundled files, got %#v", resourceManifest["bundledFiles"])
 	}
 	assertPersistedBundledFileEntries(t, bundledFiles)
 
@@ -108,8 +110,8 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(persisted thin bundled-file layout): %v", err)
 	}
-	if loaded.FactoryConfig().ResourceManifest == nil || len(loaded.FactoryConfig().ResourceManifest.BundledFiles) != 3 {
-		t.Fatalf("loaded bundled files = %#v, want 3 supported bundled files", loaded.FactoryConfig().ResourceManifest)
+	if loaded.FactoryConfig().ResourceManifest == nil || len(loaded.FactoryConfig().ResourceManifest.BundledFiles) != 4 {
+		t.Fatalf("loaded bundled files = %#v, want 4 supported bundled files", loaded.FactoryConfig().ResourceManifest)
 	}
 }
 
@@ -473,7 +475,7 @@ func assertPersistedBundledFileContent(t *testing.T, targetPathValue any, conten
 		if got := content["encoding"]; got != "utf-8" {
 			t.Fatalf("expected persisted root helper encoding to stay canonical, got %#v", content)
 		}
-	case "factory/docs/README.md", "factory/scripts/execute-story.ps1":
+	case "factory/docs/README.md", "factory/scripts/execute-story.ps1", "factory/inputs/task/default/starter.md":
 		if _, ok := content["inline"]; ok {
 			t.Fatalf("expected persisted bundled file inline content to be omitted, got %#v", content)
 		}

@@ -24,6 +24,7 @@ export interface EditableWorkstationValues {
   prompt: string | null;
   runnerName: RunnerID | null;
   runnerOptions: RunnerID[];
+  sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
   sharedWorkerWorkstationNames: string[];
   workerTypeByName: Record<string, CanonicalWorker["type"] | undefined>;
   workerName: string;
@@ -59,6 +60,8 @@ export function resolveEditableWorkstationValues(
     prompt: workstation.body ?? null,
     runnerName: workstation.runner ?? null,
     runnerOptions: BUILT_IN_RUNNER_IDS,
+    sharedWorkerWorkstationNamesByWorkerName:
+      resolveSharedWorkerWorkstationNamesByWorkerName(factory, workstation),
     sharedWorkerWorkstationNames: resolveSharedWorkerWorkstationNames(
       factory,
       workstation,
@@ -187,6 +190,33 @@ function resolveSharedWorkerWorkstationNames(
     )
     .map((workstation) => workstation.name)
     .filter((name) => name.length > 0);
+}
+
+function resolveSharedWorkerWorkstationNamesByWorkerName(
+  factory: CanonicalFactoryDefinition,
+  selectedWorkstation: CanonicalWorkstation,
+): Record<string, string[]> {
+  const otherWorkstationNamesByWorkerName = new Map<string, string[]>();
+
+  for (const workstation of factory.workstations ?? []) {
+    if (
+      workstation.name === selectedWorkstation.name &&
+      workstation.id === selectedWorkstation.id
+    ) {
+      continue;
+    }
+
+    if (!workstation.worker || workstation.name.length === 0) {
+      continue;
+    }
+
+    const sharedWorkstations =
+      otherWorkstationNamesByWorkerName.get(workstation.worker) ?? [];
+    sharedWorkstations.push(workstation.name);
+    otherWorkstationNamesByWorkerName.set(workstation.worker, sharedWorkstations);
+  }
+
+  return Object.fromEntries(otherWorkstationNamesByWorkerName);
 }
 
 function resolveWorkerTypeByName(factory: CanonicalFactoryDefinition) {

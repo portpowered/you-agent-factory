@@ -101,6 +101,32 @@ func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType stri
 	return payload
 }
 
+func serviceNamedFactoryPayloadWithBundledInput(t *testing.T, project string) []byte {
+	t.Helper()
+
+	var payload map[string]any
+	if err := json.Unmarshal(serviceNamedFactoryPayload(t, project), &payload); err != nil {
+		t.Fatalf("unmarshal service factory payload: %v", err)
+	}
+	payload["supportingFiles"] = map[string]any{
+		"bundledFiles": []map[string]any{
+			{
+				"type":       "INPUT",
+				"targetPath": "factory/inputs/task/default/stale.md",
+				"content": map[string]any{
+					"encoding": string(factoryapi.Utf8),
+					"inline":   "stale starter\n",
+				},
+			},
+		},
+	}
+	updated, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal service factory payload with bundled input: %v", err)
+	}
+	return updated
+}
+
 func serviceNamedFactoryContract(t *testing.T, name string) factoryapi.Factory {
 	t.Helper()
 	return serviceNamedFactoryContractWithWorkType(t, name, "task")
@@ -158,6 +184,14 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"content": map[string]any{
 						"encoding": string(factoryapi.Utf8),
 						"inline":   servicePortableBundledScriptBody,
+					},
+				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/default/starter.md",
+					"content": map[string]any{
+						"encoding": string(factoryapi.Utf8),
+						"inline":   "starter work\n",
 					},
 				},
 			},
@@ -416,11 +450,12 @@ type runningSessionServiceOptions struct {
 }
 
 type runningSessionService struct {
-	rootDir     string
-	svc         *FactoryService
-	runErrCh    chan error
-	cancelRun   context.CancelFunc
-	factoryDirs map[string]string
+	rootDir       string
+	runtimeLogDir string
+	svc           *FactoryService
+	runErrCh      chan error
+	cancelRun     context.CancelFunc
+	factoryDirs   map[string]string
 }
 
 type sessionWorkExpectation struct {
@@ -474,11 +509,12 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
 
 	return &runningSessionService{
-		rootDir:     rootDir,
-		svc:         svc,
-		runErrCh:    runErrCh,
-		cancelRun:   cancelRun,
-		factoryDirs: factoryDirs,
+		rootDir:       rootDir,
+		runtimeLogDir: runtimeLogDir,
+		svc:           svc,
+		runErrCh:      runErrCh,
+		cancelRun:     cancelRun,
+		factoryDirs:   factoryDirs,
 	}
 }
 
@@ -585,19 +621,47 @@ func assertSessionRuntimeLogRecord(t *testing.T, session *liveFactorySession) {
 		t.Fatalf("read runtime log %s: %v", logPath, err)
 	}
 	records := parseRuntimeLogRecords(t, string(data))
+	foundSessionRecord := false
 	for _, record := range records {
 		if record["session_id"] != session.id {
-			continue
+			t.Fatalf("runtime log %s contained record for session %#v, want only %q in %#v", logPath, record["session_id"], session.id, record)
 		}
+		foundSessionRecord = true
 		if record["folder_path"] != runtimeBundle.folderPath {
 			t.Fatalf("session %s folder_path = %#v, want %q in %#v", session.id, record["folder_path"], runtimeBundle.folderPath, record)
+		}
+		if record["factory_dir"] != runtimeBundle.dir {
+			t.Fatalf("session %s factory_dir = %#v, want %q in %#v", session.id, record["factory_dir"], runtimeBundle.dir, record)
 		}
 		if record["runtime_instance_id"] == "" {
 			t.Fatalf("session %s runtime_instance_id missing in %#v", session.id, record)
 		}
-		return
 	}
-	t.Fatalf("runtime log %s did not contain any records for session %s:\n%s", logPath, session.id, string(data))
+	if !foundSessionRecord {
+		t.Fatalf("runtime log %s did not contain any records for session %s:\n%s", logPath, session.id, string(data))
+	}
+}
+
+func assertSessionRuntimeLogPathsAreDistinct(t *testing.T, runtimeLogRoot string, sessions ...*liveFactorySession) {
+	t.Helper()
+
+	seenPaths := make(map[string]string, len(sessions))
+	for _, session := range sessions {
+		if session == nil || session.handle == nil || session.handle.runtime == nil || session.handle.runtime.logSink == nil {
+			t.Fatal("expected live session runtime log sink")
+		}
+		path := session.handle.runtime.logSink.Path()
+		if path == "" {
+			t.Fatalf("session %s runtime log path is empty", session.id)
+		}
+		if session.handle.runtime.logSink.RootDir() != runtimeLogRoot {
+			t.Fatalf("session %s runtime log root = %q, want %q", session.id, session.handle.runtime.logSink.RootDir(), runtimeLogRoot)
+		}
+		if otherSessionID, ok := seenPaths[path]; ok {
+			t.Fatalf("sessions %s and %s shared runtime log path %q", otherSessionID, session.id, path)
+		}
+		seenPaths[path] = session.id
+	}
 }
 
 func assertFactoryWorkType(t *testing.T, workTypes *[]factoryapi.WorkType, want string, label string) {
@@ -1029,18 +1093,21 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 	if created.SupportingFiles == nil || created.SupportingFiles.BundledFiles == nil {
 		t.Fatalf("created factory supportingFiles = %#v, want bundled files", created.SupportingFiles)
 	}
-	if len(*created.SupportingFiles.BundledFiles) != 3 {
-		t.Fatalf("created factory bundled files = %#v, want 3 entries", created.SupportingFiles.BundledFiles)
+	if len(*created.SupportingFiles.BundledFiles) != 4 {
+		t.Fatalf("created factory bundled files = %#v, want 4 entries", created.SupportingFiles.BundledFiles)
 	}
 	bundledFiles := *created.SupportingFiles.BundledFiles
 	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
 	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.BundledFileTypeINPUT, "factory/inputs/task/default/starter.md")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[3], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1")
 
 	importedDir := filepath.Join(rootDir, "beta")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "docs", "README.md"), "# Portable factory\n")
+	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "inputs", "task", "default", "starter.md"), "starter work\n")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "scripts", "execute-story.ps1"), servicePortableBundledScriptBody)
+	assertPortableServiceBundledFileMode(t, filepath.Join(importedDir, "scripts", "execute-story.ps1"), 0o755)
 
 	factoryJSON, err := os.ReadFile(filepath.Join(importedDir, interfaces.FactoryConfigFile))
 	if err != nil {
@@ -1055,8 +1122,8 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 		t.Fatalf("expected supportingFiles object, got %#v", payload["supportingFiles"])
 	}
 	persistedBundledFiles, ok := supportingFiles["bundledFiles"].([]any)
-	if !ok || len(persistedBundledFiles) != 3 {
-		t.Fatalf("expected three bundled files, got %#v", supportingFiles["bundledFiles"])
+	if !ok || len(persistedBundledFiles) != 4 {
+		t.Fatalf("expected four bundled files, got %#v", supportingFiles["bundledFiles"])
 	}
 	for _, entry := range persistedBundledFiles {
 		bundledFile, ok := entry.(map[string]any)
@@ -1076,7 +1143,7 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 			if got := content["encoding"]; got != "utf-8" {
 				t.Fatalf("expected persisted root helper encoding to stay canonical, got %#v", content)
 			}
-		case "factory/docs/README.md", "factory/scripts/execute-story.ps1":
+		case "factory/docs/README.md", "factory/inputs/task/default/starter.md", "factory/scripts/execute-story.ps1":
 			if _, ok := content["inline"]; ok {
 				t.Fatalf("expected persisted bundled file inline content to be omitted, got %#v", content)
 			}
@@ -1671,6 +1738,70 @@ func TestFactoryService_GetCurrentFactory_CollectsSupportedPortableBundledFilesF
 	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
 	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
 	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+}
+
+func TestFactoryService_GetCurrentFactory_InlinesPortableFilesAndStarterInputs(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithBundledInput(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	if err := os.Remove(filepath.Join(alphaDir, "inputs", "task", "default", "stale.md")); err != nil {
+		t.Fatalf("Remove(stale starter): %v", err)
+	}
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "scripts", "execute-story.ps1"), servicePortableBundledScriptBody)
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "scripts", ".gitkeep"), "ignored\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "scripts", "draft.tmp"), "ignored\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "README.md"), "# Portable factory\n")
+	writePortableServiceBundledFile(t, filepath.Join(rootDir, "Makefile"), "test:\n\tgo test ./...\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "inputs", "task", "default", "starter.md"), "fresh starter\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "inputs", "task", "default", ".gitkeep"), "ignored\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "inputs", "task", "default", "draft.swp"), "ignored\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "inputs", "unknown", "default", "starter.md"), "ignored\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "inputs", "task", "default", "nested", "starter.md"), "ignored\n")
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	current, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory: %v", err)
+	}
+
+	got := serviceBundledFilesByTarget(t, current)
+	want := map[string]struct {
+		fileType factoryapi.BundledFileType
+		inline   string
+	}{
+		"Makefile":                               {fileType: factoryapi.BundledFileTypeROOTHELPER, inline: "test:\n\tgo test ./...\n"},
+		"factory/docs/README.md":                 {fileType: factoryapi.BundledFileTypeDOC, inline: "# Portable factory\n"},
+		"factory/inputs/task/default/starter.md": {fileType: factoryapi.BundledFileTypeINPUT, inline: "fresh starter\n"},
+		"factory/scripts/execute-story.ps1":      {fileType: factoryapi.BundledFileTypeSCRIPT, inline: servicePortableBundledScriptBody},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("bundled files = %#v, want targets %#v", got, want)
+	}
+	for targetPath, wantEntry := range want {
+		bundledFile, ok := got[targetPath]
+		if !ok {
+			t.Fatalf("missing bundled file %q in %#v", targetPath, got)
+		}
+		assertServiceBundledFactoryEntry(t, bundledFile, wantEntry.fileType, targetPath, wantEntry.inline)
+	}
+	if stale := got["factory/inputs/task/default/stale.md"]; stale.TargetPath != "" {
+		t.Fatalf("stale input bundled file survived readback: %#v", stale)
+	}
 }
 
 func TestFactoryService_GetCurrentFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {
