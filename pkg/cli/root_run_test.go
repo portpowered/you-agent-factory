@@ -318,9 +318,11 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 	got := stdout.String()
 	for _, want := range []string{
 		"# Docs",
+		"`authoring-factories` - Practical factory authoring workflow",
 		"`config` - Factory configuration",
 		"`workstation` - Workstation state",
 		"`workers` - Worker types",
+		"`you docs authoring-factories`",
 		"`you docs config`",
 		"`you docs workstation`",
 		"`you docs workers`",

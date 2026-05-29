@@ -12,23 +12,25 @@ import (
 type Topic string
 
 const (
-	TopicConfig      Topic = "config"
-	TopicWorkstation Topic = "workstation"
-	TopicWorkers     Topic = "workers"
-	TopicResources   Topic = "resources"
-	TopicModels      Topic = "models"
-	TopicBatchWork   Topic = "batch-work"
-	TopicTemplates   Topic = "templates"
+	TopicAuthoringFactories Topic = "authoring-factories"
+	TopicConfig             Topic = "config"
+	TopicWorkstation        Topic = "workstation"
+	TopicWorkers            Topic = "workers"
+	TopicResources          Topic = "resources"
+	TopicModels             Topic = "models"
+	TopicBatchWork          Topic = "batch-work"
+	TopicTemplates          Topic = "templates"
 )
 
 const (
-	referenceConfigPath      = "reference/config.md"
-	referenceWorkstationPath = "reference/workstation.md"
-	referenceWorkersPath     = "reference/workers.md"
-	referenceResourcesPath   = "reference/resources.md"
-	referenceModelsPath      = "reference/models.md"
-	referenceBatchWorkPath   = "reference/batch-work.md"
-	referenceTemplatesPath   = "reference/templates.md"
+	referenceAuthoringFactoriesPath = "reference/authoring-factories.md"
+	referenceConfigPath             = "reference/config.md"
+	referenceWorkstationPath        = "reference/workstation.md"
+	referenceWorkersPath            = "reference/workers.md"
+	referenceResourcesPath          = "reference/resources.md"
+	referenceModelsPath             = "reference/models.md"
+	referenceBatchWorkPath          = "reference/batch-work.md"
+	referenceTemplatesPath          = "reference/templates.md"
 )
 
 type topicDocument struct {
@@ -38,6 +40,7 @@ type topicDocument struct {
 }
 
 var topicDocuments = []topicDocument{
+	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath},
 	{topic: TopicConfig, description: "Factory configuration, work types, workers, resources, and local run options.", path: referenceConfigPath},
 	{topic: TopicWorkstation, description: "Workstation state, inputs, outputs, moves, and dispatch routing.", path: referenceWorkstationPath},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath},

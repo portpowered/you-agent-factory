@@ -22,6 +22,7 @@ type docsSmokeTopic struct {
 }
 
 var docsSmokeTopics = []docsSmokeTopic{
+	{name: "authoring-factories", heading: "# Authoring Factories", markers: []string{"factory.json", "workers/<name>/AGENTS.md", "workstations/<name>/AGENTS.md", "you run --dir ./factory --with-mock-workers", "--record ./docs/examples/sample-run.replay.json", "--replay ./docs/examples/sample-run.replay.json"}},
 	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "supportingFiles", "bundledFiles", "share-time starter-work snapshots", "docs/reference/config.md", "docs/reference/work.md", "docs/reference/authoring-factories.md", "--with-mock-workers", "--record", "--replay", "--no-record", "you-agent-factory run"}, absent: []string{"Agent Factory run"}},
 	{name: "workstation", heading: "# Workstation", markers: []string{"inputs", "outputs", "LOGICAL_MOVE", "docs/reference/workstations.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
 	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider", "docs/reference/workers.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
@@ -71,7 +72,7 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 	}
 
 	index := executeDocsSmokeCommand(t, workingDir, "docs")
-	for _, want := range []string{"# Docs", "`config` - Factory configuration", "`workstation` - Workstation state", "`you docs config`", "`you docs workstation`"} {
+	for _, want := range []string{"# Docs", "`authoring-factories` - Practical factory authoring workflow", "`config` - Factory configuration", "`workstation` - Workstation state", "`you docs authoring-factories`", "`you docs config`", "`you docs workstation`"} {
 		if !strings.Contains(index, want) {
 			t.Fatalf("docs index missing %q:\n%s", want, index)
 		}

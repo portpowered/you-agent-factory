@@ -11,6 +11,7 @@ complete customer-facing contract.
 
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
+| `authoring-factories` | Practical factory authoring workflow, runnable examples, mock workers, and replay | [Author factories](authoring-factories.md) |
 | `config` | Split layout and `factory.json` placement | [Factory JSON and work configuration](work.md) and [Author factories](authoring-factories.md) |
 | `workstation` | Workstation quick reference | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |

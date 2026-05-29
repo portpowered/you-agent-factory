@@ -12,6 +12,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
+		"authoring-factories",
 		"config",
 		"workstation",
 		"workers",
@@ -49,6 +50,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 	got := IndexMarkdown("you")
 	for _, want := range []string{
 		"# Docs",
+		"`authoring-factories` - Practical factory authoring workflow",
 		"`config` - Factory configuration",
 		"`workstation` - Workstation state",
 		"`workers` - Worker types",
@@ -56,6 +58,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`models` - Local and hosted model setup",
 		"`batch-work` - Batch work input files",
 		"`templates` - Prompt template variables",
+		"`you docs authoring-factories`",
 		"`you docs config`",
 		"`you docs workstation`",
 		"`you docs batch-work`",
@@ -94,6 +97,34 @@ func TestMarkdown_ReturnsRawPackagedMarkdownForEachSupportedTopic(t *testing.T) 
 	}
 }
 
+func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("authoring-factories")
+	if err != nil {
+		t.Fatalf("Markdown(authoring-factories) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Authoring Factories",
+		"you run --dir ./factory --with-mock-workers",
+		"you run --dir ./factory --record ./docs/examples/sample-run.replay.json",
+		"you run --dir ./factory --replay ./docs/examples/sample-run.replay.json",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(authoring-factories) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs authoring-factories`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(authoring-factories) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	t.Parallel()
 
@@ -101,7 +132,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: config, workstation, workers, resources, models, batch-work, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, workstation, workers, resources, models, batch-work, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

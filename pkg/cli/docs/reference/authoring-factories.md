@@ -1,0 +1,756 @@
+---
+author: Agent Factory Team
+last-modified: 2026-05-23
+doc-id: agent-factory/authoring-factories
+---
+
+# Authoring Factories
+
+Use this guide to create and run a current you-agent-factory workflow with the
+public `factory.json` contract. Keep topology in `factory.json`, worker runtime
+instructions in `workers/<name>/AGENTS.md`, and workstation prompts in
+`workstations/<name>/AGENTS.md`.
+
+Use this guide for workflow sequencing, runnable examples, and command order.
+Use [Factory JSON And Work Configuration](work.md) for the field-by-field
+`factory.json` reference, [Workstations](workstations.md) for workstation
+runtime fields, [Workers](workers.md) for worker backend fields, and
+[Batch Inputs](batch-inputs.md) for the watched-file and API request shape.
+
+## Recommended Layout
+
+```text
+factory/
+  factory.json
+  workers/
+    executor/AGENTS.md
+    reviewer/AGENTS.md
+  workstations/
+    execute-story/AGENTS.md
+    review-story/AGENTS.md
+  inputs/
+    story/
+      default/
+```
+
+`factory.json` owns the work graph: work types, states, workers, workstations,
+resources, and routing. The split `AGENTS.md` files own prompt-heavy runtime
+configuration that is easier to maintain outside JSON.
+
+## Minimal Workflow
+
+A minimal workflow needs one work type, one worker, and one workstation:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "processor" }
+  ],
+  "workstations": [
+    {
+      "name": "process-task",
+      "worker": "processor",
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": { "workType": "task", "state": "failed" }
+    }
+  ]
+}
+```
+
+At runtime:
+
+1. A submitted `task` work item starts in `task:init`.
+2. `process-task` is enabled when a token is present in that place.
+3. Accepted work routes to `task:complete`.
+4. Failed or timed-out work routes to `task:failed`.
+
+Use [Factory JSON And Work Configuration](work.md#how-the-pieces-fit) for the
+canonical routing contract, including continue and rejection routes.
+
+## Build Your First Workflow
+
+This walkthrough creates a two-stage execution and review loop with canonical
+camelCase config fields.
+
+### 1. Create `factory.json`
+
+```json
+{
+  "id": "sample-service",
+  "resources": [
+    { "name": "agent-slot", "capacity": 1 }
+  ],
+  "workTypes": [
+    {
+      "name": "story",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "in-review", "type": "PROCESSING" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "executor" },
+    { "name": "reviewer" }
+  ],
+  "workstations": [
+    {
+      "name": "execute-story",
+      "behavior": "REPEATER",
+      "worker": "executor",
+      "inputs": [{ "workType": "story", "state": "init" }],
+      "outputs": [{ "workType": "story", "state": "in-review" }],
+      "onContinue": { "workType": "story", "state": "init" },
+      "onFailure": { "workType": "story", "state": "failed" },
+      "resources": [{ "name": "agent-slot", "capacity": 1 }]
+    },
+    {
+      "name": "review-story",
+      "worker": "reviewer",
+      "inputs": [{ "workType": "story", "state": "in-review" }],
+      "outputs": [{ "workType": "story", "state": "complete" }],
+      "onRejection": { "workType": "story", "state": "init" },
+      "onFailure": { "workType": "story", "state": "failed" },
+      "resources": [{ "name": "agent-slot", "capacity": 1 }]
+    },
+    {
+      "name": "review-loop-breaker",
+      "type": "LOGICAL_MOVE",
+      "guards": [{ "type": "VISIT_COUNT", "workstation": "review-story", "maxVisits": 3 }],
+      "inputs": [{ "workType": "story", "state": "init" }],
+      "outputs": [{ "workType": "story", "state": "failed" }]
+    }
+  ]
+}
+```
+
+This topology gives you one execution pass, one review pass, and an explicit
+guarded loop breaker so a rejected story cannot cycle forever.
+
+### Optional portability manifest
+
+Add `supportingFiles` only when the workflow also needs declarative host-tool
+checks or bundled helper files that should travel with the factory contract.
+Use
+[Factory JSON And Work Configuration](work.md#portability-resource-manifest)
+for the manifest fields and validation rules.
+
+### 2. Create the split runtime definitions
+
+`workers/executor/AGENTS.md`:
+
+```yaml
+---
+type: MODEL_WORKER
+model: gpt-5-codex
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
+timeout: 1h
+skipPermissions: true
+---
+
+You are a software engineer. Implement the requested story and run focused
+verification before finishing.
+```
+
+`workers/reviewer/AGENTS.md`:
+
+```yaml
+---
+type: MODEL_WORKER
+model: gpt-5-codex
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
+timeout: 30m
+skipPermissions: true
+---
+
+You review the story implementation and return ACCEPTED only when the change is
+ready.
+```
+
+`workstations/execute-story/AGENTS.md`:
+
+```yaml
+---
+type: MODEL_WORKSTATION
+limits:
+  maxExecutionTime: 1h
+---
+
+Implement the story.
+
+Story payload:
+{{ (index .Inputs 0).Payload }}
+
+Return CONTINUE when the story made ordinary partial progress but needs another
+execution pass.
+Return COMPLETE only when the story is ready to advance into review.
+```
+
+`workstations/review-story/AGENTS.md`:
+
+```yaml
+---
+type: MODEL_WORKSTATION
+limits:
+  maxExecutionTime: 30m
+---
+
+Review the story implementation.
+
+Story payload:
+{{ (index .Inputs 0).Payload }}
+
+Return ACCEPTED when the story is ready.
+Return REJECTED with concrete feedback when another pass is needed.
+```
+
+### 3. Start the factory
+
+Use mock workers for the first routing check:
+
+```bash
+you run --dir ./factory --with-mock-workers
+```
+
+The command loads `factory.json`, resolves the split `AGENTS.md` files, starts
+continuous mode, and exposes the dashboard and API on the configured port.
+
+Normal live `you run` invocations record a replay-compatible artifact by
+default when you do not pass `--record` or `--replay`. The generated artifact
+root is:
+
+```text
+~/.you-agent-factory/recordings/YYYY-MM/YYYY-MM-DD/
+```
+
+The top-level session for a normal run writes a filename shaped like:
+
+```text
+factory-session-~default-HHMMSS-<unique-id>.json
+```
+
+Independent factory sessions opened later in the same service lifetime keep the
+same directory contract but replace `~default` with the owning session ID so
+their histories stay isolated in separate replay artifacts.
+
+Use these controls when you need to override the default behavior:
+
+- Pass `--no-record` to skip the default recording for one invocation.
+- Pass `--record <path>` to write the replay artifact to an explicit path you
+  own instead of the generated recordings directory.
+- Pass `--replay <path>` to replay an existing artifact instead of starting a
+  live run.
+
+For an explicit recording path, run:
+
+```bash
+you run --dir ./factory --record ./docs/examples/sample-run.replay.json
+```
+
+To replay that artifact later, run:
+
+```bash
+you run --dir ./factory --replay ./docs/examples/sample-run.replay.json
+```
+
+To run without writing the default recording, run:
+
+```bash
+you run --dir ./factory --no-record
+```
+
+Record mode starts a live run and writes the observed runtime history to a
+replay artifact. Replay mode reads an existing artifact and uses the recorded
+runtime history instead of dispatching live workers again. `--record` and
+`--replay` cannot be used together for the same invocation.
+
+The CLI reports the resolved generated path during shutdown with
+`Recording saved: ...` so the artifact is easy to find after a failure or an
+unexpected run. Replay artifacts are sensitive because they can contain
+prompts, payloads, stdout, stderr, and diagnostic metadata. The first version
+does not delete old artifacts automatically, so manage retention in your own
+home directory or CI workspace.
+
+Maintainers who need the internal event-log and fixture workflow can use
+[`docs/internal/development/record-replay.md`](../internal/development/record-replay.md);
+customer runs only need the CLI flags above.
+
+### 4. Submit work
+
+Create a startup or watched-file request:
+
+```json
+{
+  "request_id": "story-001",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "story-001",
+      "work_type_name": "story",
+      "payload": {
+        "title": "Add review checklist"
+      }
+    }
+  ]
+}
+```
+
+Run it at startup:
+
+```bash
+you run --dir ./factory --with-mock-workers --work ./docs/examples/startup-work.json
+```
+
+Or drop the file under `factory/inputs/story/default/` while the factory is
+already running.
+
+The reusable startup work file
+[`docs/examples/startup-work.json`](../examples/startup-work.json) uses the
+same `FACTORY_REQUEST_BATCH` request shape with one `story` work item in the
+`init` state and a concrete payload. The companion
+[`docs/examples/README.md`](../examples/README.md) shows how to combine that
+startup work, the mock-worker config, and replay commands with the checked-in
+[`examples/write-code-review`](../../examples/write-code-review/factory.json)
+factory.
+
+## Author A Model-Operation TTS Factory
+
+Use `MODEL_INVOKE` when the workstation should request a generic operation such
+as `TTS` and let worker capability plus typed resources decide whether the
+execution is local or cloud-backed.
+
+### Shared workstation contract
+
+This workstation stays the same for both local and cloud TTS:
+
+```json
+{
+  "name": "speak",
+  "type": "MODEL_INVOKE",
+  "operation": "TTS",
+  "worker": "tts-worker",
+  "operationBindings": [
+    {
+      "slot": "text",
+      "selector": {
+        "label": "utterance",
+        "type": "TEXT"
+      }
+    },
+    {
+      "slot": "voice",
+      "defaultContent": [
+        {
+          "type": "JSON",
+          "role": "voice",
+          "json": { "name": "alloy" }
+        }
+      ]
+    }
+  ],
+  "inputs": [{ "workType": "speech", "state": "init" }],
+  "outputs": [{ "workType": "speech", "state": "complete" }],
+  "onFailure": [{ "workType": "speech", "state": "failed" }]
+}
+```
+
+### Local OMNIVOICE example
+
+`factory.json`:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "speech",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "name": "omnivoice-cache",
+      "type": "MODEL",
+      "capacity": 1,
+      "model": "OMNIVOICE_Q4_K_M",
+      "backend": "LLAMACPP",
+      "loadPolicy": "ON_DEMAND"
+    }
+  ],
+  "workers": [{ "name": "tts-worker" }],
+  "workstations": [
+    {
+      "name": "speak",
+      "type": "MODEL_INVOKE",
+      "operation": "TTS",
+      "worker": "tts-worker",
+      "operationBindings": [
+        {
+          "slot": "text",
+          "selector": { "type": "TEXT", "label": "utterance" }
+        }
+      ],
+      "inputs": [{ "workType": "speech", "state": "init" }],
+      "outputs": [{ "workType": "speech", "state": "complete" }],
+      "onFailure": [{ "workType": "speech", "state": "failed" }]
+    }
+  ]
+}
+```
+
+`workers/tts-worker/AGENTS.md`:
+
+```yaml
+---
+type: MODEL_WORKER
+model: OMNIVOICE_Q4_K_M
+modelProvider: CODEX
+modelLocality: LOCAL
+resources:
+  - name: omnivoice-cache
+    capacity: 1
+operations:
+  - name: TTS
+    inputs:
+      - name: text
+        required: true
+        contentTypes:
+          - TEXT
+    outputs:
+      - name: audio
+        contentTypes:
+          - AUDIO
+---
+Synthesize speech from the resolved utterance.
+```
+
+### Cloud-backed TTS example
+
+Reuse the same workstation and change the resources plus worker:
+
+```json
+{
+  "resources": [
+    {
+      "name": "cloud-tts-quota",
+      "type": "PROVIDER_QUOTA",
+      "capacity": 8,
+      "provider": "CODEX",
+      "model": "gpt-4o-mini-tts"
+    },
+    {
+      "name": "cloud-tts-slot",
+      "type": "INVOCATION_SLOT",
+      "capacity": 2,
+      "provider": "CODEX",
+      "model": "gpt-4o-mini-tts"
+    }
+  ],
+  "workers": [{ "name": "tts-worker" }]
+}
+```
+
+```yaml
+---
+type: MODEL_WORKER
+model: gpt-4o-mini-tts
+modelProvider: CODEX
+modelLocality: CLOUD
+resources:
+  - name: cloud-tts-quota
+    capacity: 1
+  - name: cloud-tts-slot
+    capacity: 1
+operations:
+  - name: TTS
+    inputs:
+      - name: text
+        required: true
+        contentTypes:
+          - TEXT
+    outputs:
+      - name: audio
+        contentTypes:
+          - AUDIO
+---
+Synthesize speech through the cloud-backed provider.
+```
+
+Compatibility stays stable because the workstation still asks for one `TTS`
+operation with the same slot contract. Only the worker identity, locality, and
+resource metadata change.
+
+### Test And Inspect Without A Full Workflow
+
+Use the `/models` surface while authoring:
+
+```bash
+you models list
+you models inspect OMNIVOICE_Q4_K_M
+you models pull OMNIVOICE_Q4_K_M
+you models invoke OMNIVOICE_Q4_K_M --operation TTS --text "release notes" --output speech.wav
+you models invoke OMNIVOICE_Q4_K_M --operation TTS --text "release notes" --json
+```
+
+Use the `--output` form when you want the streamed audio body written directly
+to a file. Use `--json` when you want metadata plus canonical output content
+references.
+
+### Maintainer Validation
+
+For real local OMNIVOICE coverage, run `make long-tests`. Set
+`INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1`, ensure `omnivoice-llamacpp` is
+installed, and optionally set `INFINITE_YOU_OMNIVOICE_COMMAND` or
+`INFINITE_YOU_OMNIVOICE_CACHE_DIR` to reuse a custom backend or managed cache.
+
+## Related Contract Detail
+
+- [Factory JSON And Work Configuration](work.md) owns work types, states,
+  routing, resources, and portability fields.
+- [Workstations](workstations.md) owns workstation kinds, runtime fields,
+  route fields, and guards.
+- [Workers](workers.md) owns worker types, backend fields, and worker
+  `AGENTS.md` placement.
+- [Author AGENTS.md](authoring-agents-md.md) owns split file shape, prompt
+  placement, and authoring patterns.
+
+## Failure Routing And Provider Behavior
+
+For workflow design, add explicit failure, continue, and rejection destinations
+to the topology so every outcome lands somewhere intentional. Use
+[Factory JSON And Work Configuration](work.md#how-the-pieces-fit) for the
+canonical routing contract, [Workstations](workstations.md) for route fields
+and execution limits, and [Workers](workers.md) for worker backend behavior.
+
+## When To Use Pollers
+
+Use `POLLER` when the factory itself should own a long-lived ingress loop that
+continuously creates ordinary submitted work from an external system.
+
+Choose the workstation behavior this way:
+
+- Use `STANDARD` for a normal dispatch stage.
+- Use `REPEATER` when one work item should iterate until it is accepted or
+  fails.
+- Use `CRON` when service mode should create internal time-triggered work on a
+  schedule.
+- Use `POLLER` when service mode should keep an external integration alive,
+  restart it with bounded backoff, and stop it cleanly on shutdown or
+  replacement.
+
+Choose the poller worker type this way:
+
+- Use a `SCRIPT_WORKER` poller when you already have custom integration logic
+  in a script.
+- Use a `HOSTED_WORKER` poller when the repository already ships the provider
+  integration, such as the built-in `LINEAR` poller.
+
+Keep the exact contracts on the canonical owner pages:
+
+- [Workstations](workstations.md) owns `behavior: "POLLER"` and lifecycle
+  behavior.
+- [Workers](workers.md) owns hosted `LINEAR` worker fields and `auth.secretRef`.
+- [Batch Inputs](batch-inputs.md#poller-stdout-contract) owns the script
+  poller stdout submission contract.
+
+### Script Poller Example
+
+`factory.json`:
+
+```json
+{
+  "name": "github-intake",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "github-poller" }
+  ],
+  "workstations": [
+    {
+      "name": "github-intake",
+      "behavior": "POLLER",
+      "worker": "github-poller",
+      "outputs": [{ "workType": "task", "state": "init" }],
+      "onFailure": { "workType": "task", "state": "failed" }
+    }
+  ]
+}
+```
+
+`workers/github-poller/AGENTS.md`:
+
+```yaml
+---
+type: SCRIPT_WORKER
+command: bash
+args: ["scripts/poll-github.sh"]
+timeout: 2m
+---
+
+Poll GitHub and emit one canonical batch payload on stdout per run.
+```
+
+### Hosted Linear Poller Example
+
+`workers/linear-poller/AGENTS.md`:
+
+```yaml
+---
+type: HOSTED_WORKER
+provider: LINEAR
+auth:
+  secretRef: secrets/linear-api-key
+linear:
+  pollInterval: 2m
+  teams: ["ENG"]
+  states: ["unstarted", "started"]
+  mapping:
+    workType: task
+    state: init
+---
+
+Repository-owned Linear poller.
+```
+
+Bound workstation:
+
+```json
+{
+  "name": "linear-intake",
+  "behavior": "POLLER",
+  "worker": "linear-poller",
+  "outputs": [{ "workType": "task", "state": "init" }],
+  "onFailure": { "workType": "task", "state": "failed" }
+}
+```
+
+V1 non-goals for poller authoring:
+
+- Raw factory event emission from pollers.
+- OAuth-based hosted auth flows.
+- Advanced multi-instance poller coordination.
+
+## Test Workflows With Mock Workers
+
+Use mock workers when you want to verify routing, rejection loops, failure
+paths, and script side effects without making live provider calls.
+
+For the simplest validation run, omit the config path:
+
+```bash
+you run --dir ./factory --with-mock-workers
+```
+
+That is equivalent to this config:
+
+```json
+{
+  "mockWorkers": []
+}
+```
+
+To target specific dispatches, pass a config path:
+
+```bash
+you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json
+```
+
+The reusable example in
+[`docs/examples/mock-workers.json`](../examples/mock-workers.json) matches a
+review dispatch and returns a deterministic rejection:
+
+```json
+{
+  "mockWorkers": [
+    {
+      "id": "reviewer-rejects-first-pass",
+      "workerName": "reviewer",
+      "workstationName": "review-story",
+      "workInputs": [
+        {
+          "workType": "story",
+          "state": "in-review",
+          "inputName": "work"
+        }
+      ],
+      "runType": "reject",
+      "rejectConfig": {
+        "stdout": "needs changes",
+        "stderr": "missing acceptance criteria",
+        "exitCode": 42
+      }
+    }
+  ]
+}
+```
+
+Selection fields combine as filters:
+
+| Field | Matches |
+|-------|---------|
+| `workerName` | Worker identity from `workers[].name` |
+| `workstationName` | Workstation currently executing |
+| `workInputs` | Consumed token fields such as `workType`, `state`, `inputName`, `traceId`, or `payloadHash` |
+
+Use `workerName` for the worker declared in `workers[].name`,
+`workstationName` for the workstation currently executing, `workInputs` for
+the consumed work filters, `runType` for the outcome, and the matching
+run-type config such as `rejectConfig` or `scriptConfig` for outcome details.
+If no entry matches, mock-worker mode returns the default accepted result.
+
+The checked-in
+[`examples/write-code-review/factory.json`](../../examples/write-code-review/factory.json)
+factory is a concrete starting point for adapting this command to a
+review-loop workflow.
+
+## Authoring Checklist
+
+- Keep the public workflow contract in `factory.json`.
+- Use camelCase factory-config fields such as `workTypes`, `resources`,
+  `onFailure`, `onRejection`, and `maxVisits`.
+- Use `supportingFiles` only for portability-only concerns such as
+  validation-only PATH tools and explicitly bundled scripts or docs.
+- Keep prompt-heavy worker and workstation runtime fields in split `AGENTS.md`
+  files unless you intentionally need a single-file config.
+- Add a guarded `LOGICAL_MOVE` workstation for repeater or review loops.
+- Use [Batch Inputs](batch-inputs.md) for `FACTORY_REQUEST_BATCH`
+  request files.
+- Use [Workstations](workstations.md) for cron, prompt templates, timeouts, and
+  workstation runtime field details.
+- Use [Workers](workers.md) for worker backend field details.
+
+## Related
+
+- [Factory JSON And Work Configuration](work.md)
+- [Workstations](workstations.md)
+- [Workers](workers.md)
+- [Batch Inputs](batch-inputs.md)
+- [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
+- [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
+- [Templates](templates.md)
+- [README](../README.md)
