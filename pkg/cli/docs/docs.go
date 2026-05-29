@@ -32,38 +32,19 @@ const (
 )
 
 type topicDocument struct {
-	topic Topic
-	path  string
+	topic       Topic
+	description string
+	path        string
 }
 
 var topicDocuments = []topicDocument{
-	{topic: TopicConfig, path: referenceConfigPath},
-	{topic: TopicWorkstation, path: referenceWorkstationPath},
-	{topic: TopicWorkers, path: referenceWorkersPath},
-	{topic: TopicResources, path: referenceResourcesPath},
-	{topic: TopicModels, path: referenceModelsPath},
-	{topic: TopicBatchWork, path: referenceBatchWorkPath},
-	{topic: TopicTemplates, path: referenceTemplatesPath},
-}
-
-var topicPaths = map[string]string{
-	string(TopicConfig):      referenceConfigPath,
-	string(TopicWorkstation): referenceWorkstationPath,
-	string(TopicWorkers):     referenceWorkersPath,
-	string(TopicResources):   referenceResourcesPath,
-	string(TopicModels):      referenceModelsPath,
-	string(TopicBatchWork):   referenceBatchWorkPath,
-	string(TopicTemplates):   referenceTemplatesPath,
-}
-
-var supportedTopics = []string{
-	string(TopicConfig),
-	string(TopicWorkstation),
-	string(TopicWorkers),
-	string(TopicResources),
-	string(TopicModels),
-	string(TopicBatchWork),
-	string(TopicTemplates),
+	{topic: TopicConfig, description: "Factory configuration, work types, workers, resources, and local run options.", path: referenceConfigPath},
+	{topic: TopicWorkstation, description: "Workstation state, inputs, outputs, moves, and dispatch routing.", path: referenceWorkstationPath},
+	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath},
+	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath},
+	{topic: TopicModels, description: "Local and hosted model setup for workers and CLI model commands.", path: referenceModelsPath},
+	{topic: TopicBatchWork, description: "Batch work input files, request shape, dependencies, and validation.", path: referenceBatchWorkPath},
+	{topic: TopicTemplates, description: "Prompt template variables, context fields, and Go template behavior.", path: referenceTemplatesPath},
 }
 
 var (
@@ -71,16 +52,64 @@ var (
 	embeddedReferenceDocs embed.FS
 )
 
+// TopicSummary describes one canonical packaged docs topic for index output.
+type TopicSummary struct {
+	Name        string
+	Description string
+}
+
 // SupportedTopics returns the fixed docs topics exposed by the packaged CLI
 // docs surface in display order.
 func SupportedTopics() []string {
+	supportedTopics := make([]string, 0, len(topicDocuments))
+	for _, doc := range topicDocuments {
+		supportedTopics = append(supportedTopics, string(doc.topic))
+	}
 	return append([]string(nil), supportedTopics...)
+}
+
+// TopicSummaries returns canonical packaged docs topic metadata in display order.
+func TopicSummaries() []TopicSummary {
+	summaries := make([]TopicSummary, 0, len(topicDocuments))
+	for _, doc := range topicDocuments {
+		summaries = append(summaries, TopicSummary{
+			Name:        string(doc.topic),
+			Description: doc.description,
+		})
+	}
+	return summaries
+}
+
+// IndexMarkdown returns a terminal-friendly index of packaged docs topics.
+func IndexMarkdown(cliName string) string {
+	var builder strings.Builder
+	builder.WriteString("# Docs\n\n")
+	builder.WriteString("Packaged reference topics:\n\n")
+	for _, summary := range TopicSummaries() {
+		builder.WriteString("- `")
+		builder.WriteString(summary.Name)
+		builder.WriteString("` - ")
+		builder.WriteString(summary.Description)
+		builder.WriteString(" Run `")
+		builder.WriteString(cliName)
+		builder.WriteString(" docs ")
+		builder.WriteString(summary.Name)
+		builder.WriteString("`.\n")
+	}
+	return builder.String()
 }
 
 // Markdown returns the embedded markdown page for one supported topic.
 func Markdown(topic string) (string, error) {
-	path, ok := topicPaths[topic]
-	if !ok {
+	var path string
+	for _, doc := range topicDocuments {
+		if topic == string(doc.topic) {
+			path = doc.path
+			break
+		}
+	}
+	if path == "" {
+		supportedTopics := SupportedTopics()
 		return "", fmt.Errorf("unsupported docs topic %q (supported: %s)", topic, strings.Join(supportedTopics, ", "))
 	}
 

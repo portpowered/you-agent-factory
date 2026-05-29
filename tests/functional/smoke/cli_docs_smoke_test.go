@@ -70,10 +70,10 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 		t.Fatalf("temp working dir unexpectedly contains docs tree %q", missingDocsTree)
 	}
 
-	help := executeDocsSmokeCommand(t, workingDir, "docs")
-	for _, want := range []string{"Print packaged markdown reference topics", "Use one of the supported topic subcommands"} {
-		if !strings.Contains(help, want) {
-			t.Fatalf("docs help missing %q:\n%s", want, help)
+	index := executeDocsSmokeCommand(t, workingDir, "docs")
+	for _, want := range []string{"# Docs", "`config` - Factory configuration", "`workstation` - Workstation state", "`you docs config`", "`you docs workstation`"} {
+		if !strings.Contains(index, want) {
+			t.Fatalf("docs index missing %q:\n%s", want, index)
 		}
 	}
 

@@ -304,6 +304,64 @@ func TestRootCommand_HelpDocumentsDiagnosticsContract(t *testing.T) {
 	}
 }
 
+func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
+	var stdout bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"docs"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute docs: %v", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"# Docs",
+		"`config` - Factory configuration",
+		"`workstation` - Workstation state",
+		"`workers` - Worker types",
+		"`you docs config`",
+		"`you docs workstation`",
+		"`you docs workers`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("docs index missing %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{
+		"Usage:",
+		"Available Commands:",
+	} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("docs index should not fall back to Cobra help marker %q:\n%s", unwanted, got)
+		}
+	}
+}
+
+func TestDocsCommand_HelpStillUsesCobraHelp(t *testing.T) {
+	var stdout bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"docs", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute docs --help: %v", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Print packaged markdown reference topics",
+		"Usage:",
+		"Available Commands:",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("docs help missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestDocsCommand_VerboseLogsTopicResolutionWithoutChangingMarkdown(t *testing.T) {
 	wantMarkdown, err := docscli.Markdown("config")
 	if err != nil {

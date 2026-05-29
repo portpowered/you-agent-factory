@@ -26,6 +26,46 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 	}
 }
 
+func TestTopicSummaries_ReturnsTopicDescriptionsInSupportedOrder(t *testing.T) {
+	t.Parallel()
+
+	summaries := TopicSummaries()
+	if len(summaries) != len(SupportedTopics()) {
+		t.Fatalf("TopicSummaries() length = %d, want %d", len(summaries), len(SupportedTopics()))
+	}
+	for i, topic := range SupportedTopics() {
+		if summaries[i].Name != topic {
+			t.Fatalf("TopicSummaries()[%d].Name = %q, want %q", i, summaries[i].Name, topic)
+		}
+		if strings.TrimSpace(summaries[i].Description) == "" {
+			t.Fatalf("TopicSummaries()[%d].Description is empty", i)
+		}
+	}
+}
+
+func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
+	t.Parallel()
+
+	got := IndexMarkdown("you")
+	for _, want := range []string{
+		"# Docs",
+		"`config` - Factory configuration",
+		"`workstation` - Workstation state",
+		"`workers` - Worker types",
+		"`resources` - Resource capacity",
+		"`models` - Local and hosted model setup",
+		"`batch-work` - Batch work input files",
+		"`templates` - Prompt template variables",
+		"`you docs config`",
+		"`you docs workstation`",
+		"`you docs batch-work`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("IndexMarkdown() missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestMarkdown_ReturnsRawPackagedMarkdownForEachSupportedTopic(t *testing.T) {
 	t.Parallel()
 

@@ -289,7 +289,8 @@ func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"Use one of the supported topic subcommands to print the authored markdown page with no wrapper formatting.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
+			_, err := io.WriteString(cmd.OutOrStdout(), docscli.IndexMarkdown(cliBinaryName))
+			return err
 		},
 	}
 
