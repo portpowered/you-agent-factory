@@ -281,6 +281,23 @@ func TestBuildRuntimeLoggerMigratesLegacyDefaultLogDirectory(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeLoggerLeavesCanonicalFlatHistoricalLogsUntouched(t *testing.T) {
+	fixture := newRuntimeLogHomeFixture(t)
+	historicalContents := "historical flat runtime log\n"
+	historicalPath := fixture.writeCanonicalLog("historical.log", historicalContents)
+	before := time.Now().UTC()
+
+	sink := fixture.buildDefaultRuntimeLogger("runtime-flat-history")
+	defer sink.Close()
+	after := time.Now().UTC()
+
+	assertRuntimeLogPathFormat(t, sink.Path(), fixture.canonicalLogDir(), "runtime-flat-history", before, after)
+	assertFileContents(t, historicalPath, historicalContents)
+	if filepath.Dir(sink.Path()) == fixture.canonicalLogDir() {
+		t.Fatalf("active runtime log path %q should use a UTC subdirectory below canonical root %q", sink.Path(), fixture.canonicalLogDir())
+	}
+}
+
 func TestBuildRuntimeLoggerKeepsCanonicalDirWhenLegacyDirAlsoExists(t *testing.T) {
 	fixture := newRuntimeLogHomeFixture(t)
 	legacyLogPath := fixture.writeLegacyLog("legacy.log", "legacy runtime log\n")
@@ -297,6 +314,29 @@ func TestBuildRuntimeLoggerKeepsCanonicalDirWhenLegacyDirAlsoExists(t *testing.T
 	}
 	if _, err := os.Stat(canonicalExistingPath); err != nil {
 		t.Fatalf("expected canonical runtime log to remain untouched: %v", err)
+	}
+}
+
+func TestBuildRuntimeLoggerKeepsConfiguredRootFlatHistoricalLogsUntouched(t *testing.T) {
+	logDir := t.TempDir()
+	historicalPath := filepath.Join(logDir, "historical.log")
+	historicalContents := "configured root flat runtime log\n"
+	if err := os.WriteFile(historicalPath, []byte(historicalContents), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", historicalPath, err)
+	}
+	before := time.Now().UTC()
+
+	sink, err := BuildRuntimeLogger(zap.NewNop(), "runtime-configured-flat-history", logDir, RuntimeLogConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeLogger: %v", err)
+	}
+	defer sink.Close()
+	after := time.Now().UTC()
+
+	assertRuntimeLogPathFormat(t, sink.Path(), logDir, "runtime-configured-flat-history", before, after)
+	assertFileContents(t, historicalPath, historicalContents)
+	if filepath.Dir(sink.Path()) == logDir {
+		t.Fatalf("active runtime log path %q should use a UTC subdirectory below configured root %q", sink.Path(), logDir)
 	}
 }
 
@@ -402,5 +442,17 @@ func assertPathContainsRuntimeInstanceID(t *testing.T, path, runtimeInstanceID s
 
 	if !strings.Contains(filepath.Base(path), "-"+runtimeInstanceID+"-") {
 		t.Fatalf("runtime log path %q does not include runtime instance ID %q", path, runtimeInstanceID)
+	}
+}
+
+func assertFileContents(t *testing.T, path, want string) {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(data) != want {
+		t.Fatalf("file %s contents = %q, want %q", path, string(data), want)
 	}
 }
