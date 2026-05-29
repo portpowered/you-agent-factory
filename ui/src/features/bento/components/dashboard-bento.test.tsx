@@ -206,6 +206,9 @@ vi.mock("../../workflow-activity/public", () => ({
       {widgetInstanceID ? `:${widgetInstanceID}` : ""}
     </section>
   ),
+}));
+
+vi.mock("../../workflow-activity/hooks/current-activity-import-controller", () => ({
   useCurrentActivityImportController: () => ({
     activationState: { status: "idle" },
     activateImport: vi.fn(),

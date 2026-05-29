@@ -28,8 +28,8 @@ import {
 import { getWorkTotalsMessages } from "../../work-totals/messages/work-totals";
 import { WorkTotalsWidget } from "../../work-totals/public";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import type { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
 import {
-  type useCurrentActivityImportController,
   WorkflowActivityWidget,
 } from "../../workflow-activity/public";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/useDashboardLayout";

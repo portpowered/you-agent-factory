@@ -14,7 +14,7 @@ import { DashboardImportPreviewDialog } from "../../import/public";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useTraceDrilldown } from "../../trace-drilldown/public";
 import { useWorkOutcomeChart } from "../../work-outcome/public";
-import { useCurrentActivityImportController } from "../../workflow-activity/public";
+import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
 import {
   getRenderableDashboardLayout,
   useDashboardLayout,
