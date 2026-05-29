@@ -149,6 +149,7 @@ describe("WorkerDetailCard", () => {
   it("renders editable worker fields for model workers", () => {
     const onModelProviderChange = vi.fn();
     const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: false,
       draft: {
         argsText: "",
         body: "",
@@ -160,6 +161,7 @@ describe("WorkerDetailCard", () => {
         provider: null,
         type: "MODEL_WORKER",
       },
+      hasValidationErrors: false,
       initialValues: {
         args: [],
         body: null,
@@ -186,6 +188,7 @@ describe("WorkerDetailCard", () => {
       onTypeChange: vi.fn(),
       pendingFactoryDefinition: buildFactoryDocument(),
       status: "ready",
+      validationErrors: {},
     };
 
     mockFactoryDocumentQuery({
@@ -227,5 +230,139 @@ describe("WorkerDetailCard", () => {
     expect(screen.queryByText("Model provider")).toBeNull();
     expect(screen.queryByText("Model")).toBeNull();
     expect(screen.queryByText("Executor provider")).toBeNull();
+  });
+
+  it("warns when saving would affect multiple referencing workstations", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: true,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review", "Plan"],
+      },
+      isDirty: true,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("alert").textContent,
+    ).toContain("Saving reviewer updates every workstation");
+    expect(screen.getByRole("button", { name: "Save worker" })).toBeTruthy();
+  });
+
+  it("disables save and shows field errors while validation is unresolved", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: false,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "",
+        modelLocality: null,
+        modelProvider: null,
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: true,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: true,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {
+        model: "Enter a model before saving this worker.",
+        modelProvider: "Select a model provider before saving this worker.",
+      },
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByText("Resolve the highlighted fields before saving this worker."),
+    ).toBeTruthy();
+    expect(screen.getByText("Enter a model before saving this worker.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save worker" }).hasAttribute("disabled")).toBe(
+      true,
+    );
   });
 });

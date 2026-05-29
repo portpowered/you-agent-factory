@@ -15,3 +15,8 @@ export {
   findWorkerInFactoryDefinition,
   workstationNamesReferencingWorkerInFactoryDefinition,
 } from "../lib/worker-detail-values";
+export {
+  hasEditableWorkerValidationErrors,
+  validateEditableWorkerDraft,
+} from "../lib/worker-editable-validation";
+export type { EditableWorkerValidationErrors } from "../lib/worker-editable-validation";

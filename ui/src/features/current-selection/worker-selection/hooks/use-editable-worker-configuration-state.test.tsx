@@ -59,12 +59,40 @@ describe("useEditableWorkerConfigurationState", () => {
 
     expect(result.current).toMatchObject({
       status: "ready",
+      canSave: false,
       draft: {
         model: "gpt-5.5",
         modelProvider: "CURSOR",
         type: "MODEL_WORKER",
       },
+      hasValidationErrors: false,
       isDirty: false,
+      validationErrors: {},
+    });
+  });
+
+  it("blocks save when required model worker fields are cleared", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onModelProviderChange(null);
+      result.current.onModelChange("");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: false,
+      hasValidationErrors: true,
+      isDirty: true,
+      validationErrors: {
+        model: expect.any(String),
+        modelProvider: expect.any(String),
+      },
     });
   });
 
@@ -95,5 +123,7 @@ describe("useEditableWorkerConfigurationState", () => {
       },
     ]);
     expect(result.current.isDirty).toBe(true);
+    expect(result.current.canSave).toBe(true);
+    expect(result.current.hasValidationErrors).toBe(false);
   });
 });

@@ -12,7 +12,25 @@ export interface WorkerDetailMessages {
   editableConfigurationErrorPrefix: string;
   editableConfigurationExpandActionLabel: string;
   editableConfigurationHeading: string;
+  editableConfigurationArgsInvalid: string;
+  editableConfigurationBodyRequired: string;
+  editableConfigurationCommandRequired: string;
+  editableConfigurationContractInvalidPrefix: string;
+  editableConfigurationDirtyStatus: string;
+  editableConfigurationDraftNote: string;
   editableConfigurationLoading: string;
+  editableConfigurationModelProviderRequired: string;
+  editableConfigurationModelRequired: string;
+  editableConfigurationProviderRequired: string;
+  editableConfigurationSaveAction: string;
+  editableConfigurationSaveDisabledValidationDetail: string;
+  editableConfigurationScriptCommandOrBodyRequired: string;
+  editableConfigurationSharedImpactWarning: (
+    workerName: string,
+    workstationNames: string,
+  ) => string;
+  editableConfigurationSharedImpactWarningDetail: string;
+  editableConfigurationValidationStatus: string;
   executorProviderLabel: string;
   expandAction: string;
   modelLabel: string;

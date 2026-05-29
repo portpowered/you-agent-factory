@@ -9,6 +9,11 @@ import {
 } from "../../../current-factory-definition/lib/worker-editable-values";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
+import {
+  hasEditableWorkerValidationErrors,
+  mergeEditableWorkerContractValidationErrors,
+  validateEditableWorkerDraft,
+} from "../lib/worker-editable-validation";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 
 interface EditableWorkerSessionState {
@@ -123,15 +128,27 @@ function buildReadyEditableWorkerConfigurationState({
     workerName,
     sessionState.draft,
   );
+  const messages = getWorkerDetailMessages();
+  const validationErrors = mergeEditableWorkerContractValidationErrors(
+    validateEditableWorkerDraft(sessionState.draft, messages),
+    pendingFactoryDefinition,
+    workerName,
+    messages,
+  );
+  const hasValidationErrors = hasEditableWorkerValidationErrors(validationErrors);
+  const isDirty = !areEditableWorkerDraftsEqual(
+    sessionState.draft,
+    sessionState.sessionStartDraft,
+  );
 
   return {
     baseVersion: editableDefinition.version,
+    canSave:
+      isDirty && !hasValidationErrors && pendingFactoryDefinition != null,
     draft: sessionState.draft,
+    hasValidationErrors,
     initialValues: selectedEditableValues,
-    isDirty: !areEditableWorkerDraftsEqual(
-      sessionState.draft,
-      sessionState.sessionStartDraft,
-    ),
+    isDirty,
     onArgsTextChange: (value) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, argsText: value }));
     },
@@ -181,6 +198,7 @@ function buildReadyEditableWorkerConfigurationState({
     },
     pendingFactoryDefinition,
     status: "ready",
+    validationErrors,
   };
 }
 

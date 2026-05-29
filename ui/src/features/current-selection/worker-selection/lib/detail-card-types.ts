@@ -7,6 +7,7 @@ import type {
   EditableWorkerDraft,
   EditableWorkerValues,
 } from "../../../current-factory-definition/lib/worker-editable-values";
+import type { EditableWorkerValidationErrors } from "./worker-editable-validation";
 
 export interface WorkerDetailCardProps {
   editableConfigurationState?: EditableWorkerConfigurationState;
@@ -21,7 +22,9 @@ export type EditableWorkerConfigurationState =
   | { status: "empty"; message?: string }
   | {
       baseVersion?: CurrentFactoryVersion;
+      canSave: boolean;
       draft: EditableWorkerDraft;
+      hasValidationErrors: boolean;
       initialValues: EditableWorkerValues;
       isDirty: boolean;
       onArgsTextChange: (value: string) => void;
@@ -40,7 +43,10 @@ export type EditableWorkerConfigurationState =
       onTypeChange: (value: EditableWorkerDraft["type"]) => void;
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
       status: "ready";
+      validationErrors: EditableWorkerValidationErrors;
     };
+
+export type { EditableWorkerValidationErrors } from "./worker-editable-validation";
 
 export type WorkerDetailState =
   | { status: "loading" }
