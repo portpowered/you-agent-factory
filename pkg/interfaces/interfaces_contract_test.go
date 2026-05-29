@@ -707,6 +707,44 @@ func TestNewRunnerCapabilities_ClonesOptionalSupport(t *testing.T) {
 	}
 }
 
+func TestResolveOpenCodeAgent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		workstationAgent  string
+		workerAgent       string
+		wantOpenCodeAgent string
+	}{
+		{
+			name:              "WorkstationOverridesWorker",
+			workstationAgent:  " implementer ",
+			workerAgent:       "reviewer",
+			wantOpenCodeAgent: "implementer",
+		},
+		{
+			name:              "WorkerDefaultWhenWorkstationUnset",
+			workerAgent:       "reviewer",
+			wantOpenCodeAgent: "reviewer",
+		},
+		{
+			name: "EmptyWhenUnset",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ResolveOpenCodeAgent(tt.workstationAgent, tt.workerAgent)
+			if got != tt.wantOpenCodeAgent {
+				t.Fatalf("ResolveOpenCodeAgent(...) = %q, want %q", got, tt.wantOpenCodeAgent)
+			}
+		})
+	}
+}
+
 func TestResolveRunnerSelection(t *testing.T) {
 	t.Parallel()
 

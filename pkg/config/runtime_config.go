@@ -261,6 +261,7 @@ func hasNonEmptyWorkerRuntimeStrings(worker interfaces.WorkerConfig) bool {
 		worker.Command,
 		worker.Timeout,
 		worker.StopToken,
+		worker.OpenCodeAgent,
 		worker.Body,
 	} {
 		if strings.TrimSpace(value) != "" {
@@ -296,6 +297,7 @@ func workstationRuntimeDefinitionFromInline(workstation interfaces.FactoryWorkst
 func workstationHasRuntimeFields(workstation interfaces.FactoryWorkstationConfig) bool {
 	return strings.TrimSpace(workstation.Type) != "" ||
 		workstation.Runner != "" ||
+		workstation.OpenCodeAgent != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||
@@ -314,6 +316,7 @@ func workstationHasInlineRuntimeDefinitionFields(workstation interfaces.FactoryW
 	}
 	return strings.TrimSpace(workstation.Type) != "" ||
 		workstation.Runner != "" ||
+		workstation.OpenCodeAgent != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||
@@ -329,6 +332,7 @@ func workstationHasInlineRuntimeDefinitionFields(workstation interfaces.FactoryW
 func isTopologyOnlyLogicalMoveLoopBreaker(workstation interfaces.FactoryWorkstationConfig) bool {
 	return strings.TrimSpace(workstation.Type) == interfaces.WorkstationTypeLogical &&
 		workstation.Runner == "" &&
+		workstation.OpenCodeAgent == "" &&
 		workstation.PromptFile == "" &&
 		workstation.OutputSchema == "" &&
 		workstation.Timeout == "" &&
@@ -380,6 +384,9 @@ func applyWorkstationRuntimeIdentity(workstation *interfaces.FactoryWorkstationC
 	}
 	if runtimeDef.Runner != "" {
 		workstation.Runner = runtimeDef.Runner
+	}
+	if runtimeDef.OpenCodeAgent != "" {
+		workstation.OpenCodeAgent = runtimeDef.OpenCodeAgent
 	}
 }
 

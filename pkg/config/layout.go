@@ -454,6 +454,9 @@ func applyWorkerRuntimeExecution(worker *interfaces.WorkerConfig, runtimeDef int
 	if runtimeDef.SkipPermissions {
 		worker.SkipPermissions = true
 	}
+	if runtimeDef.OpenCodeAgent != "" {
+		worker.OpenCodeAgent = runtimeDef.OpenCodeAgent
+	}
 	if runtimeDef.Auth != nil {
 		worker.Auth = cloneHostedWorkerAuthConfig(runtimeDef.Auth)
 	}
@@ -690,6 +693,7 @@ func workerDefForExpansion(def interfaces.WorkerConfig) interfaces.WorkerConfig 
 		Timeout:          def.Timeout,
 		StopToken:        def.StopToken,
 		SkipPermissions:  def.SkipPermissions,
+		OpenCodeAgent:    def.OpenCodeAgent,
 		Auth:             cloneHostedWorkerAuthConfig(def.Auth),
 		Linear:           cloneHostedLinearWorkerConfig(def.Linear),
 		Body:             def.Body,

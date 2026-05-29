@@ -743,6 +743,15 @@ func IsBuiltInRunnerID(id string) bool {
 	return ok
 }
 
+// ResolveOpenCodeAgent returns the configured OpenCode agent profile for one
+// dispatch using workstation override precedence over the worker default.
+func ResolveOpenCodeAgent(workstationAgent, workerAgent string) string {
+	if agent := strings.TrimSpace(workstationAgent); agent != "" {
+		return agent
+	}
+	return strings.TrimSpace(workerAgent)
+}
+
 // ResolveRunnerSelection applies the v1 precedence rules for backend runtime
 // runner choice: workstation override, then factory override, then legacy
 // worker modelProvider compatibility, then the codex default.
