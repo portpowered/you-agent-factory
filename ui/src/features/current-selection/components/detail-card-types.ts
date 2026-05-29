@@ -206,6 +206,7 @@ export type EditableWorkstationConfigurationState =
       baseVersion: CurrentFactoryVersion;
       onBehaviorChange: (value: EditableWorkstationBehavior) => void;
       onPromptChange: (value: string) => void;
+      onResetToLatest: () => void;
       onRunnerChange: (value: RunnerID | null) => void;
       onWorkerChange: (value: string) => void;
       overwriteFieldNames: EditableWorkstationOverwriteField[];

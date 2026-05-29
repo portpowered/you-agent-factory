@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import type { EditableWorkstationOverwriteField } from "./detail-card-types";
 import { WorkstationDetailCard } from "./workstation-detail-card";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
@@ -84,6 +85,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         status: "ready";
       };
   sharedWorkerWorkstationNames?: string[];
+  overwriteFieldNames?: EditableWorkstationOverwriteField[];
   validationErrors?: {
     behavior?: string;
     prompt?: string;
@@ -138,9 +140,10 @@ function buildReadyEditableConfigurationState(overrides?: {
     },
     onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
+    onResetToLatest: vi.fn(),
     onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
-    overwriteFieldNames: [],
+    overwriteFieldNames: overrides?.overwriteFieldNames ?? [],
     pendingFactoryDefinition: null,
     promptDiagnostics: overrides?.promptDiagnostics ?? [],
     promptHelpState: overrides?.promptHelpState ?? {
@@ -419,6 +422,45 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(onWorkerChange).toHaveBeenCalledWith("planner");
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
+  });
+
+  it("marks server-changed fields and resets the draft to the latest values", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const onResetToLatest = vi.fn();
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...buildReadyEditableConfigurationState({
+            overwriteFieldNames: ["prompt", "worker"],
+            prompt: "Keep this local prompt draft.",
+          }),
+          isDirty: true,
+          onResetToLatest,
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(
+      screen.getAllByText(
+        "The running factory changed this field while you were editing. Reset to latest to discard the local draft value.",
+      ),
+    ).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset to latest" }));
+
+    expect(onResetToLatest).toHaveBeenCalledTimes(1);
   });
 
   it("identifies shared workers and keeps worker-owned fields out of the workstation form", () => {

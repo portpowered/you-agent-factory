@@ -12,6 +12,8 @@ export interface WorkstationDetailMessages {
   editableConfigurationDirtyStatus: string;
   editableConfigurationDraftNote: string;
   editableConfigurationModelSharedWorkerHint: string;
+  editableConfigurationResetAction: string;
+  editableConfigurationServerFieldChangedHint: string;
   editableConfigurationOverwriteWarning: (fields: string) => string;
   editableConfigurationOverwriteWarningDetail: string;
   editableConfigurationSaveAction: string;

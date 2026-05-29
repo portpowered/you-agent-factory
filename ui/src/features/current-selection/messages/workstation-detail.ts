@@ -34,6 +34,9 @@ const workstationDetailMessagesByLocale = {
       "Changes stay local to this edit session until you save the running factory.",
     editableConfigurationModelSharedWorkerHint:
       "Model edits are disabled here because this workstation shares its worker with other workstations.",
+    editableConfigurationResetAction: "Reset to latest",
+    editableConfigurationServerFieldChangedHint:
+      "The running factory changed this field while you were editing. Reset to latest to discard the local draft value.",
     editableConfigurationOverwriteWarning: (fields) =>
       `The running factory changed after you started editing. Saving now will overwrite newer server values for ${fields}.`,
     editableConfigurationOverwriteWarningDetail:
@@ -213,6 +216,9 @@ const workstationDetailMessagesByLocale = {
       "変更は、実行中ファクトリーを保存するまでこの編集セッション内だけに保持されます。",
     editableConfigurationModelSharedWorkerHint:
       "このワークステーションは他のワークステーションと同じワーカーを共有しているため、ここではモデルを編集できません。",
+    editableConfigurationResetAction: "最新へ戻す",
+    editableConfigurationServerFieldChangedHint:
+      "編集中に実行中ファクトリーのこの項目が更新されました。最新へ戻すと、この下書きのローカル値を破棄します。",
     editableConfigurationOverwriteWarning: (fields) =>
       `編集開始後に実行中ファクトリーが変更されました。今保存すると、${fields} の新しいサーバー値を上書きします。`,
     editableConfigurationOverwriteWarningDetail:
@@ -390,6 +396,9 @@ const workstationDetailMessagesByLocale = {
       "변경 사항은 실행 중인 팩토리를 저장할 때까지 이 편집 세션에만 로컬로 유지됩니다.",
     editableConfigurationModelSharedWorkerHint:
       "이 워크스테이션은 다른 워크스테이션과 같은 워커를 공유하므로 여기서는 모델을 편집할 수 없습니다.",
+    editableConfigurationResetAction: "최신값으로 재설정",
+    editableConfigurationServerFieldChangedHint:
+      "편집하는 동안 실행 중인 팩토리에서 이 필드가 변경되었습니다. 최신값으로 재설정하면 로컬 초안 값이 버려집니다.",
     editableConfigurationOverwriteWarning: (fields) =>
       `편집을 시작한 뒤 실행 중인 팩토리가 변경되었습니다. 지금 저장하면 ${fields}의 최신 서버 값을 덮어쓰게 됩니다.`,
     editableConfigurationOverwriteWarningDetail:
@@ -564,6 +573,9 @@ const workstationDetailMessagesByLocale = {
       "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
     editableConfigurationModelSharedWorkerHint:
       "此工作站与其他工作站共享同一个 worker，因此这里不能编辑模型。",
+    editableConfigurationResetAction: "重置为最新值",
+    editableConfigurationServerFieldChangedHint:
+      "你编辑期间，运行中的工厂已更新此字段。重置为最新值会丢弃当前本地草稿值。",
     editableConfigurationOverwriteWarning: (fields) =>
       `你开始编辑后，运行中的工厂已发生变化。现在保存将覆盖 ${fields} 的较新服务器值。`,
     editableConfigurationOverwriteWarningDetail:

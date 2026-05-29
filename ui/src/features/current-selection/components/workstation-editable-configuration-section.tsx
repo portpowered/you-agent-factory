@@ -1,6 +1,10 @@
 import { type ReactNode, useId, useState } from "react";
 
-import { Select } from "../../../components/ui";
+import {
+  DashboardActionButton,
+  DashboardActionRow,
+  Select,
+} from "../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -137,10 +141,17 @@ function EditableConfigurationReadyForm({
           }
           label={messages.workerFieldLabel}
           supportingContent={
-            <EditableConfigurationSharedWorkerHint
-              messages={messages}
-              state={state}
-            />
+            <>
+              <EditableConfigurationSharedWorkerHint
+                messages={messages}
+                state={state}
+              />
+              <EditableConfigurationServerChangedHint
+                fieldName="worker"
+                messages={messages}
+                state={state}
+              />
+            </>
           }
         />
         <EditableConfigurationField
@@ -153,11 +164,25 @@ function EditableConfigurationReadyForm({
             />
           }
           label={messages.kindLabel}
+          supportingContent={
+            <EditableConfigurationServerChangedHint
+              fieldName="behavior"
+              messages={messages}
+              state={state}
+            />
+          }
         />
         <EditableConfigurationField
           fieldId="editable-workstation-runner"
           input={<EditableConfigurationRunnerField messages={messages} state={state} />}
           label={messages.runnerFieldLabel}
+          supportingContent={
+            <EditableConfigurationServerChangedHint
+              fieldName="runner"
+              messages={messages}
+              state={state}
+            />
+          }
         />
       </div>
       <EditableConfigurationField
@@ -170,7 +195,27 @@ function EditableConfigurationReadyForm({
           />
         }
         label={messages.promptFieldLabel}
+        supportingContent={
+          <EditableConfigurationServerChangedHint
+            fieldName="prompt"
+            messages={messages}
+            state={state}
+          />
+        }
       />
+      {state.isDirty ? (
+        <DashboardActionRow
+          actions={
+            <DashboardActionButton
+              disabled={saveState?.status === "submitting"}
+              onClick={state.onResetToLatest}
+              type="button"
+            >
+              {messages.editableConfigurationResetAction}
+            </DashboardActionButton>
+          }
+        />
+      ) : null}
     </form>
   );
 }
@@ -382,6 +427,34 @@ function EditableConfigurationSharedWorkerHint({
         valueOrFallback(state.draft.workerName, messages.notConfiguredValue),
         formatList(sharedWorkstationNames),
       )}
+    </p>
+  );
+}
+
+function EditableConfigurationServerChangedHint({
+  fieldName,
+  messages,
+  state,
+}: {
+  fieldName: EditableWorkstationOverwriteField;
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  if (!state.overwriteFieldNames.includes(fieldName)) {
+    return null;
+  }
+
+  return (
+    <p
+      className={cn(
+        "m-0 text-af-warning-text",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
+    >
+      {messages.editableConfigurationServerFieldChangedHint}
     </p>
   );
 }

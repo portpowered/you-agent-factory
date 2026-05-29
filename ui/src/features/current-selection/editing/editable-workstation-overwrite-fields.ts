@@ -4,21 +4,34 @@ import type { EditableWorkstationOverwriteField } from "../components/detail-car
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
 export function resolveEditableWorkstationOverwriteFields(
+  sessionStartDraft: EditableWorkstationDraft,
   draft: EditableWorkstationDraft,
   latestDefinitionDraft: EditableWorkstationDraft,
 ): EditableWorkstationOverwriteField[] {
   const fields: EditableWorkstationOverwriteField[] = [];
 
-  if (draft.behavior !== latestDefinitionDraft.behavior) {
+  if (
+    sessionStartDraft.behavior !== latestDefinitionDraft.behavior &&
+    draft.behavior !== latestDefinitionDraft.behavior
+  ) {
     fields.push("behavior");
   }
-  if (draft.prompt !== latestDefinitionDraft.prompt) {
+  if (
+    sessionStartDraft.prompt !== latestDefinitionDraft.prompt &&
+    draft.prompt !== latestDefinitionDraft.prompt
+  ) {
     fields.push("prompt");
   }
-  if (draft.workerName !== latestDefinitionDraft.workerName) {
+  if (
+    sessionStartDraft.workerName !== latestDefinitionDraft.workerName &&
+    draft.workerName !== latestDefinitionDraft.workerName
+  ) {
     fields.push("worker");
   }
-  if (draft.runnerName !== latestDefinitionDraft.runnerName) {
+  if (
+    sessionStartDraft.runnerName !== latestDefinitionDraft.runnerName &&
+    draft.runnerName !== latestDefinitionDraft.runnerName
+  ) {
     fields.push("runner");
   }
 

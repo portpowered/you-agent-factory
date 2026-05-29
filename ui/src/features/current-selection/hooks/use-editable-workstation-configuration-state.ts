@@ -336,6 +336,7 @@ function buildReadyEditableWorkstationConfigurationState({
         currentState
           ? {
               ...currentState,
+              latestDefinitionDraft: currentState.draft,
               sessionStartDraft: currentState.draft,
             }
           : currentState,
@@ -350,6 +351,17 @@ function buildReadyEditableWorkstationConfigurationState({
                 ...currentState.draft,
                 prompt: value,
               },
+            }
+          : currentState,
+      );
+    },
+    onResetToLatest: () => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              draft: currentState.latestDefinitionDraft,
+              sessionStartDraft: currentState.latestDefinitionDraft,
             }
           : currentState,
       );
@@ -394,6 +406,7 @@ function buildReadyEditableWorkstationConfigurationState({
       );
     },
     overwriteFieldNames: resolveEditableWorkstationOverwriteFields(
+      sessionState.sessionStartDraft,
       sessionState.draft,
       sessionState.latestDefinitionDraft,
     ),

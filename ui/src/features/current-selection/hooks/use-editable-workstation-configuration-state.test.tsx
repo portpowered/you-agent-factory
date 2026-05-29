@@ -193,6 +193,107 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("keeps dirty drafts local while tracking newer server-backed field changes", async () => {
+    const { rerender, result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("Keep this local prompt draft.");
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          prompt: "Server refreshed prompt before local save.",
+          workerName: "planner",
+          workerOptions: [
+            { name: "planner", type: "MODEL_WORKER" },
+            { name: "reviewer", type: "MODEL_WORKER" },
+          ],
+        }),
+      ),
+    );
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        draft: {
+          prompt: "Keep this local prompt draft.",
+          workerName: "reviewer",
+        },
+        isDirty: true,
+        overwriteFieldNames: ["prompt", "worker"],
+        status: "ready",
+      });
+    });
+  });
+
+  it("resets dirty drafts to the latest server-backed values", async () => {
+    const { rerender, result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("Keep this local prompt draft.");
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          prompt: "Server refreshed prompt before local save.",
+          workerName: "planner",
+          workerOptions: [
+            { name: "planner", type: "MODEL_WORKER" },
+            { name: "reviewer", type: "MODEL_WORKER" },
+          ],
+        }),
+      ),
+    );
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        isDirty: true,
+        overwriteFieldNames: ["prompt", "worker"],
+        status: "ready",
+      });
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onResetToLatest();
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        prompt: "Server refreshed prompt before local save.",
+        workerName: "planner",
+      },
+      isDirty: false,
+      overwriteFieldNames: [],
+      status: "ready",
+    });
+  });
+
   it("resets the editable draft when the selected workstation changes", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(
