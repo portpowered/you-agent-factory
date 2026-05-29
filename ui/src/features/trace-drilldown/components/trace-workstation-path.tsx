@@ -12,10 +12,7 @@ import {
   ReactFlow,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type {
-  DashboardTraceDispatch,
-  DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
+import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
@@ -25,10 +22,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import {
-  formatTraceOutcome,
-  formatTypedWorkItemLabel,
-} from "../../../components/ui/formatters";
+import { formatTraceOutcome } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import {
   getCachedTraceGraphLayout,
@@ -37,6 +31,7 @@ import {
 } from "../lib/trace-elk-layout";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
+import { projectTraceDispatchesToFactoryGraph } from "../lib/trace-dispatch-factory-graph";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 const GRAPH_SHELL_CLASS =
@@ -288,217 +283,38 @@ function buildDispatchGraph(
   edges: Edge[];
   nodes: WorkstationPathNode[];
 } {
-  const dispatchGraph = dispatchDependencyGraph(dispatches, locale);
+  const projection = projectTraceDispatchesToFactoryGraph(dispatches, locale);
 
   return {
-    edges: dispatchGraph.edges,
-    nodes: dispatchGraph.nodes.map((node, index) => ({
-      data: {
-        label: node.label,
-        inputSummary: node.inputSummary,
-        locale,
-        outcome: node.outcome,
-        outputSummary: node.outputSummary,
-      },
-      id: node.id,
-      position: { x: index * (DISPATCH_NODE_WIDTH + 24), y: 0 },
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
-      type: "trace-workstation",
+    edges: projection.topology.edges.map((edge) => ({
+      id: edge.id,
+      source:
+        projection.dispatchIdByNodeId.get(edge.sourceId) ?? edge.sourceId,
+      target:
+        projection.dispatchIdByNodeId.get(edge.targetId) ?? edge.targetId,
     })),
-  };
-}
-
-function dispatchDependencyGraph(
-  dispatches: DashboardTraceDispatch[],
-  locale?: string,
-): {
-  edges: Edge[];
-  nodes: Array<{
-    id: string;
-    inputSummary: string;
-    label: string;
-    outcome?: string;
-    outputSummary: string;
-  }>;
-} {
-  const messages = getTraceDrilldownMessages(locale);
-  const nodes = dispatches.map((dispatch) => ({
-    id: dispatch.dispatch_id,
-    inputSummary: summarizeWorkItems(dispatch.input_items, locale),
-    label:
-      dispatch.workstation_name ||
-      dispatch.transition_id ||
-      messages.unknownWorkstationLabel,
-    outcome: dispatch.outcome,
-    outputSummary: summarizeWorkItems(dispatch.output_items, locale),
-  }));
-  const edgeKeys = new Set<string>();
-  const latestDispatchIDByChainingTraceID = new Map<string, string>();
-
-  for (
-    let currentIndex = 0;
-    currentIndex < dispatches.length;
-    currentIndex += 1
-  ) {
-    const currentDispatch = dispatches[currentIndex];
-    const predecessorDispatchIDs =
-      resolveExplicitPredecessorDispatchIDs(
-        currentDispatch,
-        latestDispatchIDByChainingTraceID,
-      ) ??
-      resolveWorkItemProducerDispatchIDs(dispatches, currentIndex) ??
-      resolveSequentialPredecessorDispatchIDs(dispatches, currentIndex) ??
-      [];
-
-    for (const producerDispatchID of predecessorDispatchIDs) {
-      if (producerDispatchID === currentDispatch.dispatch_id) {
-        continue;
-      }
-      edgeKeys.add(`${producerDispatchID}->${currentDispatch.dispatch_id}`);
-    }
-
-    for (const chainingTraceID of collectCurrentChainingTraceIDs(
-      currentDispatch,
-    )) {
-      latestDispatchIDByChainingTraceID.set(
-        chainingTraceID,
-        currentDispatch.dispatch_id,
-      );
-    }
-  }
-
-  const edges = [...edgeKeys].map((edgeKey) => {
-    const [source, target] = edgeKey.split("->");
-
-    return {
-      id: edgeKey,
-      source,
-      target,
-    };
-  });
-
-  return {
-    edges,
-    nodes,
-  };
-}
-
-function resolveExplicitPredecessorDispatchIDs(
-  dispatch: DashboardTraceDispatch,
-  latestDispatchIDByChainingTraceID: Map<string, string>,
-): string[] | null {
-  const predecessorDispatchIDs = collectPreviousChainingTraceIDs(dispatch)
-    .map((traceID) => latestDispatchIDByChainingTraceID.get(traceID))
-    .filter((dispatchID): dispatchID is string => Boolean(dispatchID));
-
-  return predecessorDispatchIDs.length > 0
-    ? uniqueNonEmptyStrings(predecessorDispatchIDs)
-    : null;
-}
-
-function resolveWorkItemProducerDispatchIDs(
-  dispatches: DashboardTraceDispatch[],
-  currentIndex: number,
-): string[] | null {
-  const currentDispatch = dispatches[currentIndex];
-  const producerDispatchIDs = new Set<string>();
-
-  for (const inputItem of currentDispatch.input_items ?? []) {
-    for (
-      let producerIndex = 0;
-      producerIndex < currentIndex;
-      producerIndex += 1
-    ) {
-      const producerDispatch = dispatches[producerIndex];
-      const matchingOutput = producerDispatch.output_items?.find(
-        (outputItem) => outputItem.work_id === inputItem.work_id,
-      );
-
-      if (!matchingOutput) {
-        continue;
+    nodes: projection.topology.nodes.map((node, index) => {
+      const overlay = projection.overlaysByNodeId.get(node.id);
+      if (!overlay) {
+        throw new Error(`Missing trace overlay for factory node ${node.id}.`);
       }
 
-      producerDispatchIDs.add(producerDispatch.dispatch_id);
-    }
-  }
-
-  return producerDispatchIDs.size > 0 ? [...producerDispatchIDs] : null;
-}
-
-function resolveSequentialPredecessorDispatchIDs(
-  dispatches: DashboardTraceDispatch[],
-  currentIndex: number,
-): string[] | null {
-  return currentIndex > 0 ? [dispatches[currentIndex - 1].dispatch_id] : null;
-}
-
-function collectCurrentChainingTraceIDs(
-  dispatch: DashboardTraceDispatch,
-): string[] {
-  const chainingTraceIDs = [
-    dispatch.current_chaining_trace_id,
-    ...(dispatch.output_items ?? []).map(
-      (item) => item.current_chaining_trace_id,
-    ),
-  ];
-
-  return uniqueNonEmptyStrings(chainingTraceIDs);
-}
-
-function collectPreviousChainingTraceIDs(
-  dispatch: DashboardTraceDispatch,
-): string[] {
-  return uniqueNonEmptyStrings([
-    ...(dispatch.previous_chaining_trace_ids ?? []),
-    ...(dispatch.input_items ?? []).flatMap(
-      (item) => item.previous_chaining_trace_ids ?? [],
-    ),
-  ]);
-}
-
-function uniqueNonEmptyStrings(values: Array<string | undefined>): string[] {
-  const seen = new Set<string>();
-
-  for (const value of values) {
-    const nextValue = value?.trim();
-    if (!nextValue) {
-      continue;
-    }
-    seen.add(nextValue);
-  }
-
-  return [...seen];
-}
-
-function summarizeWorkItems(
-  workItems: DashboardWorkItemRef[] | undefined,
-  locale?: string,
-): string {
-  if (!workItems || workItems.length === 0) {
-    return getTraceDrilldownMessages(locale).noBatchRelations;
-  }
-
-  const labels = dedupeWorkItems(workItems).map(formatTypedWorkItemLabel);
-  if (labels.length <= 2) {
-    return labels.join(", ");
-  }
-
-  return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
-}
-
-function dedupeWorkItems(
-  workItems: DashboardWorkItemRef[],
-): DashboardWorkItemRef[] {
-  const itemsByID = new Map<string, DashboardWorkItemRef>();
-
-  for (const workItem of workItems) {
-    if (workItem.work_id) {
-      itemsByID.set(workItem.work_id, workItem);
-    }
-  }
-
-  return [...itemsByID.values()];
+      return {
+        data: {
+          label: overlay.displayLabel,
+          inputSummary: overlay.inputSummary,
+          locale,
+          outcome: overlay.outcome,
+          outputSummary: overlay.outputSummary,
+        },
+        id: overlay.dispatchId,
+        position: { x: index * (DISPATCH_NODE_WIDTH + 24), y: 0 },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        type: "trace-workstation",
+      };
+    }),
+  };
 }
 
 function outcomeToneClassName(outcome?: string): string {
