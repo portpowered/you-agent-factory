@@ -66,7 +66,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "fix it",
 			})
@@ -157,7 +157,7 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 			}))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "fix it",
 			})
@@ -202,7 +202,7 @@ func TestScriptWrapProvider_Infer_CodexWindowsCorpusEntryRemainsDistinctFromAuth
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "fix it",
 			})
@@ -281,7 +281,7 @@ func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t 
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "fix it",
 			})
@@ -352,7 +352,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailureExtractsBoundedErrorLine(t *te
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "fix it",
 			})
@@ -448,7 +448,7 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "fix it",
 			})
@@ -480,7 +480,7 @@ func TestScriptWrapProvider_Infer_April11RecordingFailureShapesNormalize(t *test
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "replay April 11 failure shape",
 			})
@@ -506,7 +506,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailurePreservesSessionMetadata(t *te
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderCodex),
+		ModelProvider: string(interfaces.ModelProviderCodex),
 		Model:         "gpt-5-codex",
 		UserMessage:   "fix it",
 	})
@@ -574,7 +574,7 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				Model:         "claude-sonnet-4-5-20250514",
 				UserMessage:   "fix it",
 			})
@@ -678,7 +678,7 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "fix it",
 			})
@@ -729,7 +729,7 @@ func TestScriptWrapProvider_Infer_ProviderTimeoutTextNormalizesToRetryableTimeou
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "fix it",
 			})

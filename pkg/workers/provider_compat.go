@@ -15,16 +15,16 @@ type ScriptWrapProviderOption = workerprovider.ScriptWrapProviderOption
 type InferenceEventRecorder = workerprovider.InferenceEventRecorder
 type RecordingProvider = workerprovider.RecordingProvider
 type RecordingProviderOption = workerprovider.RecordingProviderOption
-type ModelProvider = workerprovider.ModelProvider
+type ModelProvider = interfaces.ModelProvider
 type MockWorkerCommandRunner = mockworker.MockWorkerCommandRunner
 
 const (
-	ModelProviderClaude   = workerprovider.ModelProviderClaude
-	ModelProviderCodex    = workerprovider.ModelProviderCodex
-	ModelProviderGemini   = workerprovider.ModelProviderGemini
-	ModelProviderKiro     = workerprovider.ModelProviderKiro
-	ModelProviderCursor   = workerprovider.ModelProviderCursor
-	ModelProviderOpenCode = workerprovider.ModelProviderOpenCode
+	ModelProviderClaude   = interfaces.ModelProviderClaude
+	ModelProviderCodex    = interfaces.ModelProviderCodex
+	ModelProviderGemini   = interfaces.ModelProviderGemini
+	ModelProviderKiro     = interfaces.ModelProviderKiro
+	ModelProviderCursor   = interfaces.ModelProviderCursor
+	ModelProviderOpenCode = interfaces.ModelProviderOpenCode
 
 	providerSessionKindSessionID       = "session_id"
 	providerSessionKindConversationID  = "conversation_id"

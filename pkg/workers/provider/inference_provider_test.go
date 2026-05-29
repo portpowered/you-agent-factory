@@ -143,9 +143,9 @@ func TestModelWorkerCommandRequest_MergesEnvironmentWithDeterministicPrecedence(
 	t.Setenv("GIT_SEQUENCE_EDITOR", "vim")
 	t.Setenv("AGENT_FACTORY_PROVIDER_ENV_PRECEDENCE", "process")
 
-	behavior := providerBehaviorFor(string(ModelProviderClaude), nil)
+	behavior := providerBehaviorFor(string(interfaces.ModelProviderClaude), nil)
 	req := behavior.BuildCommandRequest(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		UserMessage:   "fix it",
 		EnvVars: map[string]string{
 			"AGENT_FACTORY_PROVIDER_ENV_PRECEDENCE": "provider",
@@ -187,7 +187,7 @@ func TestScriptWrapProvider_Infer_CommandEnvironmentUsesAutomationDefaultsOverPr
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderCodex),
+		ModelProvider: string(interfaces.ModelProviderCodex),
 		Model:         "gpt-5-codex",
 		UserMessage:   "fix it",
 		EnvVars: map[string]string{
@@ -212,7 +212,7 @@ func TestScriptWrapProvider_Infer_CommandEnvironmentIncludesAutomationDefaults(t
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderCodex),
+		ModelProvider: string(interfaces.ModelProviderCodex),
 		Model:         "gpt-5-codex",
 		UserMessage:   "fix it",
 	})
@@ -228,7 +228,7 @@ func TestScriptWrapProvider_Infer_CommandCanObserveAutomationDefaultsInEnvironme
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		UserMessage:   "print environment",
 	})
 	if err != nil {
@@ -309,7 +309,7 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 	)
 
 	req := interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		Model:         "claude-sonnet-4-5-20250514",
 		SessionID:     "claude-session-123",
 		SystemPrompt:  "system prompt",
@@ -329,8 +329,8 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 	if resp.ProviderSession == nil {
 		t.Fatal("expected provider session metadata for claude response")
 	}
-	if resp.ProviderSession.Provider != string(ModelProviderClaude) {
-		t.Fatalf("provider session provider = %q, want %q", resp.ProviderSession.Provider, ModelProviderClaude)
+	if resp.ProviderSession.Provider != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("provider session provider = %q, want %q", resp.ProviderSession.Provider, interfaces.ModelProviderClaude)
 	}
 	if resp.ProviderSession.Kind != providerSessionKindSessionID {
 		t.Fatalf("provider session kind = %q, want %q", resp.ProviderSession.Kind, providerSessionKindSessionID)
@@ -370,7 +370,7 @@ func TestScriptWrapProvider_Infer_PropagatesExecutionMetadataToProviderCommand(t
 		ReplayKey:           "transition-1/trace-1/work-1/work-2",
 	}
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		Model:         "claude-sonnet-4-5-20250514",
 		UserMessage:   "fix it",
 		Dispatch:      interfaces.WorkDispatch{Execution: want},
@@ -389,7 +389,7 @@ func TestScriptWrapProvider_Infer_ClaudeWithoutSessionLeavesMetadataNil(t *testi
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		Model:         "claude-sonnet-4-5-20250514",
 		UserMessage:   "fix it",
 	})
@@ -411,7 +411,7 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailurePreservesConfiguredSessionMet
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		Model:         "claude-sonnet-4-5-20250514",
 		SessionID:     "claude-session-123",
 		UserMessage:   "fix it",
@@ -427,8 +427,8 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailurePreservesConfiguredSessionMet
 	if providerErr.ProviderSession == nil {
 		t.Fatal("expected provider session metadata on failure")
 	}
-	if providerErr.ProviderSession.Provider != string(ModelProviderClaude) {
-		t.Fatalf("provider session provider = %q, want %q", providerErr.ProviderSession.Provider, ModelProviderClaude)
+	if providerErr.ProviderSession.Provider != string(interfaces.ModelProviderClaude) {
+		t.Fatalf("provider session provider = %q, want %q", providerErr.ProviderSession.Provider, interfaces.ModelProviderClaude)
 	}
 	if providerErr.ProviderSession.ID != "claude-session-123" {
 		t.Fatalf("provider session id = %q, want %q", providerErr.ProviderSession.ID, "claude-session-123")
@@ -449,7 +449,7 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 	)
 
 	req := interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(ModelProviderCodex),
+		ModelProvider:    string(interfaces.ModelProviderCodex),
 		Model:            "gpt-5-codex",
 		WorkingDirectory: "C:\\repo",
 		UserMessage:      "line 1\nline 2",
@@ -467,8 +467,8 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 	if resp.ProviderSession == nil {
 		t.Fatal("expected provider session metadata for codex response")
 	}
-	if resp.ProviderSession.Provider != string(ModelProviderCodex) {
-		t.Fatalf("provider session provider = %q, want %q", resp.ProviderSession.Provider, ModelProviderCodex)
+	if resp.ProviderSession.Provider != string(interfaces.ModelProviderCodex) {
+		t.Fatalf("provider session provider = %q, want %q", resp.ProviderSession.Provider, interfaces.ModelProviderCodex)
 	}
 	if resp.ProviderSession.Kind != providerSessionKindSessionID {
 		t.Fatalf("provider session kind = %q, want %q", resp.ProviderSession.Kind, providerSessionKindSessionID)
@@ -512,7 +512,7 @@ func TestScriptWrapProvider_Infer_CodexImageContentEmitsOrderedImageArgs(t *test
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(ModelProviderCodex),
+		ModelProvider:    string(interfaces.ModelProviderCodex),
 		Model:            "gpt-5-codex",
 		UserMessage:      "inspect the images",
 		WorkingDirectory: workspace,
@@ -553,7 +553,7 @@ func TestScriptWrapProvider_Infer_CodexTextOnlyContentDoesNotEmitImageArgs(t *te
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderCodex),
+		ModelProvider: string(interfaces.ModelProviderCodex),
 		Model:         "gpt-5-codex",
 		UserMessage:   "text only",
 		InputTokens: InputTokens(interfaces.Token{
@@ -578,7 +578,7 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(ModelProviderCodex),
+		ModelProvider:    string(interfaces.ModelProviderCodex),
 		Model:            "gpt-5-codex",
 		UserMessage:      "inspect",
 		WorkingDirectory: t.TempDir(),
@@ -615,7 +615,7 @@ func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testi
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		Model:         "claude-sonnet",
 		UserMessage:   "inspect",
 		InputTokens: InputTokens(interfaces.Token{
@@ -691,7 +691,7 @@ func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 		{
 			name: "Gemini",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderGemini),
+				ModelProvider: string(interfaces.ModelProviderGemini),
 				Model:         "gemini-2.5-flash",
 				UserMessage:   "run the tests",
 				EnvVars: map[string]string{
@@ -704,7 +704,7 @@ func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 		{
 			name: "Kiro",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderKiro),
+				ModelProvider: string(interfaces.ModelProviderKiro),
 				SystemPrompt:  "You are a careful reviewer.",
 				SessionID:     "kiro-session-123",
 				UserMessage:   "run the tests",
@@ -724,7 +724,7 @@ func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 		{
 			name: "Cursor",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCursor),
+				ModelProvider: string(interfaces.ModelProviderCursor),
 				Model:         "gpt-5",
 				SessionID:     "cursor-session-123",
 				UserMessage:   "run the tests",
@@ -738,7 +738,7 @@ func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 		{
 			name: "OpenCode",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider:    string(ModelProviderOpenCode),
+				ModelProvider:    string(interfaces.ModelProviderOpenCode),
 				Model:            "openai/gpt-5",
 				SessionID:        "opencode-session-123",
 				WorkingDirectory: "/tmp/project",
@@ -764,7 +764,7 @@ func TestScriptWrapProvider_Infer_AttachesSharedCommandDiagnosticsToResponse(t *
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(ModelProviderCodex),
+		ModelProvider:    string(interfaces.ModelProviderCodex),
 		Model:            "gpt-5-codex",
 		WorkingDirectory: "C:\\repo",
 		UserMessage:      "diagnose this",
@@ -779,7 +779,7 @@ func TestScriptWrapProvider_Infer_AttachesSharedCommandDiagnosticsToResponse(t *
 		t.Fatal("expected shared command diagnostics on provider response")
 	}
 	diag := resp.Diagnostics.Command
-	if diag.Command != string(ModelProviderCodex) {
+	if diag.Command != string(interfaces.ModelProviderCodex) {
 		t.Fatalf("diagnostic command = %q, want codex", diag.Command)
 	}
 	// "--cd", "C:\\repo",
@@ -827,7 +827,7 @@ func TestScriptWrapProvider_Infer_ConsumesCanonicalWorkDispatchInputTokens(t *te
 		},
 		WorkerType:       "worker-a",
 		WorkstationType:  "review",
-		ModelProvider:    string(ModelProviderCodex),
+		ModelProvider:    string(interfaces.ModelProviderCodex),
 		Model:            "gpt-5-codex",
 		UserMessage:      "fix it",
 		InputTokens:      InputTokens(inputToken),
@@ -857,7 +857,7 @@ func TestScriptWrapProvider_Infer_CommandDiagnosticsRedactSensitiveEnvWithoutCha
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		Model:         "claude-sonnet-4",
 		UserMessage:   "diagnose provider env",
 		EnvVars: map[string]string{
@@ -902,13 +902,13 @@ func TestScriptWrapProvider_Infer_CommandDiagnosticsRedactSensitiveEnvWithoutCha
 	}
 
 	fullDiagnostics := withInferenceResponseDiagnostics(workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(ModelProviderClaude),
+		ModelProvider:    string(interfaces.ModelProviderClaude),
 		Model:            "claude-sonnet-4",
 		WorkerType:       interfaces.WorkerTypeModel,
 		WorkstationType:  "review",
 		WorkingDirectory: "C:\\repo",
 	}), resp, 2)
-	if fullDiagnostics.Provider.Provider != string(ModelProviderClaude) {
+	if fullDiagnostics.Provider.Provider != string(interfaces.ModelProviderClaude) {
 		t.Fatalf("provider diagnostic provider = %q, want claude", fullDiagnostics.Provider.Provider)
 	}
 	if fullDiagnostics.Provider.Model != "claude-sonnet-4" {
@@ -929,7 +929,7 @@ func TestScriptWrapProvider_Infer_CodexWithoutSessionLeavesMetadataNil(t *testin
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderCodex),
+		ModelProvider: string(interfaces.ModelProviderCodex),
 		Model:         "gpt-5-codex",
 		UserMessage:   "fix it",
 	})
@@ -952,7 +952,7 @@ func TestScriptWrapProvider_Infer_ExitFailureIncludesExitCodeAndProcessOutput(t 
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		UserMessage:   "hello",
 	})
 	if err == nil {
@@ -966,7 +966,7 @@ func TestScriptWrapProvider_Infer_ExitFailureIncludesExitCodeAndProcessOutput(t 
 		t.Fatal("expected shared command diagnostics on provider error")
 	}
 	diag := providerErr.Diagnostics.Command
-	if diag.Command != string(ModelProviderClaude) {
+	if diag.Command != string(interfaces.ModelProviderClaude) {
 		t.Fatalf("diagnostic command = %q, want claude", diag.Command)
 	}
 	if diag.Stdout != "partial output" {

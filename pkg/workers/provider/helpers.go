@@ -19,17 +19,6 @@ type CommandResult = workerprocess.CommandResult
 type ExecCommandRunner = workerprocess.ExecCommandRunner
 type LoggingCommandRunner = workerprocess.LoggingCommandRunner
 
-type ModelProvider string
-
-const (
-	ModelProviderClaude   ModelProvider = "claude"
-	ModelProviderCodex    ModelProvider = "codex"
-	ModelProviderGemini   ModelProvider = "gemini"
-	ModelProviderKiro     ModelProvider = "kiro-cli"
-	ModelProviderCursor   ModelProvider = "agent"
-	ModelProviderOpenCode ModelProvider = "opencode"
-)
-
 const (
 	omitZeroWorkerEventExitCode    = false
 	includeZeroWorkerEventExitCode = true

@@ -13,7 +13,7 @@ import (
 // worker unit tests and functional smoke coverage.
 type ProviderErrorCorpusEntry struct {
 	Name                  string                         `json:"name"`
-	Provider              ModelProvider                  `json:"provider"`
+	Provider              interfaces.ModelProvider       `json:"provider"`
 	RawProviderFamily     string                         `json:"raw_provider_family"`
 	Category              string                         `json:"category"`
 	UpstreamSourceCase    string                         `json:"upstream_source_case"`
