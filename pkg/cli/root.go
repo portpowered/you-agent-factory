@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
@@ -550,7 +550,7 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error
 		return nil
 	}
 
-	factoryRoot, err := factoryconfig.ResolveFactoryRootFromConfigFile(cfg.FactoryConfigPath)
+	factoryRoot, err := factoryrun.ResolveFactoryRootFromConfigFile(cfg.FactoryConfigPath)
 	if err != nil {
 		return err
 	}

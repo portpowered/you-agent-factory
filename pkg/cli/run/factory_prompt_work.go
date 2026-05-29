@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -19,14 +19,14 @@ func PrepareFactoryPromptWorkFile(factoryConfigPath, prompt string) (workFilePat
 		return "", fmt.Errorf("prompt is required for you run --factory")
 	}
 
-	cfg, err := factoryconfig.LoadFactoryConfigFromConfigFile(factoryConfigPath)
+	cfg, err := factoryrun.LoadFactoryConfigFromConfigFile(factoryConfigPath)
 	if err != nil {
 		return "", err
 	}
-	if err := factoryconfig.ValidateFactoryForPromptRun(cfg); err != nil {
+	if err := factoryrun.ValidateFactoryForPromptRun(cfg); err != nil {
 		return "", err
 	}
-	workTypeName, err := factoryconfig.DefaultHandlingWorkTypeName(cfg)
+	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(cfg)
 	if err != nil {
 		return "", err
 	}

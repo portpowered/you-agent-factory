@@ -1,10 +1,11 @@
-package config
+package factoryrun
 
 import (
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -23,7 +24,7 @@ func LoadFactoryConfigFromConfigFile(configFilePath string) (*interfaces.Factory
 		return nil, fmt.Errorf("read factory config file %s: %w", trimmed, err)
 	}
 
-	cfg, err := NewFactoryConfigMapper().Expand(data)
+	cfg, err := config.NewFactoryConfigMapper().Expand(data)
 	if err != nil {
 		return nil, fmt.Errorf("parse factory config %s: %w", trimmed, err)
 	}
@@ -35,7 +36,7 @@ func ValidateFactoryForPromptRun(cfg *interfaces.FactoryConfig) error {
 	if cfg == nil {
 		return fmt.Errorf("factory config is required")
 	}
-	result := NewConfigValidator(WithRequireDefaultHandlingWorkType()).Validate(cfg)
+	result := config.NewConfigValidator(config.WithRequireDefaultHandlingWorkType()).Validate(cfg)
 	if result.HasErrors() {
 		return fmt.Errorf("%s", result.Error())
 	}

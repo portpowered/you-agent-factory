@@ -1,4 +1,4 @@
-package config
+package factoryrun
 
 import (
 	"fmt"
