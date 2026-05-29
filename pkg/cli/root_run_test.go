@@ -45,6 +45,7 @@ func TestRootCommand_SharedDiagnosticsFlagsAvailableOnCoveredCommands(t *testing
 		{"work", "list"},
 		{"factory", "query"},
 		{"factory", "list"},
+		{"factory", "save"},
 		{"factory", "save", "staging"},
 		{"factory", "update", "staging"},
 		{"factory", "delete", "staging"},

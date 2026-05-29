@@ -27,7 +27,8 @@ var ErrCurrentFactoryNotFound = errors.New("current factory not found")
 
 // QueryCurrentConfig holds parameters for querying the current factory.
 type QueryCurrentConfig struct {
-	Port int
+	Port      int
+	SessionID string
 }
 
 // QueryConfig holds parameters for the factory query command.
@@ -63,11 +64,15 @@ func Query(cfg QueryConfig) error {
 
 // QueryCurrent requests the active factory from a running factory service.
 func QueryCurrent(cfg QueryCurrentConfig) (factoryapi.Factory, error) {
-	return queryCurrent(queryCurrentOptions{Port: cfg.Port})
+	return queryCurrent(queryCurrentOptions{
+		Port:      cfg.Port,
+		SessionID: cfg.SessionID,
+	})
 }
 
 type queryCurrentOptions struct {
 	Port        int
+	SessionID   string
 	Verbose     bool
 	Diagnostics io.Writer
 }
@@ -76,9 +81,17 @@ func queryCurrent(cfg queryCurrentOptions) (factoryapi.Factory, error) {
 	endpoint := url.URL{
 		Scheme: "http",
 		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   sessionpath.CurrentFactoryPath(""),
+		Path:   sessionpath.CurrentFactoryPath(cfg.SessionID),
 	}
-	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query request endpointPath=%s endpoint=%s port=%d", endpoint.Path, endpoint.String(), cfg.Port)
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"factory query request endpointPath=%s endpoint=%s port=%d session=%s",
+		endpoint.Path,
+		endpoint.String(),
+		cfg.Port,
+		clidiag.SessionLabel(cfg.SessionID),
+	)
 
 	client := &http.Client{Timeout: queryCurrentRequestTimeout}
 	started := time.Now()

@@ -36,6 +36,7 @@ var listWork = workcli.List
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
 var saveFactoryFromFile = factorycli.SaveFromFile
+var saveFactoryCurrent = factorycli.SaveCurrent
 var updateFactoryFromFile = factorycli.UpdateFromFile
 var deleteFactory = factorycli.Delete
 var listModels = modelscli.List
@@ -123,7 +124,7 @@ func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	factoryCmd.AddCommand(
 		newFactoryQueryCommand(diagnostics),
 		newFactoryListCommand(diagnostics),
-		newFactorySaveFromFileCommand(diagnostics),
+		newFactorySaveCommand(diagnostics),
 		newFactoryUpdateFromFileCommand(diagnostics),
 		newFactoryDeleteCommand(diagnostics),
 	)
@@ -187,36 +188,47 @@ func newFactoryUpdateFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
 	return cmd
 }
 
-func newFactorySaveFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
-	cfg := factorycli.SaveFromFileConfig{Dir: defaultcmd.FactoryDir}
+func newFactorySaveCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	fileCfg := factorycli.SaveFromFileConfig{Dir: defaultcmd.FactoryDir}
+	liveCfg := factorycli.SaveCurrentConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
-		Use:   "save <name>",
-		Short: "Save a new named factory from a config file",
-		Long: "Persist a new named factory from an existing factory.json file.\n\n" +
-			"The command validates the payload, materializes the named factory layout under " +
-			"the selected factory root, and rejects duplicate names. Use --set-current to update " +
-			".current-factory after a successful save.",
+		Use:   "save [name]",
+		Short: "Save a named factory from disk or persist the live current factory",
+		Long: "Save factory definitions from disk or persist the live current factory from a running service.\n\n" +
+			"With a name argument, the command validates a factory.json payload and materializes a new " +
+			"named factory layout under the selected factory root. Without a name, the command reads the " +
+			"session current factory from the running service and persists it with PUT.",
 		Example: "  # Save a new named factory from a config file.\n" +
 			"  " + cliBinaryName + " factory save staging --from ./factory.json\n\n" +
 			"  # Save and select the new factory as current.\n" +
 			"  " + cliBinaryName + " factory save staging --from ./factory.json --set-current\n\n" +
-			"  # Emit structured confirmation for scripting.\n" +
-			"  " + cliBinaryName + " factory save staging --from ./factory.json --json",
-		Args:         cobra.ExactArgs(1),
+			"  # Persist the live current factory from the running service.\n" +
+			"  " + cliBinaryName + " factory save\n\n" +
+			"  # Persist the live current factory for one session as JSON.\n" +
+			"  " + cliBinaryName + " factory save --session session-beta --json",
+		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Name = args[0]
-			cfg.Output = cmd.OutOrStdout()
-			return saveFactoryFromFile(cfg)
+			if len(args) == 0 {
+				liveCfg.Output = cmd.OutOrStdout()
+				liveCfg.Diagnostics = diagnostics.writer(cmd)
+				liveCfg.Verbose = diagnostics.verboseEnabled()
+				liveCfg.JSON = fileCfg.JSON // shared --json flag
+				return saveFactoryCurrent(liveCfg)
+			}
+			fileCfg.Name = args[0]
+			fileCfg.Output = cmd.OutOrStdout()
+			return saveFactoryFromFile(fileCfg)
 		},
 	}
 
-	cmd.Flags().StringVar(&cfg.From, "from", "", "path to an existing factory.json payload (required)")
-	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
-	cmd.Flags().BoolVar(&cfg.SetCurrent, "set-current", false, "update .current-factory to the saved name")
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit structured confirmation JSON")
-	_ = cmd.MarkFlagRequired("from")
+	cmd.Flags().StringVar(&fileCfg.From, "from", "", "path to an existing factory.json payload (required with <name>)")
+	cmd.Flags().StringVar(&fileCfg.Dir, "dir", fileCfg.Dir, "factory root directory containing named factories")
+	cmd.Flags().BoolVar(&fileCfg.SetCurrent, "set-current", false, "update .current-factory to the saved name")
+	cmd.Flags().IntVar(&liveCfg.Port, "port", liveCfg.Port, "HTTP server port for live save")
+	cmd.Flags().StringVar(&liveCfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
+	cmd.Flags().BoolVar(&fileCfg.JSON, "json", false, "emit structured confirmation JSON")
 	return cmd
 }
 
