@@ -171,13 +171,17 @@ export function ChartLegendContent({
   className,
   getToggleLabel,
   hiddenSeries = new Set<string>(),
+  itemClassName,
   onToggleSeries,
   payload,
+  swatchClassName,
 }: RechartsLegendContentProps & {
   className?: string;
   getToggleLabel?: (label: string, hidden: boolean) => string;
   hiddenSeries?: ReadonlySet<string>;
+  itemClassName?: string;
   onToggleSeries?: (key: string) => void;
+  swatchClassName?: string;
 }) {
   const config = useChartConfig();
 
@@ -206,7 +210,8 @@ export function ChartLegendContent({
             <span
               aria-hidden="true"
               className={cn(
-                "h-2.5 w-2.5 rounded-full",
+                "rounded-full",
+                swatchClassName ?? "h-2.5 w-2.5",
                 hidden ? "border border-af-border bg-af-surface-subtle" : "",
               )}
               style={{
@@ -221,7 +226,10 @@ export function ChartLegendContent({
 
         if (!onToggleSeries) {
           return (
-            <div className="flex items-center gap-2" key={key}>
+            <div
+              className={cn("flex items-center gap-2", itemClassName)}
+              key={key}
+            >
               {content}
             </div>
           );
@@ -234,6 +242,7 @@ export function ChartLegendContent({
             className={cn(
               "min-h-0 rounded-md border-transparent px-0 py-1 text-left font-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-focus",
               hidden ? "text-af-text-disabled" : "",
+              itemClassName,
             )}
             data-chart-legend-series={key}
             data-chart-legend-series-hidden={hidden ? "true" : "false"}

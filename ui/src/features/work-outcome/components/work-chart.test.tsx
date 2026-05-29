@@ -186,6 +186,42 @@ describe("WorkChart", () => {
     expect(within(chart).getByText("Queued")).toBeTruthy();
   });
 
+  it("renders a compact single-row legend at default work outcome bento width", () => {
+    render(
+      <div style={{ width: "24rem" }}>
+        <WorkChart
+          ariaLabel="Work chart compact legend"
+          model={sparseWorkChartModel}
+          series={OUTCOME_SERIES}
+        />
+      </div>,
+    );
+
+    const chart = screen.getByRole("img", { name: "Work chart compact legend" });
+    const legend = chart.querySelector("[data-work-chart-legend='true']");
+    expect(legend?.getAttribute("data-work-chart-legend-density")).toBe(
+      "compact",
+    );
+
+    const legendContent = legend?.firstElementChild as HTMLElement | null;
+    expect(legendContent?.className).toContain("flex-nowrap");
+    expect(legendContent?.className).toContain("gap-x-2");
+    expect(legendContent?.className).toContain("pt-0");
+
+    const swatch = legendContent?.querySelector("[aria-hidden='true']");
+    expect(swatch?.className).toContain("h-2");
+    expect(swatch?.className).toContain("w-2");
+
+    const legendControls = within(chart).getAllByRole("button", {
+      name: / series$/,
+    });
+    expect(legendControls.length).toBeGreaterThan(1);
+    const rowTops = legendControls.map(
+      (control) => control.getBoundingClientRect().top,
+    );
+    expect(new Set(rowTops).size).toBe(1);
+  });
+
   it("does not render a legend for loading, empty, or error chart states", () => {
     const { rerender } = render(
       <WorkChart

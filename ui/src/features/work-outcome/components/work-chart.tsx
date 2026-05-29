@@ -43,7 +43,10 @@ export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_READY_CLASS =
   "flex h-full min-h-[14rem] min-w-0 w-full flex-col px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5";
-const WORK_CHART_LEGEND_ROW_CLASS = "shrink-0 pb-1 pt-0 sm:pb-1.5";
+export const WORK_CHART_LEGEND_CONTENT_CLASS =
+  "flex-nowrap justify-center gap-x-2 gap-y-1 pt-0 sm:justify-start";
+export const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";
+export const WORK_CHART_LEGEND_SWATCH_CLASS = "h-2 w-2";
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_STATUS_PANEL_CLASS =
   "flex h-full min-h-[14rem] min-w-0 w-full flex-1 flex-col justify-center";
@@ -325,18 +328,22 @@ function WorkChartLegendRow({
 }: WorkChartLegendRowProps) {
   return (
     <div
-      className={WORK_CHART_LEGEND_ROW_CLASS}
+      className="shrink-0 pb-0.5 pt-0"
       data-work-chart-legend="true"
+      data-work-chart-legend-density="compact"
     >
       <ChartLegendContent
+        className={WORK_CHART_LEGEND_CONTENT_CLASS}
         getToggleLabel={(label, hidden) =>
           hidden
             ? chartMessages.showSeriesLabel(label)
             : chartMessages.hideSeriesLabel(label)
         }
         hiddenSeries={hiddenSeriesKeys}
+        itemClassName={WORK_CHART_LEGEND_ITEM_CLASS}
         onToggleSeries={toggleSeries}
         payload={buildWorkChartLegendPayload(series)}
+        swatchClassName={WORK_CHART_LEGEND_SWATCH_CLASS}
       />
     </div>
   );
