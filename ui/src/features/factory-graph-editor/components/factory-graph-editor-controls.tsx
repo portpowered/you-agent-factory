@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { DashboardMutationDialog } from "../../../components/dashboard";
 import {
   Button,
   DashboardActionRow,
@@ -11,6 +10,7 @@ import {
   PopoverTrigger,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
+import { DashboardMutationDialog } from "../../workflow-activity/public";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 export {
   FactoryGraphEditorModeToggle,

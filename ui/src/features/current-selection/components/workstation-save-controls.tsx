@@ -1,5 +1,5 @@
-import { DashboardMutationDialog } from "../../../components/dashboard";
 import { Button, DashboardActionButton } from "../../../components/ui";
+import { DashboardMutationDialog } from "../../workflow-activity/public";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import type {
