@@ -1,9 +1,6 @@
 package factorysessions
 
 import (
-	"errors"
-	"fmt"
-
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
@@ -87,33 +84,4 @@ func validationErrorTarget(reason string, field string) factoryapi.ErrorTarget {
 		target.Field = &field
 	}
 	return target
-}
-
-// IsValidationError reports whether err is a factory-session validation error.
-func IsValidationError(err error) bool {
-	var targeted *validationError
-	return errors.As(err, &targeted)
-}
-
-// ValidationErrorReason returns the validation reason when err is a validation error.
-func ValidationErrorReason(err error) (string, bool) {
-	var targeted *validationError
-	if !errors.As(err, &targeted) || targeted == nil {
-		return "", false
-	}
-	return targeted.reason, true
-}
-
-// ValidationErrorField returns the validation field when err is a validation error.
-func ValidationErrorField(err error) (string, bool) {
-	var targeted *validationError
-	if !errors.As(err, &targeted) || targeted == nil {
-		return "", false
-	}
-	return targeted.field, true
-}
-
-// ValidationErrorMessage is a helper for tests and logging.
-func ValidationErrorMessage(reason string, field string, message string) error {
-	return NewValidationError(reason, field, fmt.Errorf("%s", message))
 }
