@@ -1527,7 +1527,9 @@ describe("App current selection layout", () => {
     expect(within(chart).getByText("Completed")).toBeTruthy();
     expect(within(chart).getByText("Failed/retried")).toBeTruthy();
     expect(within(chart).getByText("Ticks")).toBeTruthy();
-    expect(within(chart).getByText("Work count")).toBeTruthy();
+    const chartOverlay = chart.querySelector("[data-work-chart-overlay='true']");
+    expect(chartOverlay).toBeTruthy();
+    expect(within(chartOverlay as HTMLElement).getByText("Work count")).toBeTruthy();
 
     const stream = MockEventSource.instances[0];
     if (!stream) {

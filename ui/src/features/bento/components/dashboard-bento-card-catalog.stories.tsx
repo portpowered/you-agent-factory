@@ -27,6 +27,11 @@ import { TerminalWorkWidget } from "../../terminal-work/public";
 import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { TraceDrilldownWidget } from "../../trace-drilldown/public";
 import type { WorkChartModel } from "../../work-outcome/lib/trends";
+import {
+  expectWorkChartAxisLabelsVisible,
+  expectWorkChartCompactLegendContract,
+  expectWorkChartLegendClearOfCardTitle,
+} from "../../work-outcome/lib/work-chart-legend-story-contract";
 import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { WorkTotalsWidget } from "../../work-totals/public";
 import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
@@ -1849,13 +1854,55 @@ export const WorkOutcomeChart = {
     const card = await canvas.findByRole("article", {
       name: "Work outcome chart",
     });
+    const chart = within(card).getByRole("img", {
+      name: "Work outcome chart for Session",
+    });
 
-    await expect(
-      within(card).getByRole("img", { name: "Work outcome chart for Session" }),
-    ).toBeVisible();
+    await expect(chart).toBeVisible();
     await expect(
       canvas.getByRole("button", { name: "Move Work outcome chart" }),
     ).toBeVisible();
+    expectWorkChartCompactLegendContract(chart);
+    expectWorkChartAxisLabelsVisible(chart);
+    expectWorkChartLegendClearOfCardTitle(card);
+  },
+};
+
+export const WorkOutcomeChartNarrow = {
+  render: () =>
+    renderCardFrame({
+      children: (
+        <WorkOutcomeWidget
+          model={workOutcomeModel}
+          widgetId="work-outcome-chart-narrow::story"
+        />
+      ),
+      initialWidth: 360,
+      layout: layoutFor(DASHBOARD_WIDGET_IDS.workOutcomeChart, {
+        h: 6,
+        id: "work-outcome-chart-narrow::story",
+        w: 6,
+      }),
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+    const chart = within(card).getByRole("img", {
+      name: "Work outcome chart for Session",
+    });
+
+    expectWorkChartCompactLegendContract(chart);
+    expectWorkChartAxisLabelsVisible(chart);
+    expectWorkChartLegendClearOfCardTitle(card);
+
+    const frame = canvasElement.firstElementChild;
+    if (!(frame instanceof HTMLElement)) {
+      throw new Error("expected catalog story frame");
+    }
+    expect(frame.getBoundingClientRect().width).toBeLessThanOrEqual(360);
+    expect(frame.scrollWidth <= frame.clientWidth + 1).toBe(true);
   },
 };
 

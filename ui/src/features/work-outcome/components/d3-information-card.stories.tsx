@@ -7,6 +7,11 @@ import {
   type AgentBentoLayoutItem,
 } from "../../bento/components/agent-bento";
 import type { WorkChartModel } from "../lib/trends";
+import {
+  expectWorkChartAxisLabelsVisible,
+  expectWorkChartCompactLegendContract,
+  expectWorkChartLegendClearOfCardTitle,
+} from "../lib/work-chart-legend-story-contract";
 import { D3CompletionInformationCard } from "./d3-information-card";
 import type { WorkChartState } from "./work-chart";
 import { WorkOutcomeWidget } from "./work-outcome-widget";
@@ -146,7 +151,9 @@ const RESIZABLE_WORK_OUTCOME_LAYOUT: AgentBentoLayoutItem[] = [
   },
 ];
 
-async function expectWorkOutcomeChartContract(card: HTMLElement): Promise<void> {
+async function expectWorkOutcomeChartContract(
+  card: HTMLElement,
+): Promise<void> {
   const chart = within(card).getByRole("img", {
     name: "Work outcome chart for 15m",
   });
@@ -174,9 +181,10 @@ async function expectWorkOutcomeChartContract(card: HTMLElement): Promise<void> 
   expect(overlay?.className).toContain("sm:px-6");
   expect(overlay?.className).toContain("sm:pb-5");
   expect(overlay?.className).toContain("sm:pt-5");
-  expect(
-    chart.querySelector(".recharts-responsive-container"),
-  ).not.toBeNull();
+  expect(chart.querySelector(".recharts-responsive-container")).not.toBeNull();
+  expectWorkChartCompactLegendContract(chart);
+  expectWorkChartAxisLabelsVisible(chart);
+  expectWorkChartLegendClearOfCardTitle(card);
 }
 
 function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
@@ -257,7 +265,9 @@ async function expectChartResizeChrome(
   const card = await canvas.findByRole("article", {
     name: "Work outcome chart",
   });
-  const gridItem = card.closest<HTMLElement>("[data-bento-card-id='work-outcome-chart']");
+  const gridItem = card.closest<HTMLElement>(
+    "[data-bento-card-id='work-outcome-chart']",
+  );
 
   if (!(gridItem instanceof HTMLElement)) {
     throw new Error("expected work outcome grid item");
@@ -292,7 +302,9 @@ async function expectStatusPanelResizeChrome(
   const card = await canvas.findByRole("article", {
     name: "Work outcome chart",
   });
-  const gridItem = card.closest<HTMLElement>("[data-bento-card-id='work-outcome-chart']");
+  const gridItem = card.closest<HTMLElement>(
+    "[data-bento-card-id='work-outcome-chart']",
+  );
 
   if (!(gridItem instanceof HTMLElement)) {
     throw new Error("expected work outcome grid item");
@@ -461,10 +473,7 @@ export const ResizableDesktop = {
       model: populatedTrend,
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectChartResizeChrome(
-      canvasElement,
-      ".react-resizable-handle-s",
-    );
+    await expectChartResizeChrome(canvasElement, ".react-resizable-handle-s");
   },
 };
 
@@ -475,10 +484,7 @@ export const ResizableConstrainedWidth = {
       model: populatedTrend,
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectChartResizeChrome(
-      canvasElement,
-      ".react-resizable-handle-se",
-    );
+    await expectChartResizeChrome(canvasElement, ".react-resizable-handle-se");
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
