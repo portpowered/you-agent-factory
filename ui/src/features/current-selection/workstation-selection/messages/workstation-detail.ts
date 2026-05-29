@@ -11,6 +11,7 @@ type WorkstationDetailCatalogMessages = Omit<
   | "localizeProviderSessionKind"
   | "localizeWorkstationBehavior"
   | "localizeWorkstationKind"
+  | "localizeWorkstationType"
 >;
 
 const singularPlural = (count: number, singular: string, plural: string) =>
@@ -744,6 +745,7 @@ export function getWorkstationDetailMessages(
     localizeProviderSessionKind: enumMessages.localizeProviderSessionKind,
     localizeWorkstationBehavior: enumMessages.localizeWorkstationBehavior,
     localizeWorkstationKind: enumMessages.localizeWorkstationKind,
+    localizeWorkstationType: enumMessages.localizeWorkstationType,
   };
 }
 

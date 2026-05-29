@@ -135,6 +135,7 @@ export interface WorkstationDetailMessages {
   localizeProviderSessionKind: (value: string) => string;
   localizeWorkstationBehavior: (value: string) => string;
   localizeWorkstationKind: (value: string) => string;
+  localizeWorkstationType: (value: string) => string;
   unknownWorkerTypeValue: string;
   unknownWorkLabel: string;
   workDetailsUnavailable: (dispatchId: string) => string;

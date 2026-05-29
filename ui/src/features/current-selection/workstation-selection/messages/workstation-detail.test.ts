@@ -131,7 +131,7 @@ describe("getWorkstationDetailMessages", () => {
     ).toContain("dispatch-review-history");
   });
 
-  it("localizes workstation behavior and kind labels with unknown fallback", () => {
+  it("localizes workstation behavior, kind, and type labels with unknown fallback", () => {
     expect(
       getWorkstationDetailMessages("en").localizeProviderSessionKind(
         "session_id",
@@ -156,9 +156,22 @@ describe("getWorkstationDetailMessages", () => {
       ),
     ).toBe("轮询器");
     expect(
+      getWorkstationDetailMessages("en").localizeWorkstationKind("REPEATER"),
+    ).toBe("Repeater");
+    expect(
       getWorkstationDetailMessages("zh-CN").localizeWorkstationKind(
         "future-kind",
       ),
     ).toBe("未知种类：future-kind");
+    expect(
+      getWorkstationDetailMessages("en").localizeWorkstationType(
+        "MODEL_WORKSTATION",
+      ),
+    ).toBe("Model workstation");
+    expect(
+      getWorkstationDetailMessages("zh-CN").localizeWorkstationType(
+        "FUTURE_TYPE",
+      ),
+    ).toBe("未知类型：FUTURE_TYPE");
   });
 });

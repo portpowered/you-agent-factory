@@ -133,9 +133,15 @@ const invokeWorkstationDetail = (
       ];
     case "localizeWorkstationKind":
       return [
-        formatter("standard" as never),
-        formatter("poller" as never),
+        formatter("STANDARD" as never),
+        formatter("POLLER" as never),
         formatter("future-kind" as never),
+      ];
+    case "localizeWorkstationType":
+      return [
+        formatter("MODEL_WORKSTATION" as never),
+        formatter("LOGICAL_MOVE" as never),
+        formatter("FUTURE_TYPE" as never),
       ];
     case "runnerFieldHelp":
       return [formatter("Gemini" as never, "Factory" as never)];
