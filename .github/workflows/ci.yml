@@ -532,10 +532,7 @@ jobs:
         shell: bash
         timeout-minutes: 15
         run: |
-          set -o pipefail
-          artifact_root=".artifacts/backend-verification"
-          mkdir -p "$artifact_root"
-          make test-backend-verification 2>&1 | tee "$artifact_root/command.log"
+          ARTIFACT_ROOT=".artifacts/backend-verification" ./scripts/ci/run-backend-verification.sh
 
       - name: Report lane execution
         if: always() && needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'

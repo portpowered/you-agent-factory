@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testpath"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
@@ -258,29 +257,58 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 	}
 }
 
-func TestCIWorkflowBackendVerificationLaneUsesCanonicalOwnedCommands(t *testing.T) {
-	workflowPath := testpath.MustRepoPathFromCaller(t, 0, ".github", "workflows", "ci.yml")
-	body, err := os.ReadFile(workflowPath)
+func TestBackendVerificationLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\n")
+	artifactRoot := filepath.Join(t.TempDir(), "backend-verification-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-backend-verification.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
 	if err != nil {
-		t.Fatalf("ReadFile(%q) error = %v", workflowPath, err)
+		t.Fatalf("run backend verification script: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "fake-make:test-backend-verification") {
+		t.Fatalf("backend verification script did not invoke canonical make target:\n%s", output)
 	}
 
-	workflow := string(body)
-	backendJob := extractWorkflowJobBlock(t, workflow, "  backend-verification:\n")
-	if !strings.Contains(backendJob, "command=\"make test-backend-verification\"") {
-		t.Fatalf("backend-verification job missing canonical fallback command:\n%s", backendJob)
+	logBody, err := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
+	if err != nil {
+		t.Fatalf("read backend verification command log: %v", err)
 	}
-	if !strings.Contains(backendJob, "make test-backend-verification 2>&1 | tee \"$artifact_root/command.log\"") {
-		t.Fatalf("backend-verification job missing canonical lane invocation:\n%s", backendJob)
+	if !strings.Contains(string(logBody), "fake-make:test-backend-verification") {
+		t.Fatalf("backend verification command log missing canonical command output:\n%s", string(logBody))
 	}
-	if strings.Contains(backendJob, "go test") {
-		t.Fatalf("backend-verification job should not embed raw go test commands:\n%s", backendJob)
+}
+
+func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-fail", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\nexit 27\n")
+	artifactRoot := filepath.Join(t.TempDir(), "backend-verification-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-backend-verification.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err == nil {
+		t.Fatalf("backend verification script unexpectedly succeeded:\n%s", output)
 	}
-	if !strings.Contains(workflow, "echo \"full_run_command=make verify-pr\"") {
-		t.Fatalf("workflow missing canonical full rerun command output")
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 27 {
+		t.Fatalf("backend verification script exit = %v, want exit code 27\n%s", err, output)
 	}
-	if !strings.Contains(workflow, "full_rerun=\"make verify-pr\"") {
-		t.Fatalf("workflow missing canonical full rerun fallback")
+
+	logBody, readErr := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
+	if readErr != nil {
+		t.Fatalf("read backend verification command log: %v", readErr)
+	}
+	if !strings.Contains(string(logBody), "fake-make:test-backend-verification") {
+		t.Fatalf("backend verification command log missing failure output:\n%s", string(logBody))
 	}
 }
 
@@ -400,23 +428,27 @@ func writeMakeEchoScript(t *testing.T, label string) string {
 	return path
 }
 
-func extractWorkflowJobBlock(t *testing.T, workflow string, header string) string {
+func writeExecutableScript(t *testing.T, label string, body string) string {
 	t.Helper()
 
-	start := strings.Index(workflow, header)
-	if start < 0 {
-		t.Fatalf("workflow job header %q not found", header)
+	path := filepath.Join(t.TempDir(), label)
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("write executable script: %v", err)
 	}
+	return path
+}
 
-	lines := strings.Split(workflow[start:], "\n")
-	block := make([]string, 0, len(lines))
-	for index, line := range lines {
-		if index > 0 && strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && strings.HasSuffix(line, ":") {
-			break
-		}
-		block = append(block, line)
-	}
-	return strings.Join(block, "\n")
+func runScript(repoRoot string, scriptPath string, env ...string) (string, error) {
+	cmd := exec.Command(scriptPath)
+	cmd.Dir = repoRoot
+	cmd.Env = append(os.Environ(), env...)
+
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+
+	err := cmd.Run()
+	return output.String(), err
 }
 
 func assertOutputOrder(t *testing.T, output string, markers ...string) {
