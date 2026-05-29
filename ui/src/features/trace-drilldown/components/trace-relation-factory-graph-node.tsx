@@ -115,12 +115,13 @@ function TraceRelationFactoryGraphNode({
   );
 
   if (data.selectable && data.workID && data.onSelectWorkID) {
+    const workID = data.workID;
     return (
       <GraphNodeButton
         aria-label={data.displayLabel}
         className="nodrag nopan h-full w-full"
-        onClick={() => data.onSelectWorkID?.(data.workID!)}
-        title={data.workID}
+        onClick={() => data.onSelectWorkID?.(workID)}
+        title={workID}
       >
         {content}
       </GraphNodeButton>
