@@ -16,10 +16,8 @@ import { SubmitWorkWidget } from "../../submit-work/public";
 import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
 import { TerminalWorkWidget } from "../../terminal-work/public";
 import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
-import {
-  TraceDrilldownWidget,
-  type useTraceDrilldown,
-} from "../../trace-drilldown/public";
+import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
+import { TraceDrilldownWidget } from "../../trace-drilldown/public";
 import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
 import {
   type useWorkOutcomeChart,

@@ -167,16 +167,19 @@ vi.mock("../../timeline/state/factoryTimelineStore", () => ({
     }),
 }));
 
+vi.mock("../../trace-drilldown/hooks/useTraceDrilldown", () => ({
+  useTraceDrilldown: () => ({
+    selectedTrace: null,
+    traceGridState: { status: "empty" },
+  }),
+}));
+
 vi.mock("../../trace-drilldown/public", () => ({
   TraceDrilldownWidget: ({
     headerAction,
   }: {
     headerAction?: React.ReactNode;
   }) => <section>{headerAction}Trace card</section>,
-  useTraceDrilldown: () => ({
-    selectedTrace: null,
-    traceGridState: { status: "empty" },
-  }),
 }));
 
 vi.mock("../../work-outcome/public", () => ({
