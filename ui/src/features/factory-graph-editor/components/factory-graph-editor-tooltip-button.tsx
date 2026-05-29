@@ -5,9 +5,6 @@ import {
   type DashboardActionButtonProps,
 } from "../../../components/ui";
 
-const INLINE_TOOLTIP_CLASS =
-  "pointer-events-none absolute left-1/2 top-full z-30 mt-2 -translate-x-1/2 rounded-xl border border-af-border-strong bg-af-surface-raised px-3 py-2 text-center text-xs font-medium text-af-text shadow-af-panel";
-
 export function FactoryGraphEditorTooltipActionButton({
   children,
   tooltip,
@@ -43,7 +40,11 @@ export function FactoryGraphEditorTooltipActionButton({
         {children}
       </DashboardActionButton>
       {tooltipVisible ? (
-        <span className={INLINE_TOOLTIP_CLASS} id={tooltipID} role="tooltip">
+        <span
+          className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 -translate-x-1/2 rounded-xl border border-af-border-strong bg-af-surface-raised px-3 py-2 text-center text-xs font-medium text-af-text shadow-af-panel"
+          id={tooltipID}
+          role="tooltip"
+        >
           {tooltip}
         </span>
       ) : null}

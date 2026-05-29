@@ -19,7 +19,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/factory-graph-editor/components/factory-graph-editor-controls.tsx#MENU_ACTION_LABEL_CLASS",
   "src/features/factory-graph-editor/components/factory-graph-editor-controls.tsx#MENU_ACTION_DESCRIPTION_CLASS",
   "src/features/factory-graph-editor/components/factory-graph-editor-controls.tsx#VISIBILITY_PANEL_CLASS",
-  "src/features/factory-graph-editor/components/factory-graph-editor-tooltip-button.tsx#INLINE_TOOLTIP_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_TOOLBAR_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_HEADER_ROWS_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_PRIMARY_ROW_CLASS",
