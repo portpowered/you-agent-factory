@@ -34,6 +34,7 @@ var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
 var listWork = workcli.List
 var queryFactory = factorycli.Query
+var listFactories = factorycli.List
 var listModels = modelscli.List
 var inspectModel = modelscli.Inspect
 var invokeModel = modelscli.Invoke
@@ -116,8 +117,34 @@ func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"Use the query subcommand to ask the live API server which factory is currently active " +
 			"instead of inferring runtime state from local factory files.",
 	}
-	factoryCmd.AddCommand(newFactoryQueryCommand(diagnostics))
+	factoryCmd.AddCommand(newFactoryQueryCommand(diagnostics), newFactoryListCommand(diagnostics))
 	return factoryCmd
+}
+
+func newFactoryListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.ListConfig{Dir: defaultcmd.FactoryDir}
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List persisted named factories",
+		Long: "List persisted named factories stored under a factory root.\n\n" +
+			"By default the command writes a human-readable table with each factory name, " +
+			"on-disk directory, and whether it is selected by .current-factory. " +
+			"Use --dir to scope discovery to a different factory root and --json for scripting output.",
+		Example: "  # List named factories under the default factory root.\n" +
+			"  " + cliBinaryName + " factory list\n\n" +
+			"  # List factories from a custom root as JSON.\n" +
+			"  " + cliBinaryName + " factory list --dir my-factory --json",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Output = cmd.OutOrStdout()
+			return listFactories(cfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit persisted factories as a JSON array")
+	return cmd
 }
 
 func newFactoryQueryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
