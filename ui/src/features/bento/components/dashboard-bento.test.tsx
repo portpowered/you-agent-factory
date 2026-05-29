@@ -68,7 +68,13 @@ vi.mock("../../current-selection/public", () => ({
       </button>
     </section>
   ),
+}));
+
+vi.mock("../../current-selection/hooks/useCurrentSelection", () => ({
   useCurrentSelection: () => currentSelectionState,
+}));
+
+vi.mock("../../current-selection/hooks/useCurrentSelectionDetails", () => ({
   useCurrentSelectionDetails: () => ({
     selectedWorkExecutionDetails: null,
     selectedWorkRelationshipGraph: { status: "loading" as const },
