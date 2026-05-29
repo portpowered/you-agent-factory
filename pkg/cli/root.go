@@ -72,7 +72,7 @@ func NewRootCommand() *cobra.Command {
 			"  # Explicit batch-style runs are still available when you need them.\n" +
 			"  " + cliBinaryName + " run --dir factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runFactory(cmd, defaultcmd.OOTBRunConfig(), diagnostics.verboseEnabled(), diagnostics.debug)
+			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, diagnostics.verboseEnabled(), diagnostics.debug)
 		},
 	}
 	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
@@ -465,14 +465,16 @@ func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			if cmd.Flags().Changed("port") {
 				cfg.AutoPort = false
 			}
+			promptArgs := args
 			if cfg.MockWorkersConfigPath == defaultMockWorkersConfigPathSentinel {
 				if len(args) > 0 {
 					cfg.MockWorkersConfigPath = args[0]
+					promptArgs = args[1:]
 				} else {
 					cfg.MockWorkersConfigPath = ""
 				}
 			}
-			return runFactory(cmd, cfg, diagnostics.verboseEnabled(), diagnostics.debug)
+			return runFactory(cmd, cfg, promptArgs, diagnostics.verboseEnabled(), diagnostics.debug)
 		},
 	}
 
@@ -503,8 +505,11 @@ func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	return cmd
 }
 
-func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, verbose, debug bool) error {
+func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, verbose, debug bool) error {
 	if err := resolveRunFactorySelection(cmd, &cfg); err != nil {
+		return err
+	}
+	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs); err != nil {
 		return err
 	}
 
@@ -550,6 +555,35 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error
 		return err
 	}
 	cfg.Dir = factoryRoot
+	return nil
+}
+
+func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptArgs []string) error {
+	factoryChanged := cmd.Flags().Changed("factory")
+	workChanged := cmd.Flags().Changed("work")
+	prompt := strings.TrimSpace(strings.Join(promptArgs, " "))
+
+	if !factoryChanged {
+		if prompt != "" {
+			return fmt.Errorf("positional prompt arguments require --factory")
+		}
+		return nil
+	}
+	if workChanged && prompt != "" {
+		return fmt.Errorf("positional prompt arguments cannot be used with --work")
+	}
+	if len(promptArgs) > 0 && prompt == "" {
+		return fmt.Errorf("prompt is required for you run --factory")
+	}
+	if prompt == "" {
+		return nil
+	}
+
+	workFile, err := runcli.PrepareFactoryPromptWorkFile(cfg.FactoryConfigPath, prompt)
+	if err != nil {
+		return err
+	}
+	cfg.WorkFile = workFile
 	return nil
 }
 
