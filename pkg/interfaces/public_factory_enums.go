@@ -13,9 +13,12 @@ var publicFactoryWorkerTypeAliases = map[string]string{
 }
 
 var publicFactoryWorkerModelProviderAliases = map[string]string{
-	publicFactoryWorkerModelProviderClaude: publicFactoryWorkerModelProviderClaude,
-	publicFactoryWorkerModelProviderCodex:  publicFactoryWorkerModelProviderCodex,
-	publicFactoryWorkerModelProviderCursor: publicFactoryWorkerModelProviderCursor,
+	publicFactoryWorkerModelProviderClaude:   publicFactoryWorkerModelProviderClaude,
+	publicFactoryWorkerModelProviderCodex:    publicFactoryWorkerModelProviderCodex,
+	publicFactoryWorkerModelProviderCursor:   publicFactoryWorkerModelProviderCursor,
+	publicFactoryWorkerModelProviderGemini:   publicFactoryWorkerModelProviderGemini,
+	publicFactoryWorkerModelProviderKiro:     publicFactoryWorkerModelProviderKiro,
+	publicFactoryWorkerModelProviderOpenCode: publicFactoryWorkerModelProviderOpenCode,
 }
 
 var publicFactoryWorkerProviderAliases = map[string]string{
@@ -68,10 +71,13 @@ var publicFactoryRunnerSelectionSourceAliases = map[string]string{
 }
 
 const (
-	publicFactoryWorkerModelProviderClaude = "CLAUDE"
-	publicFactoryWorkerModelProviderCodex  = "CODEX"
-	publicFactoryWorkerModelProviderCursor = "CURSOR"
-	publicFactoryWorkerProviderScriptWrap  = "SCRIPT_WRAP"
+	publicFactoryWorkerModelProviderClaude   = "CLAUDE"
+	publicFactoryWorkerModelProviderCodex    = "CODEX"
+	publicFactoryWorkerModelProviderCursor   = "CURSOR"
+	publicFactoryWorkerModelProviderGemini   = "GEMINI"
+	publicFactoryWorkerModelProviderKiro     = "KIRO"
+	publicFactoryWorkerModelProviderOpenCode = "OPENCODE"
+	publicFactoryWorkerProviderScriptWrap    = "SCRIPT_WRAP"
 )
 
 var internalFactoryWorkerModelProviderAliases = map[string]string{
@@ -80,6 +86,9 @@ var internalFactoryWorkerModelProviderAliases = map[string]string{
 	"CODEX":        publicFactoryWorkerModelProviderCodex,
 	"CURSOR":       publicFactoryWorkerModelProviderCursor,
 	"CURSOR_AGENT": publicFactoryWorkerModelProviderCursor,
+	"GEMINI":       publicFactoryWorkerModelProviderGemini,
+	"KIRO":         publicFactoryWorkerModelProviderKiro,
+	"OPENCODE":     publicFactoryWorkerModelProviderOpenCode,
 	"OPENAI":       publicFactoryWorkerModelProviderCodex,
 	"agent":        publicFactoryWorkerModelProviderCursor,
 	"anthropic":    publicFactoryWorkerModelProviderClaude,
@@ -87,7 +96,11 @@ var internalFactoryWorkerModelProviderAliases = map[string]string{
 	"codex":        publicFactoryWorkerModelProviderCodex,
 	"cursor":       publicFactoryWorkerModelProviderCursor,
 	"cursor-agent": publicFactoryWorkerModelProviderCursor,
+	"gemini":       publicFactoryWorkerModelProviderGemini,
+	"kiro":         publicFactoryWorkerModelProviderKiro,
+	"kiro-cli":     publicFactoryWorkerModelProviderKiro,
 	"openai":       publicFactoryWorkerModelProviderCodex,
+	"opencode":     publicFactoryWorkerModelProviderOpenCode,
 }
 
 var internalFactoryWorkerProviderAliases = map[string]string{
