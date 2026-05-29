@@ -41,8 +41,9 @@ const BUILT_IN_RUNNER_METADATA: Record<RunnerID, RunnerMetadata> = {
         { capability: "working_directory", status: "supported" },
         {
           capability: "worktree",
-          detail: "Codex rejects workstation worktree selection in v1.",
-          status: "unsupported",
+          detail:
+            "Factory-managed git worktree preparation under the factory root.",
+          status: "supported",
         },
       ],
     },

@@ -43,7 +43,7 @@ describe("WorkstationRequestDetailCard request fallbacks", () => {
     ).toBeTruthy();
   });
 
-  it("renders fallback Codex capability detail that matches unsupported worktree behavior", () => {
+  it("renders fallback Codex capability detail that matches factory-managed worktree support", () => {
     render(
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-codex-fallback", {
@@ -67,7 +67,7 @@ describe("WorkstationRequestDetailCard request fallbacks", () => {
     ).toBeTruthy();
     expect(
       within(currentSelection).getByText(
-        "Codex rejects workstation worktree selection in v1.",
+        "Factory-managed git worktree preparation under the factory root.",
       ),
     ).toBeTruthy();
   });
