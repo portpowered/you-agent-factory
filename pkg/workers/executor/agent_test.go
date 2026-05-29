@@ -84,12 +84,6 @@ func withAgentWorkingDirectory(workingDirectory string) func(*interfaces.Worksta
 	}
 }
 
-func withAgentRunnerID(runnerID string) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
-		req.RunnerID = runnerID
-	}
-}
-
 func withAgentModelOperation(operation string, bindings []interfaces.ResolvedModelOperationBinding) func(*interfaces.WorkstationExecutionRequest) {
 	return func(req *interfaces.WorkstationExecutionRequest) {
 		req.ModelOperation = operation
