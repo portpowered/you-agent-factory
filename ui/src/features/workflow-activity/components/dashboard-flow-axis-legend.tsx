@@ -5,7 +5,7 @@ import { GraphSemanticIcon } from "../../flowchart/public";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../../flowchart/public";
+} from "../../flowchart/lib/workstation-icon-metadata";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 
 export interface DashboardFlowAxisLegendEdgeItem {
