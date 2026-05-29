@@ -130,6 +130,10 @@ var publicFactoryRunnerSelectionSourceAliases = map[string]string{
 	string(RunnerSelectionSourceDefault):        string(RunnerSelectionSourceDefault),
 }
 
+var publicFactoryWorkTypeHandlingBehaviorAliases = map[string]string{
+	WorkTypeHandlingBehaviorDefault: WorkTypeHandlingBehaviorDefault,
+}
+
 const (
 	publicFactoryWorkerModelProviderClaude   = "CLAUDE"
 	publicFactoryWorkerModelProviderCodex    = "CODEX"
@@ -449,6 +453,16 @@ func CanonicalPublicWorkstationKind(kind WorkstationKind) string {
 // StrictPublicWorkstationKind canonicalizes supported public workstation kinds and rejects unknown values.
 func StrictPublicWorkstationKind(value string) string {
 	return normalizePublicWorkstationKind(value, false, false)
+}
+
+// PermissivePublicWorkTypeHandlingBehavior canonicalizes supported public work-type handling markers and preserves unknown values.
+func PermissivePublicWorkTypeHandlingBehavior(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkTypeHandlingBehaviorAliases, true)
+}
+
+// StrictPublicWorkTypeHandlingBehavior canonicalizes supported public work-type handling markers and rejects unknown values.
+func StrictPublicWorkTypeHandlingBehavior(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkTypeHandlingBehaviorAliases, false)
 }
 
 // GeneratedPublicWorkstationKind returns the generated workstation kind enum.

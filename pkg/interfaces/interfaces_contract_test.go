@@ -203,6 +203,14 @@ func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
 			permissive: PermissivePublicFactoryRunnerSelectionSource,
 			strict:     StrictPublicFactoryRunnerSelectionSource,
 		},
+		{
+			name:       "work type handling behavior",
+			alias:      WorkTypeHandlingBehaviorDefault,
+			unknown:    "PROMPT",
+			want:       WorkTypeHandlingBehaviorDefault,
+			permissive: PermissivePublicWorkTypeHandlingBehavior,
+			strict:     StrictPublicWorkTypeHandlingBehavior,
+		},
 	}
 }
 

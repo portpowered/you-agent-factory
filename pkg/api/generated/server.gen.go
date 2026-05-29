@@ -336,6 +336,11 @@ const (
 	WorkStateTypeTERMINAL   WorkStateType = "TERMINAL"
 )
 
+// Defines values for WorkTypeHandlingBehavior.
+const (
+	WorkTypeHandlingBehaviorDefault WorkTypeHandlingBehavior = "DEFAULT"
+)
+
 // Defines values for WorkerModelLocality.
 const (
 	WorkerModelLocalityCloud WorkerModelLocality = "CLOUD"
@@ -2408,12 +2413,18 @@ type WorkTextContentPart struct {
 
 // WorkType A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.
 type WorkType struct {
+	// HandlingBehavior Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
+	HandlingBehavior *[]WorkTypeHandlingBehavior `json:"handlingBehavior,omitempty"`
+
 	// Name Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.
 	Name string `json:"name"`
 
 	// States Lifecycle states available for work items of this type.
 	States []WorkState `json:"states"`
 }
+
+// WorkTypeHandlingBehavior Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
+type WorkTypeHandlingBehavior string
 
 // Worker A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
 type Worker struct {

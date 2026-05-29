@@ -15,4 +15,11 @@ properties:
     description: Lifecycle states available for work items of this type.
     items:
       $ref: './WorkState.yaml'
+  handlingBehavior:
+    type: array
+    description: >-
+      Optional CLI routing markers for this work type. Factories used with you run --factory
+      must declare handlingBehavior DEFAULT on exactly one work type.
+    items:
+      $ref: './WorkTypeHandlingBehavior.yaml'
 
