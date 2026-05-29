@@ -27,16 +27,6 @@ const (
 	Utf8 BundledFileContentEncoding = "utf-8"
 )
 
-// Defines values for CodexSessionTranscriptEntryType.
-const (
-	AssistantMessage CodexSessionTranscriptEntryType = "assistant_message"
-	Reasoning        CodexSessionTranscriptEntryType = "reasoning"
-	SystemEvent      CodexSessionTranscriptEntryType = "system_event"
-	ToolCall         CodexSessionTranscriptEntryType = "tool_call"
-	ToolOutput       CodexSessionTranscriptEntryType = "tool_output"
-	UserMessage      CodexSessionTranscriptEntryType = "user_message"
-)
-
 // Defines values for ErrorFamily.
 const (
 	ErrorFamilyBadRequest          ErrorFamily = "BAD_REQUEST"
@@ -222,6 +212,16 @@ const (
 	PromptTemplateVariableReferenceCategoryINPUT     PromptTemplateVariableReferenceCategory = "INPUT"
 	PromptTemplateVariableReferenceCategoryMAPACCESS PromptTemplateVariableReferenceCategory = "MAP_ACCESS"
 	PromptTemplateVariableReferenceCategoryROOT      PromptTemplateVariableReferenceCategory = "ROOT"
+)
+
+// Defines values for ProviderSessionTranscriptEntryType.
+const (
+	AssistantMessage ProviderSessionTranscriptEntryType = "assistant_message"
+	Reasoning        ProviderSessionTranscriptEntryType = "reasoning"
+	SystemEvent      ProviderSessionTranscriptEntryType = "system_event"
+	ToolCall         ProviderSessionTranscriptEntryType = "tool_call"
+	ToolOutput       ProviderSessionTranscriptEntryType = "tool_output"
+	UserMessage      ProviderSessionTranscriptEntryType = "user_message"
 )
 
 // Defines values for RelationType.
@@ -434,190 +434,6 @@ type ClassificationRoute struct {
 
 	// Outputs One or more authored destinations emitted when this classifier label is selected.
 	Outputs []WorkstationIO `json:"outputs"`
-}
-
-// CodexSessionFunctionCallSummary defines model for CodexSessionFunctionCallSummary.
-type CodexSessionFunctionCallSummary struct {
-	// Arguments Compact argument payload when present.
-	Arguments *string `json:"arguments,omitempty"`
-
-	// CallId Provider call identifier when present in the session stream.
-	CallId *string `json:"callId,omitempty"`
-
-	// Name Function or tool name when present.
-	Name *string `json:"name,omitempty"`
-
-	// Order Chronological order of the function or tool call in the session stream.
-	Order int `json:"order"`
-
-	// Output Compact output payload when present.
-	Output *string `json:"output,omitempty"`
-
-	// Status Result status inferred from the call output or explicit status fields.
-	Status *string `json:"status,omitempty"`
-
-	// TurnIndex One-based execution turn index associated with the call when inferable.
-	TurnIndex *int `json:"turnIndex,omitempty"`
-
-	// Type Raw response item type for the call, such as function_call or custom_tool_call.
-	Type string `json:"type"`
-}
-
-// CodexSessionLineError defines model for CodexSessionLineError.
-type CodexSessionLineError struct {
-	// LineNumber One-based line number of the malformed event-stream record.
-	LineNumber int `json:"lineNumber"`
-
-	// Message Client-safe parse error message for the malformed line.
-	Message string `json:"message"`
-}
-
-// CodexSessionParseSummary defines model for CodexSessionParseSummary.
-type CodexSessionParseSummary struct {
-	// EventCount Number of JSON event records parsed from the session stream.
-	EventCount int `json:"eventCount"`
-
-	// FunctionCalls Function and tool calls observed in chronological order.
-	FunctionCalls []CodexSessionFunctionCallSummary `json:"functionCalls"`
-
-	// LineCount Number of non-empty event-stream lines inspected.
-	LineCount int `json:"lineCount"`
-
-	// MalformedLineCount Number of non-empty lines that could not be parsed as JSON objects.
-	MalformedLineCount int `json:"malformedLineCount"`
-
-	// ParseErrors Line-level parse errors for malformed event-stream records.
-	ParseErrors []CodexSessionLineError `json:"parseErrors"`
-
-	// Reasoning Reasoning entries or summaries observed in chronological order.
-	Reasoning  []CodexSessionReasoningSummary `json:"reasoning"`
-	TokenUsage *CodexSessionTokenUsage        `json:"tokenUsage,omitempty"`
-
-	// Turns Chronological execution turns inferred from turn boundaries and response activity.
-	Turns []CodexSessionTurnSummary `json:"turns"`
-
-	// UnknownEventCount Number of parsed JSON events without a recognized type field.
-	UnknownEventCount int `json:"unknownEventCount"`
-
-	// UnknownEvents Compact list of events with unknown or unsupported type fields.
-	UnknownEvents []CodexSessionUnknownEvent `json:"unknownEvents"`
-}
-
-// CodexSessionReasoningSummary defines model for CodexSessionReasoningSummary.
-type CodexSessionReasoningSummary struct {
-	// Encrypted Whether the reasoning entry only exposed encrypted content.
-	Encrypted *bool `json:"encrypted,omitempty"`
-
-	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
-	EncryptedContent *string `json:"encryptedContent,omitempty"`
-
-	// Order Chronological order of the reasoning entry in the session stream.
-	Order int `json:"order"`
-
-	// SourceType Event or response item type that carried the reasoning entry.
-	SourceType string `json:"sourceType"`
-
-	// Summary Compact reasoning summary when present.
-	Summary *string `json:"summary,omitempty"`
-
-	// Text Reasoning text when plaintext content is present.
-	Text *string `json:"text,omitempty"`
-
-	// TurnIndex One-based execution turn index associated with the reasoning entry when inferable.
-	TurnIndex *int `json:"turnIndex,omitempty"`
-}
-
-// CodexSessionTokenUsage defines model for CodexSessionTokenUsage.
-type CodexSessionTokenUsage struct {
-	CachedInputTokens     *int `json:"cachedInputTokens,omitempty"`
-	InputTokens           *int `json:"inputTokens,omitempty"`
-	OutputTokens          *int `json:"outputTokens,omitempty"`
-	ReasoningOutputTokens *int `json:"reasoningOutputTokens,omitempty"`
-	TotalTokens           *int `json:"totalTokens,omitempty"`
-}
-
-// CodexSessionTranscriptEntry defines model for CodexSessionTranscriptEntry.
-type CodexSessionTranscriptEntry struct {
-	// Arguments Compact tool-call arguments when present.
-	Arguments *string `json:"arguments,omitempty"`
-
-	// CallId Provider tool-call identifier when present.
-	CallId *string `json:"callId,omitempty"`
-
-	// Encrypted Whether the entry only exposed encrypted content instead of plaintext.
-	Encrypted *bool `json:"encrypted,omitempty"`
-
-	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
-	EncryptedContent *string `json:"encryptedContent,omitempty"`
-
-	// LineNumber One-based JSONL line number that produced this transcript entry when applicable.
-	LineNumber *int `json:"lineNumber,omitempty"`
-
-	// Name Tool or function name when present.
-	Name *string `json:"name,omitempty"`
-
-	// Order Stable chronological order of the transcript entry in the session stream.
-	Order int `json:"order"`
-
-	// Output Compact tool output when present.
-	Output *string `json:"output,omitempty"`
-
-	// SourceType Raw provider event or item type that produced this transcript entry.
-	SourceType *string `json:"sourceType,omitempty"`
-
-	// Status Provider or inferred status value when present.
-	Status *string `json:"status,omitempty"`
-
-	// Summary Compact summary text when the provider emits a separate summary channel.
-	Summary *string `json:"summary,omitempty"`
-
-	// Text Plaintext transcript body when present.
-	Text *string `json:"text,omitempty"`
-
-	// Timestamp Provider event timestamp when present in the source session stream.
-	Timestamp *time.Time `json:"timestamp,omitempty"`
-
-	// TurnIndex One-based inferred turn index when the session parser can associate the entry with a turn.
-	TurnIndex *int `json:"turnIndex,omitempty"`
-
-	// Type Canonical transcript entry type used by the dashboard transcript view.
-	Type CodexSessionTranscriptEntryType `json:"type"`
-}
-
-// CodexSessionTranscriptEntryType Canonical transcript entry type used by the dashboard transcript view.
-type CodexSessionTranscriptEntryType string
-
-// CodexSessionTurnSummary defines model for CodexSessionTurnSummary.
-type CodexSessionTurnSummary struct {
-	// EventCount Number of parsed events associated with the turn.
-	EventCount int `json:"eventCount"`
-
-	// FunctionCallCount Number of function or tool calls associated with the turn.
-	FunctionCallCount int `json:"functionCallCount"`
-
-	// Index One-based chronological execution turn index.
-	Index int `json:"index"`
-
-	// ReasoningCount Number of reasoning entries associated with the turn.
-	ReasoningCount int `json:"reasoningCount"`
-
-	// ResponseItemCount Number of response_item records associated with the turn.
-	ResponseItemCount int `json:"responseItemCount"`
-
-	// StartedAt First event timestamp associated with the turn when present.
-	StartedAt *time.Time `json:"startedAt,omitempty"`
-}
-
-// CodexSessionUnknownEvent defines model for CodexSessionUnknownEvent.
-type CodexSessionUnknownEvent struct {
-	// LineNumber One-based line number of the unknown event.
-	LineNumber int `json:"lineNumber"`
-
-	// PayloadType Raw nested payload type when present.
-	PayloadType *string `json:"payloadType,omitempty"`
-
-	// Type Raw top-level event type when present.
-	Type *string `json:"type,omitempty"`
 }
 
 // CommandDiagnostic defines model for CommandDiagnostic.
@@ -1703,12 +1519,48 @@ type ProviderFailureMetadata struct {
 
 // ProviderSessionDetailResponse defines model for ProviderSessionDetailResponse.
 type ProviderSessionDetailResponse struct {
-	Parse           CodexSessionParseSummary      `json:"parse"`
+	Parse           ProviderSessionParseSummary   `json:"parse"`
 	ProviderSession LoadableProviderSessionRef    `json:"providerSession"`
 	Source          ProviderSessionSourceMetadata `json:"source"`
 
 	// Transcript Ordered transcript entries extracted from the provider-session stream.
-	Transcript []CodexSessionTranscriptEntry `json:"transcript"`
+	Transcript []ProviderSessionTranscriptEntry `json:"transcript"`
+}
+
+// ProviderSessionFunctionCallSummary defines model for ProviderSessionFunctionCallSummary.
+type ProviderSessionFunctionCallSummary struct {
+	// Arguments Compact argument payload when present.
+	Arguments *string `json:"arguments,omitempty"`
+
+	// CallId Provider call identifier when present in the session stream.
+	CallId *string `json:"callId,omitempty"`
+
+	// Name Function or tool name when present.
+	Name *string `json:"name,omitempty"`
+
+	// Order Chronological order of the function or tool call in the session stream.
+	Order int `json:"order"`
+
+	// Output Compact output payload when present.
+	Output *string `json:"output,omitempty"`
+
+	// Status Result status inferred from the call output or explicit status fields.
+	Status *string `json:"status,omitempty"`
+
+	// TurnIndex One-based execution turn index associated with the call when inferable.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+
+	// Type Raw response item type for the call, such as function_call or custom_tool_call.
+	Type string `json:"type"`
+}
+
+// ProviderSessionLineError defines model for ProviderSessionLineError.
+type ProviderSessionLineError struct {
+	// LineNumber One-based line number of the malformed event-stream record.
+	LineNumber int `json:"lineNumber"`
+
+	// Message Client-safe parse error message for the malformed line.
+	Message string `json:"message"`
 }
 
 // ProviderSessionMetadata defines model for ProviderSessionMetadata.
@@ -1718,16 +1570,164 @@ type ProviderSessionMetadata struct {
 	Provider *string `json:"provider,omitempty"`
 }
 
+// ProviderSessionParseSummary defines model for ProviderSessionParseSummary.
+type ProviderSessionParseSummary struct {
+	// EventCount Number of JSON event records parsed from the session stream.
+	EventCount int `json:"eventCount"`
+
+	// FunctionCalls Function and tool calls observed in chronological order.
+	FunctionCalls []ProviderSessionFunctionCallSummary `json:"functionCalls"`
+
+	// LineCount Number of non-empty event-stream lines inspected.
+	LineCount int `json:"lineCount"`
+
+	// MalformedLineCount Number of non-empty lines that could not be parsed as JSON objects.
+	MalformedLineCount int `json:"malformedLineCount"`
+
+	// ParseErrors Line-level parse errors for malformed event-stream records.
+	ParseErrors []ProviderSessionLineError `json:"parseErrors"`
+
+	// Reasoning Reasoning entries or summaries observed in chronological order.
+	Reasoning  []ProviderSessionReasoningSummary `json:"reasoning"`
+	TokenUsage *ProviderSessionTokenUsage        `json:"tokenUsage,omitempty"`
+
+	// Turns Chronological execution turns inferred from turn boundaries and response activity.
+	Turns []ProviderSessionTurnSummary `json:"turns"`
+
+	// UnknownEventCount Number of parsed JSON events without a recognized type field.
+	UnknownEventCount int `json:"unknownEventCount"`
+
+	// UnknownEvents Compact list of events with unknown or unsupported type fields.
+	UnknownEvents []ProviderSessionUnknownEvent `json:"unknownEvents"`
+}
+
+// ProviderSessionReasoningSummary defines model for ProviderSessionReasoningSummary.
+type ProviderSessionReasoningSummary struct {
+	// Encrypted Whether the reasoning entry only exposed encrypted content.
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
+	EncryptedContent *string `json:"encryptedContent,omitempty"`
+
+	// Order Chronological order of the reasoning entry in the session stream.
+	Order int `json:"order"`
+
+	// SourceType Event or response item type that carried the reasoning entry.
+	SourceType string `json:"sourceType"`
+
+	// Summary Compact reasoning summary when present.
+	Summary *string `json:"summary,omitempty"`
+
+	// Text Reasoning text when plaintext content is present.
+	Text *string `json:"text,omitempty"`
+
+	// TurnIndex One-based execution turn index associated with the reasoning entry when inferable.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+}
+
 // ProviderSessionSourceMetadata defines model for ProviderSessionSourceMetadata.
 type ProviderSessionSourceMetadata struct {
 	// ModifiedAt Filesystem modification time when available.
 	ModifiedAt *time.Time `json:"modifiedAt,omitempty"`
 
-	// RelativePath Path to the loaded session file relative to the configured Codex sessions root.
+	// RelativePath Path to the loaded session file relative to the configured provider sessions root.
 	RelativePath string `json:"relativePath"`
 
 	// SizeBytes Size of the loaded session file in bytes.
 	SizeBytes int64 `json:"sizeBytes"`
+}
+
+// ProviderSessionTokenUsage defines model for ProviderSessionTokenUsage.
+type ProviderSessionTokenUsage struct {
+	CachedInputTokens     *int `json:"cachedInputTokens,omitempty"`
+	InputTokens           *int `json:"inputTokens,omitempty"`
+	OutputTokens          *int `json:"outputTokens,omitempty"`
+	ReasoningOutputTokens *int `json:"reasoningOutputTokens,omitempty"`
+	TotalTokens           *int `json:"totalTokens,omitempty"`
+}
+
+// ProviderSessionTranscriptEntry defines model for ProviderSessionTranscriptEntry.
+type ProviderSessionTranscriptEntry struct {
+	// Arguments Compact tool-call arguments when present.
+	Arguments *string `json:"arguments,omitempty"`
+
+	// CallId Provider tool-call identifier when present.
+	CallId *string `json:"callId,omitempty"`
+
+	// Encrypted Whether the entry only exposed encrypted content instead of plaintext.
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
+	EncryptedContent *string `json:"encryptedContent,omitempty"`
+
+	// LineNumber One-based JSONL line number that produced this transcript entry when applicable.
+	LineNumber *int `json:"lineNumber,omitempty"`
+
+	// Name Tool or function name when present.
+	Name *string `json:"name,omitempty"`
+
+	// Order Stable chronological order of the transcript entry in the session stream.
+	Order int `json:"order"`
+
+	// Output Compact tool output when present.
+	Output *string `json:"output,omitempty"`
+
+	// SourceType Raw provider event or item type that produced this transcript entry.
+	SourceType *string `json:"sourceType,omitempty"`
+
+	// Status Provider or inferred status value when present.
+	Status *string `json:"status,omitempty"`
+
+	// Summary Compact summary text when the provider emits a separate summary channel.
+	Summary *string `json:"summary,omitempty"`
+
+	// Text Plaintext transcript body when present.
+	Text *string `json:"text,omitempty"`
+
+	// Timestamp Provider event timestamp when present in the source session stream.
+	Timestamp *time.Time `json:"timestamp,omitempty"`
+
+	// TurnIndex One-based inferred turn index when the session parser can associate the entry with a turn.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+
+	// Type Canonical transcript entry type used by the dashboard transcript view.
+	Type ProviderSessionTranscriptEntryType `json:"type"`
+}
+
+// ProviderSessionTranscriptEntryType Canonical transcript entry type used by the dashboard transcript view.
+type ProviderSessionTranscriptEntryType string
+
+// ProviderSessionTurnSummary defines model for ProviderSessionTurnSummary.
+type ProviderSessionTurnSummary struct {
+	// EventCount Number of parsed events associated with the turn.
+	EventCount int `json:"eventCount"`
+
+	// FunctionCallCount Number of function or tool calls associated with the turn.
+	FunctionCallCount int `json:"functionCallCount"`
+
+	// Index One-based chronological execution turn index.
+	Index int `json:"index"`
+
+	// ReasoningCount Number of reasoning entries associated with the turn.
+	ReasoningCount int `json:"reasoningCount"`
+
+	// ResponseItemCount Number of response_item records associated with the turn.
+	ResponseItemCount int `json:"responseItemCount"`
+
+	// StartedAt First event timestamp associated with the turn when present.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+}
+
+// ProviderSessionUnknownEvent defines model for ProviderSessionUnknownEvent.
+type ProviderSessionUnknownEvent struct {
+	// LineNumber One-based line number of the unknown event.
+	LineNumber int `json:"lineNumber"`
+
+	// PayloadType Raw nested payload type when present.
+	PayloadType *string `json:"payloadType,omitempty"`
+
+	// Type Raw top-level event type when present.
+	Type *string `json:"type,omitempty"`
 }
 
 // Relation defines model for Relation.

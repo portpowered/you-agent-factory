@@ -490,7 +490,7 @@ paths:
         - Provider Sessions
       operationId: getProviderSessionDetails
       summary: Get provider session details
-      description: Loads a known Codex provider-session file by provider-session metadata. The browser supplies provider, kind, and identifier values; the server resolves the matching rollout file under the configured Codex sessions root and never accepts a raw filesystem path.
+      description: Returns parsed provider-session details using a provider-neutral response schema. The browser supplies provider, kind, and identifier query parameters; the server resolves the matching session file under the configured provider sessions root and never accepts a raw filesystem path. Only Codex (`codex`) sessions are currently loadable for this endpoint.
       parameters:
         - name: provider
           in: query
@@ -1690,12 +1690,12 @@ components:
         source:
           $ref: '#/components/schemas/ProviderSessionSourceMetadata'
         parse:
-          $ref: '#/components/schemas/CodexSessionParseSummary'
+          $ref: '#/components/schemas/ProviderSessionParseSummary'
         transcript:
           type: array
           description: Ordered transcript entries extracted from the provider-session stream.
           items:
-            $ref: '#/components/schemas/CodexSessionTranscriptEntry'
+            $ref: '#/components/schemas/ProviderSessionTranscriptEntry'
     FactorySessionTargetRef:
       type: object
       additionalProperties: false
@@ -1823,7 +1823,7 @@ components:
       properties:
         relativePath:
           type: string
-          description: Path to the loaded session file relative to the configured Codex sessions root.
+          description: Path to the loaded session file relative to the configured provider sessions root.
         sizeBytes:
           type: integer
           format: int64
@@ -1833,7 +1833,7 @@ components:
           type: string
           format: date-time
           description: Filesystem modification time when available.
-    CodexSessionParseSummary:
+    ProviderSessionParseSummary:
       type: object
       additionalProperties: false
       required:
@@ -1867,30 +1867,30 @@ components:
           type: array
           description: Chronological execution turns inferred from turn boundaries and response activity.
           items:
-            $ref: '#/components/schemas/CodexSessionTurnSummary'
+            $ref: '#/components/schemas/ProviderSessionTurnSummary'
         functionCalls:
           type: array
           description: Function and tool calls observed in chronological order.
           items:
-            $ref: '#/components/schemas/CodexSessionFunctionCallSummary'
+            $ref: '#/components/schemas/ProviderSessionFunctionCallSummary'
         reasoning:
           type: array
           description: Reasoning entries or summaries observed in chronological order.
           items:
-            $ref: '#/components/schemas/CodexSessionReasoningSummary'
+            $ref: '#/components/schemas/ProviderSessionReasoningSummary'
         tokenUsage:
-          $ref: '#/components/schemas/CodexSessionTokenUsage'
+          $ref: '#/components/schemas/ProviderSessionTokenUsage'
         parseErrors:
           type: array
           description: Line-level parse errors for malformed event-stream records.
           items:
-            $ref: '#/components/schemas/CodexSessionLineError'
+            $ref: '#/components/schemas/ProviderSessionLineError'
         unknownEvents:
           type: array
           description: Compact list of events with unknown or unsupported type fields.
           items:
-            $ref: '#/components/schemas/CodexSessionUnknownEvent'
-    CodexSessionTurnSummary:
+            $ref: '#/components/schemas/ProviderSessionUnknownEvent'
+    ProviderSessionTurnSummary:
       type: object
       additionalProperties: false
       required:
@@ -1924,7 +1924,7 @@ components:
           type: string
           format: date-time
           description: First event timestamp associated with the turn when present.
-    CodexSessionFunctionCallSummary:
+    ProviderSessionFunctionCallSummary:
       type: object
       additionalProperties: false
       required:
@@ -1957,7 +1957,7 @@ components:
         status:
           type: string
           description: Result status inferred from the call output or explicit status fields.
-    CodexSessionReasoningSummary:
+    ProviderSessionReasoningSummary:
       type: object
       additionalProperties: false
       required:
@@ -1987,7 +1987,7 @@ components:
         encryptedContent:
           type: string
           description: Compact encrypted reasoning payload when the provider exposes it.
-    CodexSessionTokenUsage:
+    ProviderSessionTokenUsage:
       type: object
       additionalProperties: false
       properties:
@@ -2006,7 +2006,7 @@ components:
         totalTokens:
           type: integer
           minimum: 0
-    CodexSessionLineError:
+    ProviderSessionLineError:
       type: object
       additionalProperties: false
       required:
@@ -2020,7 +2020,7 @@ components:
         message:
           type: string
           description: Client-safe parse error message for the malformed line.
-    CodexSessionUnknownEvent:
+    ProviderSessionUnknownEvent:
       type: object
       additionalProperties: false
       required:
@@ -2036,6 +2036,71 @@ components:
         payloadType:
           type: string
           description: Raw nested payload type when present.
+    ProviderSessionTranscriptEntryType:
+      type: string
+      description: Canonical transcript entry type used by the dashboard transcript view.
+      enum:
+        - user_message
+        - assistant_message
+        - reasoning
+        - tool_call
+        - tool_output
+        - system_event
+    ProviderSessionTranscriptEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - order
+        - type
+      properties:
+        order:
+          type: integer
+          minimum: 1
+          description: Stable chronological order of the transcript entry in the session stream.
+        type:
+          $ref: '#/components/schemas/ProviderSessionTranscriptEntryType'
+        turnIndex:
+          type: integer
+          minimum: 1
+          description: One-based inferred turn index when the session parser can associate the entry with a turn.
+        timestamp:
+          type: string
+          format: date-time
+          description: Provider event timestamp when present in the source session stream.
+        lineNumber:
+          type: integer
+          minimum: 1
+          description: One-based JSONL line number that produced this transcript entry when applicable.
+        sourceType:
+          type: string
+          description: Raw provider event or item type that produced this transcript entry.
+        callId:
+          type: string
+          description: Provider tool-call identifier when present.
+        name:
+          type: string
+          description: Tool or function name when present.
+        status:
+          type: string
+          description: Provider or inferred status value when present.
+        text:
+          type: string
+          description: Plaintext transcript body when present.
+        summary:
+          type: string
+          description: Compact summary text when the provider emits a separate summary channel.
+        arguments:
+          type: string
+          description: Compact tool-call arguments when present.
+        output:
+          type: string
+          description: Compact tool output when present.
+        encrypted:
+          type: boolean
+          description: Whether the entry only exposed encrypted content instead of plaintext.
+        encryptedContent:
+          type: string
+          description: Compact encrypted reasoning payload when the provider exposes it.
     StringMap:
       type: object
       additionalProperties:
@@ -4570,71 +4635,6 @@ components:
         defaultContent:
           $ref: '#/components/schemas/WorkContent'
           description: Optional final fallback content when neither runtime input nor config content resolves the slot.
-    CodexSessionTranscriptEntryType:
-      type: string
-      description: Canonical transcript entry type used by the dashboard transcript view.
-      enum:
-        - user_message
-        - assistant_message
-        - reasoning
-        - tool_call
-        - tool_output
-        - system_event
-    CodexSessionTranscriptEntry:
-      type: object
-      additionalProperties: false
-      required:
-        - order
-        - type
-      properties:
-        order:
-          type: integer
-          minimum: 1
-          description: Stable chronological order of the transcript entry in the session stream.
-        type:
-          $ref: '#/components/schemas/CodexSessionTranscriptEntryType'
-        turnIndex:
-          type: integer
-          minimum: 1
-          description: One-based inferred turn index when the session parser can associate the entry with a turn.
-        timestamp:
-          type: string
-          format: date-time
-          description: Provider event timestamp when present in the source session stream.
-        lineNumber:
-          type: integer
-          minimum: 1
-          description: One-based JSONL line number that produced this transcript entry when applicable.
-        sourceType:
-          type: string
-          description: Raw provider event or item type that produced this transcript entry.
-        callId:
-          type: string
-          description: Provider tool-call identifier when present.
-        name:
-          type: string
-          description: Tool or function name when present.
-        status:
-          type: string
-          description: Provider or inferred status value when present.
-        text:
-          type: string
-          description: Plaintext transcript body when present.
-        summary:
-          type: string
-          description: Compact summary text when the provider emits a separate summary channel.
-        arguments:
-          type: string
-          description: Compact tool-call arguments when present.
-        output:
-          type: string
-          description: Compact tool output when present.
-        encrypted:
-          type: boolean
-          description: Whether the entry only exposed encrypted content instead of plaintext.
-        encryptedContent:
-          type: string
-          description: Compact encrypted reasoning payload when the provider exposes it.
     WorkTypeHandlingBehavior:
       type: string
       description: Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.

@@ -11,9 +11,9 @@ properties:
   source:
     $ref: './ProviderSessionSourceMetadata.yaml'
   parse:
-    $ref: './CodexSessionParseSummary.yaml'
+    $ref: './ProviderSessionParseSummary.yaml'
   transcript:
     type: array
     description: Ordered transcript entries extracted from the provider-session stream.
     items:
-      $ref: './CodexSessionTranscriptEntry.yaml'
+      $ref: './ProviderSessionTranscriptEntry.yaml'
