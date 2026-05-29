@@ -25,6 +25,7 @@ import {
   CurrentSelectionHeaderActionProvider,
   CurrentSelectionLocaleProvider,
 } from "../base/public";
+import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
@@ -52,6 +53,7 @@ function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
   editableConfigurationState,
+  editableWorkerConfigurationState,
   failedWorkDetailsByWorkID,
   headerAction,
   locale,
@@ -69,6 +71,9 @@ function renderCurrentSelectionDetailCard({
   currentSelection: CurrentSelectionState;
   editableConfigurationState: ReturnType<
     typeof useEditableWorkstationConfigurationState
+  >;
+  editableWorkerConfigurationState: ReturnType<
+    typeof useEditableWorkerConfigurationState
   >;
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
   headerAction: ReactNode;
@@ -157,6 +162,7 @@ function renderCurrentSelectionDetailCard({
   if (selection?.kind === "worker" && selectedWorkerName) {
     return (
       <WorkerDetailCard
+        editableConfigurationState={editableWorkerConfigurationState}
         locale={locale}
         widgetId={widgetId}
         workerName={selectedWorkerName}
@@ -210,11 +216,17 @@ export function CurrentSelectionWidget({
     selectedNodeProviderSessions,
     selectedWorkDispatchAttempts,
     selectedWorkRequestHistory,
+    selectedWorkerName,
     selection,
   } = currentSelection;
   const editableConfigurationState = useEditableWorkstationConfigurationState(
     selection,
     selectedNode,
+    locale,
+  );
+  const editableWorkerConfigurationState = useEditableWorkerConfigurationState(
+    selection,
+    selectedWorkerName,
     locale,
   );
   const workstationSaveScopeKey =
@@ -250,6 +262,7 @@ export function CurrentSelectionWidget({
     activeTraceID,
     currentSelection,
     editableConfigurationState,
+    editableWorkerConfigurationState,
     failedWorkDetailsByWorkID,
     headerAction: workstationHeaderAction,
     locale: locale ?? undefined,

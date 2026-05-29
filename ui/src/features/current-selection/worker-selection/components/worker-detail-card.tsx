@@ -14,8 +14,10 @@ import {
 import type { WorkerDetailCardProps } from "../lib/detail-card-types";
 import { useWorkerDetailState } from "../hooks/use-worker-detail-state";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
+import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
 
 export function WorkerDetailCard({
+  editableConfigurationState,
   locale,
   widgetId = "current-selection",
   workerName,
@@ -54,6 +56,10 @@ export function WorkerDetailCard({
           <WorkerReferencingWorkstations
             messages={messages}
             workstationNames={detailState.workstationNames}
+          />
+          <WorkerEditableConfigurationSection
+            messages={messages}
+            state={editableConfigurationState}
           />
         </>
       ) : null}

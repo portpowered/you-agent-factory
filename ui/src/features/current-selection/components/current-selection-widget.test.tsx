@@ -739,12 +739,47 @@ describe("CurrentSelectionWidget", () => {
     );
 
     expect(screen.getByText("reviewer")).toBeTruthy();
-    expect(screen.getByText("Model worker")).toBeTruthy();
+    expect(screen.getAllByText("Model worker").length).toBeGreaterThan(0);
     expect(screen.getByText("Review")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Worker configuration" }),
+    ).toBeTruthy();
     expect(
       screen.queryByRole("heading", { name: "Configuration" }),
     ).toBeNull();
     expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
+  });
+
+  it("initializes editable worker inputs from the canonical factory definition", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedWorkerName: "reviewer",
+          selection: { kind: "worker", workerName: "reviewer" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect((screen.getByLabelText("Model provider") as HTMLSelectElement).value).toBe(
+      "CURSOR",
+    );
+    expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(
+      "gpt-5.5",
+    );
+
+    fireEvent.change(screen.getByLabelText("Model provider"), {
+      target: { value: "CODEX" },
+    });
+
+    expect((screen.getByLabelText("Model provider") as HTMLSelectElement).value).toBe(
+      "CODEX",
+    );
   });
 
   it("enables editable workstation loading after a workstation becomes selected", () => {
@@ -769,9 +804,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(
-      vi.mocked(useCurrentFactoryDocument),
-    ).toHaveBeenLastCalledWith(true);
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
   });
 
   it("loads editable workstation inputs when a workstation is already selected on mount", () => {
@@ -1141,6 +1174,7 @@ function buildEditableFactoryDefinition(overrides?: {
     workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(
       (name, index) => ({
         model: `gpt-5.${index + 5}`,
+        modelProvider: index === 0 ? "CURSOR" : "CODEX",
         name,
         type: "MODEL_WORKER",
       }),

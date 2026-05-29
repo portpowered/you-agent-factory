@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
+import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
 
 vi.mock("../../../current-factory-definition/public", async () => {
@@ -77,6 +78,7 @@ function buildFactoryDocument(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: worker detail card coverage groups loading, summary, and editable field regressions together.
 describe("WorkerDetailCard", () => {
   beforeEach(() => {
     mockFactoryDocumentQuery();
@@ -142,6 +144,70 @@ describe("WorkerDetailCard", () => {
     expect(screen.getByText("Script wrap")).toBeTruthy();
     expect(screen.getByText("Review")).toBeTruthy();
     expect(screen.getByText("Plan")).toBeTruthy();
+  });
+
+  it("renders editable worker fields for model workers", () => {
+    const onModelProviderChange = vi.fn();
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: false,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange,
+      onProviderChange: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        workerName="reviewer"
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Model provider"), {
+      target: { value: "CODEX" },
+    });
+
+    expect(onModelProviderChange).toHaveBeenCalledWith("CODEX");
+    expect(screen.queryByLabelText("Command")).toBeNull();
   });
 
   it("omits optional model fields when they are absent on the worker", () => {

@@ -6,12 +6,23 @@ import {
 
 export interface WorkerDetailEnumMessages {
   localizeExecutorProvider: (value: string) => string;
+  localizeModelLocality: (value: string) => string;
   localizeModelProvider: (value: string) => string;
   localizeWorkerType: (value: string) => string;
 }
 
 const workerDetailEnumMessagesByLocale = {
   en: {
+    localizeModelLocality: (value: string) =>
+      localizeEnumLabel({
+        category: "type",
+        labels: {
+          CLOUD: "Cloud",
+          LOCAL: "Local",
+        },
+        locale: "en",
+        value,
+      }),
     localizeExecutorProvider: (value: string) =>
       localizeEnumLabel({
         category: "type",
@@ -48,6 +59,16 @@ const workerDetailEnumMessagesByLocale = {
       }),
   },
   ja: {
+    localizeModelLocality: (value: string) =>
+      localizeEnumLabel({
+        category: "type",
+        labels: {
+          CLOUD: "クラウド",
+          LOCAL: "ローカル",
+        },
+        locale: "ja",
+        value,
+      }),
     localizeExecutorProvider: (value: string) =>
       localizeEnumLabel({
         category: "type",
@@ -84,6 +105,16 @@ const workerDetailEnumMessagesByLocale = {
       }),
   },
   ko: {
+    localizeModelLocality: (value: string) =>
+      localizeEnumLabel({
+        category: "type",
+        labels: {
+          CLOUD: "클라우드",
+          LOCAL: "로컬",
+        },
+        locale: "ko",
+        value,
+      }),
     localizeExecutorProvider: (value: string) =>
       localizeEnumLabel({
         category: "type",
@@ -120,6 +151,16 @@ const workerDetailEnumMessagesByLocale = {
       }),
   },
   "zh-CN": {
+    localizeModelLocality: (value: string) =>
+      localizeEnumLabel({
+        category: "type",
+        labels: {
+          CLOUD: "云端",
+          LOCAL: "本地",
+        },
+        locale: "zh-CN",
+        value,
+      }),
     localizeExecutorProvider: (value: string) =>
       localizeEnumLabel({
         category: "type",

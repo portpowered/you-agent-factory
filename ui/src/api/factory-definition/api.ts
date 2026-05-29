@@ -51,6 +51,7 @@ const WORKER_KEYS = new Set([
   "executorProvider",
   "linear",
   "model",
+  "modelLocality",
   "modelProvider",
   "name",
   "provider",
@@ -138,6 +139,9 @@ const WORKER_MODEL_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["modelPro
 const WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["executorProvider"]>>([
   "SCRIPT_WRAP",
 ]);
+const WORKER_MODEL_LOCALITY_VALUES = new Set<
+  NonNullable<FactoryWorker["modelLocality"]>
+>(["LOCAL", "CLOUD"]);
 const HOSTED_WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["provider"]>>([
   "LINEAR",
 ]);
@@ -319,6 +323,12 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   const type = readOptionalEnum(record, "type", path, WORKER_TYPE_VALUES);
   const model = readOptionalString(record, "model", path);
   const modelProvider = readOptionalEnum(record, "modelProvider", path, WORKER_MODEL_PROVIDER_VALUES);
+  const modelLocality = readOptionalEnum(
+    record,
+    "modelLocality",
+    path,
+    WORKER_MODEL_LOCALITY_VALUES,
+  );
   const provider = readOptionalEnum(record, "provider", path, HOSTED_WORKER_PROVIDER_VALUES);
   const executorProvider = readOptionalEnum(
     record,
@@ -344,6 +354,9 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   }
   if (modelProvider !== undefined) {
     worker.modelProvider = modelProvider;
+  }
+  if (modelLocality !== undefined) {
+    worker.modelLocality = modelLocality;
   }
   if (provider !== undefined) {
     worker.provider = provider;
