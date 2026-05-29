@@ -57,6 +57,71 @@ make test-ui-coverage 2>&1 | rg '\[ui-coverage\].*elapsed'
 
 Local runs are useful for iteration and slow-file tuning but are **not** interchangeable with CI job wall time; prefer the CI table above when estimating PR lane cost. The main covered pass dominates both environments; local App shell and jsdom suites ran slower than the comparable CI runner in this snapshot.
 
+After a successful main covered pass, `make test-ui-coverage` prints a bounded `[ui-coverage] Main covered pass slowest test files (top 15):` block parsed from Vitest default-reporter output. Use that block for file-level targets; the analysis below uses the **2026-05-30 UTC** phase baseline plus representative slow-file snapshots from maintainer runs on the same head.
+
+## Root-cause analysis (why ~8–9 minutes on CI)
+
+The UI Coverage lane is slow because several independent costs stack in **one sequential job**: hundreds of jsdom specs under V8 instrumentation, a deliberately split main/isolated pass layout, and conservative timeouts—not because a single misconfigured flag dominates.
+
+### V8 coverage instrumentation
+
+Every covered Vitest phase runs with `coverage.provider: "v8"` and blob reporters (`ui/vite.config.ts`). Instrumentation adds per-test collection and merge work on top of jsdom render cost. Dashboard and graph suites that mount large React trees pay the highest multiplier: the same interaction that costs a few seconds without coverage can take tens of seconds with instrumentation enabled across many cases.
+
+### Two-worker main covered pass
+
+The main corpus runs with `UI_COVERAGE_MAIN_MAX_WORKERS` default **2** (`ui/scripts/ui-coverage-runner.mjs`). That choice cut the main pass roughly in half versus a single worker in the first rollout (see **Historical rollout** below) but caps parallelism below typical CI CPU counts. Raising workers may help until memory, jsdom, or shared mock contention flattens gains—**US-004** owns measurement.
+
+### Isolated React Flow covered pass
+
+`src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` is excluded from the main pass and run alone with `--maxWorkers=1`. That adds a full second Vitest startup plus ~**107–126s** CI wall time in the baseline tables. Isolation prevents React Flow + coverage flake when mixed with the wide main corpus; it is a deliberate **~20%** of lane phase time, not accidental overhead.
+
+### Sequential phases (no overlap)
+
+Phases run in fixed order: main covered pass → isolated React Flow pass → blob merge (threshold enforcement) → standalone script-style test → replay coverage check (`make test-ui-coverage` → `ui/scripts/ui-coverage-runner.mjs`). CI cannot overlap merge with the next spec file; total lane time is the **sum** of phase elapsed lines, which matched **~532s (~8m52s)** on the reference CI run.
+
+### High `testTimeout` under coverage
+
+`ui/vite.config.ts` sets `testTimeout` to **180000ms** (30s default) when `VITEST_COVERAGE` is active. That does not add wall time on passing tests but allows slow megatests to complete instead of failing fast, which keeps flaky timeouts from masking real regressions while letting heavy App and workstation suites run to completion under instrumentation.
+
+### Megatest files (US-002 slow-file summary)
+
+The runner’s slow-file block highlights files whose **reported** Vitest duration dominates the main pass. Representative hotspots on comparable runs (not exhaustive; re-run `make test-ui-coverage` for the current top 15):
+
+| File (main-pass or isolated) | Role | Representative duration |
+| --- | --- | ---: |
+| `src/App.test.tsx` | Full dashboard shell, Monaco mocks, many integration-style cases in jsdom | ~20–120s depending on machine (CI toward lower band; local arm64 higher) |
+| `src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` | Isolated phase; React Flow + coverage | ~84–126s CI phase total (file share of isolated pass) |
+| Workstation / graph / prompt-editor suites under `src/features/` | Large trees, editors, or graph layout under coverage | Often multi-second to tens of seconds each in slow-file tail |
+
+`integration/*.integration.test.mjs` and Playwright specs are **excluded** from this lane; their cost belongs to **`make ui-integration-test`** (see **US-007**).
+
+## Ranked fix proposals
+
+Prioritized for follow-up stories in this initiative. **Impact** is qualitative against the **2026-05-30 UTC** CI baseline (~8m52s lane step, ~404s main pass). **Risk** is flake or contract regression likelihood.
+
+| Rank | Proposal | Est. impact | Risk | Owned command / story |
+| ---: | --- | --- | --- | --- |
+| 1 | Tune `UI_COVERAGE_MAIN_MAX_WORKERS` (trial 3 and 4 on CI) | Medium–high on main pass if CPU-bound; uncertain total lane if memory-bound | Medium (flake, OOM, mock races) | `UI_COVERAGE_MAIN_MAX_WORKERS=3 make test-ui-coverage` (and `=4`); compare `[ui-coverage]` phases | **US-004** |
+| 2 | Slim `App.test.tsx` (fewer redundant full-app mounts, tighter waits) | Medium on main pass (~20s+ file at CI) | Low–medium (behavior regressions if assertions weakened) | Edit `src/App.test.tsx`; verify slow-file line | **US-006** |
+| 3 | Isolate `App.test.tsx` in dedicated single-worker covered phase (like React Flow) | Low–negative to medium (extra startup; may help parallelism) | Medium (merge/threshold, phase ordering) | Trial in `ui/scripts/ui-coverage-runner.mjs`; measure total lane | **US-005** |
+| 4 | Optional CI matrix shard of main pass (directory splits, blob merge) | High on **job** wall if shards run parallel; workflow complexity | High (flake, merge, threshold gaps) | Design in closeout; implement in `ci.yml` if accepted | **US-008** |
+| 5 | Browser lane: faster preview reuse, slimmer build, parallel integration files | None on UI Coverage lane; reduces total PR UI verify time | Medium (preview contract, artifact harness) | `make ui-integration-test`; `ui/integration/browser-test-harness.mjs` | **US-007** |
+
+**Suggested execution order:** US-004 (workers) and US-006 (App slimming) first—they touch existing phases without new workflow. US-005 only after US-002 slow-file and trial totals prove benefit. US-008 only if single-job main pass remains >~6–7 minutes after (1)–(3). US-007 stays separate so coverage work is not confused with Playwright timing.
+
+At least one implemented optimization from ranks 1–4 must show **≥15%** total lane improvement versus the baseline table with stable CI or documented local proof before the initiative’s optimization acceptance criterion is satisfied (**US-004** / **US-005** / **US-006** / **US-008**).
+
+## Approaches not recommended
+
+| Approach | Why not |
+| --- | --- |
+| Lower merged coverage thresholds in `ui/vite.config.ts` | Saves merge time only; defeats the regression contract enforced at blob merge. Threshold changes belong to explicit product decisions, not speedups. |
+| Move `integration/*.integration.test.mjs` into the jsdom coverage corpus | Blends browser-backed replay timing with jsdom coverage; breaks lane boundaries in `ui/scripts/ui-coverage-runner.mjs` and `development.md`. Browser regressions belong in **`make ui-integration-test`**. |
+| Drop or skip the replay coverage check (`write-replay-coverage-report.ts --check`) | Negligible wall time today; removes metadata guard for replay fixtures. Keep it on `make test-ui-coverage`. |
+| Merge isolated React Flow pass back into main pass without flake evidence | Prior isolation exists because combined runs were unstable; reversing requires CI proof, not assumption. |
+| Disable V8 coverage or run main pass without `--coverage` | Would invalidate the lane’s purpose; use non-coverage `vitest` targets for dev iteration only. |
+| Rely on local arm64 wall time alone for rollout decisions | Local baseline in this doc was ~15m33s vs ~8m52s CI for the same commit—optimize against **CI** tables when estimating PR cost. |
+
 ## Historical rollout (first speedup, `ralph/ui-coverage-speed`)
 
 This section records the CI timing evidence for the first UI coverage speedup rollout on branch `ralph/ui-coverage-speed`.
