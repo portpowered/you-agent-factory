@@ -101,7 +101,6 @@ describe("localized widget responsive schedule", () => {
       "agent-factory-dashboard-trace-grid-bento-card--localized-zh-cn",
       "agent-factory-dashboard-work-outcome-chart-card--localized-zh-cn",
       "agent-factory-dashboard-react-flow-current-activity-card--localized-zh-cn",
-      "you-agent-factory-workflow-dashboard--locale-propagation-verification",
     ]);
     expect(
       localizedWidgetStories.map((storyCheck) => storyCheck.label),
@@ -110,7 +109,6 @@ describe("localized widget responsive schedule", () => {
       "trace drilldown widget (zh-CN)",
       "work outcome widget (zh-CN)",
       "workflow activity widget (zh-CN)",
-      "current selection widget (zh-CN)",
     ]);
     expect(viewportChecks).toEqual([
       { height: 844, label: "mobile", width: 390 },
@@ -121,15 +119,12 @@ describe("localized widget responsive schedule", () => {
 });
 
 describe("current-selection prompt hint responsive schedule", () => {
-  test("keeps the prompt hint story in the default responsive schedule", () => {
+  test("keeps the prompt hint story out of the aggregate responsive schedule", () => {
     const promptHintStory = storyChecks.find(
       (storyCheck) => storyCheck.label === "current selection prompt hinting",
     );
 
-    expect(promptHintStory?.id).toBe(
-      "you-agent-factory-workflow-dashboard--current-selection-prompt-hint-verification",
-    );
-    expect(promptHintStory?.dialogName).toBeUndefined();
+    expect(promptHintStory).toBeUndefined();
     expect(viewportChecks).toEqual([
       { height: 844, label: "mobile", width: 390 },
       { height: 1024, label: "tablet", width: 768 },

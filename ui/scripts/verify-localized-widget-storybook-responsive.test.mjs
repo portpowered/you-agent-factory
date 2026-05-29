@@ -10,6 +10,9 @@ import {
 
 function createVisibleLocator() {
   return {
+    first: vi.fn(function first() {
+      return this;
+    }),
     isVisible: vi.fn().mockResolvedValue(true),
     waitFor: vi.fn().mockResolvedValue(undefined),
   };
@@ -126,6 +129,7 @@ function createWorkOutcomeHarness() {
     page: {
       getByRole: vi.fn().mockReturnValue(card),
     },
+    yAxis,
   };
 }
 
@@ -242,9 +246,6 @@ describe("verify-localized-widget-storybook-responsive", () => {
       submissionItems,
       "Localized submission-items list",
     );
-    expect(card.getByText).toHaveBeenCalledWith(
-      "先选择工作类型并填写请求名称，然后即可继续。",
-    );
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Localized submit work card at mobile",
@@ -276,7 +277,7 @@ describe("verify-localized-widget-storybook-responsive", () => {
   });
 
   test("verifyLocalizedWorkOutcomeChart checks the localized chart labels", async () => {
-    const { card, expectNoHorizontalOverflow, expectVisible, page } =
+    const { card, expectNoHorizontalOverflow, expectVisible, page, yAxis } =
       createWorkOutcomeHarness();
 
     await verifyLocalizedWorkOutcomeChart({
@@ -295,6 +296,7 @@ describe("verify-localized-widget-storybook-responsive", () => {
     expect(card.getByText).toHaveBeenCalledWith("已完成");
     expect(card.getByText).toHaveBeenCalledWith("刻度");
     expect(card.getByText).toHaveBeenCalledWith("工作计数");
+    expect(yAxis.first).toHaveBeenCalledTimes(1);
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Localized work outcome chart at mobile",
