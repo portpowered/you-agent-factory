@@ -6,9 +6,6 @@ interface DashboardBrandLockupProps {
   wordmarkClassName?: string;
 }
 
-const BRAND_MARK_CLASS =
-  "inline-flex h-12 items-center justify-center gap-1 rounded-sm mt-1 border border-af-accent-border bg-af-accent-surface px-3 text-sm font-black uppercase leading-none tracking-[0.18em] text-af-accent";
-
 export function DashboardBrandLockup({
   className = "",
   locale: _locale,
@@ -21,7 +18,7 @@ export function DashboardBrandLockup({
         className,
       )}
     >
-      <span className={BRAND_MARK_CLASS}>
+      <span className="inline-flex h-12 items-center justify-center gap-1 rounded-sm mt-1 border border-af-accent-border bg-af-accent-surface px-3 text-sm font-black uppercase leading-none tracking-[0.18em] text-af-accent">
         <span className="text-[1rem] leading-none">U</span>
       </span>
     </span>
