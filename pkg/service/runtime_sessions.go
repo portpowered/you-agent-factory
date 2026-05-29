@@ -152,18 +152,35 @@ func newFactorySessionID() string {
 	return uuid.NewString()
 }
 
+func (fs *FactoryService) activeFactoryDirectory() string {
+	if fs == nil {
+		return ""
+	}
+	if fs.cfg != nil {
+		if dir := strings.TrimSpace(fs.cfg.Dir); dir != "" {
+			return dir
+		}
+	}
+	return fs.factoryRootDir
+}
+
 func (fs *FactoryService) registerLiveSession(sessionID string, handle *liveRuntimeHandle, selectSession bool) {
 	if fs == nil || fs.sessions == nil || sessionID == "" || handle == nil {
 		return
 	}
+	factoryDir := fs.activeFactoryDirectory()
+	folderPath := fs.factoryRootDir
+	if folderPath == "" {
+		folderPath = factoryDir
+	}
 	fs.sessions.upsert(newLiveFactorySession(
 		sessionID,
-		fs.factoryRootDir,
-		fs.factoryRootDir,
+		factoryDir,
+		folderPath,
 		FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 		handle,
 		sessionID == defaultFactorySessionID,
-		filepath.Base(fs.factoryRootDir),
+		filepath.Base(folderPath),
 	), selectSession)
 	if selectSession && handle.runtime != nil {
 		fs.swapActiveRuntime(handle.runtime)
@@ -797,6 +814,22 @@ func resolveFactorySessionFolder(folderPath string) (string, error) {
 		)
 	}
 	return resolved, nil
+}
+
+func absolutizeFactoryDirectory(dir string) (string, error) {
+	trimmed := strings.TrimSpace(dir)
+	if trimmed == "" {
+		return "", fmt.Errorf("factory directory is required")
+	}
+	expanded, err := expandFactorySessionFolderHome(trimmed)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.Abs(expanded)
+	if err != nil {
+		return "", fmt.Errorf("resolve factory directory %q: %w", dir, err)
+	}
+	return filepath.Clean(resolved), nil
 }
 
 func expandFactorySessionFolderHome(path string) (string, error) {

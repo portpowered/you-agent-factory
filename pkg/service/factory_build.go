@@ -52,6 +52,10 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		if err != nil {
 			return nil, fmt.Errorf("resolve factory dir: %w", err)
 		}
+		resolvedDir, err = absolutizeFactoryDirectory(resolvedDir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve factory dir: %w", err)
+		}
 		cfg.Dir = resolvedDir
 	}
 
@@ -105,7 +109,11 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 }
 
 func buildPrimaryServiceLogger(cfg *FactoryServiceConfig) (string, *zap.Logger, *logging.RuntimeLogSink, *zap.Logger, error) {
-	factoryRootDir := cfg.Dir
+	factoryRootDir, err := absolutizeFactoryDirectory(cfg.Dir)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	cfg.Dir = factoryRootDir
 	baseLogger := cfg.Logger
 	if baseLogger == nil {
 		baseLogger = zap.NewNop()
