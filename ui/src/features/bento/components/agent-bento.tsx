@@ -1,5 +1,5 @@
 import { Move } from "lucide-react";
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { GridLayout, useContainerWidth } from "react-grid-layout";
@@ -47,6 +47,7 @@ export interface AgentBentoLayoutProps {
 
 export interface AgentBentoCardProps {
   bodyClassName?: string;
+  bodyProps?: HTMLAttributes<HTMLDivElement>;
   children: ReactNode;
   className?: string;
   chromeDensity?: "compact" | "default";
@@ -305,6 +306,7 @@ export function AgentBentoLayout({
 
 export function AgentBentoCard({
   bodyClassName = "",
+  bodyProps,
   children,
   className = "",
   chromeDensity = "default",
@@ -331,7 +333,9 @@ export function AgentBentoCard({
         headerAction={headerAction}
         title={title}
       />
-      <div className={cardBodyClassName}>{children}</div>
+      <div className={cardBodyClassName} {...bodyProps}>
+        {children}
+      </div>
     </DashboardPanelShell>
   );
 }

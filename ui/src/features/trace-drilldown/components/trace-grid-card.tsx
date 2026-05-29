@@ -92,6 +92,9 @@ export function TraceGridBentoCard({
 
   return (
     <AgentBentoCard
+      bodyProps={
+        { "data-trace-card-scroll": "" } as HTMLAttributes<HTMLDivElement>
+      }
       className={cardClassName}
       headerAction={headerAction}
       title={title ?? messages.title}
@@ -170,7 +173,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
   }, []);
 
   return (
-    <div className="grid min-w-0 w-full gap-3 overflow-x-clip">
+    <div className="grid min-w-0 w-full gap-3">
       <dl
         className={cn(
           "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-af-border [&_div]:pt-3 [&_dt]:mb-1",
