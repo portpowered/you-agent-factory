@@ -343,7 +343,7 @@ func requiredRunnerOptionalCapabilities(request interfaces.WorkstationExecutionR
 	if request.WorkingDirectory != "" {
 		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityWorkingDirectory)
 	}
-	if request.Worktree != "" {
+	if shouldRequireWorktreeRunnerCapability(request) {
 		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityWorktree)
 	}
 	for _, token := range cloneInputTokens(request.InputTokens) {
@@ -353,6 +353,16 @@ func requiredRunnerOptionalCapabilities(request interfaces.WorkstationExecutionR
 		}
 	}
 	return capabilities
+}
+
+func shouldRequireWorktreeRunnerCapability(request interfaces.WorkstationExecutionRequest) bool {
+	if request.Worktree == "" {
+		return false
+	}
+	if request.WorkingDirectory != "" && interfaces.NormalizeRunnerID(request.RunnerID) == interfaces.RunnerIDCodex {
+		return false
+	}
+	return true
 }
 
 func tokenHasImageContent(token interfaces.Token) bool {
