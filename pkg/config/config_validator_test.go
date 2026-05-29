@@ -15,9 +15,7 @@ func TestValidationResult_HasErrors_FalseWithOnlyWarningsAndHints(t *testing.T) 
 			{Severity: SeverityHint, Path: "b", Message: "hint", Rule: "r2"},
 		},
 	}
-	if vr.HasErrors() {
-		t.Fatal("HasErrors() should be false when only warnings and hints present")
-	}
+	if vr.HasErrors() { t.Fatal("HasErrors() should be false when only warnings and hints present") }
 }
 
 func TestValidationResult_HasErrors_TrueWithErrors(t *testing.T) {
@@ -27,9 +25,7 @@ func TestValidationResult_HasErrors_TrueWithErrors(t *testing.T) {
 			{Severity: SeverityError, Path: "b", Message: "err", Rule: "r2"},
 		},
 	}
-	if !vr.HasErrors() {
-		t.Fatal("HasErrors() should be true when error findings present")
-	}
+	if !vr.HasErrors() { t.Fatal("HasErrors() should be true when error findings present") }
 }
 
 func TestValidationResult_Errors_ReturnsOnlyErrors(t *testing.T) {
