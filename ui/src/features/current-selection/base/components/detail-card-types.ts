@@ -1,16 +1,11 @@
 import type { ReactNode } from "react";
 import type {
-  DashboardFailedWorkDetail,
-  DashboardPlaceRef,
   DashboardProviderSession,
   DashboardProviderSessionAttempt,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
-import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
 import type { WorkstationDetailMessages } from "../../messages/workstation-detail-types";
-import type { StatePositionWorkItem } from "../state/selection-types";
-
 export interface SelectionDetailLayoutProps {
   children: ReactNode;
   headerAction?: ReactNode;
@@ -18,36 +13,6 @@ export interface SelectionDetailLayoutProps {
 }
 
 export interface NoSelectionDetailCardProps {
-  widgetId?: string;
-}
-
-export interface StatePositionWorkListProps {
-  failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
-  messages: Pick<
-    CurrentSelectionDetailMessages,
-    | "failureMessageLabel"
-    | "failureReasonLabel"
-    | "startedAtLabel"
-    | "selectWorkItemLabel"
-  >;
-  onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
-  workItems: StatePositionWorkItem[];
-}
-
-export interface StatePositionWorkListItemProps {
-  failureDetail?: DashboardFailedWorkDetail;
-  messages: StatePositionWorkListProps["messages"];
-  onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
-  workItem: StatePositionWorkItem;
-}
-
-export interface StateNodeDetailCardProps {
-  currentWorkItems: StatePositionWorkItem[];
-  failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
-  onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
-  place: DashboardPlaceRef;
-  terminalHistoryWorkItems?: StatePositionWorkItem[];
-  tokenCount: number;
   widgetId?: string;
 }
 
@@ -123,6 +88,12 @@ export type {
   SelectedWorkRequestHistoryItem,
   WorkstationRequestDetailCardProps,
 } from "../../dispatch-selection/lib/detail-card-types";
+
+export type {
+  StateNodeDetailCardProps,
+  StatePositionWorkListItemProps,
+  StatePositionWorkListProps,
+} from "../../work-state-selection/lib/detail-card-types";
 
 export interface MetadataSectionProps {
   emptyMessage: string;

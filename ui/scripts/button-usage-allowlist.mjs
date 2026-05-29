@@ -83,7 +83,8 @@ export const approvedButtonUsageAllowlist = [
     rawButtonFingerprints: ['aria-label={messages.selectWorkItemLabel(workLabel)}'],
     rawButtonReason:
       "State-node work rows are selection shells that need full-row button semantics.",
-    relativeFilePath: "src/features/current-selection/components/state-node-detail.tsx",
+    relativeFilePath:
+      "src/features/current-selection/work-state-selection/components/state-node-detail.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={messages.relatedWorkSelectLabel(label)}'],

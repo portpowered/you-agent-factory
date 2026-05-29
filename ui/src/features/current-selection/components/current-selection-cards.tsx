@@ -1,5 +1,5 @@
 export { NoSelectionDetailCard } from "./no-selection-detail-card";
-export { StateNodeDetailCard } from "./state-node-detail";
+export { StateNodeDetailCard } from "../work-state-selection/public";
 export {
   TerminalWorkSummaryCard,
   WorkItemDetailCard,
