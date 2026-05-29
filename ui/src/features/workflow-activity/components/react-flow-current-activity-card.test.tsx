@@ -49,9 +49,9 @@ import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart/public";
+import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
-import type { ReadFactoryImportFile } from "../../import/public";
 import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
