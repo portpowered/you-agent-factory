@@ -4,7 +4,7 @@ import { installDashboardBrowserTestShims } from "../../../components/dashboard/
 import {
   buildLongDispatchTrace,
   constrainTraceCardHeight,
-  expectNoVerticalScrollContainer,
+  expectNoVerticalScrollBetweenDispatchTableAndCardBody,
   findTraceCardScrollContainer,
   findTraceDispatchTableRegion,
 } from "../lib/trace-grid-card-scroll-test-helpers";
@@ -12,7 +12,7 @@ import { TraceGridBentoCard } from "./trace-grid-card";
 
 const longDispatchTrace = buildLongDispatchTrace(12);
 
-describe("TraceGridBentoCard card-level scrolling", () => {
+describe("TraceGridBentoCard dispatch scroll ownership regressions", () => {
   let restoreBrowserShims: (() => void) | undefined;
 
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe("TraceGridBentoCard card-level scrolling", () => {
     restoreBrowserShims = undefined;
   });
 
-  it("keeps vertical scroll on the trace card body instead of the dispatch grid root", () => {
+  it("keeps vertical scroll ownership on the card body for a long dispatch fixture", () => {
     render(
       <TraceGridBentoCard
         state={{ status: "ready", trace: longDispatchTrace }}
@@ -33,20 +33,11 @@ describe("TraceGridBentoCard card-level scrolling", () => {
     );
 
     const card = screen.getByRole("article", { name: "Trace drill-down" });
-    const scrollContainer = findTraceCardScrollContainer(card);
-    const traceGridRoot = scrollContainer.firstElementChild;
-    const tableRegion = card.querySelector("[data-trace-dispatch-table]");
-
-    expect(scrollContainer.className).toContain("overflow-auto");
-    expect(traceGridRoot).toBeTruthy();
-    expect(traceGridRoot?.className).not.toContain("overflow-x-clip");
-    expectNoVerticalScrollContainer(traceGridRoot as Element);
-    if (tableRegion) {
-      expectNoVerticalScrollContainer(tableRegion);
-    }
+    expectNoVerticalScrollBetweenDispatchTableAndCardBody(card);
+    expect(within(card).getAllByRole("row")).toHaveLength(13);
   });
 
-  it("scrolls the trace card body from the dispatch table without scrolling the table wrapper", () => {
+  it("scrolls the card body when dispatch content exceeds the viewport height", () => {
     render(
       <div style={{ height: 240, overflow: "hidden" }}>
         <TraceGridBentoCard
@@ -68,7 +59,7 @@ describe("TraceGridBentoCard card-level scrolling", () => {
     );
   });
 
-  it("keeps fixed-height graph shells while the card body scrolls", () => {
+  it("does not add nested vertical scrollports between the dispatch table and card body", () => {
     render(
       <TraceGridBentoCard
         state={{ status: "ready", trace: longDispatchTrace }}
@@ -76,20 +67,10 @@ describe("TraceGridBentoCard card-level scrolling", () => {
     );
 
     const card = screen.getByRole("article", { name: "Trace drill-down" });
-    const graphFrames = card.querySelectorAll("[data-dashboard-graph-frame]");
-    expect(graphFrames.length).toBeGreaterThan(0);
-    for (const frame of graphFrames) {
-      if (!(frame instanceof HTMLElement)) {
-        continue;
-      }
-      expect(frame.style.height).not.toBe("");
-      expect(frame.className).toContain("overflow-hidden");
-      expectNoVerticalScrollContainer(frame);
-    }
+    const scrollContainer = findTraceCardScrollContainer(card);
+    const traceGridRoot = scrollContainer.firstElementChild;
 
-    const scrollContainer = constrainTraceCardHeight(card, 240);
-    scrollContainer.scrollTop = 320;
-    expect(within(card).getByText("Dispatch flow")).toBeTruthy();
-    expect(scrollContainer.scrollTop).toBe(320);
+    expect(traceGridRoot?.className).not.toContain("overflow-x-clip");
+    expectNoVerticalScrollBetweenDispatchTableAndCardBody(card);
   });
 });

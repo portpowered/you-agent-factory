@@ -67,6 +67,7 @@ import {
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { expectNoVerticalScrollContainer } from "../lib/trace-grid-card-scroll-test-helpers";
 import { TraceGridBentoCard } from "./trace-grid-card";
 
 const populatedTrace: DashboardTrace = {
@@ -159,14 +160,6 @@ const populatedTrace: DashboardTrace = {
   workstation_sequence: ["Plan", "Implement"],
 };
 
-function expectNoVerticalScrollContainer(element: Element) {
-  expect(element.className).toContain("overflow-y-clip");
-  expect(element.className).not.toMatch(/overflow-y-(auto|scroll)/);
-  const style = window.getComputedStyle(element);
-  expect(style.overflowY).not.toBe("auto");
-  expect(style.overflowY).not.toBe("scroll");
-}
-
 function useBrowserShimsForTraceGridTests() {
   let restoreBrowserShims: (() => void) | undefined;
 
@@ -234,7 +227,9 @@ describe("TraceGridBentoCard ready state", () => {
     expect(tableScroller?.className).toContain("overflow-x-auto");
     expect(tableScroller?.className).toContain("overflow-y-clip");
     expect(tableScroller?.className).toContain("overscroll-x-contain");
-    expectNoVerticalScrollContainer(tableScroller as Element);
+    expectNoVerticalScrollContainer(tableScroller as Element, {
+      requireOverflowYClip: true,
+    });
     expect(table.className).toContain("min-w-[640px]");
     expect(
       await within(card).findByRole("region", { name: "Batch relation graph" }),
