@@ -301,6 +301,56 @@ describe("useSaveEditableWorkerConfiguration", () => {
       });
     });
   });
+
+  it.each([
+    ["factory.workers[0].modelLocality", "modelLocality"],
+    ["factory.workers[0].executorProvider", "executorProvider"],
+    ["factory.workers[0].command", "command"],
+    ["factory.workers[0].args", "args"],
+    ["factory.workers[0].body", "body"],
+    ["factory.workers[0].provider", "provider"],
+    ["factory.workers[0].type", "type"],
+    ["factory.workers[0].model", "model"],
+  ] as const)(
+    "maps save validation target %s onto %s",
+    async (field, expectedField) => {
+      const message = `Invalid ${expectedField}.`;
+      const mutateAsync = vi.fn().mockRejectedValue(
+        new CurrentFactoryDefinitionError(message, {
+          code: "BAD_REQUEST",
+          status: 400,
+          targets: [{ field, kind: "field" }],
+        }),
+      );
+      vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+        isPending: false,
+        mutateAsync,
+      } as never);
+
+      const { result } = renderHook(
+        () =>
+          useSaveEditableWorkerConfiguration({
+            editableConfigurationState: buildReadyEditableConfigurationState(),
+            scopeKey: "reviewer",
+          }),
+        { wrapper: createQueryClientWrapper() },
+      );
+
+      await act(async () => {
+        await result.current.save();
+      });
+
+      await waitFor(() => {
+        expect(result.current.saveState).toEqual({
+          errorMessage: message,
+          fieldErrors: {
+            [expectedField]: message,
+          },
+          status: "error",
+        });
+      });
+    },
+  );
 });
 
 function createQueryClientWrapper() {

@@ -56,6 +56,27 @@ describe("validateEditableWorkerDraft", () => {
     });
   });
 
+  it("rejects script worker args that contain invalid characters", () => {
+    expect(
+      validateEditableWorkerDraft(
+        {
+          argsText: "check\0lint",
+          body: "",
+          command: "make check",
+          executorProvider: null,
+          model: "",
+          modelLocality: null,
+          modelProvider: null,
+          provider: null,
+          type: "SCRIPT_WORKER",
+        },
+        messages,
+      ),
+    ).toEqual({
+      args: messages.editableConfigurationArgsInvalid,
+    });
+  });
+
   it("requires hosted provider for hosted workers", () => {
     expect(
       validateEditableWorkerDraft(
