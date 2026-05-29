@@ -36,6 +36,7 @@ function buildFactoryDocument(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: editable worker state regressions share one mocked factory-document seam.
 describe("useEditableWorkerConfigurationState", () => {
   const workerSelection: DashboardSelection = {
     kind: "worker",

@@ -1,4 +1,3 @@
-import { FactoryDefinitionAPIError } from "../../../../api/factory-definition";
 import type { EditableWorkerDraft } from "../../../current-factory-definition/lib/worker-editable-values";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 import {
