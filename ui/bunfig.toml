@@ -1,0 +1,6 @@
+[test]
+# DOM globals must register before @testing-library/react evaluates (see bun-dom.preload.ts).
+preload = [
+  "./testing/bun-dom.preload.ts",
+  "./testing/bun-test.preload.ts",
+]
