@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { WorkstationPromptEditor } from "./workstation-prompt-editor";

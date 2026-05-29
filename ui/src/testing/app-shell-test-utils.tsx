@@ -1,10 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, beforeEach, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, vi, type Mock } from "bun:test";
 import { App } from "../App";
 import type {
   DashboardSnapshot,
-  DashboardTopology,
   DashboardTrace,
   DashboardWorkstationRequest,
 } from "../api/dashboard";
@@ -32,28 +31,51 @@ import {
   type WorldState,
   useFactoryTimelineStore,
 } from "../features/timeline/state/factoryTimelineStore";
-import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 
-vi.mock("../features/flowchart/lib/layout", async () => {
-  const actual = await vi.importActual("../features/flowchart/lib/layout");
+const isBunTestRuntime = typeof Bun !== "undefined";
 
-  return {
-    ...actual,
-    buildGraphLayout: async (topology: DashboardTopology) =>
-      buildDashboardTestGraphLayout(topology),
-  };
-});
+const globalStubStack: Array<{
+  key: keyof typeof globalThis;
+  previous: unknown;
+  previousWindow: unknown;
+}> = [];
 
-vi.mock("../features/current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../features/current-factory-definition/public",
-  );
+function stubGlobal<K extends keyof typeof globalThis>(
+  key: K,
+  value: (typeof globalThis)[K],
+): void {
+  const windowRef = globalThis.window as
+    | (Window & typeof globalThis & Record<string, unknown>)
+    | undefined;
+  const previousWindowValue = windowRef?.[key as string];
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+  const globalTarget = globalThis as Record<string, unknown>;
+
+  globalStubStack.push({
+    key,
+    previous: globalTarget[key as string],
+    previousWindow: previousWindowValue,
+  });
+  globalTarget[key as string] = value;
+  if (windowRef) {
+    windowRef[key as string] = value;
+  }
+}
+
+function restoreGlobalStubs(): void {
+  const globalTarget = globalThis as Record<string, unknown>;
+  const windowRef = globalThis.window as
+    | (Window & typeof globalThis & Record<string, unknown>)
+    | undefined;
+
+  while (globalStubStack.length > 0) {
+    const { key, previous, previousWindow } = globalStubStack.pop()!;
+    globalTarget[key as string] = previous;
+    if (windowRef) {
+      windowRef[key as string] = previousWindow;
+    }
+  }
+}
 
 export class MockEventSource {
   public static instances: MockEventSource[] = [];
@@ -290,9 +312,8 @@ export function renderApp({
   });
   queryClients.push(queryClient);
 
-  const fetchMock: FetchMock = vi
-    .fn()
-    .mockImplementation(async (input: RequestInfo | URL) => {
+  const fetchMock: FetchMock = vi.fn(
+    async (input: RequestInfo | URL) => {
       const path =
         typeof input === "string"
           ? input
@@ -307,10 +328,14 @@ export function renderApp({
       }
 
       throw new Error(`unexpected fetch for ${path}`);
-    });
+    },
+  );
 
-  vi.stubGlobal("fetch", fetchMock);
-  vi.stubGlobal("EventSource", MockEventSource);
+  stubGlobal("fetch", fetchMock as typeof fetch);
+  stubGlobal(
+    "EventSource",
+    MockEventSource as unknown as typeof EventSource,
+  );
   reloadDashboardLayoutFromStorage();
   if (timelineEvents) {
     useFactoryTimelineStore.getState().replaceEvents(timelineEvents);
@@ -338,8 +363,8 @@ export function renderApp({
   return { ...result, fetchMock };
 }
 
-function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
-  return fetchMock.mock.calls.map(([input]) =>
+function fetchCallPaths(fetchMock: FetchMock) {
+  return fetchMock.mock.calls.map(([input]: [RequestInfo | URL]) =>
     typeof input === "string"
       ? input
       : input instanceof URL
@@ -348,11 +373,9 @@ function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
   );
 }
 
-export function nonPromptTemplateFetchPaths(
-  fetchMock: ReturnType<typeof vi.fn>,
-) {
+export function nonPromptTemplateFetchPaths(fetchMock: FetchMock) {
   return fetchCallPaths(fetchMock).filter(
-    (path) =>
+    (path: string) =>
       !path.includes("/prompt-template-contract") &&
       path !== "/factory-sessions",
   );
@@ -405,6 +428,15 @@ export function createFileDropTransfer(files: File[]): {
 export function mockCurrentFactoryDocument(
   result: CurrentFactoryDocumentResult,
 ): void {
+  if (isBunTestRuntime) {
+    const { useCurrentFactoryDocumentMock } =
+      require("../../testing/bun-app-shell-module-mocks") as typeof import(
+        "../../testing/bun-app-shell-module-mocks"
+      );
+    useCurrentFactoryDocumentMock.mockReturnValue(result as never);
+    return;
+  }
+
   vi.mocked(useCurrentFactoryDocument).mockReturnValue(result as never);
 }
 
@@ -438,7 +470,7 @@ export function registerAppDashboardTestLifecycle(): void {
       isStale: true,
       isSuccess: false,
       promise: Promise.resolve(undefined),
-      refetch: vi.fn(),
+      refetch: vi.fn(() => Promise.resolve(undefined)),
       status: "pending",
     } as never);
   });
@@ -466,7 +498,7 @@ export function registerAppDashboardTestLifecycle(): void {
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
     vi.restoreAllMocks();
-    vi.unstubAllGlobals();
+    restoreGlobalStubs();
   });
 }
 

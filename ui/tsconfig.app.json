@@ -21,6 +21,7 @@
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
-    "src/**/*.stories.tsx"
+    "src/**/*.stories.tsx",
+    "src/testing/app-shell-test-utils.tsx"
   ]
 }

@@ -1,3 +1,10 @@
+function assignTestGlobal(name: string, value: unknown): void {
+  (globalThis as Record<string, unknown>)[name] = value;
+  if (typeof globalThis.window !== "undefined") {
+    (globalThis.window as unknown as Record<string, unknown>)[name] = value;
+  }
+}
+
 const DEFAULT_RECT = {
   bottom: 600,
   height: 600,
@@ -48,7 +55,7 @@ function installAnimationFrameShim() {
   let nextAnimationFrameHandle = 1;
   const cancelledAnimationFrames = new Set<number>();
 
-  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+  assignTestGlobal("requestAnimationFrame", ((callback: FrameRequestCallback) => {
     const handle = nextAnimationFrameHandle++;
 
     queueMicrotask(() => {
@@ -59,14 +66,14 @@ function installAnimationFrameShim() {
     });
 
     return handle;
-  }) as typeof requestAnimationFrame;
-  globalThis.cancelAnimationFrame = ((handle: number) => {
+  }) as typeof requestAnimationFrame);
+  assignTestGlobal("cancelAnimationFrame", ((handle: number) => {
     cancelledAnimationFrames.add(handle);
-  }) as typeof cancelAnimationFrame;
+  }) as typeof cancelAnimationFrame);
 
   return () => {
-    globalThis.requestAnimationFrame = requestAnimationFrame;
-    globalThis.cancelAnimationFrame = cancelAnimationFrame;
+    assignTestGlobal("requestAnimationFrame", requestAnimationFrame);
+    assignTestGlobal("cancelAnimationFrame", cancelAnimationFrame);
   };
 }
 
@@ -102,9 +109,11 @@ function installElementMeasurementShims() {
     "getBBox",
   );
 
-  globalThis.ResizeObserver = DashboardResizeObserver;
-  globalThis.DOMMatrixReadOnly =
-    DashboardDOMMatrixReadOnly as unknown as typeof DOMMatrixReadOnly;
+  assignTestGlobal("ResizeObserver", DashboardResizeObserver);
+  assignTestGlobal(
+    "DOMMatrixReadOnly",
+    DashboardDOMMatrixReadOnly as unknown as typeof DOMMatrixReadOnly,
+  );
   Object.defineProperty(HTMLElement.prototype, "offsetParent", {
     configurable: true,
     get() {
@@ -154,8 +163,8 @@ function installElementMeasurementShims() {
   });
 
   return () => {
-    globalThis.ResizeObserver = resizeObserver;
-    globalThis.DOMMatrixReadOnly = domMatrixReadOnly;
+    assignTestGlobal("ResizeObserver", resizeObserver);
+    assignTestGlobal("DOMMatrixReadOnly", domMatrixReadOnly);
     if (offsetParentDescriptor) {
       Object.defineProperty(HTMLElement.prototype, "offsetParent", offsetParentDescriptor);
     } else {

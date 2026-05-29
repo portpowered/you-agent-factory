@@ -68,6 +68,11 @@ const apiProxy = Object.fromEntries(
 
 export default defineConfig({
   base: "/dashboard/ui/",
+  resolve: isVitestRun
+    ? {
+        alias: [{ find: "bun:test", replacement: "vitest" }],
+      }
+    : undefined,
   build: {
     rollupOptions: {
       output: {
@@ -107,6 +112,7 @@ export default defineConfig({
     strictPort: true,
   },
   test: {
+    exclude: ["**/*.bun.test.{ts,tsx}"],
     deps: {
       interopDefault: true,
     },

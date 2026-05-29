@@ -1,3 +1,5 @@
+/** Vitest-only setup. Bun unit/coverage lanes use `ui/testing/bun-*.preload.ts`. */
+import "./app-shell-vitest-mocks";
 import { configure } from "@testing-library/react";
 import { createElement, type ReactNode, useEffect, useMemo, useState } from "react";
 import { vi } from "vitest";

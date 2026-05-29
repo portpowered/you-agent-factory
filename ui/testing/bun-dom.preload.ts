@@ -16,6 +16,7 @@ const globalScope = globalThis as typeof globalThis & {
   document: Document;
   navigator: Navigator;
   HTMLElement: typeof HTMLElement;
+  SVGElement: typeof SVGElement;
   Element: typeof Element;
   Node: typeof Node;
   Text: typeof Text;
@@ -35,6 +36,7 @@ globalScope.window = window as Window & typeof globalThis;
 globalScope.document = window.document;
 globalScope.navigator = window.navigator;
 globalScope.HTMLElement = window.HTMLElement;
+globalScope.SVGElement = window.SVGElement;
 globalScope.Element = window.Element;
 globalScope.Node = window.Node;
 globalScope.Text = window.Text;
