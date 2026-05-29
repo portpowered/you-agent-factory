@@ -48,8 +48,9 @@ const cliBinaryName = "you"
 func NewRootCommand() *cobra.Command {
 	diagnostics := &cliDiagnosticsOptions{}
 	root := &cobra.Command{
-		Use:   cliBinaryName,
-		Short: "Run and manage CPN-based workflow factories",
+		Use:          cliBinaryName,
+		Short:        "Run and manage CPN-based workflow factories",
+		SilenceUsage: true,
 		Long: "Run and manage CPN-based workflow factories.\n\n" +
 			"Running " + cliBinaryName + " with no arguments starts the out-of-the-box flow: " +
 			"it prepares ./factory when needed, keeps the runtime alive in continuous mode, " +
@@ -283,34 +284,20 @@ func newWorkListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 
 func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	docsCmd := &cobra.Command{
-		Use:   "docs",
-		Short: "Print packaged markdown reference topics",
+		Use:          "docs [topic]",
+		Short:        "Print packaged markdown reference topics",
+		SilenceUsage: true,
 		Long: "Print packaged markdown reference topics from the installed binary.\n\n" +
-			"Use one of the supported topic subcommands to print the authored markdown page with no wrapper formatting.",
-		Args: cobra.NoArgs,
+			"Run without a topic to print the packaged docs index. Use one supported topic argument to print the authored markdown page with no wrapper formatting.",
+		Args:      cobra.MaximumNArgs(1),
+		ValidArgs: docscli.SupportedTopicCommands(),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := io.WriteString(cmd.OutOrStdout(), docscli.IndexMarkdown(cliBinaryName))
-			return err
-		},
-	}
+			if len(args) == 0 {
+				_, err := io.WriteString(cmd.OutOrStdout(), docscli.IndexMarkdown(cliBinaryName))
+				return err
+			}
 
-	for _, topic := range docscli.SupportedTopicCommands() {
-		docsCmd.AddCommand(newDocsTopicCommand(topic, diagnostics))
-	}
-
-	return docsCmd
-}
-
-func supportedDocsTopicsHelpText() string {
-	return strings.Join(docscli.SupportedTopics(), ", ")
-}
-
-func newDocsTopicCommand(topic string, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	return &cobra.Command{
-		Use:   topic,
-		Short: fmt.Sprintf("Print the packaged %s reference page", topic),
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+			topic := args[0]
 			diagnosticsOutput := diagnostics.writer(cmd)
 			clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs request topic=%s", topic)
 			markdown, err := docscli.Markdown(topic)
@@ -326,6 +313,12 @@ func newDocsTopicCommand(topic string, diagnostics *cliDiagnosticsOptions) *cobr
 			return err
 		},
 	}
+
+	return docsCmd
+}
+
+func supportedDocsTopicsHelpText() string {
+	return strings.Join(docscli.SupportedTopics(), ", ")
 }
 
 func newConfigCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {

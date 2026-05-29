@@ -86,6 +86,25 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 		}
 	}
 
+	var unsupportedStdout bytes.Buffer
+	runInWorkingDirectory(t, workingDir, func() {
+		root := agentcli.NewRootCommand()
+		root.SetOut(&unsupportedStdout)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"docs", "unknown"})
+
+		err := root.Execute()
+		if err == nil {
+			t.Fatal("expected unsupported docs topic to fail")
+		}
+		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, work, workstations, workers, resources, models, batch-inputs, templates)` {
+			t.Fatalf("unexpected unsupported topic error %q", got)
+		}
+	})
+	if got := unsupportedStdout.String(); got != "" {
+		t.Fatalf("unsupported docs topic should not write stdout, got %q", got)
+	}
+
 	for _, topic := range docsSmokeTopics {
 		topic := topic
 		t.Run(topic.name, func(t *testing.T) {

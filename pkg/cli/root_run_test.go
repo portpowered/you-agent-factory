@@ -360,11 +360,35 @@ func TestDocsCommand_HelpStillUsesCobraHelp(t *testing.T) {
 	for _, want := range []string{
 		"Print packaged markdown reference topics",
 		"Usage:",
-		"Available Commands:",
+		"docs [topic]",
+		"Run without a topic to print the packaged docs index.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("docs help missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"docs", "unknown"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected unsupported docs topic to fail")
+	}
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, work, workstations, workers, resources, models, batch-inputs, templates)` {
+		t.Fatalf("unexpected docs error %q", got)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("unsupported topic should not write stdout, got %q", got)
+	}
+	if got := stderr.String(); strings.Contains(got, "unknown command") || strings.Contains(got, "Available Commands:") {
+		t.Fatalf("unsupported topic should not fall back to cobra unknown-command output:\n%s", got)
 	}
 }
 

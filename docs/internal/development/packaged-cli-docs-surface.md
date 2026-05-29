@@ -52,9 +52,9 @@ surface. Keep each topic in one `topicDocuments` entry with:
 unsupported-topic errors. Keep it canonical-only and deterministic. Aliases are
 accepted commands, not first-class topics.
 
-`SupportedTopicCommands()` is the command-wiring list. It can include canonical
-topics plus compatibility aliases so Cobra accepts older names without adding
-alias noise to the index or error messages.
+`SupportedTopicCommands()` is the accepted topic-argument list. It can include
+canonical topics plus compatibility aliases so `you docs <topic>` accepts older
+names without adding alias noise to the index or unsupported-topic errors.
 
 ## Alias Policy
 
