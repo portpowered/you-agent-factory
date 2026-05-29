@@ -9,11 +9,9 @@ import type {
 } from "./index";
 
 describe("current-selection public barrel", () => {
-  it("keeps the public runtime surface focused on the widget and hooks", () => {
+  it("keeps the public runtime surface focused on the widget", () => {
     expect(Object.keys(currentSelectionPublic).sort()).toEqual([
       "CurrentSelectionWidget",
-      "useCurrentSelection",
-      "useCurrentSelectionDetails",
     ]);
     expect("TerminalWorkDetail" in currentSelectionPublic).toBe(false);
   });
