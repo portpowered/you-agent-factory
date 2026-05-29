@@ -242,7 +242,7 @@ func TestAgentExecutor_ForwardsOpenCodeAgentOnOpenCodeDispatch(t *testing.T) {
 		},
 	}, provider)
 
-	_, err := executor.Execute(context.Background(), testAgentRequest(
+	result, err := executor.Execute(context.Background(), testAgentRequest(
 		interfaces.WorkDispatch{
 			DispatchID:      "d-1",
 			TransitionID:    "t-1",
@@ -260,6 +260,12 @@ func TestAgentExecutor_ForwardsOpenCodeAgentOnOpenCodeDispatch(t *testing.T) {
 	}
 	if provider.lastReq.OpenCodeAgent != "implementer" {
 		t.Fatalf("OpenCodeAgent = %q, want workstation override implementer", provider.lastReq.OpenCodeAgent)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Provider == nil {
+		t.Fatal("expected provider diagnostics on work result")
+	}
+	if got := result.Diagnostics.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
+		t.Fatalf("diagnostic opencode_agent = %q, want implementer", got)
 	}
 }
 

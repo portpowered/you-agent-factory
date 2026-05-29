@@ -294,6 +294,7 @@ func safeDiagnosticMetadata(input map[string]string) map[string]string {
 func isSafeProviderMetadataKey(key string) bool {
 	switch strings.ToLower(key) {
 	case "content_bytes",
+		"opencode_agent",
 		"output_schema",
 		"prompt_source",
 		"provider_session_id",
