@@ -527,18 +527,11 @@ jobs:
           fi
 
           {
-            echo "### Execution result"
-            echo
-            echo "- Verified: Backend coverage and required short functional checks through \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`."
-            echo "- Result: \`failed\`"
-            echo "- Retained artifact: \`$artifact_name\` for 14 days"
-            echo "- Primary log: \`$artifact_root/command.log\`"
-            echo
-            echo "#### Failing log tail"
-            echo
-            echo '```text'
-            tail -n 40 "$artifact_root/command.log"
-            echo '```'
+            go run ./cmd/backendverificationsummary \
+              -log "$artifact_root/command.log" \
+              -command "${{ needs.classify-pr-impact.outputs.backend_verification_command }}" \
+              -artifact-name "$artifact_name" \
+              -primary-log "$artifact_root/command.log"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload backend verification failure artifacts
