@@ -74,7 +74,7 @@
         "Verify in browser using dev-browser skill on a factory graph view that includes cron configuration"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]

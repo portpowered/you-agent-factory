@@ -59,3 +59,12 @@
   - Gotchas encountered: Connection-anchor building must use the filtered `displayTopology` so hidden nodes are not referenced when resolving connection targets.
   - Useful context: Reuse the mixed `mixed-public-system-time` fixture from customer-display or layout tests for raw-vs-projected assertions.
 ---
+
+## 2026-05-30T01:20:00Z - cron-workstation-ui-hide-004
+- What was implemented: Added `cronSystemTimeFactoryDefinition` / `dashboardSnapshotWithCronSystemTimeFactory` and a React Flow current-activity card DOM test that asserts layout and rendered controls omit `__system_time` work type, pending state, and expire utility nodes while the customer cron workstation stays selectable.
+- Files changed: `ui/src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Card tests should assert both `buildCurrentActivityGraphLayoutFromFactory` node IDs and DOM queries (`work-type:__system_time` label, workstation/state select buttons) because the card mounts async layout from `snapshot.factory`.
+  - Gotchas encountered: Workstation graph node IDs use authored `name` (`workstation:Nightly Cron`) while `onSelectWorkstation` callbacks use `id || name` (`nightly-cron`); keep both in mind when wiring fixtures.
+  - Useful context: Browser verification via dev-browser skill was not run this iteration; the Vitest card test is the automated E2E proof for story 004.
+---
