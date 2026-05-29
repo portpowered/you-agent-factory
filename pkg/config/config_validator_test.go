@@ -15,9 +15,7 @@ func TestValidationResult_HasErrors_FalseWithOnlyWarningsAndHints(t *testing.T) 
 			{Severity: SeverityHint, Path: "b", Message: "hint", Rule: "r2"},
 		},
 	}
-	if vr.HasErrors() {
-		t.Fatal("HasErrors() should be false when only warnings and hints present")
-	}
+	if vr.HasErrors() { t.Fatal("HasErrors() should be false when only warnings and hints present") }
 }
 
 func TestValidationResult_HasErrors_TrueWithErrors(t *testing.T) {
@@ -27,9 +25,7 @@ func TestValidationResult_HasErrors_TrueWithErrors(t *testing.T) {
 			{Severity: SeverityError, Path: "b", Message: "err", Rule: "r2"},
 		},
 	}
-	if !vr.HasErrors() {
-		t.Fatal("HasErrors() should be true when error findings present")
-	}
+	if !vr.HasErrors() { t.Fatal("HasErrors() should be true when error findings present") }
 }
 
 func TestValidationResult_Errors_ReturnsOnlyErrors(t *testing.T) {
@@ -960,6 +956,26 @@ func TestRuleBundledFiles_RejectsTargetOutsideCanonicalRootForType(t *testing.T)
 
 	findings := ruleBundledFiles(cfg)
 	assertFindingExists(t, findings, "bundled-file-target-root")
+}
+
+func TestRuleBundledFiles_RejectsUnsupportedInputTargetShape(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
+		BundledFiles: []interfaces.BundledFileConfig{{
+			Type:       interfaces.BundledFileTypeInput,
+			TargetPath: "factory/inputs/task/default/nested/starter.md",
+			Content: interfaces.BundledFileContentConfig{
+				Encoding: interfaces.BundledFileEncodingUTF8,
+				Inline:   "starter work\n",
+			},
+		}},
+	}
+
+	findings := ruleBundledFiles(cfg)
+	assertFindingExists(t, findings, "bundled-file-target-root")
+	if !strings.Contains(findings[0].Message, "factory/inputs/<work-type>/<channel>/<file>") {
+		t.Fatalf("expected INPUT shape guidance, got %#v", findings[0])
+	}
 }
 
 func TestRuleBundledFiles_RejectsUnsupportedRootHelperTarget(t *testing.T) {

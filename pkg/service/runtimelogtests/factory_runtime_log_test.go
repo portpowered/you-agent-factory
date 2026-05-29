@@ -55,7 +55,7 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	logPath := filepath.Join(logDir, runtimeInstanceID+".log")
+	logPath := requireRuntimeLogPath(t, logDir, runtimeInstanceID)
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read runtime log %s: %v", logPath, err)
@@ -71,6 +71,7 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
 		}
+		assertRuntimeRecordTimestamp(t, record)
 		if record["runtime_instance_id"] != runtimeInstanceID {
 			t.Fatalf("runtime_instance_id = %#v, want %q", record["runtime_instance_id"], runtimeInstanceID)
 		}
@@ -79,9 +80,7 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 		}
 
 		foundStartup = true
-		if record["runtime_log_path"] != logPath {
-			t.Fatalf("runtime_log_path = %#v, want %q", record["runtime_log_path"], logPath)
-		}
+		assertRuntimeStartupLogSelection(t, record, logPath, logDir)
 		if record["runtime_log_appender"] != logging.RuntimeLogAppenderZapRollingFile {
 			t.Fatalf("runtime_log_appender = %#v, want %q", record["runtime_log_appender"], logging.RuntimeLogAppenderZapRollingFile)
 		}
@@ -112,6 +111,40 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 	}
 	if !foundStartup {
 		t.Fatalf("expected factory started record in runtime log:\n%s", data)
+	}
+}
+
+func assertRuntimeStartupLogSelection(t *testing.T, record map[string]any, logPath, logDir string) {
+	t.Helper()
+
+	if record["runtime_log_path"] != logPath {
+		t.Fatalf("runtime_log_path = %#v, want %q", record["runtime_log_path"], logPath)
+	}
+	if record["runtime_log_root"] != logDir {
+		t.Fatalf("runtime_log_root = %#v, want %q", record["runtime_log_root"], logDir)
+	}
+	startTime, ok := record["runtime_log_start_time_utc"].(string)
+	if !ok || startTime == "" {
+		t.Fatalf("runtime_log_start_time_utc = %#v, want non-empty RFC3339 timestamp", record["runtime_log_start_time_utc"])
+	}
+	parsedStartTime, err := time.Parse(time.RFC3339Nano, startTime)
+	if err != nil {
+		t.Fatalf("runtime_log_start_time_utc = %q, want RFC3339 timestamp: %v", startTime, err)
+	}
+	if parsedStartTime.Location() != time.UTC {
+		t.Fatalf("runtime_log_start_time_utc location = %s, want UTC", parsedStartTime.Location())
+	}
+}
+
+func assertRuntimeRecordTimestamp(t *testing.T, record map[string]any) {
+	t.Helper()
+
+	ts, ok := record["ts"].(float64)
+	if !ok {
+		t.Fatalf("ts = %#v, want numeric zap production timestamp in record %#v", record["ts"], record)
+	}
+	if ts <= 0 {
+		t.Fatalf("ts = %v, want positive timestamp in record %#v", ts, record)
 	}
 }
 
@@ -153,7 +186,7 @@ func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	logPath := filepath.Join(logDir, runtimeInstanceID+".log")
+	logPath := requireRuntimeLogPath(t, logDir, runtimeInstanceID)
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read runtime log %s: %v", logPath, err)
@@ -164,6 +197,7 @@ func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
 		}
+		assertRuntimeRecordTimestamp(t, record)
 		if record["msg"] != "dispatcher: dispatching work to worker" {
 			continue
 		}
@@ -211,6 +245,7 @@ func TestFactoryService_RunWritesWorkerPoolLifecycleEventsToRuntimeLog(t *testin
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
 		}
+		assertRuntimeRecordTimestamp(t, record)
 		eventName, ok := record["event_name"].(string)
 		if !ok {
 			continue
@@ -270,6 +305,7 @@ func TestFactoryService_RunWritesCommandRunnerEventsWithOutputsToRuntimeLog(t *t
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
 		}
+		assertRuntimeRecordTimestamp(t, record)
 		eventName, ok := record["event_name"].(string)
 		if !ok {
 			continue
@@ -486,7 +522,20 @@ func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) 
 		t.Fatalf("Run: %v", err)
 	}
 
-	return opts.work, filepath.Join(logDir, opts.runtimeInstanceID+".log"), recordPath
+	return opts.work, requireRuntimeLogPath(t, logDir, opts.runtimeInstanceID), recordPath
+}
+
+func requireRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {
+	t.Helper()
+
+	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*-"+runtimeInstanceID+"-*.log"))
+	if err != nil {
+		t.Fatalf("glob runtime log path: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("runtime log paths for %q under %s = %v, want exactly one", runtimeInstanceID, logDir, matches)
+	}
+	return matches[0]
 }
 
 func assertRuntimeLogWorkContext(t *testing.T, record map[string]any, eventName string, work interfaces.SubmitRequest) {

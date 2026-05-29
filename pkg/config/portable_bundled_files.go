@@ -222,6 +222,9 @@ func collectPortableBundledFilesFromDir(sourceDir, targetRoot, fileType string, 
 		if entry.IsDir() || !entry.Type().IsRegular() {
 			return nil
 		}
+		if isPortableBundledIgnoredFile(filepath.Base(path)) {
+			return nil
+		}
 
 		relativePath, err := filepath.Rel(sourceDir, path)
 		if err != nil {
@@ -386,6 +389,9 @@ func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryC
 		if strings.TrimSpace(bundledFile.Content.Inline) == "" {
 			continue
 		}
+		if err := validatePortableBundledWriteTarget(bundledFile); err != nil {
+			return nil, err
+		}
 		target, err := portableBundledTargetPath(validationRoot.targetDir, bundledFile.TargetPath)
 		if err != nil {
 			return nil, fmt.Errorf("resolve bundled file %q: %w", bundledFile.TargetPath, err)
@@ -401,6 +407,16 @@ func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryC
 		})
 	}
 	return resolvedWrites, nil
+}
+
+func validatePortableBundledWriteTarget(bundledFile interfaces.BundledFileConfig) error {
+	for _, finding := range validateBundledFileType("bundledFile", bundledFile) {
+		return fmt.Errorf("%s", finding.Message)
+	}
+	for _, finding := range validateBundledFileTarget("bundledFile", bundledFile) {
+		return fmt.Errorf("%s", finding.Message)
+	}
+	return nil
 }
 
 func collectSharedFactoryStarterWork(factoryDir string, cfg *interfaces.FactoryConfig) ([]interfaces.BundledFileConfig, error) {
@@ -491,6 +507,10 @@ func portableStarterWorkRelativePath(inputsDir, path string, validWorkTypes map[
 }
 
 func isPortableStarterWorkIgnoredFile(name string) bool {
+	return isPortableBundledIgnoredFile(name)
+}
+
+func isPortableBundledIgnoredFile(name string) bool {
 	if name == ".gitkeep" {
 		return true
 	}

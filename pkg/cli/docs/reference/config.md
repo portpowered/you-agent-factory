@@ -93,6 +93,24 @@ For an end-to-end run walkthrough, including `--with-mock-workers`,
 - Prefer split `AGENTS.md` files for long prompts and inline runtime fields for
   portable or recorded single-file configs.
 
+## Portability And Bundled Files
+
+- Keep portability-only declarations under `supportingFiles`; runtime-capacity
+  pools still belong under `resources`.
+- `config flatten` automatically collects eligible `factory/scripts/**`,
+  `factory/docs/**`, supported root helper files such as `Makefile`, and the
+  current valid starter work present under `inputs/<work-type-or-BATCH>/<channel>/`
+  into `supportingFiles.bundledFiles`.
+- The export bundle intentionally excludes unsupported project-root files,
+  directories, `.gitkeep`, and temporary or editor-swap files.
+- Shared-factory `INPUT` bundled files are share-time starter-work snapshots.
+  Imported recipients restore detached copies, so later source-factory edits do
+  not rewrite an already shared factory and recipient edits do not flow back to
+  the source.
+- Use [`docs/reference/config.md`](../../../docs/reference/config.md) and
+  [`docs/reference/work.md`](../../../docs/reference/work.md) for the maintained
+  allowlist, target-path, and portability-manifest contract details.
+
 ## Related
 
 - `you docs workstation`

@@ -79,7 +79,7 @@ jobs:
             echo "backend_only=false"
             echo "shared_risk=true"
             echo "full_run_required=true"
-            echo "full_run_command=make verify"
+            echo "full_run_command=make verify-pr"
             echo "areas=shared-risk"
             echo "changed_files_count=0"
             echo "reason=Push events stay on the full shared-risk verification path."
@@ -100,7 +100,7 @@ jobs:
             echo "- Areas touched: \`shared-risk\`"
             echo "- Changed files: \`0\`"
             echo "- Reason: Push events stay on the full shared-risk verification path."
-            echo "- Full required rerun: \`make verify\`"
+            echo "- Full required rerun: \`make verify-pr\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   typecheck:
@@ -470,28 +470,55 @@ jobs:
     needs:
       - classify-pr-impact
       - verify-build-contracts
+    if: always()
     timeout-minutes: 35
     steps:
       - name: Report lane routing
         run: |
+          classification="${{ needs.classify-pr-impact.outputs.classification }}"
+          areas="${{ needs.classify-pr-impact.outputs.areas }}"
+          command="${{ needs.classify-pr-impact.outputs.backend_verification_command }}"
+          full_rerun="${{ needs.classify-pr-impact.outputs.full_run_command }}"
+          decision="${{ needs.classify-pr-impact.outputs.run_backend_verification == 'true' && 'run' || 'skip' }}"
+          reason="${{ needs.classify-pr-impact.outputs.backend_verification_reason }}"
+          if [[ -z "$classification" ]]; then
+            classification="unavailable"
+          fi
+          if [[ -z "$areas" ]]; then
+            areas="unavailable"
+          fi
+          if [[ -z "$command" ]]; then
+            command="make test-backend-verification"
+          fi
+          if [[ -z "$full_rerun" ]]; then
+            full_rerun="make verify-pr"
+          fi
+          if [[ "${{ needs.classify-pr-impact.result }}" != "success" ]]; then
+            decision="blocked-upstream"
+            reason="Not executed because Classify PR Impact did not complete successfully."
+          elif [[ "${{ needs.verify-build-contracts.result }}" != "success" ]]; then
+            decision="blocked-upstream"
+            reason="Not executed because Build, Lint, and API did not complete successfully."
+          fi
           {
             echo "## Backend Verification"
             echo
-            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
-            echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_backend_verification == 'true' && 'run' || 'skip' }}\`"
-            echo "- Local command: \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`"
-            echo "- Reason: ${{ needs.classify-pr-impact.outputs.backend_verification_reason }}"
-            echo "- Full required rerun: \`${{ needs.classify-pr-impact.outputs.full_run_command }}\`"
+            echo "- Classification: \`$classification\`"
+            echo "- Areas touched: \`$areas\`"
+            echo "- Decision: \`$decision\`"
+            echo "- Local command: \`$command\`"
+            echo "- Reason: $reason"
+            echo "- Full required rerun: \`$full_rerun\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check out repository
-        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
-        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -500,18 +527,15 @@ jobs:
 
       - name: Run merged backend coverage and functional verification
         id: run_backend_verification
-        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         continue-on-error: true
         shell: bash
         timeout-minutes: 15
         run: |
-          set -o pipefail
-          artifact_root=".artifacts/backend-verification"
-          mkdir -p "$artifact_root"
-          make test-backend-verification 2>&1 | tee "$artifact_root/command.log"
+          ARTIFACT_ROOT=".artifacts/backend-verification" ./scripts/ci/run-backend-verification.sh
 
       - name: Report lane execution
-        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: always() && needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         shell: bash
         run: |
           artifact_name="backend-verification-failure-artifacts"
@@ -527,18 +551,11 @@ jobs:
           fi
 
           {
-            echo "### Execution result"
-            echo
-            echo "- Verified: Backend coverage and required short functional checks through \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`."
-            echo "- Result: \`failed\`"
-            echo "- Retained artifact: \`$artifact_name\` for 14 days"
-            echo "- Primary log: \`$artifact_root/command.log\`"
-            echo
-            echo "#### Failing log tail"
-            echo
-            echo '```text'
-            tail -n 40 "$artifact_root/command.log"
-            echo '```'
+            go run ./cmd/backendverificationsummary \
+              -log "$artifact_root/command.log" \
+              -command "${{ needs.classify-pr-impact.outputs.backend_verification_command }}" \
+              -artifact-name "$artifact_name" \
+              -primary-log "$artifact_root/command.log"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload backend verification failure artifacts

@@ -269,6 +269,38 @@ func TestRunRequiresLogPath(t *testing.T) {
 	}
 }
 
+func TestRunReadsLogAndWritesSummary(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "command.log")
+	if err := os.WriteFile(logPath, []byte(strings.Join([]string{
+		"=== RUN   TestWorkerRoutes",
+		"--- FAIL: TestWorkerRoutes (0.02s)",
+		"FAIL",
+		"FAIL\tgithub.com/portpowered/infinite-you/pkg/workers\t0.220s",
+		"run go test coverage lane: exit status 1",
+	}, "\n")), 0o600); err != nil {
+		t.Fatalf("write fixture log: %v", err)
+	}
+
+	var output bytes.Buffer
+	err := run(config{
+		logPath:      logPath,
+		command:      defaultCommand,
+		artifactName: defaultArtifactName,
+		primaryLog:   defaultPrimaryLog,
+	}, &output)
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	got := output.String()
+	if !strings.Contains(got, "- Test: `TestWorkerRoutes`") {
+		t.Fatalf("run() output = %q, want failing test", got)
+	}
+	if !strings.Contains(got, "- Package: `github.com/portpowered/infinite-you/pkg/workers`") {
+		t.Fatalf("run() output = %q, want failing package", got)
+	}
+}
+
 func TestRunWritesSummaryFromLogFile(t *testing.T) {
 	tempDir := t.TempDir()
 	logPath := filepath.Join(tempDir, "command.log")

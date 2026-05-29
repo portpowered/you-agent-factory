@@ -685,7 +685,7 @@ func TestRunCommand_RuntimeLogFlags(t *testing.T) {
 		def     string
 		usageIn string
 	}{
-		{name: "runtime-log-dir", def: "", usageIn: "directory for structured runtime log files"},
+		{name: "runtime-log-dir", def: "", usageIn: "root directory for structured runtime log files grouped by UTC start date"},
 		{name: "runtime-log-max-size-mb", def: "100", usageIn: "rotate each runtime log file"},
 		{name: "runtime-log-max-backups", def: "20", usageIn: "maximum rotated runtime log files"},
 		{name: "runtime-log-max-age-days", def: "30", usageIn: "maximum days to retain rotated runtime log files"},
@@ -710,8 +710,8 @@ func TestRunCommand_RuntimeLogFlags(t *testing.T) {
 	if got := runCmd.Flags().Lookup("runtime-log-dir").Usage; !strings.Contains(got, "~/.you-agent-factory/logs") {
 		t.Fatalf("--runtime-log-dir usage = %q, want canonical default log path", got)
 	}
-	if !strings.Contains(runCmd.Long, "Runtime logs are structured JSON rolling files") {
-		t.Fatal("expected run command long help text to document runtime log behavior")
+	if !strings.Contains(runCmd.Long, "Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root") {
+		t.Fatal("expected run command long help text to document UTC-grouped runtime log behavior")
 	}
 	if !strings.Contains(runCmd.Long, "stdout/stderr only on command failures") {
 		t.Fatal("expected run command long help text to document command output policy")
@@ -837,7 +837,7 @@ func TestRunCommand_RuntimeLogFlagsMapToRunConfig(t *testing.T) {
 	}
 
 	if got.RuntimeLogDir != "logs/runtime" {
-		t.Fatalf("runtime log dir = %q, want logs/runtime", got.RuntimeLogDir)
+		t.Fatalf("runtime log dir = %q, want unchanged root logs/runtime", got.RuntimeLogDir)
 	}
 	want := logging.RuntimeLogConfig{MaxSize: 11, MaxBackups: 12, MaxAge: 13, Compress: true}
 	if got.RuntimeLogConfig != want {

@@ -564,6 +564,8 @@ func (fs *FactoryService) logServiceStartup() {
 	fs.logger.Info("factory started",
 		zap.String("dir", fs.cfg.Dir),
 		zap.String("runtime_log_path", fs.logSink.Path()),
+		zap.String("runtime_log_root", fs.logSink.RootDir()),
+		zap.String("runtime_log_start_time_utc", runtimeLogStartTimeString(fs.logSink.StartTimeUTC())),
 		zap.String("runtime_log_appender", logging.RuntimeLogAppenderZapRollingFile),
 		zap.Int("runtime_log_max_size_mb", runtimeLogConfig.MaxSize),
 		zap.Int("runtime_log_max_backups", runtimeLogConfig.MaxBackups),

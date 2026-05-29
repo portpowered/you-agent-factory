@@ -23,11 +23,16 @@ import (
 )
 
 type stubFactoryService struct {
-	run func(context.Context) error
+	run                   func(context.Context) error
+	runtimeLogDiagnostics service.RuntimeLogDiagnostics
 }
 
 func (s stubFactoryService) Run(ctx context.Context) error {
 	return s.run(ctx)
+}
+
+func (s stubFactoryService) RuntimeLogDiagnostics() service.RuntimeLogDiagnostics {
+	return s.runtimeLogDiagnostics
 }
 
 type capturedOOTBSmokeRun struct {

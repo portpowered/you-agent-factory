@@ -17,7 +17,7 @@ const (
 	classificationUIOnly      = "ui-only"
 	classificationBackendOnly = "backend-only"
 	classificationSharedRisk  = "shared-risk"
-	fullRunCommand            = "make verify"
+	fullRunCommand            = "make verify-pr"
 )
 
 var (
@@ -407,9 +407,7 @@ func writeGitHubStepSummary(result classificationResult) error {
 		fmt.Sprintf("- Areas touched: `%s`", strings.Join(result.Areas, ", ")),
 		fmt.Sprintf("- Changed files: `%d`", len(result.ChangedPaths)),
 		fmt.Sprintf("- Reason: %s", result.Reason),
-	}
-	if result.Classification == classificationSharedRisk {
-		lines = append(lines, fmt.Sprintf("- Full required rerun: `%s`", fullRunCommand))
+		fmt.Sprintf("- Full required rerun: `%s`", fullRunCommand),
 	}
 	lines = append(lines, "", "### Required lane routing")
 	for _, plan := range lanePlans(result.Classification) {
