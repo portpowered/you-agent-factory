@@ -3,7 +3,11 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { WorkChartCard } from "./d3-information-card";
-import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
+import {
+  WORK_CHART_MARGIN,
+  WorkChart,
+  type WorkChartSeriesDefinition,
+} from "./work-chart";
 import type { WorkChartModel } from "../lib/trends";
 import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
 
@@ -157,6 +161,69 @@ describe("WorkChart", () => {
     restoreBrowserShims();
   });
 
+  it("renders the series legend in a content-sized shell row outside Recharts", () => {
+    render(
+      <WorkChart
+        ariaLabel="Work chart legend placement"
+        model={sparseWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "Work chart legend placement" });
+    expect(chart.getAttribute("data-work-chart-legend-placement")).toBe(
+      "shell-row",
+    );
+    expect(chart.getAttribute("data-work-chart-plot-margin-bottom")).toBe(
+      String(WORK_CHART_MARGIN.bottom),
+    );
+    expect(WORK_CHART_MARGIN.bottom).toBeLessThan(40);
+
+    const legend = chart.querySelector("[data-work-chart-legend='true']");
+    expect(legend).toBeTruthy();
+    expect(legend?.closest(".recharts-wrapper")).toBeNull();
+    expect(chart.querySelector(".recharts-legend-wrapper")).toBeNull();
+    expect(within(chart).getByText("Queued")).toBeTruthy();
+  });
+
+  it("does not render a legend for loading, empty, or error chart states", () => {
+    const { rerender } = render(
+      <WorkChart
+        ariaLabel="Work chart non-ready legend"
+        series={OUTCOME_SERIES}
+        state={{ status: "loading" }}
+      />,
+    );
+
+    expect(
+      document.querySelector("[data-work-chart-legend='true']"),
+    ).toBeNull();
+
+    rerender(
+      <WorkChart
+        ariaLabel="Work chart non-ready legend"
+        emptyMessage="Empty"
+        emptyTitle="Empty title"
+        model={emptyWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+    expect(
+      document.querySelector("[data-work-chart-legend='true']"),
+    ).toBeNull();
+
+    rerender(
+      <WorkChart
+        ariaLabel="Work chart non-ready legend"
+        series={OUTCOME_SERIES}
+        state={{ status: "error" }}
+      />,
+    );
+    expect(
+      document.querySelector("[data-work-chart-legend='true']"),
+    ).toBeNull();
+  });
+
   it("renders reusable paths for sparse outcome series without crashing", () => {
     render(
       <WorkChart
@@ -173,8 +240,12 @@ describe("WorkChart", () => {
     expect(within(chart).getByText("In-flight")).toBeTruthy();
     expect(within(chart).getByText("Completed")).toBeTruthy();
     expect(within(chart).queryByText("Failed")).toBeNull();
+    const overlay = chart.querySelector<HTMLElement>(
+      "[data-work-chart-overlay='true']",
+    );
+    expect(overlay).toBeTruthy();
     expect(within(chart).getByText("Ticks")).toBeTruthy();
-    expect(within(chart).getByText("Work count")).toBeTruthy();
+    expect(within(overlay as HTMLElement).getByText("Work count")).toBeTruthy();
   });
 
   it("keeps missing series points absent instead of fabricating zero-valued rows", () => {
@@ -243,8 +314,12 @@ describe("WorkChart", () => {
     expect(within(chart).getByText("排队中")).toBeTruthy();
     expect(within(chart).getByText("进行中")).toBeTruthy();
     expect(within(chart).getByText("已完成")).toBeTruthy();
+    const overlay = chart.querySelector<HTMLElement>(
+      "[data-work-chart-overlay='true']",
+    );
+    expect(overlay).toBeTruthy();
     expect(within(chart).getByText("刻度")).toBeTruthy();
-    expect(within(chart).getByText("工作计数")).toBeTruthy();
+    expect(within(overlay as HTMLElement).getByText("工作计数")).toBeTruthy();
   });
 
   it("supports localized zoom and reset interactions", async () => {

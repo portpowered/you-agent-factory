@@ -15,11 +15,11 @@ import {
 import { Button } from "../../../components/ui/button";
 import {
   ChartContainer,
-  ChartLegend,
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "../../../components/ui/chart";
+import type { LegendPayload } from "recharts/types/component/DefaultLegendContent";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { cn } from "../../../lib/cn";
 import { DASHBOARD_CHART_AXIS_LABEL_CLASS } from "../lib/chart-contract";
@@ -39,10 +39,11 @@ import {
 export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
 
 export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
-const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
+export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_READY_CLASS =
-  "h-full min-h-[14rem] min-w-0 w-full px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5";
+  "flex h-full min-h-[14rem] min-w-0 w-full flex-col px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5";
+const WORK_CHART_LEGEND_ROW_CLASS = "shrink-0 pb-1 pt-0 sm:pb-1.5";
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_STATUS_PANEL_CLASS =
   "flex h-full min-h-[14rem] min-w-0 w-full flex-1 flex-col justify-center";
@@ -213,12 +214,22 @@ function ReadyWorkChart({
       <ChartContainer
         className={WORK_CHART_READY_CLASS}
         config={chartData.config}
+        footer={
+          <WorkChartLegendRow
+            chartMessages={chartMessages}
+            hiddenSeriesKeys={hiddenSeriesKeys}
+            series={chartData.series}
+            toggleSeries={toggleSeries}
+          />
+        }
         interactionAttributes={{
           onMouseDown: beginSelection,
           onMouseMove: updateSelection,
           onMouseUp: commitSelection,
         }}
         rootAttributes={{
+          "data-work-chart-legend-placement": "shell-row",
+          "data-work-chart-plot-margin-bottom": String(WORK_CHART_MARGIN.bottom),
           "data-work-chart-ready": "true",
           "data-work-chart-hidden-series": [...hiddenSeriesKeys].join(","),
           "data-work-chart-visible-series": visibleSeriesKeys.join(","),
@@ -277,19 +288,6 @@ function ReadyWorkChart({
             }}
             cursor={{ stroke: "var(--color-af-chart-cursor)" }}
           />
-          <ChartLegend
-            content={
-              <ChartLegendContent
-                getToggleLabel={(label, hidden) =>
-                  hidden
-                    ? chartMessages.showSeriesLabel(label)
-                    : chartMessages.hideSeriesLabel(label)
-                }
-                hiddenSeries={hiddenSeriesKeys}
-                onToggleSeries={toggleSeries}
-              />
-            }
-          />
           <WorkChartSelectionArea selectionRange={selectionRange} />
           <WorkChartLines
             hiddenSeriesKeys={hiddenSeriesKeys}
@@ -297,6 +295,49 @@ function ReadyWorkChart({
           />
         </LineChart>
       </ChartContainer>
+    </div>
+  );
+}
+
+function buildWorkChartLegendPayload(
+  series: readonly WorkChartBuiltSeries[],
+): LegendPayload[] {
+  return series.map((seriesData) => ({
+    color: seriesData.lineColor,
+    dataKey: seriesData.key,
+    type: "line",
+    value: seriesData.label,
+  }));
+}
+
+interface WorkChartLegendRowProps {
+  chartMessages: ReturnType<typeof getWorkOutcomeMessages>["chart"];
+  hiddenSeriesKeys: ReadonlySet<string>;
+  series: readonly WorkChartBuiltSeries[];
+  toggleSeries: (key: string) => void;
+}
+
+function WorkChartLegendRow({
+  chartMessages,
+  hiddenSeriesKeys,
+  series,
+  toggleSeries,
+}: WorkChartLegendRowProps) {
+  return (
+    <div
+      className={WORK_CHART_LEGEND_ROW_CLASS}
+      data-work-chart-legend="true"
+    >
+      <ChartLegendContent
+        getToggleLabel={(label, hidden) =>
+          hidden
+            ? chartMessages.showSeriesLabel(label)
+            : chartMessages.hideSeriesLabel(label)
+        }
+        hiddenSeries={hiddenSeriesKeys}
+        onToggleSeries={toggleSeries}
+        payload={buildWorkChartLegendPayload(series)}
+      />
     </div>
   );
 }

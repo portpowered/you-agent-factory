@@ -49,6 +49,7 @@ export function ChartContainer({
   children,
   className,
   config,
+  footer,
   interactionAttributes,
   overlay,
   rootAttributes,
@@ -58,12 +59,25 @@ export function ChartContainer({
   children: ReactNode;
   className?: string;
   config: ChartConfig;
+  footer?: ReactNode;
   interactionAttributes?: HTMLAttributes<HTMLDivElement>;
   overlay?: ReactNode;
   rootAttributes?: Record<string, string>;
   style?: CSSProperties;
   title: string;
 }) {
+  const chartSurface = (
+    <ResponsiveContainer
+      height="100%"
+      initialDimension={DEFAULT_CHART_INITIAL_DIMENSION}
+      minHeight={0}
+      minWidth={0}
+      width="100%"
+    >
+      {children}
+    </ResponsiveContainer>
+  );
+
   return (
     <ChartContext.Provider value={config}>
       <div
@@ -88,15 +102,14 @@ export function ChartContainer({
         {overlay ? (
           <div className="pointer-events-none absolute inset-0">{overlay}</div>
         ) : null}
-        <ResponsiveContainer
-          height="100%"
-          initialDimension={DEFAULT_CHART_INITIAL_DIMENSION}
-          minHeight={0}
-          minWidth={0}
-          width="100%"
-        >
-          {children}
-        </ResponsiveContainer>
+        {footer ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1">{chartSurface}</div>
+            {footer}
+          </div>
+        ) : (
+          chartSurface
+        )}
       </div>
     </ChartContext.Provider>
   );

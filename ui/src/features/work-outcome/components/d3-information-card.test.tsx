@@ -150,7 +150,6 @@ describe("D3CompletionInformationCard", () => {
     expect(within(chart).getByText("Completed")).toBeTruthy();
     expect(within(chart).getByText("Failed/retried")).toBeTruthy();
     expect(within(chart).getByText("Ticks")).toBeTruthy();
-    expect(within(chart).getByText("Work count")).toBeTruthy();
     expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
     const chartRegion = within(card).getByLabelText(
       "Work outcome chart region",
@@ -176,6 +175,7 @@ describe("D3CompletionInformationCard", () => {
       "[data-work-chart-overlay='true']",
     );
     expect(overlay).toBeTruthy();
+    expect(within(overlay as HTMLElement).getByText("Work count")).toBeTruthy();
     expect(overlay?.className).toContain("px-5");
     expect(overlay?.className).toContain("pb-4");
     expect(overlay?.className).toContain("pt-4");
