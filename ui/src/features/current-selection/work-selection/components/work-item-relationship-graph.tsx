@@ -1,21 +1,21 @@
 import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { DashboardStatusPill } from "../../../components/ui/dashboard-status-pill";
-import { cn } from "../../../lib/cn";
+} from "../../../../components/ui/dashboard-typography";
+import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
+import { cn } from "../../../../lib/cn";
 import type {
   SelectedWorkRelationshipEdge,
   SelectedWorkRelationshipGraph,
   SelectedWorkRelationshipNode,
 } from "../lib/selected-work-relationship-graph";
-import type { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
+import type { useCurrentSelectionDispatchHistoryMessages } from "../../components/current-selection-locale";
 import { FocusedRelationshipSummary } from "./work-item-relationship-summary";
 import {
   CURRENT_SELECTION_ALERT_PANEL_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
-} from "./detail-card-shared";
+} from "../../components/detail-card-shared";
 
 interface RelatedWorkItem {
   description: string;

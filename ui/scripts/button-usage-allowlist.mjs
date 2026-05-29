@@ -52,7 +52,7 @@ export const approvedButtonUsageAllowlist = [
     ],
     rawButtonReason:
       "Inference attempt controls are disclosure toggles and provider-session selection shells inside the current-selection detail surface.",
-    relativeFilePath: "src/features/current-selection/components/inference-attempt.tsx",
+    relativeFilePath: "src/features/current-selection/work-selection/components/inference-attempt.tsx",
   },
   {
     rawButtonFingerprints: [
@@ -89,13 +89,13 @@ export const approvedButtonUsageAllowlist = [
     rawButtonReason:
       "Work-item relationship nodes use selection-chip semantics to jump between related work items rather than performing ordinary button-lane actions.",
     relativeFilePath:
-      "src/features/current-selection/components/work-item-relationship-graph.tsx",
+      "src/features/current-selection/work-selection/components/work-item-relationship-graph.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}'],
     rawButtonReason:
       "Consumed-work payload rows use work-selection chip semantics rather than ordinary action buttons.",
-    relativeFilePath: "src/features/current-selection/components/work-item-payload-details.tsx",
+    relativeFilePath: "src/features/current-selection/work-selection/components/work-item-payload-details.tsx",
   },
   {
     rawButtonFingerprints: [

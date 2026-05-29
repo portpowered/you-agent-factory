@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
+} from "../../../../api/dashboard/types";
 import { buildSelectedWorkRelationshipGraph } from "./selected-work-relationship-graph";
 
 const selectedWorkItem: DashboardWorkItemRef = {

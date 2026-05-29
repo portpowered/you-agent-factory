@@ -4,20 +4,20 @@ import { describe, expect, it, vi } from "vitest";
 import {
   formatDurationMillis,
   formatLocalDateTime,
-} from "../../../components/ui/formatters";
-import type { DashboardWorkItemRef } from "../../../api/dashboard/types";
-import { dashboardWorkstationRequestFixtures } from "../../../components/dashboard/fixtures";
-import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
+} from "../../../../components/ui/formatters";
+import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
+import { dashboardWorkstationRequestFixtures } from "../../../../components/dashboard/fixtures";
+import { providerSessionSelectionKey } from "../../../provider-session-detail/lib/provider-session-ref";
 import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
 import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
+import { CurrentSelectionLocaleProvider } from "../../components/current-selection-locale";
 import {
   DETAIL_CARD_NOW,
   getSelectedWorkItemFixture,
   inferenceAttempt,
   workstationRequest,
-} from "./detail-card-test-helpers";
+} from "../../components/detail-card-test-helpers";
 import { WorkItemDetailCard } from "./work-item-card";
 
 function getDetailRow(container: HTMLElement, label: string): HTMLElement {

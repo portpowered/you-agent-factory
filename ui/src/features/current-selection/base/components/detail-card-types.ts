@@ -1,24 +1,16 @@
 import type { ReactNode } from "react";
 import type {
   DashboardFailedWorkDetail,
-  DashboardInferenceAttempt,
   DashboardPlaceRef,
   DashboardProviderSession,
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
-  DashboardTrace,
-  DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
-import type { SelectedWorkRelationshipGraph } from "../../lib/selected-work-relationship-graph";
 import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
 import type { WorkstationDetailMessages } from "../../messages/workstation-detail-types";
-import type { SelectedWorkItemExecutionDetails } from "../../state/executionDetails";
-import type {
-  DashboardWorkItemSelection,
-  StatePositionWorkItem,
-} from "../state/selection-types";
+import type { StatePositionWorkItem } from "../state/selection-types";
 
 export interface SelectionDetailLayoutProps {
   children: ReactNode;
@@ -60,27 +52,6 @@ export interface StateNodeDetailCardProps {
   widgetId?: string;
 }
 
-export interface ExecutionDetailsSectionProps {
-  activeTraceID?: string | null;
-  details: SelectedWorkItemExecutionDetails;
-  now: number;
-  onSelectTraceID?: (traceID: string) => void;
-  showInferenceAttempts?: boolean;
-  traceTargetId: string;
-}
-
-export interface InferenceAttemptsSectionProps {
-  attempts: DashboardInferenceAttempt[];
-  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
-  selectedProviderSessionKey?: string | null;
-}
-
-export interface InferenceAttemptCardProps {
-  attempt: DashboardInferenceAttempt;
-  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
-  selectedProviderSessionKey?: string | null;
-}
-
 export interface InferenceAttemptDetailProps {
   code?: boolean;
   label: string;
@@ -91,24 +62,6 @@ export interface InferenceAttemptDetailProps {
 export interface InferenceAttemptTextSectionProps {
   label: string;
   value: string;
-}
-
-export interface WorkItemDetailCardProps {
-  activeTraceID?: string | null;
-  dispatchAttempts: DashboardProviderSessionAttempt[];
-  executionDetails: SelectedWorkItemExecutionDetails;
-  locale?: string;
-  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
-  onSelectTraceID?: (traceID: string) => void;
-  onSelectWorkID?: (workID: string) => void;
-  relationshipGraph?: SelectedWorkRelationshipGraph;
-  selectedNode?: DashboardWorkstationNode | null;
-  selectedProviderSessionKey?: string | null;
-  selection: DashboardWorkItemSelection;
-  selectedTrace?: DashboardTrace;
-  workstationRequests: SelectedWorkRequestHistoryItem[];
-  traceTargetId?: string;
-  widgetId?: string;
 }
 
 export interface ProviderSessionAttemptsProps {
@@ -189,16 +142,6 @@ export interface WorkstationRequestDetailCardProps {
   onSelectWorkID?: (workID: string) => void;
   request: DashboardWorkstationRequest;
   selectedWorkID?: string | null;
-  widgetId?: string;
-}
-
-export interface TerminalWorkSummaryCardProps {
-  executionDetails?: SelectedWorkItemExecutionDetails;
-  failureMessage?: string;
-  failureReason?: string;
-  label: string;
-  now?: number;
-  status: "completed" | "failed";
   widgetId?: string;
 }
 

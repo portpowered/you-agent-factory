@@ -6,7 +6,7 @@ import type {
   DashboardTrace,
   DashboardWorkItemRef,
   DashboardWorkstationNode,
-} from "../../../api/dashboard";
+} from "../../../../api/dashboard";
 
 import { selectWorkItemExecutionDetails } from "./executionDetails";
 

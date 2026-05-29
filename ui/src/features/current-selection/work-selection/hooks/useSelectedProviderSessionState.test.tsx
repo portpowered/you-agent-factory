@@ -1,8 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { useSelectedProviderSessionState } from "./useSelectedProviderSessionState";
-import type { CurrentSelectionState } from "./useCurrentSelection";
-import type { DashboardWorkstationRequest } from "../../../api/dashboard/types";
+import type { CurrentSelectionState } from "../../hooks/useCurrentSelection";
+import type { DashboardWorkstationRequest } from "../../../../api/dashboard/types";
 
 function buildCurrentSelection(
   overrides: Partial<CurrentSelectionState> = {},

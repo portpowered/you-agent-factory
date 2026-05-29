@@ -1,12 +1,12 @@
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../components/ui/dashboard-typography";
+import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../../components/ui/dashboard-typography";
 import type { SelectedWorkRelationshipNode } from "../lib/selected-work-relationship-graph";
-import type { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
+import type { useCurrentSelectionDispatchHistoryMessages } from "../../components/current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   TRACE_ACTION_LINK_CLASS,
-} from "./detail-card-shared";
+} from "../../components/detail-card-shared";
 
 export function FocusedRelationshipSummary({
   activeTraceID,

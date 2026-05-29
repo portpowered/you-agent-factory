@@ -13,13 +13,17 @@ import {
   WorkstationDetailCard,
 } from "../workstation-selection/public";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useSelectedProviderSessionState } from "../hooks/useSelectedProviderSessionState";
-import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
-import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
+import {
+  useSelectedProviderSessionState,
+  WorkItemDetailCard,
+} from "../work-selection/public";
+import type {
+  SelectedWorkItemExecutionDetails,
+  SelectedWorkRelationshipGraph,
+} from "../work-selection/public";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
-  WorkItemDetailCard,
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
 import { CurrentSelectionHeaderActionProvider } from "./current-selection-detail-layout";

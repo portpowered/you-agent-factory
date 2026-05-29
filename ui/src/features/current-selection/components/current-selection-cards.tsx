@@ -1,6 +1,8 @@
 export { NoSelectionDetailCard } from "./no-selection-detail-card";
 export { StateNodeDetailCard } from "./state-node-detail";
-export { TerminalWorkSummaryCard } from "./terminal-work-summary-detail";
-export { WorkItemDetailCard } from "./work-item-card";
+export {
+  TerminalWorkSummaryCard,
+  WorkItemDetailCard,
+} from "../work-selection/public";
 export { WorkstationDetailCard } from "../workstation-selection/public";
 export { WorkstationRequestDetailCard } from "./workstation-request-detail";
