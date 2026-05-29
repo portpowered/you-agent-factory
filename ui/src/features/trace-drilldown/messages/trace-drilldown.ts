@@ -15,7 +15,6 @@ export interface TraceDrilldownMessages {
   dispatchPathInputPrefix: string;
   dispatchPathOutputPrefix: string;
   dispatchPathPendingOutcome: string;
-  dispatchPathSectionLabel: string;
   emptyMessage: string;
   emptyTitle: string;
   errorTitle: string;
@@ -45,7 +44,6 @@ export interface TraceDrilldownMessages {
   unknownWorkstationLabel: string;
   unavailableValue: string;
   workItemsExpandLabel: (expanded: boolean) => string;
-  workItemsLabel: string;
   workItemsSummary: (count: number) => string;
   workstationColumnLabel: string;
   outcomeColumnLabel: string;
@@ -64,7 +62,6 @@ const traceDrilldownMessagesByLocale = {
     dispatchPathInputPrefix: "In",
     dispatchPathOutputPrefix: "Out",
     dispatchPathPendingOutcome: "Observed",
-    dispatchPathSectionLabel: "Dispatch",
     emptyMessage:
       "No retained dispatch history is currently available for this work item.",
     emptyTitle: "Trace history unavailable",
@@ -165,7 +162,6 @@ const traceDrilldownMessagesByLocale = {
     unavailableValue: "Unavailable",
     workItemsExpandLabel: (expanded): string =>
       expanded ? "Collapse" : "Expand",
-    workItemsLabel: "Work items",
     workItemsSummary: (count) => `${count} work item${count === 1 ? "" : "s"}`,
     workstationColumnLabel: "Workstation",
     outcomeColumnLabel: "Outcome",
@@ -182,7 +178,6 @@ const traceDrilldownMessagesByLocale = {
     dispatchPathInputPrefix: "输入",
     dispatchPathOutputPrefix: "输出",
     dispatchPathPendingOutcome: "已观测",
-    dispatchPathSectionLabel: "分派",
     emptyMessage: "当前这个工作项暂时没有可保留的分派历史。",
     emptyTitle: "追踪历史不可用",
     errorTitle: "追踪查询失败",
@@ -278,7 +273,6 @@ const traceDrilldownMessagesByLocale = {
     unknownWorkstationLabel: "未知工作站",
     unavailableValue: "不可用",
     workItemsExpandLabel: (expanded): string => (expanded ? "折叠" : "展开"),
-    workItemsLabel: "工作项",
     workItemsSummary: (count) => `${count} 个工作项`,
     workstationColumnLabel: "工作站",
     outcomeColumnLabel: "结果",

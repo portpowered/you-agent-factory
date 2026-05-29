@@ -226,10 +226,16 @@ describe("TraceRelationFlow", () => {
     const implementButton = screen.getByRole("button", {
       name: "Implement story",
     });
-    expect(implementButton.className).toContain("border-af-success-border");
-    expect(implementButton.className).toContain("bg-af-success-surface");
+    const implementNode = implementButton.querySelector("article");
+    if (!implementNode) {
+      throw new Error("Expected selectable relation node shell to render.");
+    }
+    expect(implementNode.className).toContain("border-af-success-border");
+    expect(implementNode.className).toContain("bg-af-success-surface");
     expect(within(implementButton).getByText("Parent-child")).toBeTruthy();
     expect(within(implementButton).getByText("Done")).toBeTruthy();
+    expect(screen.queryByText("Work items")).toBeNull();
+    expect(screen.getAllByText("Work state").length).toBeGreaterThan(0);
     expect(screen.getByText("Failed")).toBeTruthy();
 
     fireEvent.click(implementButton);

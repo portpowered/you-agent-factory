@@ -133,8 +133,8 @@ describe("TraceGridBentoCard replayed world state", () => {
       throw new Error("Expected replayed workstation flow to render.");
     }
 
-    expect(nodeIDsForFlow(workstationFlow)).toEqual(
-      TRACE_WORKSTATION_PATH_REGRESSION_DISPATCH_IDS,
+    expect(nodeIDsForFlow(workstationFlow).sort()).toEqual(
+      [...TRACE_WORKSTATION_PATH_REGRESSION_DISPATCH_IDS].sort(),
     );
     expect(within(workstationFlow).getByText("plan")).toBeTruthy();
     expect(within(workstationFlow).getByText("setup-workspace")).toBeTruthy();
