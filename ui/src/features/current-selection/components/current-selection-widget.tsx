@@ -28,6 +28,7 @@ import {
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
+  WorkerDetailCard,
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
 
@@ -96,6 +97,7 @@ function renderCurrentSelectionDetailCard({
     selectedWorkDispatchAttempts,
     selectedWorkID,
     selectedWorkRequestHistory,
+    selectedWorkerName,
     selectedWorkstationRequest,
     selection,
     selectWorkByID,
@@ -148,6 +150,16 @@ function renderCurrentSelectionDetailCard({
         terminalHistoryWorkItems={selectedStateTerminalHistoryWorkItems}
         tokenCount={selectedStateTokenCount}
         widgetId={widgetId}
+      />
+    );
+  }
+
+  if (selection?.kind === "worker" && selectedWorkerName) {
+    return (
+      <WorkerDetailCard
+        locale={locale}
+        widgetId={widgetId}
+        workerName={selectedWorkerName}
       />
     );
   }

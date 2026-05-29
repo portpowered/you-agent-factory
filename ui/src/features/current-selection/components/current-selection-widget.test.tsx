@@ -62,11 +62,15 @@ function buildCurrentSelection(
     selectedWorkWorkstationRequests: [],
     selectedWorkstationRequest: null,
     selectedNodeWorkstationRequests: [],
+    selectedWorker: null,
+    selectedWorkerName: null,
+    selectedWorkerWorkstationNames: [],
     selection: null,
     selectWorkByID: () => undefined,
     selectStateNode: () => undefined,
     selectStateWorkItem: () => undefined,
     selectWorkItem: () => undefined,
+    selectWorker: () => undefined,
     selectWorkstation: () => undefined,
     selectWorkstationRequest: () => undefined,
     terminalWorkDetail: null,
@@ -695,6 +699,52 @@ describe("CurrentSelectionWidget", () => {
     expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
       false,
     );
+  });
+
+  it("renders the worker detail card for worker selections", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildEditableFactoryDefinition(),
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: true,
+      isFetchedAfterMount: true,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: false,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: false,
+      isSuccess: true,
+      promise: Promise.resolve(buildEditableFactoryDefinition()),
+      refetch: vi.fn(),
+      status: "success",
+    } as never);
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedWorkerName: "reviewer",
+          selection: { kind: "worker", workerName: "reviewer" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(screen.getByText("reviewer")).toBeTruthy();
+    expect(screen.getByText("Model worker")).toBeTruthy();
+    expect(screen.getByText("Review")).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Configuration" }),
+    ).toBeNull();
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
   });
 
   it("enables editable workstation loading after a workstation becomes selected", () => {
