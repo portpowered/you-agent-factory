@@ -11,7 +11,7 @@ import { formatTimeOfDay } from "./components/ui/formatters";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
-} from "./features/current-selection/state/selectionHistoryStore";
+} from "./features/current-selection/base/public";
 import { DashboardScreen } from "./features/dashboard/public";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import { AppLocaleProvider, useAppLocale } from "./i18n";

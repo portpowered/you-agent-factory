@@ -9,7 +9,7 @@ import {
   currentFactoryDocumentQueryKey,
   currentFactoryDefinitionQueryKey,
 } from "../../current-factory-definition/public";
-import { resetSelectionHistoryStore } from "../../current-selection/state/selectionHistoryStore";
+import { resetSelectionHistoryStore } from "../../current-selection/base/public";
 import {
   compactFactoryEventForTimeline,
   installFactoryTimelineDebugGlobal,

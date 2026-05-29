@@ -14,7 +14,7 @@ import {
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
+import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 
 const saveCurrentFactoryMutation = vi.fn();
 
@@ -28,7 +28,7 @@ vi.mock("../../current-factory-definition/public", async () => {
   };
 });
 
-vi.mock("../hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
+vi.mock("../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
   useCurrentWorkstationPromptTemplateValidation: vi.fn(),
 }));
 

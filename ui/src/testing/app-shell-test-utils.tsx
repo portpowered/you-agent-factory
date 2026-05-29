@@ -20,7 +20,7 @@ import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
 import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
-import { resetSelectionHistoryStore } from "../features/current-selection/state/selectionHistoryStore";
+import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,

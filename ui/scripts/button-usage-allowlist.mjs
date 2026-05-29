@@ -52,7 +52,7 @@ export const approvedButtonUsageAllowlist = [
     ],
     rawButtonReason:
       "Inference attempt controls are disclosure toggles and provider-session selection shells inside the current-selection detail surface.",
-    relativeFilePath: "src/features/current-selection/components/inference-attempt.tsx",
+    relativeFilePath: "src/features/current-selection/work-selection/components/inference-attempt.tsx",
   },
   {
     rawButtonFingerprints: [
@@ -63,39 +63,42 @@ export const approvedButtonUsageAllowlist = [
     ],
     rawButtonReason:
       "Provider-session attempt rows use disclosure and selection semantics rather than ordinary action-button styling.",
-    relativeFilePath: "src/features/current-selection/components/provider-session-attempts.tsx",
+    relativeFilePath:
+      "src/features/current-selection/workstation-selection/components/provider-session-attempts.tsx",
   },
   {
     rawButtonFingerprints: ['aria-controls={panelId} aria-expanded={expanded}'],
     rawButtonReason:
       "Selected-work dispatch attempt sections are disclosure shells and stay outside the ordinary action-button lane.",
-    relativeFilePath: "src/features/current-selection/components/selected-work-dispatch-attempt-sections.tsx",
+    relativeFilePath:
+      "src/features/current-selection/dispatch-selection/components/selected-work-dispatch-attempt-sections.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={selectWorkItemAccessibleLabel('],
     rawButtonReason:
       "Shared selected-work dispatch controls use work-selection chip semantics rather than ordinary actions.",
     relativeFilePath:
-      "src/features/current-selection/components/selected-work-dispatch-history-card-shared.tsx",
+      "src/features/current-selection/dispatch-selection/components/selected-work-dispatch-history-card-shared.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={messages.selectWorkItemLabel(workLabel)}'],
     rawButtonReason:
       "State-node work rows are selection shells that need full-row button semantics.",
-    relativeFilePath: "src/features/current-selection/components/state-node-detail.tsx",
+    relativeFilePath:
+      "src/features/current-selection/work-state-selection/components/state-node-detail.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={messages.relatedWorkSelectLabel(label)}'],
     rawButtonReason:
       "Work-item relationship nodes use selection-chip semantics to jump between related work items rather than performing ordinary button-lane actions.",
     relativeFilePath:
-      "src/features/current-selection/components/work-item-relationship-graph.tsx",
+      "src/features/current-selection/work-selection/components/work-item-relationship-graph.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}'],
     rawButtonReason:
       "Consumed-work payload rows use work-selection chip semantics rather than ordinary action buttons.",
-    relativeFilePath: "src/features/current-selection/components/work-item-payload-details.tsx",
+    relativeFilePath: "src/features/current-selection/work-selection/components/work-item-payload-details.tsx",
   },
   {
     rawButtonFingerprints: [
@@ -103,7 +106,7 @@ export const approvedButtonUsageAllowlist = [
     ],
     rawButtonReason:
       "Workstation detail keeps one disclosure-toggle shell inside the current-selection detail surface while ordinary actions stay on shared button primitives.",
-    relativeFilePath: "src/features/current-selection/components/workstation-detail-card.tsx",
+    relativeFilePath: "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx",
   },
   {
     rawButtonFingerprints: ['aria-controls={panelID} aria-expanded={expanded}'],

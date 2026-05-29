@@ -11,9 +11,7 @@ import {
 import {
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
 } from "./features/bento/hooks/dashboardLayoutSchema";
-import {
-  useCurrentWorkstationPromptTemplateValidation,
-} from "./features/current-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
+import { useCurrentWorkstationPromptTemplateValidation } from "./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import {
   activeSnapshot,
   baselineSnapshot,
@@ -24,7 +22,7 @@ import {
   terminalSnapshot,
 } from "./testing/app-shell-test-utils";
 
-vi.mock("./features/current-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
+vi.mock("./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
   useCurrentWorkstationPromptTemplateValidation: vi.fn(),
 }));
 

@@ -8,9 +8,9 @@ import {
 } from "../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
-import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
+import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
+import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
@@ -26,11 +26,11 @@ vi.mock("../../current-factory-definition/public", async () => {
   };
 });
 
-vi.mock("../hooks/use-save-editable-workstation-configuration", () => ({
+vi.mock("../workstation-selection/hooks/use-save-editable-workstation-configuration", () => ({
   useSaveEditableWorkstationConfiguration: vi.fn(),
 }));
 
-vi.mock("../hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
+vi.mock("../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
   useCurrentWorkstationPromptTemplateValidation: vi.fn(),
 }));
 

@@ -11,7 +11,7 @@ import {
 import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
 import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
-import { PROVIDER_SESSION_CARD_CLASS } from "../../current-selection/components/detail-card-shared";
+import { PROVIDER_SESSION_CARD_CLASS } from "../../current-selection/base/public";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
