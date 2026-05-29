@@ -1,13 +1,23 @@
 import type { ReactNode } from "react";
 
 import { useEffect, useMemo, useState } from "react";
-
-import { cn } from "../../../lib/cn";
+import type {
+  DashboardTrace,
+  DashboardWorkItemRef,
+} from "../../../api/dashboard/types";
 import {
-  formatDurationMillis,
-  formatTraceOutcome,
-  formatTypedWorkItemLabel,
-} from "../../../components/ui/formatters";
+  DASHBOARD_WIDGET_CLASS,
+  DETAIL_CARD_CLASS,
+  DETAIL_CARD_WIDE_CLASS,
+  EMPTY_STATE_CLASS,
+  EMPTY_STATE_COMPACT_CLASS,
+} from "../../../components/ui/widget-frame";
+import { Button } from "../../../components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "../../../components/ui/collapsible";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_CODE_CLASS,
@@ -15,19 +25,10 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import {
-  DASHBOARD_WIDGET_CLASS,
-  DETAIL_CARD_CLASS,
-  DETAIL_CARD_WIDE_CLASS,
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/dashboard/widget-board";
-import { AgentBentoCard } from "../../../components/ui";
-import { Button } from "../../../components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "../../../components/ui/collapsible";
+  formatDurationMillis,
+  formatTraceOutcome,
+  formatTypedWorkItemLabel,
+} from "../../../components/ui/formatters";
 import { Skeleton } from "../../../components/ui/skeleton";
 import {
   Table,
@@ -38,10 +39,8 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import type {
-  DashboardTrace,
-  DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
+import { cn } from "../../../lib/cn";
+import { AgentBentoCard } from "../../bento/public";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
@@ -144,7 +143,13 @@ function renderTraceState(
         </div>
       );
     case "ready":
-      return <TraceGrid locale={locale} onSelectWorkID={onSelectWorkID} trace={state.trace} />;
+      return (
+        <TraceGrid
+          locale={locale}
+          onSelectWorkID={onSelectWorkID}
+          trace={state.trace}
+        />
+      );
   }
 }
 
@@ -174,19 +179,28 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
         )}
       >
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.traceIdLabel}</dt>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+            {messages.traceIdLabel}
+          </dt>
           <dd className="[overflow-wrap:anywhere]">
             {trace.trace_id || messages.unavailableValue}
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.dispatchFlowLabel}</dt>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+            {messages.dispatchFlowLabel}
+          </dt>
           <dd>
-            <TraceWorkstationPath dispatches={trace.dispatches} locale={locale} />
+            <TraceWorkstationPath
+              dispatches={trace.dispatches}
+              locale={locale}
+            />
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.dispatchCountLabel}</dt>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+            {messages.dispatchCountLabel}
+          </dt>
           <dd>{trace.dispatches.length}</dd>
         </div>
         <div>
@@ -197,7 +211,10 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                 onOpenChange={setWorkItemsExpanded}
                 open={workItemsExpanded}
               >
-                <section aria-labelledby={`${workItemsID}-heading`} className="grid gap-2.5">
+                <section
+                  aria-labelledby={`${workItemsID}-heading`}
+                  className="grid gap-2.5"
+                >
                   <div className={TRACE_EXPANDER_HEADER_CLASS}>
                     <h3
                       className={DASHBOARD_SUPPORTING_LABEL_CLASS}
@@ -234,13 +251,17 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.requestIdsLabel}</dt>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+            {messages.requestIdsLabel}
+          </dt>
           <dd className="[overflow-wrap:anywhere]">
             {trace.request_ids?.join(", ") || messages.unavailableValue}
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.batchRelationsLabel}</dt>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+            {messages.batchRelationsLabel}
+          </dt>
           <dd>
             {trace.relations && trace.relations.length > 0 ? (
               <TraceRelationFlow
@@ -257,25 +278,44 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
 
       {trace.dispatches.length > 0 ? (
         <div className="min-w-0 overflow-x-auto overscroll-x-contain">
-          <Table className={cn(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}>
-            <TableCaption className={cn("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
+          <Table
+            className={cn(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}
+          >
+            <TableCaption
+              className={cn("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}
+            >
               {messages.tableCaption}
             </TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                <TableHead
+                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                  scope="col"
+                >
                   {messages.dispatchColumnLabel}
                 </TableHead>
-                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                <TableHead
+                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                  scope="col"
+                >
                   {messages.workstationColumnLabel}
                 </TableHead>
-                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                <TableHead
+                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                  scope="col"
+                >
                   {messages.outcomeColumnLabel}
                 </TableHead>
-                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                <TableHead
+                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                  scope="col"
+                >
                   {messages.inputItemsColumnLabel}
                 </TableHead>
-                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                <TableHead
+                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                  scope="col"
+                >
                   {messages.outputItemsColumnLabel}
                 </TableHead>
               </TableRow>
@@ -384,5 +424,7 @@ function resolveTraceWorkItems(trace: DashboardTrace): DashboardWorkItemRef[] {
     }
   }
 
-  return [...itemsByID.values()].sort((left, right) => left.work_id.localeCompare(right.work_id));
+  return [...itemsByID.values()].sort((left, right) =>
+    left.work_id.localeCompare(right.work_id),
+  );
 }

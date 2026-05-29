@@ -1,7 +1,7 @@
 import {
   DETAIL_COPY_CLASS,
   WIDGET_SUBTITLE_CLASS,
-} from "../../../components/dashboard/widget-board";
+} from "../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import { useCurrentSelectionShellMessages } from "./current-selection-locale";
 import { normalizeDetailText } from "./detail-card-shared";

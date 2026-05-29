@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
 
-import { DETAIL_CARD_WIDE_CLASS } from "../../../components/dashboard/widget-board";
+import { DETAIL_CARD_WIDE_CLASS } from "../../../components/ui/widget-frame";
 import { DashboardWidgetFrame } from "../../../components/ui";
 import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { CurrentSelectionHeaderActions } from "./current-selection-header-actions";

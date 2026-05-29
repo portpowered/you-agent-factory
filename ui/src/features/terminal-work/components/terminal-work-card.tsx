@@ -5,24 +5,25 @@ import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
   DETAIL_COPY_CLASS,
-} from "../../../components/dashboard/widget-board";
-import { AgentBentoCard } from "../../../components/ui";
+} from "../../../components/ui/widget-frame";
 import {
   Collapsible,
   CollapsibleContent,
 } from "../../../components/ui/collapsible";
-import { DisclosureButton } from "../../../components/ui/disclosure-button";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { DisclosureButton } from "../../../components/ui/disclosure-button";
 import { SelectableCardButton } from "../../../components/ui/selectable-card-button";
 import { cn } from "../../../lib/cn";
+import { AgentBentoCard } from "../../bento/public";
 import type { GraphSemanticIconKind } from "../../flowchart/public";
 import { GraphSemanticIcon } from "../../flowchart/public";
-import { getTerminalWorkMessages } from "../messages/terminal-work";
 import type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
+import { getTerminalWorkMessages } from "../messages/terminal-work";
+
 export type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
 
 export interface CompletedFailedWorkstationCardProps {

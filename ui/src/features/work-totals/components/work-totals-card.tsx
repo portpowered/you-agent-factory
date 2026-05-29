@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { formatNumber } from "../../../i18n";
 import { cn } from "../../../lib/cn";
-import { AgentBentoCard } from "../../../components/ui";
+import { AgentBentoCard } from "../../bento/public";
 import { getWorkTotalsMessages } from "../messages/work-totals";
 
 interface WorkTotalsCardProps {
@@ -22,8 +22,7 @@ interface StatCardProps {
   valueLabel: string;
 }
 
-const STAT_CARD_CLASS =
-  "min-h-0 rounded-lg border bg-af-surface-raised p-2";
+const STAT_CARD_CLASS = "min-h-0 rounded-lg border bg-af-surface-raised p-2";
 
 export function WorkTotalsCard({
   completedCount,

@@ -10,7 +10,7 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
+import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,

@@ -11,40 +11,49 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-func writeExpandedFactoryLayout(sourceDir, targetDir string, cfg *interfaces.FactoryConfig, canonical []byte, sourcePath string) ([]PortableBundledFileReplacement, error) {
+func writeExpandedFactoryLayout(sourceDir, targetDir string, cfg *interfaces.FactoryConfig, canonical []byte, sourcePath string) (LayoutExpansionReport, error) {
 	if _, err := preparePortableBundledFileWrites(targetDir, cfg); err != nil {
-		return nil, err
+		return LayoutExpansionReport{}, err
 	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create factory directory %s: %w", targetDir, err)
+		return LayoutExpansionReport{}, fmt.Errorf("create factory directory %s: %w", targetDir, err)
 	}
 
 	formatted, err := formatCanonicalFactoryJSON(canonical, sourcePath)
 	if err != nil {
-		return nil, err
+		return LayoutExpansionReport{}, err
 	}
 	factoryPath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
 	if err := os.WriteFile(factoryPath, formatted, 0o644); err != nil {
-		return nil, fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
+		return LayoutExpansionReport{}, fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
 	}
+	report := LayoutExpansionReport{FactoryConfigPaths: 1}
 
-	if err := writeExpandedWorkerFiles(targetDir, cfg.Workers); err != nil {
-		return nil, err
+	workerAgentPaths, err := writeExpandedWorkerFiles(targetDir, cfg.Workers)
+	if err != nil {
+		return LayoutExpansionReport{}, err
 	}
-	if err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations); err != nil {
-		return nil, err
+	report.WorkerAgentPaths = workerAgentPaths
+
+	workstationAgentPaths, promptPaths, err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations)
+	if err != nil {
+		return LayoutExpansionReport{}, err
 	}
+	report.WorkstationAgentPaths = workstationAgentPaths
+	report.PromptPaths = promptPaths
+
 	replacements, err := materializePortableBundledFiles(targetDir, cfg)
 	if err != nil {
-		return nil, err
+		return LayoutExpansionReport{}, err
 	}
+	report.BundledReplacements = replacements
 	if err := copySupportedPortableBundledFilesFromSource(sourceDir, targetDir, cfg); err != nil {
-		return nil, err
+		return LayoutExpansionReport{}, err
 	}
 	if err := writeExpandedReferencedScripts(sourceDir, targetDir, cfg); err != nil {
-		return nil, err
+		return LayoutExpansionReport{}, err
 	}
-	return replacements, nil
+	return report, nil
 }
 
 func copySupportedPortableBundledFilesFromSource(sourceDir, targetDir string, cfg *interfaces.FactoryConfig) error {
@@ -123,10 +132,10 @@ func resolvePortableBundledCopyTarget(
 	return target, true, nil
 }
 
-func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.WorkerConfig) error {
+func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.WorkerConfig) (int, error) {
 	workersDir := filepath.Join(targetDir, interfaces.WorkersDir)
 	if err := os.MkdirAll(workersDir, 0o755); err != nil {
-		return fmt.Errorf("create workers directory %s: %w", workersDir, err)
+		return 0, fmt.Errorf("create workers directory %s: %w", workersDir, err)
 	}
 
 	configs := append([]interfaces.WorkerConfig(nil), workerConfigs...)
@@ -134,16 +143,17 @@ func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.Worke
 		return configs[i].Name < configs[j].Name
 	})
 
+	written := 0
 	for _, workerCfg := range configs {
 		segment, err := safeFactoryLayoutSegment("worker", workerCfg.Name)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		workerDir := filepath.Join(workersDir, segment)
 		if workerCfg.Type == "" {
 			exists, err := agentsFileExists(workerDir)
 			if err != nil {
-				return fmt.Errorf("check worker %q AGENTS.md: %w", workerCfg.Name, err)
+				return 0, fmt.Errorf("check worker %q AGENTS.md: %w", workerCfg.Name, err)
 			}
 			if exists {
 				continue
@@ -151,25 +161,27 @@ func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.Worke
 			def := workerDefForExpansion(workerCfg)
 			agents, err := renderAgentsMarkdown(workerFrontmatterForExpansion(def), def.Body)
 			if err != nil {
-				return fmt.Errorf("render worker %q AGENTS.md: %w", workerCfg.Name, err)
+				return 0, fmt.Errorf("render worker %q AGENTS.md: %w", workerCfg.Name, err)
 			}
 			if err := writeAgentsFile(workerDir, agents); err != nil {
-				return fmt.Errorf("write worker %q AGENTS.md: %w", workerCfg.Name, err)
+				return 0, fmt.Errorf("write worker %q AGENTS.md: %w", workerCfg.Name, err)
 			}
+			written++
 			continue
 		}
 		agents := renderAgentsBody(workerCfg.Body)
 		if err := writeAgentsFile(workerDir, agents); err != nil {
-			return fmt.Errorf("write worker %q AGENTS.md: %w", workerCfg.Name, err)
+			return 0, fmt.Errorf("write worker %q AGENTS.md: %w", workerCfg.Name, err)
 		}
+		written++
 	}
-	return nil
+	return written, nil
 }
 
-func writeExpandedWorkstationFiles(targetDir string, workstationConfigs []interfaces.FactoryWorkstationConfig) error {
+func writeExpandedWorkstationFiles(targetDir string, workstationConfigs []interfaces.FactoryWorkstationConfig) (int, int, error) {
 	workstationsDir := filepath.Join(targetDir, interfaces.WorkstationsDir)
 	if err := os.MkdirAll(workstationsDir, 0o755); err != nil {
-		return fmt.Errorf("create workstations directory %s: %w", workstationsDir, err)
+		return 0, 0, fmt.Errorf("create workstations directory %s: %w", workstationsDir, err)
 	}
 
 	configs := append([]interfaces.FactoryWorkstationConfig(nil), workstationConfigs...)
@@ -177,16 +189,18 @@ func writeExpandedWorkstationFiles(targetDir string, workstationConfigs []interf
 		return configs[i].Name < configs[j].Name
 	})
 
+	agentsWritten := 0
+	promptsWritten := 0
 	for _, workstationCfg := range configs {
 		segment, err := safeFactoryLayoutSegment("workstation", workstationCfg.Name)
 		if err != nil {
-			return err
+			return 0, 0, err
 		}
 		workstationDir := filepath.Join(workstationsDir, segment)
 		if !hasInlineWorkstationRuntime(workstationCfg) {
 			exists, err := agentsFileExists(workstationDir)
 			if err != nil {
-				return fmt.Errorf("check workstation %q AGENTS.md: %w", workstationCfg.Name, err)
+				return 0, 0, fmt.Errorf("check workstation %q AGENTS.md: %w", workstationCfg.Name, err)
 			}
 			if exists {
 				continue
@@ -197,29 +211,31 @@ func writeExpandedWorkstationFiles(targetDir string, workstationConfigs []interf
 		if !hasInlineWorkstationRuntime(workstationCfg) {
 			agents, err = renderAgentsMarkdown(workstationFrontmatterForExpansion(def), def.Body)
 			if err != nil {
-				return fmt.Errorf("render workstation %q AGENTS.md: %w", workstationCfg.Name, err)
+				return 0, 0, fmt.Errorf("render workstation %q AGENTS.md: %w", workstationCfg.Name, err)
 			}
 		}
 		promptPath := ""
 		if def.PromptFile != "" {
 			promptPath, err = safePromptFilePath(workstationDir, def.PromptFile)
 			if err != nil {
-				return fmt.Errorf("resolve workstation %q prompt file: %w", workstationCfg.Name, err)
+				return 0, 0, fmt.Errorf("resolve workstation %q prompt file: %w", workstationCfg.Name, err)
 			}
 		}
 		if err := writeAgentsFile(workstationDir, agents); err != nil {
-			return fmt.Errorf("write workstation %q AGENTS.md: %w", workstationCfg.Name, err)
+			return 0, 0, fmt.Errorf("write workstation %q AGENTS.md: %w", workstationCfg.Name, err)
 		}
+		agentsWritten++
 		if promptPath != "" {
 			if err := os.MkdirAll(filepath.Dir(promptPath), 0o755); err != nil {
-				return fmt.Errorf("create workstation %q prompt directory: %w", workstationCfg.Name, err)
+				return 0, 0, fmt.Errorf("create workstation %q prompt directory: %w", workstationCfg.Name, err)
 			}
 			if err := os.WriteFile(promptPath, []byte(promptFileContent), 0o644); err != nil {
-				return fmt.Errorf("write workstation %q prompt file: %w", workstationCfg.Name, err)
+				return 0, 0, fmt.Errorf("write workstation %q prompt file: %w", workstationCfg.Name, err)
 			}
+			promptsWritten++
 		}
 	}
-	return nil
+	return agentsWritten, promptsWritten, nil
 }
 
 func writeExpandedReferencedScripts(sourceDir, targetDir string, cfg *interfaces.FactoryConfig) error {

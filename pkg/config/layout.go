@@ -72,49 +72,66 @@ func ExpandFactoryConfigLayout(path string) (string, error) {
 	return targetDir, err
 }
 
+// LayoutExpansionReport describes filesystem paths managed by a split-layout
+// expansion without exposing file contents.
+type LayoutExpansionReport struct {
+	FactoryConfigPaths    int
+	WorkerAgentPaths      int
+	WorkstationAgentPaths int
+	PromptPaths           int
+	BundledReplacements   []PortableBundledFileReplacement
+}
+
 // ExpandFactoryConfigLayoutWithReport writes a split factory directory layout
 // from a canonical factory.json file and reports any differing portable
 // bundled files that were overwritten during materialization.
 func ExpandFactoryConfigLayoutWithReport(path string) (string, []PortableBundledFileReplacement, error) {
+	targetDir, report, err := ExpandFactoryConfigLayoutWithExpansionReport(path)
+	return targetDir, report.BundledReplacements, err
+}
+
+// ExpandFactoryConfigLayoutWithExpansionReport writes a split factory directory
+// layout and reports path counts by category for CLI diagnostics.
+func ExpandFactoryConfigLayoutWithExpansionReport(path string) (string, LayoutExpansionReport, error) {
 	if path == "" {
-		return "", nil, fmt.Errorf("factory config path is required")
+		return "", LayoutExpansionReport{}, fmt.Errorf("factory config path is required")
 	}
 
 	data, sourcePath, targetDir, err := readFactoryConfigExpansionSource(path)
 	if err != nil {
-		return "", nil, err
+		return "", LayoutExpansionReport{}, err
 	}
 
 	mapper := NewFactoryConfigMapper()
 	factoryCfg, err := mapper.Expand(data)
 	if err != nil {
-		return "", nil, fmt.Errorf("parse factory config %s: %w", sourcePath, err)
+		return "", LayoutExpansionReport{}, fmt.Errorf("parse factory config %s: %w", sourcePath, err)
 	}
 	if err := validatePortableBundledFilesForExpandOnPath(filepath.Dir(sourcePath), factoryCfg); err != nil {
-		return "", nil, err
+		return "", LayoutExpansionReport{}, err
 	}
 
 	cfgForExpandedFiles, err := InlineRuntimeDefinitions(targetDir, factoryCfg, InlineRuntimeDefinitionOptions{})
 	if err != nil {
-		return "", nil, fmt.Errorf("load split runtime definitions for expand %s: %w", targetDir, err)
+		return "", LayoutExpansionReport{}, fmt.Errorf("load split runtime definitions for expand %s: %w", targetDir, err)
 	}
 	if cfgForExpandedFiles == nil {
 		cfgForExpandedFiles = factoryCfg
 	}
 	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(cfgForExpandedFiles)
 	if err != nil {
-		return "", nil, fmt.Errorf("normalize authored factory config %s: %w", sourcePath, err)
+		return "", LayoutExpansionReport{}, fmt.Errorf("normalize authored factory config %s: %w", sourcePath, err)
 	}
 	canonical, err := mapper.Flatten(authoredFactoryCfg)
 	if err != nil {
-		return "", nil, fmt.Errorf("normalize factory config %s: %w", sourcePath, err)
+		return "", LayoutExpansionReport{}, fmt.Errorf("normalize factory config %s: %w", sourcePath, err)
 	}
 
-	replacements, err := writeExpandedFactoryLayout(filepath.Dir(sourcePath), targetDir, cfgForExpandedFiles, canonical, sourcePath)
+	report, err := writeExpandedFactoryLayout(filepath.Dir(sourcePath), targetDir, cfgForExpandedFiles, canonical, sourcePath)
 	if err != nil {
-		return "", nil, err
+		return "", LayoutExpansionReport{}, err
 	}
-	return targetDir, replacements, nil
+	return targetDir, report, nil
 }
 
 // InlineRuntimeDefinitions returns a copy of cfg with any runtime definitions

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 )
 
 const (
@@ -25,40 +26,56 @@ const (
 var ErrModelNotFound = errors.New("model not found")
 
 type ListConfig struct {
-	Port   int
-	JSON   bool
-	Output io.Writer
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 type InspectConfig struct {
-	ModelName string
-	Port      int
-	JSON      bool
-	Output    io.Writer
+	ModelName   string
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 type InvokeConfig struct {
-	ModelName  string
-	Operation  string
-	Text       string
-	OutputPath string
-	Port       int
-	JSON       bool
-	Output     io.Writer
+	ModelName   string
+	Operation   string
+	Text        string
+	OutputPath  string
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 type PullConfig struct {
-	ModelName string
-	Port      int
-	JSON      bool
-	Output    io.Writer
+	ModelName   string
+	Port        int
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
 }
 
 func List(cfg ListConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
-	response, err := QueryList(cfg.Port)
+	response, err := queryList(queryOptions{
+		Port:        cfg.Port,
+		Verbose:     cfg.Verbose,
+		Diagnostics: cfg.Diagnostics,
+	})
 	if err != nil {
 		return err
 	}
@@ -72,7 +89,12 @@ func Inspect(cfg InspectConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
-	model, err := QueryModel(cfg.Port, cfg.ModelName)
+	model, err := queryModel(queryOptions{
+		Port:        cfg.Port,
+		ModelName:   cfg.ModelName,
+		Verbose:     cfg.Verbose,
+		Diagnostics: cfg.Diagnostics,
+	})
 	if err != nil {
 		return err
 	}
@@ -100,7 +122,14 @@ func Invoke(cfg InvokeConfig) error {
 	}
 
 	if cfg.JSON {
-		response, err := invokeModelMetadata(cfg.Port, modelName, operation, text)
+		response, err := invokeModelMetadata(invokeOptions{
+			Port:        cfg.Port,
+			ModelName:   modelName,
+			Operation:   operation,
+			Text:        text,
+			Verbose:     cfg.Verbose,
+			Diagnostics: cfg.Diagnostics,
+		})
 		if err != nil {
 			return err
 		}
@@ -111,7 +140,15 @@ func Invoke(cfg InvokeConfig) error {
 	if outputPath == "" {
 		return fmt.Errorf("--output is required unless --json is set")
 	}
-	if err := invokeModelAudio(cfg.Port, modelName, operation, text, outputPath); err != nil {
+	if err := invokeModelAudio(invokeOptions{
+		Port:        cfg.Port,
+		ModelName:   modelName,
+		Operation:   operation,
+		Text:        text,
+		OutputPath:  outputPath,
+		Verbose:     cfg.Verbose,
+		Diagnostics: cfg.Diagnostics,
+	}); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(cfg.Output, "Wrote audio: %s\n", outputPath)
@@ -126,7 +163,12 @@ func Pull(cfg PullConfig) error {
 	if modelName == "" {
 		return fmt.Errorf("model name is required")
 	}
-	response, err := pullModel(cfg.Port, modelName)
+	response, err := pullModel(pullOptions{
+		Port:        cfg.Port,
+		ModelName:   modelName,
+		Verbose:     cfg.Verbose,
+		Diagnostics: cfg.Diagnostics,
+	})
 	if err != nil {
 		return err
 	}
@@ -136,52 +178,98 @@ func Pull(cfg PullConfig) error {
 	return RenderPull(response, cfg.Output)
 }
 
-func QueryList(port int) (factoryapi.ListModelsResponse, error) {
+type queryOptions struct {
+	Port        int
+	ModelName   string
+	Verbose     bool
+	Diagnostics io.Writer
+}
+
+func queryList(cfg queryOptions) (factoryapi.ListModelsResponse, error) {
 	endpoint := url.URL{
 		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", port),
+		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
 		Path:   "/models",
 	}
 	var response factoryapi.ListModelsResponse
-	if err := doModelsGET(endpoint, &response); err != nil {
+	if err := doModelsGET(endpoint, &response, requestDiagnostics{
+		Enabled:     cfg.Verbose,
+		Output:      cfg.Diagnostics,
+		Command:     "models list",
+		Port:        cfg.Port,
+		SummaryFunc: func() string { return fmt.Sprintf("resultCount=%d", len(response.Results)) },
+	}); err != nil {
 		return factoryapi.ListModelsResponse{}, err
 	}
 	return response, nil
 }
 
 func QueryModel(port int, modelName string) (factoryapi.ModelDetail, error) {
+	return queryModel(queryOptions{Port: port, ModelName: modelName})
+}
+
+func queryModel(cfg queryOptions) (factoryapi.ModelDetail, error) {
 	endpoint := url.URL{
 		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", port),
-		Path:   "/models/" + url.PathEscape(strings.TrimSpace(modelName)),
+		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
+		Path:   "/models/" + url.PathEscape(strings.TrimSpace(cfg.ModelName)),
 	}
 	var response factoryapi.ModelDetail
-	if err := doModelsGET(endpoint, &response); err != nil {
+	if err := doModelsGET(endpoint, &response, requestDiagnostics{
+		Enabled:   cfg.Verbose,
+		Output:    cfg.Diagnostics,
+		Command:   "models inspect",
+		Port:      cfg.Port,
+		ModelName: strings.TrimSpace(cfg.ModelName),
+		SummaryFunc: func() string {
+			return fmt.Sprintf("status=%s loadState=%s operations=%d", response.Status, response.LoadState, len(response.Operations))
+		},
+	}); err != nil {
 		return factoryapi.ModelDetail{}, err
 	}
 	return response, nil
 }
 
-func invokeModelMetadata(port int, modelName, operation, text string) (factoryapi.ModelInvocationResponse, error) {
+type invokeOptions struct {
+	Port        int
+	ModelName   string
+	Operation   string
+	Text        string
+	OutputPath  string
+	Verbose     bool
+	Diagnostics io.Writer
+}
+
+func invokeModelMetadata(cfg invokeOptions) (factoryapi.ModelInvocationResponse, error) {
 	request := factoryapi.ModelInvocationRequest{
-		Operation: operation,
+		Operation: cfg.Operation,
 		Content: &factoryapi.WorkContent{
-			mustGeneratedTextContentPart(text),
+			mustGeneratedTextContentPart(cfg.Text),
 		},
 	}
 	var response factoryapi.ModelInvocationResponse
-	if err := doModelsPOST(port, "/models/"+url.PathEscape(strings.TrimSpace(modelName))+"/invocations", request, &response); err != nil {
+	path := "/models/" + url.PathEscape(strings.TrimSpace(cfg.ModelName)) + "/invocations"
+	if err := doModelsPOST(cfg.Port, path, request, &response, requestDiagnostics{
+		Enabled:      cfg.Verbose,
+		Output:       cfg.Diagnostics,
+		Command:      "models invoke",
+		Port:         cfg.Port,
+		ModelName:    strings.TrimSpace(cfg.ModelName),
+		Operation:    cfg.Operation,
+		RequestBytes: len(cfg.Text),
+		SummaryFunc:  func() string { return fmt.Sprintf("worker=%s contentParts=%d", response.Worker, len(response.Content)) },
+	}); err != nil {
 		return factoryapi.ModelInvocationResponse{}, err
 	}
 	return response, nil
 }
 
-func invokeModelAudio(port int, modelName, operation, text, outputPath string) error {
+func invokeModelAudio(cfg invokeOptions) error {
 	mode := factoryapi.ModelInvocationResponseMode("AUDIO_STREAM")
 	request := factoryapi.ModelInvocationRequest{
-		Operation: operation,
+		Operation: cfg.Operation,
 		Content: &factoryapi.WorkContent{
-			mustGeneratedTextContentPart(text),
+			mustGeneratedTextContentPart(cfg.Text),
 		},
 		Options: &factoryapi.ModelInvocationOptions{
 			ResponseMode: &mode,
@@ -193,9 +281,19 @@ func invokeModelAudio(port int, modelName, operation, text, outputPath string) e
 	}
 	endpoint := url.URL{
 		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", port),
-		Path:   "/models/" + url.PathEscape(strings.TrimSpace(modelName)) + "/invocations",
+		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
+		Path:   "/models/" + url.PathEscape(strings.TrimSpace(cfg.ModelName)) + "/invocations",
 	}
+	logModelsRequest(requestDiagnostics{
+		Enabled:      cfg.Verbose,
+		Output:       cfg.Diagnostics,
+		Command:      "models invoke",
+		Port:         cfg.Port,
+		ModelName:    strings.TrimSpace(cfg.ModelName),
+		Operation:    cfg.Operation,
+		OutputPath:   cfg.OutputPath,
+		RequestBytes: len(body),
+	}, endpoint)
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint.String(), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("build invoke request: %w", err)
@@ -203,8 +301,10 @@ func invokeModelAudio(port int, modelName, operation, text, outputPath string) e
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: modelsRequestTimeout}
+	started := time.Now()
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		logModelsResponse(requestDiagnostics{Enabled: cfg.Verbose, Output: cfg.Diagnostics, Command: "models invoke"}, endpoint, 0, time.Since(started), "error=unreachable")
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
@@ -213,9 +313,10 @@ func invokeModelAudio(port int, modelName, operation, text, outputPath string) e
 		if readErr != nil {
 			return fmt.Errorf("read invocation error response: %w", readErr)
 		}
+		logModelsResponse(requestDiagnostics{Enabled: cfg.Verbose, Output: cfg.Diagnostics, Command: "models invoke"}, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d", len(responseBody)))
 		return modelsRequestError(resp.StatusCode, responseBody)
 	}
-	output, err := os.Create(outputPath)
+	output, err := os.Create(cfg.OutputPath)
 	if err != nil {
 		return fmt.Errorf("create output file: %w", err)
 	}
@@ -223,18 +324,47 @@ func invokeModelAudio(port int, modelName, operation, text, outputPath string) e
 	if _, err := io.Copy(output, resp.Body); err != nil {
 		return fmt.Errorf("write output file: %w", err)
 	}
+	logModelsResponse(requestDiagnostics{Enabled: cfg.Verbose, Output: cfg.Diagnostics, Command: "models invoke"}, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("outputPath=%s", cfg.OutputPath))
 	return nil
 }
 
-func pullModel(port int, modelName string) (factoryapi.ModelPullResponse, error) {
+type pullOptions struct {
+	Port        int
+	ModelName   string
+	Verbose     bool
+	Diagnostics io.Writer
+}
+
+func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 	var response factoryapi.ModelPullResponse
-	if err := doModelsPOST(port, "/models/"+url.PathEscape(strings.TrimSpace(modelName))+"/pull", map[string]any{}, &response); err != nil {
+	if err := doModelsPOST(cfg.Port, "/models/"+url.PathEscape(strings.TrimSpace(cfg.ModelName))+"/pull", map[string]any{}, &response, requestDiagnostics{
+		Enabled:   cfg.Verbose,
+		Output:    cfg.Diagnostics,
+		Command:   "models pull",
+		Port:      cfg.Port,
+		ModelName: strings.TrimSpace(cfg.ModelName),
+		SummaryFunc: func() string {
+			return fmt.Sprintf("outcome=%s downloadedFiles=%d", response.Outcome, len(response.DownloadedFiles))
+		},
+	}); err != nil {
 		return factoryapi.ModelPullResponse{}, err
 	}
 	return response, nil
 }
 
-func doModelsPOST(port int, path string, payload any, out any) error {
+type requestDiagnostics struct {
+	Enabled      bool
+	Output       io.Writer
+	Command      string
+	Port         int
+	ModelName    string
+	Operation    string
+	OutputPath   string
+	RequestBytes int
+	SummaryFunc  func() string
+}
+
+func doModelsPOST(port int, path string, payload any, out any, diagnostics requestDiagnostics) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal models request: %w", err)
@@ -244,9 +374,13 @@ func doModelsPOST(port int, path string, payload any, out any) error {
 		Host:   fmt.Sprintf("localhost:%d", port),
 		Path:   path,
 	}
+	diagnostics.RequestBytes = len(body)
+	logModelsRequest(diagnostics, endpoint)
 	client := &http.Client{Timeout: modelsRequestTimeout}
+	started := time.Now()
 	resp, err := client.Post(endpoint.String(), "application/json", bytes.NewReader(body))
 	if err != nil {
+		logModelsResponse(diagnostics, endpoint, 0, time.Since(started), "error=unreachable")
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
@@ -255,18 +389,23 @@ func doModelsPOST(port int, path string, payload any, out any) error {
 		return fmt.Errorf("read models response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d", len(responseBody)))
 		return modelsRequestError(resp.StatusCode, responseBody)
 	}
 	if err := json.Unmarshal(responseBody, out); err != nil {
 		return fmt.Errorf("parse models response: %w", err)
 	}
+	logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d %s", len(responseBody), diagnostics.summary()))
 	return nil
 }
 
-func doModelsGET(endpoint url.URL, out any) error {
+func doModelsGET(endpoint url.URL, out any, diagnostics requestDiagnostics) error {
+	logModelsRequest(diagnostics, endpoint)
 	client := &http.Client{Timeout: modelsRequestTimeout}
+	started := time.Now()
 	resp, err := client.Get(endpoint.String())
 	if err != nil {
+		logModelsResponse(diagnostics, endpoint, 0, time.Since(started), "error=unreachable")
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
@@ -276,12 +415,45 @@ func doModelsGET(endpoint url.URL, out any) error {
 		return fmt.Errorf("read models response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d", len(body)))
 		return modelsRequestError(resp.StatusCode, body)
 	}
 	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("parse models response: %w", err)
 	}
+	logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d %s", len(body), diagnostics.summary()))
 	return nil
+}
+
+func (diagnostics requestDiagnostics) summary() string {
+	if diagnostics.SummaryFunc == nil {
+		return ""
+	}
+	return strings.TrimSpace(diagnostics.SummaryFunc())
+}
+
+func logModelsRequest(diagnostics requestDiagnostics, endpoint url.URL) {
+	clidiag.Printf(
+		diagnostics.Output,
+		diagnostics.Enabled,
+		"%s request endpointPath=%s endpoint=%s port=%d modelName=%q operation=%q outputPath=%s requestBytes=%d",
+		diagnostics.Command,
+		endpoint.Path,
+		endpoint.String(),
+		diagnostics.Port,
+		diagnostics.ModelName,
+		diagnostics.Operation,
+		diagnostics.OutputPath,
+		diagnostics.RequestBytes,
+	)
+}
+
+func logModelsResponse(diagnostics requestDiagnostics, endpoint url.URL, statusCode int, elapsed time.Duration, summary string) {
+	if strings.TrimSpace(summary) == "" {
+		clidiag.Printf(diagnostics.Output, diagnostics.Enabled, "%s response endpointPath=%s status=%d durationMillis=%d", diagnostics.Command, endpoint.Path, statusCode, elapsed.Milliseconds())
+		return
+	}
+	clidiag.Printf(diagnostics.Output, diagnostics.Enabled, "%s response endpointPath=%s status=%d durationMillis=%d %s", diagnostics.Command, endpoint.Path, statusCode, elapsed.Milliseconds(), summary)
 }
 
 func RenderList(response factoryapi.ListModelsResponse, output io.Writer) error {

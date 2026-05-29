@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
@@ -45,6 +46,7 @@ const cliBinaryName = "you"
 
 // NewRootCommand creates the top-level Cobra command for the you-agent-factory CLI.
 func NewRootCommand() *cobra.Command {
+	diagnostics := &cliDiagnosticsOptions{}
 	root := &cobra.Command{
 		Use:   cliBinaryName,
 		Short: "Run and manage CPN-based workflow factories",
@@ -53,6 +55,10 @@ func NewRootCommand() *cobra.Command {
 			"it prepares ./factory when needed, keeps the runtime alive in continuous mode, " +
 			"watches factory/inputs/task/default for Markdown or JSON task files, and reports " +
 			"the local dashboard at the first available port, preferring http://localhost:7437/dashboard/ui.\n\n" +
+			"Default command output is customer-facing. Use --verbose for concise troubleshooting context; " +
+			"--debug enables lower-level diagnostics where supported and implies --verbose. Diagnostics " +
+			"use stderr so JSON stdout remains parseable, and must not include full prompts, " +
+			"full work payloads, access tokens, full model input text, full successful response bodies, or sensitive generated content.\n\n" +
 			"Packaged reference topics are also available through " + cliBinaryName + " docs <topic>. " +
 			"Supported docs topics: " + supportedDocsTopicsHelpText() + ".",
 		Example: "  # Start the default Codex-backed factory in the current project.\n" +
@@ -64,25 +70,43 @@ func NewRootCommand() *cobra.Command {
 			"  # Explicit batch-style runs are still available when you need them.\n" +
 			"  " + cliBinaryName + " run --dir factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runFactory(cmd, defaultcmd.OOTBRunConfig(), false, false)
+			return runFactory(cmd, defaultcmd.OOTBRunConfig(), diagnostics.verboseEnabled(), diagnostics.debug)
 		},
 	}
+	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
+	root.PersistentFlags().BoolVarP(&diagnostics.debug, "debug", "d", false, "emit lower-level command diagnostics where supported (implies --verbose)")
 
 	root.AddCommand(
-		newConfigCommand(),
-		newDocsCommand(),
-		newFactoryCommand(),
-		newInitCommand(),
-		newModelsCommand(),
-		newRunCommand(),
-		newSubmitCommand(),
-		newWorkCommand(),
+		newConfigCommand(diagnostics),
+		newDocsCommand(diagnostics),
+		newFactoryCommand(diagnostics),
+		newInitCommand(diagnostics),
+		newModelsCommand(diagnostics),
+		newRunCommand(diagnostics),
+		newSubmitCommand(diagnostics),
+		newWorkCommand(diagnostics),
 	)
 
 	return root
 }
 
-func newFactoryCommand() *cobra.Command {
+type cliDiagnosticsOptions struct {
+	verbose bool
+	debug   bool
+}
+
+func (opts *cliDiagnosticsOptions) verboseEnabled() bool {
+	return opts.verbose || opts.debug
+}
+
+func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
+	if !opts.verboseEnabled() {
+		return nil
+	}
+	return cmd.ErrOrStderr()
+}
+
+func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	factoryCmd := &cobra.Command{
 		Use:   "factory",
 		Short: "Inspect factory runtime state",
@@ -90,11 +114,11 @@ func newFactoryCommand() *cobra.Command {
 			"Use the query subcommand to ask the live API server which factory is currently active " +
 			"instead of inferring runtime state from local factory files.",
 	}
-	factoryCmd.AddCommand(newFactoryQueryCommand())
+	factoryCmd.AddCommand(newFactoryQueryCommand(diagnostics))
 	return factoryCmd
 }
 
-func newFactoryQueryCommand() *cobra.Command {
+func newFactoryQueryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := factorycli.QueryConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
@@ -113,6 +137,9 @@ func newFactoryQueryCommand() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return queryFactory(cfg)
 		},
 	}
@@ -122,16 +149,16 @@ func newFactoryQueryCommand() *cobra.Command {
 	return cmd
 }
 
-func newWorkCommand() *cobra.Command {
+func newWorkCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	workCmd := &cobra.Command{
 		Use:   "work",
 		Short: "Inspect work from a running factory",
 	}
-	workCmd.AddCommand(newWorkListCommand())
+	workCmd.AddCommand(newWorkListCommand(diagnostics))
 	return workCmd
 }
 
-func newModelsCommand() *cobra.Command {
+func newModelsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	modelsCmd := &cobra.Command{
 		Use:   "models",
 		Short: "Inspect discovered models from a running service",
@@ -140,17 +167,20 @@ func newModelsCommand() *cobra.Command {
 			"invoke to call a discovered model directly through the same /models contract exposed by the API, " +
 			"and pull to populate the managed local-model cache for supported local assets.",
 	}
-	modelsCmd.AddCommand(newModelsListCommand(), newModelsInspectCommand(), newModelsInvokeCommand(), newModelsPullCommand())
+	modelsCmd.AddCommand(newModelsListCommand(diagnostics), newModelsInspectCommand(diagnostics), newModelsInvokeCommand(diagnostics), newModelsPullCommand(diagnostics))
 	return modelsCmd
 }
 
-func newModelsListCommand() *cobra.Command {
+func newModelsListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := modelscli.ListConfig{Port: defaultcmd.FactoryPort}
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List discovered models",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return listModels(cfg)
 		},
 	}
@@ -159,7 +189,7 @@ func newModelsListCommand() *cobra.Command {
 	return cmd
 }
 
-func newModelsInspectCommand() *cobra.Command {
+func newModelsInspectCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := modelscli.InspectConfig{Port: defaultcmd.FactoryPort}
 	cmd := &cobra.Command{
 		Use:   "inspect <model-name>",
@@ -168,6 +198,9 @@ func newModelsInspectCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.ModelName = args[0]
 			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return inspectModel(cfg)
 		},
 	}
@@ -176,7 +209,7 @@ func newModelsInspectCommand() *cobra.Command {
 	return cmd
 }
 
-func newModelsInvokeCommand() *cobra.Command {
+func newModelsInvokeCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := modelscli.InvokeConfig{Port: defaultcmd.FactoryPort, Operation: "TTS"}
 	cmd := &cobra.Command{
 		Use:   "invoke <model-name>",
@@ -185,6 +218,9 @@ func newModelsInvokeCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.ModelName = args[0]
 			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return invokeModel(cfg)
 		},
 	}
@@ -196,7 +232,7 @@ func newModelsInvokeCommand() *cobra.Command {
 	return cmd
 }
 
-func newModelsPullCommand() *cobra.Command {
+func newModelsPullCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := modelscli.PullConfig{Port: defaultcmd.FactoryPort}
 	cmd := &cobra.Command{
 		Use:   "pull <model-name>",
@@ -205,6 +241,9 @@ func newModelsPullCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.ModelName = args[0]
 			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return pullModel(cfg)
 		},
 	}
@@ -213,7 +252,7 @@ func newModelsPullCommand() *cobra.Command {
 	return cmd
 }
 
-func newWorkListCommand() *cobra.Command {
+func newWorkListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := workcli.ListConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
@@ -224,6 +263,9 @@ func newWorkListCommand() *cobra.Command {
 			"Use --session to route the request to one specific live factory session instead.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return listWork(cfg)
 		},
 	}
@@ -239,7 +281,7 @@ func newWorkListCommand() *cobra.Command {
 	return cmd
 }
 
-func newDocsCommand() *cobra.Command {
+func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	docsCmd := &cobra.Command{
 		Use:   "docs",
 		Short: "Print packaged markdown reference topics",
@@ -252,7 +294,7 @@ func newDocsCommand() *cobra.Command {
 	}
 
 	for _, topic := range docscli.SupportedTopics() {
-		docsCmd.AddCommand(newDocsTopicCommand(topic))
+		docsCmd.AddCommand(newDocsTopicCommand(topic, diagnostics))
 	}
 
 	return docsCmd
@@ -262,35 +304,42 @@ func supportedDocsTopicsHelpText() string {
 	return strings.Join(docscli.SupportedTopics(), ", ")
 }
 
-func newDocsTopicCommand(topic string) *cobra.Command {
+func newDocsTopicCommand(topic string, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   topic,
 		Short: fmt.Sprintf("Print the packaged %s reference page", topic),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			diagnosticsOutput := diagnostics.writer(cmd)
+			clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs request topic=%s", topic)
 			markdown, err := docscli.Markdown(topic)
 			if err != nil {
+				clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs failed topic=%s phase=resolve-topic", topic)
 				return err
 			}
+			clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs resolved topic=%s contentBytes=%d", topic, len(markdown))
 			_, err = io.WriteString(cmd.OutOrStdout(), markdown)
+			if err != nil {
+				clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs failed topic=%s phase=write-output", topic)
+			}
 			return err
 		},
 	}
 }
 
-func newConfigCommand() *cobra.Command {
+func newConfigCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	configCmd := &cobra.Command{
 		Use:   "config",
 		Short: "Inspect and transform factory configuration",
 	}
 	configCmd.AddCommand(
-		newConfigExpandCommand(),
-		newConfigFlattenCommand(),
+		newConfigExpandCommand(diagnostics),
+		newConfigFlattenCommand(diagnostics),
 	)
 	return configCmd
 }
 
-func newConfigFlattenCommand() *cobra.Command {
+func newConfigFlattenCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := configcli.FactoryConfigFlattenConfig{}
 
 	cmd := &cobra.Command{
@@ -303,6 +352,9 @@ func newConfigFlattenCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Path = args[0]
 			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return flattenFactoryConfig(cfg)
 		},
 	}
@@ -310,7 +362,7 @@ func newConfigFlattenCommand() *cobra.Command {
 	return cmd
 }
 
-func newConfigExpandCommand() *cobra.Command {
+func newConfigExpandCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := configcli.FactoryConfigExpandConfig{}
 
 	cmd := &cobra.Command{
@@ -323,6 +375,9 @@ func newConfigExpandCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Path = args[0]
 			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return expandFactoryConfig(cfg)
 		},
 	}
@@ -337,7 +392,7 @@ func Execute() {
 	}
 }
 
-func newInitCommand() *cobra.Command {
+func newInitCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := initcmd.InitConfig{
 		Dir:      defaultcmd.FactoryDir,
 		Type:     string(initcmd.DefaultScaffoldType),
@@ -362,6 +417,9 @@ func newInitCommand() *cobra.Command {
 			"  # Create the minimal Ralph PRD-to-execution scaffold.\n" +
 			"  " + cliBinaryName + " init --type ralph --dir ralph-factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return initFactory(cfg)
 		},
 	}
@@ -380,10 +438,8 @@ func newInitCommand() *cobra.Command {
 	return cmd
 }
 
-func newRunCommand() *cobra.Command {
+func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := defaultcmd.ExplicitRunConfig()
-	var verbose bool
-	var debug bool
 
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -418,7 +474,7 @@ func newRunCommand() *cobra.Command {
 					cfg.MockWorkersConfigPath = ""
 				}
 			}
-			return runFactory(cmd, cfg, verbose, debug)
+			return runFactory(cmd, cfg, diagnostics.verboseEnabled(), diagnostics.debug)
 		},
 	}
 
@@ -445,8 +501,6 @@ func newRunCommand() *cobra.Command {
 	cmd.Flags().StringVar(&cfg.MockWorkersConfigPath, "with-mock-workers", "", "enable mock-worker execution with an optional mock-workers JSON config path")
 	cmd.Flags().Lookup("with-mock-workers").NoOptDefVal = defaultMockWorkersConfigPathSentinel
 	cmd.Flags().BoolVar(&cfg.SuppressDashboardRendering, "quiet", false, "suppress dashboard output for quiet or CI-oriented runs")
-	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose (info-level) logging")
-	cmd.Flags().BoolVarP(&debug, "debug", "d", false, "enable debug-level logging (implies verbose)")
 	return cmd
 }
 
@@ -458,6 +512,7 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, verbose, debug bool) e
 	cfg.Logger = logger
 	cfg.Verbose = verbose || debug
 	cfg.StartupOutput = cmd.OutOrStdout()
+	cfg.Diagnostics = cmd.ErrOrStderr()
 
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
@@ -477,7 +532,7 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, verbose, debug bool) e
 	return runCLI(ctx, cfg)
 }
 
-func newSubmitCommand() *cobra.Command {
+func newSubmitCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := submitcli.SubmitConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
@@ -487,6 +542,9 @@ func newSubmitCommand() *cobra.Command {
 			"By default the command submits to the default compatibility session. " +
 			"Use --session to submit to one specific live factory session instead.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
 			return submitWork(cfg)
 		},
 	}

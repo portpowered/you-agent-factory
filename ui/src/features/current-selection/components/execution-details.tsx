@@ -1,4 +1,4 @@
-import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
+import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import {
   formatLocalDateTime,

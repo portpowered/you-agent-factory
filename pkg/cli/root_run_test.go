@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -22,7 +25,7 @@ func TestRunCommand_VerboseFlag(t *testing.T) {
 		t.Fatalf("find run: %v", err)
 	}
 
-	vFlag := runCmd.Flags().Lookup("verbose")
+	vFlag := runCmd.Flag("verbose")
 	if vFlag == nil {
 		t.Fatal("expected --verbose flag on run command")
 	}
@@ -31,6 +34,48 @@ func TestRunCommand_VerboseFlag(t *testing.T) {
 	}
 	if vFlag.Shorthand != "v" {
 		t.Errorf("verbose shorthand = %q, want %q", vFlag.Shorthand, "v")
+	}
+}
+
+func TestRootCommand_SharedDiagnosticsFlagsAvailableOnCoveredCommands(t *testing.T) {
+	root := NewRootCommand()
+	commands := [][]string{
+		{},
+		{"run"},
+		{"submit"},
+		{"work", "list"},
+		{"factory", "query"},
+		{"models", "list"},
+		{"models", "inspect"},
+		{"models", "invoke"},
+		{"models", "pull"},
+		{"config", "flatten"},
+		{"config", "expand"},
+		{"init"},
+		{"docs", "config"},
+	}
+
+	for _, path := range commands {
+		cmd := root
+		if len(path) > 0 {
+			found, _, err := root.Find(path)
+			if err != nil {
+				t.Fatalf("find %v: %v", path, err)
+			}
+			cmd = found
+		}
+		for name, shorthand := range map[string]string{"verbose": "v", "debug": "d"} {
+			flag := cmd.Flag(name)
+			if flag == nil {
+				t.Fatalf("%v missing shared --%s flag", path, name)
+			}
+			if flag.DefValue != "false" {
+				t.Fatalf("%v --%s default = %q, want false", path, name, flag.DefValue)
+			}
+			if flag.Shorthand != shorthand {
+				t.Fatalf("%v --%s shorthand = %q, want %q", path, name, flag.Shorthand, shorthand)
+			}
+		}
 	}
 }
 
@@ -229,6 +274,68 @@ func TestRootCommand_HelpDocumentsOOTBQuickstart(t *testing.T) {
 	}
 }
 
+func TestRootCommand_HelpDocumentsDiagnosticsContract(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute root --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"Default command output is customer-facing",
+		"Use --verbose for concise troubleshooting context",
+		"--debug enables lower-level diagnostics where supported and implies --verbose",
+		"JSON stdout remains parseable",
+		"must not include full prompts",
+		"full work payloads",
+		"access tokens",
+		"full model input text",
+		"full successful response bodies",
+		"sensitive generated content",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("root help missing diagnostics contract %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestDocsCommand_VerboseLogsTopicResolutionWithoutChangingMarkdown(t *testing.T) {
+	wantMarkdown, err := docscli.Markdown("config")
+	if err != nil {
+		t.Fatalf("Markdown(config): %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"docs", "config", "--verbose"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute docs config --verbose: %v", err)
+	}
+
+	if got := stdout.String(); got != wantMarkdown {
+		t.Fatalf("stdout markdown changed\nwant:\n%s\ngot:\n%s", wantMarkdown, got)
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"docs request topic=config",
+		"docs resolved topic=config",
+		"contentBytes=",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stderr missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestRunCommand_DebugFlag(t *testing.T) {
 	root := NewRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
@@ -236,7 +343,7 @@ func TestRunCommand_DebugFlag(t *testing.T) {
 		t.Fatalf("find run: %v", err)
 	}
 
-	dFlag := runCmd.Flags().Lookup("debug")
+	dFlag := runCmd.Flag("debug")
 	if dFlag == nil {
 		t.Fatal("expected --debug flag on run command")
 	}
@@ -245,6 +352,114 @@ func TestRunCommand_DebugFlag(t *testing.T) {
 	}
 	if dFlag.Shorthand != "d" {
 		t.Errorf("debug shorthand = %q, want %q", dFlag.Shorthand, "d")
+	}
+}
+
+func TestRunCommand_DebugImpliesVerboseRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--debug"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --debug: %v", err)
+	}
+
+	if !got.Verbose {
+		t.Fatal("expected --debug to imply verbose run behavior")
+	}
+	if got.Logger == nil {
+		t.Fatal("expected run command to set debug-capable logger")
+	}
+}
+
+func TestWorkListCommand_SharedDiagnosticsFlagsMapToConfig(t *testing.T) {
+	originalListWork := listWork
+	defer func() {
+		listWork = originalListWork
+	}()
+
+	var got workcli.ListConfig
+	listWork = func(cfg workcli.ListConfig) error {
+		got = cfg
+		return nil
+	}
+
+	var stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"work", "list", "--debug"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work list --debug: %v", err)
+	}
+
+	if !got.Verbose {
+		t.Fatal("expected --debug to imply verbose command diagnostics")
+	}
+	if !got.Debug {
+		t.Fatal("expected debug config")
+	}
+	if got.Diagnostics != &stderr {
+		t.Fatalf("diagnostics writer = %#v, want configured stderr writer", got.Diagnostics)
+	}
+	if got.Output == nil {
+		t.Fatal("expected stdout writer")
+	}
+}
+
+func TestFactoryQueryCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr(t *testing.T) {
+	originalQueryFactory := queryFactory
+	defer func() {
+		queryFactory = originalQueryFactory
+	}()
+
+	queryFactory = func(cfg factorycli.QueryConfig) error {
+		if !cfg.Verbose {
+			t.Fatal("expected verbose config")
+		}
+		if cfg.Diagnostics == nil {
+			t.Fatal("expected diagnostics writer")
+		}
+		if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: factory query"); err != nil {
+			return err
+		}
+		_, err := fmt.Fprintln(cfg.Output, `{"name":"default"}`)
+		return err
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"factory", "query", "--json", "--verbose"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory query --json --verbose: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("stdout is not parseable JSON: %v\n%s", err, stdout.String())
+	}
+	if payload["name"] != "default" {
+		t.Fatalf("stdout JSON = %#v, want default factory name", payload)
+	}
+	if got := stderr.String(); !strings.Contains(got, "diagnostic: factory query") {
+		t.Fatalf("stderr = %q, want diagnostics", got)
 	}
 }
 
@@ -714,5 +929,41 @@ func TestRunCommand_VerboseFlagMapsToRunConfig(t *testing.T) {
 	}
 	if got.Logger == nil {
 		t.Fatal("expected run command to set logger")
+	}
+}
+
+func TestRunCommand_VerboseDiagnosticsUseStderr(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		if !cfg.Verbose {
+			t.Fatal("expected verbose run config")
+		}
+		if cfg.Diagnostics == nil {
+			t.Fatal("expected diagnostics writer")
+		}
+		_, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: run startup")
+		return err
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"run", "--verbose"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --verbose: %v", err)
+	}
+
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want no diagnostic output", stdout.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "diagnostic: run startup") {
+		t.Fatalf("stderr = %q, want run diagnostics", got)
 	}
 }

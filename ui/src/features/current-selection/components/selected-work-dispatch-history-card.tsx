@@ -2,7 +2,7 @@ import { cn } from "../../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
+import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import {
   formatDurationMillis,
   formatLocalDateTime,

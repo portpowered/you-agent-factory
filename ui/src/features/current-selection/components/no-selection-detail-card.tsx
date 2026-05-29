@@ -1,4 +1,4 @@
-import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
+import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import { useCurrentSelectionShellMessages } from "./current-selection-locale";
 import type { NoSelectionDetailCardProps } from "./detail-card-types";

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -403,6 +404,98 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 	}
 	if got.PaginationContext == nil || got.PaginationContext.MaxResults != 2 || stringValue(got.PaginationContext.NextToken) != nextToken {
 		t.Fatalf("pagination context = %#v, want maxResults=2 nextToken=%q", got.PaginationContext, nextToken)
+	}
+}
+
+func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T) {
+	nextToken := "cursor-2"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:   "Review PRD",
+				WorkId: stringPtr("work-1"),
+				State: &factoryapi.WorkState{
+					Name: "review",
+					Type: factoryapi.WorkStateTypePROCESSING,
+				},
+			}},
+			PaginationContext: &factoryapi.PaginationContext{
+				MaxResults: 1,
+				NextToken:  &nextToken,
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	var diagnostics bytes.Buffer
+	err := List(ListConfig{
+		Port:        serverPort(t, srv),
+		SessionID:   "session-alpha",
+		StateName:   "review",
+		StateType:   "PROCESSING",
+		MaxResults:  1,
+		NextToken:   "cursor-1",
+		JSON:        true,
+		Verbose:     true,
+		Output:      &out,
+		Diagnostics: &diagnostics,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	var got factoryapi.ListWorkResponse
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("json output is invalid: %v\n%s", err, out.String())
+	}
+	diag := diagnostics.String()
+	for _, want := range []string{
+		"work list request",
+		"endpointPath=/factory-sessions/session-alpha/work",
+		"session=session-alpha",
+		"filters=state.name,state.type",
+		"maxResults=1",
+		"nextTokenPresent=true",
+		"work list response",
+		"status=200",
+		"resultCount=1",
+	} {
+		if !strings.Contains(diag, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, diag)
+		}
+	}
+}
+
+func TestList_VerboseLogsFailureStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "service unavailable", Code: "INTERNAL_ERROR"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	var diagnostics bytes.Buffer
+	err := List(ListConfig{
+		Port:        serverPort(t, srv),
+		Verbose:     true,
+		Output:      &out,
+		Diagnostics: &diagnostics,
+	})
+	if err == nil {
+		t.Fatal("expected list failure")
+	}
+	diag := diagnostics.String()
+	if !strings.Contains(diag, "work list response") || !strings.Contains(diag, "status=500") {
+		t.Fatalf("diagnostics missing failure status:\n%s", diag)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should stay empty on failure, got %q", out.String())
 	}
 }
 

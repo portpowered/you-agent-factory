@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
+import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../components/ui/dashboard-typography";
 import { formatWorkItemLabel } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";

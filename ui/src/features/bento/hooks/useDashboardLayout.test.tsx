@@ -2,10 +2,10 @@ import { act, renderHook } from "@testing-library/react";
 
 import {
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+  DASHBOARD_LAYOUT_STORAGE_KEY,
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
-  DASHBOARD_LAYOUT_STORAGE_KEY,
   reloadDashboardLayoutFromStorage,
   useDashboardLayout,
 } from "./useDashboardLayout";
