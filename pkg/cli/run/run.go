@@ -52,8 +52,8 @@ type RunConfig struct {
 	// DisableDefaultRecording disables the default live-run replay artifact
 	// generation for a single invocation.
 	DisableDefaultRecording bool
-	// RuntimeLogDir overrides the service-owned structured runtime log
-	// directory. Empty uses the service default under the user's home directory.
+	// RuntimeLogDir overrides the service-owned structured runtime log root.
+	// Empty uses the service default under the user's home directory.
 	RuntimeLogDir string
 	// RuntimeLogConfig controls service-owned structured runtime log rotation.
 	RuntimeLogConfig logging.RuntimeLogConfig
