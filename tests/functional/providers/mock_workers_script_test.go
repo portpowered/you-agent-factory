@@ -80,7 +80,7 @@ func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *test
 		t.Fatalf("dispatch reason = %q, want configured stderr detail", snapshot.DispatchHistory[0].Reason)
 	}
 
-	record := findRuntimeLogRecord(t, filepath.Join(logDir, "mock-script-reject.log"), workers.WorkLogEventCommandRunnerCompleted)
+	record := findRuntimeLogRecord(t, requireRuntimeLogPath(t, logDir, "mock-script-reject"), workers.WorkLogEventCommandRunnerCompleted)
 	if record["exit_code"] != float64(9) {
 		t.Fatalf("logged exit_code = %#v, want 9", record["exit_code"])
 	}

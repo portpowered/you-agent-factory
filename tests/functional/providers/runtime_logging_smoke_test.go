@@ -142,7 +142,7 @@ func runRuntimeLoggingSmoke(t *testing.T, runner workers.CommandRunner, rollingC
 	)
 	h.RunUntilComplete(t, 10*time.Second)
 
-	logPath := filepath.Join(logDir, runtimeInstanceID+".log")
+	logPath := requireRuntimeLogPath(t, logDir, runtimeInstanceID)
 	return runtimeLoggingSmokeResult{
 		harness:  h,
 		records:  readRuntimeLoggingSmokeRecords(t, logPath),

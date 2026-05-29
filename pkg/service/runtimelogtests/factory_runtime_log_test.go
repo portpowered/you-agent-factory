@@ -55,7 +55,7 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	logPath := filepath.Join(logDir, runtimeInstanceID+".log")
+	logPath := requireRuntimeLogPath(t, logDir, runtimeInstanceID)
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read runtime log %s: %v", logPath, err)
@@ -153,7 +153,7 @@ func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	logPath := filepath.Join(logDir, runtimeInstanceID+".log")
+	logPath := requireRuntimeLogPath(t, logDir, runtimeInstanceID)
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read runtime log %s: %v", logPath, err)
@@ -486,7 +486,20 @@ func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) 
 		t.Fatalf("Run: %v", err)
 	}
 
-	return opts.work, filepath.Join(logDir, opts.runtimeInstanceID+".log"), recordPath
+	return opts.work, requireRuntimeLogPath(t, logDir, opts.runtimeInstanceID), recordPath
+}
+
+func requireRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {
+	t.Helper()
+
+	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*-"+runtimeInstanceID+"-*.log"))
+	if err != nil {
+		t.Fatalf("glob runtime log path: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("runtime log paths for %q under %s = %v, want exactly one", runtimeInstanceID, logDir, matches)
+	}
+	return matches[0]
 }
 
 func assertRuntimeLogWorkContext(t *testing.T, record map[string]any, eventName string, work interfaces.SubmitRequest) {

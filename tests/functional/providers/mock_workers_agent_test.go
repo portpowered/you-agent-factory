@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -82,7 +81,7 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureAndLogsCommandOutput(t *testi
 		t.Fatalf("dispatch reason = %q, want exit code detail", snapshot.DispatchHistory[0].Reason)
 	}
 
-	record := findRuntimeLogRecord(t, filepath.Join(logDir, "mock-reject.log"), workers.WorkLogEventCommandRunnerCompleted)
+	record := findRuntimeLogRecord(t, requireRuntimeLogPath(t, logDir, "mock-reject"), workers.WorkLogEventCommandRunnerCompleted)
 	if record["exit_code"] != float64(7) {
 		t.Fatalf("logged exit_code = %#v, want 7", record["exit_code"])
 	}
