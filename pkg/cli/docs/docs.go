@@ -19,6 +19,7 @@ const (
 	TopicMockWorkers        Topic = "mock-workers"
 	TopicRecordReplay       Topic = "record-replay"
 	TopicGuards             Topic = "guards"
+	TopicRelationships      Topic = "relationships"
 	TopicWork               Topic = "work"
 	TopicWorkstations       Topic = "workstations"
 	TopicWorkers            Topic = "workers"
@@ -39,6 +40,7 @@ const (
 	referenceMockWorkersPath        = "reference/mock-workers.md"
 	referenceRecordReplayPath       = "reference/record-replay.md"
 	referenceGuardsPath             = "reference/guards.md"
+	referenceRelationshipsPath      = "reference/relationships.md"
 	referenceWorkPath               = "reference/work.md"
 	referenceWorkstationsPath       = "reference/workstations.md"
 	referenceWorkersPath            = "reference/workers.md"
@@ -62,6 +64,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},
 	{topic: TopicRecordReplay, description: "Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.", path: referenceRecordReplayPath, displayOrder: 26},
 	{topic: TopicGuards, description: "Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.", path: referenceGuardsPath, displayOrder: 27},
+	{topic: TopicRelationships, description: "Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.", path: referenceRelationshipsPath, displayOrder: 28},
 	{topic: TopicWork, description: "Work types, states, routing, resources, and portable factory fields.", path: referenceWorkPath, displayOrder: 30},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
