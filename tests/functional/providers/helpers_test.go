@@ -222,6 +222,25 @@ func assertCommandArgs(t *testing.T, req workers.CommandRequest, want []string) 
 	}
 }
 
+func assertProviderArgsPrompt(t *testing.T, req workers.CommandRequest, want string) {
+	t.Helper()
+
+	if len(req.Args) == 0 {
+		t.Fatal("provider args were empty")
+	}
+	if got := req.Args[len(req.Args)-1]; got != want {
+		t.Fatalf("provider prompt arg = %q, want %q", got, want)
+	}
+}
+
+func assertProviderStdin(t *testing.T, req workers.CommandRequest, want string) {
+	t.Helper()
+
+	if got := string(req.Stdin); got != want {
+		t.Fatalf("provider stdin = %q, want %q", got, want)
+	}
+}
+
 func assertRuntimeMergeCommandRequest(t *testing.T, dir string, req workers.CommandRequest) {
 	t.Helper()
 
@@ -309,4 +328,17 @@ func containsEnv(env []string, expected string) bool {
 		}
 	}
 	return false
+}
+
+func cursorMergedPrompt(systemPrompt, userMessage string) string {
+	systemPrompt = strings.TrimSpace(systemPrompt)
+	userMessage = strings.TrimSpace(userMessage)
+	switch {
+	case systemPrompt == "":
+		return userMessage
+	case userMessage == "":
+		return systemPrompt
+	default:
+		return "System instructions:\n" + systemPrompt + "\n\nUser request:\n" + userMessage
+	}
 }

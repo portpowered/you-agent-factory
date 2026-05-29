@@ -228,3 +228,41 @@ func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *t
 	assertProviderStdin(t, req, executionTemplateWantPrompt(dir))
 	assertProviderExecutionFields(t, dir, req)
 }
+
+func TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates(t *testing.T) {
+	support.SkipLongFunctional(t, "slow cursor execution-template provider smoke")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
+	support.SetWorkingDirectory(t, dir)
+	configureCursorExecutionTemplateWorkstation(t, dir)
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(workers.ModelProviderCursor, "test-cursor-model"))
+
+	writeExecutionTemplateSeed(t, dir)
+
+	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	h := testutil.NewServiceTestHarness(t, dir,
+		testutil.WithFullWorkerPoolAndScriptWrap(),
+		testutil.WithProviderCommandRunner(runner),
+	)
+
+	h.RunUntilComplete(t, 10*time.Second)
+
+	h.Assert().
+		PlaceTokenCount("task:complete", 1).
+		HasNoTokenInPlace("task:init").
+		HasNoTokenInPlace("task:failed")
+
+	req := runner.LastRequest()
+	if req.Command != string(workers.ModelProviderCursor) {
+		t.Fatalf("command = %q, want %q", req.Command, workers.ModelProviderCursor)
+	}
+	wantWorkDir := support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch")
+	assertCommandArgs(t, req, []string{
+		"-p",
+		"--model", "test-cursor-model",
+		"--workspace", wantWorkDir,
+		cursorExecutionTemplateWantPrompt(dir),
+	})
+	assertProviderStdin(t, req, "")
+	assertProviderExecutionFields(t, dir, req)
+}

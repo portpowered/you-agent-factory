@@ -15,6 +15,7 @@ var publicFactoryWorkerTypeAliases = map[string]string{
 var publicFactoryWorkerModelProviderAliases = map[string]string{
 	publicFactoryWorkerModelProviderClaude: publicFactoryWorkerModelProviderClaude,
 	publicFactoryWorkerModelProviderCodex:  publicFactoryWorkerModelProviderCodex,
+	publicFactoryWorkerModelProviderCursor: publicFactoryWorkerModelProviderCursor,
 }
 
 var publicFactoryWorkerProviderAliases = map[string]string{
@@ -69,18 +70,24 @@ var publicFactoryRunnerSelectionSourceAliases = map[string]string{
 const (
 	publicFactoryWorkerModelProviderClaude = "CLAUDE"
 	publicFactoryWorkerModelProviderCodex  = "CODEX"
+	publicFactoryWorkerModelProviderCursor = "CURSOR"
 	publicFactoryWorkerProviderScriptWrap  = "SCRIPT_WRAP"
 )
 
 var internalFactoryWorkerModelProviderAliases = map[string]string{
-	"ANTHROPIC": publicFactoryWorkerModelProviderClaude,
-	"CLAUDE":    publicFactoryWorkerModelProviderClaude,
-	"CODEX":     publicFactoryWorkerModelProviderCodex,
-	"OPENAI":    publicFactoryWorkerModelProviderCodex,
-	"anthropic": publicFactoryWorkerModelProviderClaude,
-	"claude":    publicFactoryWorkerModelProviderClaude,
-	"codex":     publicFactoryWorkerModelProviderCodex,
-	"openai":    publicFactoryWorkerModelProviderCodex,
+	"ANTHROPIC":    publicFactoryWorkerModelProviderClaude,
+	"CLAUDE":       publicFactoryWorkerModelProviderClaude,
+	"CODEX":        publicFactoryWorkerModelProviderCodex,
+	"CURSOR":       publicFactoryWorkerModelProviderCursor,
+	"CURSOR_AGENT": publicFactoryWorkerModelProviderCursor,
+	"OPENAI":       publicFactoryWorkerModelProviderCodex,
+	"agent":        publicFactoryWorkerModelProviderCursor,
+	"anthropic":    publicFactoryWorkerModelProviderClaude,
+	"claude":       publicFactoryWorkerModelProviderClaude,
+	"codex":        publicFactoryWorkerModelProviderCodex,
+	"cursor":       publicFactoryWorkerModelProviderCursor,
+	"cursor-agent": publicFactoryWorkerModelProviderCursor,
+	"openai":       publicFactoryWorkerModelProviderCodex,
 }
 
 var internalFactoryWorkerProviderAliases = map[string]string{

@@ -732,7 +732,7 @@ func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 					"AGENT_FACTORY_CURSOR_ENV": "enabled",
 				},
 			},
-			wantArgs: []string{"--print", "run the tests", "--output-format", "text", "--model", "gpt-5", "--resume", "cursor-session-123"},
+			wantArgs: []string{"-p", "--model", "gpt-5", "--resume", "cursor-session-123", "run the tests"},
 			wantEnv:  "AGENT_FACTORY_CURSOR_ENV=enabled",
 		},
 		{

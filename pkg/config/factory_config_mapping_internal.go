@@ -534,6 +534,7 @@ const (
 	publicFactoryWorkerTypeHosted                = "HOSTED_WORKER"
 	publicFactoryWorkerModelProviderClaude       = "CLAUDE"
 	publicFactoryWorkerModelProviderCodex        = "CODEX"
+	publicFactoryWorkerModelProviderCursor       = "CURSOR"
 	publicFactoryWorkerModelLocalityLocal        = "LOCAL"
 	publicFactoryWorkerModelLocalityCloud        = "CLOUD"
 	publicFactoryResourceTypeModel               = "MODEL"
@@ -698,6 +699,8 @@ func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelP
 		return string(factoryapiToInternalModelProviderClaude())
 	case publicFactoryWorkerModelProviderCodex:
 		return string(factoryapiToInternalModelProviderCodex())
+	case publicFactoryWorkerModelProviderCursor:
+		return string(factoryapiToInternalModelProviderCursor())
 	default:
 		return strings.TrimSpace(string(*value))
 	}
@@ -848,4 +851,8 @@ func factoryapiToInternalModelProviderClaude() string {
 
 func factoryapiToInternalModelProviderCodex() string {
 	return "codex"
+}
+
+func factoryapiToInternalModelProviderCursor() string {
+	return "agent"
 }
