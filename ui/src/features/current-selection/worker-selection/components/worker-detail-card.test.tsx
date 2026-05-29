@@ -5,7 +5,9 @@ import type { EditableWorkerConfigurationState } from "../lib/detail-card-types"
 import { WorkerDetailCard } from "./worker-detail-card";
 
 vi.mock("../../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../../current-factory-definition/public");
+  const actual = await vi.importActual(
+    "../../../current-factory-definition/public",
+  );
 
   return {
     ...actual,
@@ -104,10 +106,12 @@ describe("WorkerDetailCard", () => {
 
     render(<WorkerDetailCard workerName="reviewer" />);
 
-    expect(
-      screen.getByRole("alert").textContent,
-    ).toContain("Worker definition unavailable.");
-    expect(screen.getByRole("alert").textContent).toContain("Factory unavailable");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Worker definition unavailable.",
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Factory unavailable",
+    );
   });
 
   it("shows empty state when the selected worker is missing from the factory document", () => {
@@ -294,9 +298,9 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("alert").textContent,
-    ).toContain("Saving reviewer updates every workstation");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Saving reviewer updates every workstation",
+    );
     expect(screen.getByRole("button", { name: "Save worker" })).toBeTruthy();
   });
 
@@ -360,7 +364,9 @@ describe("WorkerDetailCard", () => {
     );
 
     expect(
-      screen.getByText(/reviewer was updated in the running factory definition/),
+      screen.getByText(
+        /reviewer was updated in the running factory definition/,
+      ),
     ).toBeTruthy();
   });
 
@@ -428,11 +434,17 @@ describe("WorkerDetailCard", () => {
     );
 
     expect(
-      screen.getByText("Resolve the highlighted fields before saving this worker."),
+      screen.getByText(
+        "Resolve the highlighted fields before saving this worker.",
+      ),
     ).toBeTruthy();
-    expect(screen.getByText("Enter a model before saving this worker.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Save worker" }).hasAttribute("disabled")).toBe(
-      true,
-    );
+    expect(
+      screen.getByText("Enter a model before saving this worker."),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Save worker" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
   });
 });

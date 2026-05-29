@@ -156,6 +156,9 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 	if err := normalizeFactoryInputTypeEntries(root); err != nil {
 		return nil, err
 	}
+	if err := normalizeFactoryWorkTypeEntries(root); err != nil {
+		return nil, err
+	}
 	if err := normalizeFactoryResourceEntries(root); err != nil {
 		return nil, err
 	}
@@ -217,6 +220,36 @@ func rejectUnsupportedFactoryGuardBoundaryFields(guard map[string]any, path stri
 		{key: "parentInput", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
 		{key: "spawnedBy", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
 	})
+}
+
+func normalizeFactoryWorkTypeEntries(root map[string]any) error {
+	workTypes, ok := root["workTypes"].([]any)
+	if !ok {
+		return nil
+	}
+	for workTypeIndex, item := range workTypes {
+		workType, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		behaviors, ok := workType["handlingBehavior"].([]any)
+		if !ok {
+			continue
+		}
+		for behaviorIndex, behaviorAny := range behaviors {
+			behavior, ok := behaviorAny.(string)
+			if !ok {
+				continue
+			}
+			canonical := interfaces.StrictPublicWorkTypeHandlingBehavior(behavior)
+			if canonical == "" {
+				return fmt.Errorf("workTypes[%d].handlingBehavior[%d]: unsupported value %q", workTypeIndex, behaviorIndex, behavior)
+			}
+			behaviors[behaviorIndex] = canonical
+		}
+		workType["handlingBehavior"] = behaviors
+	}
+	return nil
 }
 
 func normalizeFactoryInputTypeEntries(root map[string]any) error {

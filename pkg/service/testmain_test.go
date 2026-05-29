@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/service/localmodel"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
@@ -138,6 +138,12 @@ func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
 	if svc.localModels == nil {
 		t.Fatal("expected BuildFactoryService to initialize localModels")
 	}
+	if svc.sessions == nil {
+		t.Fatal("expected BuildFactoryService to initialize sessions")
+	}
+	if svc.hostedWorkers.Logger == nil {
+		t.Fatal("expected BuildFactoryService to initialize hostedWorkers logger")
+	}
 }
 
 func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalModelRuntime) (*httptest.Server, func()) {
@@ -260,7 +266,7 @@ func localModelLongTestFactoryConfig() *interfaces.FactoryConfig {
 			Model:         "OMNIVOICE_Q4_K_M",
 			ModelProvider: interfaces.RunnerIDCodex,
 			ModelLocality: interfaces.ModelLocalityLocal,
-			Command:       localmodel.DefaultOmniVoiceCommand,
+			Command:       localmodels.DefaultOmniVoiceCommand,
 			Resources: []interfaces.ResourceConfig{{
 				Name:     "omnivoice-cache",
 				Capacity: 1,

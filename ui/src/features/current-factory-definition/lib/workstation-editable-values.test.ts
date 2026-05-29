@@ -45,17 +45,81 @@ describe("resolveEditableWorkstationValues", () => {
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: "Review the latest story changes before approval.",
+      resolvedRunnerSelection: {
+        runnerId: "codex",
+        source: "default",
+      },
       runnerName: null,
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
+      workerModelProvider: null,
       workerName: "reviewer",
       workerOptions: ["reviewer"],
       workerTypeByName: {
         reviewer: "MODEL_WORKER",
       },
       workstationName: "Review",
+      workstationType: "MODEL_WORKSTATION",
     });
+  });
+
+  it("defaults omitted workstation type to MODEL_WORKSTATION", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review the latest story changes before approval.",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode)?.workstationType,
+    ).toBe("MODEL_WORKSTATION");
+  });
+
+  it("preserves explicit workstation implementation types", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Move work downstream.",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          type: "LOGICAL_MOVE",
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode)?.workstationType,
+    ).toBe("LOGICAL_MOVE");
   });
 
   it("falls back from transition id lookup to workstation name lookup", () => {
@@ -108,14 +172,21 @@ describe("resolveEditableWorkstationValues", () => {
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: "Review the latest story changes before approval.",
+      resolvedRunnerSelection: {
+        runnerId: "codex",
+        source: "default",
+      },
       runnerName: null,
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
+      workerModelProvider: null,
       workerName: "missing-worker",
       workerOptions: [],
       workerTypeByName: {},
       workstationName: "Review",
+      workstationType: "MODEL_WORKSTATION",
     });
   });
 
@@ -264,19 +335,61 @@ describe("resolveEditableWorkstationValues", () => {
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: "Review work",
+      resolvedRunnerSelection: {
+        runnerId: "codex",
+        source: "default",
+      },
       runnerName: null,
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {
         coder: ["Code"],
         processor: ["Plan"],
       },
       sharedWorkerWorkstationNames: ["Plan"],
+      workerModelProvider: null,
       workerName: "processor",
       workerOptions: ["processor"],
       workerTypeByName: {
         processor: "MODEL_WORKER",
       },
       workstationName: "Review",
+      workstationType: "MODEL_WORKSTATION",
+    });
+  });
+
+  it("resolves legacy_provider runner selection from worker modelProvider", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CODEX",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(resolveEditableWorkstationValues(factory, selectedNode)).toMatchObject({
+      effectiveRunnerName: "codex",
+      resolvedRunnerSelection: {
+        runnerId: "codex",
+        source: "legacy_provider",
+      },
+      runnerSelectionSource: "legacy_provider",
+      workerModelProvider: "CODEX",
     });
   });
 

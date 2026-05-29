@@ -66,6 +66,24 @@ func inputTypesInternalFromAPI(inputTypes []factoryapi.InputType) []interfaces.I
 	return values
 }
 
+func workTypeHandlingBehaviorInternalFromAPI(behaviors *[]factoryapi.WorkTypeHandlingBehavior) []string {
+	if behaviors == nil || len(*behaviors) == 0 {
+		return nil
+	}
+	values := make([]string, 0, len(*behaviors))
+	for _, behavior := range *behaviors {
+		canonical := interfaces.StrictPublicWorkTypeHandlingBehavior(string(behavior))
+		if canonical == "" {
+			continue
+		}
+		values = append(values, canonical)
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
 func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) []interfaces.WorkTypeConfig {
 	values := make([]interfaces.WorkTypeConfig, len(workTypes))
 	for i, workType := range workTypes {
@@ -76,7 +94,11 @@ func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) []interfaces.Work
 				Type: interfaces.StateType(state.Type),
 			}
 		}
-		values[i] = interfaces.WorkTypeConfig{Name: workType.Name, States: states}
+		values[i] = interfaces.WorkTypeConfig{
+			Name:             workType.Name,
+			States:           states,
+			HandlingBehavior: workTypeHandlingBehaviorInternalFromAPI(workType.HandlingBehavior),
+		}
 	}
 	return values
 }

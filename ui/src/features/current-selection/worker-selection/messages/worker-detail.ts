@@ -2,8 +2,8 @@ import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../../i18n";
-import type { WorkerDetailMessages } from "./worker-detail-types";
 import { getWorkerDetailEnumMessages } from "./worker-detail-enums";
+import type { WorkerDetailMessages } from "./worker-detail-types";
 
 type WorkerDetailCatalogMessages = Omit<
   WorkerDetailMessages,
@@ -22,13 +22,16 @@ const workerDetailMessagesByLocale = {
     configurationEmpty:
       "This running factory definition does not include the selected worker.",
     configurationErrorPrefix: "Worker definition unavailable.",
-    configurationLoading: "Loading the current factory definition for this worker.",
+    configurationLoading:
+      "Loading the current factory definition for this worker.",
     discardDraftAction: "Discard local changes",
-    editableConfigurationCollapseActionLabel: "Collapse worker configuration editor",
+    editableConfigurationCollapseActionLabel:
+      "Collapse worker configuration editor",
     editableConfigurationEmpty:
       "This running factory definition does not expose editable worker values.",
     editableConfigurationErrorPrefix: "Worker configuration unavailable.",
-    editableConfigurationExpandActionLabel: "Expand worker configuration editor",
+    editableConfigurationExpandActionLabel:
+      "Expand worker configuration editor",
     editableConfigurationHeading: "Worker configuration",
     editableConfigurationArgsInvalid:
       "Each script argument must be a single non-empty line.",
@@ -36,7 +39,8 @@ const workerDetailMessagesByLocale = {
       "Enter script body instructions before saving this worker.",
     editableConfigurationCommandRequired:
       "Enter a command before saving this worker.",
-    editableConfigurationContractInvalidPrefix: "Worker configuration is invalid.",
+    editableConfigurationContractInvalidPrefix:
+      "Worker configuration is invalid.",
     editableConfigurationDirtyStatus:
       "You have unsaved changes for this worker.",
     editableConfigurationDraftNote:
@@ -100,7 +104,8 @@ const workerDetailMessagesByLocale = {
     configurationLoading:
       "このワーカーの現在のファクトリ定義を読み込んでいます。",
     discardDraftAction: "ローカル変更を破棄",
-    editableConfigurationCollapseActionLabel: "ワーカー設定エディターを折りたたむ",
+    editableConfigurationCollapseActionLabel:
+      "ワーカー設定エディターを折りたたむ",
     editableConfigurationEmpty:
       "実行中のファクトリ定義に編集可能なワーカー値がありません。",
     editableConfigurationErrorPrefix: "ワーカー設定を利用できません。",
@@ -134,7 +139,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationSaveDisabledValidationDetail:
       "ハイライトされたワーカー項目が有効になるまで保存は無効のままです。",
     editableConfigurationSaveErrorPrefix: "保存に失敗しました。",
-    editableConfigurationSaveFallbackError: "実行中のファクトリを保存できませんでした。",
+    editableConfigurationSaveFallbackError:
+      "実行中のファクトリを保存できませんでした。",
     editableConfigurationSaveStaleVersionDetail:
       "最新の実行中ファクトリ値を再読み込みするか、このドラフトを保持したままエディター更新後に再試行してください。",
     editableConfigurationSaveSuccess: (workerName) =>
@@ -171,8 +177,7 @@ const workerDetailMessagesByLocale = {
     configurationEmpty:
       "실행 중인 팩토리 정의에 선택한 워커가 포함되어 있지 않습니다.",
     configurationErrorPrefix: "워커 정의를 사용할 수 없습니다.",
-    configurationLoading:
-      "이 워커의 현재 팩토리 정의를 불러오는 중입니다.",
+    configurationLoading: "이 워커의 현재 팩토리 정의를 불러오는 중입니다.",
     discardDraftAction: "로컬 변경 사항 취소",
     editableConfigurationCollapseActionLabel: "워커 구성 편집기 접기",
     editableConfigurationEmpty:
@@ -186,8 +191,10 @@ const workerDetailMessagesByLocale = {
       "이 워커를 저장하기 전에 스크립트 본문을 입력하세요.",
     editableConfigurationCommandRequired:
       "이 워커를 저장하기 전에 명령을 입력하세요.",
-    editableConfigurationContractInvalidPrefix: "워커 구성이 유효하지 않습니다.",
-    editableConfigurationDirtyStatus: "이 워커에 저장되지 않은 변경 사항이 있습니다.",
+    editableConfigurationContractInvalidPrefix:
+      "워커 구성이 유효하지 않습니다.",
+    editableConfigurationDirtyStatus:
+      "이 워커에 저장되지 않은 변경 사항이 있습니다.",
     editableConfigurationDraftNote:
       "저장할 때까지 변경 사항은 이 편집 세션에만 유지됩니다.",
     editableConfigurationOverwriteWarning: (fields) =>
@@ -208,7 +215,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationSaveDisabledValidationDetail:
       "강조된 워커 필드가 유효해질 때까지 저장은 비활성화됩니다.",
     editableConfigurationSaveErrorPrefix: "저장에 실패했습니다.",
-    editableConfigurationSaveFallbackError: "실행 중인 팩토리를 저장할 수 없습니다.",
+    editableConfigurationSaveFallbackError:
+      "실행 중인 팩토리를 저장할 수 없습니다.",
     editableConfigurationSaveStaleVersionDetail:
       "최신 실행 중 팩토리 값을 다시 불러오거나 이 초안을 유지한 채 편집기가 새로고침된 후 다시 시도하세요.",
     editableConfigurationSaveSuccess: (workerName) =>
@@ -264,9 +272,11 @@ const workerDetailMessagesByLocale = {
     editableConfigurationServerFieldChangedHint:
       "编辑期间运行中的工厂更改了此字段。放弃本地更改将使用最新的服务器值。",
     editableConfigurationLoading: "正在加载可编辑的 worker 配置。",
-    editableConfigurationModelProviderRequired: "保存此 worker 前请选择模型 provider。",
+    editableConfigurationModelProviderRequired:
+      "保存此 worker 前请选择模型 provider。",
     editableConfigurationModelRequired: "保存此 worker 前请输入模型。",
-    editableConfigurationProviderRequired: "保存此 worker 前请选择托管 provider。",
+    editableConfigurationProviderRequired:
+      "保存此 worker 前请选择托管 provider。",
     editableConfigurationSaveAction: "保存 worker",
     editableConfigurationSaveBusyAction: "正在保存 worker...",
     editableConfigurationSaveDisabledValidationDetail:
@@ -308,7 +318,10 @@ export function getWorkerDetailMessages(
   locale?: string | null,
 ): WorkerDetailMessages {
   const enumMessages = getWorkerDetailEnumMessages(locale);
-  const catalog = resolveLocalizedMessages(workerDetailMessagesByLocale, locale);
+  const catalog = resolveLocalizedMessages(
+    workerDetailMessagesByLocale,
+    locale,
+  );
 
   return {
     ...catalog,

@@ -4,15 +4,15 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
 import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
+import { cn } from "../../../../lib/cn";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
   CurrentSelectionSectionHeader,
   WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "../../base/components/detail-card-shared";
-import type { WorkerDetailCardProps } from "../lib/detail-card-types";
 import { useWorkerDetailState } from "../hooks/use-worker-detail-state";
+import type { WorkerDetailCardProps } from "../lib/detail-card-types";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
 
@@ -87,7 +87,10 @@ function WorkerSummary({
   const sectionId = `worker-summary-${workerName}`;
 
   return (
-    <section aria-labelledby={sectionId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
+    <section
+      aria-labelledby={sectionId}
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    >
       <CurrentSelectionSectionHeader
         headingId={sectionId}
         title={messages.summaryHeading}
@@ -129,7 +132,10 @@ function WorkerReferencingWorkstations({
   const sectionId = "worker-referencing-workstations";
 
   return (
-    <section aria-labelledby={sectionId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
+    <section
+      aria-labelledby={sectionId}
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={sectionId}>
         {messages.referencingWorkstationsHeading}
       </h4>
@@ -140,12 +146,19 @@ function WorkerReferencingWorkstations({
               className="rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2"
               key={workstationName}
             >
-              <span className={DASHBOARD_BODY_TEXT_CLASS}>{workstationName}</span>
+              <span className={DASHBOARD_BODY_TEXT_CLASS}>
+                {workstationName}
+              </span>
             </li>
           ))}
         </ul>
       ) : (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-af-text-muted",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
           {messages.referencingWorkstationsEmpty}
         </p>
       )}

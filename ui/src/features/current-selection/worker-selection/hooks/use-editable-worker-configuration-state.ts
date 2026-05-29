@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
 import {
   applyEditableWorkerDraft,
   type EditableWorkerDraft,
   editableWorkerDraftFromValues,
   resolveEditableWorkerValues,
 } from "../../../current-factory-definition/lib/worker-editable-values";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
 import type { DashboardSelection } from "../../base/state/selection-types";
+import { resolveEditableWorkerOverwriteFields } from "../editing/editable-worker-overwrite-fields";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import {
   hasEditableWorkerValidationErrors,
   mergeEditableWorkerContractValidationErrors,
   validateEditableWorkerDraft,
 } from "../lib/worker-editable-validation";
-import { resolveEditableWorkerOverwriteFields } from "../editing/editable-worker-overwrite-fields";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 
 interface EditableWorkerSessionState {
@@ -136,7 +135,8 @@ function buildReadyEditableWorkerConfigurationState({
     workerName,
     messages,
   );
-  const hasValidationErrors = hasEditableWorkerValidationErrors(validationErrors);
+  const hasValidationErrors =
+    hasEditableWorkerValidationErrors(validationErrors);
   const isDirty = !areEditableWorkerDraftsEqual(
     sessionState.draft,
     sessionState.sessionStartDraft,
@@ -274,7 +274,10 @@ function syncEditableWorkerSession(
   }
 
   if (
-    areEditableWorkerDraftsEqual(currentState.draft, currentState.sessionStartDraft)
+    areEditableWorkerDraftsEqual(
+      currentState.draft,
+      currentState.sessionStartDraft,
+    )
   ) {
     return {
       draft: initialDraft,

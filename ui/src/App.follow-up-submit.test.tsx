@@ -170,6 +170,16 @@ describe("App follow-up submit request flows", () => {
       name: "Dashboard empty payload request",
       workTypeName: "story",
     });
+    expect(
+      await submitWorkScope.findByText(
+        "Your request was submitted. Trace ID: trace-submit-story.",
+      ),
+    ).toBeTruthy();
+    expect(
+      submitWorkScope.queryByText(
+        "We couldn't submit your request. Try again in a moment.",
+      ),
+    ).toBeNull();
 
     fireEvent.change(requestName, {
       target: { value: "Retry dashboard request" },

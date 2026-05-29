@@ -22,14 +22,12 @@ import {
   EDITABLE_WORKER_TYPES,
 } from "../../../current-factory-definition/lib/worker-editable-values";
 import {
-  CurrentSelectionSectionHeader,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
+  CurrentSelectionSectionHeader,
   HISTORY_TOGGLE_CLASS,
 } from "../../base/components/detail-card-shared";
-import {
-  formatEditableWorkerOverwriteFieldLabels,
-} from "../editing/editable-worker-overwrite-fields";
+import { formatEditableWorkerOverwriteFieldLabels } from "../editing/editable-worker-overwrite-fields";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerOverwriteField,
@@ -85,20 +83,33 @@ export function WorkerEditableConfigurationSection({
       {expanded ? (
         <div className="grid gap-2.5" id={contentId}>
           {state?.status === "loading" ? (
-            <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p
+              className={cn(
+                "m-0 text-af-text-muted",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+            >
               {messages.editableConfigurationLoading}
             </p>
           ) : null}
           {state?.status === "error" ? (
             <p
-              className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+              className={cn(
+                "m-0 text-af-danger-text",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
               role="alert"
             >
               {messages.editableConfigurationErrorPrefix} {state.errorMessage}
             </p>
           ) : null}
           {state?.status === "empty" ? (
-            <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p
+              className={cn(
+                "m-0 text-af-text-muted",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+            >
               {state.message || messages.editableConfigurationEmpty}
             </p>
           ) : null}
@@ -160,7 +171,10 @@ function WorkerEditableConfigurationReadyForm({
           {validationErrors.contract}
         </p>
       ) : null}
-      <WorkerEditableConfigurationDraftStatus messages={messages} state={state} />
+      <WorkerEditableConfigurationDraftStatus
+        messages={messages}
+        state={state}
+      />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <WorkerEditableConfigurationField
           errorMessage={validationErrors.type}
@@ -260,7 +274,12 @@ function WorkerEditableConfigurationSaveFeedback({
         >
           {saveState.message}
         </p>
-        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-af-text-subtle",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
           {messages.editableConfigurationSaveStaleVersionDetail}
         </p>
       </div>
@@ -319,7 +338,12 @@ function WorkerEditableConfigurationOverwriteWarning({
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
-      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
         {messages.editableConfigurationOverwriteWarningDetail}
       </p>
     </div>
@@ -341,7 +365,10 @@ function WorkerEditableConfigurationServerChangedHint({
 
   return (
     <p
-      className={cn("m-0 text-af-warning-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      className={cn(
+        "m-0 text-af-warning-text",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
     >
       {messages.editableConfigurationServerFieldChangedHint}
     </p>
@@ -373,7 +400,12 @@ function WorkerEditableConfigurationSharedImpactWarning({
           formatList(workstationNames),
         )}
       </p>
-      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
         {messages.editableConfigurationSharedImpactWarningDetail}
       </p>
     </div>
@@ -392,7 +424,9 @@ function WorkerEditableConfigurationDraftStatus({
       <p
         className={cn(
           "m-0",
-          state.hasValidationErrors ? "text-af-danger-text" : "text-af-text-muted",
+          state.hasValidationErrors
+            ? "text-af-danger-text"
+            : "text-af-text-muted",
           DASHBOARD_BODY_TEXT_CLASS,
         )}
         role={state.hasValidationErrors ? "alert" : "status"}
@@ -404,11 +438,21 @@ function WorkerEditableConfigurationDraftStatus({
             : messages.editableConfigurationDraftNote}
       </p>
       {state.hasValidationErrors ? (
-        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-af-text-subtle",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
           {messages.editableConfigurationSaveDisabledValidationDetail}
         </p>
       ) : (
-        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-af-text-subtle",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
           {messages.editableConfigurationDraftNote}
         </p>
       )}
@@ -607,7 +651,9 @@ function ScriptWorkerEditableFields({
         input={
           <input
             aria-describedby={
-              validationErrors.command ? "editable-worker-command-error" : undefined
+              validationErrors.command
+                ? "editable-worker-command-error"
+                : undefined
             }
             aria-invalid={validationErrors.command ? "true" : undefined}
             className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
@@ -697,7 +743,9 @@ function HostedWorkerEditableFields({
       input={
         <WorkerOptionalEnumSelect
           ariaDescribedBy={
-            validationErrors.provider ? "editable-worker-provider-error" : undefined
+            validationErrors.provider
+              ? "editable-worker-provider-error"
+              : undefined
           }
           ariaInvalid={Boolean(validationErrors.provider)}
           id="editable-worker-provider"

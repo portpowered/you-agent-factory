@@ -10,6 +10,7 @@ export interface StatePositionWorkListProps {
     | "failureReasonLabel"
     | "startedAtLabel"
     | "selectWorkItemLabel"
+    | "timestampUnavailable"
   >;
   onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
   workItems: StatePositionWorkItem[];

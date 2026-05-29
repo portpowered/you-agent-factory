@@ -73,7 +73,9 @@ export type EditableWorkerConfigurationState =
         value: EditableWorkerDraft["executorProvider"],
       ) => void;
       onModelChange: (value: string) => void;
-      onModelLocalityChange: (value: EditableWorkerDraft["modelLocality"]) => void;
+      onModelLocalityChange: (
+        value: EditableWorkerDraft["modelLocality"],
+      ) => void;
       onModelProviderChange: (
         value: EditableWorkerDraft["modelProvider"],
       ) => void;

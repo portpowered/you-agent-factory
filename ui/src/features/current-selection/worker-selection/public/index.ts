@@ -5,13 +5,6 @@ export { useWorkerDetailState } from "../hooks/use-worker-detail-state";
 export type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
-} from "../lib/detail-card-types";
-export {
-  getWorkerDetailMessages,
-  workerDetailMessagesByLocale,
-} from "../messages/worker-detail";
-export type { WorkerDetailMessages } from "../messages/worker-detail-types";
-export type {
   WorkerDetailCardProps,
   WorkerDetailState,
 } from "../lib/detail-card-types";
@@ -19,8 +12,13 @@ export {
   findWorkerInFactoryDefinition,
   workstationNamesReferencingWorkerInFactoryDefinition,
 } from "../lib/worker-detail-values";
+export type { EditableWorkerValidationErrors } from "../lib/worker-editable-validation";
 export {
   hasEditableWorkerValidationErrors,
   validateEditableWorkerDraft,
 } from "../lib/worker-editable-validation";
-export type { EditableWorkerValidationErrors } from "../lib/worker-editable-validation";
+export {
+  getWorkerDetailMessages,
+  workerDetailMessagesByLocale,
+} from "../messages/worker-detail";
+export type { WorkerDetailMessages } from "../messages/worker-detail-types";

@@ -854,6 +854,48 @@ func assertExpandedPortableResourceManifest(t *testing.T, expanded *interfaces.F
 	}
 }
 
+func TestFactoryConfigMapper_FlattenRoundTripsWorkTypeHandlingBehavior(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"name":"default-handling-factory",
+		"workTypes": [{
+			"name":"story",
+			"handlingBehavior":["DEFAULT"],
+			"states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]
+		}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	cfg, err := mapper.Expand(raw)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+	if len(cfg.WorkTypes) != 1 || len(cfg.WorkTypes[0].HandlingBehavior) != 1 ||
+		cfg.WorkTypes[0].HandlingBehavior[0] != interfaces.WorkTypeHandlingBehaviorDefault {
+		t.Fatalf("expected DEFAULT handling behavior on story work type, got %#v", cfg.WorkTypes)
+	}
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	expanded, err := mapper.Expand(flattened)
+	if err != nil {
+		t.Fatalf("mapper.Expand roundtrip: %v", err)
+	}
+	if got := expanded.WorkTypes[0].HandlingBehavior; len(got) != 1 || got[0] != interfaces.WorkTypeHandlingBehaviorDefault {
+		t.Fatalf("handlingBehavior roundtrip mismatch: got %#v", got)
+	}
+}
+
 func assertMissingKey(t *testing.T, payload map[string]any, key string) {
 	t.Helper()
 	if _, ok := payload[key]; ok {

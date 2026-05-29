@@ -1,8 +1,8 @@
+import type { CanonicalFactoryDefinition } from "../../../../api/current-factory-definition";
 import {
   FactoryDefinitionAPIError,
   normalizeFactoryDefinition,
 } from "../../../../api/factory-definition";
-import type { CanonicalFactoryDefinition } from "../../../../api/current-factory-definition";
 import type { EditableWorkerDraft } from "../../../current-factory-definition/lib/worker-editable-values";
 import type { WorkerDetailMessages } from "../messages/worker-detail-types";
 

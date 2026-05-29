@@ -5,7 +5,9 @@ import type { DashboardSelection } from "../../base/state/selection-types";
 import { useEditableWorkerConfigurationState } from "./use-editable-worker-configuration-state";
 
 vi.mock("../../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../../current-factory-definition/public");
+  const actual = await vi.importActual(
+    "../../../current-factory-definition/public",
+  );
 
   return {
     ...actual,

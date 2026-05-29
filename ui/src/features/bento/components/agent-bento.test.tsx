@@ -449,6 +449,61 @@ describe("AgentBentoLayout", () => {
     );
   });
 
+});
+
+describe("AgentBentoCard", () => {
+  it("renders the canonical shared header with an h3 title and move control", () => {
+    render(
+      <AgentBentoCard title="Work totals">
+        <p>Totals body</p>
+      </AgentBentoCard>,
+    );
+
+    const card = screen.getByRole("article", { name: "Work totals" });
+    const header = card.querySelector("header");
+
+    expect(header).toBeTruthy();
+    expect(
+      within(card).getByRole("heading", { level: 3, name: "Work totals" }),
+    ).toBeTruthy();
+    expect(
+      within(card)
+        .getByRole("button", { name: "Move Work totals" })
+        .getAttribute("data-bento-drag-handle"),
+    ).toBe("true");
+    expect(card.querySelectorAll("header")).toHaveLength(1);
+  });
+
+  it("renders optional header actions in the shared tools region with the move control", () => {
+    render(
+      <AgentBentoCard
+        headerAction={<button type="button">Remove card</button>}
+        title="Current selection"
+      >
+        <p>Selection body</p>
+      </AgentBentoCard>,
+    );
+
+    const card = screen.getByRole("article", { name: "Current selection" });
+    const header = card.querySelector("header");
+    const toolsRegion = header?.lastElementChild;
+
+    expect(
+      within(card).getByRole("button", { name: "Remove card" }),
+    ).toBeTruthy();
+    expect(
+      within(card).getByRole("button", { name: "Move Current selection" }),
+    ).toBeTruthy();
+    expect(toolsRegion?.contains(screen.getByRole("button", { name: "Remove card" }))).toBe(
+      true,
+    );
+    expect(
+      toolsRegion?.contains(
+        screen.getByRole("button", { name: "Move Current selection" }),
+      ),
+    ).toBe(true);
+  });
+
   it("supports compact shared chrome for dense dashboard cards", () => {
     render(
       <AgentBentoCard chromeDensity="compact" title="Factory graph">

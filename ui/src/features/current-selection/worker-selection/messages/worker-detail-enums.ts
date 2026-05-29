@@ -1,6 +1,6 @@
 import {
-  localizeEnumLabel,
   type LocalizedMessageCatalog,
+  localizeEnumLabel,
   resolveLocalizedMessages,
 } from "../../../../i18n";
 

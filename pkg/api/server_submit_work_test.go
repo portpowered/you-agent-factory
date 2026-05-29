@@ -197,10 +197,37 @@ func TestSubmitWork_RejectsStructuredItemsCombinedWithPayload(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with payload")
 }
 
-func TestSubmitWork_RejectsEmptyStructuredItems(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
-	rec := submitWorkRequest(t, srv, `{"name":"empty-items","workTypeName":"prd","items":[]}`)
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items must contain at least one item")
+func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
+	// Dashboard submit-work sends name, workTypeName, and items: [] when optional text
+	// inputs are blank. Header/type-only submissions carry no structured content.
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+	rec := submitWorkRequest(t, srv, `{"name":"header-only-request","workTypeName":"prd","items":[]}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("header-only structured submit-work: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
+	if resp.TraceId == "" {
+		t.Fatalf("expected non-empty trace_id, got %q", resp.TraceId)
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if mf.Submitted[0].Name != "header-only-request" {
+		t.Fatalf("submitted name = %q, want header-only-request", mf.Submitted[0].Name)
+	}
+	if mf.Submitted[0].WorkTypeID != "prd" {
+		t.Fatalf("submitted work type = %q, want prd", mf.Submitted[0].WorkTypeID)
+	}
+	if len(mf.Submitted[0].Content) != 0 {
+		t.Fatalf("submitted content count = %d, want empty structured content", len(mf.Submitted[0].Content))
+	}
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 {
+		t.Fatalf("work requests = %#v, want one submitted work request", mf.WorkRequests)
+	}
+	if len(mf.WorkRequests[0].Works[0].Content) != 0 {
+		t.Fatalf("submitted work request content count = %d, want empty structured content", len(mf.WorkRequests[0].Works[0].Content))
+	}
 }
 
 func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {

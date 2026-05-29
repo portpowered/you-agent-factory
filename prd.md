@@ -1,159 +1,123 @@
-# PRD: Packaged CLI Docs for Mock Workers and Record/Replay
+# PRD: Submit Work Header-Only Defaults
 
-## Introduction
-
-Customers run factories locally with `you run` and need deterministic workflow checks without live model or script provider calls, plus the ability to capture and replay runs for debugging and support. The installed `you docs` surface is the primary way customers read reference material from `./bin/you` without cloning the repository.
-
-Today, mock-worker and record/replay guidance is scattered inside the long `authoring-factories` topic and only summarized in `config`. A customer running `you docs` does not get dedicated topics for `--with-mock-workers`, mock-workers JSON, or the `--record` / `--replay` / `--no-record` controls. The content that exists is hard to discover and mixes workflow sequencing with CLI run-mode reference.
-
-Add two focused packaged docs topics—`mock-workers` and `record-replay`—that explain how to use those commands from the installed binary, keep `docs/reference/` and `pkg/cli/docs/reference/` synchronized, and cross-link from existing topics without duplicating maintainer-only internals.
+---
+author: Codex
+last modified: 2026, may, 30
+status: draft
+---
 
 ## Context
 
-### Customer ask
+### Customer Ask
 
-The current `./bin/you docs` output does not document how customers are supposed to use `mock-workers` or `record/replay` commands. Add support for this.
+When a dashboard user submits work from the Submit work widget with only the required header fields filled in (work type and request name) and leaves the submission text area empty, submission fails. Add a test that proves header/type-only submission is currently rejected, then fix the flow so submission succeeds with an empty text payload.
 
 ### Problem
 
-- `you docs` lists nine topics; none are named for mock workers or record/replay.
-- Runnable command examples and JSON contracts for `--with-mock-workers` live deep inside `authoring-factories`, mixed with factory layout and batch-input guidance.
-- Record/replay behavior (default-on recording, generated artifact paths, explicit `--record`, `--replay`, `--no-record`, sensitivity warnings, and mutual exclusion) is similarly buried; `config` only points readers elsewhere.
-- Customers who know the feature names cannot run `you docs mock-workers` or `you docs record-replay` and get a complete answer.
+The dashboard Submit work widget builds structured submit requests through `buildStructuredSubmitItems`, which omits blank text items and therefore sends `items: []` when the user provides only `name` and `workTypeName`. The widget already has a unit test expecting that payload shape, but the backend rejects it:
 
-### High-level solution
+- `validateSubmitWorkItemsField` returns `items must contain at least one item` for an empty `items` array.
+- `submitWorkItemsToContent` returns the same class of error when converting structured items to work content.
 
-Introduce two new canonical packaged topics registered in `pkg/cli/docs/docs.go`, backed by customer-authored markdown in `docs/reference/mock-workers.md` and `docs/reference/record-replay.md` with synchronized packaged copies. Trim `authoring-factories` and `config` to short summaries plus links to the new owners. Extend CLI and functional smoke tests so the new topics are discoverable from `you docs` and return stable, copy-pasteable command guidance outside the repository docs tree.
+As a result, operators who only want to enqueue a named request of a given work type see a failed submission even though the OpenAPI contract only requires `name` and `workTypeName`.
+
+### Solution
+
+Treat an empty structured `items` array as a valid header-only submission. Keep rejecting submissions whose `items` array contains only blank text or otherwise non-meaningful entries. Add explicit API tests for the header-only case, update backend validation/conversion in `pkg/api/submit_work_items.go`, and add functional smoke coverage so the dashboard path and HTTP API agree.
+
+## Project Acceptance Criteria
+
+- [ ] A submit-work request with `name`, `workTypeName`, and `items: []` is accepted by the API and returns `201 Created` with a trace identifier.
+- [ ] The accepted header-only submission reaches the factory with the provided name and work type and with empty structured content (no phantom text parts).
+- [ ] Submissions whose `items` array contains only whitespace text items remain rejected with a clear validation error.
+- [ ] The dashboard Submit work widget can complete a header-only submission without showing a server error after the backend fix.
+- [ ] Regression tests cover the rejection (before fix) and acceptance (after fix) behavior at the API layer, plus at least one functional smoke path.
+- [ ] Quality gate: backend and frontend typecheck, lint, and relevant tests pass before merge.
 
 ## Goals
 
-- Customers can discover mock-worker and record/replay documentation from `you docs` without reading the full authoring workflow guide.
-- `you docs mock-workers` explains when to use `--with-mock-workers`, optional config paths, the JSON contract, selection fields, supported `runType` values, default accept behavior, and links to checked-in examples.
-- `you docs record-replay` explains default recording, generated artifact locations, explicit `--record` / `--replay` / `--no-record`, sensitivity and retention expectations, and flag combinations the CLI rejects.
-- Existing topics remain accurate entry points via cross-links; maintainer internals stay in `docs/internal/development/record-replay.md`.
-- Packaged topics work when the repository `docs/` tree is absent (installed-binary behavior).
-
-## Project-Level Acceptance Criteria
-
-- [ ] Running `you docs` lists `mock-workers` and `record-replay` with customer-facing descriptions and `you docs <topic>` commands.
-- [ ] Running `you docs mock-workers` prints a dedicated guide that includes `you run --with-mock-workers` usage, optional config path behavior, the `mockWorkers` JSON shape, selection-field semantics, supported `runType` values, and links to `docs/examples/mock-workers.json`.
-- [ ] Running `you docs record-replay` prints a dedicated guide that includes default-on recording, generated artifact path contract, `--record`, `--replay`, `--no-record`, sensitivity guidance, and the rule that `--record` and `--replay` cannot be combined.
-- [ ] `authoring-factories` and `config` cross-link to the new topics without contradicting `you run --help` or root-command flag text.
-- [ ] Canonical `docs/reference/` pages and packaged `pkg/cli/docs/reference/` copies stay synchronized for every touched topic.
-- [ ] Focused tests prove index output, topic rendering, and installed-binary smoke behavior for the new topics.
-- [ ] Typecheck, lint, and tests pass for the changed packages.
+- [ ] Allow operators to submit work using only work type and request name when they do not need inline text or staged files.
+- [ ] Align backend validation with the dashboard’s existing empty-items payload shape.
+- [ ] Preserve validation for malformed or meaningless structured item payloads.
+- [ ] Add direct test evidence so header-only submission cannot regress to `400 Bad Request`.
 
 ## User Stories
 
-### docs-extensions-mock-workers-and-record-001: Add mock-workers packaged docs topic
+### US-001: Prove header-only structured submit-work is rejected today
 
-**Description:** As a factory author, I want `you docs mock-workers` to print a complete mock-worker guide so I can test routing and outcomes without live provider calls.
+**Description:** As a maintainer, I want an API test that submits only `name`, `workTypeName`, and an empty `items` array so the current rejection is documented before we change validation.
 
 **Acceptance Criteria:**
-
-- [ ] `docs/reference/mock-workers.md` and `pkg/cli/docs/reference/mock-workers.md` match and document: enabling with `you run --dir <factory> --with-mock-workers` (optional path), empty-config default accept behavior, JSON top-level `mockWorkers` array, selection fields (`workerName`, `workstationName`, `workInputs`, etc.), `runType` values `accept`, `reject`, and `script` with their config objects, and unmatched-dispatch default accept behavior.
-- [ ] The page includes copy-pasteable commands using the `you` binary name and references the checked-in example at `docs/examples/mock-workers.json` with a runnable combined example that also uses `docs/examples/startup-work.json` when startup work is relevant.
-- [ ] `pkg/cli/docs/docs.go` registers canonical topic `mock-workers` with explicit display order, packaged path, and index description; `SupportedTopics()` and unsupported-topic errors include it in deterministic order.
-- [ ] `you docs` index lists `mock-workers` and does not list compatibility aliases for it.
+- [ ] `POST /work` (or session-scoped equivalent handler test) with body `{"name":"<non-empty>","workTypeName":"<configured type>","items":[]}` returns `400 Bad Request`.
+- [ ] The error message identifies structured `items` validation (for example `items must contain at least one item`).
+- [ ] The test name and assertions describe header/type-only submission without text or file payload content.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### docs-extensions-mock-workers-and-record-002: Add record-replay packaged docs topic
+### US-002: Accept header-only structured submit-work on the API
 
-**Description:** As a factory operator, I want `you docs record-replay` to explain record and replay run modes so I can capture, locate, and replay sensitive run artifacts safely.
+**Description:** As a dashboard operator, I want to submit work with only a work type and request name so I can enqueue named requests without typing optional details.
 
 **Acceptance Criteria:**
-
-- [ ] `docs/reference/record-replay.md` and `pkg/cli/docs/reference/record-replay.md` match and document: default-on recording when neither `--record` nor `--replay` is passed, generated artifact directory `~/.you-agent-factory/recordings/YYYY-MM/YYYY-MM-DD/`, session-based filename pattern, explicit `--record <path>`, `--replay <path>`, `--no-record`, shutdown `Recording saved: ...` messaging, sensitivity warnings, no automatic retention cleanup in v1, and rejection of `--record` with `--replay` or `--no-record` with `--record`.
-- [ ] The page distinguishes record mode (live run writes history) from replay mode (reads artifact instead of dispatching live workers) in customer language without requiring maintainer event-log detail.
-- [ ] Includes copy-pasteable `you run` examples using `docs/examples/sample-run.replay.json` for explicit record and replay paths.
-- [ ] `pkg/cli/docs/docs.go` registers canonical topic `record-replay` with explicit display order, packaged path, and index description.
+- [ ] `POST /work` with `name`, `workTypeName`, and `items: []` returns `201 Created` and a non-empty trace identifier.
+- [ ] The factory receives the submission with the provided `name` and `workTypeName` and with empty structured content (no text or file content parts).
+- [ ] `items` arrays that contain only whitespace text items still return `400 Bad Request` with `items must contain at least one non-empty item`.
+- [ ] Prior rejection tests for empty `items: []` are updated to expect success instead of failure.
+- [ ] A functional runtime API smoke test submits header-only structured work and observes successful acceptance.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### docs-extensions-mock-workers-and-record-003: Cross-link existing packaged topics to the new owners
+### US-003: Confirm the dashboard submit-work widget completes header-only submission
 
-**Description:** As a customer reading `you docs config` or `you docs authoring-factories`, I want clear pointers to the dedicated mock-worker and record/replay guides so I do not have to search a long workflow page.
-
-**Acceptance Criteria:**
-
-- [ ] `config` retains a brief mention of `--with-mock-workers`, `--record`, `--replay`, and `--no-record` but links to `you docs mock-workers` and `you docs record-replay` as the canonical owners instead of being the only detailed reference.
-- [ ] `authoring-factories` keeps workflow sequencing but replaces duplicated deep mock-worker and record/replay sections with short summaries plus links to the new topics; runnable quick-start commands for the review example remain present.
-- [ ] `authoring-factories` still links to `docs/examples/README.md` and example JSON files using paths that work from the repository docs tree.
-- [ ] `docs/reference/README.md` packaged-topic table includes `mock-workers` and `record-replay` with accurate scope descriptions.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### docs-extensions-mock-workers-and-record-004: Prove packaged CLI docs behavior for new topics
-
-**Description:** As a maintainer, I need automated checks that the installed docs command exposes the new topics reliably so regressions are caught before release.
+**Description:** As a dashboard user, I want the Submit work widget to succeed when I fill in work type and request name but leave the default text item blank.
 
 **Acceptance Criteria:**
-
-- [ ] `pkg/cli/docs/docs_test.go` expects `mock-workers` and `record-replay` in supported-topic order, index markdown, and raw markdown markers for each new topic.
-- [ ] `pkg/cli/root_docs_test.go` and other root-command docs tests list the new topics in help or unsupported-topic error text where applicable.
-- [ ] `tests/functional/smoke/cli_docs_smoke_test.go` runs `you docs mock-workers` and `you docs record-replay` from a temp working directory without a local `docs/` tree and asserts stable headings and command markers (for example `--with-mock-workers`, `--record`, `--replay`, `--no-record`, and example artifact paths).
-- [ ] Unsupported-topic errors list all canonical topics including the two new ones in deterministic order.
+- [ ] With work type and request name filled and the default text item left empty, clicking Submit work issues one `POST` whose JSON body includes `items: []`, the chosen `name`, and `workTypeName`.
+- [ ] When the API responds `201`, the widget shows the existing success status message with the returned trace identifier.
+- [ ] No inline server error is shown for the header-only happy path.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
 ## Functional Requirements
 
-- FR-1: Register `mock-workers` and `record-replay` as canonical packaged docs topics with positive display order after existing run-adjacent topics and before or after `templates` per a stable ordering documented in the registration table.
-- FR-2: `you docs mock-workers` returns raw markdown with no CLI wrapper prose, matching the authored reference page.
-- FR-3: `you docs record-replay` returns raw markdown with no CLI wrapper prose, matching the authored reference page.
-- FR-4: Mock-workers documentation must reflect the runtime JSON contract validated by `LoadMockWorkersConfig` / `ParseMockWorkersConfig` (including `mockWorkers`, `runType`, `rejectConfig`, `scriptConfig`, and work-input selectors).
-- FR-5: Record-replay documentation must align with `you run` flag behavior and long help in `pkg/cli/root.go` for default recording, sensitivity, and conflicting flag rejection.
-- FR-6: All customer-facing command examples in new pages use the installed binary name `you`, not legacy `agent-factory` or `infinite-you` invocations.
-- FR-7: Maintainer-only event-log, fixture promotion, and divergence interpretation remain in `docs/internal/development/record-replay.md`; the customer topic links to it only as optional further reading for contributors.
+- FR-1: Structured submit-work requests with `items: []` are valid when `name` and `workTypeName` are non-empty.
+- FR-2: Empty `items` arrays produce empty structured work content at submission time (no synthetic text parts).
+- FR-3: Structured `items` arrays that include entries but no meaningful text or staged file content remain invalid.
+- FR-4: The dashboard continues to omit blank text draft items from the outbound `items` array.
+- FR-5: Whitespace-only text items inside a non-empty `items` array remain rejected.
 
 ## Non-Goals
 
-- No new CLI flags or changes to mock-worker or replay runtime behavior beyond documentation.
-- No website or OpenAPI contract changes.
-- No automatic pruning or encryption of replay artifacts.
-- No meta-tests that only walk `docs/reference` link graphs or assert file inventories without checking CLI output.
-- No removal of `authoring-factories` as the workflow-oriented entry point.
+- Changing OpenAPI required fields or adding new submit-work request properties.
+- Requiring users to enter text in the default text item.
+- Allowing submissions with missing or blank `name` or `workTypeName`.
+- Reworking file staging, multimodal item ordering, or submit-work card layout.
+- Broad refactors of submit-work helpers unrelated to empty payload handling.
 
-## Technical Design
+## High-Level Technical Design
 
-### Packaged docs ownership
+**Ownership:** `pkg/api` owns structured submit-work validation and content conversion (`submit_work_items.go`, `server_submit_work_test.go`). The dashboard widget already builds empty `items` in `ui/src/features/submit-work/hooks/use-submit-work-widget-helpers.ts`.
 
-Follow `docs/internal/development/packaged-cli-docs-surface.md`:
+**Validation change:** When `items` is present as an empty array, skip the “at least one item” and “at least one non-empty item” checks. When `items` is non-empty, keep existing per-item validation and meaningful-item checks.
 
-1. Author canonical markdown under `docs/reference/`.
-2. Copy to `pkg/cli/docs/reference/`.
-3. Register in `topicDocuments` in `pkg/cli/docs/docs.go`.
-4. Update `pkg/cli/docs/docs_test.go`, root docs tests, and `cli_docs_smoke_test.go`.
+**Conversion change:** `submitWorkItemsToContent` returns an empty content slice for `len(items) == 0` instead of an error.
 
-### Content extraction strategy
+**UI surface:** No payload-shape change expected; verify the existing widget test and success/error status handling still match backend behavior.
 
-- **mock-workers.md:** Customer guide focused on `--with-mock-workers`, optional path sentinel behavior (flag present without path uses empty config), JSON schema, matching semantics, run types, and example commands. Pull accurate field tables from existing `authoring-factories` section `## Test Workflows With Mock Workers` and `pkg/config` validation rules.
-- **record-replay.md:** Customer guide focused on CLI controls and artifact handling. Pull from existing `authoring-factories` step 3 record/replay bullets and customer-safe portions of `docs/internal/development/record-replay.md` (record paths, flags, sensitivity); omit maintainer test-promotion workflows.
-- **authoring-factories.md:** Keep the numbered workflow; replace long duplicated sections with 2–4 sentence summaries and links `you docs mock-workers` / `you docs record-replay`.
+**Verification:** Handler tests in `pkg/api/server_submit_work_test.go`, functional smoke in `tests/functional/runtime_api/api_generated_smoke_test.go`, and widget tests in `ui/src/features/submit-work/components/submit-work-widget.test.tsx`.
 
-### Display order
+## Supporting Technical and UX Considerations
 
-Place new topics after `config` (display order ~25 and ~26) so run-mode references sit near configuration and before work-type reference material, or immediately after `authoring-factories` if that keeps workflow-adjacent topics grouped—implementers should pick one order, apply it consistently in `docs.go` and tests, and document the choice in the registration table comment if non-obvious.
-
-### Examples and paths
-
-Continue using repository-owned examples under `docs/examples/` (`mock-workers.json`, `startup-work.json`, `sample-run.replay.json`). Docs pages should show paths relative to a cloned repository for copy-paste and mention that installed-binary users can pass any local path for `--with-mock-workers` and replay artifacts.
-
-## Supporting Considerations
-
-- Keep `docs/examples/README.md` aligned if command examples change.
-- Update `docs/internal/processes/development-guide-relevant-files.md` only if the packaged-docs inventory row needs the new topic names (optional, same PR if touched).
-- `you run --help` remains the concise flag reference; packaged docs provide narrative and examples.
-- Replay artifacts are sensitive; both new topic and `record-replay` must warn customers not to commit real recordings.
+- Distinguish `items: null`/omitted (legacy `content` path) from `items: []` (structured header-only path); only relax validation for the explicit empty array used by the dashboard.
+- Keep error messages specific so operators can still tell the difference between “no items provided when items key is non-empty but meaningless” versus “valid header-only submission”.
+- Success UX should continue to use existing trace-ID success copy; no new empty-state messaging is required.
 
 ## Success Metrics
 
-- A customer can answer “how do I run with mock workers?” using only `you docs mock-workers` in under one minute.
-- A customer can answer “where did my recording go?” and “how do I replay it?” using only `you docs record-replay`.
-- Functional docs smoke tests pass from a clean temp directory without the repo `docs/` tree.
-- No increase in unsupported-topic confusion: canonical topic list in errors matches index.
+- Header-only submissions from the dashboard complete without `400` responses.
+- API and functional tests prevent reintroducing empty-items rejection.
+- No increase in invalid blank-only multimodal submissions reaching the factory.
 
 ## Open Questions
 
-None. Scope, ownership split, and verification surfaces are defined by existing packaged-docs standards and current CLI behavior.
+None. The failure mode, payload shape, and fix boundary are clear.

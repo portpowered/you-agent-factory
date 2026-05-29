@@ -5,7 +5,7 @@ import {
 } from "../../../../i18n";
 
 const RAW_REJECTED_OUTCOME = "REJECTED";
-const REPEATER_WORKSTATION_KIND = "repeater";
+const REPEATER_WORKSTATION_KIND = "REPEATER";
 
 type WorkstationRunOutcomeDisplay = {
   label: string;
@@ -31,7 +31,7 @@ function isRepeaterRejectedOutcome(
 ): boolean {
   return (
     value.trim().toUpperCase() === RAW_REJECTED_OUTCOME &&
-    workstationKind?.trim().toLowerCase() === REPEATER_WORKSTATION_KIND
+    workstationKind?.trim().toUpperCase() === REPEATER_WORKSTATION_KIND
   );
 }
 

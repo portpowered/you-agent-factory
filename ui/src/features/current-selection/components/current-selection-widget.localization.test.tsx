@@ -2,8 +2,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
+import {
+  useCurrentFactoryDefinition,
+  useCurrentFactoryDocument,
+} from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
@@ -18,6 +22,7 @@ vi.mock("../../current-factory-definition/public", async () => {
   return {
     ...actual,
     useCurrentFactoryDefinition: vi.fn(),
+    useCurrentFactoryDocument: vi.fn(),
   };
 });
 
@@ -133,6 +138,11 @@ function setupCurrentSelectionLocalizationTest() {
       status: "success",
     } as never);
     vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      status: "pending",
+    } as never);
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
       isPending: true,
       status: "pending",
@@ -253,38 +263,47 @@ describe("CurrentSelectionWidget workstation localization", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = {
       ...snapshot.topology.workstation_nodes_by_id.review,
-      workstation_kind: "standard",
+      workstation_kind: "repeater",
     };
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    const factoryDocument: CurrentFactoryDocument = {
+      name: "Current Factory",
+      version: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      workers: [
+        { model: "gpt-5.5", name: "reviewer", type: "MODEL_WORKER" },
+        { model: "gpt-5.6", name: "planner", type: "MODEL_WORKER" },
+      ],
+      workstations: [
+        {
+          behavior: "STANDARD",
+          body: "Review the latest story changes before approval.",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          promptFile: "prompts/review.md",
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
 
     vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
-      data: {
-        name: "Current Factory",
-        version: {
-          logical: "7",
-          physical: "2026-05-23T15:52:00Z",
-        },
-        workers: [
-          { model: "gpt-5.5", name: "reviewer", type: "MODEL_WORKER" },
-          { model: "gpt-5.6", name: "planner", type: "MODEL_WORKER" },
-        ],
-        workstations: [
-          {
-            behavior: "STANDARD",
-            body: "Review the latest story changes before approval.",
-            id: "review",
-            inputs: [{ state: "queued", workType: "story" }],
-            name: "Review",
-            outputs: [{ state: "approved", workType: "story" }],
-            promptFile: "prompts/review.md",
-            worker: "reviewer",
-          },
-        ],
-        workTypes: [],
-      },
+      data: factoryDocument,
       isPending: false,
+      status: "success",
+    } as never);
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: factoryDocument,
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
       status: "success",
     } as never);
 

@@ -128,7 +128,9 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
   it("preserves existing field errors when contract validation fails", () => {
     const pendingFactoryDefinition = {
       name: "Current Factory",
-      workers: [{ name: "reviewer", type: "MODEL_WORKER", modelProvider: "CURSOR" }],
+      workers: [
+        { name: "reviewer", type: "MODEL_WORKER", modelProvider: "CURSOR" },
+      ],
       workTypes: [],
     };
 

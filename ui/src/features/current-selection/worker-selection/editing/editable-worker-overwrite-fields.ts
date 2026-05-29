@@ -35,7 +35,8 @@ export function resolveEditableWorkerOverwriteFields(
     fields.push("modelLocality");
   }
   if (
-    sessionStartDraft.executorProvider !== latestDefinitionDraft.executorProvider &&
+    sessionStartDraft.executorProvider !==
+      latestDefinitionDraft.executorProvider &&
     draft.executorProvider !== latestDefinitionDraft.executorProvider
   ) {
     fields.push("executorProvider");

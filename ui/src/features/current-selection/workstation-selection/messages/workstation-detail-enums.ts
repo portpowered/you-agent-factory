@@ -3,15 +3,30 @@ import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
 } from "../../../../i18n";
+import type { ApiWorkstationKind, ApiWorkstationType } from "./workstation-openapi-enums";
+import {
+  localizeRunnerSelectionSourceValue,
+  type ApiRunnerSelectionSource,
+} from "./runner-openapi-enums";
+import {
+  localizeWorkstationKindValue,
+  localizeWorkstationTypeValue,
+} from "./workstation-openapi-enums";
 
 export interface WorkstationDetailEnumMessages {
   localizeProviderSessionKind: (value: string) => string;
-  localizeWorkstationBehavior: (value: string) => string;
-  localizeWorkstationKind: (value: string) => string;
+  localizeRunnerSelectionSource: (
+    value: ApiRunnerSelectionSource | string,
+  ) => string;
+  localizeWorkstationBehavior: (value: ApiWorkstationKind | string) => string;
+  localizeWorkstationKind: (value: ApiWorkstationKind | string) => string;
+  localizeWorkstationType: (value: ApiWorkstationType | string) => string;
 }
 
 const workstationDetailEnumMessagesByLocale = {
   en: {
+    localizeRunnerSelectionSource: (value) =>
+      localizeRunnerSelectionSourceValue(value, "en"),
     localizeProviderSessionKind: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -22,32 +37,16 @@ const workstationDetailEnumMessagesByLocale = {
         locale: "en",
         value,
       }),
-    localizeWorkstationBehavior: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          CRON: "Cron",
-          POLLER: "Poller",
-          REPEATER: "Repeater",
-          STANDARD: "Standard",
-        },
-        locale: "en",
-        value,
-      }),
-    localizeWorkstationKind: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          cron: "Cron",
-          poller: "Poller",
-          repeater: "Repeater",
-          standard: "Standard",
-        },
-        locale: "en",
-        value,
-      }),
+    localizeWorkstationBehavior: (value) =>
+      localizeWorkstationKindValue(value, "en"),
+    localizeWorkstationKind: (value) =>
+      localizeWorkstationKindValue(value, "en"),
+    localizeWorkstationType: (value) =>
+      localizeWorkstationTypeValue(value, "en"),
   },
   ja: {
+    localizeRunnerSelectionSource: (value) =>
+      localizeRunnerSelectionSourceValue(value, "ja"),
     localizeProviderSessionKind: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -58,32 +57,16 @@ const workstationDetailEnumMessagesByLocale = {
         locale: "ja",
         value,
       }),
-    localizeWorkstationBehavior: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          CRON: "Cron",
-          POLLER: "ポーラー",
-          REPEATER: "リピーター",
-          STANDARD: "標準",
-        },
-        locale: "ja",
-        value,
-      }),
-    localizeWorkstationKind: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          cron: "Cron",
-          poller: "ポーラー",
-          repeater: "リピーター",
-          standard: "標準",
-        },
-        locale: "ja",
-        value,
-      }),
+    localizeWorkstationBehavior: (value) =>
+      localizeWorkstationKindValue(value, "ja"),
+    localizeWorkstationKind: (value) =>
+      localizeWorkstationKindValue(value, "ja"),
+    localizeWorkstationType: (value) =>
+      localizeWorkstationTypeValue(value, "ja"),
   },
   ko: {
+    localizeRunnerSelectionSource: (value) =>
+      localizeRunnerSelectionSourceValue(value, "ko"),
     localizeProviderSessionKind: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -94,32 +77,16 @@ const workstationDetailEnumMessagesByLocale = {
         locale: "ko",
         value,
       }),
-    localizeWorkstationBehavior: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          CRON: "Cron",
-          POLLER: "폴러",
-          REPEATER: "반복기",
-          STANDARD: "표준",
-        },
-        locale: "ko",
-        value,
-      }),
-    localizeWorkstationKind: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          cron: "Cron",
-          poller: "폴러",
-          repeater: "반복기",
-          standard: "표준",
-        },
-        locale: "ko",
-        value,
-      }),
+    localizeWorkstationBehavior: (value) =>
+      localizeWorkstationKindValue(value, "ko"),
+    localizeWorkstationKind: (value) =>
+      localizeWorkstationKindValue(value, "ko"),
+    localizeWorkstationType: (value) =>
+      localizeWorkstationTypeValue(value, "ko"),
   },
   "zh-CN": {
+    localizeRunnerSelectionSource: (value) =>
+      localizeRunnerSelectionSourceValue(value, "zh-CN"),
     localizeProviderSessionKind: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -130,30 +97,12 @@ const workstationDetailEnumMessagesByLocale = {
         locale: "zh-CN",
         value,
       }),
-    localizeWorkstationBehavior: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          CRON: "Cron",
-          POLLER: "轮询器",
-          REPEATER: "重复器",
-          STANDARD: "标准",
-        },
-        locale: "zh-CN",
-        value,
-      }),
-    localizeWorkstationKind: (value: string) =>
-      localizeEnumLabel({
-        category: "kind",
-        labels: {
-          cron: "Cron",
-          poller: "轮询器",
-          repeater: "重复器",
-          standard: "标准",
-        },
-        locale: "zh-CN",
-        value,
-      }),
+    localizeWorkstationBehavior: (value) =>
+      localizeWorkstationKindValue(value, "zh-CN"),
+    localizeWorkstationKind: (value) =>
+      localizeWorkstationKindValue(value, "zh-CN"),
+    localizeWorkstationType: (value) =>
+      localizeWorkstationTypeValue(value, "zh-CN"),
   },
 } satisfies LocalizedMessageCatalog<WorkstationDetailEnumMessages>;
 

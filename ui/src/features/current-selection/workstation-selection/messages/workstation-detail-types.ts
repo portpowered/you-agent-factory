@@ -104,13 +104,7 @@ export interface WorkstationDetailMessages {
   runnerFieldLabel: string;
   runnerInheritanceFactoryLabel: (runnerName: string) => string;
   runnerInheritanceFactoryMissingLabel: string;
-  runnerInheritanceFactorySummaryLabel: string;
-  runnerInheritanceWorkstationSummaryLabel: string;
   runnerLoadingValue: string;
-  runnerSelectionDefaultLabel: string;
-  runnerSelectionFactoryLabel: string;
-  runnerSelectionLegacyProviderLabel: string;
-  runnerSelectionWorkstationLabel: string;
   runHistoryHeading: string;
   providerSessionLogAction: string;
   providerSessionLogUnavailable: string;
@@ -132,14 +126,21 @@ export interface WorkstationDetailMessages {
   unknownActiveWorkLabel: string;
   unavailableValue: string;
   unavailableRunnerValue: string;
+  unavailableWorkstationKindValue: string;
+  unavailableWorkstationTypeValue: string;
   localizeProviderSessionKind: (value: string) => string;
+  localizeRunnerSelectionSource: (value: string) => string;
   localizeWorkstationBehavior: (value: string) => string;
   localizeWorkstationKind: (value: string) => string;
+  localizeWorkstationType: (value: string) => string;
   unknownWorkerTypeValue: string;
   unknownWorkLabel: string;
   workDetailsUnavailable: (dispatchId: string) => string;
   workIdLabel: string;
   workSelectedAction: string;
   workerTypeLabel: string;
+  workstationKindLoadingValue: string;
+  workstationTypeLabel: string;
+  workstationTypeLoadingValue: string;
   selectedRunnerLabel: string;
 }

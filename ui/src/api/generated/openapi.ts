@@ -1763,6 +1763,8 @@ export interface components {
             name: string;
             /** @description Lifecycle states available for work items of this type. */
             states: components["schemas"]["WorkState"][];
+            /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
+            handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
         };
         /** @description A lifecycle state that a work item can occupy inside one work type. */
         WorkState: {
@@ -2258,6 +2260,11 @@ export interface components {
             /** @description Compact encrypted reasoning payload when the provider exposes it. */
             encryptedContent?: string;
         };
+        /**
+         * @description Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
+         * @enum {string}
+         */
+        WorkTypeHandlingBehavior: "DEFAULT";
         /**
          * @description Built-in repository-owned hosted worker providers supported by the public factory-config contract.
          * @enum {string}

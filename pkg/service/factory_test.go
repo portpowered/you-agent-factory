@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -410,11 +411,11 @@ func TestFactoryService_CurrentRuntimeBundleAndDirComparisonHelpers(t *testing.T
 		t.Fatalf("currentRuntimeBundle = %#v, want service fields copied through", bundle)
 	}
 
-	if sameFactoryDir("", svc.cfg.Dir) {
-		t.Fatal("sameFactoryDir should reject blank paths")
+	if factorysessions.SameFactoryDir("", svc.cfg.Dir) {
+		t.Fatal("SameFactoryDir should reject blank paths")
 	}
-	if !sameFactoryDir("C:/factory/./named", "C:/factory/named") {
-		t.Fatal("sameFactoryDir should normalize equivalent paths")
+	if !factorysessions.SameFactoryDir("C:/factory/./named", "C:/factory/named") {
+		t.Fatal("SameFactoryDir should normalize equivalent paths")
 	}
 }
 
@@ -551,7 +552,7 @@ func (h *runningSessionService) requireSession(t *testing.T, sessionID string) *
 
 	session := h.svc.sessionByID(sessionID)
 	if session == nil {
-		t.Fatalf("expected session %q to be registered; got ids %v", sessionID, h.svc.sessions.ids())
+		t.Fatalf("expected session %q to be registered; got ids %v", sessionID, h.svc.sessions.IDs())
 	}
 	return session
 }
@@ -578,11 +579,11 @@ func assertSessionWorkIsolation(t *testing.T, expectations []sessionWorkExpectat
 func assertSessionArtifactIsolation(t *testing.T, session *liveFactorySession, wantWork string, forbiddenWork map[string]string) {
 	t.Helper()
 
-	if session == nil || session.handle == nil || session.handle.runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
 		t.Fatal("expected live session runtime")
 	}
 
-	runtimeBundle := session.handle.runtime
+	runtimeBundle := liveSessionHandle(session).runtime
 	artifact, err := replay.Load(runtimeBundle.recordPath)
 	if err != nil {
 		t.Fatalf("Load(%s): %v", runtimeBundle.recordPath, err)
@@ -595,7 +596,7 @@ func assertSessionArtifactIsolation(t *testing.T, session *liveFactorySession, w
 		t.Fatalf("artifact %s did not contain session work %q: %s", runtimeBundle.recordPath, wantWork, string(payload))
 	}
 	for otherSessionID, otherWork := range forbiddenWork {
-		if otherSessionID == session.id {
+		if otherSessionID == session.ID {
 			continue
 		}
 		if strings.Contains(string(payload), otherWork) {
@@ -607,14 +608,14 @@ func assertSessionArtifactIsolation(t *testing.T, session *liveFactorySession, w
 func assertSessionRuntimeLogRecord(t *testing.T, session *liveFactorySession) {
 	t.Helper()
 
-	if session == nil || session.handle == nil || session.handle.runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
 		t.Fatal("expected live session runtime")
 	}
 
-	runtimeBundle := session.handle.runtime
+	runtimeBundle := liveSessionHandle(session).runtime
 	logPath := runtimeBundle.logSink.Path()
 	if logPath == "" {
-		t.Fatalf("session %s runtime log path is empty", session.id)
+		t.Fatalf("session %s runtime log path is empty", session.ID)
 	}
 	data, err := os.ReadFile(logPath)
 	if err != nil {
@@ -623,22 +624,22 @@ func assertSessionRuntimeLogRecord(t *testing.T, session *liveFactorySession) {
 	records := parseRuntimeLogRecords(t, string(data))
 	foundSessionRecord := false
 	for _, record := range records {
-		if record["session_id"] != session.id {
-			t.Fatalf("runtime log %s contained record for session %#v, want only %q in %#v", logPath, record["session_id"], session.id, record)
+		if record["session_id"] != session.ID {
+			t.Fatalf("runtime log %s contained record for session %#v, want only %q in %#v", logPath, record["session_id"], session.ID, record)
 		}
 		foundSessionRecord = true
 		if record["folder_path"] != runtimeBundle.folderPath {
-			t.Fatalf("session %s folder_path = %#v, want %q in %#v", session.id, record["folder_path"], runtimeBundle.folderPath, record)
+			t.Fatalf("session %s folder_path = %#v, want %q in %#v", session.ID, record["folder_path"], runtimeBundle.folderPath, record)
 		}
 		if record["factory_dir"] != runtimeBundle.dir {
-			t.Fatalf("session %s factory_dir = %#v, want %q in %#v", session.id, record["factory_dir"], runtimeBundle.dir, record)
+			t.Fatalf("session %s factory_dir = %#v, want %q in %#v", session.ID, record["factory_dir"], runtimeBundle.dir, record)
 		}
 		if record["runtime_instance_id"] == "" {
-			t.Fatalf("session %s runtime_instance_id missing in %#v", session.id, record)
+			t.Fatalf("session %s runtime_instance_id missing in %#v", session.ID, record)
 		}
 	}
 	if !foundSessionRecord {
-		t.Fatalf("runtime log %s did not contain any records for session %s:\n%s", logPath, session.id, string(data))
+		t.Fatalf("runtime log %s did not contain any records for session %s:\n%s", logPath, session.ID, string(data))
 	}
 }
 
@@ -647,20 +648,20 @@ func assertSessionRuntimeLogPathsAreDistinct(t *testing.T, runtimeLogRoot string
 
 	seenPaths := make(map[string]string, len(sessions))
 	for _, session := range sessions {
-		if session == nil || session.handle == nil || session.handle.runtime == nil || session.handle.runtime.logSink == nil {
+		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.logSink == nil {
 			t.Fatal("expected live session runtime log sink")
 		}
-		path := session.handle.runtime.logSink.Path()
+		path := liveSessionHandle(session).runtime.logSink.Path()
 		if path == "" {
-			t.Fatalf("session %s runtime log path is empty", session.id)
+			t.Fatalf("session %s runtime log path is empty", session.ID)
 		}
-		if session.handle.runtime.logSink.RootDir() != runtimeLogRoot {
-			t.Fatalf("session %s runtime log root = %q, want %q", session.id, session.handle.runtime.logSink.RootDir(), runtimeLogRoot)
+		if liveSessionHandle(session).runtime.logSink.RootDir() != runtimeLogRoot {
+			t.Fatalf("session %s runtime log root = %q, want %q", session.ID, liveSessionHandle(session).runtime.logSink.RootDir(), runtimeLogRoot)
 		}
 		if otherSessionID, ok := seenPaths[path]; ok {
-			t.Fatalf("sessions %s and %s shared runtime log path %q", otherSessionID, session.id, path)
+			t.Fatalf("sessions %s and %s shared runtime log path %q", otherSessionID, session.ID, path)
 		}
-		seenPaths[path] = session.id
+		seenPaths[path] = session.ID
 	}
 }
 
@@ -701,8 +702,8 @@ func waitForSessionRuntimeStatus(
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		session := svc.sessionByID(sessionID)
-		if session != nil && session.handle != nil && session.handle.runtime != nil {
-			snap, err := session.handle.runtime.factory.GetEngineStateSnapshot(context.Background())
+		if session != nil && liveSessionHandle(session) != nil && liveSessionHandle(session).runtime != nil {
+			snap, err := liveSessionHandle(session).runtime.factory.GetEngineStateSnapshot(context.Background())
 			if err == nil && snap.RuntimeStatus == want {
 				return
 			}
@@ -715,7 +716,7 @@ func waitForSessionRuntimeStatus(
 func submitSessionWork(t *testing.T, session *liveFactorySession, workID, traceID string) {
 	t.Helper()
 
-	if session == nil || session.handle == nil || session.handle.runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
 		t.Fatal("live session runtime is required")
 	}
 	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
@@ -725,7 +726,7 @@ func submitSessionWork(t *testing.T, session *liveFactorySession, workID, traceI
 		TraceID:    traceID,
 		Payload:    []byte(`{"title":"` + workID + `"}`),
 	}})
-	if _, err := session.handle.runtime.factory.SubmitWorkRequest(context.Background(), request); err != nil {
+	if _, err := liveSessionHandle(session).runtime.factory.SubmitWorkRequest(context.Background(), request); err != nil {
 		t.Fatalf("SubmitWorkRequest(%s): %v", workID, err)
 	}
 }
@@ -751,23 +752,20 @@ func selectCompatibilitySessionForTest(t *testing.T, svc *FactoryService, sessio
 	if svc == nil || svc.sessions == nil {
 		t.Fatal("service session manager is required")
 	}
-	svc.sessions.mu.Lock()
-	defer svc.sessions.mu.Unlock()
-	if _, ok := svc.sessions.sessions[sessionID]; !ok {
+	if !svc.sessions.Select(sessionID) {
 		t.Fatalf("session %q is not registered", sessionID)
 	}
-	svc.sessions.selectedID = sessionID
 }
 
 func assertSessionRemainsLive(t *testing.T, svc *FactoryService, sessionID string, wait time.Duration, label string) {
 	t.Helper()
 
 	session := svc.sessionByID(sessionID)
-	if session == nil || session.handle == nil {
+	if session == nil || liveSessionHandle(session) == nil {
 		t.Fatalf("%s is not registered", label)
 	}
 	select {
-	case <-session.handle.runDone:
+	case <-liveSessionHandle(session).runDone:
 		t.Fatalf("%s stopped unexpectedly", label)
 	case <-time.After(wait):
 	}
@@ -796,10 +794,10 @@ func assertSessionEventsDoNotContain(t *testing.T, session *liveFactorySession, 
 func sessionEventsContain(t *testing.T, session *liveFactorySession, want string) bool {
 	t.Helper()
 
-	if session == nil || session.handle == nil || session.handle.runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
 		t.Fatal("live session runtime is required")
 	}
-	events, err := session.handle.runtime.factory.GetFactoryEvents(context.Background())
+	events, err := liveSessionHandle(session).runtime.factory.GetFactoryEvents(context.Background())
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}

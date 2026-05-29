@@ -111,8 +111,9 @@ type ConfigValidatorOption func(*ConfigValidator)
 
 // ConfigValidator runs all registered validation rules against a factory config.
 type ConfigValidator struct {
-	requiredToolChecker RequiredToolChecker
-	rules               []validationRule
+	requiredToolChecker              RequiredToolChecker
+	requireDefaultHandlingWorkType   bool
+	rules                            []validationRule
 }
 
 // NewConfigValidator creates a ConfigValidator with all built-in validation rules.
@@ -127,6 +128,7 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 	}
 	cv.rules = []validationRule{
 		ruleInputTypes,
+		cv.ruleWorkTypeHandlingBehavior,
 		rulePlaceReferences,
 		ruleFactoryGuards,
 		ruleGuards,

@@ -161,9 +161,13 @@ const (
 	InputKindDefault InputKind = "default"
 )
 
+// WorkTypeHandlingBehaviorDefault marks the work type that receives simplified CLI prompt submissions.
+const WorkTypeHandlingBehaviorDefault = "DEFAULT"
+
 type WorkTypeConfig struct {
-	Name   string        `json:"name"`
-	States []StateConfig `json:"states"`
+	Name              string   `json:"name"`
+	States            []StateConfig `json:"states"`
+	HandlingBehavior  []string `json:"handlingBehavior,omitempty"`
 }
 
 // StateConfig declares a state within a work type.

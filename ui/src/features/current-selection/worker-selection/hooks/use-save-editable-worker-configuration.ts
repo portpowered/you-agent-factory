@@ -136,7 +136,12 @@ export function useSaveEditableWorkerConfiguration({
     } finally {
       saveInFlightRef.current = false;
     }
-  }, [editableConfigurationState, messages.editableConfigurationSaveFallbackError, mutation, scopeKey]);
+  }, [
+    editableConfigurationState,
+    messages.editableConfigurationSaveFallbackError,
+    mutation,
+    scopeKey,
+  ]);
 
   return {
     canSave,

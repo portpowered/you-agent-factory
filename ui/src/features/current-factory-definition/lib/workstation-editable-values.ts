@@ -5,11 +5,20 @@ import {
   type RunnerID,
 } from "../../current-selection/workstation-selection/public";
 import {
+  resolveRunnerSelection,
+  type ResolvedRunnerSelection,
+  type RunnerSelectionSource,
+} from "./runner-selection";
+import {
   DEFAULT_WORKSTATION_BEHAVIOR,
   resolveEditableWorkstationBehavior,
   resolveEditableWorkstationBehaviorOptions,
   type EditableWorkstationBehavior,
 } from "./workstation-behavior";
+import {
+  resolveEditableWorkstationType,
+  type EditableWorkstationType,
+} from "./workstation-type";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
@@ -22,14 +31,18 @@ export interface EditableWorkstationValues {
   effectiveRunnerName: RunnerID;
   factoryRunnerName: RunnerID | null;
   prompt: string | null;
+  resolvedRunnerSelection: ResolvedRunnerSelection;
   runnerName: RunnerID | null;
   runnerOptions: RunnerID[];
+  runnerSelectionSource: RunnerSelectionSource;
   sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
   sharedWorkerWorkstationNames: string[];
   workerTypeByName: Record<string, CanonicalWorker["type"] | undefined>;
   workerName: string;
   workerOptions: string[];
+  workerModelProvider: string | null;
   workstationName: string;
+  workstationType: EditableWorkstationType;
 }
 
 export interface EditableWorkstationDraft {
@@ -49,17 +62,28 @@ export function resolveEditableWorkstationValues(
   }
 
   const { workstation } = workstationResolution;
+  const workerModelProvider = resolveWorkerModelProvider(
+    factory,
+    workstation.worker,
+  );
+  const resolvedRunnerSelection = resolveRunnerSelection(
+    workstation.runner,
+    factory.runner,
+    workerModelProvider,
+  );
 
   return {
     behavior: resolveEditableWorkstationBehavior(workstation),
     behaviorOptions: resolveEditableWorkstationBehaviorOptions(
       resolveEditableWorkstationBehavior(workstation),
     ),
-    effectiveRunnerName: resolveEffectiveRunnerName(factory, workstation),
+    effectiveRunnerName: resolvedRunnerSelection.runnerId,
     factoryRunnerName: factory.runner ?? null,
     prompt: workstation.body ?? null,
+    resolvedRunnerSelection,
     runnerName: workstation.runner ?? null,
     runnerOptions: BUILT_IN_RUNNER_IDS,
+    runnerSelectionSource: resolvedRunnerSelection.source,
     sharedWorkerWorkstationNamesByWorkerName:
       resolveSharedWorkerWorkstationNamesByWorkerName(factory, workstation),
     sharedWorkerWorkstationNames: resolveSharedWorkerWorkstationNames(
@@ -68,9 +92,11 @@ export function resolveEditableWorkstationValues(
       workstationResolution.workstationIndex,
     ),
     workerTypeByName: resolveWorkerTypeByName(factory),
+    workerModelProvider,
     workerName: workstation.worker,
     workerOptions: resolveWorkerOptions(factory),
     workstationName: workstation.name,
+    workstationType: resolveEditableWorkstationType(workstation),
   };
 }
 
@@ -155,15 +181,12 @@ function resolveCanonicalWorkstation(
   return null;
 }
 
-function resolveEffectiveRunnerName(
+function resolveWorkerModelProvider(
   factory: CanonicalFactoryDefinition,
-  workstation: CanonicalWorkstation,
-): RunnerID {
-  return (
-    workstation.runner ??
-    factory.runner ??
-    "codex"
-  );
+  workerName: string,
+): string | null {
+  const worker = (factory.workers ?? []).find((entry) => entry.name === workerName);
+  return worker?.modelProvider ?? null;
 }
 
 function resolveWorkerOptions(factory: CanonicalFactoryDefinition): string[] {
