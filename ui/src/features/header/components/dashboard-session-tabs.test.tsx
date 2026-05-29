@@ -6,7 +6,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import { sessionCloseLabel } from "../lib/dashboard-session-tabs-utils";
+import {
+  SESSION_TAB_PATH_MAX_LENGTH,
+  sessionCloseLabel,
+  sessionTabSecondaryPath,
+} from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 
@@ -965,6 +969,45 @@ describe("DashboardSessionTabs", () => {
     expect((pendingCloseButton as HTMLButtonElement).disabled).toBe(true);
     expect(pendingCloseButton.textContent?.trim()).toBe(
       messages.closingSessionButtonLabel,
+    );
+  });
+
+  it("shows the default session tab secondary line from absolute folderPath metadata", async () => {
+    const absoluteFactoryPath =
+      "/Users/operator/infinite-you/agent-factory/examples/catalog/factory";
+
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: absoluteFactoryPath,
+        folderPath: absoluteFactoryPath,
+        id: "~default",
+        isDefault: true,
+        project: "factory",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "factory" })).toBeTruthy();
+    });
+
+    const defaultTab = screen.getByRole("tab", { name: "factory" });
+    const truncatedSecondaryPath = sessionTabSecondaryPath(
+      absoluteFactoryPath,
+      SESSION_TAB_PATH_MAX_LENGTH,
+    );
+
+    expect(defaultTab.getAttribute("aria-label")).toBe("factory");
+    expect(screen.getByText(truncatedSecondaryPath)).toBeTruthy();
+    expect(screen.getByTitle(absoluteFactoryPath).textContent).toBe(
+      truncatedSecondaryPath,
+    );
+    expect(defaultTab.parentElement?.getAttribute("title")).toBe(
+      `${absoluteFactoryPath} (~default)`,
     );
   });
 
