@@ -114,8 +114,14 @@ function buildReadyEditableConfigurationState(overrides?: {
       effectiveRunnerName: "gemini",
       factoryRunnerName: "codex",
       prompt: "Review the latest story changes before approval.",
+      resolvedRunnerSelection: {
+        runnerId: "gemini",
+        source: "workstation",
+      },
       runnerName: "gemini",
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      runnerSelectionSource: "workstation",
+      workerModelProvider: null,
       sharedWorkerWorkstationNamesByWorkerName: {
         planner: ["Plan", "Code"],
         reviewer: overrides?.sharedWorkerWorkstationNames ?? [],

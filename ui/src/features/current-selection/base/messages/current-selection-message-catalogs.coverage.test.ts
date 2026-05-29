@@ -143,6 +143,12 @@ const invokeWorkstationDetail = (
         formatter("LOGICAL_MOVE" as never),
         formatter("FUTURE_TYPE" as never),
       ];
+    case "localizeRunnerSelectionSource":
+      return [
+        formatter("factory" as never),
+        formatter("legacy_provider" as never),
+        formatter("future-source" as never),
+      ];
     case "runnerFieldHelp":
       return [formatter("Gemini" as never, "Factory" as never)];
     case "historyRequestCountLabel":

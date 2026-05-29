@@ -104,13 +104,7 @@ export interface WorkstationDetailMessages {
   runnerFieldLabel: string;
   runnerInheritanceFactoryLabel: (runnerName: string) => string;
   runnerInheritanceFactoryMissingLabel: string;
-  runnerInheritanceFactorySummaryLabel: string;
-  runnerInheritanceWorkstationSummaryLabel: string;
   runnerLoadingValue: string;
-  runnerSelectionDefaultLabel: string;
-  runnerSelectionFactoryLabel: string;
-  runnerSelectionLegacyProviderLabel: string;
-  runnerSelectionWorkstationLabel: string;
   runHistoryHeading: string;
   providerSessionLogAction: string;
   providerSessionLogUnavailable: string;
@@ -135,6 +129,7 @@ export interface WorkstationDetailMessages {
   unavailableWorkstationKindValue: string;
   unavailableWorkstationTypeValue: string;
   localizeProviderSessionKind: (value: string) => string;
+  localizeRunnerSelectionSource: (value: string) => string;
   localizeWorkstationBehavior: (value: string) => string;
   localizeWorkstationKind: (value: string) => string;
   localizeWorkstationType: (value: string) => string;

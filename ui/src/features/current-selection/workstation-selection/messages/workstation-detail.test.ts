@@ -173,5 +173,15 @@ describe("getWorkstationDetailMessages", () => {
         "FUTURE_TYPE",
       ),
     ).toBe("未知类型：FUTURE_TYPE");
+    expect(
+      getWorkstationDetailMessages("en").localizeRunnerSelectionSource(
+        "legacy_provider",
+      ),
+    ).toBe("Legacy provider");
+    expect(
+      getWorkstationDetailMessages("ja").localizeRunnerSelectionSource(
+        "workstation",
+      ),
+    ).toBe("ワークステーション");
   });
 });

@@ -9,6 +9,7 @@ import { getWorkstationDetailEnumMessages } from "./workstation-detail-enums";
 type WorkstationDetailCatalogMessages = Omit<
   WorkstationDetailMessages,
   | "localizeProviderSessionKind"
+  | "localizeRunnerSelectionSource"
   | "localizeWorkstationBehavior"
   | "localizeWorkstationKind"
   | "localizeWorkstationType"
@@ -164,13 +165,7 @@ const workstationDetailMessagesByLocale = {
     runnerInheritanceFactoryLabel: (runnerName) =>
       `Inherit factory runner (${runnerName})`,
     runnerInheritanceFactoryMissingLabel: "Inherit default runner (Codex)",
-    runnerInheritanceFactorySummaryLabel: "Factory runner",
-    runnerInheritanceWorkstationSummaryLabel: "Workstation runner",
     runnerLoadingValue: "Loading runner...",
-    runnerSelectionDefaultLabel: "Default",
-    runnerSelectionFactoryLabel: "Factory",
-    runnerSelectionLegacyProviderLabel: "Legacy provider",
-    runnerSelectionWorkstationLabel: "Workstation",
     runHistoryHeading: "Run history",
     providerSessionLogAction: "Codex session log",
     providerSessionLogUnavailable: "Session log unavailable",
@@ -351,13 +346,7 @@ const workstationDetailMessagesByLocale = {
     runnerInheritanceFactoryLabel: (runnerName) =>
       `ファクトリー runner を継承 (${runnerName})`,
     runnerInheritanceFactoryMissingLabel: "既定 runner (Codex) を継承",
-    runnerInheritanceFactorySummaryLabel: "ファクトリー runner",
-    runnerInheritanceWorkstationSummaryLabel: "ワークステーション runner",
     runnerLoadingValue: "runner を読み込み中...",
-    runnerSelectionDefaultLabel: "既定",
-    runnerSelectionFactoryLabel: "ファクトリー",
-    runnerSelectionLegacyProviderLabel: "旧 provider",
-    runnerSelectionWorkstationLabel: "ワークステーション",
     runHistoryHeading: "ラン履歴",
     providerSessionLogAction: "Codex セッションログ",
     providerSessionLogUnavailable: "セッションログは利用できません",
@@ -537,13 +526,7 @@ const workstationDetailMessagesByLocale = {
     runnerInheritanceFactoryLabel: (runnerName) =>
       `팩토리 runner 상속 (${runnerName})`,
     runnerInheritanceFactoryMissingLabel: "기본 runner (Codex) 상속",
-    runnerInheritanceFactorySummaryLabel: "팩토리 runner",
-    runnerInheritanceWorkstationSummaryLabel: "워크스테이션 runner",
     runnerLoadingValue: "runner 불러오는 중...",
-    runnerSelectionDefaultLabel: "기본값",
-    runnerSelectionFactoryLabel: "팩토리",
-    runnerSelectionLegacyProviderLabel: "레거시 provider",
-    runnerSelectionWorkstationLabel: "워크스테이션",
     runHistoryHeading: "실행 기록",
     providerSessionLogAction: "Codex 세션 로그",
     providerSessionLogUnavailable: "세션 로그를 사용할 수 없음",
@@ -707,13 +690,7 @@ const workstationDetailMessagesByLocale = {
     runnerInheritanceFactoryLabel: (runnerName) =>
       `继承工厂 runner（${runnerName}）`,
     runnerInheritanceFactoryMissingLabel: "继承默认 runner（Codex）",
-    runnerInheritanceFactorySummaryLabel: "工厂 runner",
-    runnerInheritanceWorkstationSummaryLabel: "工作站 runner",
     runnerLoadingValue: "正在加载 runner...",
-    runnerSelectionDefaultLabel: "默认值",
-    runnerSelectionFactoryLabel: "工厂",
-    runnerSelectionLegacyProviderLabel: "旧 provider",
-    runnerSelectionWorkstationLabel: "工作站",
     runHistoryHeading: "运行历史",
     providerSessionLogAction: "Codex 会话日志",
     providerSessionLogUnavailable: "会话日志不可用",
@@ -763,6 +740,7 @@ export function getWorkstationDetailMessages(
   return {
     ...messages,
     localizeProviderSessionKind: enumMessages.localizeProviderSessionKind,
+    localizeRunnerSelectionSource: enumMessages.localizeRunnerSelectionSource,
     localizeWorkstationBehavior: enumMessages.localizeWorkstationBehavior,
     localizeWorkstationKind: enumMessages.localizeWorkstationKind,
     localizeWorkstationType: enumMessages.localizeWorkstationType,

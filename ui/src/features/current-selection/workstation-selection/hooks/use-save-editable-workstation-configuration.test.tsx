@@ -309,10 +309,16 @@ function buildReadyEditableConfigurationState(overrides?: {
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: overrides?.prompt ?? "Review the story.",
+      resolvedRunnerSelection: {
+        runnerId: "codex",
+        source: "default",
+      },
       runnerName: null,
-      runnerOptions: ["codex"],
+      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
+      workerModelProvider: null,
       workerName: "reviewer",
       workerOptions: ["reviewer"],
       workerTypeByName: {

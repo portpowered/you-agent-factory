@@ -23,8 +23,14 @@ const readyEditableConfigurationState = {
     factoryRunnerName: null,
     prompt: "Review",
     runnerName: null,
-    runnerOptions: ["codex"],
+    runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+    runnerSelectionSource: "default",
+    resolvedRunnerSelection: {
+      runnerId: "codex",
+      source: "default",
+    },
     sharedWorkerWorkstationNamesByWorkerName: {},
+    workerModelProvider: null,
     sharedWorkerWorkstationNames: [],
     workerName: "reviewer",
     workerOptions: ["reviewer"],
@@ -167,7 +173,78 @@ describe("resolveWorkstationSummaryKindValue", () => {
 });
 
 describe("resolveWorkstationSummaryRunnerValue", () => {
-  it("re-exports the runner summary resolver", () => {
-    expect(resolveWorkstationSummaryRunnerValue).toBeTypeOf("function");
+  it("shows localized runner display metadata with RunnerSelectionSource labels", () => {
+    expect(
+      resolveWorkstationSummaryRunnerValue(
+        {
+          draft: {
+            behavior: "STANDARD",
+            prompt: "Review",
+            runnerName: "gemini",
+            workerName: "reviewer",
+          },
+          initialValues: {
+            ...readyEditableConfigurationState.initialValues,
+            factoryRunnerName: "codex",
+            runnerName: "gemini",
+            resolvedRunnerSelection: {
+              runnerId: "gemini",
+              source: "workstation",
+            },
+            runnerSelectionSource: "workstation",
+          },
+          status: "ready",
+        } as never,
+        getWorkstationDetailMessages("en"),
+      ),
+    ).toBe("Gemini (Workstation)");
+  });
+
+  it("uses legacy_provider when inheriting from worker modelProvider", () => {
+    expect(
+      resolveWorkstationSummaryRunnerValue(
+        {
+          draft: {
+            behavior: "STANDARD",
+            prompt: "Review",
+            runnerName: null,
+            workerName: "reviewer",
+          },
+          initialValues: {
+            ...readyEditableConfigurationState.initialValues,
+            factoryRunnerName: null,
+            runnerName: null,
+            resolvedRunnerSelection: {
+              runnerId: "codex",
+              source: "legacy_provider",
+            },
+            runnerSelectionSource: "legacy_provider",
+            workerModelProvider: "codex",
+          },
+          status: "ready",
+        } as never,
+        getWorkstationDetailMessages("en"),
+      ),
+    ).toBe("Codex (Legacy provider)");
+  });
+
+  it("returns unavailable copy for invalid runner ids", () => {
+    const messages = getWorkstationDetailMessages("en");
+
+    expect(
+      resolveWorkstationSummaryRunnerValue(
+        {
+          draft: {
+            behavior: "STANDARD",
+            prompt: "Review",
+            runnerName: "claude",
+            workerName: "reviewer",
+          },
+          initialValues: readyEditableConfigurationState.initialValues,
+          status: "ready",
+        } as never,
+        messages,
+      ),
+    ).toBe(messages.unavailableRunnerValue);
   });
 });

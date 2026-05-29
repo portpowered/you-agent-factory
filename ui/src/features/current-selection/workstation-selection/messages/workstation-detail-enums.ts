@@ -5,12 +5,19 @@ import {
 } from "../../../../i18n";
 import type { ApiWorkstationKind, ApiWorkstationType } from "./workstation-openapi-enums";
 import {
+  localizeRunnerSelectionSourceValue,
+  type ApiRunnerSelectionSource,
+} from "./runner-openapi-enums";
+import {
   localizeWorkstationKindValue,
   localizeWorkstationTypeValue,
 } from "./workstation-openapi-enums";
 
 export interface WorkstationDetailEnumMessages {
   localizeProviderSessionKind: (value: string) => string;
+  localizeRunnerSelectionSource: (
+    value: ApiRunnerSelectionSource | string,
+  ) => string;
   localizeWorkstationBehavior: (value: ApiWorkstationKind | string) => string;
   localizeWorkstationKind: (value: ApiWorkstationKind | string) => string;
   localizeWorkstationType: (value: ApiWorkstationType | string) => string;
@@ -18,6 +25,8 @@ export interface WorkstationDetailEnumMessages {
 
 const workstationDetailEnumMessagesByLocale = {
   en: {
+    localizeRunnerSelectionSource: (value) =>
+      localizeRunnerSelectionSourceValue(value, "en"),
     localizeProviderSessionKind: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -36,6 +45,8 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationTypeValue(value, "en"),
   },
   ja: {
+    localizeRunnerSelectionSource: (value) =>
+      localizeRunnerSelectionSourceValue(value, "ja"),
     localizeProviderSessionKind: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -54,6 +65,8 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationTypeValue(value, "ja"),
   },
   ko: {
+    localizeRunnerSelectionSource: (value) =>
+      localizeRunnerSelectionSourceValue(value, "ko"),
     localizeProviderSessionKind: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -72,6 +85,8 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationTypeValue(value, "ko"),
   },
   "zh-CN": {
+    localizeRunnerSelectionSource: (value) =>
+      localizeRunnerSelectionSourceValue(value, "zh-CN"),
     localizeProviderSessionKind: (value: string) =>
       localizeEnumLabel({
         category: "kind",
