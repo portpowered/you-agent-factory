@@ -1,6 +1,6 @@
 import type { DashboardSnapshot } from "../../api/dashboard/types";
-import type { WorkstationIconMetadata } from "../../features/flowchart/public";
-import { workstationIconMetadata } from "../../features/flowchart/public";
+import type { WorkstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
+import { workstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
 import { buildFactoryTimelineSnapshot } from "../../features/timeline/state/factoryTimelineStore";
 import {
   activeWorkRuntimeOverlay,
