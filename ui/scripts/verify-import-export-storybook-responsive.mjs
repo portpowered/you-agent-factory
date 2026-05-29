@@ -17,9 +17,6 @@ import {
   verifyObserverGraphParity as verifyObserverGraphParityImpl,
 } from "./verify-graph-parity-storybook-responsive.mjs";
 import {
-  verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl,
-} from "./verify-current-selection-storybook-responsive.mjs";
-import {
   createLocalizedExportDialogVerifier,
   createLocalizedImportDialogVerifier,
 } from "./verify-import-export-storybook-localized.mjs";
@@ -323,14 +320,6 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
     page,
     viewport,
   );
-}
-export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
-  return verifyCurrentSelectionPromptHintImpl({
-    expectNoHorizontalOverflow,
-    expectVisible,
-    page,
-    viewport,
-  });
 }
 export async function verifyBentoCardCatalogResponsive(page, _dialog, viewport) {
   return verifyBentoCardCatalogResponsiveImpl({
