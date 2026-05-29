@@ -128,6 +128,30 @@ func TestCodexProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(
 	}
 }
 
+func TestCodexProviderBehavior_BuildArgs_AllowsWorktreeMetadataWithPreparedWorkingDirectory(t *testing.T) {
+	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
+	args, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+		ModelProvider:    string(interfaces.ModelProviderCodex),
+		UserMessage:      "summarize the workspace",
+		Worktree:         "feature-worktree",
+		WorkingDirectory: "/tmp/factory/.worktrees/feature-worktree",
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
+			interfaces.RunnerOptionalCapabilityWorkingDirectory,
+		},
+	}, false)
+	if err != nil {
+		t.Fatalf("BuildArgs() error = %v", err)
+	}
+	if len(args) == 0 || args[len(args)-1] != "-" {
+		t.Fatalf("args = %#v, want stdin placeholder", args)
+	}
+	for _, arg := range args {
+		if arg == "--worktree" {
+			t.Fatalf("args = %#v, want no --worktree passthrough", args)
+		}
+	}
+}
+
 func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
 	testCases := []struct {
 		name            string

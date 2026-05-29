@@ -410,7 +410,7 @@ func validateCodexOptionalCapabilities(req interfaces.ProviderInferenceRequest) 
 			return errors.New("worktree selection is not supported by the codex runner in v1")
 		}
 	}
-	if req.Worktree != "" {
+	if req.Worktree != "" && req.WorkingDirectory == "" {
 		return errors.New("worktree selection is not supported by the codex runner in v1")
 	}
 	return nil

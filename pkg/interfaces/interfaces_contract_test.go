@@ -783,10 +783,10 @@ func TestBuiltInRunnerMetadata_CodexWorktreeDetailMatchesRuntimeBehavior(t *test
 		if capability.Capability != RunnerOptionalCapabilityWorktree {
 			continue
 		}
-		if capability.Status != RunnerOptionalCapabilityStatusUnsupported {
-			t.Fatalf("worktree status = %q, want %q", capability.Status, RunnerOptionalCapabilityStatusUnsupported)
+		if capability.Status != RunnerOptionalCapabilityStatusSupported {
+			t.Fatalf("worktree status = %q, want %q", capability.Status, RunnerOptionalCapabilityStatusSupported)
 		}
-		if capability.Detail != "codex rejects workstation worktree selection in v1" {
+		if capability.Detail != "factory-managed git worktree preparation under the factory root" {
 			t.Fatalf("worktree detail = %q", capability.Detail)
 		}
 		return
