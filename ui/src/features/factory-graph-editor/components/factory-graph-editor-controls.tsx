@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DashboardMutationDialog } from "../../workflow-activity/components/mutation-dialog";
+import { DashboardMutationDialog } from "../../workflow-activity/public";
 import {
   Button,
   DashboardActionRow,
