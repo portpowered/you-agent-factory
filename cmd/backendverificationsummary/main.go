@@ -89,7 +89,7 @@ func summarizeBackendVerificationLog(rawLog string) failureSummary {
 	}
 	return failureSummary{
 		Kind:     "unclassified backend verification failure",
-		Excerpt:  boundedExcerpt(lines, 0, len(lines)),
+		Excerpt:  boundedTailExcerpt(lines),
 		Inferred: false,
 	}
 }
@@ -245,6 +245,39 @@ func boundedExcerpt(lines []string, start int, end int) []string {
 	}
 	if end-start > len(excerpt) {
 		excerpt = append(excerpt, "... excerpt truncated ...")
+	}
+	return excerpt
+}
+
+func boundedTailExcerpt(lines []string) []string {
+	if len(lines) == 0 {
+		return []string{"command log was empty"}
+	}
+
+	start := len(lines) - excerptLineLimit
+	if start < 0 {
+		start = 0
+	}
+
+	excerpt := make([]string, 0, len(lines)-start+1)
+	bytesUsed := 0
+	truncated := start > 0
+	for index := len(lines) - 1; index >= start; index-- {
+		line := lines[index]
+		nextBytes := len(line) + 1
+		if len(excerpt) > 0 && bytesUsed+nextBytes > excerptByteLimit {
+			truncated = true
+			break
+		}
+		excerpt = append(excerpt, line)
+		bytesUsed += nextBytes
+	}
+
+	for left, right := 0, len(excerpt)-1; left < right; left, right = left+1, right-1 {
+		excerpt[left], excerpt[right] = excerpt[right], excerpt[left]
+	}
+	if truncated {
+		excerpt = append([]string{"... excerpt truncated ..."}, excerpt...)
 	}
 	return excerpt
 }

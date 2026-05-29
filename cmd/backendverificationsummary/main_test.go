@@ -174,6 +174,94 @@ func TestWriteMarkdownSummaryIncludesCoverageGateDetails(t *testing.T) {
 	}
 }
 
+func TestSummarizeBackendVerificationLogFallsBackToBoundedTail(t *testing.T) {
+	logLines := []string{
+		"run go test coverage lane: starting",
+	}
+	for index := 0; index < 90; index++ {
+		logLines = append(logLines, "ok  \tgithub.com/portpowered/infinite-you/pkg/filler\t0.001s")
+	}
+	logLines = append(logLines,
+		"panic: bootstrap environment missing required provider fixture",
+		"goroutine 1 [running]:",
+		"exit status 2",
+		"run go test coverage lane: exit status 2",
+	)
+
+	summary := summarizeBackendVerificationLog(strings.Join(logLines, "\n"))
+
+	if summary.Kind != "unclassified backend verification failure" {
+		t.Fatalf("summary.Kind = %q, want unclassified backend verification failure", summary.Kind)
+	}
+	if summary.Inferred {
+		t.Fatalf("summary.Inferred = true, want false")
+	}
+	excerpt := strings.Join(summary.Excerpt, "\n")
+	for _, want := range []string{
+		"... excerpt truncated ...",
+		"panic: bootstrap environment missing required provider fixture",
+		"run go test coverage lane: exit status 2",
+	} {
+		if !strings.Contains(excerpt, want) {
+			t.Fatalf("summary excerpt = %q, want %q", excerpt, want)
+		}
+	}
+	if strings.Contains(excerpt, "run go test coverage lane: starting") {
+		t.Fatalf("summary excerpt = %q, did not expect unbounded log start", excerpt)
+	}
+	if len(summary.Excerpt) > excerptLineLimit+1 {
+		t.Fatalf("summary excerpt has %d lines, want at most %d", len(summary.Excerpt), excerptLineLimit+1)
+	}
+}
+
+func TestWriteMarkdownSummaryIncludesUnclassifiedFallbackContract(t *testing.T) {
+	summary := failureSummary{
+		Kind: "unclassified backend verification failure",
+		Excerpt: []string{
+			"panic: bootstrap environment missing required provider fixture",
+			"run go test coverage lane: exit status 2",
+		},
+		Inferred: false,
+	}
+
+	var output bytes.Buffer
+	writeMarkdownSummary(&output, config{
+		command:      defaultCommand,
+		artifactName: defaultArtifactName,
+		primaryLog:   defaultPrimaryLog,
+	}, summary)
+
+	got := output.String()
+	for _, want := range []string{
+		"- Result: `failed`",
+		"- Failure type: `unclassified backend verification failure`",
+		"- Failure identity: specific failing package or test could not be inferred from the command log.",
+		"- Local rerun: `make test-backend-verification`",
+		"- Retained artifact: `backend-verification-failure-artifacts` for 14 days",
+		"- Primary log: `.artifacts/backend-verification/command.log`",
+		"#### First actionable failure excerpt",
+		"panic: bootstrap environment missing required provider fixture",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("markdown summary = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestSummarizeBackendVerificationLogFallbackHandlesEmptyLog(t *testing.T) {
+	summary := summarizeBackendVerificationLog("")
+
+	if summary.Kind != "unclassified backend verification failure" {
+		t.Fatalf("summary.Kind = %q, want unclassified backend verification failure", summary.Kind)
+	}
+	if summary.Inferred {
+		t.Fatalf("summary.Inferred = true, want false")
+	}
+	if got := strings.Join(summary.Excerpt, "\n"); got != "command log was empty" {
+		t.Fatalf("summary excerpt = %q, want empty log diagnostic", got)
+	}
+}
+
 func TestRunReadsLogAndWritesSummary(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "command.log")
 	if err := os.WriteFile(logPath, []byte(strings.Join([]string{
