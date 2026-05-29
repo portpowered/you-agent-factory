@@ -83,6 +83,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         };
         status: "ready";
       };
+  sharedWorkerWorkstationNames?: string[];
   validationErrors?: {
     behavior?: string;
     prompt?: string;
@@ -113,6 +114,8 @@ function buildReadyEditableConfigurationState(overrides?: {
       prompt: "Review the latest story changes before approval.",
       runnerName: "gemini",
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      sharedWorkerWorkstationNames:
+        overrides?.sharedWorkerWorkstationNames ?? [],
       workerName: "reviewer",
       workerOptions: ["reviewer", "planner"],
       workerTypeByName: {
@@ -416,6 +419,62 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(onWorkerChange).toHaveBeenCalledWith("planner");
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
+  });
+
+  it("identifies shared workers and keeps worker-owned fields out of the workstation form", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(screen.queryByText(/also used by/i)).toBeNull();
+    expect(screen.queryByLabelText("Model")).toBeNull();
+    expect(screen.queryByLabelText("Template")).toBeNull();
+  });
+
+  it("makes shared-worker scope explicit without exposing worker-owned settings", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          sharedWorkerWorkstationNames: ["Plan", "Code"],
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "Worker reviewer is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Model")).toBeNull();
+    expect(screen.queryByLabelText("Template")).toBeNull();
   });
 
   it("localizes behavior options in zh-CN while keeping canonical option values", () => {

@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing workstation-editable-values coverage stayed intact during feature-root migration.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: existing workstation-editable-values coverage stayed intact during feature-root migration.
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import {
@@ -47,6 +47,7 @@ describe("resolveEditableWorkstationValues", () => {
       prompt: "Review the latest story changes before approval.",
       runnerName: null,
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      sharedWorkerWorkstationNames: [],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
       workerTypeByName: {
@@ -108,6 +109,7 @@ describe("resolveEditableWorkstationValues", () => {
       prompt: "Review the latest story changes before approval.",
       runnerName: null,
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      sharedWorkerWorkstationNames: [],
       workerName: "missing-worker",
       workerOptions: [],
       workerTypeByName: {},
@@ -262,6 +264,7 @@ describe("resolveEditableWorkstationValues", () => {
       prompt: "Review work",
       runnerName: null,
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      sharedWorkerWorkstationNames: ["Plan"],
       workerName: "processor",
       workerOptions: ["processor"],
       workerTypeByName: {
@@ -336,6 +339,74 @@ describe("resolveEditableWorkstationValues", () => {
         },
         { body: "Plan work", name: "Plan" },
         { body: "Code work", name: "Code" },
+      ],
+    });
+  });
+
+  it("keeps shared worker objects unchanged when applying prompt and behavior changes", () => {
+    const sharedWorker = {
+      body: "Shared worker instructions stay worker-owned.",
+      model: "gpt-5.4",
+      name: "processor",
+      type: "MODEL_WORKER" as const,
+    };
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [sharedWorker],
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "processor",
+        },
+        {
+          body: "Plan work",
+          id: "plan",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Plan",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "processor",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        behavior: "REPEATER",
+        prompt: "Updated review prompt only.",
+        runnerName: null,
+        workerName: "processor",
+      },
+    );
+
+    expect(updatedFactory?.workers).toBe(factory.workers);
+    expect(updatedFactory?.workers?.[0]).toBe(sharedWorker);
+    expect(updatedFactory).toMatchObject({
+      workers: [
+        {
+          body: "Shared worker instructions stay worker-owned.",
+          model: "gpt-5.4",
+          name: "processor",
+        },
+      ],
+      workstations: [
+        {
+          behavior: "REPEATER",
+          body: "Updated review prompt only.",
+          name: "Review",
+          worker: "processor",
+        },
+        {
+          body: "Plan work",
+          name: "Plan",
+          worker: "processor",
+        },
       ],
     });
   });

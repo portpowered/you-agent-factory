@@ -24,6 +24,7 @@ export interface EditableWorkstationValues {
   prompt: string | null;
   runnerName: RunnerID | null;
   runnerOptions: RunnerID[];
+  sharedWorkerWorkstationNames: string[];
   workerTypeByName: Record<string, CanonicalWorker["type"] | undefined>;
   workerName: string;
   workerOptions: string[];
@@ -58,6 +59,11 @@ export function resolveEditableWorkstationValues(
     prompt: workstation.body ?? null,
     runnerName: workstation.runner ?? null,
     runnerOptions: BUILT_IN_RUNNER_IDS,
+    sharedWorkerWorkstationNames: resolveSharedWorkerWorkstationNames(
+      factory,
+      workstation,
+      workstationResolution.workstationIndex,
+    ),
     workerTypeByName: resolveWorkerTypeByName(factory),
     workerName: workstation.worker,
     workerOptions: resolveWorkerOptions(factory),
@@ -160,6 +166,26 @@ function resolveEffectiveRunnerName(
 function resolveWorkerOptions(factory: CanonicalFactoryDefinition): string[] {
   return (factory.workers ?? [])
     .map((worker) => worker.name)
+    .filter((name) => name.length > 0);
+}
+
+function resolveSharedWorkerWorkstationNames(
+  factory: CanonicalFactoryDefinition,
+  selectedWorkstation: CanonicalWorkstation,
+  selectedWorkstationIndex: number,
+): string[] {
+  const selectedWorkerName = selectedWorkstation.worker;
+  if (!selectedWorkerName) {
+    return [];
+  }
+
+  return (factory.workstations ?? [])
+    .filter(
+      (workstation, index) =>
+        index !== selectedWorkstationIndex &&
+        workstation.worker === selectedWorkerName,
+    )
+    .map((workstation) => workstation.name)
     .filter((name) => name.length > 0);
 }
 

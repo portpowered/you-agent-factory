@@ -51,6 +51,10 @@ export interface WorkstationDetailMessages {
   editableConfigurationWorkerMissing: string;
   editableConfigurationWorkerOptionsEmpty: string;
   editableConfigurationWorkerRequired: string;
+  editableConfigurationSharedWorkerScopeHint: (
+    workerName: string,
+    workstationNames: string,
+  ) => string;
   editableConfigurationWorkerUnavailable: string;
   editableConfigurationWorkerUnavailablePrefix: string;
   modelFieldLabel: string;

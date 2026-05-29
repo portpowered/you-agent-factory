@@ -225,6 +225,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       prompt: overrides?.prompt ?? "Review the story.",
       runnerName: null,
       runnerOptions: ["codex"],
+      sharedWorkerWorkstationNames: [],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
       workerTypeByName: {

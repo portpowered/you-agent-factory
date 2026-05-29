@@ -96,6 +96,11 @@ const workstationDetailMessagesByLocale = {
       "No current workers are available for this workstation. Add a worker to the factory before editing this field.",
     editableConfigurationWorkerRequired:
       "Select a worker before saving this workstation.",
+    editableConfigurationSharedWorkerScopeHint: (
+      workerName,
+      workstationNames,
+    ) =>
+      `Worker ${workerName} is also used by ${workstationNames}. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.`,
     editableConfigurationWorkerUnavailable:
       "The selected worker is no longer available. Choose another worker before saving this workstation.",
     editableConfigurationWorkerUnavailablePrefix:
@@ -266,6 +271,11 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションで利用できる現在のワーカーがありません。このフィールドを編集する前にファクトリーへワーカーを追加してください。",
     editableConfigurationWorkerRequired:
       "このワークステーションを保存する前にワーカーを選択してください。",
+    editableConfigurationSharedWorkerScopeHint: (
+      workerName,
+      workstationNames,
+    ) =>
+      `ワーカー ${workerName} は ${workstationNames} でも使用されています。provider、model、runner process、worker instruction の設定は worker 所有のままで、このワークステーションフォームからは編集されません。`,
     editableConfigurationWorkerUnavailable:
       "選択したワーカーは利用できなくなりました。保存前に別のワーカーを選択してください。",
     editableConfigurationWorkerUnavailablePrefix:
@@ -436,6 +446,11 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션에서 사용할 수 있는 현재 워커가 없습니다. 이 필드를 편집하기 전에 팩토리에 워커를 추가하세요.",
     editableConfigurationWorkerRequired:
       "이 워크스테이션을 저장하기 전에 워커를 선택하세요.",
+    editableConfigurationSharedWorkerScopeHint: (
+      workerName,
+      workstationNames,
+    ) =>
+      `워커 ${workerName}는 ${workstationNames}에서도 사용됩니다. provider, model, runner process, worker instruction 설정은 워커 소유로 유지되며 이 워크스테이션 양식에서 편집되지 않습니다.`,
     editableConfigurationWorkerUnavailable:
       "선택한 워커를 더 이상 사용할 수 없습니다. 저장하기 전에 다른 워커를 선택하세요.",
     editableConfigurationWorkerUnavailablePrefix:
@@ -592,6 +607,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationWorkerOptionsEmpty:
       "此工作站当前没有可用的工作器。请先向工厂添加工作器，再编辑此字段。",
     editableConfigurationWorkerRequired: "保存此工作站前请选择工作器。",
+    editableConfigurationSharedWorkerScopeHint: (
+      workerName,
+      workstationNames,
+    ) =>
+      `工作器 ${workerName} 也被 ${workstationNames} 使用。provider、model、runner process 和 worker instruction 设置仍归 worker 所有，不会从此工作站表单编辑。`,
     editableConfigurationWorkerUnavailable:
       "所选工作器已不可用。保存前请选择其他工作器。",
     editableConfigurationWorkerUnavailablePrefix: "工作器选择不可用。",

@@ -136,6 +136,12 @@ function EditableConfigurationReadyForm({
             />
           }
           label={messages.workerFieldLabel}
+          supportingContent={
+            <EditableConfigurationSharedWorkerHint
+              messages={messages}
+              state={state}
+            />
+          }
         />
         <EditableConfigurationField
           fieldId="editable-workstation-kind"
@@ -349,6 +355,34 @@ function EditableConfigurationBehaviorInput({
         </option>
       ))}
     </Select>
+  );
+}
+
+function EditableConfigurationSharedWorkerHint({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  const sharedWorkstationNames =
+    state.draft.workerName === state.initialValues.workerName
+      ? state.initialValues.sharedWorkerWorkstationNames
+      : [];
+  if (sharedWorkstationNames.length === 0) {
+    return null;
+  }
+
+  return (
+    <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      {messages.editableConfigurationSharedWorkerScopeHint(
+        valueOrFallback(state.draft.workerName, messages.notConfiguredValue),
+        formatList(sharedWorkstationNames),
+      )}
+    </p>
   );
 }
 

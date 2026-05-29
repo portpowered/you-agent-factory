@@ -468,6 +468,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       prompt: "Review the story.",
       runnerName: null,
       runnerOptions: ["codex"],
+      sharedWorkerWorkstationNames: [],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
       workerTypeByName: {
