@@ -9,8 +9,10 @@ import { getWorkstationDetailEnumMessages } from "./workstation-detail-enums";
 type WorkstationDetailCatalogMessages = Omit<
   WorkstationDetailMessages,
   | "localizeProviderSessionKind"
+  | "localizeRunnerSelectionSource"
   | "localizeWorkstationBehavior"
   | "localizeWorkstationKind"
+  | "localizeWorkstationType"
 >;
 
 const singularPlural = (count: number, singular: string, plural: string) =>
@@ -130,7 +132,7 @@ const workstationDetailMessagesByLocale = {
     historicalRequestsLabel: "Historical requests",
     historicalRunsLabel: "Historical runs",
     inputWorkTypesLabel: "Input work types",
-    kindDefaultValue: "standard",
+    kindDefaultValue: "STANDARD",
     kindLabel: "Kind",
     noWorkstationRequests:
       "No workstation requests have been recorded for this workstation yet.",
@@ -163,13 +165,7 @@ const workstationDetailMessagesByLocale = {
     runnerInheritanceFactoryLabel: (runnerName) =>
       `Inherit factory runner (${runnerName})`,
     runnerInheritanceFactoryMissingLabel: "Inherit default runner (Codex)",
-    runnerInheritanceFactorySummaryLabel: "Factory runner",
-    runnerInheritanceWorkstationSummaryLabel: "Workstation runner",
     runnerLoadingValue: "Loading runner...",
-    runnerSelectionDefaultLabel: "Default",
-    runnerSelectionFactoryLabel: "Factory",
-    runnerSelectionLegacyProviderLabel: "Legacy provider",
-    runnerSelectionWorkstationLabel: "Workstation",
     runHistoryHeading: "Run history",
     providerSessionLogAction: "Codex session log",
     providerSessionLogUnavailable: "Session log unavailable",
@@ -192,6 +188,8 @@ const workstationDetailMessagesByLocale = {
     unknownActiveWorkLabel: "Unknown active work",
     unavailableValue: "Unavailable",
     unavailableRunnerValue: "Runner unavailable",
+    unavailableWorkstationKindValue: "Workstation kind unavailable",
+    unavailableWorkstationTypeValue: "Workstation type unavailable",
     unknownWorkerTypeValue: "Unknown",
     unknownWorkLabel: "Unknown work",
     workDetailsUnavailable: (dispatchId) =>
@@ -199,6 +197,9 @@ const workstationDetailMessagesByLocale = {
     workIdLabel: "Work ID",
     workSelectedAction: "Work selected",
     workerTypeLabel: "Worker type",
+    workstationKindLoadingValue: "Loading workstation kind...",
+    workstationTypeLabel: "Workstation type",
+    workstationTypeLoadingValue: "Loading workstation type...",
   },
   ja: {
     activeRunsLabel: "実行中のラン",
@@ -311,7 +312,7 @@ const workstationDetailMessagesByLocale = {
     historicalRequestsLabel: "過去のリクエスト",
     historicalRunsLabel: "過去のラン",
     inputWorkTypesLabel: "入力ワークタイプ",
-    kindDefaultValue: "standard",
+    kindDefaultValue: "STANDARD",
     kindLabel: "種別",
     noWorkstationRequests:
       "このワークステーションではまだワークステーションリクエストが記録されていません。",
@@ -345,13 +346,7 @@ const workstationDetailMessagesByLocale = {
     runnerInheritanceFactoryLabel: (runnerName) =>
       `ファクトリー runner を継承 (${runnerName})`,
     runnerInheritanceFactoryMissingLabel: "既定 runner (Codex) を継承",
-    runnerInheritanceFactorySummaryLabel: "ファクトリー runner",
-    runnerInheritanceWorkstationSummaryLabel: "ワークステーション runner",
     runnerLoadingValue: "runner を読み込み中...",
-    runnerSelectionDefaultLabel: "既定",
-    runnerSelectionFactoryLabel: "ファクトリー",
-    runnerSelectionLegacyProviderLabel: "旧 provider",
-    runnerSelectionWorkstationLabel: "ワークステーション",
     runHistoryHeading: "ラン履歴",
     providerSessionLogAction: "Codex セッションログ",
     providerSessionLogUnavailable: "セッションログは利用できません",
@@ -375,6 +370,8 @@ const workstationDetailMessagesByLocale = {
     unknownActiveWorkLabel: "不明なアクティブ作業",
     unavailableValue: "利用不可",
     unavailableRunnerValue: "runner は利用できません",
+    unavailableWorkstationKindValue: "ワークステーション種別は利用できません",
+    unavailableWorkstationTypeValue: "ワークステーション種別は利用できません",
     unknownWorkerTypeValue: "不明",
     unknownWorkLabel: "不明な作業",
     workDetailsUnavailable: (dispatchId) =>
@@ -382,6 +379,9 @@ const workstationDetailMessagesByLocale = {
     workIdLabel: "ワーク ID",
     workSelectedAction: "ワークを選択済み",
     workerTypeLabel: "ワーカータイプ",
+    workstationKindLoadingValue: "ワークステーション種別を読み込み中...",
+    workstationTypeLabel: "ワークステーション種別",
+    workstationTypeLoadingValue: "ワークステーション種別を読み込み中...",
   },
   ko: {
     activeRunsLabel: "활성 실행",
@@ -493,7 +493,7 @@ const workstationDetailMessagesByLocale = {
     historicalRequestsLabel: "이전 요청",
     historicalRunsLabel: "이전 실행",
     inputWorkTypesLabel: "입력 작업 유형",
-    kindDefaultValue: "standard",
+    kindDefaultValue: "STANDARD",
     kindLabel: "종류",
     noWorkstationRequests:
       "이 워크스테이션에는 아직 워크스테이션 요청 기록이 없습니다.",
@@ -526,13 +526,7 @@ const workstationDetailMessagesByLocale = {
     runnerInheritanceFactoryLabel: (runnerName) =>
       `팩토리 runner 상속 (${runnerName})`,
     runnerInheritanceFactoryMissingLabel: "기본 runner (Codex) 상속",
-    runnerInheritanceFactorySummaryLabel: "팩토리 runner",
-    runnerInheritanceWorkstationSummaryLabel: "워크스테이션 runner",
     runnerLoadingValue: "runner 불러오는 중...",
-    runnerSelectionDefaultLabel: "기본값",
-    runnerSelectionFactoryLabel: "팩토리",
-    runnerSelectionLegacyProviderLabel: "레거시 provider",
-    runnerSelectionWorkstationLabel: "워크스테이션",
     runHistoryHeading: "실행 기록",
     providerSessionLogAction: "Codex 세션 로그",
     providerSessionLogUnavailable: "세션 로그를 사용할 수 없음",
@@ -555,6 +549,8 @@ const workstationDetailMessagesByLocale = {
     unknownActiveWorkLabel: "알 수 없는 활성 작업",
     unavailableValue: "사용할 수 없음",
     unavailableRunnerValue: "runner 를 사용할 수 없음",
+    unavailableWorkstationKindValue: "워크스테이션 종류를 사용할 수 없음",
+    unavailableWorkstationTypeValue: "워크스테이션 유형을 사용할 수 없음",
     unknownWorkerTypeValue: "알 수 없음",
     unknownWorkLabel: "알 수 없는 작업",
     workDetailsUnavailable: (dispatchId) =>
@@ -562,6 +558,9 @@ const workstationDetailMessagesByLocale = {
     workIdLabel: "작업 ID",
     workSelectedAction: "작업 선택됨",
     workerTypeLabel: "워커 유형",
+    workstationKindLoadingValue: "워크스테이션 종류 불러오는 중...",
+    workstationTypeLabel: "워크스테이션 유형",
+    workstationTypeLoadingValue: "워크스테이션 유형 불러오는 중...",
   },
   "zh-CN": {
     activeRunsLabel: "活动运行",
@@ -660,7 +659,7 @@ const workstationDetailMessagesByLocale = {
     historicalRequestsLabel: "历史请求",
     historicalRunsLabel: "历史运行",
     inputWorkTypesLabel: "输入工作类型",
-    kindDefaultValue: "standard",
+    kindDefaultValue: "STANDARD",
     kindLabel: "类型",
     noWorkstationRequests: "此工作站尚未记录任何工作站请求。",
     noWorkstationRuns: "此工作站尚未记录任何工作站运行。",
@@ -691,13 +690,7 @@ const workstationDetailMessagesByLocale = {
     runnerInheritanceFactoryLabel: (runnerName) =>
       `继承工厂 runner（${runnerName}）`,
     runnerInheritanceFactoryMissingLabel: "继承默认 runner（Codex）",
-    runnerInheritanceFactorySummaryLabel: "工厂 runner",
-    runnerInheritanceWorkstationSummaryLabel: "工作站 runner",
     runnerLoadingValue: "正在加载 runner...",
-    runnerSelectionDefaultLabel: "默认值",
-    runnerSelectionFactoryLabel: "工厂",
-    runnerSelectionLegacyProviderLabel: "旧 provider",
-    runnerSelectionWorkstationLabel: "工作站",
     runHistoryHeading: "运行历史",
     providerSessionLogAction: "Codex 会话日志",
     providerSessionLogUnavailable: "会话日志不可用",
@@ -720,6 +713,8 @@ const workstationDetailMessagesByLocale = {
     unknownActiveWorkLabel: "未知活动工作",
     unavailableValue: "不可用",
     unavailableRunnerValue: "runner 不可用",
+    unavailableWorkstationKindValue: "工作站种类不可用",
+    unavailableWorkstationTypeValue: "工作站类型不可用",
     unknownWorkerTypeValue: "未知",
     unknownWorkLabel: "未知工作",
     workDetailsUnavailable: (dispatchId) =>
@@ -727,6 +722,9 @@ const workstationDetailMessagesByLocale = {
     workIdLabel: "工作 ID",
     workSelectedAction: "工作已选中",
     workerTypeLabel: "工作器类型",
+    workstationKindLoadingValue: "正在加载工作站种类...",
+    workstationTypeLabel: "工作站类型",
+    workstationTypeLoadingValue: "正在加载工作站类型...",
   },
 } satisfies LocalizedMessages<WorkstationDetailCatalogMessages>;
 
@@ -742,8 +740,10 @@ export function getWorkstationDetailMessages(
   return {
     ...messages,
     localizeProviderSessionKind: enumMessages.localizeProviderSessionKind,
+    localizeRunnerSelectionSource: enumMessages.localizeRunnerSelectionSource,
     localizeWorkstationBehavior: enumMessages.localizeWorkstationBehavior,
     localizeWorkstationKind: enumMessages.localizeWorkstationKind,
+    localizeWorkstationType: enumMessages.localizeWorkstationType,
   };
 }
 

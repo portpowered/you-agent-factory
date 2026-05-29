@@ -4,6 +4,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
+import { resolveRunnerSelection } from "../../../current-factory-definition/lib/runner-selection";
 import type { WorkstationDetailCardProps } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import {
@@ -11,17 +12,21 @@ import {
   getRunnerMetadata,
   type RunnerID,
 } from "../editing/runner-metadata";
+import { isOpenApiRunnerID } from "../messages/runner-openapi-enums";
+
+type ReadyEditableConfigurationState = Extract<
+  NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+  { status: "ready" }
+>;
 
 export function EditableConfigurationRunnerField({
   messages,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
-  state: Extract<
-    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
-    { status: "ready" }
-  >;
+  state: ReadyEditableConfigurationState;
 }) {
+  const resolvedSelection = resolveEditableRunnerSelection(state);
   const inheritedRunnerLabel = state.initialValues.factoryRunnerName
     ? messages.runnerInheritanceFactoryLabel(
         getRunnerDisplayName(state.initialValues.factoryRunnerName) ??
@@ -29,16 +34,12 @@ export function EditableConfigurationRunnerField({
       )
     : messages.runnerInheritanceFactoryMissingLabel;
 
-  const effectiveRunnerID =
-    state.draft.runnerName ?? state.initialValues.factoryRunnerName ?? "codex";
-  const runnerMetadata = getRunnerMetadata(effectiveRunnerID);
+  const runnerMetadata = getRunnerMetadata(resolvedSelection.runnerId);
   const runnerName =
-    getRunnerDisplayName(effectiveRunnerID) ?? effectiveRunnerID;
-  const sourceLabel = state.draft.runnerName
-    ? messages.runnerSelectionWorkstationLabel
-    : state.initialValues.factoryRunnerName
-      ? messages.runnerSelectionFactoryLabel
-      : messages.runnerSelectionDefaultLabel;
+    getRunnerDisplayName(resolvedSelection.runnerId) ?? resolvedSelection.runnerId;
+  const sourceLabel = messages.localizeRunnerSelectionSource(
+    resolvedSelection.source,
+  );
 
   return (
     <div className="grid gap-2">
@@ -129,18 +130,33 @@ export function resolveWorkstationSummaryRunnerValue(
     return messages.unavailableRunnerValue;
   }
 
-  const effectiveRunnerID =
-    state.draft.runnerName ??
-    state.initialValues.factoryRunnerName ??
-    state.initialValues.effectiveRunnerName;
-  const runnerName = getRunnerDisplayName(effectiveRunnerID) ?? effectiveRunnerID;
-  const sourceLabel = state.draft.runnerName
-    ? messages.runnerInheritanceWorkstationSummaryLabel
-    : state.initialValues.factoryRunnerName
-      ? messages.runnerInheritanceFactorySummaryLabel
-      : messages.runnerSelectionDefaultLabel;
+  if (
+    state.draft.runnerName != null &&
+    !isOpenApiRunnerID(state.draft.runnerName)
+  ) {
+    return messages.unavailableRunnerValue;
+  }
+
+  const resolvedSelection = resolveEditableRunnerSelection(state);
+  if (!getRunnerMetadata(resolvedSelection.runnerId)) {
+    return messages.unavailableRunnerValue;
+  }
+
+  const runnerName =
+    getRunnerDisplayName(resolvedSelection.runnerId) ?? resolvedSelection.runnerId;
+  const sourceLabel = messages.localizeRunnerSelectionSource(
+    resolvedSelection.source,
+  );
 
   return `${runnerName} (${sourceLabel})`;
+}
+
+function resolveEditableRunnerSelection(state: ReadyEditableConfigurationState) {
+  return resolveRunnerSelection(
+    state.draft.runnerName,
+    state.initialValues.factoryRunnerName,
+    state.initialValues.workerModelProvider,
+  );
 }
 
 function labelForRunnerCapability(

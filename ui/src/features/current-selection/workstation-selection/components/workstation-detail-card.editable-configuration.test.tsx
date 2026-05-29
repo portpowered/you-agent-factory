@@ -114,8 +114,14 @@ function buildReadyEditableConfigurationState(overrides?: {
       effectiveRunnerName: "gemini",
       factoryRunnerName: "codex",
       prompt: "Review the latest story changes before approval.",
+      resolvedRunnerSelection: {
+        runnerId: "gemini",
+        source: "workstation",
+      },
       runnerName: "gemini",
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      runnerSelectionSource: "workstation",
+      workerModelProvider: null,
       sharedWorkerWorkstationNamesByWorkerName: {
         planner: ["Plan", "Code"],
         reviewer: overrides?.sharedWorkerWorkstationNames ?? [],
@@ -129,6 +135,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         reviewer: "MODEL_WORKER",
       },
       workstationName: "Review",
+      workstationType: "MODEL_WORKSTATION",
     },
     isDirty: Boolean(
       overrides?.behavior ||
@@ -594,12 +601,27 @@ describe("WorkstationDetailCard editable configuration", () => {
     ]);
   });
 
-  it("renders localized unknown-kind fallback in the workstation summary", () => {
+  it("renders localized workstation type from editable configuration when ready", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedNode = {
-      ...snapshot.topology.workstation_nodes_by_id.review,
-      workstation_kind: "future-kind",
-    };
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByText("Workstation type")).toBeTruthy();
+    expect(screen.getByText("Model workstation")).toBeTruthy();
+  });
+
+  it("renders localized workstation type in zh-CN when editable configuration is ready", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
     render(
       <WorkstationDetailCard
@@ -612,8 +634,96 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
+    expect(screen.getByText("工作站类型")).toBeTruthy();
+    expect(screen.getByText("模型工作站")).toBeTruthy();
+  });
+
+  it("shows workstation type loading and unavailable copy for editable configuration states", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{ status: "loading" }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByText("Loading workstation type...")).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          errorMessage: "Factory definition unavailable.",
+          status: "error",
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByText("Workstation type unavailable")).toBeTruthy();
+  });
+
+  it("renders localized scheduling kind from editable draft behavior in the workstation summary", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      workstation_kind: "future-kind",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "REPEATER",
+        })}
+        locale="zh-CN"
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
     expect(screen.getByRole("heading", { name: "工作站摘要" })).toBeTruthy();
-    expect(screen.getByText("未知种类：future-kind")).toBeTruthy();
+    expect(screen.getByText("重复器")).toBeTruthy();
+  });
+
+  it("shows workstation kind loading and unavailable copy for editable configuration states", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{ status: "loading" }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByText("Loading workstation kind...")).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          errorMessage: "Factory definition unavailable.",
+          status: "error",
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByText("Workstation kind unavailable")).toBeTruthy();
   });
 
   it("shows inline Monaco guidance from the current workstation contract", () => {

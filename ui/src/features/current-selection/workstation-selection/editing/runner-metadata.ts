@@ -1,4 +1,5 @@
 import type { components } from "../../../../api/generated/openapi";
+import { OPENAPI_RUNNER_IDS } from "../messages/runner-openapi-enums";
 
 export type RunnerID = components["schemas"]["RunnerID"];
 export type RunnerBaselineCapability =
@@ -107,9 +108,7 @@ const BUILT_IN_RUNNER_METADATA: Record<RunnerID, RunnerMetadata> = {
   },
 };
 
-export const BUILT_IN_RUNNER_IDS = Object.keys(
-  BUILT_IN_RUNNER_METADATA,
-) as RunnerID[];
+export const BUILT_IN_RUNNER_IDS: RunnerID[] = [...OPENAPI_RUNNER_IDS];
 
 export function getRunnerMetadata(
   runnerID: string | null | undefined,
