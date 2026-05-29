@@ -11,7 +11,7 @@ import {
 import {
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
 } from "./features/bento/hooks/dashboardLayoutSchema";
-import { useCurrentWorkstationPromptTemplateValidation } from "./features/current-selection/workstation-selection/public";
+import { useCurrentWorkstationPromptTemplateValidation } from "./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import {
   activeSnapshot,
   baselineSnapshot,
