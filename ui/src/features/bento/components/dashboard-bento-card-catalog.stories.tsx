@@ -33,8 +33,8 @@ import {
 import type { WorkChartModel } from "../../work-outcome/lib/trends";
 import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { WorkTotalsWidget } from "../../work-totals/public";
+import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
 import {
-  useCurrentActivityImportController,
   WorkflowActivityWidget,
 } from "../../workflow-activity/public";
 import {
