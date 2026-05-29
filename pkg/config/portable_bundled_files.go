@@ -222,6 +222,9 @@ func collectPortableBundledFilesFromDir(sourceDir, targetRoot, fileType string, 
 		if entry.IsDir() || !entry.Type().IsRegular() {
 			return nil
 		}
+		if isPortableBundledIgnoredFile(filepath.Base(path)) {
+			return nil
+		}
 
 		relativePath, err := filepath.Rel(sourceDir, path)
 		if err != nil {
@@ -491,6 +494,10 @@ func portableStarterWorkRelativePath(inputsDir, path string, validWorkTypes map[
 }
 
 func isPortableStarterWorkIgnoredFile(name string) bool {
+	return isPortableBundledIgnoredFile(name)
+}
+
+func isPortableBundledIgnoredFile(name string) bool {
 	if name == ".gitkeep" {
 		return true
 	}

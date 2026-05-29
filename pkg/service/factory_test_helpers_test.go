@@ -64,6 +64,18 @@ func assertServiceBundledFactoryEntryWithoutInline(t *testing.T, bundledFile fac
 	}
 }
 
+func serviceBundledFilesByTarget(t *testing.T, factory factoryapi.Factory) map[string]factoryapi.BundledFile {
+	t.Helper()
+	if factory.SupportingFiles == nil || factory.SupportingFiles.BundledFiles == nil {
+		t.Fatalf("factory %q missing supportingFiles.bundledFiles", factory.Name)
+	}
+	byTarget := make(map[string]factoryapi.BundledFile, len(*factory.SupportingFiles.BundledFiles))
+	for _, bundledFile := range *factory.SupportingFiles.BundledFiles {
+		byTarget[bundledFile.TargetPath] = bundledFile
+	}
+	return byTarget
+}
+
 func writePortableServiceBundledFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
