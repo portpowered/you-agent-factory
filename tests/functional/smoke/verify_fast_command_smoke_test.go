@@ -145,6 +145,40 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	}
 }
 
+func TestBackendVerificationCompatibilityAliasesSmoke_RedirectToCanonicalLane(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"test-coverage-go":          "@printf '%s\\n' 'unexpected:test-coverage-go'\n\t@exit 99\n",
+	})
+
+	coverageOutput, err := runMakefileTarget(repoRoot, makefilePath, "test-backend-coverage")
+	if err != nil {
+		t.Fatalf("run test-backend-coverage wrapper: %v\n%s", err, coverageOutput)
+	}
+	if count := strings.Count(coverageOutput, "stub:test-backend-verification"); count != 1 {
+		t.Fatalf("test-backend-coverage should delegate to the canonical backend lane exactly once, found %d:\n%s", count, coverageOutput)
+	}
+	if strings.Contains(coverageOutput, "unexpected:test-coverage-go") {
+		t.Fatalf("test-backend-coverage bypassed the canonical backend lane:\n%s", coverageOutput)
+	}
+
+	functionalOutput, err := runMakefileTarget(repoRoot, makefilePath, "test-backend-functional")
+	if err != nil {
+		t.Fatalf("run test-backend-functional wrapper: %v\n%s", err, functionalOutput)
+	}
+	assertOutputOrder(t, functionalOutput,
+		"Backend functional verification is merged into make test-backend-verification; rerun that target for the required PR lane.",
+		"stub:test-backend-verification",
+	)
+	if count := strings.Count(functionalOutput, "stub:test-backend-verification"); count != 1 {
+		t.Fatalf("test-backend-functional should delegate to the canonical backend lane exactly once, found %d:\n%s", count, functionalOutput)
+	}
+	if strings.Contains(functionalOutput, "unexpected:test-coverage-go") {
+		t.Fatalf("test-backend-functional bypassed the canonical backend lane:\n%s", functionalOutput)
+	}
+}
+
 func TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -220,6 +254,61 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		if count := strings.Count(output, expected); count != 1 {
 			t.Fatalf("expected %q exactly once through the verify compatibility alias, found %d:\n%s", expected, count, output)
 		}
+	}
+}
+
+func TestBackendVerificationLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\n")
+	artifactRoot := filepath.Join(t.TempDir(), "backend-verification-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-backend-verification.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err != nil {
+		t.Fatalf("run backend verification script: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "fake-make:test-backend-verification") {
+		t.Fatalf("backend verification script did not invoke canonical make target:\n%s", output)
+	}
+
+	logBody, err := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
+	if err != nil {
+		t.Fatalf("read backend verification command log: %v", err)
+	}
+	if !strings.Contains(string(logBody), "fake-make:test-backend-verification") {
+		t.Fatalf("backend verification command log missing canonical command output:\n%s", string(logBody))
+	}
+}
+
+func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-fail", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\nexit 27\n")
+	artifactRoot := filepath.Join(t.TempDir(), "backend-verification-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-backend-verification.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err == nil {
+		t.Fatalf("backend verification script unexpectedly succeeded:\n%s", output)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 27 {
+		t.Fatalf("backend verification script exit = %v, want exit code 27\n%s", err, output)
+	}
+
+	logBody, readErr := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
+	if readErr != nil {
+		t.Fatalf("read backend verification command log: %v", readErr)
+	}
+	if !strings.Contains(string(logBody), "fake-make:test-backend-verification") {
+		t.Fatalf("backend verification command log missing failure output:\n%s", string(logBody))
 	}
 }
 
@@ -337,6 +426,29 @@ func writeMakeEchoScript(t *testing.T, label string) string {
 		t.Fatalf("write echo script: %v", err)
 	}
 	return path
+}
+
+func writeExecutableScript(t *testing.T, label string, body string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), label)
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("write executable script: %v", err)
+	}
+	return path
+}
+
+func runScript(repoRoot string, scriptPath string, env ...string) (string, error) {
+	cmd := exec.Command(scriptPath)
+	cmd.Dir = repoRoot
+	cmd.Env = append(os.Environ(), env...)
+
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+
+	err := cmd.Run()
+	return output.String(), err
 }
 
 func assertOutputOrder(t *testing.T, output string, markers ...string) {

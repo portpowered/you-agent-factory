@@ -303,14 +303,17 @@ func TestRunWritesGitHubOutputsAndSummary(t *testing.T) {
 	if !strings.Contains(summary, "- Classification: `ui-only`") {
 		t.Fatalf("GitHub summary = %q, want classification bullet", summary)
 	}
-	if strings.Contains(summary, "- Full required rerun: `make verify`") {
-		t.Fatalf("GitHub summary = %q, did not want shared-risk rerun guidance for ui-only", summary)
+	if !strings.Contains(summary, "- Full required rerun: `make verify-pr`") {
+		t.Fatalf("GitHub summary = %q, want full rerun guidance for skipped backend verification", summary)
 	}
 	if !strings.Contains(summary, "### Required lane routing") {
 		t.Fatalf("GitHub summary = %q, want lane routing section", summary)
 	}
 	if !strings.Contains(summary, "- `Backend Verification`: `skip` via `make test-backend-verification`") {
 		t.Fatalf("GitHub summary = %q, want backend skip line", summary)
+	}
+	if !strings.Contains(summary, "Skipped because UI-only changes do not require backend verification.") {
+		t.Fatalf("GitHub summary = %q, want backend skip reason", summary)
 	}
 	if !strings.Contains(summary, "- `ui/src/App.tsx`") {
 		t.Fatalf("GitHub summary = %q, want changed file list", summary)
@@ -350,7 +353,7 @@ func TestRunWritesFullRunGuidanceForSharedRisk(t *testing.T) {
 	if !strings.Contains(output, "full_run_required=true") {
 		t.Fatalf("GitHub output = %q, want full_run_required", output)
 	}
-	if !strings.Contains(output, "full_run_command=make verify") {
+	if !strings.Contains(output, "full_run_command=make verify-pr") {
 		t.Fatalf("GitHub output = %q, want full run command", output)
 	}
 
@@ -359,7 +362,7 @@ func TestRunWritesFullRunGuidanceForSharedRisk(t *testing.T) {
 		t.Fatalf("read GitHub summary: %v", err)
 	}
 	summary := string(summaryBytes)
-	if !strings.Contains(summary, "- Full required rerun: `make verify`") {
+	if !strings.Contains(summary, "- Full required rerun: `make verify-pr`") {
 		t.Fatalf("GitHub summary = %q, want full required rerun guidance", summary)
 	}
 }
@@ -565,7 +568,7 @@ func expectedGuideLaneMatrix(classification string) string {
 func expectedGuideRerunGuidance(classification string) []string {
 	switch classification {
 	case classificationDocsOnly:
-		return []string{"`go run ./cmd/ciclassify ...`", "`make verify`"}
+		return []string{"`go run ./cmd/ciclassify ...`", "`make verify-pr`"}
 	case classificationSharedRisk:
 		return []string{"`" + fullRunCommand + "`"}
 	default:
