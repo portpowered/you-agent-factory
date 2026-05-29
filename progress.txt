@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Hide internal `__system_time` factory graph nodes with `filterFactoryGraphTopologyForCustomerDisplay` in `ui/src/features/factory-graph-editor/lib/factory-graph-customer-display.ts`; reuse `systemTime.ts` constants/predicates and apply the filter at graph render boundaries (layout/projection) before seeding nodes or edges.
+- Apply customer-display filtering in `projectFactoryGraphToReactFlow` only; keep `buildFactoryGraphTopologyFromDefinition` and draft-validation topology unfiltered so canonical factory data and editor mutations stay complete.
 - Register new packaged `you docs` topics in the single `topicDocuments` table in `pkg/cli/docs/docs.go` with canonical name, description, `displayOrder`, path, and optional aliases together so `SupportedTopics()`, index output, and unsupported-topic errors stay aligned.
 - Keep `docs/reference/*.md` and `pkg/cli/docs/reference/*.md` synchronized when adding customer-facing packaged topics; embedded markdown is loaded from `pkg/cli/docs/reference/` via `//go:embed`.
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
@@ -48,4 +49,13 @@
   - Patterns discovered: Apply customer-display filtering on the topology object immediately after `buildFactoryGraphTopologyFromDefinition`; resource-availability collapsing still runs on the filtered topology during node/edge seeding.
   - Gotchas encountered: Biome expects `factory-graph-customer-display` imports before `factory-graph-draft.test-helpers` in graph test files.
   - Useful context: Mirror resource-availability layout tests—assert `buildFactoryGraphTopologyFromDefinition` still exposes internal nodes, then assert `buildCurrentActivityGraphLayoutFromFactory` node IDs and edge endpoints exclude `__system_time`.
+---
+
+## 2026-05-30T01:18:00Z - cron-workstation-ui-hide-003
+- What was implemented: Applied `filterFactoryGraphTopologyForCustomerDisplay` inside `projectFactoryGraphToReactFlow` at the React Flow display boundary; added projection test proving raw topology retains system-time nodes while projected nodes and edges omit them.
+- Files changed: `ui/src/features/factory-graph-editor/lib/factory-graph-react-flow-projection.ts`, `ui/src/features/factory-graph-editor/lib/factory-graph-react-flow-projection.test.ts`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Draft validation and graph operations should keep full topology from `buildFactoryGraphTopologyFromDefinition`; only `projectFactoryGraphToReactFlow` (and current-activity layout) should filter for customer display.
+  - Gotchas encountered: Connection-anchor building must use the filtered `displayTopology` so hidden nodes are not referenced when resolving connection targets.
+  - Useful context: Reuse the mixed `mixed-public-system-time` fixture from customer-display or layout tests for raw-vs-projected assertions.
 ---
