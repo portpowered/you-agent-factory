@@ -16,6 +16,13 @@ import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-
 
 const WORKSTATION_NODE_CLASS =
   "min-w-0 w-full justify-start overflow-hidden text-left shadow-af-card";
+const DISPATCH_NODE_TONE_DEFAULT_CLASS = "border-af-border bg-af-surface";
+const DISPATCH_NODE_TONE_DANGER_CLASS =
+  "border-af-danger-border bg-af-danger-surface";
+const DISPATCH_NODE_TONE_WARNING_CLASS =
+  "border-af-warning-border bg-af-warning-surface";
+const DISPATCH_NODE_TONE_SUCCESS_CLASS =
+  "border-af-success-border bg-af-success-surface";
 
 function TraceDispatchFactoryGraphNode({
   data,
@@ -104,15 +111,15 @@ function outcomeBadgeTone(
 
 function outcomeToneClassName(outcome?: string): string {
   if (!outcome) {
-    return "border-af-border bg-af-surface";
+    return DISPATCH_NODE_TONE_DEFAULT_CLASS;
   }
 
   const normalized = outcome.toUpperCase();
   if (normalized === "FAILED" || normalized === "REJECTED") {
-    return "border-af-danger-border bg-af-danger-surface";
+    return DISPATCH_NODE_TONE_DANGER_CLASS;
   }
   if (normalized === "CONTINUE") {
-    return "border-af-warning-border bg-af-warning-surface";
+    return DISPATCH_NODE_TONE_WARNING_CLASS;
   }
-  return "border-af-success-border bg-af-success-surface";
+  return DISPATCH_NODE_TONE_SUCCESS_CLASS;
 }
