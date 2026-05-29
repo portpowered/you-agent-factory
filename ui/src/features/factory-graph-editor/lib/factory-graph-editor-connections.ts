@@ -1,3 +1,5 @@
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {
   FactoryGraphDraft,
@@ -6,6 +8,7 @@ import type {
   FactoryGraphNode,
   FactoryGraphNodeKind,
   FactoryGraphTopology,
+  FactoryWorkstation,
 } from "./factory-graph-draft-types";
 import { edgeChangeId } from "./factory-graph-draft-types";
 
@@ -23,6 +26,21 @@ export interface FactoryGraphConnectionEndpoint {
   anchorId: string;
   nodeId: string;
 }
+
+export interface FactoryGraphConnectionAnchorContext {
+  workstation: WorkstationProgressOutcomeRouteContext;
+}
+
+export interface FactoryGraphConnectionResolver {
+  resolveWorkstation?: (
+    workstationName: string,
+  ) => WorkstationProgressOutcomeRouteContext | undefined;
+}
+
+const PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS = new Set([
+  "workstation-on-continue-source",
+  "workstation-on-rejection-source",
+]);
 
 const ANCHORS_BY_KIND: Record<
   FactoryGraphNodeKind,
@@ -149,16 +167,59 @@ const ANCHORS_BY_KIND: Record<
   ],
 };
 
-export function getFactoryGraphConnectionAnchors(kind: FactoryGraphNodeKind) {
-  return ANCHORS_BY_KIND[kind];
+export function factoryGraphConnectionAnchorContext(
+  workstation: WorkstationProgressOutcomeRouteContext,
+): FactoryGraphConnectionAnchorContext {
+  return { workstation };
+}
+
+export function createFactoryGraphWorkstationResolver(
+  workstations: readonly FactoryWorkstation[] | undefined,
+): FactoryGraphConnectionResolver {
+  const byName = new Map(
+    (workstations ?? []).map((workstation) => [workstation.name, workstation]),
+  );
+
+  return {
+    resolveWorkstation: (workstationName) => byName.get(workstationName),
+  };
+}
+
+function filterWorkstationConnectionAnchors(
+  anchors: FactoryGraphConnectionAnchor[],
+  context?: FactoryGraphConnectionAnchorContext,
+) {
+  if (
+    !context ||
+    workstationSupportsProgressOutcomeRoutes(context.workstation)
+  ) {
+    return anchors;
+  }
+
+  return anchors.filter(
+    (anchor) => !PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id),
+  );
+}
+
+export function getFactoryGraphConnectionAnchors(
+  kind: FactoryGraphNodeKind,
+  context?: FactoryGraphConnectionAnchorContext,
+) {
+  const anchors = ANCHORS_BY_KIND[kind];
+  if (kind !== "workstation") {
+    return anchors;
+  }
+
+  return filterWorkstationConnectionAnchors(anchors, context);
 }
 
 export function getLocalizedFactoryGraphConnectionAnchors(
   kind: FactoryGraphNodeKind,
   locale?: string | null,
+  context?: FactoryGraphConnectionAnchorContext,
 ) {
   const messages = getFactoryGraphEditorMessages(locale);
-  return ANCHORS_BY_KIND[kind].map((anchor) => ({
+  return getFactoryGraphConnectionAnchors(kind, context).map((anchor) => ({
     ...anchor,
     description: messages.connectionAnchorDescription(anchor.id),
     label: messages.connectionAnchorLabel(anchor.id),
@@ -168,8 +229,25 @@ export function getLocalizedFactoryGraphConnectionAnchors(
 export function getFactoryGraphConnectionAnchor(
   kind: FactoryGraphNodeKind,
   anchorId: string,
+  context?: FactoryGraphConnectionAnchorContext,
 ) {
-  return ANCHORS_BY_KIND[kind].find((anchor) => anchor.id === anchorId) ?? null;
+  return (
+    getFactoryGraphConnectionAnchors(kind, context).find(
+      (anchor) => anchor.id === anchorId,
+    ) ?? null
+  );
+}
+
+function resolveConnectionAnchorContext(
+  node: FactoryGraphNode,
+  resolver?: FactoryGraphConnectionResolver,
+): FactoryGraphConnectionAnchorContext | undefined {
+  if (node.kind !== "workstation" || node.key.kind !== "workstation") {
+    return undefined;
+  }
+
+  const workstation = resolver?.resolveWorkstation?.(node.key.name);
+  return workstation ? factoryGraphConnectionAnchorContext(workstation) : undefined;
 }
 
 export function buildFactoryGraphEdgeChangeFromConnection(
@@ -180,6 +258,7 @@ export function buildFactoryGraphEdgeChangeFromConnection(
     targetAnchorId: string;
     targetNodeId: string;
   },
+  resolver?: FactoryGraphConnectionResolver,
 ): FactoryGraphDraftEdgeChange | null {
   const sourceNode = findNode(topology, endpoint.sourceNodeId);
   const targetNode = findNode(topology, endpoint.targetNodeId);
@@ -187,13 +266,17 @@ export function buildFactoryGraphEdgeChangeFromConnection(
     return null;
   }
 
+  const sourceContext = resolveConnectionAnchorContext(sourceNode, resolver);
+  const targetContext = resolveConnectionAnchorContext(targetNode, resolver);
   const sourceAnchor = getFactoryGraphConnectionAnchor(
     sourceNode.kind,
     endpoint.sourceAnchorId,
+    sourceContext,
   );
   const targetAnchor = getFactoryGraphConnectionAnchor(
     targetNode.kind,
     endpoint.targetAnchorId,
+    targetContext,
   );
   if (!sourceAnchor || !targetAnchor) {
     return null;
@@ -214,14 +297,24 @@ export function isValidFactoryGraphConnection(input: {
   sourceNodeKind: FactoryGraphNodeKind;
   targetAnchorId: string;
   targetNodeKind: FactoryGraphNodeKind;
+  sourceWorkstation?: WorkstationProgressOutcomeRouteContext;
+  targetWorkstation?: WorkstationProgressOutcomeRouteContext;
 }) {
+  const sourceContext = input.sourceWorkstation
+    ? factoryGraphConnectionAnchorContext(input.sourceWorkstation)
+    : undefined;
+  const targetContext = input.targetWorkstation
+    ? factoryGraphConnectionAnchorContext(input.targetWorkstation)
+    : undefined;
   const sourceAnchor = getFactoryGraphConnectionAnchor(
     input.sourceNodeKind,
     input.sourceAnchorId,
+    sourceContext,
   );
   const targetAnchor = getFactoryGraphConnectionAnchor(
     input.targetNodeKind,
     input.targetAnchorId,
+    targetContext,
   );
   if (!sourceAnchor || !targetAnchor) {
     return false;
@@ -323,19 +416,30 @@ export function applyFactoryGraphEdgeRemoval(
 
 export function buildFactoryGraphConnectionNotice(options: {
   locale?: string | null;
+  resolver?: FactoryGraphConnectionResolver;
   sourceAnchorId: string;
   sourceNode: FactoryGraphNode;
   targetAnchorId: string;
   targetNode: FactoryGraphNode;
 }) {
   const messages = getFactoryGraphEditorMessages(options.locale);
+  const sourceContext = resolveConnectionAnchorContext(
+    options.sourceNode,
+    options.resolver,
+  );
+  const targetContext = resolveConnectionAnchorContext(
+    options.targetNode,
+    options.resolver,
+  );
   const sourceAnchor = getFactoryGraphConnectionAnchor(
     options.sourceNode.kind,
     options.sourceAnchorId,
+    sourceContext,
   );
   const targetAnchor = getFactoryGraphConnectionAnchor(
     options.targetNode.kind,
     options.targetAnchorId,
+    targetContext,
   );
   if (!sourceAnchor || !targetAnchor) {
     return messages.connectionFallbackNotice;

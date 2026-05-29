@@ -9,7 +9,10 @@ import {
   applyFactoryGraphEdgeRemoval,
   buildFactoryGraphConnectionNotice,
   buildFactoryGraphEdgeChangeFromConnection,
+  createFactoryGraphWorkstationResolver,
+  factoryGraphConnectionAnchorContext,
   getLocalizedFactoryGraphConnectionAnchors,
+  isValidFactoryGraphConnection,
 } from "./factory-graph-editor-connections";
 
 const baseDraft: FactoryGraphDraft = {
@@ -55,10 +58,25 @@ const connectableTopology: FactoryGraphTopology = {
   ],
 };
 
+const standardProcessorWithoutStopWords = factoryGraphConnectionAnchorContext({
+  type: "MODEL_WORKSTATION",
+  behavior: "STANDARD",
+});
+
+const standardProcessorWithStopWords = factoryGraphConnectionAnchorContext({
+  type: "MODEL_WORKSTATION",
+  behavior: "STANDARD",
+  stopWords: ["DONE"],
+});
+
 describe("factory graph editor connections", () => {
-  it("exposes separate workstation transition anchors for success, continue, failure, and rejection", () => {
+  it("exposes separate workstation transition anchors for success, continue, failure, and rejection when progress routes are supported", () => {
     expect(
-      getLocalizedFactoryGraphConnectionAnchors("workstation", "en"),
+      getLocalizedFactoryGraphConnectionAnchors(
+        "workstation",
+        "en",
+        standardProcessorWithStopWords,
+      ),
     ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -79,6 +97,71 @@ describe("factory graph editor connections", () => {
         }),
       ]),
     );
+  });
+
+  it("omits continue and reject anchors for a standard processor without stopWords", () => {
+    const anchorIds = getLocalizedFactoryGraphConnectionAnchors(
+      "workstation",
+      "en",
+      standardProcessorWithoutStopWords,
+    ).map((anchor) => anchor.id);
+
+    expect(anchorIds).toEqual(
+      expect.arrayContaining([
+        "workstation-input-target",
+        "worker-assignment-target",
+        "workstation-resource-target",
+        "workstation-output-source",
+        "workstation-on-failure-source",
+      ]),
+    );
+    expect(anchorIds).not.toContain("workstation-on-continue-source");
+    expect(anchorIds).not.toContain("workstation-on-rejection-source");
+  });
+
+  it("includes continue and reject anchors for a standard processor with stopWords", () => {
+    const anchorIds = getLocalizedFactoryGraphConnectionAnchors(
+      "workstation",
+      "en",
+      standardProcessorWithStopWords,
+    ).map((anchor) => anchor.id);
+
+    expect(anchorIds).toContain("workstation-on-continue-source");
+    expect(anchorIds).toContain("workstation-on-rejection-source");
+  });
+
+  it("rejects new continue and reject connections when those anchors are hidden", () => {
+    expect(
+      isValidFactoryGraphConnection({
+        sourceAnchorId: "workstation-on-continue-source",
+        sourceNodeKind: "workstation",
+        targetAnchorId: "work-state-input-target",
+        targetNodeKind: "work-state",
+        sourceWorkstation: standardProcessorWithoutStopWords.workstation,
+      }),
+    ).toBe(false);
+
+    expect(
+      buildFactoryGraphEdgeChangeFromConnection(
+        connectableTopology,
+        {
+          sourceAnchorId: "workstation-on-rejection-source",
+          sourceNodeId: "workstation:review",
+          targetAnchorId: "work-state-input-target",
+          targetNodeId: "work-state:story:queued",
+        },
+        createFactoryGraphWorkstationResolver([
+          {
+            body: "Review",
+            inputs: [],
+            name: "review",
+            outputs: [],
+            type: "MODEL_WORKSTATION",
+            worker: "writer",
+          },
+        ]),
+      ),
+    ).toBeNull();
   });
 
   it("maps compatible anchor selections into a draft edge addition", () => {

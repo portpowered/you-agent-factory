@@ -157,6 +157,22 @@ describe("factory graph operations", () => {
     });
   });
 
+  it("rejects continue and reject connections for standard processors without stopWords", () => {
+    const continueConnection = connectFactoryGraphNodes({
+      baseFactoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      sourceAnchorId: "workstation-on-continue-source",
+      sourceNodeId: "workstation:draft",
+      targetAnchorId: "work-state-input-target",
+      targetNodeId: "work-state:story:done",
+    });
+
+    expect(continueConnection).toMatchObject({
+      ok: false,
+      reason: "INVALID_CONNECTION",
+    });
+  });
+
   it("connects and disconnects semantic edge changes in the draft", () => {
     const connected = connectFactoryGraphNodes({
       baseFactoryDefinition,

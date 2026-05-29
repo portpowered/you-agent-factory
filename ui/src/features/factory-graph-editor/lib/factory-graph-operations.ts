@@ -23,6 +23,7 @@ import {
   applyFactoryGraphEdgeRemoval,
   buildFactoryGraphConnectionNotice,
   buildFactoryGraphEdgeChangeFromConnection,
+  createFactoryGraphWorkstationResolver,
 } from "./factory-graph-editor-connections";
 import {
   applyFactoryGraphEntityRemoval,
@@ -179,12 +180,21 @@ export function connectFactoryGraphNodes(options: {
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
   const messages = getFactoryGraphEditorMessages(options.locale);
   const state = buildFactoryGraphState(options);
-  const edgeChange = buildFactoryGraphEdgeChangeFromConnection(state.graph, {
-    sourceAnchorId: options.sourceAnchorId,
-    sourceNodeId: options.sourceNodeId,
-    targetAnchorId: options.targetAnchorId,
-    targetNodeId: options.targetNodeId,
-  });
+  const workstationResolver = createFactoryGraphWorkstationResolver(
+    (
+      state.pendingFactoryDefinition ?? options.baseFactoryDefinition
+    ).workstations,
+  );
+  const edgeChange = buildFactoryGraphEdgeChangeFromConnection(
+    state.graph,
+    {
+      sourceAnchorId: options.sourceAnchorId,
+      sourceNodeId: options.sourceNodeId,
+      targetAnchorId: options.targetAnchorId,
+      targetNodeId: options.targetNodeId,
+    },
+    workstationResolver,
+  );
 
   if (!edgeChange) {
     const sourceNode = state.graph.nodes.find(
@@ -203,6 +213,7 @@ export function connectFactoryGraphNodes(options: {
               targetAnchorId: options.targetAnchorId,
               targetNode,
               locale: options.locale,
+              resolver: workstationResolver,
             })
           : messages.connectionFallbackNotice,
       ok: false,
