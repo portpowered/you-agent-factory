@@ -1,7 +1,7 @@
 import { Button } from "../../../components/ui";
 import type {
   FactoryPngDropState,
-} from "../../import/public";
+} from "../../import/hooks/use-factory-png-drop";
 import type { ReadFactoryImportPngError } from "../../import/lib/factory-png-import";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import { DashboardMessagePanel } from "./mutation-dialog";
