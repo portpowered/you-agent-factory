@@ -1,29 +1,30 @@
 {
-  "project": "infinite-you",
-  "branchName": "ralph/submit-work-defaults",
-  "description": "Allow dashboard submit-work to succeed when operators provide only work type and request name by accepting empty structured items payloads on the API, with tests that document the prior rejection and lock in header-only submission behavior end to end.",
+  "project": "OpenCode Agent Support",
+  "branchName": "ralph/opencode-agent-support",
+  "description": "Let factory authors select OpenCode agent profiles via openCodeAgent on workers and workstations, forward the resolved name through ProviderInferenceRequest, pass opencode run --agent during OpenCode dispatch, surface the value in inference diagnostics, align factory OpenAPI shapes, document the field, and prove the behavior with backend tests.",
   "context": {
-    "customerAsk": "When no text is in the submit-work submission payload, the UI submission fails. Add a test proving header/type-only submission is rejected today, then fix it so submission works with an empty text payload.",
-    "problem": "The dashboard Submit work widget sends items: [] when blank text items are omitted, but backend structured submit-work validation rejects empty items arrays with 400 Bad Request even though OpenAPI only requires name and workTypeName.",
-    "solution": "Relax pkg/api structured submit-work validation and conversion to accept items: [] as a valid header-only submission, keep rejecting whitespace-only non-empty item arrays, add explicit API and functional tests for the scenario, and verify the existing dashboard widget empty-payload submission path succeeds."
+    "customerAsk": "Add agent support for OpenCode using the OpenCode CLI documentation (https://opencode.ai/docs/cli/), including corresponding backend tests.",
+    "problem": "The opencode runner invokes opencode run without the --agent flag, factory config has no openCodeAgent field, and inference diagnostics do not record which OpenCode agent profile was requested even though the CLI supports named agents.",
+    "solution": "Add openCodeAgent to worker and workstation configuration with workstation override precedence, validate it against resolved runner opencode, populate ProviderInferenceRequest.OpenCodeAgent, append --agent to opencode run in openCodeProviderBehavior, record opencode_agent in request metadata, extend OpenAPI factory schemas, update reference docs, and add backend tests for command construction, dispatch wiring, and misconfiguration errors."
   },
   "acceptanceCriteria": [
-    "POST /work with name, workTypeName, and items: [] returns 201 Created with a trace identifier.",
-    "Header-only submissions reach the factory with the provided name and work type and empty structured content.",
-    "items arrays containing only whitespace text items still return 400 with a clear validation error.",
-    "The dashboard Submit work widget completes header-only submission without showing a server error.",
-    "API and functional tests cover header-only acceptance and prevent regression to empty-items rejection.",
-    "Quality gate: backend and frontend typecheck, lint, and relevant tests pass before merge."
+    "Worker or workstation openCodeAgent with resolved runner opencode dispatches opencode run with --agent <name> before the user prompt.",
+    "Omitting openCodeAgent leaves existing OpenCode dispatch behavior unchanged.",
+    "Setting openCodeAgent when the resolved runner is not opencode fails before subprocess start with a clear configuration error.",
+    "Inference request diagnostics include opencode_agent when an agent was configured.",
+    "OpenAPI worker and workstation schemas accept openCodeAgent and round-trip through config load and projection.",
+    "Reference docs describe openCodeAgent, precedence, and opencode agent list discovery.",
+    "Repository quality gate passes: typecheck, lint, and affected backend and UI test suites are green."
   ],
   "userStories": [
     {
-      "id": "submit-work-defaults-001",
-      "title": "Prove header-only structured submit-work is rejected today",
-      "description": "As a maintainer, I want an API test that submits only name, workTypeName, and an empty items array so the current rejection is documented before we change validation.",
+      "id": "opencode-agent-support-001",
+      "title": "Author OpenCode agent names in factory config",
+      "description": "As a factory author, I want to declare which OpenCode agent profile a worker or workstation should use so I can reuse agents I created with opencode agent create without duplicating prompts in infinite-you.",
       "acceptanceCriteria": [
-        "POST /work with body containing non-empty name, configured workTypeName, and items: [] returns 400 Bad Request.",
-        "The error message identifies structured items validation such as items must contain at least one item.",
-        "The test name and assertions describe header/type-only submission without text or file payload content.",
+        "Worker AGENTS.md frontmatter accepts optional openCodeAgent as a non-empty string.",
+        "Workstation AGENTS.md frontmatter accepts optional openCodeAgent that overrides the worker default when both are set.",
+        "Loaded runtime worker and workstation config retain the resolved openCodeAgent value through factory build.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -32,15 +33,12 @@
       "notes": ""
     },
     {
-      "id": "submit-work-defaults-002",
-      "title": "Accept header-only structured submit-work on the API",
-      "description": "As a dashboard operator, I want to submit work with only a work type and request name so I can enqueue named requests without typing optional details.",
+      "id": "opencode-agent-support-002",
+      "title": "Reject OpenCode agent config on non-OpenCode runners",
+      "description": "As an operator, I want a clear configuration error when openCodeAgent is set but the dispatch will not use the OpenCode runner, so misconfigured factories fail fast instead of silently ignoring the field.",
       "acceptanceCriteria": [
-        "POST /work with name, workTypeName, and items: [] returns 201 Created and a non-empty trace identifier.",
-        "The factory receives the submission with the provided name and workTypeName and with empty structured content.",
-        "items arrays that contain only whitespace text items still return 400 Bad Request with items must contain at least one non-empty item.",
-        "Prior rejection tests for empty items: [] are updated to expect success instead of failure.",
-        "A functional runtime API smoke test submits header-only structured work and observes successful acceptance.",
+        "When openCodeAgent is non-empty and the resolved runner for a model dispatch is not opencode, the factory reports a validation or dispatch-time error that references openCodeAgent and the resolved runner ID.",
+        "When openCodeAgent is empty or unset, non-OpenCode runners behave exactly as before.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -49,18 +47,76 @@
       "notes": ""
     },
     {
-      "id": "submit-work-defaults-003",
-      "title": "Confirm the dashboard submit-work widget completes header-only submission",
-      "description": "As a dashboard user, I want the Submit work widget to succeed when I fill in work type and request name but leave the default text item blank.",
+      "id": "opencode-agent-support-003",
+      "title": "Forward OpenCode agent into provider inference requests",
+      "description": "As a backend maintainer, I want the resolved OpenCode agent name on ProviderInferenceRequest so provider behavior can build CLI arguments without re-reading frontmatter.",
       "acceptanceCriteria": [
-        "With work type and request name filled and the default text item left empty, clicking Submit work issues one POST whose JSON body includes items: [], the chosen name, and workTypeName.",
-        "When the API responds 201, the widget shows the existing success status message with the returned trace identifier.",
-        "No inline server error is shown for the header-only happy path.",
+        "ProviderInferenceRequest carries an OpenCodeAgent field populated from workstation override else worker default when the resolved runner is opencode.",
+        "The shared inference-request builder sets OpenCodeAgent only for OpenCode dispatches and leaves it empty for other runners.",
+        "Cloning and diagnostic helpers preserve OpenCodeAgent without mutating shared maps.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "opencode-agent-support-004",
+      "title": "Pass --agent to opencode run",
+      "description": "As a factory operator, I want OpenCode dispatches to invoke my configured agent profile so tool permissions and system prompts defined in OpenCode take effect.",
+      "acceptanceCriteria": [
+        "For model provider opencode with non-empty OpenCodeAgent, built CLI args include opencode run --agent <name> with existing --model, --session, --dir, and --dangerously-skip-permissions flags unchanged when those fields are set.",
+        "For empty OpenCodeAgent, built args match today's opencode run shape with no --agent flag.",
+        "Existing OpenCode unsupported capability guards still apply unchanged.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "opencode-agent-support-005",
+      "title": "Surface OpenCode agent in inference diagnostics",
+      "description": "As an operator reviewing inference events, I want to see which OpenCode agent was requested so I can correlate factory behavior with OpenCode session logs.",
+      "acceptanceCriteria": [
+        "Provider request metadata for OpenCode dispatches includes opencode_agent with the resolved agent name when configured.",
+        "OpenCode dispatches without a configured agent omit opencode_agent from request metadata.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "opencode-agent-support-006",
+      "title": "Extend factory OpenAPI shapes for openCodeAgent",
+      "description": "As an API consumer editing factory definitions through the API or UI, I want openCodeAgent on worker and workstation schemas so saved factories preserve the setting.",
+      "acceptanceCriteria": [
+        "OpenAPI Worker and Workstation components include optional openCodeAgent string fields with descriptions referencing OpenCode CLI agent selection.",
+        "Regenerated Go and TypeScript clients expose openCodeAgent; factory-definition validation accepts non-empty strings.",
+        "A contract or config round-trip test proves openCodeAgent survives OpenAPI decode and public projection for worker and workstation fixtures.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "opencode-agent-support-007",
+      "title": "Document OpenCode agent configuration for factory authors",
+      "description": "As a factory author reading reference docs, I want clear guidance on openCodeAgent and how it maps to the OpenCode CLI so I can configure agents without reading backend source.",
+      "acceptanceCriteria": [
+        "docs/reference/workers.md documents openCodeAgent for model workers used with runner or modelProvider OpenCode.",
+        "docs/reference/workstations.md documents workstation-level override and precedence over the worker default.",
+        "Docs reference opencode agent list per https://opencode.ai/docs/cli/ for discovering agent names.",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
       "notes": ""
     }
   ]
