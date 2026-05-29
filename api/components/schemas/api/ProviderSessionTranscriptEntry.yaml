@@ -9,7 +9,7 @@ properties:
     minimum: 1
     description: Stable chronological order of the transcript entry in the session stream.
   type:
-    $ref: './CodexSessionTranscriptEntryType.yaml'
+    $ref: './ProviderSessionTranscriptEntryType.yaml'
   turnIndex:
     type: integer
     minimum: 1

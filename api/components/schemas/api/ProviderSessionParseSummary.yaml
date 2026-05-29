@@ -31,26 +31,26 @@ properties:
     type: array
     description: Chronological execution turns inferred from turn boundaries and response activity.
     items:
-      $ref: './CodexSessionTurnSummary.yaml'
+      $ref: './ProviderSessionTurnSummary.yaml'
   functionCalls:
     type: array
     description: Function and tool calls observed in chronological order.
     items:
-      $ref: './CodexSessionFunctionCallSummary.yaml'
+      $ref: './ProviderSessionFunctionCallSummary.yaml'
   reasoning:
     type: array
     description: Reasoning entries or summaries observed in chronological order.
     items:
-      $ref: './CodexSessionReasoningSummary.yaml'
+      $ref: './ProviderSessionReasoningSummary.yaml'
   tokenUsage:
-    $ref: './CodexSessionTokenUsage.yaml'
+    $ref: './ProviderSessionTokenUsage.yaml'
   parseErrors:
     type: array
     description: Line-level parse errors for malformed event-stream records.
     items:
-      $ref: './CodexSessionLineError.yaml'
+      $ref: './ProviderSessionLineError.yaml'
   unknownEvents:
     type: array
     description: Compact list of events with unknown or unsupported type fields.
     items:
-      $ref: './CodexSessionUnknownEvent.yaml'
+      $ref: './ProviderSessionUnknownEvent.yaml'

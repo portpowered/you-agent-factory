@@ -887,20 +887,24 @@ components:
       $ref: './components/schemas/api/LoadableProviderSessionKind.yaml'
     ProviderSessionSourceMetadata:
       $ref: './components/schemas/api/ProviderSessionSourceMetadata.yaml'
-    CodexSessionParseSummary:
-      $ref: './components/schemas/api/CodexSessionParseSummary.yaml'
-    CodexSessionTurnSummary:
-      $ref: './components/schemas/api/CodexSessionTurnSummary.yaml'
-    CodexSessionFunctionCallSummary:
-      $ref: './components/schemas/api/CodexSessionFunctionCallSummary.yaml'
-    CodexSessionReasoningSummary:
-      $ref: './components/schemas/api/CodexSessionReasoningSummary.yaml'
-    CodexSessionTokenUsage:
-      $ref: './components/schemas/api/CodexSessionTokenUsage.yaml'
-    CodexSessionLineError:
-      $ref: './components/schemas/api/CodexSessionLineError.yaml'
-    CodexSessionUnknownEvent:
-      $ref: './components/schemas/api/CodexSessionUnknownEvent.yaml'
+    ProviderSessionParseSummary:
+      $ref: './components/schemas/api/ProviderSessionParseSummary.yaml'
+    ProviderSessionTurnSummary:
+      $ref: './components/schemas/api/ProviderSessionTurnSummary.yaml'
+    ProviderSessionFunctionCallSummary:
+      $ref: './components/schemas/api/ProviderSessionFunctionCallSummary.yaml'
+    ProviderSessionReasoningSummary:
+      $ref: './components/schemas/api/ProviderSessionReasoningSummary.yaml'
+    ProviderSessionTokenUsage:
+      $ref: './components/schemas/api/ProviderSessionTokenUsage.yaml'
+    ProviderSessionLineError:
+      $ref: './components/schemas/api/ProviderSessionLineError.yaml'
+    ProviderSessionUnknownEvent:
+      $ref: './components/schemas/api/ProviderSessionUnknownEvent.yaml'
+    ProviderSessionTranscriptEntryType:
+      $ref: './components/schemas/api/ProviderSessionTranscriptEntryType.yaml'
+    ProviderSessionTranscriptEntry:
+      $ref: './components/schemas/api/ProviderSessionTranscriptEntry.yaml'
     StringMap:
       $ref: './components/schemas/shared/StringMap.yaml'
     IntegerMap:
