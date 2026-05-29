@@ -146,9 +146,6 @@ function createPromptHintFixture() {
   const removedHelpButton = createVisibleLocator("removed help button", {
     count: vi.fn().mockResolvedValue(0),
   });
-  const removedHelpPanel = createVisibleLocator("removed help panel", {
-    count: vi.fn().mockResolvedValue(0),
-  });
   const legacySquiggleOverlay = createVisibleLocator("legacy mark", {
     count: vi.fn().mockResolvedValue(0),
   });
@@ -184,9 +181,6 @@ function createPromptHintFixture() {
     }),
     getByText: vi.fn((text) => {
       calls.push(["text", text]);
-      if (text === "Available variables") {
-        return removedHelpPanel;
-      }
       return createVisibleLocator(`text:${text}`);
     }),
     locator: vi.fn((selector) => {
@@ -245,7 +239,6 @@ function createPromptHintFixture() {
     planWorkstationButton,
     promptField,
     removedHelpButton,
-    removedHelpPanel,
     reviewWorkstationButton,
     saveButton,
     completedPromptLine,
@@ -267,7 +260,6 @@ describe("verifyCurrentSelectionPromptHint", () => {
       planWorkstationButton,
       promptField,
       removedHelpButton,
-      removedHelpPanel,
       reviewWorkstationButton,
       saveButton,
       completedPromptLine,
@@ -285,7 +277,6 @@ describe("verifyCurrentSelectionPromptHint", () => {
       name: "Close prompt variable help",
     });
     expect(removedHelpButton.count).toHaveBeenCalled();
-    expect(removedHelpPanel.count).toHaveBeenCalled();
     expect(legacySquiggleOverlay.count).toHaveBeenCalled();
     expect(planWorkstationButton.focus).toHaveBeenCalled();
     expect(implementWorkstationButton.focus).toHaveBeenCalled();
@@ -324,6 +315,17 @@ describe("verifyCurrentSelectionPromptHint", () => {
     expect(calls).toContainEqual([
       "text",
       "Save stays disabled until the prompt validates cleanly for this workstation context.",
+    ]);
+    expect(calls).toContainEqual([
+      "role",
+      "heading",
+      { name: "Available variables" },
+    ]);
+    expect(calls).toContainEqual(["text", ".WorkID"]);
+    expect(calls).toContainEqual([
+      "role",
+      "heading",
+      { name: "Unavailable access" },
     ]);
   });
 });

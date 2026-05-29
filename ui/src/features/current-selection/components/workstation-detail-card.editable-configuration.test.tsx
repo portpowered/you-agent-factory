@@ -571,13 +571,23 @@ describe("WorkstationDetailCard editable configuration", () => {
         "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
       ),
     ).toBeTruthy();
+    expect(screen.getByText("Available variables")).toBeTruthy();
+    expect(screen.getByText(".WorkID")).toBeTruthy();
+    expect(screen.getByText("{{ .WorkID }}")).toBeTruthy();
+    expect(
+      screen.getByText("The current work item identifier."),
+    ).toBeTruthy();
+    expect(screen.getByText("Unavailable access")).toBeTruthy();
+    expect(screen.getByText(".Inputs[1].Payload")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Only input 0 is available for this workstation.",
+      ),
+    ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Open prompt variable help" }),
     ).toBeNull();
     expect(screen.queryByText("Prompt variable help")).toBeNull();
-    expect(screen.queryByText("Available variables")).toBeNull();
-    expect(screen.queryByText(".WorkID")).toBeNull();
-    expect(screen.queryByText("{{ .WorkID }}")).toBeNull();
   });
 
   it("renders inline prompt diagnostics with squiggle feedback for invalid variables", () => {
