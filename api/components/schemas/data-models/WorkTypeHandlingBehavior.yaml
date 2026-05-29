@@ -1,0 +1,10 @@
+type: string
+description: >-
+  Declares how the CLI should route simplified one-shot prompt submissions for this work type.
+  DEFAULT marks the single work type that receives positional prompts from you run --factory.
+x-enum-varnames:
+  - WorkTypeHandlingBehaviorDefault
+enum:
+  - DEFAULT
+x-enum-descriptions:
+  - Receives simplified CLI prompt submissions when exactly one work type in the factory declares this behavior.

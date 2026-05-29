@@ -43,9 +43,35 @@ func assertGeneratedFactoryRejectsMisCasedEnumValue(t *testing.T, fieldPath, val
 }
 
 func generatedFactoryMisCasedEnumTestCases() []generatedFactoryMisCasedEnumTestCase {
-	cases := generatedFactoryMisCasedWorkerEnumTestCases()
+	cases := generatedFactoryMisCasedWorkTypeEnumTestCases()
+	cases = append(cases, generatedFactoryMisCasedWorkerEnumTestCases()...)
 	cases = append(cases, generatedFactoryMisCasedWorkstationEnumTestCases()...)
 	return cases
+}
+
+func generatedFactoryMisCasedWorkTypeEnumTestCases() []generatedFactoryMisCasedEnumTestCase {
+	return []generatedFactoryMisCasedEnumTestCase{
+		{
+			name:      "work type handling behavior",
+			fieldPath: "workTypes[0].handlingBehavior[0]",
+			value:     "default",
+			payload: `{
+				"name":"work-type-handling-factory",
+				"workTypes": [{
+					"name":"story",
+					"handlingBehavior":["default"],
+					"states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]
+				}],
+				"workers": [{"name":"executor"}],
+				"workstations": [{
+					"name":"execute-story",
+					"worker":"executor",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+		},
+	}
 }
 
 func generatedFactoryMisCasedWorkerEnumTestCases() []generatedFactoryMisCasedEnumTestCase {

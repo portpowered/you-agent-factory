@@ -3542,6 +3542,11 @@ components:
           description: Lifecycle states available for work items of this type.
           items:
             $ref: '#/components/schemas/WorkState'
+        handlingBehavior:
+          type: array
+          description: Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
+          items:
+            $ref: '#/components/schemas/WorkTypeHandlingBehavior'
     WorkState:
       type: object
       additionalProperties: false
@@ -4630,6 +4635,15 @@ components:
         encryptedContent:
           type: string
           description: Compact encrypted reasoning payload when the provider exposes it.
+    WorkTypeHandlingBehavior:
+      type: string
+      description: Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
+      x-enum-varnames:
+        - WorkTypeHandlingBehaviorDefault
+      enum:
+        - DEFAULT
+      x-enum-descriptions:
+        - Receives simplified CLI prompt submissions when exactly one work type in the factory declares this behavior.
     HostedWorkerProvider:
       type: string
       description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.

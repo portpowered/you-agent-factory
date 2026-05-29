@@ -37,6 +37,9 @@ type RunConfig struct {
 	Continuously bool
 	WorkFile     string
 	Dir          string
+	// FactoryConfigPath is the factory.json file path from you run --factory.
+	// The service uses Dir as the resolved factory root directory.
+	FactoryConfigPath string
 	RunnerID     string
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths. Empty defaults to the caller's current working
