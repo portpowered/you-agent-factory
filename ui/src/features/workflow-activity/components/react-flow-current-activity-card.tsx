@@ -17,8 +17,8 @@ import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboar
 import { cn } from "../../../lib/cn";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
+import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
-import type { ReadFactoryImportFile } from "../../import/public";
 import {
   type CurrentActivityImportController,
   useCurrentActivityImportController,

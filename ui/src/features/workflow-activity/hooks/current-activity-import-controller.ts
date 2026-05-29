@@ -1,16 +1,20 @@
 import { useCallback } from "react";
 
 import type { FactoryValue } from "../../../api/named-factory";
+import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import {
   type FactoryImportActivationState,
+  useFactoryImportActivation,
+} from "../../import/hooks/use-factory-import-activation";
+import {
   type FactoryImportPreviewState,
+  useFactoryImportPreview,
+} from "../../import/hooks/use-factory-import-preview";
+import {
   type FactoryPngDropState,
   type ReadFactoryImportFile,
-  useFactoryImportActivation,
-  useFactoryImportPreview,
   useFactoryPngDrop,
-} from "../../import/public";
-import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
+} from "../../import/hooks/use-factory-png-drop";
 
 export interface CurrentActivityImportController {
   activateImport: (value: FactoryPngImportValue) => Promise<void>;

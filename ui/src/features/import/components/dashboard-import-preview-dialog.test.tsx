@@ -5,8 +5,9 @@ import { axe } from "jest-axe";
 import { NamedFactoryAPIError } from "../../../api/named-factory";
 import {
   DashboardImportPreviewDialog,
+  FactoryImportPreviewDialog,
   type DashboardImportPreviewDialogProps,
-} from "./dashboard-import-preview-dialog";
+} from "../public";
 import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 
 function createReadyImportPreviewState(): DashboardImportPreviewDialogProps["importPreviewState"] {
@@ -47,6 +48,27 @@ function renderDialog(
 }
 
 describe("DashboardImportPreviewDialog", () => {
+  it("renders the factory preview dialog through the import public boundary", async () => {
+    const onCancel = vi.fn();
+    const onConfirm = vi.fn();
+    const messages = getImportPreviewDialogMessages("en");
+
+    render(
+      <FactoryImportPreviewDialog
+        activationState={{ status: "idle" }}
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+        previewState={createReadyImportPreviewState()}
+      />,
+    );
+
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+
+    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.cancelAction }));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it("renders the extracted dashboard-owned import preview", async () => {
     const { onCancel } = renderDialog();
     const messages = getImportPreviewDialogMessages("en");
