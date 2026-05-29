@@ -138,6 +138,12 @@ func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
 	if svc.localModels == nil {
 		t.Fatal("expected BuildFactoryService to initialize localModels")
 	}
+	if svc.sessions == nil {
+		t.Fatal("expected BuildFactoryService to initialize sessions")
+	}
+	if svc.hostedWorkers.Logger == nil {
+		t.Fatal("expected BuildFactoryService to initialize hostedWorkers logger")
+	}
 }
 
 func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalModelRuntime) (*httptest.Server, func()) {

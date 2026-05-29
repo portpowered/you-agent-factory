@@ -127,6 +127,10 @@ type runtimeBundleBuildInput struct {
 // FactoryService is an instantiation of a factory along with its runtime
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
+//
+// Extracted domains are composed explicitly: pkg/factorysessions owns the live
+// session registry, pkg/localmodels owns managed model runtime wiring, and
+// pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
 	runtimeMu      sync.RWMutex
 	activationMu   sync.RWMutex
@@ -134,6 +138,7 @@ type FactoryService struct {
 	runState       *serviceRunState
 	apiServerExit  <-chan error
 	sessions       *factorysessions.Registry
+	hostedWorkers  hostedworkers.Config
 	factoryRootDir string
 	factory        factory.Factory
 	listener       *ingest.FileWatcher

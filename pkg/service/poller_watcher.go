@@ -81,7 +81,7 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 				)
 				continue
 			}
-			hostedworkers.StartLinearPoller(ctx, sidecars, fs.hostedWorkersConfig(), runtimeCfg, ws, workerDef, hostedworkers.Submitter(submitter))
+			hostedworkers.StartLinearPoller(ctx, sidecars, fs.hostedWorkers, runtimeCfg, ws, workerDef, hostedworkers.Submitter(submitter))
 		default:
 			continue
 		}
@@ -128,22 +128,6 @@ func (fs *FactoryService) superviseScriptPoller(
 		case <-backoffClock.After(backoff):
 		}
 	}
-}
-
-func (fs *FactoryService) hostedWorkersConfig() hostedworkers.Config {
-	cfg := hostedworkers.Config{Logger: fs.logger}
-	if fs == nil {
-		return cfg
-	}
-	if supervisorClock, ok := fs.clock.(clockwork.Clock); ok && supervisorClock != nil {
-		cfg.Clock = supervisorClock
-	}
-	if fs.cfg != nil {
-		cfg.HTTPClient = fs.cfg.HostedPollerHTTPClient
-		cfg.SecretResolver = fs.cfg.HostedPollerSecretResolver
-		cfg.LinearEndpoint = strings.TrimSpace(fs.cfg.HostedLinearEndpoint)
-	}
-	return cfg
 }
 
 func (fs *FactoryService) runScriptPoller(
