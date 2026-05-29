@@ -3,14 +3,18 @@ import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
+import { baseFactoryDefinition } from "../lib/factory-graph-draft.test-helpers";
+import type {
+  FactoryGraphTopology,
+  FactoryWorkstation,
+} from "../lib/factory-graph-draft-types";
+import type { FactoryGraphConnectionEndpoint } from "../lib/factory-graph-editor-connections";
 import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-controls";
-import type { FactoryGraphTopology } from "../lib/factory-graph-draft-types";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "./factory-graph-editor-flow";
-import type { FactoryGraphConnectionEndpoint } from "../lib/factory-graph-editor-connections";
 
 const PENDING_REMOVAL_TOPOLOGY: FactoryGraphTopology = {
   edges: [
@@ -440,6 +444,111 @@ function WorkerResourceDensityStory() {
   );
 }
 
+const PROGRESS_OUTCOME_ROUTE_TOPOLOGY: FactoryGraphTopology = {
+  edges: [],
+  nodes: [
+    {
+      id: "workstation:draft",
+      key: { kind: "workstation", name: "draft" },
+      kind: "workstation",
+      label: "draft",
+    },
+    {
+      id: "work-state:story:done",
+      key: {
+        kind: "work-state",
+        stateName: "done",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:done",
+    },
+    {
+      id: "work-state:story:queued",
+      key: {
+        kind: "work-state",
+        stateName: "queued",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:queued",
+    },
+  ],
+};
+
+const standardProcessorWithoutStopWords: FactoryWorkstation = {
+  ...baseFactoryDefinition.workstations[0],
+  behavior: "STANDARD",
+  stopWords: undefined,
+};
+
+const standardProcessorWithStopWords: FactoryWorkstation = {
+  ...baseFactoryDefinition.workstations[0],
+  behavior: "STANDARD",
+  stopWords: ["DONE"],
+};
+
+function ProgressOutcomeRoutesStory(input: {
+  workstations: readonly FactoryWorkstation[];
+}) {
+  const flow = buildFactoryGraphEditorFlowModel({
+    canEditConnections: true,
+    pendingAdditionEdgeIds: new Set<string>(),
+    pendingConnectionSource: null,
+    pendingAdditionNodeIds: new Set<string>(),
+    pendingRemovalEdgeIds: new Set<string>(),
+    pendingRemovalNodeIds: new Set<string>(),
+    topology: PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+    workstations: input.workstations,
+  });
+
+  return (
+    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-border bg-af-surface-raised p-4">
+      <ReactFlow
+        defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
+        edges={flow.edges}
+        fitView={true}
+        nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
+        nodes={flow.nodes}
+        nodesDraggable={false}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
+  );
+}
+
+async function expectProgressOutcomeRouteHandles(
+  canvas: ReturnType<typeof within>,
+  input: { includeContinueAndReject: boolean },
+) {
+  await expect(
+    canvas.getByRole("button", { name: "Connect: draft Success" }),
+  ).toBeVisible();
+  await expect(
+    canvas.getByRole("button", { name: "Connect: draft Failure" }),
+  ).toBeVisible();
+
+  if (input.includeContinueAndReject) {
+    await expect(
+      canvas.getByRole("button", { name: "Connect: draft Continue" }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Connect: draft Reject" }),
+    ).toBeVisible();
+    return;
+  }
+
+  await expect(
+    canvas.queryByRole("button", { name: "Connect: draft Continue" }),
+  ).toBeNull();
+  await expect(
+    canvas.queryByRole("button", { name: "Connect: draft Reject" }),
+  ).toBeNull();
+}
+
 export default {
   title: "Agent Factory/Dashboard/Factory Graph Editor Flow",
   tags: ["test"],
@@ -522,6 +631,38 @@ export const PendingEdgeChanges = {
     await expect(edgePaths[1]?.getAttribute("style") ?? "").toContain(
       "stroke-dasharray: 9, 4",
     );
+  },
+};
+
+export const ProgressOutcomeRoutesWithoutStopWords = {
+  render: () => (
+    <ProgressOutcomeRoutesStory
+      workstations={[standardProcessorWithoutStopWords]}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByText("draft")).toBeVisible();
+    await expectProgressOutcomeRouteHandles(canvas, {
+      includeContinueAndReject: false,
+    });
+  },
+};
+
+export const ProgressOutcomeRoutesWithStopWords = {
+  render: () => (
+    <ProgressOutcomeRoutesStory
+      workstations={[standardProcessorWithStopWords]}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByText("draft")).toBeVisible();
+    await expectProgressOutcomeRouteHandles(canvas, {
+      includeContinueAndReject: true,
+    });
   },
 };
 

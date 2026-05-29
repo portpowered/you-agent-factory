@@ -2,17 +2,17 @@ import process from "node:process";
 import { chromium } from "playwright";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
 import {
-  OVERFLOW_TOLERANCE_PX,
   expectDialogWithinViewport,
   expectNoHorizontalOverflow,
   expectVisible,
+  OVERFLOW_TOLERANCE_PX,
   storyUrl,
   waitForDialog,
   waitForStoryRender,
 } from "./storybook-responsive-helpers.mjs";
-import { verifyDashboardSessionTabs as verifyDashboardSessionTabsImpl } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
 import { verifyBentoCardCatalogHeader as verifyBentoCardCatalogHeaderImpl } from "./verify-bento-card-catalog-storybook-header.mjs";
 import { verifyBentoCardCatalogResponsive as verifyBentoCardCatalogResponsiveImpl } from "./verify-bento-card-catalog-storybook-responsive.mjs";
+import { verifyDashboardSessionTabs as verifyDashboardSessionTabsImpl } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
 import {
   verifyEditorGraphParity as verifyEditorGraphParityImpl,
   verifyObserverGraphParity as verifyObserverGraphParityImpl,
@@ -27,7 +27,12 @@ import {
   verifyLocalizedWorkflowActivity,
   verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
+import {
+  verifyProgressOutcomeRoutesWithoutStopWords as verifyProgressOutcomeRoutesWithoutStopWordsImpl,
+  verifyProgressOutcomeRoutesWithStopWords as verifyProgressOutcomeRoutesWithStopWordsImpl,
+} from "./verify-progress-outcome-route-handles-storybook-responsive.mjs";
 import { verifyProviderSessionDetailSuccess as verifyProviderSessionDetailSuccessImpl } from "./verify-provider-session-storybook-responsive.mjs";
+
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
@@ -156,6 +161,18 @@ export const storyChecks = [
     assertions: verifyEditorGraphParity,
     id: "agent-factory-dashboard-factory-graph-editor-flow--worker-resource-density",
     label: "editor graph parity",
+  },
+  {
+    assertions: verifyProgressOutcomeRoutesWithoutStopWords,
+    id: "agent-factory-dashboard-factory-graph-editor-flow--progress-outcome-routes-without-stop-words",
+    label: "progress outcome routes without stop words",
+    viewports: [{ height: 900, label: "desktop", width: 1440 }],
+  },
+  {
+    assertions: verifyProgressOutcomeRoutesWithStopWords,
+    id: "agent-factory-dashboard-factory-graph-editor-flow--progress-outcome-routes-with-stop-words",
+    label: "progress outcome routes with stop words",
+    viewports: [{ height: 900, label: "desktop", width: 1440 }],
   },
 ];
 
@@ -296,7 +313,9 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   }
 
   if ((await allTabs.count()) < 3) {
-    throw new Error("Dashboard header did not render the expected multi-session tab strip.");
+    throw new Error(
+      "Dashboard header did not render the expected multi-session tab strip.",
+    );
   }
   if ((await page.getByRole("status", { name: /Event stream/i }).count()) > 0) {
     throw new Error(
@@ -304,7 +323,11 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     );
   }
 
-  if (await page.getByRole("button", { name: "Return to current tick" }).isVisible()) {
+  if (
+    await page
+      .getByRole("button", { name: "Return to current tick" })
+      .isVisible()
+  ) {
     throw new Error(
       "Dashboard header still rendered the retired return-to-current button.",
     );
@@ -331,7 +354,11 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
     viewport,
   );
 }
-export async function verifyBentoCardCatalogResponsive(page, _dialog, viewport) {
+export async function verifyBentoCardCatalogResponsive(
+  page,
+  _dialog,
+  viewport,
+) {
   return verifyBentoCardCatalogResponsiveImpl({
     expectNoHorizontalOverflow,
     expectVisible,
@@ -357,6 +384,28 @@ export async function verifyObserverGraphParity(page, _dialog, viewport) {
 export async function verifyEditorGraphParity(page, _dialog, viewport) {
   return verifyEditorGraphParityImpl(
     { expectNoHorizontalOverflow, expectVisible },
+    page,
+    viewport,
+  );
+}
+export async function verifyProgressOutcomeRoutesWithoutStopWords(
+  page,
+  _dialog,
+  viewport,
+) {
+  return verifyProgressOutcomeRoutesWithoutStopWordsImpl(
+    { expectVisible },
+    page,
+    viewport,
+  );
+}
+export async function verifyProgressOutcomeRoutesWithStopWords(
+  page,
+  _dialog,
+  viewport,
+) {
+  return verifyProgressOutcomeRoutesWithStopWordsImpl(
+    { expectVisible },
     page,
     viewport,
   );

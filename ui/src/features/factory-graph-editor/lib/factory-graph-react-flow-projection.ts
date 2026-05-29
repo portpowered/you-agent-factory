@@ -1,7 +1,9 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: React Flow projection keeps node, edge, and handle mapping together for one adapter seam.
 import { type Edge, MarkerType, type Node } from "@xyflow/react";
 
 import type { ActivityGraphNodeHandle } from "../../flowchart/components/current-activity-node-shell";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
+import { filterFactoryGraphTopologyForCustomerDisplay } from "./factory-graph-customer-display";
 import type {
   FactoryGraphDraftValidationError,
   FactoryGraphEdge,
@@ -15,11 +17,11 @@ import type {
 } from "./factory-graph-editor-connections";
 import {
   getFactoryGraphConnectionAnchors,
+  getLocalizedFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
   resolveFactoryGraphConnectionAnchorContext,
 } from "./factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
-import { filterFactoryGraphTopologyForCustomerDisplay } from "./factory-graph-customer-display";
 
 export type FactoryGraphReactFlowMode = "editor" | "observer";
 
@@ -138,56 +140,58 @@ export function projectFactoryGraphToReactFlow(
     edges: displayTopology.edges.map((edge) =>
       buildFactoryGraphReactFlowEdge(edge, projectionInput),
     ),
-    nodes: [...displayTopology.nodes].sort(sortFactoryGraphNodes).map((node) => {
-      const column = COLUMN_BY_KIND[node.kind];
-      const row = rowCounts.get(column) ?? 0;
-      rowCounts.set(column, row + 1);
-      const workerStatus =
-        node.kind === "worker"
-          ? (input.runtime?.workerStatusByName?.get(node.label) ?? "idle")
-          : undefined;
+    nodes: [...displayTopology.nodes]
+      .sort(sortFactoryGraphNodes)
+      .map((node) => {
+        const column = COLUMN_BY_KIND[node.kind];
+        const row = rowCounts.get(column) ?? 0;
+        rowCounts.set(column, row + 1);
+        const workerStatus =
+          node.kind === "worker"
+            ? (input.runtime?.workerStatusByName?.get(node.label) ?? "idle")
+            : undefined;
 
-      return {
-        className: nodeClassName(node.id, input),
-        data: {
-          active: input.runtime?.activeNodeIds?.has(node.id) ?? false,
-          activeFlow: input.runtime?.activeNodeIds?.has(node.id) ?? false,
-          activeTool: input.editor?.activeTool ?? null,
-          canEditConnections: input.editor?.canEditConnections ?? false,
-          connectionAnchors: buildNodeHandles({
-            editor: input.editor,
-            locale: input.locale,
-            node,
-            topology: displayTopology,
-            workstationResolver: input.workstationResolver,
-          }),
-          connectionHint: messages.flowConnectionHint,
-          draftStatus: draftStatusForNode(node.id, input.editor),
-          focused: input.runtime?.focusedNodeIds?.has(node.id) ?? false,
-          kind: node.kind,
-          kindLabel: messages.kindLabel(node.kind),
-          label: node.label,
-          muted: input.runtime?.mutedNodeIds?.has(node.id) ?? false,
-          pendingLabel: messages.flowPendingLabel,
-          removingLabel: messages.flowRemovingLabel,
-          selectedWorkId: input.runtime?.selectedWorkId ?? null,
-          tokenCount:
-            input.runtime?.placeTokenCountsByNodeId?.get(node.id) ?? null,
-          validationMessage: validationMessages.get(node.id) ?? null,
-          workerStatus,
-          workerStatusLabel: workerStatus
-            ? messages.workerStatusLabel(workerStatus)
-            : undefined,
-        },
-        draggable: true,
-        id: node.id,
-        position: input.layoutPositionsByNodeId?.get(node.id) ?? {
-          x: column * COLUMN_X,
-          y: row * ROW_Y,
-        },
-        type: "factoryEntity",
-      } satisfies FactoryGraphReactFlowNode;
-    }),
+        return {
+          className: nodeClassName(node.id, input),
+          data: {
+            active: input.runtime?.activeNodeIds?.has(node.id) ?? false,
+            activeFlow: input.runtime?.activeNodeIds?.has(node.id) ?? false,
+            activeTool: input.editor?.activeTool ?? null,
+            canEditConnections: input.editor?.canEditConnections ?? false,
+            connectionAnchors: buildNodeHandles({
+              editor: input.editor,
+              locale: input.locale,
+              node,
+              topology: displayTopology,
+              workstationResolver: input.workstationResolver,
+            }),
+            connectionHint: messages.flowConnectionHint,
+            draftStatus: draftStatusForNode(node.id, input.editor),
+            focused: input.runtime?.focusedNodeIds?.has(node.id) ?? false,
+            kind: node.kind,
+            kindLabel: messages.kindLabel(node.kind),
+            label: node.label,
+            muted: input.runtime?.mutedNodeIds?.has(node.id) ?? false,
+            pendingLabel: messages.flowPendingLabel,
+            removingLabel: messages.flowRemovingLabel,
+            selectedWorkId: input.runtime?.selectedWorkId ?? null,
+            tokenCount:
+              input.runtime?.placeTokenCountsByNodeId?.get(node.id) ?? null,
+            validationMessage: validationMessages.get(node.id) ?? null,
+            workerStatus,
+            workerStatusLabel: workerStatus
+              ? messages.workerStatusLabel(workerStatus)
+              : undefined,
+          },
+          draggable: true,
+          id: node.id,
+          position: input.layoutPositionsByNodeId?.get(node.id) ?? {
+            x: column * COLUMN_X,
+            y: row * ROW_Y,
+          },
+          type: "factoryEntity",
+        } satisfies FactoryGraphReactFlowNode;
+      }),
   };
 }
 
@@ -392,8 +396,11 @@ function buildNodeHandles(input: {
           input.workstationResolver,
         )?.workstation;
 
-  return getFactoryGraphConnectionAnchors(input.node.kind, anchorContext).map(
-    (anchor) => {
+  return getLocalizedFactoryGraphConnectionAnchors(
+    input.node.kind,
+    input.locale,
+    anchorContext,
+  ).map((anchor) => {
     const selected =
       selectedSource?.anchorId === anchor.id && anchor.role === "source";
     const compatible =
@@ -441,8 +448,7 @@ function buildNodeHandles(input: {
             ? "default"
             : "muted",
     } satisfies ActivityGraphNodeHandle;
-    },
-  );
+  });
 }
 
 function findTopologyNode(topology: FactoryGraphTopology, nodeId: string) {
