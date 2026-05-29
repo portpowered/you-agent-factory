@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -77,7 +76,7 @@ func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testi
 				t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, interfaces.OutcomeAccepted)
 			}
 
-			record := findRuntimeLogRecord(t, filepath.Join(logDir, runtimeID+".log"), workers.WorkLogEventCommandRunnerCompleted)
+			record := findRuntimeLogRecord(t, requireRuntimeLogPath(t, logDir, runtimeID), workers.WorkLogEventCommandRunnerCompleted)
 			if _, ok := record["stdout"]; ok {
 				t.Fatalf("command runner completion should omit stdout on success")
 			}

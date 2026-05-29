@@ -5,7 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
+	"unicode"
 
+	"github.com/google/uuid"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"go.uber.org/zap"
@@ -17,6 +21,9 @@ const (
 	legacyRuntimeLogDirName  = ".agent-factory"
 	runtimeLogSubdirName     = "logs"
 	runtimeLogExtension      = ".log"
+	runtimeLogMonthLayout    = "2006-01"
+	runtimeLogDateLayout     = "2006-01-02"
+	runtimeLogTimeLayout     = "150405.000000000"
 	defaultRuntimeLogMaxSize = 100
 	defaultRuntimeLogBackups = 20
 	defaultRuntimeLogMaxAge  = 30
@@ -54,10 +61,12 @@ func DefaultRuntimeLogConfig() RuntimeLogConfig {
 
 // RuntimeLogSink owns the file-backed runtime logger and its rolling writer.
 type RuntimeLogSink struct {
-	logger *zap.Logger
-	writer io.Closer
-	path   string
-	config RuntimeLogConfig
+	logger       *zap.Logger
+	writer       io.Closer
+	path         string
+	rootDir      string
+	startTimeUTC time.Time
+	config       RuntimeLogConfig
 }
 
 // Logger returns the zap logger enriched with runtime logging fields and the
@@ -75,6 +84,23 @@ func (s *RuntimeLogSink) Path() string {
 		return ""
 	}
 	return s.path
+}
+
+// RootDir returns the runtime log root selected by caller configuration or the
+// default home-directory policy.
+func (s *RuntimeLogSink) RootDir() string {
+	if s == nil {
+		return ""
+	}
+	return s.rootDir
+}
+
+// StartTimeUTC returns the UTC timestamp used to organize the active log path.
+func (s *RuntimeLogSink) StartTimeUTC() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	return s.startTimeUTC
 }
 
 // Config returns the normalized rolling-file policy applied to the sink.
@@ -161,11 +187,12 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 		}
 		runtimeLogDir = dir
 	}
-	if err := os.MkdirAll(runtimeLogDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create runtime log dir %s: %w", runtimeLogDir, err)
+	startTimeUTC := time.Now().UTC()
+	path := runtimeLogPath(runtimeLogDir, runtimeInstanceID, startTimeUTC, uuid.NewString())
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("create runtime log dir %s: %w", filepath.Dir(path), err)
 	}
 
-	path := filepath.Join(runtimeLogDir, runtimeInstanceID+runtimeLogExtension)
 	runtimeLogConfig := normalizeRuntimeLogConfig(config)
 	writer := &lumberjack.Logger{
 		Filename:   path,
@@ -187,11 +214,56 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 	})).With(zap.String("runtime_instance_id", runtimeInstanceID))
 
 	return &RuntimeLogSink{
-		logger: logger,
-		writer: writer,
-		path:   path,
-		config: runtimeLogConfig,
+		logger:       logger,
+		writer:       writer,
+		path:         path,
+		rootDir:      runtimeLogDir,
+		startTimeUTC: startTimeUTC,
+		config:       runtimeLogConfig,
 	}, nil
+}
+
+func runtimeLogPath(rootDir, runtimeInstanceID string, startTime time.Time, uniqueID string) string {
+	startTime = startTime.UTC()
+	filename := fmt.Sprintf(
+		"%s-%s-%s%s",
+		startTime.Format(runtimeLogTimeLayout),
+		safeRuntimeLogPathComponent(runtimeInstanceID),
+		safeRuntimeLogPathComponent(uniqueID),
+		runtimeLogExtension,
+	)
+	return filepath.Join(
+		rootDir,
+		startTime.Format(runtimeLogMonthLayout),
+		startTime.Format(runtimeLogDateLayout),
+		filename,
+	)
+}
+
+func safeRuntimeLogPathComponent(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "unknown"
+	}
+	var b strings.Builder
+	b.Grow(len(value))
+	lastUnderscore := false
+	for _, r := range value {
+		if r == '-' || r == '_' || r == '.' || unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			lastUnderscore = false
+			continue
+		}
+		if !lastUnderscore {
+			b.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	trimmed := strings.Trim(b.String(), "_.-")
+	if trimmed == "" {
+		return "unknown"
+	}
+	return trimmed
 }
 
 func normalizeRuntimeLogConfig(config RuntimeLogConfig) RuntimeLogConfig {

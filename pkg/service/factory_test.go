@@ -416,11 +416,12 @@ type runningSessionServiceOptions struct {
 }
 
 type runningSessionService struct {
-	rootDir     string
-	svc         *FactoryService
-	runErrCh    chan error
-	cancelRun   context.CancelFunc
-	factoryDirs map[string]string
+	rootDir       string
+	runtimeLogDir string
+	svc           *FactoryService
+	runErrCh      chan error
+	cancelRun     context.CancelFunc
+	factoryDirs   map[string]string
 }
 
 type sessionWorkExpectation struct {
@@ -474,11 +475,12 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
 
 	return &runningSessionService{
-		rootDir:     rootDir,
-		svc:         svc,
-		runErrCh:    runErrCh,
-		cancelRun:   cancelRun,
-		factoryDirs: factoryDirs,
+		rootDir:       rootDir,
+		runtimeLogDir: runtimeLogDir,
+		svc:           svc,
+		runErrCh:      runErrCh,
+		cancelRun:     cancelRun,
+		factoryDirs:   factoryDirs,
 	}
 }
 
@@ -585,19 +587,47 @@ func assertSessionRuntimeLogRecord(t *testing.T, session *liveFactorySession) {
 		t.Fatalf("read runtime log %s: %v", logPath, err)
 	}
 	records := parseRuntimeLogRecords(t, string(data))
+	foundSessionRecord := false
 	for _, record := range records {
 		if record["session_id"] != session.id {
-			continue
+			t.Fatalf("runtime log %s contained record for session %#v, want only %q in %#v", logPath, record["session_id"], session.id, record)
 		}
+		foundSessionRecord = true
 		if record["folder_path"] != runtimeBundle.folderPath {
 			t.Fatalf("session %s folder_path = %#v, want %q in %#v", session.id, record["folder_path"], runtimeBundle.folderPath, record)
+		}
+		if record["factory_dir"] != runtimeBundle.dir {
+			t.Fatalf("session %s factory_dir = %#v, want %q in %#v", session.id, record["factory_dir"], runtimeBundle.dir, record)
 		}
 		if record["runtime_instance_id"] == "" {
 			t.Fatalf("session %s runtime_instance_id missing in %#v", session.id, record)
 		}
-		return
 	}
-	t.Fatalf("runtime log %s did not contain any records for session %s:\n%s", logPath, session.id, string(data))
+	if !foundSessionRecord {
+		t.Fatalf("runtime log %s did not contain any records for session %s:\n%s", logPath, session.id, string(data))
+	}
+}
+
+func assertSessionRuntimeLogPathsAreDistinct(t *testing.T, runtimeLogRoot string, sessions ...*liveFactorySession) {
+	t.Helper()
+
+	seenPaths := make(map[string]string, len(sessions))
+	for _, session := range sessions {
+		if session == nil || session.handle == nil || session.handle.runtime == nil || session.handle.runtime.logSink == nil {
+			t.Fatal("expected live session runtime log sink")
+		}
+		path := session.handle.runtime.logSink.Path()
+		if path == "" {
+			t.Fatalf("session %s runtime log path is empty", session.id)
+		}
+		if session.handle.runtime.logSink.RootDir() != runtimeLogRoot {
+			t.Fatalf("session %s runtime log root = %q, want %q", session.id, session.handle.runtime.logSink.RootDir(), runtimeLogRoot)
+		}
+		if otherSessionID, ok := seenPaths[path]; ok {
+			t.Fatalf("sessions %s and %s shared runtime log path %q", otherSessionID, session.id, path)
+		}
+		seenPaths[path] = session.id
+	}
 }
 
 func assertFactoryWorkType(t *testing.T, workTypes *[]factoryapi.WorkType, want string, label string) {

@@ -134,6 +134,9 @@ func TestFactoryService_OpenFactorySession_IsolatesSessionLogsAndReplayArtifacts
 
 	for _, session := range []*liveFactorySession{defaultSession, firstBeta, secondBeta} {
 		assertSessionArtifactIsolation(t, session, workBySession[session.id], workBySession)
+	}
+	assertSessionRuntimeLogPathsAreDistinct(t, harness.runtimeLogDir, defaultSession, firstBeta, secondBeta)
+	for _, session := range []*liveFactorySession{defaultSession, firstBeta, secondBeta} {
 		assertSessionRuntimeLogRecord(t, session)
 	}
 }
