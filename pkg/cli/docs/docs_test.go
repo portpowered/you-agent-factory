@@ -4,9 +4,47 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestTopicDocuments_ExplicitMetadataRemainsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	if len(topicDocuments) == 0 {
+		t.Fatal("topicDocuments must not be empty")
+	}
+
+	seenOrders := make(map[int]Topic, len(topicDocuments))
+	seenCommands := make(map[string]Topic, len(topicDocuments))
+	for _, doc := range topicDocuments {
+		if doc.displayOrder <= 0 {
+			t.Fatalf("topic %q displayOrder = %d, want positive explicit order", doc.topic, doc.displayOrder)
+		}
+		if strings.TrimSpace(doc.description) == "" {
+			t.Fatalf("topic %q description is empty", doc.topic)
+		}
+		if strings.TrimSpace(doc.path) == "" {
+			t.Fatalf("topic %q path is empty", doc.topic)
+		}
+		if prior, exists := seenOrders[doc.displayOrder]; exists {
+			t.Fatalf("displayOrder %d reused by %q and %q", doc.displayOrder, prior, doc.topic)
+		}
+		seenOrders[doc.displayOrder] = doc.topic
+
+		commands := []string{string(doc.topic)}
+		for _, alias := range doc.aliases {
+			commands = append(commands, string(alias))
+		}
+		for _, command := range commands {
+			if prior, exists := seenCommands[command]; exists {
+				t.Fatalf("docs topic command %q reused by %q and %q", command, prior, doc.topic)
+			}
+			seenCommands[command] = doc.topic
+		}
+	}
+}
 
 func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 	t.Parallel()
@@ -25,6 +63,12 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 
 	if got := SupportedTopics(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("SupportedTopics() = %#v, want %#v", got, want)
+	}
+
+	got := SupportedTopics()
+	got[0] = "mutated"
+	if again := SupportedTopics(); !reflect.DeepEqual(again, want) {
+		t.Fatalf("SupportedTopics() exposed mutable internal state: %#v", again)
 	}
 }
 
@@ -47,6 +91,28 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 
 	if got := SupportedTopicCommands(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("SupportedTopicCommands() = %#v, want %#v", got, want)
+	}
+}
+
+func TestTopicRegistry_OrdersTopicsAndClonesAliases(t *testing.T) {
+	t.Parallel()
+
+	source := []topicDocument{
+		{topic: TopicTemplates, description: "templates", path: "reference/templates.md", displayOrder: 20},
+		{topic: TopicConfig, description: "config", path: "reference/config.md", displayOrder: 10, aliases: []Topic{TopicBatchWorkAlias}},
+	}
+
+	registry := newTopicRegistry(source)
+	if got, want := []Topic{registry.ordered[0].topic, registry.ordered[1].topic}, []Topic{TopicConfig, TopicTemplates}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("registry order = %#v, want %#v", got, want)
+	}
+
+	source[1].aliases[0] = TopicWorkstationAlias
+	if got, want := registry.commandToSource[string(TopicBatchWorkAlias)].topic, TopicConfig; got != want {
+		t.Fatalf("alias lookup after source mutation = %q, want %q", got, want)
+	}
+	if slices.Contains(registry.commandToSource[string(TopicConfig)].aliases, TopicWorkstationAlias) {
+		t.Fatal("registry should clone alias slices instead of sharing source storage")
 	}
 }
 
@@ -102,7 +168,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 func TestMarkdown_ReturnsRawPackagedMarkdownForEachSupportedTopic(t *testing.T) {
 	t.Parallel()
 
-	for _, doc := range topicDocuments {
+	for _, doc := range topicRegistry.ordered {
 		doc := doc
 		t.Run(string(doc.topic), func(t *testing.T) {
 			t.Parallel()
