@@ -7,7 +7,6 @@ import {
 } from "react";
 
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { AgentBentoCardHeader } from "../../bento/components/agent-bento";
 import type { DashboardWidgetPickerAvailability } from "../../bento/lib/dashboard-widget-picker";
 import { getInlineAddWidgetMessages } from "../../bento/messages/inline-add-widget";
@@ -84,16 +83,7 @@ export function InlineAddWidgetCard({
       shellKind="grid-card"
     >
       <div className="grid h-full min-h-0 grid-rows-[auto_1fr]">
-        <AgentBentoCardHeader
-          headerContent={
-            <h3
-              className={`m-0 [overflow-wrap:anywhere] ${DASHBOARD_SECTION_HEADING_CLASS}`}
-            >
-              {messages.title}
-            </h3>
-          }
-          title={messages.title}
-        />
+        <AgentBentoCardHeader title={messages.title} />
 
         <div className="grid min-h-0 content-end p-3 sm:p-4">
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">

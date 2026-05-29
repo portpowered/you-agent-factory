@@ -57,7 +57,6 @@ export interface AgentBentoCardProps {
 export interface AgentBentoCardHeaderProps {
   chromeDensity?: "compact" | "default";
   headerAction?: ReactNode;
-  headerContent: ReactNode;
   title: string;
 }
 
@@ -330,7 +329,6 @@ export function AgentBentoCard({
       <AgentBentoCardHeader
         chromeDensity={chromeDensity}
         headerAction={headerAction}
-        headerContent={<h3 className={BENTO_CARD_TITLE_CLASS}>{title}</h3>}
         title={title}
       />
       <div className={cardBodyClassName}>{children}</div>
@@ -341,7 +339,6 @@ export function AgentBentoCard({
 export function AgentBentoCardHeader({
   chromeDensity = "default",
   headerAction,
-  headerContent,
   title,
 }: AgentBentoCardHeaderProps) {
   const compactChrome = chromeDensity === "compact";
@@ -353,7 +350,9 @@ export function AgentBentoCardHeader({
         compactChrome && BENTO_CARD_HEADER_COMPACT_CLASS,
       )}
     >
-      <div className="min-w-0 flex-1">{headerContent}</div>
+      <div className="min-w-0 flex-1">
+        <h3 className={BENTO_CARD_TITLE_CLASS}>{title}</h3>
+      </div>
       <div
         className={cn(
           BENTO_CARD_HEADER_TOOLS_CLASS,
