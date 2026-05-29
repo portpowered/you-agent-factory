@@ -13,7 +13,7 @@ import type {
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
-} from "../../terminal-work/public";
+} from "../../terminal-work/lib/types";
 import {
   findWorkItemReference,
   findWorkstationNodeIDForPlace,
