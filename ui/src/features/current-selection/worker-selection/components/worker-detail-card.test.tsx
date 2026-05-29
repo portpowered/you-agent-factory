@@ -584,6 +584,26 @@ describe("WorkerDetailCard", () => {
     expect(screen.getByLabelText("Command")).toBeTruthy();
     expect(screen.getByLabelText("Body")).toBeTruthy();
     expect(screen.getByLabelText("Args")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Command"), {
+      target: { value: "make test" },
+    });
+    fireEvent.change(screen.getByLabelText("Args"), {
+      target: { value: "unit" },
+    });
+    fireEvent.change(screen.getByLabelText("Body"), {
+      target: { value: "Run unit tests" },
+    });
+
+    expect(editableConfigurationState.onCommandChange).toHaveBeenCalledWith(
+      "make test",
+    );
+    expect(editableConfigurationState.onArgsTextChange).toHaveBeenCalledWith(
+      "unit",
+    );
+    expect(editableConfigurationState.onBodyChange).toHaveBeenCalledWith(
+      "Run unit tests",
+    );
   });
 
   it("shows empty referencing workstations copy when none reference the worker", () => {

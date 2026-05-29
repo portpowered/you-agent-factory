@@ -13,6 +13,10 @@ import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
 } from "../../messages/workstation-detail";
+import {
+  getWorkerDetailMessages,
+  type WorkerDetailMessages,
+} from "../../worker-selection/messages/worker-detail";
 
 const assertResolvedValue = (value: unknown) => {
   expect(typeof value).toBe("string");
@@ -105,6 +109,46 @@ const invokeDispatchHistory = (
       return [formatter("Dependency" as never, "accepted" as never)];
     default:
       throw new Error(`Unhandled dispatch-history formatter ${key}`);
+  }
+};
+
+const invokeWorkerDetail = (
+  key: string,
+  formatter: (...args: never[]) => unknown,
+) => {
+  switch (key satisfies keyof WorkerDetailMessages) {
+    case "editableConfigurationOverwriteWarning":
+      return [formatter("Model provider" as never)];
+    case "editableConfigurationSaveSuccess":
+      return [formatter("reviewer" as never)];
+    case "editableConfigurationSharedImpactWarning":
+      return [formatter("reviewer" as never, "Review, Plan" as never)];
+    case "localizeExecutorProvider":
+      return [
+        formatter("SCRIPT_WRAP" as never),
+        formatter("future-executor" as never),
+      ];
+    case "localizeModelLocality":
+      return [
+        formatter("CLOUD" as never),
+        formatter("LOCAL" as never),
+        formatter("future-locality" as never),
+      ];
+    case "localizeModelProvider":
+      return [
+        formatter("CURSOR" as never),
+        formatter("CODEX" as never),
+        formatter("future-provider" as never),
+      ];
+    case "localizeWorkerType":
+      return [
+        formatter("MODEL_WORKER" as never),
+        formatter("SCRIPT_WORKER" as never),
+        formatter("HOSTED_WORKER" as never),
+        formatter("future-type" as never),
+      ];
+    default:
+      throw new Error(`Unhandled worker-detail formatter ${key}`);
   }
 };
 
@@ -213,6 +257,15 @@ describe("current-selection message catalogs", () => {
         unknown
       >,
       invokeWorkstationDetail,
+    );
+  });
+
+  it.each(
+    SUPPORTED_LOCALES,
+  )("resolves every %s worker-detail value", (locale) => {
+    assertCatalogValuesResolve(
+      getWorkerDetailMessages(locale) as unknown as Record<string, unknown>,
+      invokeWorkerDetail,
     );
   });
 });
