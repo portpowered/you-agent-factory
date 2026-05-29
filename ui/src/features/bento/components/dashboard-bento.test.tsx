@@ -49,33 +49,36 @@ const SHARED_SELECTED_SESSION: LoadableProviderSessionRef = {
   provider: "codex",
 };
 
-vi.mock("../../current-selection/public", async () => {
+vi.mock("../../current-selection/public", () => ({
+  CurrentSelectionWidget: ({
+    headerAction,
+    onSelectProviderSession,
+  }: {
+    headerAction?: React.ReactNode;
+    onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
+  }) => (
+    <section>
+      {headerAction}
+      <p>Current selection card</p>
+      <button
+        onClick={() => onSelectProviderSession?.(SHARED_SELECTED_SESSION)}
+        type="button"
+      >
+        Select shared provider session
+      </button>
+    </section>
+  ),
+  useCurrentSelection: () => currentSelectionState,
+  useCurrentSelectionDetails: () => ({
+    selectedWorkExecutionDetails: null,
+    selectedWorkRelationshipGraph: { status: "loading" as const },
+  }),
+}));
+
+vi.mock("../../current-selection/work-selection/public", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
 
   return {
-    CurrentSelectionWidget: ({
-      headerAction,
-      onSelectProviderSession,
-    }: {
-      headerAction?: React.ReactNode;
-      onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
-    }) => (
-      <section>
-        {headerAction}
-        <p>Current selection card</p>
-        <button
-          onClick={() => onSelectProviderSession?.(SHARED_SELECTED_SESSION)}
-          type="button"
-        >
-          Select shared provider session
-        </button>
-      </section>
-    ),
-    useCurrentSelection: () => currentSelectionState,
-    useCurrentSelectionDetails: () => ({
-      selectedWorkExecutionDetails: null,
-      selectedWorkRelationshipGraph: { status: "loading" as const },
-    }),
     useSelectedProviderSessionState: () => {
       const [selectedProviderSession, setSelectedProviderSession] =
         React.useState<LoadableProviderSessionRef | null>(null);

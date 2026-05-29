@@ -6,8 +6,8 @@ import { useAppLocale } from "../../../i18n";
 import {
   useCurrentSelection,
   useCurrentSelectionDetails,
-  useSelectedProviderSessionState,
 } from "../../current-selection/public";
+import { useSelectedProviderSessionState } from "../../current-selection/work-selection/public";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { DashboardImportPreviewDialog } from "../../import/public";
