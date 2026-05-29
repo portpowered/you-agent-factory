@@ -962,6 +962,26 @@ func TestRuleBundledFiles_RejectsTargetOutsideCanonicalRootForType(t *testing.T)
 	assertFindingExists(t, findings, "bundled-file-target-root")
 }
 
+func TestRuleBundledFiles_RejectsUnsupportedInputTargetShape(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
+		BundledFiles: []interfaces.BundledFileConfig{{
+			Type:       interfaces.BundledFileTypeInput,
+			TargetPath: "factory/inputs/task/default/nested/starter.md",
+			Content: interfaces.BundledFileContentConfig{
+				Encoding: interfaces.BundledFileEncodingUTF8,
+				Inline:   "starter work\n",
+			},
+		}},
+	}
+
+	findings := ruleBundledFiles(cfg)
+	assertFindingExists(t, findings, "bundled-file-target-root")
+	if !strings.Contains(findings[0].Message, "factory/inputs/<work-type>/<channel>/<file>") {
+		t.Fatalf("expected INPUT shape guidance, got %#v", findings[0])
+	}
+}
+
 func TestRuleBundledFiles_RejectsUnsupportedRootHelperTarget(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{

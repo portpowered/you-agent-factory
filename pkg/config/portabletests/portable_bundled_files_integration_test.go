@@ -242,12 +242,14 @@ func assertPortableBundledPersistedThinManifestFile(t *testing.T, path string) {
 func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *testing.T) {
 	tests := []struct {
 		name            string
+		fileType        string
 		targetPath      func(t *testing.T, portableDir string) string
 		outsidePath     func(portableDir, unsafeTarget string) string
 		wantErrContains string
 	}{
 		{
-			name: "absolute target location",
+			name:     "absolute target location",
+			fileType: interfaces.BundledFileTypeScript,
 			targetPath: func(t *testing.T, _ string) string {
 				return filepath.Join(t.TempDir(), "outside.ps1")
 			},
@@ -257,7 +259,8 @@ func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *te
 			wantErrContains: "must be factory-relative, not absolute",
 		},
 		{
-			name: "escaping target location",
+			name:     "escaping target location",
+			fileType: interfaces.BundledFileTypeScript,
 			targetPath: func(_ *testing.T, _ string) string {
 				return "../outside.ps1"
 			},
@@ -265,6 +268,28 @@ func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *te
 				return filepath.Join(filepath.Dir(portableDir), "outside.ps1")
 			},
 			wantErrContains: "cannot escape the factory root",
+		},
+		{
+			name:     "unsupported root helper",
+			fileType: interfaces.BundledFileTypeRootHelper,
+			targetPath: func(_ *testing.T, _ string) string {
+				return "README.md"
+			},
+			outsidePath: func(portableDir, _ string) string {
+				return filepath.Join(portableDir, "factory", "README.md")
+			},
+			wantErrContains: "must be one of the supported root helper files",
+		},
+		{
+			name:     "input nested past starter file",
+			fileType: interfaces.BundledFileTypeInput,
+			targetPath: func(_ *testing.T, _ string) string {
+				return "factory/inputs/task/default/nested/starter.md"
+			},
+			outsidePath: func(portableDir, _ string) string {
+				return filepath.Join(portableDir, "factory", "inputs", "task", "default", "nested", "starter.md")
+			},
+			wantErrContains: "must use factory/inputs/<work-type>/<channel>/<file>",
 		},
 	}
 
@@ -276,7 +301,7 @@ func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *te
 
 			writePortableBundledRuntimeFixture(t, portableDir, []interfaces.BundledFileConfig{
 				portableBundledFileFixture(interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n"),
-				portableBundledFileFixture(interfaces.BundledFileTypeScript, unsafeTarget, "Write-Output 'unsafe'\n"),
+				portableBundledFileFixture(tt.fileType, unsafeTarget, "Write-Output 'unsafe'\n"),
 			})
 
 			_, err := factoryconfig.ExpandFactoryConfigLayout(filepath.Join(portableDir, interfaces.FactoryConfigFile))
