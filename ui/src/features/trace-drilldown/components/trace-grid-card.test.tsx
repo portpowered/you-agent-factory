@@ -67,6 +67,7 @@ import {
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { expectNoVerticalScrollContainer } from "../lib/trace-grid-card-scroll-test-helpers";
 import { TraceGridBentoCard } from "./trace-grid-card";
 
 const populatedTrace: DashboardTrace = {
@@ -222,9 +223,13 @@ describe("TraceGridBentoCard ready state", () => {
     expect(dispatchPill.className).toContain("py-0.5");
     expect(within(card).getByText("Accepted · 1s")).toBeTruthy();
     expect(within(card).getByText("Accepted · 2s")).toBeTruthy();
-    const tableScroller = card.querySelector(".overscroll-x-contain");
+    const tableScroller = card.querySelector("[data-trace-dispatch-table]");
     expect(tableScroller?.className).toContain("overflow-x-auto");
+    expect(tableScroller?.className).toContain("overflow-y-clip");
     expect(tableScroller?.className).toContain("overscroll-x-contain");
+    expectNoVerticalScrollContainer(tableScroller as Element, {
+      requireOverflowYClip: true,
+    });
     expect(table.className).toContain("min-w-[640px]");
     expect(
       await within(card).findByRole("region", { name: "Batch relation graph" }),

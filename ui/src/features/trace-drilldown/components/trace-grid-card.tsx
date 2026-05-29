@@ -1,17 +1,10 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 import { useEffect, useMemo, useState } from "react";
 import type {
   DashboardTrace,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import {
-  DASHBOARD_WIDGET_CLASS,
-  DETAIL_CARD_CLASS,
-  DETAIL_CARD_WIDE_CLASS,
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/ui/widget-frame";
 import { Button } from "../../../components/ui/button";
 import {
   Collapsible,
@@ -39,6 +32,13 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
+import {
+  DASHBOARD_WIDGET_CLASS,
+  DETAIL_CARD_CLASS,
+  DETAIL_CARD_WIDE_CLASS,
+  EMPTY_STATE_CLASS,
+  EMPTY_STATE_COMPACT_CLASS,
+} from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
 import { AgentBentoCard } from "../../bento/components/agent-bento";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
@@ -92,6 +92,9 @@ export function TraceGridBentoCard({
 
   return (
     <AgentBentoCard
+      bodyProps={
+        { "data-trace-card-scroll": "" } as HTMLAttributes<HTMLDivElement>
+      }
       className={cardClassName}
       headerAction={headerAction}
       title={title ?? messages.title}
@@ -170,7 +173,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
   }, []);
 
   return (
-    <div className="grid min-w-0 w-full gap-3" style={{ overflowX: "hidden" }}>
+    <div className="grid min-w-0 w-full gap-3">
       <dl
         className={cn(
           "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-af-border [&_div]:pt-3 [&_dt]:mb-1",
@@ -277,95 +280,98 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
       </dl>
 
       {trace.dispatches.length > 0 ? (
-        <div className="min-w-0 overflow-x-auto overscroll-x-contain">
-          <Table
-            className={cn(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}
+        <Table
+          className={cn(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}
+          containerClassName="min-w-0 overscroll-x-contain"
+          containerProps={
+            {
+              "data-trace-dispatch-table": "",
+            } as HTMLAttributes<HTMLDivElement>
+          }
+        >
+          <TableCaption
+            className={cn("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}
           >
-            <TableCaption
-              className={cn("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}
-            >
-              {messages.tableCaption}
-            </TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead
-                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                  scope="col"
-                >
-                  {messages.dispatchColumnLabel}
+            {messages.tableCaption}
+          </TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead
+                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                scope="col"
+              >
+                {messages.dispatchColumnLabel}
+              </TableHead>
+              <TableHead
+                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                scope="col"
+              >
+                {messages.workstationColumnLabel}
+              </TableHead>
+              <TableHead
+                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                scope="col"
+              >
+                {messages.outcomeColumnLabel}
+              </TableHead>
+              <TableHead
+                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                scope="col"
+              >
+                {messages.inputItemsColumnLabel}
+              </TableHead>
+              <TableHead
+                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                scope="col"
+              >
+                {messages.outputItemsColumnLabel}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {trace.dispatches.map((dispatch) => (
+              <TableRow key={dispatch.dispatch_id}>
+                <TableHead className="align-top" scope="row">
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info-text",
+                      DASHBOARD_SUPPORTING_CODE_CLASS,
+                    )}
+                  >
+                    {dispatch.dispatch_id}
+                  </span>
                 </TableHead>
-                <TableHead
-                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                  scope="col"
-                >
-                  {messages.workstationColumnLabel}
-                </TableHead>
-                <TableHead
-                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                  scope="col"
-                >
-                  {messages.outcomeColumnLabel}
-                </TableHead>
-                <TableHead
-                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                  scope="col"
-                >
-                  {messages.inputItemsColumnLabel}
-                </TableHead>
-                <TableHead
-                  className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                  scope="col"
-                >
-                  {messages.outputItemsColumnLabel}
-                </TableHead>
+                <TableCell className="align-top">
+                  {dispatch.workstation_name || dispatch.transition_id}
+                </TableCell>
+                <TableCell className="align-top">
+                  {formatTraceOutcome(dispatch.outcome)} ·{" "}
+                  {formatDurationMillis(dispatch.duration_millis)}
+                </TableCell>
+                <TableCell className="align-top">
+                  {dispatch.input_items && dispatch.input_items.length > 0 ? (
+                    <SelectableWorkList
+                      onSelectWorkID={onSelectWorkID}
+                      workItems={dispatch.input_items}
+                    />
+                  ) : (
+                    <span>{messages.noInputItems}</span>
+                  )}
+                </TableCell>
+                <TableCell className="align-top">
+                  {dispatch.output_items && dispatch.output_items.length > 0 ? (
+                    <SelectableWorkList
+                      onSelectWorkID={onSelectWorkID}
+                      workItems={dispatch.output_items}
+                    />
+                  ) : (
+                    <span>{messages.noOutputItems}</span>
+                  )}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {trace.dispatches.map((dispatch) => (
-                <TableRow key={dispatch.dispatch_id}>
-                  <TableHead className="align-top" scope="row">
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info-text",
-                        DASHBOARD_SUPPORTING_CODE_CLASS,
-                      )}
-                    >
-                      {dispatch.dispatch_id}
-                    </span>
-                  </TableHead>
-                  <TableCell className="align-top">
-                    {dispatch.workstation_name || dispatch.transition_id}
-                  </TableCell>
-                  <TableCell className="align-top">
-                    {formatTraceOutcome(dispatch.outcome)} ·{" "}
-                    {formatDurationMillis(dispatch.duration_millis)}
-                  </TableCell>
-                  <TableCell className="align-top">
-                    {dispatch.input_items && dispatch.input_items.length > 0 ? (
-                      <SelectableWorkList
-                        onSelectWorkID={onSelectWorkID}
-                        workItems={dispatch.input_items}
-                      />
-                    ) : (
-                      <span>{messages.noInputItems}</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="align-top">
-                    {dispatch.output_items &&
-                    dispatch.output_items.length > 0 ? (
-                      <SelectableWorkList
-                        onSelectWorkID={onSelectWorkID}
-                        workItems={dispatch.output_items}
-                      />
-                    ) : (
-                      <span>{messages.noOutputItems}</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+            ))}
+          </TableBody>
+        </Table>
       ) : (
         <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
           <h3>{messages.noTraceHistoryTitle}</h3>
