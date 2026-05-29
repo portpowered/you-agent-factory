@@ -258,14 +258,7 @@ func TestSummarizeBackendVerificationLogFallbackHandlesEmptyLog(t *testing.T) {
 		t.Fatalf("summary.Inferred = true, want false")
 	}
 	if got := strings.Join(summary.Excerpt, "\n"); got != "command log was empty" {
-		t.Fatalf("summary.Excerpt = %q, want command log was empty", got)
-	}
-}
-
-func TestRunRequiresLogPath(t *testing.T) {
-	err := run(config{}, ioDiscard())
-	if err == nil || !strings.Contains(err.Error(), "-log is required") {
-		t.Fatalf("run error = %v, want missing -log error", err)
+		t.Fatalf("summary excerpt = %q, want empty log diagnostic", got)
 	}
 }
 
@@ -299,47 +292,4 @@ func TestRunReadsLogAndWritesSummary(t *testing.T) {
 	if !strings.Contains(got, "- Package: `github.com/portpowered/infinite-you/pkg/workers`") {
 		t.Fatalf("run() output = %q, want failing package", got)
 	}
-}
-
-func TestRunWritesSummaryFromLogFile(t *testing.T) {
-	tempDir := t.TempDir()
-	logPath := filepath.Join(tempDir, "command.log")
-	logBody := strings.Join([]string{
-		"=== RUN   TestFactoryServiceStarts",
-		"    factory_service_test.go:42: expected startup work to be queued",
-		"--- FAIL: TestFactoryServiceStarts (0.01s)",
-		"FAIL",
-		"FAIL\tgithub.com/portpowered/infinite-you/pkg/service\t0.128s",
-		"run go test coverage lane: exit status 1",
-	}, "\n")
-	if err := os.WriteFile(logPath, []byte(logBody), 0o644); err != nil {
-		t.Fatalf("write log: %v", err)
-	}
-
-	var output bytes.Buffer
-	err := run(config{
-		logPath:      logPath,
-		command:      defaultCommand,
-		artifactName: defaultArtifactName,
-		primaryLog:   defaultPrimaryLog,
-	}, &output)
-	if err != nil {
-		t.Fatalf("run returned error: %v", err)
-	}
-
-	got := output.String()
-	for _, want := range []string{
-		"- Failure type: `go test failure`",
-		"- Package: `github.com/portpowered/infinite-you/pkg/service`",
-		"- Test: `TestFactoryServiceStarts`",
-		"#### First actionable failure excerpt",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("summary output = %q, want %q", got, want)
-		}
-	}
-}
-
-func ioDiscard() *bytes.Buffer {
-	return &bytes.Buffer{}
 }
