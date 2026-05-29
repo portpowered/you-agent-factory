@@ -38,7 +38,8 @@ quoting rules.
 ## Variable Roots
 
 - `.Inputs` is the token-data root for payloads, tags, relations, retry
-  history, and per-input metadata.
+  history, and per-input metadata. See `you docs relationships` for batch
+  relation semantics and `you docs guards` for parent-aware guard fields.
 - `.Context` is the execution-context root for project, working directory,
   artifact directory, and environment values.
 
@@ -77,3 +78,5 @@ Task:
 - `you docs workstations`
 - `you docs workers`
 - `you docs batch-work`
+- `you docs guards`
+- `you docs relationships`

@@ -9,6 +9,10 @@ Use a `FACTORY_REQUEST_BATCH` when one submission should create multiple work
 items together. A batch can describe independent work, `DEPENDS_ON`
 prerequisites, or parent-child membership for parent-aware fan-in.
 
+`you docs relationships` is the canonical guide for `DEPENDS_ON`,
+`PARENT_CHILD`, and parent-aware guard linkage. `you docs guards` covers
+parent-aware input guards such as `ALL_CHILDREN_COMPLETE`.
+
 This guide covers the public batch input shape used by watched input files,
 `you run --work`, and `PUT /work-requests/{request_id}`.
 
@@ -328,6 +332,7 @@ Before dropping a batch file into `factory/inputs/...`, confirm:
 
 - [Work](../reference/work.md)
 - [Author factories](../reference/authoring-factories.md)
-- [Parent-aware fan-in](../internal/development/parent-aware-fan-in.md)
+- [Relationships](relationships.md)
+- [Guards](guards.md)
 - [Workstations](../reference/workstations.md)
 - [Templates](../reference/templates.md)

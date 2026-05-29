@@ -352,7 +352,8 @@ routes all use the same IO shape:
 
 The config validator rejects workstation IO that points to missing work types
 or missing states. Input guards are workstation-specific; see
-[Workstations](workstations.md) for guard fields and behavior.
+[Guards](guards.md) for guard types and attachment levels and
+[Workstations](workstations.md) for workstation fields that carry them.
 
 ## Resources
 
@@ -498,7 +499,7 @@ At runtime:
 - [Workers](workers.md)
 - [Resources](resources.md)
 - [Batch Inputs](batch-inputs.md)
-- [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
-- [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
+- [Guards](guards.md)
+- [Relationships](relationships.md)
 - [Templates](templates.md)
 - [Author AGENTS.md](authoring-agents-md.md)

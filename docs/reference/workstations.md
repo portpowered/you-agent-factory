@@ -641,9 +641,9 @@ same-name joins on `workstations[].inputs[].guards[]` with
 `type: "SAME_NAME"` and `matchInput`; keep parent fan-in on per-input guards
 such as `ALL_CHILDREN_COMPLETE` or `ANY_CHILD_FAILED`.
 
-See [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
-and [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md) for
-the full guard authoring guides.
+See [Guards](guards.md) for guard types, attachment levels, and guarded
+`LOGICAL_MOVE` loop breakers, and [Relationships](relationships.md) for
+`PARENT_CHILD` batch relations that enable parent-aware input guards.
 
 ## Related
 
@@ -652,5 +652,5 @@ the full guard authoring guides.
 - [Workers reference](workers.md)
 - [Factory JSON and work configuration](work.md)
 - [Templates](templates.md)
-- [Workstation guards and guarded loop breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
-- [Parent-aware fan-in](../internal/development/parent-aware-fan-in.md)
+- [Guards](guards.md)
+- [Relationships](relationships.md)
