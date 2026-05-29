@@ -217,7 +217,8 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	start time.Time,
 ) *interfaces.WorkResult {
 	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
-	if !worktree.ShouldPrepareFactoryWorktreeForCodex(selection.RunnerID, workstationDef.WorkingDirectory, requestContext.Worktree) {
+	executionProvider := modelProviderForExecution(workerDef.ModelProvider, selection)
+	if !worktree.ShouldPrepareFactoryWorktreeForCodex(executionProvider, workstationDef.WorkingDirectory, requestContext.Worktree) {
 		return nil
 	}
 	if we.RuntimeConfig == nil {

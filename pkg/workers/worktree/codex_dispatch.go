@@ -8,10 +8,13 @@ import (
 
 // ShouldPrepareFactoryWorktreeForCodex reports whether a Codex model workstation
 // dispatch should materialize a factory-local git worktree before execution.
-// Preparation runs when a worktree template resolved to a name and the
-// workstation did not also author a workingDirectory template.
+// Preparation runs when execution will use the Codex provider, a worktree template
+// resolved to a name, and the workstation did not also author a workingDirectory
+// template. Callers must pass the resolved execution model provider (not runner ID
+// alone) so legacy modelProvider: claude workstations with default runner selection
+// keep CLI --worktree passthrough.
 func ShouldPrepareFactoryWorktreeForCodex(
-	runnerID string,
+	executionModelProvider string,
 	authoredWorkingDirectory string,
 	resolvedWorktree string,
 ) bool {
@@ -21,5 +24,5 @@ func ShouldPrepareFactoryWorktreeForCodex(
 	if strings.TrimSpace(authoredWorkingDirectory) != "" {
 		return false
 	}
-	return interfaces.NormalizeRunnerID(runnerID) == interfaces.RunnerIDCodex
+	return strings.TrimSpace(executionModelProvider) == string(interfaces.ModelProviderCodex)
 }

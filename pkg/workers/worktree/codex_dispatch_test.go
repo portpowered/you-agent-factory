@@ -11,35 +11,35 @@ func TestShouldPrepareFactoryWorktreeForCodex(t *testing.T) {
 
 	tests := []struct {
 		name                     string
-		runnerID                 string
+		executionModelProvider   string
 		authoredWorkingDirectory string
 		resolvedWorktree         string
 		want                     bool
 	}{
 		{
-			name:             "CodexWithResolvedWorktree",
-			runnerID:         interfaces.RunnerIDCodex,
-			resolvedWorktree: "feature-a",
-			want:             true,
+			name:                   "CodexWithResolvedWorktree",
+			executionModelProvider: string(interfaces.ModelProviderCodex),
+			resolvedWorktree:       "feature-a",
+			want:                   true,
 		},
 		{
 			name:                     "SkipsWhenWorkingDirectoryAuthored",
-			runnerID:                 interfaces.RunnerIDCodex,
+			executionModelProvider:   string(interfaces.ModelProviderCodex),
 			authoredWorkingDirectory: `/repo/{{ .Branch }}`,
 			resolvedWorktree:         "feature-a",
 			want:                     false,
 		},
 		{
-			name:             "SkipsWithoutResolvedWorktree",
-			runnerID:         interfaces.RunnerIDCodex,
-			resolvedWorktree: "",
-			want:             false,
+			name:                   "SkipsWithoutResolvedWorktree",
+			executionModelProvider: string(interfaces.ModelProviderCodex),
+			resolvedWorktree:       "",
+			want:                   false,
 		},
 		{
-			name:             "SkipsForNonCodexRunner",
-			runnerID:         interfaces.RunnerIDCursorCLI,
-			resolvedWorktree: "feature-a",
-			want:             false,
+			name:                   "SkipsForNonCodexExecutionProvider",
+			executionModelProvider: string(interfaces.ModelProviderClaude),
+			resolvedWorktree:       "feature-a",
+			want:                   false,
 		},
 	}
 
@@ -47,7 +47,7 @@ func TestShouldPrepareFactoryWorktreeForCodex(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := ShouldPrepareFactoryWorktreeForCodex(tc.runnerID, tc.authoredWorkingDirectory, tc.resolvedWorktree)
+			got := ShouldPrepareFactoryWorktreeForCodex(tc.executionModelProvider, tc.authoredWorkingDirectory, tc.resolvedWorktree)
 			if got != tc.want {
 				t.Fatalf("ShouldPrepareFactoryWorktreeForCodex() = %v, want %v", got, tc.want)
 			}

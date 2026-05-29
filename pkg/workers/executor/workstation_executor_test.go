@@ -1034,6 +1034,66 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SetsMaterializedWorkingDir
 	}
 }
 
+func TestWorkstationExecutor_LegacyClaudeWorktree_SkipsCodexFactoryPreparation(t *testing.T) {
+	dir := t.TempDir()
+	factoryRoot := filepath.Join(dir, "factory")
+	if err := os.MkdirAll(factoryRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(factory): %v", err)
+	}
+
+	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	we := newTestWorkstationExecutor(staticRuntimeConfig{
+		FactoryPath: factoryRoot,
+		Workers: map[string]*interfaces.WorkerConfig{
+			"claude-worker": {
+				Type:          interfaces.WorkerTypeModel,
+				Body:          "system",
+				ModelProvider: string(interfaces.ModelProviderClaude),
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"process": {
+				Type:           interfaces.WorkstationTypeModel,
+				WorkerTypeName: "claude-worker",
+				PromptTemplate: "Process {{ (index .Inputs 0).WorkID }}",
+				Worktree:       `{{ index (index .Inputs 0).Tags "branch" }}`,
+			},
+		},
+	}, mock)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-claude-worktree",
+		TransitionID:    "t-claude-worktree",
+		WorkerType:      "claude-worker",
+		WorkstationName: "process",
+		InputTokens: InputTokens(interfaces.Token{
+			ID:    "tok-1",
+			Color: interfaces.TokenColor{WorkID: "work-1", Tags: map[string]string{"branch": "my-feature-branch"}},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s (%s)", result.Outcome, interfaces.OutcomeAccepted, result.Error)
+	}
+	if !mock.called {
+		t.Fatal("executor was not called")
+	}
+	if mock.dispatch.WorkingDirectory != "" {
+		t.Fatalf("working directory = %q, want empty for Claude --worktree passthrough", mock.dispatch.WorkingDirectory)
+	}
+	if mock.dispatch.Worktree != "my-feature-branch" {
+		t.Fatalf("worktree = %q, want my-feature-branch", mock.dispatch.Worktree)
+	}
+	if mock.dispatch.RunnerID != interfaces.RunnerIDCodex {
+		t.Fatalf("runner = %q, want default codex runner id", mock.dispatch.RunnerID)
+	}
+	if _, err := os.Stat(filepath.Join(factoryRoot, ".worktrees", "my-feature-branch")); !os.IsNotExist(err) {
+		t.Fatal("expected factory-managed worktree not to be created for legacy Claude provider")
+	}
+}
+
 func TestWorkstationExecutor_CodexWorktreePreparation_SkipsWhenWorkingDirectoryAuthored(t *testing.T) {
 	repoRoot := initGitRepositoryForWorkstationExecutorTest(t)
 	factoryRoot := filepath.Join(repoRoot, "factory")
