@@ -1215,9 +1215,9 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(requestName.getAttribute("aria-invalid")).toBe("true");
   });
 
-  it("submits a request-name-only draft with an empty items payload", async () => {
+  it("completes header-only submission when the default text item is blank", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
+      new Response(JSON.stringify({ traceId: "trace-header-only" }), {
         headers: {
           "Content-Type": "application/json",
         },
@@ -1229,16 +1229,21 @@ describe("SubmitWorkWidget submission behavior", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
+    const card = screen.getByRole("article", { name: "Submit work" });
     const workType = screen.getByRole<HTMLSelectElement>("combobox", {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: "Request name",
     });
+    const defaultTextItem = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Text item 1",
+    });
 
+    expect(defaultTextItem.value).toBe("");
     fireEvent.change(workType, { target: { value: "story" } });
     fireEvent.change(requestName, {
-      target: { value: "Empty payload request" },
+      target: { value: "Header-only request" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
@@ -1247,9 +1252,19 @@ describe("SubmitWorkWidget submission behavior", () => {
     });
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       items: [],
-      name: "Empty payload request",
+      name: "Header-only request",
       workTypeName: "story",
     });
+    expect(
+      await screen.findByText(
+        "Your request was submitted. Trace ID: trace-header-only.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(card).queryByText(
+        "We couldn't submit your request. Try again in a moment.",
+      ),
+    ).toBeNull();
   });
 
   it("preserves authored text-item order in the structured submit request", async () => {

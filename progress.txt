@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- Header-only structured submit-work (`name`, `workTypeName`, `items: []`) is accepted in `pkg/api/submit_work_items.go` via empty-array early returns in `validateSubmitWorkItemsField` and `submitWorkItemsToContent`; API proof lives in `TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork` and `TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission`.
+- Dashboard header-only submit proof belongs in `submit-work-widget.test.tsx` (`completes header-only submission when the default text item is blank`) and the empty-payload segment of `App.follow-up-submit.test.tsx`; assert POST body `items: []`, success trace status copy, and absence of submit error fallback.
 - Hide internal `__system_time` factory graph nodes with `filterFactoryGraphTopologyForCustomerDisplay` in `ui/src/features/factory-graph-editor/lib/factory-graph-customer-display.ts`; reuse `systemTime.ts` constants/predicates and apply the filter at graph render boundaries (layout/projection) before seeding nodes or edges.
 - Apply customer-display filtering in `projectFactoryGraphToReactFlow` only; keep `buildFactoryGraphTopologyFromDefinition` and draft-validation topology unfiltered so canonical factory data and editor mutations stay complete.
 - Register new packaged `you docs` topics in the single `topicDocuments` table in `pkg/cli/docs/docs.go` with canonical name, description, `displayOrder`, path, and optional aliases together so `SupportedTopics()`, index output, and unsupported-topic errors stay aligned.
@@ -67,4 +69,31 @@
   - Patterns discovered: Card tests should assert both `buildCurrentActivityGraphLayoutFromFactory` node IDs and DOM queries (`work-type:__system_time` label, workstation/state select buttons) because the card mounts async layout from `snapshot.factory`.
   - Gotchas encountered: Workstation graph node IDs use authored `name` (`workstation:Nightly Cron`) while `onSelectWorkstation` callbacks use `id || name` (`nightly-cron`); keep both in mind when wiring fixtures.
   - Useful context: Browser verification via dev-browser skill was not run this iteration; the Vitest card test is the automated E2E proof for story 004.
+---
+
+## 2026-05-30T12:00:00Z - submit-work-defaults-001
+- What was implemented: Renamed and strengthened the API regression test to `TestSubmitWork_RejectsHeaderOnlyStructuredSubmitWork`, documenting that POST `/work` with only `name`, `workTypeName`, and `items: []` returns 400 with structured-items validation before backend relaxation.
+- Files changed: `pkg/api/server_submit_work_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: Dashboard blank-text path sends explicit `items: []`; distinguish from omitted `items` (legacy payload/content path) when changing validation in `submit_work_items.go`.
+  - Gotchas encountered: `TestSubmitWork_RejectsEmptyStructuredItems` name did not satisfy PRD wording for header/type-only documentation; prefer explicit test naming tied to dashboard operator flow.
+  - Useful context: Functional smoke `TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission` covers whitespace-only items, not `items: []`; story 002 adds acceptance coverage there.
+---
+
+## 2026-05-30T12:30:00Z - submit-work-defaults-002
+- What was implemented: Relaxed structured submit-work validation and conversion to accept explicit `items: []`, flipped API test to `TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork`, and added `TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission` for runtime acceptance.
+- Files changed: `pkg/api/submit_work_items.go`, `pkg/api/server_submit_work_test.go`, `tests/functional/runtime_api/api_generated_smoke_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: Empty `items: []` is valid header-only structured submit-work; return `[]interfaces.WorkContentPart{}` from `submitWorkItemsToContent` and skip meaningful-item checks in `validateSubmitWorkItemsField` when the unmarshaled array length is zero.
+  - Gotchas encountered: `waitForGeneratedWorkComplete` returns `ListWorkResponse`, not a single `Work`; assert on `workList.Results[0]` like other generated smoke tests.
+  - Useful context: Whitespace-only non-empty `items` arrays still fail with `items must contain at least one non-empty item`; story 003 verifies dashboard widget end-to-end.
+---
+
+## 2026-05-30T02:05:00Z - submit-work-defaults-003
+- What was implemented: Strengthened dashboard header-only submit regressions to assert blank default text item, POST body with `items: []`, 201 success trace status copy, and no submit error fallback in the widget test and app-shell follow-up submit flow.
+- Files changed: `ui/src/features/submit-work/components/submit-work-widget.test.tsx`, `ui/src/App.follow-up-submit.test.tsx`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: `buildStructuredSubmitItems` omits blank text items so the default empty `Text item 1` yields `items: []` without UI changes; mirror the full happy-path assertions from the text submission test (trace success + no `errorFallback` copy).
+  - Gotchas encountered: `App.follow-up-submit.test.tsx` already asserted empty-payload POST bodies but not post-submit success messaging for the header-only segment.
+  - Useful context: Rename widget tests to describe operator flow (`header-only`, `default text item is blank`) so PRD story wording maps directly to test discovery.
 ---

@@ -24,7 +24,7 @@ func submitWorkContent(req factoryapi.SubmitWorkRequest) ([]interfaces.WorkConte
 
 func submitWorkItemsToContent(items []factoryapi.SubmitWorkItem) ([]interfaces.WorkContentPart, error) {
 	if len(items) == 0 {
-		return nil, requestFieldValidationError{message: "items must contain at least one item"}
+		return []interfaces.WorkContentPart{}, nil
 	}
 
 	content := make([]interfaces.WorkContentPart, 0, len(items))
@@ -158,7 +158,7 @@ func validateSubmitWorkItemsField(fields map[string]json.RawMessage, prefix stri
 		return requestFieldValidationError{message: fmt.Sprintf("%sitems must be an array", prefix)}
 	}
 	if len(itemPayloads) == 0 {
-		return requestFieldValidationError{message: fmt.Sprintf("%sitems must contain at least one item", prefix)}
+		return nil
 	}
 
 	hasMeaningfulItem := false

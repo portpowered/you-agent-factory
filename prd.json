@@ -1,29 +1,29 @@
 {
-  "project": "Hide Cron / System-Time Utility Topology from Factory Graph UI",
-  "branchName": "ralph/cron-workstation-ui-hide",
-  "description": "Hide internal __system_time utility workstations, work types, and states from factory graph UI surfaces while preserving canonical factory data, matching existing timeline topology filtering and resource-hiding test patterns.",
+  "project": "infinite-you",
+  "branchName": "ralph/submit-work-defaults",
+  "description": "Allow dashboard submit-work to succeed when operators provide only work type and request name by accepting empty structured items payloads on the API, with tests that document the prior rejection and lock in header-only submission behavior end to end.",
   "context": {
-    "customerAsk": "Various utility workstations and work states appear in the factory graph because they are not hidden. Hide them from the UI and add tests that validate hiding the same way we validate hiding resources—primarily for __system_time (workstation:__system_time:expire, pending, the work type, and related edges).",
-    "problem": "Factory graph observer and editor paths build full topology from the canonical factory definition, so internal cron/system-time entities (__system_time work type, pending state, __system_time:expire utility workstation, and their edges) appear in the UI even though timeline dashboard topology already omits them and customers do not author this plumbing.",
-    "solution": "Introduce a shared customer-display graph topology filter aligned with existing system-time contracts, apply it at graph render boundaries (current-activity layout and factory graph editor React Flow projection), keep canonical factory and timeline snapshot.factory intact, and add direct layout/projection tests modeled on resource-availability hiding."
+    "customerAsk": "When no text is in the submit-work submission payload, the UI submission fails. Add a test proving header/type-only submission is rejected today, then fix it so submission works with an empty text payload.",
+    "problem": "The dashboard Submit work widget sends items: [] when blank text items are omitted, but backend structured submit-work validation rejects empty items arrays with 400 Bad Request even though OpenAPI only requires name and workTypeName.",
+    "solution": "Relax pkg/api structured submit-work validation and conversion to accept items: [] as a valid header-only submission, keep rejecting whitespace-only non-empty item arrays, add explicit API and functional tests for the scenario, and verify the existing dashboard widget empty-payload submission path succeeds."
   },
   "acceptanceCriteria": [
-    "Factory graph UI does not render __system_time work type, __system_time:pending work state, or __system_time:expire utility workstation nodes",
-    "Rendered graphs omit edges to or from filtered system-time nodes; mixed customer workstations show only public routes",
-    "Customer cron workstations and public work types remain visible and interactable",
-    "Canonical factory payloads and timeline snapshot.factory retain __system_time data; existing timeline topology omission tests keep passing",
-    "Automated tests prove filtered rendered graph output using the resource-hiding test pattern",
-    "Typecheck, lint, and tests pass for all touched packages"
+    "POST /work with name, workTypeName, and items: [] returns 201 Created with a trace identifier.",
+    "Header-only submissions reach the factory with the provided name and work type and empty structured content.",
+    "items arrays containing only whitespace text items still return 400 with a clear validation error.",
+    "The dashboard Submit work widget completes header-only submission without showing a server error.",
+    "API and functional tests cover header-only acceptance and prevent regression to empty-items rejection.",
+    "Quality gate: backend and frontend typecheck, lint, and relevant tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "cron-workstation-ui-hide-001",
-      "title": "Shared customer-display graph visibility rules",
-      "description": "As a maintainer, I need one authoritative rule set for internal system-time graph entities so observer and editor surfaces hide the same nodes and edges.",
+      "id": "submit-work-defaults-001",
+      "title": "Prove header-only structured submit-work is rejected today",
+      "description": "As a maintainer, I want an API test that submits only name, workTypeName, and an empty items array so the current rejection is documented before we change validation.",
       "acceptanceCriteria": [
-        "Shared graph visibility module exposes system-time predicates and filterFactoryGraphTopologyForCustomerDisplay aligned with SYSTEM_TIME_* constants in systemTime.ts and pkg/interfaces/factory_config.go",
-        "Filter removes __system_time work-type nodes, __system_time work-state nodes, __system_time:expire workstation nodes, and any edges referencing removed node IDs with no orphans",
-        "Unit tests cover pure system-time fixtures, mixed public/system-time workstation fixtures, and a case where a normal customer workstation remains",
+        "POST /work with body containing non-empty name, configured workTypeName, and items: [] returns 400 Bad Request.",
+        "The error message identifies structured items validation such as items must contain at least one item.",
+        "The test name and assertions describe header/type-only submission without text or file payload content.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -32,14 +32,15 @@
       "notes": ""
     },
     {
-      "id": "cron-workstation-ui-hide-002",
-      "title": "Hide system-time topology from current-activity graph layout",
-      "description": "As a customer viewing the workflow graph, I want internal cron/system-time plumbing hidden so I only see my authored factory workflow.",
+      "id": "submit-work-defaults-002",
+      "title": "Accept header-only structured submit-work on the API",
+      "description": "As a dashboard operator, I want to submit work with only a work type and request name so I can enqueue named requests without typing optional details.",
       "acceptanceCriteria": [
-        "buildCurrentActivityGraphLayoutFromFactory applies the shared customer-display filter before seeding layout nodes and edges",
-        "Rendered layout node IDs exclude work-type:__system_time, work-state:__system_time:pending, and workstation:__system_time:expire for factories with cron/system-time definitions",
-        "Mixed workstations render without edges to internal pending or expire nodes while keeping public routes",
-        "Layout test asserts raw buildFactoryGraphTopologyFromDefinition may contain system-time entities but buildCurrentActivityGraphLayoutFromFactory output must not, following the resource-availability test pattern",
+        "POST /work with name, workTypeName, and items: [] returns 201 Created and a non-empty trace identifier.",
+        "The factory receives the submission with the provided name and workTypeName and with empty structured content.",
+        "items arrays that contain only whitespace text items still return 400 Bad Request with items must contain at least one non-empty item.",
+        "Prior rejection tests for empty items: [] are updated to expect success instead of failure.",
+        "A functional runtime API smoke test submits header-only structured work and observes successful acceptance.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -48,32 +49,17 @@
       "notes": ""
     },
     {
-      "id": "cron-workstation-ui-hide-003",
-      "title": "Hide system-time topology from factory graph editor projection",
-      "description": "As a customer editing the factory graph, I want the editor canvas to match the observer graph and not surface internal utility workstations or states.",
+      "id": "submit-work-defaults-003",
+      "title": "Confirm the dashboard submit-work widget completes header-only submission",
+      "description": "As a dashboard user, I want the Submit work widget to succeed when I fill in work type and request name but leave the default text item blank.",
       "acceptanceCriteria": [
-        "Factory graph editor React Flow projection applies the shared customer-display filter before materializing nodes and edges",
-        "Projection tests confirm system-time node IDs and incident edges are absent while customer workstations remain in the projected graph",
-        "Canonical factory documents and draft validation paths are unchanged; filtering applies only to display projection",
+        "With work type and request name filled and the default text item left empty, clicking Submit work issues one POST whose JSON body includes items: [], the chosen name, and workTypeName.",
+        "When the API responds 201, the widget shows the existing success status message with the returned trace identifier.",
+        "No inline server error is shown for the header-only happy path.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cron-workstation-ui-hide-004",
-      "title": "End-to-end graph card verification for cron factories",
-      "description": "As a customer with cron-enabled factories, I want the dashboard graph card to stay readable and free of __system_time clutter in the live UI.",
-      "acceptanceCriteria": [
-        "Current-activity graph card test with a cron/system-time factory fixture asserts no rendered node or control for __system_time:expire or __system_time work type",
-        "Customer cron workstation in the fixture remains discoverable and selectable",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill on a factory graph view that includes cron configuration"
-      ],
-      "priority": 4,
       "passes": true,
       "notes": ""
     }
