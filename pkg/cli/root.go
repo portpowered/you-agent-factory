@@ -35,6 +35,7 @@ var submitWork = submitcli.Submit
 var listWork = workcli.List
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
+var saveFactoryFromFile = factorycli.SaveFromFile
 var listModels = modelscli.List
 var inspectModel = modelscli.Inspect
 var invokeModel = modelscli.Invoke
@@ -117,8 +118,45 @@ func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"Use the query subcommand to ask the live API server which factory is currently active " +
 			"instead of inferring runtime state from local factory files.",
 	}
-	factoryCmd.AddCommand(newFactoryQueryCommand(diagnostics), newFactoryListCommand(diagnostics))
+	factoryCmd.AddCommand(
+		newFactoryQueryCommand(diagnostics),
+		newFactoryListCommand(diagnostics),
+		newFactorySaveFromFileCommand(diagnostics),
+	)
 	return factoryCmd
+}
+
+func newFactorySaveFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.SaveFromFileConfig{Dir: defaultcmd.FactoryDir}
+
+	cmd := &cobra.Command{
+		Use:   "save <name>",
+		Short: "Save a new named factory from a config file",
+		Long: "Persist a new named factory from an existing factory.json file.\n\n" +
+			"The command validates the payload, materializes the named factory layout under " +
+			"the selected factory root, and rejects duplicate names. Use --set-current to update " +
+			".current-factory after a successful save.",
+		Example: "  # Save a new named factory from a config file.\n" +
+			"  " + cliBinaryName + " factory save staging --from ./factory.json\n\n" +
+			"  # Save and select the new factory as current.\n" +
+			"  " + cliBinaryName + " factory save staging --from ./factory.json --set-current\n\n" +
+			"  # Emit structured confirmation for scripting.\n" +
+			"  " + cliBinaryName + " factory save staging --from ./factory.json --json",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Name = args[0]
+			cfg.Output = cmd.OutOrStdout()
+			return saveFactoryFromFile(cfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfg.From, "from", "", "path to an existing factory.json payload (required)")
+	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
+	cmd.Flags().BoolVar(&cfg.SetCurrent, "set-current", false, "update .current-factory to the saved name")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit structured confirmation JSON")
+	_ = cmd.MarkFlagRequired("from")
+	return cmd
 }
 
 func newFactoryListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
