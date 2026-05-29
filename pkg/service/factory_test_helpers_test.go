@@ -98,6 +98,18 @@ func assertPortableServiceBundledFile(t *testing.T, path, want string) {
 	}
 }
 
+func assertPortableServiceBundledFileMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat(%s): %v", path, err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("file %s mode = %v, want %v", path, got, want)
+	}
+}
+
 func assertCurrentFactoryPointer(t *testing.T, rootDir, want, contextLabel string) {
 	t.Helper()
 

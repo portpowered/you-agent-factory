@@ -186,6 +186,14 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 						"inline":   servicePortableBundledScriptBody,
 					},
 				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/default/starter.md",
+					"content": map[string]any{
+						"encoding": string(factoryapi.Utf8),
+						"inline":   "starter work\n",
+					},
+				},
 			},
 		},
 	})
@@ -1055,18 +1063,21 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 	if created.SupportingFiles == nil || created.SupportingFiles.BundledFiles == nil {
 		t.Fatalf("created factory supportingFiles = %#v, want bundled files", created.SupportingFiles)
 	}
-	if len(*created.SupportingFiles.BundledFiles) != 3 {
-		t.Fatalf("created factory bundled files = %#v, want 3 entries", created.SupportingFiles.BundledFiles)
+	if len(*created.SupportingFiles.BundledFiles) != 4 {
+		t.Fatalf("created factory bundled files = %#v, want 4 entries", created.SupportingFiles.BundledFiles)
 	}
 	bundledFiles := *created.SupportingFiles.BundledFiles
 	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
 	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.BundledFileTypeINPUT, "factory/inputs/task/default/starter.md")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[3], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1")
 
 	importedDir := filepath.Join(rootDir, "beta")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "docs", "README.md"), "# Portable factory\n")
+	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "inputs", "task", "default", "starter.md"), "starter work\n")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "scripts", "execute-story.ps1"), servicePortableBundledScriptBody)
+	assertPortableServiceBundledFileMode(t, filepath.Join(importedDir, "scripts", "execute-story.ps1"), 0o755)
 
 	factoryJSON, err := os.ReadFile(filepath.Join(importedDir, interfaces.FactoryConfigFile))
 	if err != nil {
@@ -1081,8 +1092,8 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 		t.Fatalf("expected supportingFiles object, got %#v", payload["supportingFiles"])
 	}
 	persistedBundledFiles, ok := supportingFiles["bundledFiles"].([]any)
-	if !ok || len(persistedBundledFiles) != 3 {
-		t.Fatalf("expected three bundled files, got %#v", supportingFiles["bundledFiles"])
+	if !ok || len(persistedBundledFiles) != 4 {
+		t.Fatalf("expected four bundled files, got %#v", supportingFiles["bundledFiles"])
 	}
 	for _, entry := range persistedBundledFiles {
 		bundledFile, ok := entry.(map[string]any)
@@ -1102,7 +1113,7 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 			if got := content["encoding"]; got != "utf-8" {
 				t.Fatalf("expected persisted root helper encoding to stay canonical, got %#v", content)
 			}
-		case "factory/docs/README.md", "factory/scripts/execute-story.ps1":
+		case "factory/docs/README.md", "factory/inputs/task/default/starter.md", "factory/scripts/execute-story.ps1":
 			if _, ok := content["inline"]; ok {
 				t.Fatalf("expected persisted bundled file inline content to be omitted, got %#v", content)
 			}
