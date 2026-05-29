@@ -34,6 +34,11 @@ var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
 var listWork = workcli.List
 var queryFactory = factorycli.Query
+var listFactories = factorycli.List
+var saveFactoryFromFile = factorycli.SaveFromFile
+var saveFactoryCurrent = factorycli.SaveCurrent
+var updateFactoryFromFile = factorycli.UpdateFromFile
+var deleteFactory = factorycli.Delete
 var listModels = modelscli.List
 var inspectModel = modelscli.Inspect
 var invokeModel = modelscli.Invoke
@@ -111,13 +116,165 @@ func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
 func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	factoryCmd := &cobra.Command{
 		Use:   "factory",
-		Short: "Inspect factory runtime state",
-		Long: "Inspect factory runtime state from a running you-agent-factory service.\n\n" +
-			"Use the query subcommand to ask the live API server which factory is currently active " +
-			"instead of inferring runtime state from local factory files.",
+		Short: "Inspect and manage factory definitions",
+		Long: "Inspect live factory runtime state and manage persisted named factories.\n\n" +
+			"Subcommands:\n" +
+			"  query   show the current active factory from a running service\n" +
+			"  list    list persisted named factories under a factory root\n" +
+			"  save    create a named factory from factory.json or persist the live current factory\n" +
+			"  update  replace an existing named factory from factory.json\n" +
+			"  delete  remove an unused named factory from disk\n\n" +
+			"Use query against a running service. Use list, save, update, and delete for on-disk " +
+			"named factories under --dir (default factory/). Live save with no name argument uses " +
+			"--port and --session like query.",
+		Example: "  # Show the active factory from the running service.\n" +
+			"  " + cliBinaryName + " factory query\n\n" +
+			"  # List persisted named factories and which one is current.\n" +
+			"  " + cliBinaryName + " factory list\n\n" +
+			"  # Save a new named factory from a config file.\n" +
+			"  " + cliBinaryName + " factory save staging --from ./factory.json --set-current\n\n" +
+			"  # Replace an existing named factory definition.\n" +
+			"  " + cliBinaryName + " factory update staging --from ./factory.json\n\n" +
+			"  # Delete an unused named factory.\n" +
+			"  " + cliBinaryName + " factory delete staging\n\n" +
+			"  # Persist the live current factory back to durable storage.\n" +
+			"  " + cliBinaryName + " factory save",
 	}
-	factoryCmd.AddCommand(newFactoryQueryCommand(diagnostics))
+	factoryCmd.AddCommand(
+		newFactoryQueryCommand(diagnostics),
+		newFactoryListCommand(diagnostics),
+		newFactorySaveCommand(diagnostics),
+		newFactoryUpdateFromFileCommand(diagnostics),
+		newFactoryDeleteCommand(diagnostics),
+	)
 	return factoryCmd
+}
+
+func newFactoryDeleteCommand(_ *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.DeleteConfig{Dir: defaultcmd.FactoryDir}
+
+	cmd := &cobra.Command{
+		Use:   "delete <name>",
+		Short: "Delete a persisted named factory",
+		Long: "Delete a persisted named factory from disk.\n\n" +
+			"The command removes the named factory directory under the selected factory root " +
+			"after validation. It refuses to delete the factory currently selected by " +
+			".current-factory; switch the current pointer to another factory first.",
+		Example: "  # Delete an unused named factory.\n" +
+			"  " + cliBinaryName + " factory delete staging\n\n" +
+			"  # Delete from a custom factory root.\n" +
+			"  " + cliBinaryName + " factory delete staging --dir my-factory",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Name = args[0]
+			cfg.Output = cmd.OutOrStdout()
+			return deleteFactory(cfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
+	return cmd
+}
+
+func newFactoryUpdateFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.UpdateFromFileConfig{Dir: defaultcmd.FactoryDir}
+
+	cmd := &cobra.Command{
+		Use:   "update <name>",
+		Short: "Update an existing named factory from a config file",
+		Long: "Replace an existing named factory from an existing factory.json file.\n\n" +
+			"The command validates the payload, atomically replaces the named factory layout under " +
+			"the selected factory root, and leaves .current-factory unchanged when it already " +
+			"points at the updated name.",
+		Example: "  # Replace an existing named factory from a config file.\n" +
+			"  " + cliBinaryName + " factory update staging --from ./factory.json\n\n" +
+			"  # Emit structured confirmation for scripting.\n" +
+			"  " + cliBinaryName + " factory update staging --from ./factory.json --json",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Name = args[0]
+			cfg.Output = cmd.OutOrStdout()
+			return updateFactoryFromFile(cfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfg.From, "from", "", "path to an existing factory.json payload (required)")
+	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit structured confirmation JSON")
+	_ = cmd.MarkFlagRequired("from")
+	return cmd
+}
+
+func newFactorySaveCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	fileCfg := factorycli.SaveFromFileConfig{Dir: defaultcmd.FactoryDir}
+	liveCfg := factorycli.SaveCurrentConfig{Port: defaultcmd.FactoryPort}
+
+	cmd := &cobra.Command{
+		Use:   "save [name]",
+		Short: "Save a named factory from disk or persist the live current factory",
+		Long: "Save factory definitions from disk or persist the live current factory from a running service.\n\n" +
+			"With a name argument, the command validates a factory.json payload and materializes a new " +
+			"named factory layout under the selected factory root. Without a name, the command reads the " +
+			"session current factory from the running service and persists it with PUT.",
+		Example: "  # Save a new named factory from a config file.\n" +
+			"  " + cliBinaryName + " factory save staging --from ./factory.json\n\n" +
+			"  # Save and select the new factory as current.\n" +
+			"  " + cliBinaryName + " factory save staging --from ./factory.json --set-current\n\n" +
+			"  # Persist the live current factory from the running service.\n" +
+			"  " + cliBinaryName + " factory save\n\n" +
+			"  # Persist the live current factory for one session as JSON.\n" +
+			"  " + cliBinaryName + " factory save --session session-beta --json",
+		Args:         cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				liveCfg.Output = cmd.OutOrStdout()
+				liveCfg.Diagnostics = diagnostics.writer(cmd)
+				liveCfg.Verbose = diagnostics.verboseEnabled()
+				liveCfg.JSON = fileCfg.JSON // shared --json flag
+				return saveFactoryCurrent(liveCfg)
+			}
+			fileCfg.Name = args[0]
+			fileCfg.Output = cmd.OutOrStdout()
+			return saveFactoryFromFile(fileCfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&fileCfg.From, "from", "", "path to an existing factory.json payload (required with <name>)")
+	cmd.Flags().StringVar(&fileCfg.Dir, "dir", fileCfg.Dir, "factory root directory containing named factories")
+	cmd.Flags().BoolVar(&fileCfg.SetCurrent, "set-current", false, "update .current-factory to the saved name")
+	cmd.Flags().IntVar(&liveCfg.Port, "port", liveCfg.Port, "HTTP server port for live save")
+	cmd.Flags().StringVar(&liveCfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
+	cmd.Flags().BoolVar(&fileCfg.JSON, "json", false, "emit structured confirmation JSON")
+	return cmd
+}
+
+func newFactoryListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.ListConfig{Dir: defaultcmd.FactoryDir}
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List persisted named factories",
+		Long: "List persisted named factories stored under a factory root.\n\n" +
+			"By default the command writes a human-readable table with each factory name, " +
+			"on-disk directory, and whether it is selected by .current-factory. " +
+			"Use --dir to scope discovery to a different factory root and --json for scripting output.",
+		Example: "  # List named factories under the default factory root.\n" +
+			"  " + cliBinaryName + " factory list\n\n" +
+			"  # List factories from a custom root as JSON.\n" +
+			"  " + cliBinaryName + " factory list --dir my-factory --json",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Output = cmd.OutOrStdout()
+			return listFactories(cfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit persisted factories as a JSON array")
+	return cmd
 }
 
 func newFactoryQueryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
