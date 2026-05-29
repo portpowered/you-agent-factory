@@ -15,8 +15,8 @@ import {
   CurrentSelectionWidget,
   useCurrentSelection,
   useCurrentSelectionDetails,
-  useSelectedProviderSessionState,
 } from "../../current-selection/public";
+import { useSelectedProviderSessionState } from "../../current-selection/work-selection/public";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import {
