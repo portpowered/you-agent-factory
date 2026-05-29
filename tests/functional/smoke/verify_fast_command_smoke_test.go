@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testpath"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
@@ -145,6 +146,40 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	}
 }
 
+func TestBackendVerificationCompatibilityAliasesSmoke_RedirectToCanonicalLane(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"test-coverage-go":          "@printf '%s\\n' 'unexpected:test-coverage-go'\n\t@exit 99\n",
+	})
+
+	coverageOutput, err := runMakefileTarget(repoRoot, makefilePath, "test-backend-coverage")
+	if err != nil {
+		t.Fatalf("run test-backend-coverage wrapper: %v\n%s", err, coverageOutput)
+	}
+	if count := strings.Count(coverageOutput, "stub:test-backend-verification"); count != 1 {
+		t.Fatalf("test-backend-coverage should delegate to the canonical backend lane exactly once, found %d:\n%s", count, coverageOutput)
+	}
+	if strings.Contains(coverageOutput, "unexpected:test-coverage-go") {
+		t.Fatalf("test-backend-coverage bypassed the canonical backend lane:\n%s", coverageOutput)
+	}
+
+	functionalOutput, err := runMakefileTarget(repoRoot, makefilePath, "test-backend-functional")
+	if err != nil {
+		t.Fatalf("run test-backend-functional wrapper: %v\n%s", err, functionalOutput)
+	}
+	assertOutputOrder(t, functionalOutput,
+		"Backend functional verification is merged into make test-backend-verification; rerun that target for the required PR lane.",
+		"stub:test-backend-verification",
+	)
+	if count := strings.Count(functionalOutput, "stub:test-backend-verification"); count != 1 {
+		t.Fatalf("test-backend-functional should delegate to the canonical backend lane exactly once, found %d:\n%s", count, functionalOutput)
+	}
+	if strings.Contains(functionalOutput, "unexpected:test-coverage-go") {
+		t.Fatalf("test-backend-functional bypassed the canonical backend lane:\n%s", functionalOutput)
+	}
+}
+
 func TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -220,6 +255,32 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		if count := strings.Count(output, expected); count != 1 {
 			t.Fatalf("expected %q exactly once through the verify compatibility alias, found %d:\n%s", expected, count, output)
 		}
+	}
+}
+
+func TestCIWorkflowBackendVerificationLaneUsesCanonicalOwnedCommands(t *testing.T) {
+	workflowPath := testpath.MustRepoPathFromCaller(t, 0, ".github", "workflows", "ci.yml")
+	body, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", workflowPath, err)
+	}
+
+	workflow := string(body)
+	backendJob := extractWorkflowJobBlock(t, workflow, "  backend-verification:\n")
+	if !strings.Contains(backendJob, "command=\"make test-backend-verification\"") {
+		t.Fatalf("backend-verification job missing canonical fallback command:\n%s", backendJob)
+	}
+	if !strings.Contains(backendJob, "make test-backend-verification 2>&1 | tee \"$artifact_root/command.log\"") {
+		t.Fatalf("backend-verification job missing canonical lane invocation:\n%s", backendJob)
+	}
+	if strings.Contains(backendJob, "go test") {
+		t.Fatalf("backend-verification job should not embed raw go test commands:\n%s", backendJob)
+	}
+	if !strings.Contains(workflow, "echo \"full_run_command=make verify-pr\"") {
+		t.Fatalf("workflow missing canonical full rerun command output")
+	}
+	if !strings.Contains(workflow, "full_rerun=\"make verify-pr\"") {
+		t.Fatalf("workflow missing canonical full rerun fallback")
 	}
 }
 
@@ -337,6 +398,25 @@ func writeMakeEchoScript(t *testing.T, label string) string {
 		t.Fatalf("write echo script: %v", err)
 	}
 	return path
+}
+
+func extractWorkflowJobBlock(t *testing.T, workflow string, header string) string {
+	t.Helper()
+
+	start := strings.Index(workflow, header)
+	if start < 0 {
+		t.Fatalf("workflow job header %q not found", header)
+	}
+
+	lines := strings.Split(workflow[start:], "\n")
+	block := make([]string, 0, len(lines))
+	for index, line := range lines {
+		if index > 0 && strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && strings.HasSuffix(line, ":") {
+			break
+		}
+		block = append(block, line)
+	}
+	return strings.Join(block, "\n")
 }
 
 func assertOutputOrder(t *testing.T, output string, markers ...string) {

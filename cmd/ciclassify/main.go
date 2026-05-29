@@ -17,7 +17,7 @@ const (
 	classificationUIOnly      = "ui-only"
 	classificationBackendOnly = "backend-only"
 	classificationSharedRisk  = "shared-risk"
-	fullRunCommand            = "make verify"
+	fullRunCommand            = "make verify-pr"
 )
 
 var (

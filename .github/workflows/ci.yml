@@ -79,7 +79,7 @@ jobs:
             echo "backend_only=false"
             echo "shared_risk=true"
             echo "full_run_required=true"
-            echo "full_run_command=make verify"
+            echo "full_run_command=make verify-pr"
             echo "areas=shared-risk"
             echo "changed_files_count=0"
             echo "reason=Push events stay on the full shared-risk verification path."
@@ -100,7 +100,7 @@ jobs:
             echo "- Areas touched: \`shared-risk\`"
             echo "- Changed files: \`0\`"
             echo "- Reason: Push events stay on the full shared-risk verification path."
-            echo "- Full required rerun: \`make verify\`"
+            echo "- Full required rerun: \`make verify-pr\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   typecheck:
@@ -491,7 +491,7 @@ jobs:
             command="make test-backend-verification"
           fi
           if [[ -z "$full_rerun" ]]; then
-            full_rerun="make verify"
+            full_rerun="make verify-pr"
           fi
           if [[ "${{ needs.classify-pr-impact.result }}" != "success" ]]; then
             decision="blocked-upstream"
