@@ -182,6 +182,17 @@ function buildReadyEditableWorkerConfigurationState({
     onProviderChange: (value) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, provider: value }));
     },
+    markChangesSaved: () => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              latestDefinitionDraft: currentState.draft,
+              sessionStartDraft: currentState.draft,
+            }
+          : currentState,
+      );
+    },
     onResetToLatest: () => {
       setSessionState((currentState) =>
         currentState

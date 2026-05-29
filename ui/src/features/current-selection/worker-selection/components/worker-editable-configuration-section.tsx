@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: worker editable fields, validation feedback, and shared-impact warnings stay colocated with save gating until story 006 adds save wiring.
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: worker editable fields, validation feedback, save wiring, and shared-impact warnings stay colocated in one section.
 import { type ReactNode, useId, useState } from "react";
 
 import {
@@ -29,16 +29,24 @@ import {
 } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkerConfigurationState,
+  EditableWorkerSaveState,
+  EditableWorkerValidationErrors,
   WorkerDetailCardProps,
 } from "../lib/detail-card-types";
 import type { getWorkerDetailMessages } from "../messages/worker-detail";
 
 export function WorkerEditableConfigurationSection({
   messages,
+  onSaveWorker,
+  saveState,
   state,
+  workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
+  onSaveWorker?: () => void;
+  saveState?: EditableWorkerSaveState;
   state?: WorkerDetailCardProps["editableConfigurationState"];
+  workerName: string;
 }) {
   const [expanded, setExpanded] = useState(true);
   const sectionId = useId();
@@ -93,8 +101,10 @@ export function WorkerEditableConfigurationSection({
           {state?.status === "ready" ? (
             <WorkerEditableConfigurationReadyForm
               messages={messages}
+              onSaveWorker={onSaveWorker}
+              saveState={saveState}
               state={state}
-              workerName={state.initialValues.workerName}
+              workerName={workerName}
             />
           ) : null}
         </div>
@@ -105,17 +115,30 @@ export function WorkerEditableConfigurationSection({
 
 function WorkerEditableConfigurationReadyForm({
   messages,
+  onSaveWorker,
+  saveState,
   state,
   workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
+  onSaveWorker?: () => void;
+  saveState?: EditableWorkerSaveState;
   state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
   workerName: string;
 }) {
-  const { validationErrors } = state;
+  const validationErrors = mergeEditableValidationErrors(
+    state.validationErrors,
+    saveState,
+  );
+  const isSaving = saveState?.status === "submitting";
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
+      <WorkerEditableConfigurationSaveFeedback
+        messages={messages}
+        saveState={saveState}
+        workerName={workerName}
+      />
       <WorkerEditableConfigurationSharedImpactWarning
         messages={messages}
         state={state}
@@ -167,11 +190,22 @@ function WorkerEditableConfigurationReadyForm({
       <DashboardActionRow
         actions={
           <>
-            <DashboardActionButton disabled={!state.canSave} type="button">
-              {messages.editableConfigurationSaveAction}
+            <DashboardActionButton
+              aria-busy={isSaving ? "true" : undefined}
+              disabled={!state.canSave || isSaving}
+              onClick={onSaveWorker}
+              type="button"
+            >
+              {isSaving
+                ? messages.editableConfigurationSaveBusyAction
+                : messages.editableConfigurationSaveAction}
             </DashboardActionButton>
             {state.isDirty ? (
-              <DashboardActionButton onClick={state.onResetToLatest} type="button">
+              <DashboardActionButton
+                disabled={isSaving}
+                onClick={state.onResetToLatest}
+                type="button"
+              >
                 {messages.discardDraftAction}
               </DashboardActionButton>
             ) : null}
@@ -180,6 +214,70 @@ function WorkerEditableConfigurationReadyForm({
       />
     </form>
   );
+}
+
+function WorkerEditableConfigurationSaveFeedback({
+  messages,
+  saveState,
+  workerName,
+}: {
+  messages: ReturnType<typeof getWorkerDetailMessages>;
+  saveState?: EditableWorkerSaveState;
+  workerName: string;
+}) {
+  if (saveState?.status === "success") {
+    return (
+      <p
+        className={cn("m-0 text-af-success-text", DASHBOARD_BODY_TEXT_CLASS)}
+        role="status"
+      >
+        {messages.editableConfigurationSaveSuccess(workerName)}
+      </p>
+    );
+  }
+
+  if (saveState?.status === "warning") {
+    return (
+      <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
+        <p
+          className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
+          role="alert"
+        >
+          {saveState.message}
+        </p>
+        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          {messages.editableConfigurationSaveStaleVersionDetail}
+        </p>
+      </div>
+    );
+  }
+
+  if (saveState?.status === "error") {
+    return (
+      <p
+        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+        role="alert"
+      >
+        {messages.editableConfigurationSaveErrorPrefix} {saveState.errorMessage}
+      </p>
+    );
+  }
+
+  return null;
+}
+
+function mergeEditableValidationErrors(
+  validationErrors: EditableWorkerValidationErrors,
+  saveState?: EditableWorkerSaveState,
+): EditableWorkerValidationErrors {
+  if (saveState?.status !== "error" || !saveState.fieldErrors) {
+    return validationErrors;
+  }
+
+  return {
+    ...validationErrors,
+    ...saveState.fieldErrors,
+  };
 }
 
 function WorkerEditableConfigurationSharedImpactWarning({

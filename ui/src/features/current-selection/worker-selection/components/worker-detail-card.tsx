@@ -19,6 +19,8 @@ import { WorkerEditableConfigurationSection } from "./worker-editable-configurat
 export function WorkerDetailCard({
   editableConfigurationState,
   locale,
+  onSaveWorker,
+  saveState,
   widgetId = "current-selection",
   workerName,
 }: WorkerDetailCardProps) {
@@ -59,7 +61,10 @@ export function WorkerDetailCard({
           />
           <WorkerEditableConfigurationSection
             messages={messages}
+            onSaveWorker={onSaveWorker}
+            saveState={saveState}
             state={editableConfigurationState}
+            workerName={workerName}
           />
         </>
       ) : null}

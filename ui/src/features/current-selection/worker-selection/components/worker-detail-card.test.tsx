@@ -184,6 +184,7 @@ describe("WorkerDetailCard", () => {
       onModelLocalityChange: vi.fn(),
       onModelProviderChange,
       onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
       onResetToLatest: vi.fn(),
       onTypeChange: vi.fn(),
       pendingFactoryDefinition: buildFactoryDocument(),
@@ -269,6 +270,7 @@ describe("WorkerDetailCard", () => {
       onModelLocalityChange: vi.fn(),
       onModelProviderChange: vi.fn(),
       onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
       onResetToLatest: vi.fn(),
       onTypeChange: vi.fn(),
       pendingFactoryDefinition: buildFactoryDocument(),
@@ -294,6 +296,69 @@ describe("WorkerDetailCard", () => {
       screen.getByRole("alert").textContent,
     ).toContain("Saving reviewer updates every workstation");
     expect(screen.getByRole("button", { name: "Save worker" })).toBeTruthy();
+  });
+
+  it("shows scoped save success feedback for the selected worker", () => {
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={{
+          canSave: false,
+          draft: {
+            argsText: "",
+            body: "",
+            command: "",
+            executorProvider: null,
+            model: "gpt-5.5",
+            modelLocality: null,
+            modelProvider: "CURSOR",
+            provider: null,
+            type: "MODEL_WORKER",
+          },
+          hasValidationErrors: false,
+          initialValues: {
+            args: [],
+            body: null,
+            command: null,
+            executorProvider: null,
+            model: "gpt-5.5",
+            modelLocality: null,
+            modelProvider: "CURSOR",
+            provider: null,
+            type: "MODEL_WORKER",
+            workerName: "reviewer",
+            workstationNames: ["Review"],
+          },
+          isDirty: false,
+          markChangesSaved: vi.fn(),
+          onArgsTextChange: vi.fn(),
+          onBodyChange: vi.fn(),
+          onCommandChange: vi.fn(),
+          onExecutorProviderChange: vi.fn(),
+          onModelChange: vi.fn(),
+          onModelLocalityChange: vi.fn(),
+          onModelProviderChange: vi.fn(),
+          onProviderChange: vi.fn(),
+          onResetToLatest: vi.fn(),
+          onTypeChange: vi.fn(),
+          pendingFactoryDefinition: buildFactoryDocument(),
+          status: "ready",
+          validationErrors: {},
+        }}
+        saveState={{ status: "success" }}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByText(/reviewer was updated in the running factory definition/),
+    ).toBeTruthy();
   });
 
   it("disables save and shows field errors while validation is unresolved", () => {
@@ -333,6 +398,7 @@ describe("WorkerDetailCard", () => {
       onModelLocalityChange: vi.fn(),
       onModelProviderChange: vi.fn(),
       onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
       onResetToLatest: vi.fn(),
       onTypeChange: vi.fn(),
       pendingFactoryDefinition: buildFactoryDocument(),

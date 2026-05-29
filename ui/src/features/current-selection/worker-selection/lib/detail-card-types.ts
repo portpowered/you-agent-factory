@@ -12,16 +12,44 @@ import type { EditableWorkerValidationErrors } from "./worker-editable-validatio
 export interface WorkerDetailCardProps {
   editableConfigurationState?: EditableWorkerConfigurationState;
   locale?: string | null;
+  onSaveWorker?: () => void;
+  saveState?: EditableWorkerSaveState;
   widgetId?: string;
   workerName: string;
 }
+
+export type EditableWorkerSaveValidationErrors = Partial<
+  Record<
+    | "args"
+    | "body"
+    | "command"
+    | "executorProvider"
+    | "model"
+    | "modelLocality"
+    | "modelProvider"
+    | "provider"
+    | "type",
+    string
+  >
+>;
+
+export type EditableWorkerSaveState =
+  | { status: "idle" }
+  | { status: "submitting" }
+  | { status: "success" }
+  | { message: string; status: "warning" }
+  | {
+      errorMessage: string;
+      fieldErrors?: EditableWorkerSaveValidationErrors;
+      status: "error";
+    };
 
 export type EditableWorkerConfigurationState =
   | { status: "loading" }
   | { status: "error"; errorMessage: string }
   | { status: "empty"; message?: string }
   | {
-      baseVersion?: CurrentFactoryVersion;
+      baseVersion: CurrentFactoryVersion;
       canSave: boolean;
       draft: EditableWorkerDraft;
       hasValidationErrors: boolean;
@@ -39,6 +67,7 @@ export type EditableWorkerConfigurationState =
         value: EditableWorkerDraft["modelProvider"],
       ) => void;
       onProviderChange: (value: EditableWorkerDraft["provider"]) => void;
+      markChangesSaved: () => void;
       onResetToLatest: () => void;
       onTypeChange: (value: EditableWorkerDraft["type"]) => void;
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;

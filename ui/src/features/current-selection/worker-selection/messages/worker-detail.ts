@@ -49,8 +49,16 @@ const workerDetailMessagesByLocale = {
     editableConfigurationProviderRequired:
       "Select a hosted provider before saving this worker.",
     editableConfigurationSaveAction: "Save worker",
+    editableConfigurationSaveBusyAction: "Saving worker...",
     editableConfigurationSaveDisabledValidationDetail:
       "Save stays disabled until the highlighted worker fields are valid.",
+    editableConfigurationSaveErrorPrefix: "Saving failed.",
+    editableConfigurationSaveFallbackError:
+      "The running factory could not be saved.",
+    editableConfigurationSaveStaleVersionDetail:
+      "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
+    editableConfigurationSaveSuccess: (workerName) =>
+      `Running factory saved. ${workerName} was updated in the running factory definition.`,
     editableConfigurationScriptCommandOrBodyRequired:
       "Enter a command or script body before saving this worker.",
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
@@ -110,8 +118,15 @@ const workerDetailMessagesByLocale = {
     editableConfigurationProviderRequired:
       "このワーカーを保存する前にホスト型プロバイダーを選択してください。",
     editableConfigurationSaveAction: "ワーカーを保存",
+    editableConfigurationSaveBusyAction: "ワーカーを保存しています...",
     editableConfigurationSaveDisabledValidationDetail:
       "ハイライトされたワーカー項目が有効になるまで保存は無効のままです。",
+    editableConfigurationSaveErrorPrefix: "保存に失敗しました。",
+    editableConfigurationSaveFallbackError: "実行中のファクトリを保存できませんでした。",
+    editableConfigurationSaveStaleVersionDetail:
+      "最新の実行中ファクトリ値を再読み込みするか、このドラフトを保持したままエディター更新後に再試行してください。",
+    editableConfigurationSaveSuccess: (workerName) =>
+      `実行中のファクトリを保存しました。${workerName} が実行中のファクトリ定義で更新されました。`,
     editableConfigurationScriptCommandOrBodyRequired:
       "このワーカーを保存する前にコマンドまたはスクリプト本文を入力してください。",
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
@@ -171,8 +186,15 @@ const workerDetailMessagesByLocale = {
     editableConfigurationProviderRequired:
       "이 워커를 저장하기 전에 호스티드 제공자를 선택하세요.",
     editableConfigurationSaveAction: "워커 저장",
+    editableConfigurationSaveBusyAction: "워커 저장 중...",
     editableConfigurationSaveDisabledValidationDetail:
       "강조된 워커 필드가 유효해질 때까지 저장은 비활성화됩니다.",
+    editableConfigurationSaveErrorPrefix: "저장에 실패했습니다.",
+    editableConfigurationSaveFallbackError: "실행 중인 팩토리를 저장할 수 없습니다.",
+    editableConfigurationSaveStaleVersionDetail:
+      "최신 실행 중 팩토리 값을 다시 불러오거나 이 초안을 유지한 채 편집기가 새로고침된 후 다시 시도하세요.",
+    editableConfigurationSaveSuccess: (workerName) =>
+      `실행 중인 팩토리가 저장되었습니다. ${workerName} 이(가) 실행 중인 팩토리 정의에서 업데이트되었습니다.`,
     editableConfigurationScriptCommandOrBodyRequired:
       "이 워커를 저장하기 전에 명령 또는 스크립트 본문을 입력하세요.",
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
@@ -222,8 +244,15 @@ const workerDetailMessagesByLocale = {
     editableConfigurationModelRequired: "保存此 worker 前请输入模型。",
     editableConfigurationProviderRequired: "保存此 worker 前请选择托管 provider。",
     editableConfigurationSaveAction: "保存 worker",
+    editableConfigurationSaveBusyAction: "正在保存 worker...",
     editableConfigurationSaveDisabledValidationDetail:
       "高亮字段有效前，保存将保持禁用。",
+    editableConfigurationSaveErrorPrefix: "保存失败。",
+    editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
+    editableConfigurationSaveStaleVersionDetail:
+      "请重新加载最新的运行中工厂值，或保留此草稿并在编辑器刷新后重试。",
+    editableConfigurationSaveSuccess: (workerName) =>
+      `运行中的工厂已保存。${workerName} 已在运行中的工厂定义中更新。`,
     editableConfigurationScriptCommandOrBodyRequired:
       "保存此 worker 前请输入命令或脚本正文。",
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>

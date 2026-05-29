@@ -1,0 +1,340 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+
+import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import * as currentFactoryFeature from "../../../current-factory-definition/public";
+import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
+import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
+import { useSaveEditableWorkerConfiguration } from "./use-save-editable-worker-configuration";
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused save-hook regressions share one mocked mutation seam.
+describe("useSaveEditableWorkerConfiguration", () => {
+  beforeEach(() => {
+    useDashboardSessionStore.setState({ selectedSessionID: "~default" });
+    vi.restoreAllMocks();
+  });
+
+  it("uses localized fallback copy for unknown save errors", async () => {
+    const mutateAsync = vi.fn().mockRejectedValue("network unavailable");
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkerConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState(),
+          locale: "zh-CN",
+          scopeKey: "reviewer",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({
+        errorMessage: "无法保存运行中的工厂。",
+        status: "error",
+      });
+    });
+    expect(mutateAsync).toHaveBeenCalledWith({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      factoryDefinition: {
+        name: "Current Factory",
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CODEX",
+            name: "reviewer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [],
+      },
+    });
+  });
+
+  it("saves worker edits through the selected session current-factory route", async () => {
+    useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
+    const markChangesSaved = vi.fn();
+    const mutateAsync = vi.fn().mockResolvedValue({
+      name: "Current Factory",
+      version: {
+        logical: "8",
+        physical: "2026-05-23T15:52:00.001Z",
+      },
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CODEX",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [],
+    });
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkerConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            isDirty: false,
+            markChangesSaved,
+          }),
+          scopeKey: "reviewer",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "success" });
+    });
+    expect(markChangesSaved).toHaveBeenCalledTimes(1);
+    expect(mutateAsync).toHaveBeenCalledWith({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      factoryDefinition: {
+        name: "Current Factory",
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CODEX",
+            name: "reviewer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [],
+      },
+    });
+  });
+
+  it("ignores repeated save requests while the current save is still in flight", async () => {
+    const deferredSave = createDeferredPromise<unknown>();
+    const mutateAsync = vi.fn().mockReturnValue(deferredSave.promise);
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkerConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState(),
+          scopeKey: "reviewer",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    let firstSave: Promise<void> | undefined;
+    await act(async () => {
+      firstSave = result.current.save();
+      await Promise.resolve();
+      await result.current.save();
+    });
+
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(result.current.saveState).toEqual({ status: "submitting" });
+
+    deferredSave.resolve({
+      name: "Current Factory",
+      version: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      workers: [],
+      workstations: [],
+    });
+
+    await act(async () => {
+      await firstSave;
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).not.toEqual({ status: "submitting" });
+    });
+  });
+
+  it("keeps stale-version save failures recoverable as warnings", async () => {
+    const mutateAsync = vi.fn().mockRejectedValue(
+      new CurrentFactoryDefinitionError(
+        "Current factory definition is stale. Refresh the graph before saving.",
+        {
+          code: "STALE_FACTORY_VERSION",
+          status: 409,
+          targets: [{ id: "stale-version", kind: "save" }],
+        },
+      ),
+    );
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkerConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState(),
+          scopeKey: "reviewer",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({
+        message:
+          "Current factory definition is stale. Refresh the graph before saving.",
+        status: "warning",
+      });
+    });
+    expect(result.current.canSave).toBe(true);
+  });
+
+  it("maps targeted save validation failures onto worker field errors", async () => {
+    const mutateAsync = vi.fn().mockRejectedValue(
+      new CurrentFactoryDefinitionError("Model provider is not supported.", {
+        code: "BAD_REQUEST",
+        status: 400,
+        targets: [
+          {
+            field: "factory.workers[0].modelProvider",
+            kind: "field",
+          },
+        ],
+      }),
+    );
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkerConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState(),
+          scopeKey: "reviewer",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({
+        errorMessage: "Model provider is not supported.",
+        fieldErrors: {
+          modelProvider: "Model provider is not supported.",
+        },
+        status: "error",
+      });
+    });
+  });
+});
+
+function createQueryClientWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
+  });
+
+  return function QueryClientWrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}
+
+function buildReadyEditableConfigurationState(overrides?: {
+  isDirty?: boolean;
+  markChangesSaved?: () => void;
+}): EditableWorkerConfigurationState {
+  return {
+    baseVersion: {
+      logical: "7",
+      physical: "2026-05-23T15:52:00Z",
+    },
+    canSave: true,
+    draft: {
+      argsText: "",
+      body: "",
+      command: "",
+      executorProvider: null,
+      model: "gpt-5.5",
+      modelLocality: null,
+      modelProvider: "CODEX",
+      provider: null,
+      type: "MODEL_WORKER",
+    },
+    hasValidationErrors: false,
+    initialValues: {
+      argsText: "",
+      body: "",
+      command: "",
+      executorProvider: null,
+      model: "gpt-5.5",
+      modelLocality: null,
+      modelProvider: "CURSOR",
+      provider: null,
+      type: "MODEL_WORKER",
+      workerName: "reviewer",
+      workstationNames: ["Review"],
+    },
+    isDirty: overrides?.isDirty ?? true,
+    markChangesSaved: overrides?.markChangesSaved ?? vi.fn(),
+    onArgsTextChange: vi.fn(),
+    onBodyChange: vi.fn(),
+    onCommandChange: vi.fn(),
+    onExecutorProviderChange: vi.fn(),
+    onModelChange: vi.fn(),
+    onModelLocalityChange: vi.fn(),
+    onModelProviderChange: vi.fn(),
+    onProviderChange: vi.fn(),
+    onResetToLatest: vi.fn(),
+    onTypeChange: vi.fn(),
+    pendingFactoryDefinition: {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CODEX",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [],
+    },
+    status: "ready",
+    validationErrors: {},
+  };
+}
+
+function createDeferredPromise<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+
+  return { promise, resolve };
+}

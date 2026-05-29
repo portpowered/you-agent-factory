@@ -26,6 +26,7 @@ import {
   CurrentSelectionLocaleProvider,
 } from "../base/public";
 import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
+import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
@@ -58,8 +59,10 @@ function renderCurrentSelectionDetailCard({
   headerAction,
   locale,
   now,
+  onSaveWorker,
   onSelectTraceID,
   saveState,
+  workerSaveState,
   selectedProviderSessionKey,
   selectedTrace,
   selectedWorkRelationshipGraph,
@@ -79,9 +82,13 @@ function renderCurrentSelectionDetailCard({
   headerAction: ReactNode;
   locale?: string;
   now: number;
+  onSaveWorker?: () => void;
   onSelectTraceID?: (traceID: string) => void;
   saveState: ReturnType<
     typeof useSaveEditableWorkstationConfiguration
+  >["saveState"];
+  workerSaveState: ReturnType<
+    typeof useSaveEditableWorkerConfiguration
   >["saveState"];
   selectedProviderSessionKey: string | null;
   selectedTrace?: DashboardTrace;
@@ -164,6 +171,8 @@ function renderCurrentSelectionDetailCard({
       <WorkerDetailCard
         editableConfigurationState={editableWorkerConfigurationState}
         locale={locale}
+        onSaveWorker={onSaveWorker}
+        saveState={workerSaveState}
         widgetId={widgetId}
         workerName={selectedWorkerName}
       />
@@ -238,6 +247,15 @@ export function CurrentSelectionWidget({
     locale,
     scopeKey: workstationSaveScopeKey,
   });
+  const workerSaveScopeKey =
+    selection?.kind === "worker" && selectedWorkerName
+      ? selectedWorkerName
+      : null;
+  const workerSave = useSaveEditableWorkerConfiguration({
+    editableConfigurationState: editableWorkerConfigurationState,
+    locale,
+    scopeKey: workerSaveScopeKey,
+  });
   const providerSessionState = useSelectedProviderSessionState({
     selectedNode,
     selectedNodeProviderSessions,
@@ -267,9 +285,11 @@ export function CurrentSelectionWidget({
     headerAction: workstationHeaderAction,
     locale: locale ?? undefined,
     now,
+    onSaveWorker: () => void workerSave.save(),
     onSelectTraceID,
     saveState: workstationSave.saveState,
     selectedProviderSessionKey,
+    workerSaveState: workerSave.saveState,
     selectedTrace,
     selectedWorkRelationshipGraph,
     selectedWorkExecutionDetails,

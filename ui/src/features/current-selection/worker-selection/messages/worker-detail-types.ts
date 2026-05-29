@@ -23,7 +23,12 @@ export interface WorkerDetailMessages {
   editableConfigurationModelRequired: string;
   editableConfigurationProviderRequired: string;
   editableConfigurationSaveAction: string;
+  editableConfigurationSaveBusyAction: string;
   editableConfigurationSaveDisabledValidationDetail: string;
+  editableConfigurationSaveErrorPrefix: string;
+  editableConfigurationSaveFallbackError: string;
+  editableConfigurationSaveStaleVersionDetail: string;
+  editableConfigurationSaveSuccess: (workerName: string) => string;
   editableConfigurationScriptCommandOrBodyRequired: string;
   editableConfigurationSharedImpactWarning: (
     workerName: string,
