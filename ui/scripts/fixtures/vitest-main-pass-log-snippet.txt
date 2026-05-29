@@ -1,0 +1,13 @@
+
+ RUN  v4.1.3 /workspace/ui
+
+ ✓ src/api/baseUrl.test.ts (2 tests) 3ms
+ ✓ src/components/ui/formatters.test.ts (25 tests) 26ms
+ ✓ src/App.test.tsx (48 tests) 120000ms
+ ✓ src/features/timeline/state/factoryTimelineStore.test.ts (12 tests | 1 failed) 5000ms
+ ✓ src/i18n/formatters.test.ts (6 tests) 116ms
+
+ Test Files  5 passed (5)
+      Tests  93 passed (93)
+   Duration  130.00s (transform 295ms, setup 1.25s, import 380ms, tests 125146ms, environment 4.74s)
+
