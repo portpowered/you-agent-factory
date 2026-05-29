@@ -118,12 +118,30 @@ describe("resolveEditableWorkstationValues", () => {
   it("applies editable draft changes without rewriting unsupported workstation or worker fields", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
+      metadata: {
+        description: "Factory metadata must survive workstation edits.",
+      },
+      resources: [
+        {
+          initial: 2,
+          name: "review-slots",
+        },
+      ],
+      version: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
       workers: [
         {
           body: "existing worker body",
           model: "gpt-5.4",
           name: "reviewer",
           type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [
+        {
+          name: "story",
         },
       ],
       workstations: [
@@ -141,7 +159,6 @@ describe("resolveEditableWorkstationValues", () => {
           workingDirectory: "/repo/review",
         },
       ],
-      workTypes: [],
     };
 
     const updatedFactory = applyEditableWorkstationDraft(
@@ -156,6 +173,19 @@ describe("resolveEditableWorkstationValues", () => {
     );
 
     expect(updatedFactory).toMatchObject({
+      metadata: {
+        description: "Factory metadata must survive workstation edits.",
+      },
+      resources: [
+        {
+          initial: 2,
+          name: "review-slots",
+        },
+      ],
+      version: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
       workers: [
         {
           body: "existing worker body",
@@ -174,7 +204,15 @@ describe("resolveEditableWorkstationValues", () => {
           workingDirectory: "/repo/review",
         },
       ],
+      workTypes: [
+        {
+          name: "story",
+        },
+      ],
     });
+    expect(updatedFactory?.workers).toBe(factory.workers);
+    expect(updatedFactory?.workTypes).toBe(factory.workTypes);
+    expect(updatedFactory?.resources).toBe(factory.resources);
   });
 
   it("returns every current worker as a worker option", () => {

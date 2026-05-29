@@ -264,6 +264,45 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("blocks saving a dirty draft when the selected workstation disappears from the latest factory definition", async () => {
+    const { rerender, result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("Keep this local prompt draft.");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        prompt: "Keep this local prompt draft.",
+      },
+      isDirty: true,
+      status: "ready",
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(buildFactoryDefinitionWithoutReview()),
+    );
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        message:
+          "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
+        status: "empty",
+      });
+    });
+  });
+
   it("surfaces an unavailable worker selection when the selected worker falls out of the current worker list", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(
@@ -638,6 +677,37 @@ function buildMultiWorkstationEditableFactoryDefinition(): CurrentFactoryDocumen
         runner: "gemini",
         worker: "reviewer",
       },
+      {
+        body: "Plan the implementation.",
+        id: "plan",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "planned", workType: "story" }],
+        promptFile: "prompts/plan.md",
+        runner: "codex",
+        worker: "planner",
+      },
+    ],
+    workTypes: [],
+  };
+}
+
+function buildFactoryDefinitionWithoutReview(): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    runner: "codex",
+    version: {
+      logical: "8",
+      physical: "2026-05-23T15:53:00Z",
+    },
+    workers: [
+      {
+        model: "gpt-5.6",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
       {
         body: "Plan the implementation.",
         id: "plan",
