@@ -3,7 +3,7 @@ import type { DashboardWorkstationRequest } from "../../../api/dashboard/types";
 import {
   DETAIL_COPY_CLASS,
   WIDGET_SUBTITLE_CLASS,
-} from "../../../components/dashboard/widget-board";
+} from "../../../components/ui/widget-frame";
 import {
   DashboardActionButton,
   DashboardActionRow,

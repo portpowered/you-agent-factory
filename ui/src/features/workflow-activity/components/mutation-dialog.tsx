@@ -2,7 +2,7 @@ import { type ReactNode, useId } from "react";
 import {
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/dashboard/widget-board";
+} from "../../../components/ui/widget-frame";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,

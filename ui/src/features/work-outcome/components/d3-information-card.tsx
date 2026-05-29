@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DASHBOARD_WIDGET_CLASS } from "../../../components/dashboard/widget-board";
+import { DASHBOARD_WIDGET_CLASS } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
 import { AgentBentoCard } from "../../bento/public";
 import { getDashboardWorkChartSeriesDefinitions } from "../lib/chart-contract";
