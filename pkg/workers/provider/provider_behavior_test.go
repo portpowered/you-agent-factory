@@ -323,6 +323,28 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 			skipPermissions: true,
 			want:            []string{"run", "--model", "openai/gpt-5", "--session", "opencode-session-123", "--dir", "/tmp/project", "--dangerously-skip-permissions", "run the tests"},
 		},
+		{
+			name: "WithOpenCodeAgent",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderOpenCode),
+				OpenCodeAgent: "implementer",
+				UserMessage:   "summarize the workspace",
+			},
+			want: []string{"run", "--agent", "implementer", "summarize the workspace"},
+		},
+		{
+			name: "WithOpenCodeAgentModelSessionWorkingDirectoryAndSkipPermissions",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider:    string(interfaces.ModelProviderOpenCode),
+				Model:            "openai/gpt-5",
+				OpenCodeAgent:    "implementer",
+				SessionID:        "opencode-session-123",
+				WorkingDirectory: "/tmp/project",
+				UserMessage:      "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"run", "--model", "openai/gpt-5", "--agent", "implementer", "--session", "opencode-session-123", "--dir", "/tmp/project", "--dangerously-skip-permissions", "run the tests"},
+		},
 	}
 
 	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
