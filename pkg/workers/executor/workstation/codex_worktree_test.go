@@ -1,4 +1,4 @@
-package executor
+package workstation_test
 
 import (
 	"context"
@@ -9,7 +9,32 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
+
+type dispatchCapturingExecutor struct {
+	dispatch interfaces.WorkstationExecutionRequest
+	called   bool
+	result   interfaces.WorkResult
+}
+
+func (m *dispatchCapturingExecutor) Execute(_ context.Context, d interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+	m.dispatch = d
+	m.called = true
+	return m.result, nil
+}
+
+func newCodexWorktreeTestWorkstationExecutor(
+	runtimeConfig runtimefixtures.RuntimeConfigLookupFixture,
+	inner *dispatchCapturingExecutor,
+) *executor.WorkstationExecutor {
+	return &executor.WorkstationExecutor{
+		RuntimeConfig: runtimeConfig,
+		Executor:      inner,
+		Renderer:      &executor.DefaultPromptRenderer{},
+	}
+}
 
 func TestWorkstationExecutor_CodexWorktreePreparation_SetsMaterializedWorkingDirectory(t *testing.T) {
 	repoRoot := initGitRepositoryForWorkstationExecutorTest(t)
@@ -19,7 +44,7 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SetsMaterializedWorkingDir
 	}
 
 	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
-	we := newTestWorkstationExecutor(staticRuntimeConfig{
+	we := newCodexWorktreeTestWorkstationExecutor(runtimefixtures.RuntimeConfigLookupFixture{
 		FactoryPath: factoryRoot,
 		Workers: map[string]*interfaces.WorkerConfig{
 			"codex-worker": {
@@ -44,7 +69,7 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SetsMaterializedWorkingDir
 		TransitionID:    "t-codex-worktree",
 		WorkerType:      "codex-worker",
 		WorkstationName: "process",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: executor.InputTokens(interfaces.Token{
 			ID: "tok-1",
 			Color: interfaces.TokenColor{
 				WorkID: "work-1",
@@ -82,7 +107,7 @@ func TestWorkstationExecutor_LegacyClaudeWorktree_SkipsCodexFactoryPreparation(t
 	}
 
 	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
-	we := newTestWorkstationExecutor(staticRuntimeConfig{
+	we := newCodexWorktreeTestWorkstationExecutor(runtimefixtures.RuntimeConfigLookupFixture{
 		FactoryPath: factoryRoot,
 		Workers: map[string]*interfaces.WorkerConfig{
 			"claude-worker": {
@@ -106,7 +131,7 @@ func TestWorkstationExecutor_LegacyClaudeWorktree_SkipsCodexFactoryPreparation(t
 		TransitionID:    "t-claude-worktree",
 		WorkerType:      "claude-worker",
 		WorkstationName: "process",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: executor.InputTokens(interfaces.Token{
 			ID:    "tok-1",
 			Color: interfaces.TokenColor{WorkID: "work-1", Tags: map[string]string{"branch": "my-feature-branch"}},
 		}),
@@ -142,7 +167,7 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SkipsWhenWorkingDirectoryA
 	}
 
 	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
-	we := newTestWorkstationExecutor(staticRuntimeConfig{
+	we := newCodexWorktreeTestWorkstationExecutor(runtimefixtures.RuntimeConfigLookupFixture{
 		FactoryPath:     factoryRoot,
 		RuntimeBasePath: repoRoot,
 		Workers: map[string]*interfaces.WorkerConfig{
@@ -169,7 +194,7 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SkipsWhenWorkingDirectoryA
 		TransitionID:    "t-codex-conflict",
 		WorkerType:      "codex-worker",
 		WorkstationName: "process",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: executor.InputTokens(interfaces.Token{
 			ID:    "tok-1",
 			Color: interfaces.TokenColor{WorkID: "work-1", Tags: map[string]string{"branch": "feature-a"}},
 		}),
