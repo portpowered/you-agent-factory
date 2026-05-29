@@ -725,6 +725,106 @@ describe("current activity graph editor handles", () => {
     });
   });
 
+  it("omits continue and reject editor handles for a standard processor without stopWords", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          name: "draft",
+          stopWords: undefined,
+        },
+      ],
+    };
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const workstationNode = nodes.find(
+      (node) => node.id === "workstation:draft",
+    );
+    const handleIds = (workstationNode?.data.handles ?? []).map(
+      (handle) => handle.id,
+    );
+
+    expect(handleIds).toEqual(
+      expect.arrayContaining([
+        "workstation-output-source",
+        "workstation-on-failure-source",
+      ]),
+    );
+    expect(handleIds).not.toContain("workstation-on-continue-source");
+    expect(handleIds).not.toContain("workstation-on-rejection-source");
+  });
+
+  it("includes continue and reject editor handles when stopWords are configured", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          name: "draft",
+          stopWords: ["DONE"],
+        },
+      ],
+    };
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const workstationNode = nodes.find(
+      (node) => node.id === "workstation:draft",
+    );
+    const handleIds = (workstationNode?.data.handles ?? []).map(
+      (handle) => handle.id,
+    );
+
+    expect(handleIds).toContain("workstation-on-continue-source");
+    expect(handleIds).toContain("workstation-on-rejection-source");
+  });
+
   it("wires shared handle click actions back through the editor anchor callback", () => {
     const onConnectionAnchorClick = vi.fn();
 

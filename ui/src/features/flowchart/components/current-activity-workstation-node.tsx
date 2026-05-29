@@ -5,6 +5,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationNode,
 } from "../../../api/dashboard/types";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,
@@ -35,6 +36,7 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   locale?: string;
   muted: boolean;
   now: number;
+  progressOutcomeRouteWorkstation?: WorkstationProgressOutcomeRouteContext;
   selectedWorkID: string | null;
   selectedWorkstation: boolean;
   workstation: DashboardWorkstationNode;

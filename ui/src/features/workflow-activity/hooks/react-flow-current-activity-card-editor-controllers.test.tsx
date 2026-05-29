@@ -63,6 +63,7 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
           name: "gpu",
         },
       ],
+      stopWords: ["DONE"],
       type: "MODEL_WORKSTATION",
       worker: "writer",
     },
@@ -204,6 +205,42 @@ describe("current activity graph editor controllers", () => {
       "Failure connections from review cannot connect to Continue on story:done.",
     );
     expect(editableGraph.actions.connectNodes).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores continue and reject anchor clicks for standard processors without stopWords", () => {
+    const factoryWithoutStopWords: CanonicalFactoryDefinition = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          stopWords: undefined,
+        },
+      ],
+    };
+    const draftState = createDraftState({
+      baseFactoryDefinition: factoryWithoutStopWords,
+      graph: buildFactoryGraphTopologyFromDefinition(factoryWithoutStopWords),
+    });
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphConnectionController({
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+      }),
+    );
+
+    act(() => {
+      result.current.handleConnectionAnchorClick({
+        anchorId: "workstation-on-continue-source",
+        nodeId: "workstation:review",
+      });
+    });
+
+    expect(result.current.pendingConnectionSource).toBeNull();
+    expect(editableGraph.actions.connectNodes).not.toHaveBeenCalled();
   });
 
   it.each([

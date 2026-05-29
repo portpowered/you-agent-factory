@@ -21,8 +21,10 @@ import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-n
 import {
   buildSemanticGraphHandles,
   type CurrentActivityEditorState,
+  resolveWorkstationConnectionAnchorContext,
   supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 
 export const EMPTY_GRAPH_LAYOUT: GraphLayout = {
   edges: [],
@@ -470,6 +472,14 @@ function buildWorkstationNode(
     return null;
   }
 
+  const factory = input.factoryDefinition ?? input.snapshot.factory;
+  const connectionAnchorContext = resolveWorkstationConnectionAnchorContext(
+    factory,
+    positionedNode.nodeId,
+  );
+  const progressOutcomeRouteWorkstation: WorkstationProgressOutcomeRouteContext | undefined =
+    connectionAnchorContext?.workstation;
+
   const executions =
     input.activeExecutionsByWorkstationNodeID[workstation.node_id] ?? [];
   const position = nodePosition(
@@ -488,12 +498,14 @@ function buildWorkstationNode(
       executions,
       factoryGraphNodeId: positionedNode.nodeId,
       handles: buildSemanticGraphHandles({
+        connectionAnchorContext,
         editor: input.editor,
         locale: input.locale,
         nodeId: positionedNode.nodeId,
         nodeKind: "workstation",
       }),
       kind: "workstation",
+      progressOutcomeRouteWorkstation,
       locale: input.locale,
       muted:
         input.activeGraphHighlights.hasActiveFlow &&

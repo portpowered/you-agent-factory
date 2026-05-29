@@ -2,8 +2,11 @@ import type {
   FactoryGraphEdgeKind,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import {
+  type FactoryGraphConnectionAnchorContext,
   type FactoryGraphConnectionEndpoint,
+  factoryGraphConnectionAnchorContext,
   getFactoryGraphConnectionAnchors,
   getLocalizedFactoryGraphConnectionAnchors,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
@@ -60,7 +63,25 @@ export function supportedSemanticHandleIdsForEdge(
 export const supportedEditorHandleIdsForEdge =
   supportedSemanticHandleIdsForEdge;
 
+export function resolveWorkstationConnectionAnchorContext(
+  factory: CanonicalFactoryDefinition | undefined,
+  factoryGraphNodeId: string,
+): FactoryGraphConnectionAnchorContext | undefined {
+  const workstationName = factoryGraphNodeId.startsWith("workstation:")
+    ? factoryGraphNodeId.slice("workstation:".length)
+    : factoryGraphNodeId;
+  const workstation = (factory?.workstations ?? []).find(
+    (candidate) =>
+      candidate.name === workstationName || candidate.id === workstationName,
+  );
+
+  return workstation
+    ? factoryGraphConnectionAnchorContext(workstation)
+    : undefined;
+}
+
 export function buildSemanticGraphHandles(args: {
+  connectionAnchorContext?: FactoryGraphConnectionAnchorContext;
   editor?: CurrentActivityEditorState;
   locale?: string | null;
   nodeId: string;
@@ -74,6 +95,7 @@ export function buildSemanticGraphHandles(args: {
   const anchors = getLocalizedFactoryGraphConnectionAnchors(
     args.nodeKind,
     args.locale,
+    args.nodeKind === "workstation" ? args.connectionAnchorContext : undefined,
   );
   const handles: ActivityGraphNodeHandle[] = anchors.map((anchor) => {
     const selected =

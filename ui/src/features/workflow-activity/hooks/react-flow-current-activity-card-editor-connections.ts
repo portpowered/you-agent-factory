@@ -1,7 +1,11 @@
 import type { Connection } from "@xyflow/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import {
+  createFactoryGraphWorkstationResolver,
+  resolveFactoryGraphConnectionAnchorContext,
+} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import {
   type EditableFactoryGraphViewModel,
   type FactoryGraphConnectionEndpoint,
@@ -24,6 +28,17 @@ export function useFactoryGraphConnectionController({
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
   const [pendingConnectionSource, setPendingConnectionSource] =
     useState<FactoryGraphConnectionEndpoint | null>(null);
+  const workstationResolver = useMemo(
+    () =>
+      createFactoryGraphWorkstationResolver(
+        draftState.pendingFactoryDefinition?.workstations ??
+          draftState.baseDocument?.workstations,
+      ),
+    [
+      draftState.baseDocument?.workstations,
+      draftState.pendingFactoryDefinition?.workstations,
+    ],
+  );
   useEffect(() => {
     if (activeTool !== "connect") {
       setPendingConnectionSource(null);
@@ -80,9 +95,14 @@ export function useFactoryGraphConnectionController({
         return;
       }
 
+      const anchorContext = resolveFactoryGraphConnectionAnchorContext(
+        node,
+        workstationResolver,
+      );
       const anchor = getFactoryGraphConnectionAnchor(
         node.kind,
         endpoint.anchorId,
+        anchorContext,
       );
       if (!anchor) {
         return;
@@ -120,6 +140,7 @@ export function useFactoryGraphConnectionController({
       draftState.graph.nodes,
       locale,
       pendingConnectionSource,
+      workstationResolver,
     ],
   );
   return {
