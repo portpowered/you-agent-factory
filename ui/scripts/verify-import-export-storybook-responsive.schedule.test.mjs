@@ -151,6 +151,22 @@ describe("bento card catalog responsive schedule", () => {
   });
 });
 
+describe("bento card header catalog responsive schedule", () => {
+  test("keeps the header catalog story on mobile and desktop viewports", () => {
+    const headerCatalogStory = storyChecks.find(
+      (storyCheck) => storyCheck.label === "bento card header catalog",
+    );
+
+    expect(headerCatalogStory?.id).toBe(
+      "you-agent-factory-dashboard-bento-cards--header-consistency-verification",
+    );
+    expect(headerCatalogStory?.viewports).toEqual([
+      { height: 844, label: "mobile", width: 390 },
+      { height: 900, label: "desktop", width: 1440 },
+    ]);
+  });
+});
+
 describe("provider-session detail responsive schedule", () => {
   test("keeps the provider-session success story in the default responsive schedule", () => {
     const providerSessionStory = storyChecks.find(

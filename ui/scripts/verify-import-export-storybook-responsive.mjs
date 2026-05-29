@@ -11,6 +11,7 @@ import {
   waitForStoryRender,
 } from "./storybook-responsive-helpers.mjs";
 import { verifyDashboardSessionTabs as verifyDashboardSessionTabsImpl } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
+import { verifyBentoCardCatalogHeader as verifyBentoCardCatalogHeaderImpl } from "./verify-bento-card-catalog-storybook-header.mjs";
 import { verifyBentoCardCatalogResponsive as verifyBentoCardCatalogResponsiveImpl } from "./verify-bento-card-catalog-storybook-responsive.mjs";
 import {
   verifyEditorGraphParity as verifyEditorGraphParityImpl,
@@ -136,6 +137,15 @@ export const storyChecks = [
     assertions: verifyBentoCardCatalogResponsive,
     id: "you-agent-factory-dashboard-bento-cards--responsive-verification",
     label: "bento card catalog",
+  },
+  {
+    assertions: verifyBentoCardCatalogHeader,
+    id: "you-agent-factory-dashboard-bento-cards--header-consistency-verification",
+    label: "bento card header catalog",
+    viewports: [
+      { height: 844, label: "mobile", width: 390 },
+      { height: 900, label: "desktop", width: 1440 },
+    ],
   },
   {
     assertions: verifyObserverGraphParity,
@@ -323,6 +333,14 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
 }
 export async function verifyBentoCardCatalogResponsive(page, _dialog, viewport) {
   return verifyBentoCardCatalogResponsiveImpl({
+    expectNoHorizontalOverflow,
+    expectVisible,
+    page,
+    viewport,
+  });
+}
+export async function verifyBentoCardCatalogHeader(page, _dialog, viewport) {
+  return verifyBentoCardCatalogHeaderImpl({
     expectNoHorizontalOverflow,
     expectVisible,
     page,
