@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
-import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../components/ui/dashboard-typography";
-import { formatWorkItemLabel } from "../../../components/ui/formatters";
-import { cn } from "../../../lib/cn";
+import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../../components/ui/dashboard-typography";
+import { formatWorkItemLabel } from "../../../../components/ui/formatters";
+import { cn } from "../../../../lib/cn";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   REQUEST_HISTORY_TEXT_CLASS,
@@ -11,7 +11,7 @@ import {
   RUNTIME_DETAIL_VALUE_CLASS,
   TRACE_ACTION_LINK_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
-} from "./detail-card-shared";
+} from "../../base/components/detail-card-shared";
 import type { dedupeWorkItems } from "../dispatch-history/selected-work-dispatch-history-helpers";
 
 export function ScriptArgsSection({

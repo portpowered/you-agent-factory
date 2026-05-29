@@ -3,14 +3,14 @@ import { type ReactNode, useId, useState } from "react";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
-import { formatDurationMillis } from "../../../components/ui/formatters";
+} from "../../../../components/ui/dashboard-typography";
+import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { formatDurationMillis } from "../../../../components/ui/formatters";
 import type {
   DashboardInferenceAttempt,
   DashboardScriptRequest,
   DashboardScriptResponse,
-} from "../../../api/dashboard/types";
+} from "../../../../api/dashboard/types";
 import {
   EXECUTION_PILL_CLASS,
   HISTORY_HEADER_CLASS,
@@ -18,15 +18,15 @@ import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
   PROVIDER_SESSION_CARD_CLASS,
-} from "./detail-card-shared";
-import { InferenceAttemptCard } from "./inference-attempt";
-import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
+} from "../../base/components/detail-card-shared";
+import { InferenceAttemptCard } from "../../work-selection/public";
+import type { SelectedWorkRequestHistoryItem } from "../lib/detail-card-types";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
-} from "./current-selection-locale";
-import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
+} from "../../components/current-selection-locale";
+import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import {
   requestModel,
   requestProvider,

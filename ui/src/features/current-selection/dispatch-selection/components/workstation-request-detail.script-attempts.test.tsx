@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { workstationRequest } from "./detail-card-test-helpers";
+import { workstationRequest } from "../../components/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 it("renders pending script-backed workstation-request details without inference placeholders", () => {

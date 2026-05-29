@@ -1,18 +1,18 @@
-import { formatDurationMillis } from "../../../components/ui/formatters";
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
-import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
+import { formatDurationMillis } from "../../../../components/ui/formatters";
+import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../../components/ui/dashboard-typography";
+import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
-} from "./current-selection-locale";
+} from "../../components/current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   REQUEST_HISTORY_TEXT_CLASS,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
-} from "./detail-card-shared";
+} from "../../base/components/detail-card-shared";
 import type { WorkstationRequestDetailView } from "./workstation-request-detail-view";
 
 export function ResponseDetailsSection({

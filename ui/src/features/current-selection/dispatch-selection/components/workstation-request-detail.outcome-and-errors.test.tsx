@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import {
   inferenceAttempt,
   workstationRequest,
-} from "./detail-card-test-helpers";
+} from "../../components/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 describe("WorkstationRequestDetailCard failed outcomes", () => {

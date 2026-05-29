@@ -69,14 +69,15 @@ export const approvedButtonUsageAllowlist = [
     rawButtonFingerprints: ['aria-controls={panelId} aria-expanded={expanded}'],
     rawButtonReason:
       "Selected-work dispatch attempt sections are disclosure shells and stay outside the ordinary action-button lane.",
-    relativeFilePath: "src/features/current-selection/components/selected-work-dispatch-attempt-sections.tsx",
+    relativeFilePath:
+      "src/features/current-selection/dispatch-selection/components/selected-work-dispatch-attempt-sections.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={selectWorkItemAccessibleLabel('],
     rawButtonReason:
       "Shared selected-work dispatch controls use work-selection chip semantics rather than ordinary actions.",
     relativeFilePath:
-      "src/features/current-selection/components/selected-work-dispatch-history-card-shared.tsx",
+      "src/features/current-selection/dispatch-selection/components/selected-work-dispatch-history-card-shared.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={messages.selectWorkItemLabel(workLabel)}'],

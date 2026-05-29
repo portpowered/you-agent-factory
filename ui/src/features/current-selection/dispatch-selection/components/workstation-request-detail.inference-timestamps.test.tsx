@@ -2,12 +2,12 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import {
   formatLocalDateTime,
   formatLocalTimezoneContext,
-} from "../../../components/ui/formatters";
-import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
+} from "../../../../components/ui/formatters";
+import { CurrentSelectionLocaleProvider } from "../../components/current-selection-locale";
 import {
   inferenceAttempt,
   workstationRequest,
-} from "./detail-card-test-helpers";
+} from "../../components/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 it("rerenders request and response timestamps for the active locale", () => {

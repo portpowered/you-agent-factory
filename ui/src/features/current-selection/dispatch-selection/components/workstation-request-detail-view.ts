@@ -1,7 +1,7 @@
-import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
-import { formatWorkItemLabel } from "../../../components/ui/formatters";
-import { normalizeDetailText } from "./detail-card-shared";
-import type { DashboardSelectedRunner } from "../../../api/dashboard/types";
+import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types";
+import { formatWorkItemLabel } from "../../../../components/ui/formatters";
+import { normalizeDetailText } from "../../base/components/detail-card-shared";
+import type { DashboardSelectedRunner } from "../../../../api/dashboard/types";
 
 export interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;

@@ -93,7 +93,7 @@
         "src/features/current-selection/hooks/useCurrentSelection.actions.test.ts",
         "src/features/current-selection/hooks/useCurrentSelection.test.tsx",
         "src/features/current-selection/workstation-selection/messages/workstation-detail.test.ts",
-        "src/features/current-selection/selected-work-dispatch-history-helpers.test.ts",
+        "src/features/current-selection/dispatch-selection/dispatch-history/selected-work-dispatch-history-helpers.test.ts",
         "src/features/current-selection/work-selection/state/executionDetails.test.ts",
         "src/features/current-selection/useCurrentSelection.request-helpers.test.ts",
         "src/features/current-selection/useCurrentSelection.selection-helpers.test.ts",

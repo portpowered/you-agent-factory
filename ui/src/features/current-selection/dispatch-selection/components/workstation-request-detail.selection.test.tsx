@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
-import { workstationRequest } from "./detail-card-test-helpers";
+import { workstationRequest } from "../../components/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 describe("WorkstationRequestDetailCard work-item selection", () => {

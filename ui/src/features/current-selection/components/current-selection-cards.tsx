@@ -5,4 +5,4 @@ export {
   WorkItemDetailCard,
 } from "../work-selection/public";
 export { WorkstationDetailCard } from "../workstation-selection/public";
-export { WorkstationRequestDetailCard } from "./workstation-request-detail";
+export { WorkstationRequestDetailCard } from "../dispatch-selection/public";

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { requestInferenceAttempts } from "../../dispatch-history/selected-work-dispatch-history-helpers";
+import { requestInferenceAttempts } from "../../dispatch-selection/public";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,

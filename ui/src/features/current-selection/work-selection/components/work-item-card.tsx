@@ -7,7 +7,7 @@ import { SelectionDetailLayout } from "../../components/current-selection-detail
 import { useCurrentSelectionDispatchHistoryMessages } from "../../components/current-selection-locale";
 import type { WorkItemDetailCardProps } from "../lib/detail-card-types";
 import { WorkRelationshipsSection } from "./work-item-relationship-graph";
-import { SelectedWorkDispatchHistorySection } from "../../components/selected-work-dispatch-history";
+import { SelectedWorkDispatchHistorySection } from "../../dispatch-selection/public";
 
 export function WorkItemDetailCard({
   activeTraceID,

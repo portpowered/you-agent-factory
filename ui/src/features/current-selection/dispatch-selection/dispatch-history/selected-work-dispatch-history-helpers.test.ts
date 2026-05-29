@@ -5,8 +5,8 @@ import type {
   DashboardRuntimeWorkstationRequest,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
-} from "../../api/dashboard/types";
-import type { SelectedWorkRequestHistoryItem } from "../components/detail-card-types";
+} from "../../../../api/dashboard/types";
+import type { SelectedWorkRequestHistoryItem } from "../lib/detail-card-types";
 import {
   dedupeWorkItems,
   hasResponseDetails,

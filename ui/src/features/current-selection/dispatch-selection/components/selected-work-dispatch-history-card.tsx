@@ -1,12 +1,12 @@
-import { cn } from "../../../lib/cn";
+import { cn } from "../../../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
+} from "../../../../components/ui/dashboard-typography";
+import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import {
   formatDurationMillis,
   formatLocalDateTime,
-} from "../../../components/ui/formatters";
+} from "../../../../components/ui/formatters";
 import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   CURRENT_SELECTION_BADGE_CLASS,
@@ -15,8 +15,8 @@ import {
   InferenceAttemptDetail,
   PROVIDER_SESSION_CARD_CLASS,
   normalizeDetailText,
-} from "./detail-card-shared";
-import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
+} from "../../base/components/detail-card-shared";
+import type { SelectedWorkRequestHistoryItem } from "../lib/detail-card-types";
 import {
   DispatchInferenceAttemptsSection,
   DispatchScriptAttemptsSection,
@@ -27,13 +27,13 @@ import {
   TraceActionGroup,
   WorkItemActionGroup,
 } from "./selected-work-dispatch-history-card-shared";
-import { WorkItemPayloadList } from "./work-item-payload-details";
+import { WorkItemPayloadList } from "../../work-selection/public";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
-} from "./current-selection-locale";
-import type { CurrentSelectionDispatchHistoryMessages } from "../messages/current-selection-dispatch-history";
+} from "../../components/current-selection-locale";
+import type { CurrentSelectionDispatchHistoryMessages } from "../../messages/current-selection-dispatch-history";
 import {
   dedupeWorkItems,
   requestDurationMillis,
@@ -51,7 +51,7 @@ import {
   requestTraceIDs,
   scriptResponseFailureType,
 } from "../dispatch-history/selected-work-dispatch-history-helpers";
-import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
+import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 
 interface DispatchHistoryCardProps {
   activeTraceID?: string | null;
