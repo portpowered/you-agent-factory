@@ -17,11 +17,11 @@ import {
   emptyStatePlaceMessage,
   isTerminalOrFailedPlace,
 } from "../../base/components/detail-card-shared";
-import { SelectionDetailLayout } from "../../components/current-selection-detail-layout";
+import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
-} from "../../components/current-selection-locale";
+} from "../../base/components/current-selection-locale";
 import type {
   StateNodeDetailCardProps,
   StatePositionWorkListItemProps,

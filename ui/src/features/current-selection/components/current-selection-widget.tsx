@@ -22,12 +22,14 @@ import type {
   SelectedWorkRelationshipGraph,
 } from "../work-selection/public";
 import {
+  CurrentSelectionHeaderActionProvider,
+  CurrentSelectionLocaleProvider,
+} from "../base/public";
+import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
-import { CurrentSelectionHeaderActionProvider } from "./current-selection-detail-layout";
-import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 
 export interface CurrentSelectionWidgetProps {
   activeTraceID?: string | null;

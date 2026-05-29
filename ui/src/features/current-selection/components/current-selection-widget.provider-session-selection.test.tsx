@@ -10,7 +10,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
 import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
+import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";

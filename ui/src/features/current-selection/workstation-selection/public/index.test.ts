@@ -20,5 +20,9 @@ describe("workstation-selection/public", () => {
     expect(workstationSelectionPublic.getWorkstationDetailMessages).toBeTypeOf(
       "function",
     );
+    expect(workstationSelectionPublic.ProviderSessionAttempts).toBeTypeOf("function");
+    expect(workstationSelectionPublic.CollapsibleProviderSessionAttempts).toBeTypeOf(
+      "function",
+    );
   });
 });

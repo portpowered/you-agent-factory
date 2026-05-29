@@ -2,12 +2,12 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
 } from "../../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
+import { getWorkstationDetailMessages } from "../../workstation-selection/messages/workstation-detail";
 import type {
   SelectedWorkDispatchHistorySectionProps,
 } from "../lib/detail-card-types";
-import { useCurrentSelectionDispatchHistoryMessages } from "../../components/current-selection-locale";
-import { ProviderSessionAttempts } from "../../components/provider-session-attempts";
+import { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
+import { ProviderSessionAttempts } from "../../workstation-selection/public";
 import { DispatchHistoryCard } from "./selected-work-dispatch-history-card";
 
 export function SelectedWorkDispatchHistorySection({

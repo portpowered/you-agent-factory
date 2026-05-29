@@ -24,14 +24,14 @@ import {
   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
   normalizeDetailText,
-} from "../../components/detail-card-shared";
+} from "../../base/components/detail-card-shared";
 import type { InferenceAttemptCardProps } from "../lib/detail-card-types";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionWorkstationDetailMessages,
-} from "../../components/current-selection-locale";
+} from "../../base/components/current-selection-locale";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,

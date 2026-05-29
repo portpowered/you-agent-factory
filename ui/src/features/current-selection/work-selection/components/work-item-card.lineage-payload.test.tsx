@@ -4,7 +4,7 @@ import { WorkItemDetailCard } from "./work-item-card";
 import {
   getSelectedWorkItemFixture,
   workstationRequest,
-} from "../../components/detail-card-test-helpers";
+} from "../../base/components/detail-card-test-helpers";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 
 function renderWorkItemDetailCard({

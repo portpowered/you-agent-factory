@@ -9,13 +9,13 @@ import type {
   SelectedWorkRelationshipGraph,
   SelectedWorkRelationshipNode,
 } from "../lib/selected-work-relationship-graph";
-import type { useCurrentSelectionDispatchHistoryMessages } from "../../components/current-selection-locale";
+import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import { FocusedRelationshipSummary } from "./work-item-relationship-summary";
 import {
   CURRENT_SELECTION_ALERT_PANEL_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
-} from "../../components/detail-card-shared";
+} from "../../base/components/detail-card-shared";
 
 interface RelatedWorkItem {
   description: string;

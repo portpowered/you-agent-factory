@@ -5,7 +5,7 @@ import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
-} from "../../components/current-selection-locale";
+} from "../../base/components/current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   REQUEST_HISTORY_TEXT_CLASS,

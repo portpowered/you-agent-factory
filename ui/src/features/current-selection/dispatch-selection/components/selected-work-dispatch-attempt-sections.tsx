@@ -25,7 +25,7 @@ import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
-} from "../../components/current-selection-locale";
+} from "../../base/components/current-selection-locale";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import {
   requestModel,

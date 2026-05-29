@@ -32,8 +32,8 @@ import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
-} from "../../components/current-selection-locale";
-import type { CurrentSelectionDispatchHistoryMessages } from "../../messages/current-selection-dispatch-history";
+} from "../../base/components/current-selection-locale";
+import type { CurrentSelectionDispatchHistoryMessages } from "../../base/messages/current-selection-dispatch-history";
 import {
   dedupeWorkItems,
   requestDurationMillis,

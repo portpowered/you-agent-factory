@@ -1,13 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { DashboardWorkstationRequest } from "../../../api/dashboard/types";
+import type { DashboardWorkstationRequest } from "../../../../api/dashboard/types";
 import { ProviderSessionAttempts } from "./provider-session-attempts";
 import {
   type LoadableProviderSessionRef,
   providerSessionSelectionKey,
-} from "../../provider-session-detail/lib/provider-session-ref";
+} from "../../../provider-session-detail/lib/provider-session-ref";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
-import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
+import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
 
 describe("ProviderSessionAttempts", () => {
   it("uses the default workstation-detail helper messages when no localized messages are provided", async () => {

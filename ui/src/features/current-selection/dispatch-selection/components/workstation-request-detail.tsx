@@ -7,7 +7,7 @@ import {
 } from "../../../../components/ui/dashboard-typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
 import { cn } from "../../../../lib/cn";
-import { SelectionDetailLayout } from "../../components/current-selection-detail-layout";
+import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   MetadataSection,
@@ -28,7 +28,7 @@ import {
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
-} from "../../components/current-selection-locale";
+} from "../../base/components/current-selection-locale";
 import { WorkItemPayloadList } from "../../work-selection/public";
 import {
   getRunnerDisplayName,

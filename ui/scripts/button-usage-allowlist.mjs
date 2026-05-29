@@ -63,7 +63,8 @@ export const approvedButtonUsageAllowlist = [
     ],
     rawButtonReason:
       "Provider-session attempt rows use disclosure and selection semantics rather than ordinary action-button styling.",
-    relativeFilePath: "src/features/current-selection/components/provider-session-attempts.tsx",
+    relativeFilePath:
+      "src/features/current-selection/workstation-selection/components/provider-session-attempts.tsx",
   },
   {
     rawButtonFingerprints: ['aria-controls={panelId} aria-expanded={expanded}'],

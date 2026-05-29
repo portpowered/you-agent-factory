@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import {
   inferenceAttempt,
   workstationRequest,
-} from "../../components/detail-card-test-helpers";
+} from "../../base/components/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 it("renders markdown-authored request and response bodies inside inference attempts", () => {

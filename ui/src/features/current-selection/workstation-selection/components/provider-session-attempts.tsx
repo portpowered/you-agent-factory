@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
-import type { DashboardProviderSession } from "../../../api/dashboard/types";
+import type { DashboardProviderSession } from "../../../../api/dashboard/types";
 
-import { getProviderSessionLogTarget } from "../../../components/ui/formatters";
-import { cn } from "../../../lib/cn";
+import { getProviderSessionLogTarget } from "../../../../components/ui/formatters";
+import { cn } from "../../../../lib/cn";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
+} from "../../../../components/ui/dashboard-typography";
+import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import {
   CurrentSelectionSectionHeader,
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
@@ -20,19 +20,19 @@ import {
   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
-} from "./detail-card-shared";
+} from "../../base/components/detail-card-shared";
 import type {
   CollapsibleProviderSessionAttemptsProps,
   ProviderSessionAttemptsProps,
   ProviderSessionLogAccessProps,
-} from "./detail-card-types";
+} from "../../base/components/detail-card-types";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
-} from "../../provider-session-detail/lib/provider-session-ref";
+} from "../../../provider-session-detail/lib/provider-session-ref";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
-import { useCurrentSelectionOperationalEnumMessages } from "./current-selection-locale";
+import { useCurrentSelectionOperationalEnumMessages } from "../../base/components/current-selection-locale";
 
 const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = getWorkstationDetailMessages(undefined);
 

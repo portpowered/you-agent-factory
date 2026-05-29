@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { CurrentSelectionLocaleProvider } from "../../components/current-selection-locale";
+import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
 import {
   inferenceAttempt,
   workstationRequest,
-} from "../../components/detail-card-test-helpers";
+} from "../../base/components/detail-card-test-helpers";
 import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "../../base/components/detail-card-shared";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 

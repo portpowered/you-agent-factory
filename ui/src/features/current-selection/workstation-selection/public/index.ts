@@ -7,6 +7,11 @@ export {
   EditableWorkstationSaveHeaderAction,
 } from "../components/workstation-save-controls";
 
+export {
+  CollapsibleProviderSessionAttempts,
+  ProviderSessionAttempts,
+} from "../components/provider-session-attempts";
+
 export { useEditableWorkstationConfigurationState } from "../hooks/use-editable-workstation-configuration-state";
 export { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
 

@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { workstationRequest } from "../../components/detail-card-test-helpers";
+import { workstationRequest } from "../../base/components/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 describe("WorkstationRequestDetailCard request fallbacks", () => {

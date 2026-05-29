@@ -3,11 +3,11 @@ import {
   formatLocalDateTime,
   formatLocalTimezoneContext,
 } from "../../../../components/ui/formatters";
-import { CurrentSelectionLocaleProvider } from "../../components/current-selection-locale";
+import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
 import {
   inferenceAttempt,
   workstationRequest,
-} from "../../components/detail-card-test-helpers";
+} from "../../base/components/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 it("rerenders request and response timestamps for the active locale", () => {

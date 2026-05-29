@@ -9,7 +9,7 @@ import {
   useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionShellMessages,
-} from "../../components/current-selection-locale";
+} from "../../base/components/current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
@@ -17,7 +17,7 @@ import {
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
   TRACE_ACTION_LINK_CLASS,
-} from "../../components/detail-card-shared";
+} from "../../base/components/detail-card-shared";
 import type {
   ExecutionDetailsSectionProps,
   InferenceAttemptsSectionProps,

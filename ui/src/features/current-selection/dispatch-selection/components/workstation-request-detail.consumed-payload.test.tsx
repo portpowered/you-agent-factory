@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
-import { workstationRequest } from "../../components/detail-card-test-helpers";
+import { workstationRequest } from "../../base/components/detail-card-test-helpers";
 
 describe("WorkstationRequestDetailCard consumed payloads", () => {
   it("renders lineage-resolved consumed payload content inline inside request details", () => {

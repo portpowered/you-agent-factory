@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
-import { NoSelectionDetailCard } from "../../current-selection/components/no-selection-detail-card";
+import { NoSelectionDetailCard } from "../../current-selection/base/public";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { WorkTotalsCard } from "../../work-totals/components/work-totals-card";
 import {

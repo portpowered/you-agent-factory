@@ -3,7 +3,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashbo
 import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
 import { formatTimeOfDay } from "../../../../components/ui/formatters";
 import { describe, expect, it, vi } from "vitest";
-import { CurrentSelectionLocaleProvider } from "../../components/current-selection-locale";
+import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
 import { StateNodeDetailCard } from "./state-node-detail";
 
 function requireValue<T>(value: T | null | undefined, message: string): T {

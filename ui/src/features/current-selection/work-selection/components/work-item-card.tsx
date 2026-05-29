@@ -3,8 +3,8 @@ import {
   formatList,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
-import { SelectionDetailLayout } from "../../components/current-selection-detail-layout";
-import { useCurrentSelectionDispatchHistoryMessages } from "../../components/current-selection-locale";
+import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
+import { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import type { WorkItemDetailCardProps } from "../lib/detail-card-types";
 import { WorkRelationshipsSection } from "./work-item-relationship-graph";
 import { SelectedWorkDispatchHistorySection } from "../../dispatch-selection/public";

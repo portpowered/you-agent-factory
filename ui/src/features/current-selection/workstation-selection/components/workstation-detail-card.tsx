@@ -29,7 +29,7 @@ import type {
   WorkstationActiveWorkListProps,
   WorkstationDetailCardProps,
 } from "../lib/detail-card-types";
-import { CollapsibleProviderSessionAttempts } from "../../components/provider-session-attempts";
+import { CollapsibleProviderSessionAttempts } from "./provider-session-attempts";
 import {
   EditableConfigurationSection,
   WorkstationSummary,

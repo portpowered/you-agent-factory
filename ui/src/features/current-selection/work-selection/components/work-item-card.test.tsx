@@ -11,13 +11,13 @@ import { providerSessionSelectionKey } from "../../../provider-session-detail/li
 import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
 import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { CurrentSelectionLocaleProvider } from "../../components/current-selection-locale";
+import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
 import {
   DETAIL_CARD_NOW,
   getSelectedWorkItemFixture,
   inferenceAttempt,
   workstationRequest,
-} from "../../components/detail-card-test-helpers";
+} from "../../base/components/detail-card-test-helpers";
 import { WorkItemDetailCard } from "./work-item-card";
 
 function getDetailRow(container: HTMLElement, label: string): HTMLElement {

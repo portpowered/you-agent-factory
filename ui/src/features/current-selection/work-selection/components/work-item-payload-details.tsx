@@ -10,8 +10,8 @@ import {
   AuthoredBodyText,
   REQUEST_AUTHORED_TEXT_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
-} from "../../components/detail-card-shared";
-import { useCurrentSelectionDetailMessages } from "../../components/current-selection-locale";
+} from "../../base/components/detail-card-shared";
+import { useCurrentSelectionDetailMessages } from "../../base/components/current-selection-locale";
 
 interface WorkItemPayloadMessages {
   consumedPayloadEmpty: string;

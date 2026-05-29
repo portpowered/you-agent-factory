@@ -9,7 +9,7 @@ import { cn } from "../../../lib/cn";
 import {
   AuthoredBodyText,
   PROVIDER_SESSION_CARD_CLASS,
-} from "../../current-selection/components/detail-card-shared";
+} from "../../current-selection/base/public";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 import { FriendlyExecCommandOutput } from "./exec-command-output";
 import { CodePanel, ExpandableCodeBlock } from "./transcript-code-block";
