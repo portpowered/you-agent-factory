@@ -47,7 +47,7 @@ func assertProviderSessionResponseIdentity(t *testing.T, resp factoryapi.Provide
 	}
 }
 
-func assertProviderSessionParseCounts(t *testing.T, parse factoryapi.CodexSessionParseSummary) {
+func assertProviderSessionParseCounts(t *testing.T, parse factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
 	if parse.LineCount != 4 || parse.EventCount != 3 || parse.MalformedLineCount != 1 || parse.UnknownEventCount != 1 {
@@ -66,7 +66,7 @@ func assertProviderSessionTranscriptSummary(t *testing.T, resp factoryapi.Provid
 	}
 }
 
-func assertProviderSessionParseDiagnostics(t *testing.T, parse factoryapi.CodexSessionParseSummary) {
+func assertProviderSessionParseDiagnostics(t *testing.T, parse factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
 	if len(parse.ParseErrors) != 1 || parse.ParseErrors[0].LineNumber != 4 || len(parse.UnknownEvents) != 1 || parse.UnknownEvents[0].LineNumber != 3 {
@@ -168,7 +168,7 @@ func TestParseCodexSessionDetails_EmitsMixedTranscriptChronologically(t *testing
 	assertMixedCodexSessionTranscript(t, parsed)
 }
 
-func assertCodexSessionSummaryCoreCounts(t *testing.T, summary factoryapi.CodexSessionParseSummary) {
+func assertCodexSessionSummaryCoreCounts(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
 	if summary.LineCount != 10 || summary.EventCount != 9 || summary.MalformedLineCount != 1 || summary.UnknownEventCount != 2 || len(summary.Turns) != 2 || len(summary.FunctionCalls) != 2 {
@@ -176,7 +176,7 @@ func assertCodexSessionSummaryCoreCounts(t *testing.T, summary factoryapi.CodexS
 	}
 }
 
-func assertCodexSessionSummaryFunctionCalls(t *testing.T, summary factoryapi.CodexSessionParseSummary) {
+func assertCodexSessionSummaryFunctionCalls(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
 	firstCall := summary.FunctionCalls[0]
@@ -189,7 +189,7 @@ func assertCodexSessionSummaryFunctionCalls(t *testing.T, summary factoryapi.Cod
 	}
 }
 
-func assertCodexSessionSummaryReasoning(t *testing.T, summary factoryapi.CodexSessionParseSummary) {
+func assertCodexSessionSummaryReasoning(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
 	if len(summary.Reasoning) != 1 || stringValue(summary.Reasoning[0].Summary) != `["checked input"]` || summary.Reasoning[0].Encrypted == nil || !*summary.Reasoning[0].Encrypted || stringValue(summary.Reasoning[0].EncryptedContent) != "sealed" {
@@ -220,7 +220,7 @@ func assertParsedCodexSessionSummaryTranscript(t *testing.T, parsed parsedCodexS
 	}
 }
 
-func assertCodexSessionSummaryTokenUsage(t *testing.T, summary factoryapi.CodexSessionParseSummary) {
+func assertCodexSessionSummaryTokenUsage(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
 	if summary.TokenUsage == nil || intValue(summary.TokenUsage.InputTokens) != 100 || intValue(summary.TokenUsage.CachedInputTokens) != 40 || intValue(summary.TokenUsage.OutputTokens) != 25 || intValue(summary.TokenUsage.ReasoningOutputTokens) != 5 || intValue(summary.TokenUsage.TotalTokens) != 130 {
@@ -228,7 +228,7 @@ func assertCodexSessionSummaryTokenUsage(t *testing.T, summary factoryapi.CodexS
 	}
 }
 
-func assertCodexSessionSummaryUnknowns(t *testing.T, summary factoryapi.CodexSessionParseSummary) {
+func assertCodexSessionSummaryUnknowns(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
 	if len(summary.UnknownEvents) != 2 || summary.UnknownEvents[0].LineNumber != 8 || stringValue(summary.UnknownEvents[0].Type) != "event_msg" || stringValue(summary.UnknownEvents[0].PayloadType) != "new_future_event" || summary.UnknownEvents[1].LineNumber != 9 || stringValue(summary.UnknownEvents[1].Type) != "unexpected_top_level" {
@@ -239,7 +239,7 @@ func assertCodexSessionSummaryUnknowns(t *testing.T, summary factoryapi.CodexSes
 	}
 }
 
-func assertMixedCodexSessionSummary(t *testing.T, summary factoryapi.CodexSessionParseSummary) {
+func assertMixedCodexSessionSummary(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
 	if summary.LineCount != 11 || summary.EventCount != 10 || summary.MalformedLineCount != 1 || summary.UnknownEventCount != 2 {
@@ -264,7 +264,7 @@ func assertMixedCodexSessionTranscriptLength(t *testing.T, parsed parsedCodexSes
 	}
 }
 
-func assertMixedCodexSessionTranscriptEntry(t *testing.T, parsed parsedCodexSessionDetails, index int, wantType factoryapi.CodexSessionTranscriptEntryType, wantLine int, wantText string) {
+func assertMixedCodexSessionTranscriptEntry(t *testing.T, parsed parsedCodexSessionDetails, index int, wantType factoryapi.ProviderSessionTranscriptEntryType, wantLine int, wantText string) {
 	t.Helper()
 
 	entry := parsed.Transcript[index]

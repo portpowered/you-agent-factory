@@ -812,9 +812,9 @@ export interface components {
         ProviderSessionDetailResponse: {
             providerSession: components["schemas"]["LoadableProviderSessionRef"];
             source: components["schemas"]["ProviderSessionSourceMetadata"];
-            parse: components["schemas"]["CodexSessionParseSummary"];
+            parse: components["schemas"]["ProviderSessionParseSummary"];
             /** @description Ordered transcript entries extracted from the provider-session stream. */
-            transcript: components["schemas"]["CodexSessionTranscriptEntry"][];
+            transcript: components["schemas"]["ProviderSessionTranscriptEntry"][];
         };
         FactorySessionTargetRef: {
             /** @enum {string} */
@@ -879,7 +879,7 @@ export interface components {
              */
             modifiedAt?: string;
         };
-        CodexSessionParseSummary: {
+        ProviderSessionParseSummary: {
             /** @description Number of JSON event records parsed from the session stream. */
             eventCount: number;
             /** @description Number of non-empty event-stream lines inspected. */
@@ -889,18 +889,18 @@ export interface components {
             /** @description Number of parsed JSON events without a recognized type field. */
             unknownEventCount: number;
             /** @description Chronological execution turns inferred from turn boundaries and response activity. */
-            turns: components["schemas"]["CodexSessionTurnSummary"][];
+            turns: components["schemas"]["ProviderSessionTurnSummary"][];
             /** @description Function and tool calls observed in chronological order. */
-            functionCalls: components["schemas"]["CodexSessionFunctionCallSummary"][];
+            functionCalls: components["schemas"]["ProviderSessionFunctionCallSummary"][];
             /** @description Reasoning entries or summaries observed in chronological order. */
-            reasoning: components["schemas"]["CodexSessionReasoningSummary"][];
-            tokenUsage?: components["schemas"]["CodexSessionTokenUsage"];
+            reasoning: components["schemas"]["ProviderSessionReasoningSummary"][];
+            tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
             /** @description Line-level parse errors for malformed event-stream records. */
-            parseErrors: components["schemas"]["CodexSessionLineError"][];
+            parseErrors: components["schemas"]["ProviderSessionLineError"][];
             /** @description Compact list of events with unknown or unsupported type fields. */
-            unknownEvents: components["schemas"]["CodexSessionUnknownEvent"][];
+            unknownEvents: components["schemas"]["ProviderSessionUnknownEvent"][];
         };
-        CodexSessionTurnSummary: {
+        ProviderSessionTurnSummary: {
             /** @description One-based chronological execution turn index. */
             index: number;
             /** @description Number of parsed events associated with the turn. */
@@ -917,7 +917,7 @@ export interface components {
              */
             startedAt?: string;
         };
-        CodexSessionFunctionCallSummary: {
+        ProviderSessionFunctionCallSummary: {
             /** @description Chronological order of the function or tool call in the session stream. */
             order: number;
             /** @description One-based execution turn index associated with the call when inferable. */
@@ -935,7 +935,7 @@ export interface components {
             /** @description Result status inferred from the call output or explicit status fields. */
             status?: string;
         };
-        CodexSessionReasoningSummary: {
+        ProviderSessionReasoningSummary: {
             /** @description Chronological order of the reasoning entry in the session stream. */
             order: number;
             /** @description One-based execution turn index associated with the reasoning entry when inferable. */
@@ -951,26 +951,65 @@ export interface components {
             /** @description Compact encrypted reasoning payload when the provider exposes it. */
             encryptedContent?: string;
         };
-        CodexSessionTokenUsage: {
+        ProviderSessionTokenUsage: {
             inputTokens?: number;
             cachedInputTokens?: number;
             outputTokens?: number;
             reasoningOutputTokens?: number;
             totalTokens?: number;
         };
-        CodexSessionLineError: {
+        ProviderSessionLineError: {
             /** @description One-based line number of the malformed event-stream record. */
             lineNumber: number;
             /** @description Client-safe parse error message for the malformed line. */
             message: string;
         };
-        CodexSessionUnknownEvent: {
+        ProviderSessionUnknownEvent: {
             /** @description One-based line number of the unknown event. */
             lineNumber: number;
             /** @description Raw top-level event type when present. */
             type?: string;
             /** @description Raw nested payload type when present. */
             payloadType?: string;
+        };
+        /**
+         * @description Canonical transcript entry type used by the dashboard transcript view.
+         * @enum {string}
+         */
+        ProviderSessionTranscriptEntryType: "user_message" | "assistant_message" | "reasoning" | "tool_call" | "tool_output" | "system_event";
+        ProviderSessionTranscriptEntry: {
+            /** @description Stable chronological order of the transcript entry in the session stream. */
+            order: number;
+            type: components["schemas"]["ProviderSessionTranscriptEntryType"];
+            /** @description One-based inferred turn index when the session parser can associate the entry with a turn. */
+            turnIndex?: number;
+            /**
+             * Format: date-time
+             * @description Provider event timestamp when present in the source session stream.
+             */
+            timestamp?: string;
+            /** @description One-based JSONL line number that produced this transcript entry when applicable. */
+            lineNumber?: number;
+            /** @description Raw provider event or item type that produced this transcript entry. */
+            sourceType?: string;
+            /** @description Provider tool-call identifier when present. */
+            callId?: string;
+            /** @description Tool or function name when present. */
+            name?: string;
+            /** @description Provider or inferred status value when present. */
+            status?: string;
+            /** @description Plaintext transcript body when present. */
+            text?: string;
+            /** @description Compact summary text when the provider emits a separate summary channel. */
+            summary?: string;
+            /** @description Compact tool-call arguments when present. */
+            arguments?: string;
+            /** @description Compact tool output when present. */
+            output?: string;
+            /** @description Whether the entry only exposed encrypted content instead of plaintext. */
+            encrypted?: boolean;
+            /** @description Compact encrypted reasoning payload when the provider exposes it. */
+            encryptedContent?: string;
         };
         StringMap: {
             [key: string]: string;
@@ -2220,45 +2259,6 @@ export interface components {
             config?: components["schemas"]["WorkContent"];
             /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
             defaultContent?: components["schemas"]["WorkContent"];
-        };
-        /**
-         * @description Canonical transcript entry type used by the dashboard transcript view.
-         * @enum {string}
-         */
-        CodexSessionTranscriptEntryType: "user_message" | "assistant_message" | "reasoning" | "tool_call" | "tool_output" | "system_event";
-        CodexSessionTranscriptEntry: {
-            /** @description Stable chronological order of the transcript entry in the session stream. */
-            order: number;
-            type: components["schemas"]["CodexSessionTranscriptEntryType"];
-            /** @description One-based inferred turn index when the session parser can associate the entry with a turn. */
-            turnIndex?: number;
-            /**
-             * Format: date-time
-             * @description Provider event timestamp when present in the source session stream.
-             */
-            timestamp?: string;
-            /** @description One-based JSONL line number that produced this transcript entry when applicable. */
-            lineNumber?: number;
-            /** @description Raw provider event or item type that produced this transcript entry. */
-            sourceType?: string;
-            /** @description Provider tool-call identifier when present. */
-            callId?: string;
-            /** @description Tool or function name when present. */
-            name?: string;
-            /** @description Provider or inferred status value when present. */
-            status?: string;
-            /** @description Plaintext transcript body when present. */
-            text?: string;
-            /** @description Compact summary text when the provider emits a separate summary channel. */
-            summary?: string;
-            /** @description Compact tool-call arguments when present. */
-            arguments?: string;
-            /** @description Compact tool output when present. */
-            output?: string;
-            /** @description Whether the entry only exposed encrypted content instead of plaintext. */
-            encrypted?: boolean;
-            /** @description Compact encrypted reasoning payload when the provider exposes it. */
-            encryptedContent?: string;
         };
         /**
          * @description Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
