@@ -4,6 +4,7 @@ import { type ReactNode, useId, useState } from "react";
 import {
   DashboardActionButton,
   DashboardActionRow,
+  DisclosureButton,
   Select,
 } from "../../../components/ui";
 import {
@@ -57,20 +58,20 @@ export function EditableConfigurationSection({
     >
       <CurrentSelectionSectionHeader
         action={
-          <button
+          <DisclosureButton
             aria-label={
               expanded
                 ? messages.editableConfigurationCollapseActionLabel
                 : messages.editableConfigurationExpandActionLabel
             }
-            aria-controls={contentId}
-            aria-expanded={expanded}
             className={HISTORY_TOGGLE_CLASS}
+            controlsID={contentId}
+            expanded={expanded}
             onClick={() => setExpanded((current) => !current)}
             type="button"
           >
             {expanded ? messages.collapseAction : messages.expandAction}
-          </button>
+          </DisclosureButton>
         }
         headingId={headingId}
         title={messages.editableConfigurationHeading}
@@ -140,7 +141,7 @@ function EditableConfigurationReadyForm({
         overwriteFieldNames={state.overwriteFieldNames ?? []}
       />
       <EditableConfigurationDraftStatus messages={messages} state={state} />
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <EditableConfigurationField
           fieldId="editable-workstation-worker"
           errorMessage={validationErrors.workerName}

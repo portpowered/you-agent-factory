@@ -1,5 +1,5 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: Keeps the PRD-required top-level bento card catalog in one Storybook sidebar group.
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import type {
@@ -10,6 +10,7 @@ import type {
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import "../../../styles.css";
+import { expectNoPageHorizontalOverflow } from "../../../stories/dashboardStorySupport";
 import {
   CurrentSelectionWidget,
   useCurrentSelection,
@@ -382,6 +383,99 @@ const providerSessionErrorFetchMock = {
   },
 };
 
+const editableConfigurationPromptTemplateContract = {
+  availableVariables: [
+    {
+      category: "ROOT",
+      description: "The current work item identifier.",
+      example: "{{ .WorkID }}",
+      path: ".WorkID",
+    },
+    {
+      category: "INPUT",
+      description: "Payload for the first authored input.",
+      example: "{{ (index .Inputs 0).Payload }}",
+      path: ".Inputs[0].Payload",
+    },
+  ],
+  inputCount: 1,
+  unavailableAccessPatterns: [
+    {
+      example: "{{ (index .Inputs 1).Payload }}",
+      path: ".Inputs[1].Payload",
+      reason: "Only input 0 is available for this workstation.",
+    },
+  ],
+};
+
+function buildEditableConfigurationDocument(prompt = "Review the latest story changes before approval.") {
+  return {
+    name: "Current Factory",
+    version: {
+      logical: "7",
+      physical: "2026-05-20T10:00:00Z",
+    },
+    workers: [
+      {
+        model: "gpt-5.5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5.6",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [],
+    workstations: [
+      {
+        body: prompt,
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        worker: "reviewer",
+      },
+    ],
+  };
+}
+
+function promptTemplateValidationResponse(init?: RequestInit) {
+  if (typeof init?.body !== "string") {
+    return {
+      diagnostics: [],
+      valid: true,
+    };
+  }
+
+  const requestBody = JSON.parse(init.body) as { prompt?: unknown };
+  const prompt =
+    typeof requestBody.prompt === "string" ? requestBody.prompt.trim() : "";
+
+  if (prompt.includes(".Inputs[1]")) {
+    return {
+      diagnostics: [
+        {
+          kind: "UNAVAILABLE_VARIABLE",
+          message: "Only input 0 is available.",
+          path: ".Inputs[1]",
+          sourceText: "(index .Inputs 1)",
+          startOffset: 7,
+          endOffset: 24,
+        },
+      ],
+      valid: false,
+    };
+  }
+
+  return {
+    diagnostics: [],
+    valid: true,
+  };
+}
+
 function layoutFor(
   widgetType: string,
   overrides: Partial<AgentBentoLayoutItem> = {},
@@ -518,6 +612,161 @@ function CurrentSelectionCardStory() {
       w: 6,
     }),
   });
+}
+
+function CurrentSelectionEditableConfigurationStory({
+  width,
+}: {
+  width: number;
+}) {
+  const initializedSelectionRef = useRef(false);
+  const currentSelection = useCurrentSelection({
+    sessionID: DEFAULT_FACTORY_SESSION_ID,
+    snapshot: semanticWorkflowDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      semanticWorkflowDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+  const providerSessionState =
+    useSelectedProviderSessionState(currentSelection);
+  const details = useCurrentSelectionDetails({
+    currentSelection,
+    selectedTrace: storyTrace,
+    snapshot: semanticWorkflowDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      semanticWorkflowDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+
+  useEffect(() => {
+    if (initializedSelectionRef.current) {
+      return;
+    }
+
+    initializedSelectionRef.current = true;
+    currentSelection.selectWorkstation("review");
+  }, [currentSelection.selectWorkstation]);
+
+  return (
+    <div style={{ maxWidth: `${width}px`, padding: "1rem", width: "100%" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1rem" }}>
+        <button onClick={() => currentSelection.selectWorkstation("review")} type="button">
+          Select Review workstation
+        </button>
+        <button onClick={() => currentSelection.selectWorkstation("plan")} type="button">
+          Select Plan workstation
+        </button>
+      </div>
+      <AgentBentoLayout
+        cards={[
+          {
+            children: (
+              <CurrentSelectionWidget
+                activeTraceID={storyTrace.trace_id}
+                currentSelection={currentSelection}
+                failedWorkDetailsByWorkID={
+                  semanticWorkflowDashboardSnapshot.runtime.session
+                    .failed_work_details_by_work_id
+                }
+                now={STORY_NOW}
+                onSelectProviderSession={
+                  providerSessionState.setSelectedProviderSession
+                }
+                onSelectTraceID={() => undefined}
+                selectedProviderSessionKey={
+                  providerSessionState.selectedProviderSessionKey
+                }
+                selectedTrace={storyTrace}
+                selectedWorkExecutionDetails={details.selectedWorkExecutionDetails}
+                selectedWorkRelationshipGraph={details.selectedWorkRelationshipGraph}
+                widgetId="current-selection-editable-configuration::story"
+              />
+            ),
+            id: "current-selection-editable-configuration::story",
+            widgetType: DASHBOARD_WIDGET_IDS.currentSelection,
+          },
+        ]}
+        initialWidth={width}
+        layout={[
+          layoutFor(DASHBOARD_WIDGET_IDS.currentSelection, {
+            h: 7,
+            id: "current-selection-editable-configuration::story",
+            w: 6,
+          }),
+        ]}
+        responsiveMode="interactive"
+      />
+    </div>
+  );
+}
+
+async function expectEditableConfigurationStoryFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+  const card = await canvas.findByRole("article", {
+    name: "Current selection",
+  });
+
+  await expect(within(card).getByText("Review")).toBeVisible();
+
+  const expandButton = within(card).getByRole("button", {
+    name: "Expand editable configuration",
+  });
+  await userEvent.click(expandButton);
+
+  const promptField = await within(card).findByRole("textbox", {
+    name: "Prompt",
+  });
+  await expect(promptField).toBeVisible();
+  await expect(
+    within(card).getByText("Available variables"),
+  ).toBeVisible();
+
+  await userEvent.click(promptField, { pointerEventsCheck: 0 });
+  await userEvent.keyboard("{Control>}{KeyA}{/Control}");
+  await userEvent.paste("Use {{ .WorkID }} for browser verification.");
+
+  await waitFor(() => {
+    expect(
+      within(card).getByRole("button", { name: "Save changes" }),
+    ).toBeEnabled();
+  });
+
+  await userEvent.click(
+    canvas.getByRole("button", { name: "Select Plan workstation" }),
+  );
+
+  await waitFor(() => {
+    expect(within(card).getByText("Plan", { selector: "p" })).toBeVisible();
+  });
+  await userEvent.click(
+    within(card).getByRole("button", { name: "Expand editable configuration" }),
+  );
+  await expect(
+    within(card).getByText(
+      "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
+    ),
+  ).toBeVisible();
+  await expect(
+    within(card).getByRole("button", { name: "Save changes" }),
+  ).toBeDisabled();
+  expect(
+    within(card).queryByDisplayValue("Use {{ .WorkID }} for browser verification."),
+  ).toBeNull();
+
+  await userEvent.click(
+    canvas.getByRole("button", { name: "Select Review workstation" }),
+  );
+  await waitFor(() => {
+    expect(within(card).getByText("Review", { selector: "p" })).toBeVisible();
+  });
+  await userEvent.click(
+    within(card).getByRole("button", { name: "Expand editable configuration" }),
+  );
+  await expect(
+    await within(card).findByRole("textbox", { name: "Prompt" }),
+  ).toHaveValue("Review the latest story changes before approval.");
 }
 
 function InlineAddWidgetCardStory() {
@@ -1203,6 +1452,77 @@ export const CurrentSelection = {
     await expect(
       canvas.getByRole("button", { name: "Move Current selection" }),
     ).toBeVisible();
+  },
+};
+
+export const CurrentSelectionEditableConfigurationDesktop = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory",
+          response: {
+            body: buildEditableConfigurationDocument(),
+          },
+        },
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract",
+          response: {
+            body: editableConfigurationPromptTemplateContract,
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
+            body: promptTemplateValidationResponse(init),
+          }),
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => <CurrentSelectionEditableConfigurationStory width={960} />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationStoryFlow(canvasElement);
+  },
+};
+
+export const CurrentSelectionEditableConfigurationNarrow = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory",
+          response: {
+            body: buildEditableConfigurationDocument(),
+          },
+        },
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract",
+          response: {
+            body: editableConfigurationPromptTemplateContract,
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
+            body: promptTemplateValidationResponse(init),
+          }),
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => <CurrentSelectionEditableConfigurationStory width={360} />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationStoryFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
   },
 };
 

@@ -176,21 +176,31 @@ function PromptContractList({
       <ul className="m-0 grid list-none gap-1 p-0">
         {items.map((item) => (
           <li
-            className="grid gap-1 rounded-lg border border-af-border bg-af-surface-raised p-2"
+            className="grid min-w-0 gap-1 rounded-lg border border-af-border bg-af-surface-raised p-2"
             key={item.key}
           >
-            <code className={CURRENT_SELECTION_CODE_SUBTLE_CLASS}>
+            <code
+              className={cn(
+                CURRENT_SELECTION_CODE_SUBTLE_CLASS,
+                "[overflow-wrap:anywhere]",
+              )}
+            >
               {item.label}
             </code>
             <p
               className={cn(
-                "m-0 text-af-text-subtle",
+                "m-0 text-af-text-subtle [overflow-wrap:anywhere]",
                 DASHBOARD_SUPPORTING_TEXT_CLASS,
               )}
             >
               {item.detail}
             </p>
-            <code className={CURRENT_SELECTION_CODE_SUBTLE_CLASS}>
+            <code
+              className={cn(
+                CURRENT_SELECTION_CODE_SUBTLE_CLASS,
+                "[overflow-wrap:anywhere]",
+              )}
+            >
               {item.example}
             </code>
           </li>
@@ -283,7 +293,12 @@ function EditableConfigurationPromptValidationFeedback({
                 {diagnostic.message}
               </p>
               {diagnostic.path ? (
-                <code className={CURRENT_SELECTION_CODE_SUBTLE_CLASS}>
+                <code
+                  className={cn(
+                    CURRENT_SELECTION_CODE_SUBTLE_CLASS,
+                    "[overflow-wrap:anywhere]",
+                  )}
+                >
                   {diagnostic.path}
                 </code>
               ) : null}
