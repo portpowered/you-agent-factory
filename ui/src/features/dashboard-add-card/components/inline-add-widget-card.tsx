@@ -6,8 +6,7 @@ import {
   useState,
 } from "react";
 
-import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
-import { AgentBentoCardHeader } from "../../bento/components/agent-bento";
+import { AgentBentoCard } from "../../bento/public";
 import type { DashboardWidgetPickerAvailability } from "../../bento/lib/dashboard-widget-picker";
 import { getInlineAddWidgetMessages } from "../../bento/messages/inline-add-widget";
 import { getInlineWidgetPickerOptions } from "../../bento/messages/inline-widget-picker";
@@ -76,35 +75,27 @@ export function InlineAddWidgetCard({
   }
 
   return (
-    <DashboardPanelShell
-      aria-label={messages.title}
-      as="article"
-      className="grid h-full min-h-0 min-w-0 place-items-stretch overflow-hidden"
-      shellKind="grid-card"
+    <AgentBentoCard
+      bodyClassName="grid min-h-0 content-end"
+      title={messages.title}
     >
-      <div className="grid h-full min-h-0 grid-rows-[auto_1fr]">
-        <AgentBentoCardHeader title={messages.title} />
-
-        <div className="grid min-h-0 content-end p-3 sm:p-4">
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-            <InlineAddWidgetSelector
-              actionLabel={messages.actionLabel}
-              availabilityByType={availabilityByType}
-              disabled={!hasEnabledWidgets}
-              onChange={handleWidgetSelection}
-              options={options}
-              unavailableLabel={messages.actionUnavailableLabel}
-              value={selectedWidgetType}
-            />
-            <InlineAddWidgetAddButton
-              disabled={!selectedAvailability?.enabled}
-              onClick={handleAddWidget}
-              selectedWidgetTitle={selectedOption?.title}
-              title={messages.title}
-            />
-          </div>
-        </div>
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <InlineAddWidgetSelector
+          actionLabel={messages.actionLabel}
+          availabilityByType={availabilityByType}
+          disabled={!hasEnabledWidgets}
+          onChange={handleWidgetSelection}
+          options={options}
+          unavailableLabel={messages.actionUnavailableLabel}
+          value={selectedWidgetType}
+        />
+        <InlineAddWidgetAddButton
+          disabled={!selectedAvailability?.enabled}
+          onClick={handleAddWidget}
+          selectedWidgetTitle={selectedOption?.title}
+          title={messages.title}
+        />
       </div>
-    </DashboardPanelShell>
+    </AgentBentoCard>
   );
 }
