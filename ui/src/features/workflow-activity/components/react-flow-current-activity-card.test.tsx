@@ -1661,16 +1661,26 @@ function registerCurrentActivityCardTestLifecycle(): void {
     });
 
     expect(
-      screen.queryByRole("button", {
+      await screen.findByRole("button", {
         name: "Select writer worker",
       }),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(await screen.findByLabelText("worker:writer")).toBeTruthy();
     expect(
       await screen.findByRole("button", {
         name: /Select .* workstation/,
       }),
     ).toBeTruthy();
+
+    const removeWorker = removeFactoryGraphNode({
+      baseFactoryDefinition: editableFactoryDefinitionDocument,
+      draft: defaultDraftState.draft,
+      nodeId: "worker:writer",
+    });
+    expect(removeWorker).toMatchObject({
+      ok: false,
+      reason: "BLOCKED_REMOVAL",
+    });
   });
 
   it("keeps removed server-backed workstations visible with a pending-removal badge", async () => {
