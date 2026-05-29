@@ -26,6 +26,7 @@ export interface WorkstationDetailMessages {
   ) => string;
   editableConfigurationSaveConfirmationTitle: string;
   editableConfigurationSaveErrorPrefix: string;
+  editableConfigurationSaveStaleVersionDetail: string;
   editableConfigurationSaveSuccess: string;
   editableConfigurationValidationStatus: string;
   editableConfigurationBehaviorPollerWorkerUnsupported: string;

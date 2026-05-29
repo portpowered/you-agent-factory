@@ -228,6 +228,7 @@ export function hasEditableWorkstationValidationErrors(
   return Boolean(
     validationErrors.behavior ||
       validationErrors.prompt ||
+      validationErrors.runnerName ||
       validationErrors.workerName,
   );
 }

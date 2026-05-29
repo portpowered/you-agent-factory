@@ -149,6 +149,14 @@ export interface WorkstationDetailCardProps {
 export interface EditableWorkstationValidationErrors {
   behavior?: string;
   prompt?: string;
+  runnerName?: string;
+  workerName?: string;
+}
+
+export interface EditableWorkstationSaveValidationErrors {
+  behavior?: string;
+  prompt?: string;
+  runnerName?: string;
   workerName?: string;
 }
 
@@ -224,7 +232,12 @@ export type EditableWorkstationSaveState =
   | { status: "confirming" }
   | { status: "submitting" }
   | { status: "success" }
-  | { errorMessage: string; status: "error" };
+  | { message: string; status: "warning" }
+  | {
+      errorMessage: string;
+      fieldErrors?: EditableWorkstationSaveValidationErrors;
+      status: "error";
+    };
 
 export interface WorkstationActiveWorkListProps {
   executions: DashboardActiveExecution[];

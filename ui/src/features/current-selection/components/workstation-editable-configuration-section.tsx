@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: current-selection editable workstation fields stay colocated so save feedback, overwrite hints, and responsive form structure evolve together.
 import { type ReactNode, useId, useState } from "react";
 
 import {
@@ -22,6 +23,7 @@ import {
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
+  EditableWorkstationValidationErrors,
   WorkstationDetailCardProps,
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
@@ -118,6 +120,15 @@ function EditableConfigurationReadyForm({
     { status: "ready" }
   >;
 }) {
+  const validationErrors = mergeEditableValidationErrors(
+    state.validationErrors,
+    saveState,
+  );
+  const renderState = {
+    ...state,
+    validationErrors,
+  };
+
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
       <EditableConfigurationSaveFeedback
@@ -132,11 +143,11 @@ function EditableConfigurationReadyForm({
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
         <EditableConfigurationField
           fieldId="editable-workstation-worker"
-          errorMessage={state.validationErrors.workerName}
+          errorMessage={validationErrors.workerName}
           input={
             <EditableConfigurationWorkerInput
               messages={messages}
-              state={state}
+              state={renderState}
             />
           }
           label={messages.workerFieldLabel}
@@ -156,11 +167,11 @@ function EditableConfigurationReadyForm({
         />
         <EditableConfigurationField
           fieldId="editable-workstation-kind"
-          errorMessage={state.validationErrors.behavior}
+          errorMessage={validationErrors.behavior}
           input={
             <EditableConfigurationBehaviorInput
               messages={messages}
-              state={state}
+              state={renderState}
             />
           }
           label={messages.kindLabel}
@@ -174,7 +185,13 @@ function EditableConfigurationReadyForm({
         />
         <EditableConfigurationField
           fieldId="editable-workstation-runner"
-          input={<EditableConfigurationRunnerField messages={messages} state={state} />}
+          errorMessage={validationErrors.runnerName}
+          input={
+            <EditableConfigurationRunnerField
+              messages={messages}
+              state={renderState}
+            />
+          }
           label={messages.runnerFieldLabel}
           supportingContent={
             <EditableConfigurationServerChangedHint
@@ -186,12 +203,12 @@ function EditableConfigurationReadyForm({
         />
       </div>
       <EditableConfigurationField
-        errorMessage={state.validationErrors.prompt}
+        errorMessage={validationErrors.prompt}
         fieldId="editable-workstation-prompt"
         input={
           <EditableConfigurationPromptInput
             messages={messages}
-            state={state}
+            state={renderState}
           />
         }
         label={messages.promptFieldLabel}
@@ -239,6 +256,22 @@ function EditableConfigurationSaveFeedback({
     );
   }
 
+  if (saveState?.status === "warning") {
+    return (
+      <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
+        <p
+          className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
+          role="alert"
+        >
+          {saveState.message}
+        </p>
+        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          {messages.editableConfigurationSaveStaleVersionDetail}
+        </p>
+      </div>
+    );
+  }
+
   if (saveState?.status === "error") {
     return (
       <p
@@ -251,6 +284,20 @@ function EditableConfigurationSaveFeedback({
   }
 
   return null;
+}
+
+function mergeEditableValidationErrors(
+  validationErrors: EditableWorkstationValidationErrors,
+  saveState?: EditableWorkstationSaveState,
+): EditableWorkstationValidationErrors {
+  if (saveState?.status !== "error" || !saveState.fieldErrors) {
+    return validationErrors;
+  }
+
+  return {
+    ...validationErrors,
+    ...saveState.fieldErrors,
+  };
 }
 
 function EditableConfigurationDraftStatus({

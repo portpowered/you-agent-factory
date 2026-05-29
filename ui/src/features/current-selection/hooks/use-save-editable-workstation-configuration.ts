@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   CanonicalFactoryDefinition,
+  CurrentFactoryDefinitionError,
   CurrentFactoryVersion,
 } from "../../../api/current-factory-definition";
 import {
@@ -9,6 +10,7 @@ import {
 } from "../../current-factory-definition/public";
 import type {
   EditableWorkstationConfigurationState,
+  EditableWorkstationSaveValidationErrors,
   EditableWorkstationSaveState,
 } from "../components/detail-card-types";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
@@ -35,8 +37,10 @@ interface EditableWorkstationSaveRequest {
 }
 
 interface EditableWorkstationErrorState {
+  fieldErrors?: EditableWorkstationSaveValidationErrors;
   message: string;
   scopeKey: string;
+  status: "error" | "warning";
 }
 
 export function useSaveEditableWorkstationConfiguration({
@@ -46,7 +50,7 @@ export function useSaveEditableWorkstationConfiguration({
 }: UseSaveEditableWorkstationConfigurationOptions): UseSaveEditableWorkstationConfigurationResult {
   const messages = getWorkstationDetailMessages(locale);
   const [isConfirming, setIsConfirming] = useState(false);
-  const [lastErroredScope, setLastErroredScope] =
+  const [lastFailedScope, setLastFailedScope] =
     useState<EditableWorkstationErrorState | null>(null);
   const [lastSuccessfulScopeKey, setLastSuccessfulScopeKey] = useState<
     string | null
@@ -60,7 +64,7 @@ export function useSaveEditableWorkstationConfiguration({
   useResetExitedSaveScope({
     scopeKey,
     setIsConfirming,
-    setLastErroredScope,
+    setLastFailedScope,
     setLastSuccessfulScopeKey,
   });
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
@@ -80,7 +84,7 @@ export function useSaveEditableWorkstationConfiguration({
 
   const beginSaveConfirmation = useCallback(() => {
     setLastSuccessfulScopeKey(null);
-    setLastErroredScope(null);
+    setLastFailedScope(null);
     setIsConfirming(true);
   }, []);
 
@@ -89,7 +93,7 @@ export function useSaveEditableWorkstationConfiguration({
       resolveEditableWorkstationSaveState({
         hasScopeChanged,
         isConfirming,
-        lastErroredScope,
+        lastFailedScope,
         lastSuccessfulScopeKey,
         scopeKey,
         submittingScopeKey,
@@ -97,7 +101,7 @@ export function useSaveEditableWorkstationConfiguration({
     [
       hasScopeChanged,
       isConfirming,
-      lastErroredScope,
+      lastFailedScope,
       lastSuccessfulScopeKey,
       scopeKey,
       submittingScopeKey,
@@ -122,7 +126,7 @@ export function useSaveEditableWorkstationConfiguration({
         return;
       }
 
-      setLastErroredScope(null);
+      setLastFailedScope(null);
       setLastSuccessfulScopeKey(null);
       saveInFlightRef.current = true;
       setSubmittingScopeKey(scopeKey);
@@ -140,17 +144,17 @@ export function useSaveEditableWorkstationConfiguration({
         request.markChangesSaved?.();
         setIsConfirming(false);
         setSubmittingScopeKey(null);
-        setLastErroredScope(null);
+        setLastFailedScope(null);
         setLastSuccessfulScopeKey(request.scopeKey);
       } catch (error) {
         setIsConfirming(false);
         setSubmittingScopeKey(null);
         setLastSuccessfulScopeKey(null);
-        setLastErroredScope({
-          message: normalizeSaveError(
-            error,
-            messages.editableConfigurationSaveFallbackError,
-          ),
+        setLastFailedScope({
+          ...normalizeSaveError(error, {
+            fallbackMessage:
+              messages.editableConfigurationSaveFallbackError,
+          }),
           scopeKey: request.scopeKey,
         });
         return;
@@ -165,14 +169,14 @@ export function useSaveEditableWorkstationConfiguration({
 function resolveEditableWorkstationSaveState({
   hasScopeChanged,
   isConfirming,
-  lastErroredScope,
+  lastFailedScope,
   lastSuccessfulScopeKey,
   scopeKey,
   submittingScopeKey,
 }: {
   hasScopeChanged: boolean;
   isConfirming: boolean;
-  lastErroredScope: EditableWorkstationErrorState | null;
+  lastFailedScope: EditableWorkstationErrorState | null;
   lastSuccessfulScopeKey: string | null;
   scopeKey: string | null;
   submittingScopeKey: string | null;
@@ -187,12 +191,20 @@ function resolveEditableWorkstationSaveState({
     return { status: "confirming" };
   }
   if (
-    lastErroredScope !== null &&
+    lastFailedScope !== null &&
     scopeKey !== null &&
-    lastErroredScope.scopeKey === scopeKey
+    lastFailedScope.scopeKey === scopeKey
   ) {
+    if (lastFailedScope.status === "warning") {
+      return {
+        message: lastFailedScope.message,
+        status: "warning",
+      };
+    }
+
     return {
-      errorMessage: lastErroredScope.message,
+      errorMessage: lastFailedScope.message,
+      fieldErrors: lastFailedScope.fieldErrors,
       status: "error",
     };
   }
@@ -206,12 +218,12 @@ function resolveEditableWorkstationSaveState({
 function useResetExitedSaveScope({
   scopeKey,
   setIsConfirming,
-  setLastErroredScope,
+  setLastFailedScope,
   setLastSuccessfulScopeKey,
 }: {
   scopeKey: string | null;
   setIsConfirming: (value: boolean) => void;
-  setLastErroredScope: (value: EditableWorkstationErrorState | null) => void;
+  setLastFailedScope: (value: EditableWorkstationErrorState | null) => void;
   setLastSuccessfulScopeKey: (value: string | null) => void;
 }) {
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
@@ -219,14 +231,14 @@ function useResetExitedSaveScope({
   useEffect(() => {
     if (previousScopeKeyRef.current !== scopeKey) {
       setIsConfirming(false);
-      setLastErroredScope(null);
+      setLastFailedScope(null);
       setLastSuccessfulScopeKey(null);
       previousScopeKeyRef.current = scopeKey;
     }
   }, [
     scopeKey,
     setIsConfirming,
-    setLastErroredScope,
+    setLastFailedScope,
     setLastSuccessfulScopeKey,
   ]);
 }
@@ -254,10 +266,107 @@ function useResetSuccessfulSaveStateOnDraftChange({
   }, [editableConfigurationState, scopeKey, setLastSuccessfulScopeKey]);
 }
 
-function normalizeSaveError(error: unknown, fallbackMessage: string): string {
-  if (error instanceof Error) {
-    return error.message;
+function normalizeSaveError(
+  error: unknown,
+  {
+    fallbackMessage,
+  }: {
+    fallbackMessage: string;
+  },
+): Pick<EditableWorkstationErrorState, "fieldErrors" | "message" | "status"> {
+  if (!isCurrentFactoryDefinitionError(error)) {
+    if (error instanceof Error) {
+      return {
+        message: error.message,
+        status: "error",
+      };
+    }
+
+    return {
+      message: fallbackMessage,
+      status: "error",
+    };
   }
 
-  return fallbackMessage;
+  if (error.code === "STALE_FACTORY_VERSION") {
+    return {
+      message: error.message,
+      status: "warning",
+    };
+  }
+
+  return {
+    fieldErrors: resolveSaveFieldErrors(error),
+    message: error.message,
+    status: "error",
+  };
+}
+
+function isCurrentFactoryDefinitionError(
+  error: unknown,
+): error is Pick<
+  CurrentFactoryDefinitionError,
+  "code" | "message" | "targets"
+> {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    typeof (error as { message?: unknown }).message === "string"
+  );
+}
+
+function resolveSaveFieldErrors(
+  error: Pick<CurrentFactoryDefinitionError, "message" | "targets">,
+): EditableWorkstationSaveValidationErrors | undefined {
+  const fieldErrors: EditableWorkstationSaveValidationErrors = {};
+
+  for (const target of error.targets ?? []) {
+    const fieldName = resolveTargetFieldName(target);
+    if (fieldName === null) {
+      continue;
+    }
+    fieldErrors[fieldName] ??= error.message;
+  }
+
+  return Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined;
+}
+
+function resolveTargetFieldName(
+  target: NonNullable<CurrentFactoryDefinitionError["targets"]>[number],
+): keyof EditableWorkstationSaveValidationErrors | null {
+  const field = target.field?.trim().toLowerCase();
+  const id = target.id?.trim().toLowerCase();
+
+  if (field?.endsWith(".worker") || field === "worker" || id === "worker") {
+    return "workerName";
+  }
+  if (
+    field?.endsWith(".behavior") ||
+    field === "behavior" ||
+    id === "behavior"
+  ) {
+    return "behavior";
+  }
+  if (
+    field?.endsWith(".body") ||
+    field?.endsWith(".prompt") ||
+    field === "body" ||
+    field === "prompt" ||
+    id === "body" ||
+    id === "prompt"
+  ) {
+    return "prompt";
+  }
+  if (
+    field?.endsWith(".runner") ||
+    field?.endsWith(".runnername") ||
+    field === "runner" ||
+    field === "runnername" ||
+    id === "runner"
+  ) {
+    return "runnerName";
+  }
+
+  return null;
 }
