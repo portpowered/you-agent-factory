@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { resolveDashboardSelection } from "../../current-selection/state/dashboardSelection";
+import { resolveDashboardSelection } from "../../current-selection/base/public";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
 import { buildGraphLayout } from "../../flowchart/lib/layout";

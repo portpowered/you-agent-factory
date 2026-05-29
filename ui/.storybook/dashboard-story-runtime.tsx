@@ -7,7 +7,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../src/api/dashboard";
 import type { FactoryEvent } from "../src/api/events";
-import { resetSelectionHistoryStore } from "../src/features/current-selection/state/selectionHistoryStore";
+import { resetSelectionHistoryStore } from "../src/features/current-selection/base/public";
 import { resetDashboardSessionStore } from "../src/features/dashboard/state/dashboardSessionStore";
 import {
   useFactoryTimelineStore,

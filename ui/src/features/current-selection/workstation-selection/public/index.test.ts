@@ -24,5 +24,10 @@ describe("workstation-selection/public", () => {
     expect(workstationSelectionPublic.CollapsibleProviderSessionAttempts).toBeTypeOf(
       "function",
     );
+    expect(
+      workstationSelectionPublic.useCurrentWorkstationPromptTemplateValidation,
+    ).toBeTypeOf("function");
+    expect(workstationSelectionPublic.BUILT_IN_RUNNER_IDS.length).toBeGreaterThan(0);
+    expect(workstationSelectionPublic.getRunnerMetadata).toBeTypeOf("function");
   });
 });

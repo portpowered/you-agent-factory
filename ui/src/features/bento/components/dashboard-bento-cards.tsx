@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { getCurrentSelectionShellMessages } from "../../current-selection/messages/current-selection-shell";
+import { getCurrentSelectionShellMessages } from "../../current-selection/base/public";
 import {
   CurrentSelectionWidget,
   type useCurrentSelection,

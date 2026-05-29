@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardSnapshot } from "../src/api/dashboard";
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../src/api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../src/api/session-routing";
-import { resetSelectionHistoryStore, useSelectionHistoryStore } from "../src/features/current-selection/state/selectionHistoryStore";
+import {
+  resetSelectionHistoryStore,
+  useSelectionHistoryStore,
+} from "../src/features/current-selection/base/public";
 import {
   resetDashboardSessionStore,
   useDashboardSessionStore,
