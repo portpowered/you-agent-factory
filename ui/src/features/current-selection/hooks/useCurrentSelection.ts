@@ -8,6 +8,7 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
+import type { FactoryWorker } from "../../../api/events/types";
 import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type {
   TerminalWorkItem,
@@ -47,6 +48,9 @@ export interface CurrentSelectionState {
   selectedWorkProviderSessions: DashboardProviderSessionAttempt[];
   selectedWorkRequestHistory: WorkstationRequestLike[];
   selectedWorkWorkstationRequests: DashboardWorkstationRequest[];
+  selectedWorker: FactoryWorker | null;
+  selectedWorkerName: string | null;
+  selectedWorkerWorkstationNames: string[];
   selectedWorkstationRequest: DashboardWorkstationRequest | null;
   selection: DashboardSelection | null;
   selectStateNode: (placeId: string) => void;
@@ -159,6 +163,9 @@ export function useCurrentSelection({
     selectedWorkProviderSessions: derived.selectedWorkProviderSessions,
     selectedWorkRequestHistory: derived.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: derived.selectedWorkWorkstationRequests,
+    selectedWorker: derived.selectedWorker,
+    selectedWorkerName: derived.selectedWorkerName,
+    selectedWorkerWorkstationNames: derived.selectedWorkerWorkstationNames,
     selectedWorkstationRequest: derived.selectedWorkstationRequest,
     selection,
     selectStateNode: actions.selectStateNode,

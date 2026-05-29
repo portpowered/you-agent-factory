@@ -5,6 +5,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
+import type { FactoryWorker } from "../../../../api/events/types";
 import { hasDashboardStatePlace } from "./dashboardStatePlaces";
 
 export interface DashboardNodeSelection {
@@ -442,10 +443,24 @@ function workerExistsInSnapshotFactory(
   snapshot: DashboardSnapshot,
   workerName: string,
 ): boolean {
-  return (
-    snapshot.factory?.workers?.some((worker) => worker.name === workerName) ??
-    false
-  );
+  return findFactoryWorkerInSnapshot(snapshot, workerName) !== undefined;
+}
+
+export function findFactoryWorkerInSnapshot(
+  snapshot: DashboardSnapshot,
+  workerName: string,
+): FactoryWorker | undefined {
+  return snapshot.factory?.workers?.find((worker) => worker.name === workerName);
+}
+
+export function workstationNamesReferencingWorkerInSnapshot(
+  snapshot: DashboardSnapshot,
+  workerName: string,
+): string[] {
+  return (snapshot.factory?.workstations ?? [])
+    .filter((workstation) => workstation.worker === workerName)
+    .map((workstation) => workstation.name)
+    .filter((name) => name.length > 0);
 }
 
 function resolveTransitionNodeID(
