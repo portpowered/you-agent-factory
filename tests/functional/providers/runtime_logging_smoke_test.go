@@ -168,6 +168,7 @@ func readRuntimeLoggingSmokeRecords(t *testing.T, path string) []map[string]any 
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
 		}
+		assertRuntimeLogTimestamp(t, record)
 		records = append(records, record)
 	}
 	if len(records) == 0 {
@@ -273,6 +274,18 @@ func assertRuntimeStartupRollingPolicy(t *testing.T, records []map[string]any, l
 	}
 	if startup["record_command_diagnostics"] != "preserved" {
 		t.Fatalf("record_command_diagnostics = %#v, want preserved in record %#v", startup["record_command_diagnostics"], startup)
+	}
+}
+
+func assertRuntimeLogTimestamp(t *testing.T, record map[string]any) {
+	t.Helper()
+
+	ts, ok := record["ts"].(float64)
+	if !ok {
+		t.Fatalf("ts = %#v, want numeric zap production timestamp in record %#v", record["ts"], record)
+	}
+	if ts <= 0 {
+		t.Fatalf("ts = %v, want positive timestamp in record %#v", ts, record)
 	}
 }
 

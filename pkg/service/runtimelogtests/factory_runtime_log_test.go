@@ -71,6 +71,7 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
 		}
+		assertRuntimeRecordTimestamp(t, record)
 		if record["runtime_instance_id"] != runtimeInstanceID {
 			t.Fatalf("runtime_instance_id = %#v, want %q", record["runtime_instance_id"], runtimeInstanceID)
 		}
@@ -135,6 +136,18 @@ func assertRuntimeStartupLogSelection(t *testing.T, record map[string]any, logPa
 	}
 }
 
+func assertRuntimeRecordTimestamp(t *testing.T, record map[string]any) {
+	t.Helper()
+
+	ts, ok := record["ts"].(float64)
+	if !ok {
+		t.Fatalf("ts = %#v, want numeric zap production timestamp in record %#v", record["ts"], record)
+	}
+	if ts <= 0 {
+		t.Fatalf("ts = %v, want positive timestamp in record %#v", ts, record)
+	}
+}
+
 func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, minimalFactoryConfig())
@@ -184,6 +197,7 @@ func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
 		}
+		assertRuntimeRecordTimestamp(t, record)
 		if record["msg"] != "dispatcher: dispatching work to worker" {
 			continue
 		}
@@ -231,6 +245,7 @@ func TestFactoryService_RunWritesWorkerPoolLifecycleEventsToRuntimeLog(t *testin
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
 		}
+		assertRuntimeRecordTimestamp(t, record)
 		eventName, ok := record["event_name"].(string)
 		if !ok {
 			continue
@@ -290,6 +305,7 @@ func TestFactoryService_RunWritesCommandRunnerEventsWithOutputsToRuntimeLog(t *t
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
 		}
+		assertRuntimeRecordTimestamp(t, record)
 		eventName, ok := record["event_name"].(string)
 		if !ok {
 			continue
