@@ -14,7 +14,6 @@ describe("current-selection public barrel", () => {
       "CurrentSelectionWidget",
       "useCurrentSelection",
       "useCurrentSelectionDetails",
-      "useSelectedProviderSessionState",
     ]);
     expect("TerminalWorkDetail" in currentSelectionPublic).toBe(false);
   });
