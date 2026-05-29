@@ -7,4 +7,4 @@ export type {
   DashboardWorkItemSelection,
   DashboardWorkstationRequestSelection,
   StatePositionWorkItem,
-} from "../state/selection-types";
+} from "../base/public";

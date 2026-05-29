@@ -1,9 +1,9 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: selection-resolution regression coverage stays in one place for timeline readability.
-import type { DashboardSnapshot } from "../../../api/dashboard";
-import type { FactoryEvent } from "../../../api/events";
-import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import type { DashboardSnapshot } from "../../../../api/dashboard";
+import type { FactoryEvent } from "../../../../api/events";
+import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 
-import { buildFactoryTimelineSnapshot } from "../../timeline/state/factoryTimelineStore";
+import { buildFactoryTimelineSnapshot } from "../../../timeline/state/factoryTimelineStore";
 import {
   resolveDashboardSelection,
   type DashboardWorkItemSelection,

@@ -1,0 +1,462 @@
+import { Fragment } from "react";
+import type { ReactNode } from "react";
+import type { DashboardPlaceRef } from "../../../../api/dashboard/types";
+import { cn } from "../../../../lib/cn";
+import {
+  DASHBOARD_BODY_CODE_CLASS,
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_CODE_CLASS,
+  DASHBOARD_SUPPORTING_LABEL_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "../../../../components/ui/dashboard-typography";
+import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import type {
+  InferenceAttemptDetailProps,
+  InferenceAttemptTextSectionProps,
+  MetadataSectionProps,
+} from "./detail-card-types";
+import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
+
+export const EXECUTION_PILL_CLASS = cn(
+  "inline-flex rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info",
+  DASHBOARD_SUPPORTING_CODE_CLASS,
+);
+export const PROVIDER_SESSION_CARD_CLASS = "rounded-lg border border-af-border bg-af-surface-subtle p-3.5";
+export const CURRENT_SELECTION_FIELD_PANEL_CLASS =
+  "grid gap-2 rounded-2xl border border-af-border bg-af-surface-subtle p-3";
+export const CURRENT_SELECTION_NOTICE_SUBTLE_CLASS = cn(
+  "m-0 text-af-text-muted",
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+);
+export const CURRENT_SELECTION_ALERT_PANEL_CLASS =
+  "grid gap-2 rounded-xl border border-af-danger-border bg-af-danger-surface p-3";
+export const CURRENT_SELECTION_WARNING_PANEL_CLASS =
+  "grid gap-2 rounded-2xl border border-af-warning-border bg-af-warning-surface p-3";
+export const CURRENT_SELECTION_CODE_SUBTLE_CLASS = cn(
+  "text-xs text-af-text-muted",
+  DASHBOARD_BODY_CODE_CLASS,
+);
+export const HISTORY_HEADER_CLASS =
+  "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2 [&_h4]:m-0";
+export const CURRENT_SELECTION_ACCENT_SURFACE_CLASS =
+  "border-af-accent-border bg-af-accent-surface text-af-text";
+export const CURRENT_SELECTION_BADGE_CLASS = cn(
+  "inline-flex rounded-full border px-2 py-0.5",
+  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+);
+export const HISTORY_TOGGLE_CLASS = cn(
+  "shrink-0 cursor-pointer rounded-lg border border-af-border bg-af-surface-raised px-2.5 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled",
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+);
+export const WORKSTATION_SUMMARY_ITEM_CLASS =
+  "grid min-w-0 gap-1 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2";
+export const INFERENCE_ATTEMPT_CARD_CLASS =
+  "grid min-w-0 gap-2.5 rounded-lg border border-af-border p-3.5";
+export const INFERENCE_ATTEMPT_DETAIL_CLASS = cn(
+  "m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[8.5rem_minmax(0,1fr)] [&_div]:gap-2",
+  DASHBOARD_BODY_TEXT_CLASS,
+);
+// tailwind-exception: intrinsic-sizing
+export const INFERENCE_ATTEMPT_TEXT_CLASS = cn(
+  "min-h-[20rem] md:min-h-[26rem] lg:min-h-[min(70vh,36rem)]",
+);
+export const REQUEST_AUTHORED_TEXT_CLASS = cn(
+  "grid gap-3 rounded-lg border border-af-border bg-af-surface-raised p-3 [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-af-overlay [&_code]:px-1 [&_code]:py-0.5 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:m-0 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-af-border [&_pre]:bg-af-surface-subtle [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-5",
+  DASHBOARD_BODY_TEXT_CLASS,
+);
+export const RUNTIME_DETAILS_SECTION_CLASS =
+  "mt-4 grid gap-3 border-t border-af-border pt-4 [&_h4]:m-0";
+export const RUNTIME_DETAIL_VALUE_CLASS = "min-w-0 [overflow-wrap:anywhere]";
+export const RUNTIME_DETAIL_CODE_CLASS = cn(
+  DASHBOARD_BODY_CODE_CLASS,
+  "[overflow-wrap:anywhere]",
+);
+export const TRACE_ACTION_LINK_CLASS =
+  "inline-flex w-fit rounded-lg border border-af-accent-border bg-af-accent-surface px-3 py-2 text-sm font-bold text-af-text outline-af-accent transition hover:border-af-accent hover:bg-af-accent-surface focus-visible:outline-2 focus-visible:outline-offset-2";
+export const REQUEST_SELECTION_STATUS_CLASS = cn(
+  "m-0 text-af-text-subtle",
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+);
+export const PROVIDER_SESSION_SELECTION_BUTTON_CLASS = cn(
+  "grid w-full gap-1.5 rounded-lg border border-af-border bg-af-surface-raised px-3 py-2.5 text-left text-af-text-muted outline-af-accent transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled",
+  DASHBOARD_BODY_TEXT_CLASS,
+);
+export const WORK_SELECTION_BUTTON_CLASS =
+  "inline-flex w-fit rounded-lg border border-af-border bg-af-surface-raised px-2.5 py-2 text-xs font-bold text-af-text-muted outline-af-accent transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
+export const REQUEST_HISTORY_TEXT_CLASS = cn(
+  "m-0 whitespace-pre-wrap rounded-lg border border-af-border bg-af-surface-raised p-2 [overflow-wrap:anywhere]",
+  DASHBOARD_BODY_CODE_CLASS,
+);
+
+export function CurrentSelectionSectionHeader({
+  action,
+  headingId,
+  supportingText,
+  title,
+}: {
+  action?: ReactNode;
+  headingId: string;
+  supportingText?: ReactNode;
+  title: string;
+}) {
+  return (
+    <div className={HISTORY_HEADER_CLASS}>
+      <div className="grid min-w-0 gap-1">
+        <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
+          {title}
+        </h4>
+        {supportingText ? (
+          <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+            {supportingText}
+          </p>
+        ) : null}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+interface RequestAuthoredHeadingBlock {
+  level: 1 | 2 | 3 | 4 | 5 | 6;
+  text: string;
+  type: "heading";
+}
+
+interface RequestAuthoredListBlock {
+  items: string[];
+  type: "ordered-list" | "unordered-list";
+}
+
+interface RequestAuthoredParagraphBlock {
+  text: string;
+  type: "paragraph";
+}
+
+interface RequestAuthoredCodeBlock {
+  code: string;
+  language?: string;
+  type: "code-block";
+}
+
+type RequestAuthoredBlock =
+  | RequestAuthoredCodeBlock
+  | RequestAuthoredHeadingBlock
+  | RequestAuthoredListBlock
+  | RequestAuthoredParagraphBlock;
+
+export function InferenceAttemptTextSection({
+  label,
+  value,
+}: InferenceAttemptTextSectionProps) {
+  return (
+    <section aria-label={label} className="grid gap-1">
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <AuthoredBodyText className={INFERENCE_ATTEMPT_TEXT_CLASS} value={value} />
+    </section>
+  );
+}
+
+export function InferenceAttemptDetail({
+  code = false,
+  label,
+  rawValue,
+  value,
+}: InferenceAttemptDetailProps) {
+  if (value === undefined || value === "") {
+    return null;
+  }
+
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+        {code ? (
+          <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code>
+        ) : rawValue ? (
+          <span title={rawValue}>{value}</span>
+        ) : (
+          value
+        )}
+      </dd>
+    </div>
+  );
+}
+
+export function MetadataSection({
+  emptyMessage,
+  metadata,
+  title,
+}: MetadataSectionProps) {
+  const entries = Object.entries(metadata ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+
+  return (
+    <section aria-label={title} className={RUNTIME_DETAILS_SECTION_CLASS}>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{title}</h4>
+      {entries.length > 0 ? (
+        <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
+          {entries.map(([key, value]) => (
+            <div key={key}>
+              <dt>{key}</dt>
+              <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+                <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>
+      )}
+    </section>
+  );
+}
+
+export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
+  return place.state_category === "TERMINAL" || place.state_category === "FAILED";
+}
+
+export function emptyStatePlaceMessage(
+  messages: Pick<
+    CurrentSelectionDetailMessages,
+    "noCurrentWorkInPlace" | "noWorkRecordedAtSelectedTick" | "selectedTickWorkUnavailable"
+  >,
+  usesRetainedWorkItems: boolean,
+  tokenCount: number,
+): string {
+  if (!usesRetainedWorkItems) {
+    return messages.noCurrentWorkInPlace;
+  }
+
+  if (tokenCount > 0) {
+    return messages.selectedTickWorkUnavailable;
+  }
+
+  return messages.noWorkRecordedAtSelectedTick;
+}
+
+export function normalizeDetailText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+export function AuthoredBodyText({
+  className,
+  value,
+}: {
+  className?: string;
+  value: string;
+}) {
+  const blocks = parseRequestAuthoredBlocks(value);
+
+  return (
+    <div className={cn(REQUEST_AUTHORED_TEXT_CLASS, className)}>
+      {blocks.map((block, index) => renderRequestAuthoredBlock(block, index))}
+    </div>
+  );
+}
+
+export function RequestAuthoredText({ value }: { value: string }) {
+  return <AuthoredBodyText value={value} />;
+}
+
+function parseRequestAuthoredBlocks(value: string): RequestAuthoredBlock[] {
+  const lines = value.split(/\r?\n/);
+  const blocks: RequestAuthoredBlock[] = [];
+
+  for (let lineIndex = 0; lineIndex < lines.length;) {
+    const line = lines[lineIndex];
+
+    if (!line.trim()) {
+      lineIndex += 1;
+      continue;
+    }
+
+    const fencedCodeMatch = line.match(/^```([^\s`]+)?\s*$/);
+    if (fencedCodeMatch) {
+      const codeLines: string[] = [];
+      lineIndex += 1;
+
+      while (lineIndex < lines.length && !/^```\s*$/.test(lines[lineIndex])) {
+        codeLines.push(lines[lineIndex]);
+        lineIndex += 1;
+      }
+
+      if (lineIndex < lines.length) {
+        lineIndex += 1;
+      }
+
+      blocks.push({
+        code: codeLines.join("\n"),
+        language: fencedCodeMatch[1],
+        type: "code-block",
+      });
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      blocks.push({
+        level: headingMatch[1].length as RequestAuthoredHeadingBlock["level"],
+        text: headingMatch[2],
+        type: "heading",
+      });
+      lineIndex += 1;
+      continue;
+    }
+
+    const unorderedListMatch = line.match(/^[-*+]\s+(.*)$/);
+    if (unorderedListMatch) {
+      const items: string[] = [];
+
+      while (lineIndex < lines.length) {
+        const listItemMatch = lines[lineIndex].match(/^[-*+]\s+(.*)$/);
+        if (!listItemMatch) {
+          break;
+        }
+
+        items.push(listItemMatch[1]);
+        lineIndex += 1;
+      }
+
+      blocks.push({ items, type: "unordered-list" });
+      continue;
+    }
+
+    const orderedListMatch = line.match(/^\d+\.\s+(.*)$/);
+    if (orderedListMatch) {
+      const items: string[] = [];
+
+      while (lineIndex < lines.length) {
+        const listItemMatch = lines[lineIndex].match(/^\d+\.\s+(.*)$/);
+        if (!listItemMatch) {
+          break;
+        }
+
+        items.push(listItemMatch[1]);
+        lineIndex += 1;
+      }
+
+      blocks.push({ items, type: "ordered-list" });
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+
+    while (lineIndex < lines.length && shouldContinueParagraph(lines[lineIndex])) {
+      paragraphLines.push(lines[lineIndex]);
+      lineIndex += 1;
+    }
+
+    blocks.push({
+      text: paragraphLines.join("\n"),
+      type: "paragraph",
+    });
+  }
+
+  return blocks;
+}
+
+function shouldContinueParagraph(line: string): boolean {
+  if (!line.trim()) {
+    return false;
+  }
+
+  return !/^(#{1,6})\s+/.test(line)
+    && !/^[-*+]\s+/.test(line)
+    && !/^\d+\.\s+/.test(line)
+    && !/^```([^\s`]+)?\s*$/.test(line);
+}
+
+function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) {
+  switch (block.type) {
+    case "code-block":
+      return (
+        <pre key={`code-block-${index}`}>
+          <code data-language={block.language}>{block.code}</code>
+        </pre>
+      );
+    case "heading": {
+      const HeadingTag = `h${block.level}` as const;
+      return (
+        <HeadingTag className="m-0" key={`heading-${index}`}>
+          {renderInlineMarkdown(block.text)}
+        </HeadingTag>
+      );
+    }
+    case "ordered-list":
+      return (
+        <ol key={`ordered-list-${index}`}>
+          {stableListKeys(block.items).map(({ item, key }) => (
+            <li className="whitespace-pre-wrap" key={`ordered-list-item-${index}-${key}`}>
+              {renderInlineMarkdown(item)}
+            </li>
+          ))}
+        </ol>
+      );
+    case "unordered-list":
+      return (
+        <ul key={`unordered-list-${index}`}>
+          {stableListKeys(block.items).map(({ item, key }) => (
+            <li className="whitespace-pre-wrap" key={`unordered-list-item-${index}-${key}`}>
+              {renderInlineMarkdown(item)}
+            </li>
+          ))}
+        </ul>
+      );
+    case "paragraph":
+      return (
+        <p className="m-0 whitespace-pre-wrap" key={`paragraph-${index}`}>
+          {renderInlineMarkdown(block.text)}
+        </p>
+      );
+  }
+}
+
+function renderInlineMarkdown(value: string): ReactNode[] {
+  const segments: ReactNode[] = [];
+  const inlineCodePattern = /`([^`]+)`/g;
+  let lastIndex = 0;
+  let match = inlineCodePattern.exec(value);
+
+  while (match) {
+    if (match.index > lastIndex) {
+      segments.push(value.slice(lastIndex, match.index));
+    }
+
+    segments.push(
+      <code key={`inline-code-${match.index}`}>{match[1]}</code>,
+    );
+    lastIndex = inlineCodePattern.lastIndex;
+    match = inlineCodePattern.exec(value);
+  }
+
+  if (lastIndex < value.length) {
+    segments.push(value.slice(lastIndex));
+  }
+
+  const seenStringSegments = new Map<string, number>();
+  return segments.map((segment) => {
+    if (typeof segment === "string") {
+      const occurrence = (seenStringSegments.get(segment) ?? 0) + 1;
+      seenStringSegments.set(segment, occurrence);
+      return <Fragment key={`inline-text-${segment}-${occurrence}`}>{segment}</Fragment>;
+    }
+
+    return segment;
+  });
+}
+
+function stableListKeys(items: string[]): Array<{ item: string; key: string }> {
+  const occurrences = new Map<string, number>();
+  return items.map((item) => {
+    const occurrence = (occurrences.get(item) ?? 0) + 1;
+    occurrences.set(item, occurrence);
+    return {
+      item,
+      key: `${item}-${occurrence}`,
+    };
+  });
+}

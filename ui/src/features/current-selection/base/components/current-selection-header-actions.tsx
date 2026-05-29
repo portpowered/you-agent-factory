@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import {
   DashboardActionButton,
   DashboardActionRow,
-} from "../../../components/ui";
+} from "../../../../components/ui";
 
 const CURRENT_SELECTION_HEADER_ACTIONS_CLASS = "w-full justify-end";
 const CURRENT_SELECTION_HEADER_ACTIONS_GROUP_CLASS = "w-full justify-end";

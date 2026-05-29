@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SUPPORTED_LOCALES } from "../../../i18n";
+import { SUPPORTED_LOCALES } from "../../../../i18n";
 import {
   getCurrentSelectionDetailMessages,
   type CurrentSelectionDetailMessages,
@@ -12,7 +12,7 @@ import {
 import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
-} from "./workstation-detail";
+} from "../../messages/workstation-detail";
 
 const assertResolvedValue = (value: unknown) => {
   expect(typeof value).toBe("string");

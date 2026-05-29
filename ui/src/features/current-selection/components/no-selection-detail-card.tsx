@@ -1,16 +1,1 @@
-import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
-import { SelectionDetailLayout } from "./current-selection-detail-layout";
-import { useCurrentSelectionShellMessages } from "./current-selection-locale";
-import type { NoSelectionDetailCardProps } from "./detail-card-types";
-
-export function NoSelectionDetailCard({
-  widgetId = "current-selection",
-}: NoSelectionDetailCardProps) {
-  const messages = useCurrentSelectionShellMessages();
-
-  return (
-    <SelectionDetailLayout widgetId={widgetId}>
-      <p className={DETAIL_COPY_CLASS}>{messages.emptyStateGuidance}</p>
-    </SelectionDetailLayout>
-  );
-}
+export * from "../base/components/no-selection-detail-card";

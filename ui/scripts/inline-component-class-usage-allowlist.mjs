@@ -5,7 +5,7 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/bento/components/agent-bento.tsx#BENTO_ITEM_CLASS",
   "src/features/bento/components/agent-bento.tsx#BENTO_CARD_TITLE_CLASS",
   "src/features/bento/components/agent-bento.tsx#BENTO_DRAG_HANDLE_CLASS",
-  "src/features/current-selection/components/current-selection-header-actions.tsx#CURRENT_SELECTION_HEADER_ACTIONS_CLASS",
+  "src/features/current-selection/base/components/current-selection-header-actions.tsx#CURRENT_SELECTION_HEADER_ACTIONS_CLASS",
   "src/features/export/components/export-factory-dialog.tsx#DIALOG_TITLE_CLASS",
   "src/features/export/components/export-factory-dialog.tsx#DIALOG_BODY_CLASS",
   "src/features/export/components/export-factory-dialog.tsx#DIALOG_FORM_CLASS",
