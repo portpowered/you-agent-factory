@@ -26,10 +26,8 @@ import {
 } from "../../submit-work/components/submit-work-card";
 import { SubmitWorkWidget } from "../../submit-work/public";
 import { TerminalWorkWidget } from "../../terminal-work/public";
-import {
-  TraceDrilldownWidget,
-  type useTraceDrilldown,
-} from "../../trace-drilldown/public";
+import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
+import { TraceDrilldownWidget } from "../../trace-drilldown/public";
 import type { WorkChartModel } from "../../work-outcome/lib/trends";
 import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { WorkTotalsWidget } from "../../work-totals/public";
