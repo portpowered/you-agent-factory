@@ -53,6 +53,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"authoring-factories",
 		"config",
 		"mock-workers",
+		"record-replay",
 		"work",
 		"workstations",
 		"workers",
@@ -80,6 +81,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"authoring-factories",
 		"config",
 		"mock-workers",
+		"record-replay",
 		"work",
 		"workstations",
 		"workstation",
@@ -144,6 +146,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`config` - Factory configuration",
 		"`mock-workers` - Mock-worker runs",
+		"`record-replay` - Record and replay run modes",
 		"`work` - Work types",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
@@ -154,6 +157,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`you docs authoring-factories`",
 		"`you docs config`",
 		"`you docs mock-workers`",
+		"`you docs record-replay`",
 		"`you docs work`",
 		"`you docs workstations`",
 		"`you docs batch-inputs`",
@@ -326,6 +330,40 @@ func TestMarkdown_WorkstationsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *
 	}
 }
 
+func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("record-replay")
+	if err != nil {
+		t.Fatalf("Markdown(record-replay) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Record and Replay",
+		"~/.you-agent-factory/recordings/",
+		"factory-session-~default-HHMMSS-<unique-id>.json",
+		"Recording saved:",
+		"you run --dir ./factory --record ./docs/examples/sample-run.replay.json",
+		"you run --dir ./factory --replay ./docs/examples/sample-run.replay.json",
+		"you run --dir ./factory --no-record",
+		"`--record` with `--replay`",
+		"`--no-record` with `--record`",
+		"does not delete old artifacts automatically",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(record-replay) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs record-replay`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(record-replay) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	t.Parallel()
 
@@ -333,7 +371,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, work, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, record-replay, work, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

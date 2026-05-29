@@ -17,6 +17,7 @@ const (
 	TopicAuthoringFactories Topic = "authoring-factories"
 	TopicConfig             Topic = "config"
 	TopicMockWorkers        Topic = "mock-workers"
+	TopicRecordReplay       Topic = "record-replay"
 	TopicWork               Topic = "work"
 	TopicWorkstations       Topic = "workstations"
 	TopicWorkers            Topic = "workers"
@@ -35,6 +36,7 @@ const (
 	referenceAuthoringFactoriesPath = "reference/authoring-factories.md"
 	referenceConfigPath             = "reference/config.md"
 	referenceMockWorkersPath        = "reference/mock-workers.md"
+	referenceRecordReplayPath       = "reference/record-replay.md"
 	referenceWorkPath               = "reference/work.md"
 	referenceWorkstationsPath       = "reference/workstations.md"
 	referenceWorkersPath            = "reference/workers.md"
@@ -56,6 +58,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath, displayOrder: 10},
 	{topic: TopicConfig, description: "Factory configuration, work types, workers, resources, and local run options.", path: referenceConfigPath, displayOrder: 20},
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},
+	{topic: TopicRecordReplay, description: "Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.", path: referenceRecordReplayPath, displayOrder: 26},
 	{topic: TopicWork, description: "Work types, states, routing, resources, and portable factory fields.", path: referenceWorkPath, displayOrder: 30},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
