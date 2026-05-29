@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
-import { formatTimeOfDay } from "../../../../components/ui/formatters";
+import { formatLocalDateTime } from "../../../../components/ui/formatters";
 import { describe, expect, it, vi } from "vitest";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
 import { StateNodeDetailCard } from "./state-node-detail";
@@ -58,8 +58,16 @@ describe("StateNodeDetailCard", () => {
     expect(screen.getByText("Active Story")).toBeTruthy();
     expect(screen.getByText("work-active-story")).toBeTruthy();
     expect(
-      screen.getByText(`Started at ${formatTimeOfDay(activeStoryStartedAt)}`),
+      screen.getByText(
+        `Started at ${formatLocalDateTime(activeStoryStartedAt, "Unavailable")}`,
+      ),
     ).toBeTruthy();
+    const startedAtTime = requireValue(
+      screen.getByText(/^Started at /).closest("time"),
+      "expected started-at time element",
+    );
+    expect(startedAtTime.getAttribute("dateTime")).toBe(activeStoryStartedAt);
+    expect(startedAtTime.getAttribute("title")).toBe(activeStoryStartedAt);
     expect(screen.queryByText("trace-active-story")).toBeNull();
     expect(screen.queryByText("story")).toBeNull();
   });
@@ -161,7 +169,9 @@ describe("StateNodeDetailCard", () => {
     expect(screen.getByText("Done Story")).toBeTruthy();
     expect(screen.getByText("work-done-story")).toBeTruthy();
     expect(
-      screen.getByText(`Started at ${formatTimeOfDay(doneStoryStartedAt)}`),
+      screen.getByText(
+        `Started at ${formatLocalDateTime(doneStoryStartedAt, "Unavailable")}`,
+      ),
     ).toBeTruthy();
     expect(screen.queryByText("trace-done-story")).toBeNull();
     expect(screen.queryByText(/^story$/)).toBeNull();
@@ -214,7 +224,9 @@ describe("StateNodeDetailCard", () => {
     expect(screen.getByText("Failed Story")).toBeTruthy();
     expect(screen.getByText("work-failed-story")).toBeTruthy();
     expect(
-      screen.getByText(`Started at ${formatTimeOfDay(failedStoryStartedAt)}`),
+      screen.getByText(
+        `Started at ${formatLocalDateTime(failedStoryStartedAt, "Unavailable")}`,
+      ),
     ).toBeTruthy();
     expect(screen.getByText("Failure reason")).toBeTruthy();
     expect(screen.getByText("provider_rate_limit")).toBeTruthy();
@@ -296,5 +308,36 @@ describe("StateNodeDetailCard", () => {
     expect(screen.queryByText("状态节点 ID")).toBeNull();
     expect(screen.getByText("当前工作")).toBeTruthy();
     expect(screen.getByText("在所选时间刻度，这个位置暂时没有记录到工作。")).toBeTruthy();
+  });
+
+  it("renders Started at with the same canonical formatter output as dispatch history for zh-CN", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+      (place) => place.place_id === "story:implemented",
+    );
+
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+
+    render(
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <StateNodeDetailCard
+          currentWorkItems={[
+            {
+              display_name: "Active Story",
+              started_at: activeStoryStartedAt,
+              work_id: "work-active-story",
+            },
+          ]}
+          place={resolvedSelectedState}
+          tokenCount={1}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    expect(
+      screen.getByText(
+        `开始时间 ${formatLocalDateTime(activeStoryStartedAt, "不可用", "zh-CN")}`,
+      ),
+    ).toBeTruthy();
   });
 });

@@ -7,7 +7,7 @@ import {
   singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
-import { formatTimeOfDay } from "./components/ui/formatters";
+import { formatLocalDateTime } from "./components/ui/formatters";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
@@ -893,7 +893,7 @@ export const DashboardImprovementsSmoke = {
     await expect(currentSelection.getByText("Active Story")).toBeVisible();
     await expect(
       currentSelection.getByText(
-        `Started at ${formatTimeOfDay("2026-04-08T12:00:01Z")}`,
+        `Started at ${formatLocalDateTime("2026-04-08T12:00:01Z", "Unavailable")}`,
       ),
     ).toBeVisible();
     expect(summaryDetails).not.toBeNull();
