@@ -22,8 +22,10 @@ type docsSmokeTopic struct {
 }
 
 var docsSmokeTopics = []docsSmokeTopic{
-	{name: "authoring-factories", heading: "# Authoring Factories", markers: []string{"factory.json", "workers/<name>/AGENTS.md", "workstations/<name>/AGENTS.md", "you run --dir ./factory --with-mock-workers", "--record ./docs/examples/sample-run.replay.json", "--replay ./docs/examples/sample-run.replay.json"}},
-	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "supportingFiles", "bundledFiles", "share-time starter-work snapshots", "docs/reference/config.md", "docs/reference/work.md", "docs/reference/authoring-factories.md", "--with-mock-workers", "--record", "--replay", "--no-record", "you-agent-factory run"}, absent: []string{"Agent Factory run"}},
+	{name: "authoring-factories", heading: "# Authoring Factories", markers: []string{"factory.json", "workers/<name>/AGENTS.md", "workstations/<name>/AGENTS.md", "you run --dir ./factory --with-mock-workers", "you docs mock-workers", "you docs record-replay", "--no-record"}},
+	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "supportingFiles", "bundledFiles", "share-time starter-work snapshots", "docs/reference/config.md", "docs/reference/work.md", "you docs mock-workers", "you docs record-replay", "you docs authoring-factories", "--with-mock-workers", "--record", "--replay", "--no-record", "you-agent-factory run"}, absent: []string{"Agent Factory run"}},
+	{name: "mock-workers", heading: "# Mock Workers", markers: []string{"--with-mock-workers", "mockWorkers", "runType", "accept", "reject", "script", "docs/examples/mock-workers.json", "docs/examples/startup-work.json"}},
+	{name: "record-replay", heading: "# Record and Replay", markers: []string{"--record", "--replay", "--no-record", "~/.you-agent-factory/recordings/", "docs/examples/sample-run.replay.json", "Recording saved:", "`--record` with `--replay`", "`--no-record` with `--record`"}},
 	{name: "work", heading: "# Factory JSON And Work Configuration", markers: []string{"work types, states, workers, workstations, resources, and routing", "supportingFiles", "## Work Types", "## Resources", "[Workstations](workstations.md)", "batch-inputs.md"}},
 	{name: "workstations", heading: "# Workstations Reference", markers: []string{"workstation authoring contract", "MODEL_WORKSTATION", "CLASSIFIER_WORKSTATION", "LOGICAL_MOVE"}},
 	{name: "workstation", heading: "# Workstations Reference", markers: []string{"workstation authoring contract", "MODEL_WORKSTATION", "CLASSIFIER_WORKSTATION", "LOGICAL_MOVE"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
@@ -50,10 +52,10 @@ func TestAuthoringFactoriesDocs_LinkMockWorkerReplayExamplesFromCustomerPath(t *
 		"../examples/mock-workers.json",
 		"../examples/startup-work.json",
 		"../examples/README.md",
-		"--record ./docs/examples/sample-run.replay.json",
-		"--replay ./docs/examples/sample-run.replay.json",
+		"you docs mock-workers",
+		"you docs record-replay",
 		"--no-record",
-		"docs/internal/development/record-replay.md",
+		"record-replay.md",
 	} {
 		if !strings.Contains(doc, marker) {
 			t.Fatalf("authoring factories docs missing marker %q", marker)
@@ -75,7 +77,7 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 	}
 
 	index := executeDocsSmokeCommand(t, workingDir, "docs")
-	for _, want := range []string{"# Docs", "`authoring-factories` - Practical factory authoring workflow", "`config` - Factory configuration", "`work` - Work types", "`batch-inputs` - Batch input files", "`workstations` - Workstation kinds", "`you docs authoring-factories`", "`you docs config`", "`you docs work`", "`you docs batch-inputs`", "`you docs workstations`"} {
+	for _, want := range []string{"# Docs", "`authoring-factories` - Practical factory authoring workflow", "`config` - Factory configuration", "`mock-workers` - Mock-worker runs", "`record-replay` - Record and replay run modes", "`work` - Work types", "`batch-inputs` - Batch input files", "`workstations` - Workstation kinds", "`you docs authoring-factories`", "`you docs config`", "`you docs mock-workers`", "`you docs record-replay`", "`you docs work`", "`you docs batch-inputs`", "`you docs workstations`"} {
 		if !strings.Contains(index, want) {
 			t.Fatalf("docs index missing %q:\n%s", want, index)
 		}

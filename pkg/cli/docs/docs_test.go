@@ -331,6 +331,43 @@ func TestMarkdown_WorkstationsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *
 	}
 }
 
+func TestMarkdown_MockWorkersReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("mock-workers")
+	if err != nil {
+		t.Fatalf("Markdown(mock-workers) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Mock Workers",
+		"mockWorkers",
+		"you run --dir <factory> --with-mock-workers",
+		"you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json",
+		"runType",
+		"accept",
+		"reject",
+		"script",
+		"scriptConfig",
+		"rejectConfig",
+		"default accepted",
+		"docs/examples/mock-workers.json",
+		"docs/examples/startup-work.json",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(mock-workers) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs mock-workers`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(mock-workers) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
