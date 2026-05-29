@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+  SYSTEM_TIME_WORK_TYPE_ID,
+  systemTimeGraphNodeId,
+} from "./factory-graph-customer-display";
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
-import type { FactoryGraphTopology } from "./factory-graph-draft-types";
+import type {
+  CanonicalFactoryDefinition,
+  FactoryGraphTopology,
+} from "./factory-graph-draft-types";
 import { projectFactoryGraphToReactFlow } from "./factory-graph-react-flow-projection";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: projection contract scenarios stay together around one adapter.
@@ -198,5 +206,110 @@ describe("factory graph React Flow projection", () => {
     expect(inputEdge?.data).toMatchObject({
       pendingStatus: "removal",
     });
+  });
+
+  it("omits system-time topology from React Flow projection while raw topology still contains it", () => {
+    const mixedSystemTimeFactory = {
+      name: "mixed-public-system-time",
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" as const },
+            { name: "reviewing", type: "PROCESSING" as const },
+            { name: "done", type: "TERMINAL" as const },
+          ],
+        },
+        {
+          name: SYSTEM_TIME_WORK_TYPE_ID,
+          states: [{ name: "pending", type: "PROCESSING" as const }],
+        },
+      ],
+      workstations: [
+        {
+          behavior: "CLASSIFIER_WORKSTATION",
+          classificationRoutes: [
+            {
+              label: "ready",
+              outputs: [{ state: "reviewing", workType: "story" }],
+            },
+            {
+              label: "tick",
+              outputs: [
+                { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+              ],
+            },
+          ],
+          id: "route-story",
+          inputs: [
+            { state: "new", workType: "story" },
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          name: "Route story",
+          onContinue: [
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          onFailure: [{ state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID }],
+          onRejection: [
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          outputs: [
+            { state: "done", workType: "story" },
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          worker: "router",
+        },
+        {
+          id: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+          inputs: [{ state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID }],
+          name: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+          outputs: [],
+          worker: "",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const rawTopology = buildFactoryGraphTopologyFromDefinition(
+      mixedSystemTimeFactory,
+    );
+    const originalTopology = structuredClone(rawTopology);
+
+    expect(rawTopology.nodes.map((node) => node.id)).toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", SYSTEM_TIME_WORK_TYPE_ID),
+        systemTimeGraphNodeId(
+          "work-state",
+          SYSTEM_TIME_WORK_TYPE_ID,
+          "pending",
+        ),
+        systemTimeGraphNodeId("workstation", SYSTEM_TIME_EXPIRY_TRANSITION_ID),
+      ]),
+    );
+
+    const projection = projectFactoryGraphToReactFlow({ topology: rawTopology });
+    const projectedNodeIds = projection.nodes.map((node) => node.id);
+
+    expect(rawTopology).toEqual(originalTopology);
+    expect(projectedNodeIds).not.toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", SYSTEM_TIME_WORK_TYPE_ID),
+        systemTimeGraphNodeId(
+          "work-state",
+          SYSTEM_TIME_WORK_TYPE_ID,
+          "pending",
+        ),
+        systemTimeGraphNodeId("workstation", SYSTEM_TIME_EXPIRY_TRANSITION_ID),
+      ]),
+    );
+    expect(projectedNodeIds).toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", "story"),
+        systemTimeGraphNodeId("workstation", "Route story"),
+      ]),
+    );
+    expect(
+      projection.edges
+        .flatMap((edge) => [edge.source, edge.target])
+        .some((nodeId) => nodeId?.includes(SYSTEM_TIME_WORK_TYPE_ID)),
+    ).toBe(false);
   });
 });

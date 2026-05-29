@@ -15,6 +15,7 @@ import {
   isValidFactoryGraphConnection,
 } from "./factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
+import { filterFactoryGraphTopologyForCustomerDisplay } from "./factory-graph-customer-display";
 
 export type FactoryGraphReactFlowMode = "editor" | "observer";
 
@@ -114,17 +115,25 @@ export function projectFactoryGraphToReactFlow(
   options: FactoryGraphTopology | ProjectFactoryGraphToReactFlowOptions,
 ): FactoryGraphReactFlowProjection {
   const input = normalizeProjectionOptions(options);
+  const displayTopology = filterFactoryGraphTopologyForCustomerDisplay(
+    input.topology,
+  );
   const messages = getFactoryGraphEditorMessages(input.locale);
   const rowCounts = new Map<number, number>();
   const validationMessages = validationMessagesByNodeId(
     input.editor?.validationErrors ?? [],
   );
 
+  const projectionInput: ProjectFactoryGraphToReactFlowOptions = {
+    ...input,
+    topology: displayTopology,
+  };
+
   return {
-    edges: input.topology.edges.map((edge) =>
-      buildFactoryGraphReactFlowEdge(edge, input),
+    edges: displayTopology.edges.map((edge) =>
+      buildFactoryGraphReactFlowEdge(edge, projectionInput),
     ),
-    nodes: [...input.topology.nodes].sort(sortFactoryGraphNodes).map((node) => {
+    nodes: [...displayTopology.nodes].sort(sortFactoryGraphNodes).map((node) => {
       const column = COLUMN_BY_KIND[node.kind];
       const row = rowCounts.get(column) ?? 0;
       rowCounts.set(column, row + 1);
@@ -144,7 +153,7 @@ export function projectFactoryGraphToReactFlow(
             editor: input.editor,
             locale: input.locale,
             node,
-            topology: input.topology,
+            topology: displayTopology,
           }),
           connectionHint: messages.flowConnectionHint,
           draftStatus: draftStatusForNode(node.id, input.editor),
