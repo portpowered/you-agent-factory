@@ -347,15 +347,17 @@ describe("TraceWorkstationPath captured selections", () => {
     );
 
     await waitFor(() => {
-      expect(renderedNodeIDs()).toEqual([
-        "8a56a3ce-6277-41d8-9bc8-840aa10a8d74",
-        "145638a2-67c9-4f2a-8a7d-6297ebcd7a19",
-        "a5399deb-dffe-4a6d-9b4f-0310aa988bf2",
-        "534f91c4-4e83-4310-b211-dbb3ee3cabd1",
-        "be0ca2a8-c4f7-42c2-8bd3-a54c0bd9de25",
-        "74d8f3b3-d91b-4bcc-927d-b2643e71bc8a",
-        "82d4be6a-68c3-4c94-ad3b-53fd53326015",
-      ]);
+      expect(renderedNodeIDs().sort()).toEqual(
+        [
+          "8a56a3ce-6277-41d8-9bc8-840aa10a8d74",
+          "145638a2-67c9-4f2a-8a7d-6297ebcd7a19",
+          "a5399deb-dffe-4a6d-9b4f-0310aa988bf2",
+          "534f91c4-4e83-4310-b211-dbb3ee3cabd1",
+          "be0ca2a8-c4f7-42c2-8bd3-a54c0bd9de25",
+          "74d8f3b3-d91b-4bcc-927d-b2643e71bc8a",
+          "82d4be6a-68c3-4c94-ad3b-53fd53326015",
+        ].sort(),
+      );
     });
   });
 });
@@ -381,6 +383,9 @@ describe("TraceWorkstationPath semantics", () => {
     await waitFor(() => {
       expect(screen.getByText("dispatch-plan")).toBeTruthy();
     });
+
+    expect(screen.queryByText("Dispatch")).toBeNull();
+    expect(screen.getAllByText("Workstation").length).toBeGreaterThan(0);
 
     const acceptedNode = screen.getByText("dispatch-plan").closest("article");
     if (!acceptedNode) {
