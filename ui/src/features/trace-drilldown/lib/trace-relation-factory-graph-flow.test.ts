@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "../components/trace-relation-factory-graph-node";
 import { buildTraceRelationFactoryGraphFlow } from "./trace-relation-factory-graph-flow";
 
 const RELATIONS: DashboardWorkRelation[] = [
@@ -61,5 +62,19 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
         }),
       ]),
     );
+  });
+
+  it("registers only factory graph React Flow node types", () => {
+    const flow = buildTraceRelationFactoryGraphFlow(RELATIONS);
+
+    expect(Object.keys(TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES)).toEqual([
+      "factoryEntity",
+    ]);
+    expect(flow.nodes.every((node) => node.type === "factoryEntity")).toBe(
+      true,
+    );
+    expect(
+      flow.edges.every((edge) => edge.type === "factoryEditorEdge"),
+    ).toBe(true);
   });
 });

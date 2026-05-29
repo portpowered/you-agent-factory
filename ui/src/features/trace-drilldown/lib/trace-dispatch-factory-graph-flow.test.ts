@@ -4,6 +4,7 @@ import type {
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "../components/trace-dispatch-factory-graph-node";
 import { buildTraceDispatchFactoryGraphFlow } from "./trace-dispatch-factory-graph-flow";
 
 function buildWorkItem(
@@ -72,5 +73,21 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
         }),
       ]),
     );
+  });
+
+  it("registers only factory graph React Flow node types", () => {
+    const flow = buildTraceDispatchFactoryGraphFlow([
+      buildDispatch("dispatch-plan"),
+    ]);
+
+    expect(Object.keys(TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES)).toEqual([
+      "factoryEntity",
+    ]);
+    expect(flow.nodes.every((node) => node.type === "factoryEntity")).toBe(
+      true,
+    );
+    expect(
+      flow.edges.every((edge) => edge.type === "factoryEditorEdge"),
+    ).toBe(true);
   });
 });
