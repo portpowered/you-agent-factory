@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import type { EditableWorkstationOverwriteField } from "./detail-card-types";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
+import type { EditableWorkstationOverwriteField } from "../lib/detail-card-types";
 import { WorkstationDetailCard } from "./workstation-detail-card";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");

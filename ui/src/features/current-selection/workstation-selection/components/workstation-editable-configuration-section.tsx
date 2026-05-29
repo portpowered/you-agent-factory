@@ -6,21 +6,21 @@ import {
   DashboardActionRow,
   DisclosureButton,
   Select,
-} from "../../../components/ui";
+} from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { formatList } from "../../../components/ui/formatters";
-import { cn } from "../../../lib/cn";
+} from "../../../../components/ui/dashboard-typography";
+import { formatList } from "../../../../components/ui/formatters";
+import { cn } from "../../../../lib/cn";
 import {
   CurrentSelectionSectionHeader,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   HISTORY_TOGGLE_CLASS,
   WORKSTATION_SUMMARY_ITEM_CLASS,
-} from "./detail-card-shared";
+} from "../../base/components/detail-card-shared";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
@@ -28,7 +28,7 @@ import type {
   WorkstationDetailCardProps,
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
-} from "./detail-card-types";
+} from "../lib/detail-card-types";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import {

@@ -1,10 +1,10 @@
-import { Select } from "../../../components/ui";
+import { Select } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { cn } from "../../../lib/cn";
-import type { WorkstationDetailCardProps } from "./detail-card-types";
+} from "../../../../components/ui/dashboard-typography";
+import { cn } from "../../../../lib/cn";
+import type { WorkstationDetailCardProps } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import {
   getRunnerDisplayName,

@@ -103,7 +103,7 @@ export const approvedButtonUsageAllowlist = [
     ],
     rawButtonReason:
       "Workstation detail keeps one disclosure-toggle shell inside the current-selection detail surface while ordinary actions stay on shared button primitives.",
-    relativeFilePath: "src/features/current-selection/components/workstation-detail-card.tsx",
+    relativeFilePath: "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx",
   },
   {
     rawButtonFingerprints: ['aria-controls={panelID} aria-expanded={expanded}'],

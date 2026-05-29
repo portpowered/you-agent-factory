@@ -1,4 +1,4 @@
-import { SUPPORTED_LOCALES } from "../../../i18n";
+import { SUPPORTED_LOCALES } from "../../../../i18n";
 import {
   getWorkstationDetailMessages,
   workstationDetailMessagesByLocale,

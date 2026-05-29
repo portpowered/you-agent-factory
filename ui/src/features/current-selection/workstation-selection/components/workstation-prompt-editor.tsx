@@ -8,12 +8,12 @@ import type { editor as MonacoEditorAPI } from "monaco-editor";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { cn } from "../../../lib/cn";
+} from "../../../../components/ui/dashboard-typography";
+import { cn } from "../../../../lib/cn";
 import type {
   EditableWorkstationPromptDiagnostic,
   EditableWorkstationPromptHelpState,
-} from "./detail-card-types";
+} from "../lib/detail-card-types";
 import {
   buildWorkstationPromptMarkers,
   isInsideTemplate,

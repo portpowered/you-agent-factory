@@ -3,11 +3,11 @@ import type {
   languages as MonacoLanguagesAPI,
 } from "monaco-editor";
 
-import type { PromptTemplateContract } from "../../../api/current-factory-prompt-template";
+import type { PromptTemplateContract } from "../../../../api/current-factory-prompt-template";
 import type {
   EditableWorkstationPromptDiagnostic,
   EditableWorkstationPromptHelpState,
-} from "./detail-card-types";
+} from "../lib/detail-card-types";
 import {
   WORKSTATION_PROMPT_MONARCH_LANGUAGE,
   WORKSTATION_PROMPT_THEME,

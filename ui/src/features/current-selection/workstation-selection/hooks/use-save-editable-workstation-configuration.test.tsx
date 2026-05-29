@@ -2,10 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
-import * as currentFactoryFeature from "../../current-factory-definition/public";
-import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import type { EditableWorkstationConfigurationState } from "../components/detail-card-types";
+import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import * as currentFactoryFeature from "../../../current-factory-definition/public";
+import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
+import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused save-hook regressions share one mocked mutation seam to keep re-entrant action behavior readable.

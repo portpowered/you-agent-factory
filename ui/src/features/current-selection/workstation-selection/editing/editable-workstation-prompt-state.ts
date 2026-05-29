@@ -3,7 +3,7 @@ import type {
   EditableWorkstationPromptDiagnostic,
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
-} from "../components/detail-card-types";
+} from "../lib/detail-card-types";
 import type { useCurrentWorkstationPromptTemplateContract } from "../hooks/useCurrentWorkstationPromptTemplateContract";
 import type { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
 

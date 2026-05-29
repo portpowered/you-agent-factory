@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import {
   buildDashboardWorkstationRequestFixture,
   dashboardWorkstationRequestFixtures,
-} from "../../../components/dashboard/fixtures";
-import { DETAIL_CARD_NOW } from "./detail-card-test-helpers";
+} from "../../../../components/dashboard/fixtures";
+import { DETAIL_CARD_NOW } from "../../base/components/detail-card-test-helpers";
 import { WorkstationDetailCard } from "./workstation-detail-card";
 
 function requireValue<T>(value: T | null | undefined, message: string): T {

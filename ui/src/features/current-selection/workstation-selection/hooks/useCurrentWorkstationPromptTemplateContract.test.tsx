@@ -5,19 +5,19 @@ import type { ReactNode } from "react";
 import {
   getCurrentFactoryWorkstationPromptTemplateContract,
   type PromptTemplateContract,
-} from "../../../api/current-factory-prompt-template";
+} from "../../../../api/current-factory-prompt-template";
 import {
   resetDashboardSessionStore,
   useDashboardSessionStore,
-} from "../../dashboard/state/dashboardSessionStore";
+} from "../../../dashboard/state/dashboardSessionStore";
 import {
   buildCurrentWorkstationPromptTemplateContractQueryKey,
   useCurrentWorkstationPromptTemplateContract,
 } from "./useCurrentWorkstationPromptTemplateContract";
 
-vi.mock("../../../api/current-factory-prompt-template", async () => {
+vi.mock("../../../../api/current-factory-prompt-template", async () => {
   const actual = await vi.importActual(
-    "../../../api/current-factory-prompt-template",
+    "../../../../api/current-factory-prompt-template",
   );
 
   return {

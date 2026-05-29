@@ -5,8 +5,13 @@ import type {
   DashboardTrace,
 } from "../../../api/dashboard/types";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
-import { useEditableWorkstationConfigurationState } from "../hooks/use-editable-workstation-configuration-state";
-import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
+import {
+  EditableWorkstationSaveDialog,
+  EditableWorkstationSaveHeaderAction,
+  useEditableWorkstationConfigurationState,
+  useSaveEditableWorkstationConfiguration,
+  WorkstationDetailCard,
+} from "../workstation-selection/public";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useSelectedProviderSessionState } from "../hooks/useSelectedProviderSessionState";
 import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
@@ -15,15 +20,10 @@ import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
   WorkItemDetailCard,
-  WorkstationDetailCard,
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
 import { CurrentSelectionHeaderActionProvider } from "./current-selection-detail-layout";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
-import {
-  EditableWorkstationSaveDialog,
-  EditableWorkstationSaveHeaderAction,
-} from "./workstation-save-controls";
 
 export interface CurrentSelectionWidgetProps {
   activeTraceID?: string | null;
