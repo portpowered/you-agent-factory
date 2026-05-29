@@ -211,6 +211,55 @@ describe("useSaveEditableWorkerConfiguration", () => {
     expect(result.current.canSave).toBe(true);
   });
 
+  it("clears save feedback when the selected worker scope changes", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({
+      name: "Current Factory",
+      version: {
+        logical: "8",
+        physical: "2026-05-23T15:52:00.001Z",
+      },
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CODEX",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [],
+    });
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { rerender, result } = renderHook(
+      ({ scopeKey }) =>
+        useSaveEditableWorkerConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            isDirty: false,
+          }),
+          scopeKey,
+        }),
+      {
+        initialProps: { scopeKey: "reviewer" },
+        wrapper: createQueryClientWrapper(),
+      },
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "success" });
+    });
+
+    rerender({ scopeKey: "planner" });
+
+    expect(result.current.saveState).toEqual({ status: "idle" });
+  });
+
   it("maps targeted save validation failures onto worker field errors", async () => {
     const mutateAsync = vi.fn().mockRejectedValue(
       new CurrentFactoryDefinitionError("Model provider is not supported.", {
@@ -313,6 +362,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     onProviderChange: vi.fn(),
     onResetToLatest: vi.fn(),
     onTypeChange: vi.fn(),
+    overwriteFieldNames: [],
     pendingFactoryDefinition: {
       name: "Current Factory",
       workers: [

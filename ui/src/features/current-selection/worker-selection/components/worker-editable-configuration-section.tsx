@@ -27,8 +27,12 @@ import {
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   HISTORY_TOGGLE_CLASS,
 } from "../../base/components/detail-card-shared";
+import {
+  formatEditableWorkerOverwriteFieldLabels,
+} from "../editing/editable-worker-overwrite-fields";
 import type {
   EditableWorkerConfigurationState,
+  EditableWorkerOverwriteField,
   EditableWorkerSaveState,
   EditableWorkerValidationErrors,
   WorkerDetailCardProps,
@@ -144,6 +148,10 @@ function WorkerEditableConfigurationReadyForm({
         state={state}
         workerName={workerName}
       />
+      <WorkerEditableConfigurationOverwriteWarning
+        messages={messages}
+        overwriteFieldNames={state.overwriteFieldNames}
+      />
       {validationErrors.contract ? (
         <p
           className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
@@ -180,6 +188,13 @@ function WorkerEditableConfigurationReadyForm({
             </Select>
           }
           label={messages.typeFieldLabel}
+          supportingContent={
+            <WorkerEditableConfigurationServerChangedHint
+              fieldName="type"
+              messages={messages}
+              state={state}
+            />
+          }
         />
         <WorkerTypeSpecificFields
           messages={messages}
@@ -278,6 +293,59 @@ function mergeEditableValidationErrors(
     ...validationErrors,
     ...saveState.fieldErrors,
   };
+}
+
+function WorkerEditableConfigurationOverwriteWarning({
+  messages,
+  overwriteFieldNames,
+}: {
+  messages: ReturnType<typeof getWorkerDetailMessages>;
+  overwriteFieldNames: EditableWorkerOverwriteField[];
+}) {
+  if (overwriteFieldNames.length === 0) {
+    return null;
+  }
+
+  const formattedFields = formatEditableWorkerOverwriteFieldLabels(
+    overwriteFieldNames,
+    messages,
+  );
+
+  return (
+    <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
+      <p
+        className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
+        role="alert"
+      >
+        {messages.editableConfigurationOverwriteWarning(formattedFields)}
+      </p>
+      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {messages.editableConfigurationOverwriteWarningDetail}
+      </p>
+    </div>
+  );
+}
+
+function WorkerEditableConfigurationServerChangedHint({
+  fieldName,
+  messages,
+  state,
+}: {
+  fieldName: EditableWorkerOverwriteField;
+  messages: ReturnType<typeof getWorkerDetailMessages>;
+  state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
+}) {
+  if (!state.overwriteFieldNames.includes(fieldName)) {
+    return null;
+  }
+
+  return (
+    <p
+      className={cn("m-0 text-af-warning-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+    >
+      {messages.editableConfigurationServerFieldChangedHint}
+    </p>
+  );
 }
 
 function WorkerEditableConfigurationSharedImpactWarning({
@@ -424,6 +492,13 @@ function ModelWorkerEditableFields({
           />
         }
         label={messages.modelProviderLabel}
+        supportingContent={
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="modelProvider"
+            messages={messages}
+            state={state}
+          />
+        }
       />
       <WorkerEditableConfigurationField
         errorMessage={validationErrors.model}
@@ -442,6 +517,13 @@ function ModelWorkerEditableFields({
           />
         }
         label={messages.modelLabel}
+        supportingContent={
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="model"
+            messages={messages}
+            state={state}
+          />
+        }
       />
       <WorkerEditableConfigurationField
         errorMessage={validationErrors.modelLocality}
@@ -464,6 +546,13 @@ function ModelWorkerEditableFields({
           />
         }
         label={messages.modelLocalityLabel}
+        supportingContent={
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="modelLocality"
+            messages={messages}
+            state={state}
+          />
+        }
       />
       <WorkerEditableConfigurationField
         errorMessage={validationErrors.executorProvider}
@@ -486,6 +575,13 @@ function ModelWorkerEditableFields({
           />
         }
         label={messages.executorProviderLabel}
+        supportingContent={
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="executorProvider"
+            messages={messages}
+            state={state}
+          />
+        }
       />
     </>
   );
@@ -522,6 +618,13 @@ function ScriptWorkerEditableFields({
           />
         }
         label={messages.commandFieldLabel}
+        supportingContent={
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="command"
+            messages={messages}
+            state={state}
+          />
+        }
       />
       <WorkerEditableConfigurationField
         errorMessage={validationErrors.args}
@@ -539,6 +642,13 @@ function ScriptWorkerEditableFields({
           />
         }
         label={messages.argsFieldLabel}
+        supportingContent={
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="args"
+            messages={messages}
+            state={state}
+          />
+        }
       />
       <WorkerEditableConfigurationField
         errorMessage={validationErrors.body}
@@ -556,6 +666,13 @@ function ScriptWorkerEditableFields({
           />
         }
         label={messages.bodyFieldLabel}
+        supportingContent={
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="body"
+            messages={messages}
+            state={state}
+          />
+        }
       />
     </>
   );
@@ -593,6 +710,13 @@ function HostedWorkerEditableFields({
         />
       }
       label={messages.providerFieldLabel}
+      supportingContent={
+        <WorkerEditableConfigurationServerChangedHint
+          fieldName="provider"
+          messages={messages}
+          state={state}
+        />
+      }
     />
   );
 }
@@ -645,11 +769,13 @@ function WorkerEditableConfigurationField({
   fieldId,
   input,
   label,
+  supportingContent,
 }: {
   errorMessage?: string;
   fieldId: string;
   input: ReactNode;
   label: string;
+  supportingContent?: ReactNode;
 }) {
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
@@ -657,6 +783,7 @@ function WorkerEditableConfigurationField({
         {label}
       </label>
       {input}
+      {supportingContent}
       {errorMessage ? (
         <p
           className={cn(

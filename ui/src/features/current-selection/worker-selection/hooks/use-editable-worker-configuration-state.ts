@@ -14,6 +14,7 @@ import {
   mergeEditableWorkerContractValidationErrors,
   validateEditableWorkerDraft,
 } from "../lib/worker-editable-validation";
+import { resolveEditableWorkerOverwriteFields } from "../editing/editable-worker-overwrite-fields";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 
 interface EditableWorkerSessionState {
@@ -207,6 +208,11 @@ function buildReadyEditableWorkerConfigurationState({
     onTypeChange: (value) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, type: value }));
     },
+    overwriteFieldNames: resolveEditableWorkerOverwriteFields(
+      sessionState.sessionStartDraft,
+      sessionState.draft,
+      sessionState.latestDefinitionDraft,
+    ),
     pendingFactoryDefinition,
     status: "ready",
     validationErrors,

@@ -41,6 +41,12 @@ const workerDetailMessagesByLocale = {
       "You have unsaved changes for this worker.",
     editableConfigurationDraftNote:
       "Changes stay local to this edit session until you save the running factory.",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `The running factory changed after you started editing. Saving now will overwrite newer server values for ${fields}.`,
+    editableConfigurationOverwriteWarningDetail:
+      "Review the latest runtime values before saving, or keep editing if this draft should replace them.",
+    editableConfigurationServerFieldChangedHint:
+      "The running factory changed this field while you were editing. Discard local changes to use the latest server-backed value.",
     editableConfigurationLoading: "Loading editable worker configuration.",
     editableConfigurationModelProviderRequired:
       "Select a model provider before saving this worker.",
@@ -110,6 +116,12 @@ const workerDetailMessagesByLocale = {
     editableConfigurationDirtyStatus: "このワーカーに未保存の変更があります。",
     editableConfigurationDraftNote:
       "保存するまで変更はこの編集セッション内にのみ保持されます。",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `編集開始後に実行中のファクトリが変更されました。保存すると ${fields} の新しいサーバー値を上書きします。`,
+    editableConfigurationOverwriteWarningDetail:
+      "保存前に最新のランタイム値を確認するか、このドラフトで置き換える必要がある場合は編集を続けてください。",
+    editableConfigurationServerFieldChangedHint:
+      "編集中に実行中のファクトリがこの項目を変更しました。ローカル変更を破棄すると最新のサーバー値が使われます。",
     editableConfigurationLoading: "編集可能なワーカー設定を読み込んでいます。",
     editableConfigurationModelProviderRequired:
       "このワーカーを保存する前にモデルプロバイダーを選択してください。",
@@ -178,6 +190,12 @@ const workerDetailMessagesByLocale = {
     editableConfigurationDirtyStatus: "이 워커에 저장되지 않은 변경 사항이 있습니다.",
     editableConfigurationDraftNote:
       "저장할 때까지 변경 사항은 이 편집 세션에만 유지됩니다.",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `편집을 시작한 뒤 실행 중인 팩토리가 변경되었습니다. 저장하면 ${fields}의 최신 서버 값을 덮어씁니다.`,
+    editableConfigurationOverwriteWarningDetail:
+      "저장하기 전에 최신 런타임 값을 검토하거나, 이 초안으로 대체해야 한다면 편집을 계속하세요.",
+    editableConfigurationServerFieldChangedHint:
+      "편집 중에 실행 중인 팩토리가 이 필드를 변경했습니다. 로컬 변경 사항을 취소하면 최신 서버 값이 사용됩니다.",
     editableConfigurationLoading: "편집 가능한 워커 구성을 불러오는 중입니다.",
     editableConfigurationModelProviderRequired:
       "이 워커를 저장하기 전에 모델 제공자를 선택하세요.",
@@ -239,6 +257,12 @@ const workerDetailMessagesByLocale = {
     editableConfigurationContractInvalidPrefix: "Worker 配置无效。",
     editableConfigurationDirtyStatus: "此 worker 有未保存的更改。",
     editableConfigurationDraftNote: "保存前，更改仅保留在此编辑会话中。",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `开始编辑后运行中的工厂已更改。保存将覆盖 ${fields} 的较新服务器值。`,
+    editableConfigurationOverwriteWarningDetail:
+      "保存前请查看最新的运行时值，或继续编辑以用此草稿替换它们。",
+    editableConfigurationServerFieldChangedHint:
+      "编辑期间运行中的工厂更改了此字段。放弃本地更改将使用最新的服务器值。",
     editableConfigurationLoading: "正在加载可编辑的 worker 配置。",
     editableConfigurationModelProviderRequired: "保存此 worker 前请选择模型 provider。",
     editableConfigurationModelRequired: "保存此 worker 前请输入模型。",

@@ -33,6 +33,17 @@ export type EditableWorkerSaveValidationErrors = Partial<
   >
 >;
 
+export type EditableWorkerOverwriteField =
+  | "args"
+  | "body"
+  | "command"
+  | "executorProvider"
+  | "model"
+  | "modelLocality"
+  | "modelProvider"
+  | "provider"
+  | "type";
+
 export type EditableWorkerSaveState =
   | { status: "idle" }
   | { status: "submitting" }
@@ -70,6 +81,7 @@ export type EditableWorkerConfigurationState =
       markChangesSaved: () => void;
       onResetToLatest: () => void;
       onTypeChange: (value: EditableWorkerDraft["type"]) => void;
+      overwriteFieldNames: EditableWorkerOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
       status: "ready";
       validationErrors: EditableWorkerValidationErrors;
