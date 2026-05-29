@@ -5,7 +5,7 @@ import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
   DETAIL_COPY_CLASS,
-} from "../../../components/dashboard/widget-board";
+} from "../../../components/ui/widget-frame";
 import {
   Collapsible,
   CollapsibleContent,

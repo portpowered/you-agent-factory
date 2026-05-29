@@ -9,7 +9,7 @@ import {
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
+import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import {
   CurrentSelectionSectionHeader,
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,

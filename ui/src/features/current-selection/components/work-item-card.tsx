@@ -1,4 +1,4 @@
-import { WIDGET_SUBTITLE_CLASS } from "../../../components/dashboard/widget-board";
+import { WIDGET_SUBTITLE_CLASS } from "../../../components/ui/widget-frame";
 import {
   formatList,
   formatWorkItemLabel,

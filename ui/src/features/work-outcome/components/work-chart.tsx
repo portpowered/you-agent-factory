@@ -11,7 +11,7 @@ import {
 import {
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/dashboard/widget-board";
+} from "../../../components/ui/widget-frame";
 import { Button } from "../../../components/ui/button";
 import {
   ChartContainer,

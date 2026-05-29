@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
+import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
