@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -131,7 +132,7 @@ type FactoryService struct {
 	runMu          sync.RWMutex
 	runState       *serviceRunState
 	apiServerExit  <-chan error
-	sessions       *liveRuntimeSessionManager
+	sessions       *factorysessions.Registry
 	factoryRootDir string
 	factory        factory.Factory
 	listener       *ingest.FileWatcher
@@ -713,8 +714,10 @@ func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
 	if fs == nil {
 		return nil
 	}
-	if currentSession := fs.currentSession(); currentSession != nil && currentSession.handle != nil {
-		return currentSession.handle.runtime
+	if currentSession := fs.currentSession(); currentSession != nil {
+		if handle := liveSessionHandle(currentSession); handle != nil {
+			return handle.runtime
+		}
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
@@ -898,16 +901,17 @@ func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) e
 		return nil
 	}
 	var errs []error
-	for _, sessionID := range fs.sessions.ids() {
+	for _, sessionID := range fs.sessions.IDs() {
 		session := fs.sessionByID(sessionID)
 		if session == nil {
 			continue
 		}
-		if session.handle == except {
+		handle := liveSessionHandle(session)
+		if handle == except {
 			continue
 		}
-		if session.handle != nil {
-			if err := fs.stopLiveRuntime(session.handle); err != nil && !errors.Is(err, context.Canceled) {
+		if handle != nil {
+			if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 				errs = append(errs, err)
 			}
 		}

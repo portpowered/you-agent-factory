@@ -728,8 +728,10 @@ func (fs *FactoryService) currentFactory() factory.Factory {
 	if fs == nil {
 		return nil
 	}
-	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil && compatibilitySession.handle != nil && compatibilitySession.handle.runtime != nil {
-		return compatibilitySession.handle.runtime.factory
+	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil {
+		if handle := liveSessionHandle(compatibilitySession); handle != nil && handle.runtime != nil {
+			return handle.runtime.factory
+		}
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
@@ -740,8 +742,10 @@ func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryCon
 	if fs == nil {
 		return nil
 	}
-	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil && compatibilitySession.handle != nil && compatibilitySession.handle.runtime != nil {
-		return compatibilitySession.handle.runtime.runtimeCfg
+	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil {
+		if handle := liveSessionHandle(compatibilitySession); handle != nil && handle.runtime != nil {
+			return handle.runtime.runtimeCfg
+		}
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()

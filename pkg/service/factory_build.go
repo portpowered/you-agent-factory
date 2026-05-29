@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -52,7 +53,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		if err != nil {
 			return nil, fmt.Errorf("resolve factory dir: %w", err)
 		}
-		resolvedDir, err = absolutizeFactoryDirectory(resolvedDir)
+		resolvedDir, err = factorysessions.AbsolutizeFactoryDirectory(resolvedDir)
 		if err != nil {
 			return nil, fmt.Errorf("resolve factory dir: %w", err)
 		}
@@ -90,7 +91,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	serviceBuilt = true
 	return &FactoryService{
 		factoryRootDir: factoryRootDir,
-		sessions:       newLiveRuntimeSessionManager(),
+		sessions:       factorysessions.NewRegistry(),
 		eventHistory:   runtimeBundle.eventHistory,
 		factory:        runtimeBundle.factory,
 		listener:       runtimeBundle.listener,
@@ -109,7 +110,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 }
 
 func buildPrimaryServiceLogger(cfg *FactoryServiceConfig) (string, *zap.Logger, *logging.RuntimeLogSink, *zap.Logger, error) {
-	factoryRootDir, err := absolutizeFactoryDirectory(cfg.Dir)
+	factoryRootDir, err := factorysessions.AbsolutizeFactoryDirectory(cfg.Dir)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
