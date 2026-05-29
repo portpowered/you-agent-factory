@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -932,5 +934,162 @@ func TestRunCommand_VerboseDiagnosticsUseStderr(t *testing.T) {
 	}
 	if got := stderr.String(); !strings.Contains(got, "diagnostic: run startup") {
 		t.Fatalf("stderr = %q, want run diagnostics", got)
+	}
+}
+
+func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
+	root := NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
+
+	flag := runCmd.Flags().Lookup("factory")
+	if flag == nil {
+		t.Fatal("expected --factory flag on run command")
+	}
+	if flag.DefValue != "" {
+		t.Fatalf("--factory default = %q, want empty", flag.DefValue)
+	}
+	if !strings.Contains(flag.Usage, "factory.json") {
+		t.Fatalf("--factory usage = %q, want factory.json guidance", flag.Usage)
+	}
+	if !strings.Contains(runCmd.Long, "--factory") {
+		t.Fatal("expected run command long help text to document --factory")
+	}
+	if !strings.Contains(runCmd.Example, "run --factory ./factory.json \"Fix the lint issues\"") {
+		t.Fatal("expected run command examples to document simplified --factory run")
+	}
+}
+
+func TestRunCommand_FactoryFlagResolvesFactoryRootBeforeRun(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := filepath.Join(dir, "factory.json")
+	if err := os.WriteFile(factoryPath, []byte(`{"id":"portable"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	wantRoot, err := filepath.Abs(dir)
+	if err != nil {
+		t.Fatalf("Abs: %v", err)
+	}
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "--port", "0"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --factory: %v", err)
+	}
+	if got.Dir != wantRoot {
+		t.Fatalf("dir = %q, want %q", got.Dir, wantRoot)
+	}
+	if got.FactoryConfigPath != factoryPath {
+		t.Fatalf("factory config path = %q, want %q", got.FactoryConfigPath, factoryPath)
+	}
+}
+
+func TestRunCommand_FactoryAndDirFlagsRejectConflict(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	dir := t.TempDir()
+	factoryPath := filepath.Join(dir, "factory.json")
+	if err := os.WriteFile(factoryPath, []byte(`{"id":"portable"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "--dir", "other-factory"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected conflict between --factory and --dir")
+	}
+	if !strings.Contains(err.Error(), "--factory cannot be used with --dir") {
+		t.Fatalf("error = %q, want conflict message", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run should not start when --factory conflicts with --dir")
+	}
+}
+
+func TestRunCommand_FactoryFlagRejectsMissingConfigFileBeforeRun(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	missingPath := filepath.Join(t.TempDir(), "missing-factory.json")
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", missingPath})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected missing --factory path to fail")
+	}
+	if !strings.Contains(err.Error(), "factory config file not found") {
+		t.Fatalf("error = %q, want not-found message", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run should not start for missing --factory path")
+	}
+}
+
+func TestRunCommand_FactoryFlagRejectsDirectoryPathBeforeRun(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", t.TempDir()})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected directory --factory path to fail")
+	}
+	if !strings.Contains(err.Error(), "must be a file") {
+		t.Fatalf("error = %q, want file requirement message", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run should not start for directory --factory path")
 	}
 }

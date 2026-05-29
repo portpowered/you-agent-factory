@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
@@ -449,13 +450,16 @@ func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"Use --continuously to keep the factory alive while idle until you cancel it. " +
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
+			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
 			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures.",
 		Example: "  # Start the out-of-the-box continuous factory.\n" +
 			"  " + cliBinaryName + "\n\n" +
 			"  # Submit a Markdown task to the default scaffold.\n" +
 			"  printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md\n\n" +
 			"  # Run an existing factory once in explicit batch mode.\n" +
-			"  " + cliBinaryName + " run --dir factory",
+			"  " + cliBinaryName + " run --dir factory\n\n" +
+			"  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n" +
+			"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.MockWorkersEnabled = cmd.Flags().Changed("with-mock-workers")
 			if cmd.Flags().Changed("port") {
@@ -476,6 +480,7 @@ func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
+	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs")
 	cmd.Flags().StringVar(&cfg.RunnerID, "runner", "", fmt.Sprintf("factory-level runner override (%s)", strings.Join([]string{
 		interfaces.RunnerIDCodex,
 		interfaces.RunnerIDGemini,
@@ -499,6 +504,10 @@ func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 }
 
 func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, verbose, debug bool) error {
+	if err := resolveRunFactorySelection(cmd, &cfg); err != nil {
+		return err
+	}
+
 	logger, err := logging.BuildLogger(verbose, debug)
 	if err != nil {
 		return err
@@ -524,6 +533,24 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, verbose, debug bool) e
 	}()
 
 	return runCLI(ctx, cfg)
+}
+
+func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error {
+	factoryChanged := cmd.Flags().Changed("factory")
+	dirChanged := cmd.Flags().Changed("dir")
+	if factoryChanged && dirChanged {
+		return fmt.Errorf("--factory cannot be used with --dir")
+	}
+	if !factoryChanged {
+		return nil
+	}
+
+	factoryRoot, err := factoryconfig.ResolveFactoryRootFromConfigFile(cfg.FactoryConfigPath)
+	if err != nil {
+		return err
+	}
+	cfg.Dir = factoryRoot
+	return nil
 }
 
 func newSubmitCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
