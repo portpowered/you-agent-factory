@@ -31,6 +31,7 @@ import {
 } from "../lib/trace-elk-layout";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
+import { projectTraceRelationsToFactoryGraph } from "../lib/trace-relation-factory-graph";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 const GRAPH_SHELL_CLASS =
@@ -307,129 +308,54 @@ function buildRelationGraph(
   edges: Edge[];
   nodes: RelationFlowNode[];
 } {
-  const nodeRecords = new Map<
-    string,
-    {
-      id: string;
-      label: string;
-      order: number;
-      relationStates: Set<string>;
-      relationTypes: Set<string>;
-      workID?: string;
-    }
-  >();
-  const edgeRecords: Edge[] = [];
-
-  relations.forEach((relation, index) => {
-    const source = relationEndpoint(relation, "source", index, locale);
-    const target = relationEndpoint(relation, "target", index, locale);
-
-    if (!nodeRecords.has(source.id)) {
-      nodeRecords.set(source.id, {
-        id: source.id,
-        label: source.label,
-        order: index * 2,
-        relationStates: new Set<string>(),
-        relationTypes: new Set<string>(),
-        workID: source.workID,
-      });
-    }
-
-    if (!nodeRecords.has(target.id)) {
-      nodeRecords.set(target.id, {
-        id: target.id,
-        label: target.label,
-        order: index * 2 + 1,
-        relationStates: new Set<string>(),
-        relationTypes: new Set<string>(),
-        workID: target.workID,
-      });
-    }
-
-    const sourceRecord = nodeRecords.get(source.id);
-    const targetRecord = nodeRecords.get(target.id);
-    sourceRecord?.relationTypes.add(relation.type);
-    targetRecord?.relationTypes.add(relation.type);
-    if (relation.required_state) {
-      sourceRecord?.relationStates.add(relation.required_state);
-      targetRecord?.relationStates.add(relation.required_state);
-    }
-
-    edgeRecords.push({
-      ariaLabel: relationEdgeLabel(
-        source.label,
-        target.label,
-        relation,
-        locale,
-      ),
-      id: relationEdgeID(relation, index),
-      markerEnd: {
-        color: relationEdgeStroke(relation),
-        type: MarkerType.ArrowClosed,
-      },
-      source: source.id,
-      style: relationEdgeStyle(relation),
-      target: target.id,
-    });
-  });
+  const projection = projectTraceRelationsToFactoryGraph(relations, { locale });
 
   return {
-    edges: edgeRecords,
-    nodes: [...nodeRecords.values()].map((record) => ({
-      data: {
-        label: record.label,
-        locale,
-        relationStates: [...record.relationStates.values()],
-        relationTypes: [...record.relationTypes.values()],
-        selectable: false,
-        workID: record.workID,
-      },
-      id: record.id,
-      position: { x: 0, y: record.order * (RELATION_NODE_HEIGHT + 20) },
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
-      type: "relation-work",
-    })),
+    edges: projection.topology.edges.map((edge) => {
+      const overlay = projection.edgeOverlaysByEdgeId.get(edge.id);
+      const relationLike: DashboardWorkRelation = {
+        request_id: overlay?.requestId,
+        required_state: overlay?.requiredState,
+        source_work_id:
+          projection.endpointKeyByNodeId.get(edge.sourceId) ?? edge.sourceId,
+        target_work_id:
+          projection.endpointKeyByNodeId.get(edge.targetId) ?? edge.targetId,
+        type: overlay?.relationType ?? "RELATED_TO",
+      };
+
+      return {
+        ariaLabel: overlay?.ariaLabel,
+        id: edge.id,
+        markerEnd: {
+          color: relationEdgeStroke(relationLike),
+          type: MarkerType.ArrowClosed,
+        },
+        source:
+          projection.endpointKeyByNodeId.get(edge.sourceId) ?? edge.sourceId,
+        style: relationEdgeStyle(relationLike),
+        target:
+          projection.endpointKeyByNodeId.get(edge.targetId) ?? edge.targetId,
+      };
+    }),
+    nodes: projection.topology.nodes.map((node, index) => {
+      const overlay = projection.overlaysByNodeId.get(node.id);
+      return {
+        data: {
+          label: overlay?.displayLabel ?? node.label,
+          locale,
+          relationStates: overlay?.relationStates ?? [],
+          relationTypes: overlay?.relationTypes ?? [],
+          selectable: false,
+          workID: overlay?.workID,
+        },
+        id: overlay?.endpointKey ?? node.id,
+        position: { x: 0, y: index * (RELATION_NODE_HEIGHT + 20) },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        type: "relation-work",
+      };
+    }),
   };
-}
-
-function relationEndpoint(
-  relation: DashboardWorkRelation,
-  side: "source" | "target",
-  index: number,
-  locale?: string,
-): { id: string; label: string; workID?: string } {
-  if (side === "source") {
-    const workID = relation.source_work_id?.trim();
-    return {
-      id: workID || `relation-${index}-source`,
-      label:
-        relation.source_work_name ||
-        workID ||
-        getTraceDrilldownMessages(locale).unknownRelationSource,
-      workID: workID || undefined,
-    };
-  }
-
-  const workID = relation.target_work_id.trim();
-  return {
-    id: workID,
-    label: relation.target_work_name || workID,
-    workID,
-  };
-}
-
-function relationEdgeID(
-  relation: DashboardWorkRelation,
-  index: number,
-): string {
-  return [
-    relation.type,
-    relation.source_work_id ?? `source-${index}`,
-    relation.target_work_id,
-    relation.required_state ?? "",
-    relation.request_id ?? "",
-  ].join("|");
 }
 
 function relationStateToneClassName(relationState: string): string {
@@ -498,16 +424,3 @@ function relationEdgeStyle(relation: DashboardWorkRelation) {
   };
 }
 
-function relationEdgeLabel(
-  sourceLabel: string,
-  targetLabel: string,
-  relation: DashboardWorkRelation,
-  locale?: string,
-): string {
-  return getTraceDrilldownMessages(locale).relationEdgeLabel({
-    relationState: relation.required_state,
-    relationType: relation.type,
-    sourceLabel,
-    targetLabel,
-  });
-}
