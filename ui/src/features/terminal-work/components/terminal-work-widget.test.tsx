@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { getTerminalWorkMessages } from "../messages/terminal-work";
-import { TerminalWorkWidget } from "./terminal-work-widget";
+import { TerminalWorkWidget } from "../public";
 
 describe("TerminalWorkWidget", () => {
   const originalDocumentLang = document.documentElement.lang;
