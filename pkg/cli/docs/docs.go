@@ -14,22 +14,26 @@ type Topic string
 const (
 	TopicAuthoringFactories Topic = "authoring-factories"
 	TopicConfig             Topic = "config"
+	TopicWork               Topic = "work"
 	TopicWorkstation        Topic = "workstation"
 	TopicWorkers            Topic = "workers"
 	TopicResources          Topic = "resources"
 	TopicModels             Topic = "models"
-	TopicBatchWork          Topic = "batch-work"
+	TopicBatchInputs        Topic = "batch-inputs"
 	TopicTemplates          Topic = "templates"
 )
+
+const TopicBatchWorkAlias Topic = "batch-work"
 
 const (
 	referenceAuthoringFactoriesPath = "reference/authoring-factories.md"
 	referenceConfigPath             = "reference/config.md"
+	referenceWorkPath               = "reference/work.md"
 	referenceWorkstationPath        = "reference/workstation.md"
 	referenceWorkersPath            = "reference/workers.md"
 	referenceResourcesPath          = "reference/resources.md"
 	referenceModelsPath             = "reference/models.md"
-	referenceBatchWorkPath          = "reference/batch-work.md"
+	referenceBatchInputsPath        = "reference/batch-inputs.md"
 	referenceTemplatesPath          = "reference/templates.md"
 )
 
@@ -37,16 +41,18 @@ type topicDocument struct {
 	topic       Topic
 	description string
 	path        string
+	aliases     []Topic
 }
 
 var topicDocuments = []topicDocument{
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath},
 	{topic: TopicConfig, description: "Factory configuration, work types, workers, resources, and local run options.", path: referenceConfigPath},
+	{topic: TopicWork, description: "Work types, states, routing, resources, and portable factory fields.", path: referenceWorkPath},
 	{topic: TopicWorkstation, description: "Workstation state, inputs, outputs, moves, and dispatch routing.", path: referenceWorkstationPath},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath},
 	{topic: TopicModels, description: "Local and hosted model setup for workers and CLI model commands.", path: referenceModelsPath},
-	{topic: TopicBatchWork, description: "Batch work input files, request shape, dependencies, and validation.", path: referenceBatchWorkPath},
+	{topic: TopicBatchInputs, description: "Batch input files, request shape, dependencies, and validation.", path: referenceBatchInputsPath, aliases: []Topic{TopicBatchWorkAlias}},
 	{topic: TopicTemplates, description: "Prompt template variables, context fields, and Go template behavior.", path: referenceTemplatesPath},
 }
 
@@ -69,6 +75,19 @@ func SupportedTopics() []string {
 		supportedTopics = append(supportedTopics, string(doc.topic))
 	}
 	return append([]string(nil), supportedTopics...)
+}
+
+// SupportedTopicCommands returns canonical topic names and compatibility
+// aliases accepted by the CLI as subcommands.
+func SupportedTopicCommands() []string {
+	commands := make([]string, 0, len(topicDocuments))
+	for _, doc := range topicDocuments {
+		commands = append(commands, string(doc.topic))
+		for _, alias := range doc.aliases {
+			commands = append(commands, string(alias))
+		}
+	}
+	return append([]string(nil), commands...)
 }
 
 // TopicSummaries returns canonical packaged docs topic metadata in display order.
@@ -106,7 +125,7 @@ func IndexMarkdown(cliName string) string {
 func Markdown(topic string) (string, error) {
 	var path string
 	for _, doc := range topicDocuments {
-		if topic == string(doc.topic) {
+		if doc.matches(topic) {
 			path = doc.path
 			break
 		}
@@ -122,4 +141,16 @@ func Markdown(topic string) (string, error) {
 	}
 
 	return string(content), nil
+}
+
+func (d topicDocument) matches(topic string) bool {
+	if topic == string(d.topic) {
+		return true
+	}
+	for _, alias := range d.aliases {
+		if topic == string(alias) {
+			return true
+		}
+	}
+	return false
 }

@@ -294,7 +294,7 @@ func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		},
 	}
 
-	for _, topic := range docscli.SupportedTopics() {
+	for _, topic := range docscli.SupportedTopicCommands() {
 		docsCmd.AddCommand(newDocsTopicCommand(topic, diagnostics))
 	}
 

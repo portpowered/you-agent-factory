@@ -320,12 +320,16 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"# Docs",
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`config` - Factory configuration",
+		"`work` - Work types",
 		"`workstation` - Workstation state",
 		"`workers` - Worker types",
+		"`batch-inputs` - Batch input files",
 		"`you docs authoring-factories`",
 		"`you docs config`",
+		"`you docs work`",
 		"`you docs workstation`",
 		"`you docs workers`",
+		"`you docs batch-inputs`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("docs index missing %q:\n%s", want, got)

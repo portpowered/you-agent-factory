@@ -14,16 +14,38 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 	want := []string{
 		"authoring-factories",
 		"config",
+		"work",
 		"workstation",
 		"workers",
 		"resources",
 		"models",
-		"batch-work",
+		"batch-inputs",
 		"templates",
 	}
 
 	if got := SupportedTopics(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("SupportedTopics() = %#v, want %#v", got, want)
+	}
+}
+
+func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
+	t.Parallel()
+
+	want := []string{
+		"authoring-factories",
+		"config",
+		"work",
+		"workstation",
+		"workers",
+		"resources",
+		"models",
+		"batch-inputs",
+		"batch-work",
+		"templates",
+	}
+
+	if got := SupportedTopicCommands(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("SupportedTopicCommands() = %#v, want %#v", got, want)
 	}
 }
 
@@ -52,20 +74,25 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"# Docs",
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`config` - Factory configuration",
+		"`work` - Work types",
 		"`workstation` - Workstation state",
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
-		"`batch-work` - Batch work input files",
+		"`batch-inputs` - Batch input files",
 		"`templates` - Prompt template variables",
 		"`you docs authoring-factories`",
 		"`you docs config`",
+		"`you docs work`",
 		"`you docs workstation`",
-		"`you docs batch-work`",
+		"`you docs batch-inputs`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("IndexMarkdown() missing %q:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "batch-work") {
+		t.Fatalf("IndexMarkdown() should list canonical topics without batch-work alias noise:\n%s", got)
 	}
 }
 
@@ -125,6 +152,71 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("work")
+	if err != nil {
+		t.Fatalf("Markdown(work) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Factory JSON And Work Configuration",
+		"work types, states, workers, workstations, resources, and routing",
+		"## Work Types",
+		"## Resources",
+		"supportingFiles",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(work) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs work`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(work) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
+func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	canonical, err := Markdown("batch-inputs")
+	if err != nil {
+		t.Fatalf("Markdown(batch-inputs) error = %v", err)
+	}
+	alias, err := Markdown("batch-work")
+	if err != nil {
+		t.Fatalf("Markdown(batch-work) error = %v", err)
+	}
+
+	if alias != canonical {
+		t.Fatal("Markdown(batch-work) should return the canonical batch-inputs markdown")
+	}
+	for _, want := range []string{
+		"# Batch Inputs",
+		"FACTORY_REQUEST_BATCH",
+		"DEPENDS_ON",
+		"PARENT_CHILD",
+		"factory/inputs/BATCH/default/<request_id>.json",
+	} {
+		if !strings.Contains(canonical, want) {
+			t.Fatalf("Markdown(batch-inputs) missing %q:\n%s", want, canonical)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs batch-inputs`.",
+	} {
+		if strings.Contains(canonical, wrapper) {
+			t.Fatalf("Markdown(batch-inputs) included wrapper text %q:\n%s", wrapper, canonical)
+		}
+	}
+}
+
 func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	t.Parallel()
 
@@ -132,7 +224,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, workstation, workers, resources, models, batch-work, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, work, workstation, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }
