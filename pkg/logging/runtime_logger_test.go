@@ -156,6 +156,7 @@ func TestBuildRuntimeLoggerUsesConfiguredRollingPolicy(t *testing.T) {
 
 func TestBuildRuntimeLoggerRotatesLogFiles(t *testing.T) {
 	logDir := t.TempDir()
+	before := time.Now().UTC()
 	sink, err := BuildRuntimeLogger(
 		zap.NewNop(),
 		"runtime-rotates",
@@ -176,6 +177,11 @@ func TestBuildRuntimeLoggerRotatesLogFiles(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected runtime logger to use lumberjack writer, got %T", sink.writer)
 	}
+	if rollingWriter.Filename != sink.Path() {
+		t.Fatalf("rolling writer filename = %q, want active runtime log path %q", rollingWriter.Filename, sink.Path())
+	}
+	assertRuntimeLogPathFormat(t, sink.Path(), logDir, "runtime-rotates", before, time.Now().UTC())
+
 	for i := 0; i < 20; i++ {
 		if _, err := rollingWriter.Write([]byte(payload)); err != nil {
 			t.Fatalf("write rotated log data: %v", err)
@@ -198,14 +204,24 @@ func TestBuildRuntimeLoggerRotatesLogFiles(t *testing.T) {
 	}
 
 	basePath := sink.Path()
+	baseDir := filepath.Dir(basePath)
+	basePrefix := strings.TrimSuffix(filepath.Base(basePath), runtimeLogExtension)
+	sawBackup := false
 	for _, path := range matches {
+		if filepath.Dir(path) != baseDir {
+			t.Fatalf("rotated runtime log %q is outside active log directory %q", path, baseDir)
+		}
 		base := filepath.Base(path)
 		if base == filepath.Base(basePath) {
 			continue
 		}
-		if !strings.HasPrefix(base, strings.TrimSuffix(filepath.Base(basePath), runtimeLogExtension)+"-") {
+		sawBackup = true
+		if !strings.HasPrefix(base, basePrefix+"-") {
 			t.Fatalf("expected backup file name with timestamp suffix, got %q", base)
 		}
+	}
+	if !sawBackup {
+		t.Fatalf("expected at least one rotated backup next to %s, got %v", basePath, matches)
 	}
 }
 
