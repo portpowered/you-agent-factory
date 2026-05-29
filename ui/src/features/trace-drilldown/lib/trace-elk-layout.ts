@@ -2,12 +2,21 @@ import type { Edge, Node } from "@xyflow/react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk.bundled.js";
 
-const elk = new ELK();
+let elk: InstanceType<typeof ELK> | null = null;
 const TRACE_GRAPH_LAYOUT_CACHE = new Map<string, Map<string, { x: number; y: number }>>();
 const TRACE_GRAPH_LAYOUT_PROMISE_CACHE = new Map<
   string,
   Promise<Map<string, { x: number; y: number }>>
 >();
+
+function getElk(): InstanceType<typeof ELK> {
+  if (elk) {
+    return elk;
+  }
+
+  elk = new ELK();
+  return elk;
+}
 
 export interface TraceElkLayoutNode {
   height: number;
@@ -133,10 +142,11 @@ export async function layoutTraceGraphWithElk<TNode extends Node>(
 
   const layoutPromise =
     TRACE_GRAPH_LAYOUT_PROMISE_CACHE.get(layoutKey) ??
-    elk.layout(layoutGraph)
-      .then((layoutResult) => {
+    getElk()
+      .layout(layoutGraph)
+      .then((layoutResult: ElkNode) => {
         const positionsByID = new Map(
-          (layoutResult.children ?? []).map((child) => [
+          (layoutResult.children ?? []).map((child: ElkNode) => [
             child.id,
             { x: child.x ?? 0, y: child.y ?? 0 },
           ]),
@@ -158,4 +168,3 @@ export async function layoutTraceGraphWithElk<TNode extends Node>(
 
   return applyTraceGraphPositions(nodes, positionsByID);
 }
-

@@ -57,7 +57,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/terminal-work/components/terminal-work-card.tsx#TERMINAL_LIST_CLASS",
   "src/features/terminal-work/components/terminal-work-card.tsx#TERMINAL_TOGGLE_CLASS",
   "src/features/terminal-work/components/terminal-work-card.tsx#TERMINAL_BUTTON_LABEL_CLASS",
-  "src/features/trace-drilldown/components/trace-drilldown-widget.tsx#TRACE_DRILLDOWN_WIDGET_CLASS",
   "src/features/trace-drilldown/components/trace-grid-card.tsx#TRACE_EXPANDER_HEADER_CLASS",
   "src/features/trace-drilldown/components/trace-grid-card.tsx#TRACE_WORK_ITEM_BUTTON_CLASS",
   "src/features/trace-drilldown/components/trace-relation-flow.tsx#GRAPH_SHELL_CLASS",

@@ -40,7 +40,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { cn } from "../../../lib/cn";
-import { AgentBentoCard } from "../../bento/public";
+import { AgentBentoCard } from "../../bento/components/agent-bento";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
