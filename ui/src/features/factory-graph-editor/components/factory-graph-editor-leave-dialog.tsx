@@ -1,5 +1,5 @@
-import { DashboardMutationDialog } from "../../../components/dashboard";
 import { Button } from "../../../components/ui";
+import { DashboardMutationDialog } from "../../workflow-activity/public";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export function FactoryGraphEditorLeaveDialog({
