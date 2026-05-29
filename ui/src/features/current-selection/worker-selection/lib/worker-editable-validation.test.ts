@@ -125,6 +125,56 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
     expect(hasEditableWorkerValidationErrors(errors)).toBe(true);
   });
 
+  it("maps contract failures onto script worker command fields", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          command: 42,
+          name: "runner",
+          type: "SCRIPT_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const errors = mergeEditableWorkerContractValidationErrors(
+      {},
+      pendingFactoryDefinition,
+      "runner",
+      messages,
+    );
+
+    expect(errors.command).toContain(
+      messages.editableConfigurationContractInvalidPrefix,
+    );
+  });
+
+  it("maps contract failures onto model locality fields", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelLocality: "INVALID",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "reviewer",
+        messages,
+      ).modelLocality,
+    ).toContain(messages.editableConfigurationContractInvalidPrefix);
+  });
+
   it("preserves existing field errors when contract validation fails", () => {
     const pendingFactoryDefinition = {
       name: "Current Factory",

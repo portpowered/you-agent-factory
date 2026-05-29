@@ -213,9 +213,22 @@ describe("WorkerDetailCard", () => {
     fireEvent.change(screen.getByLabelText("Model provider"), {
       target: { value: "CODEX" },
     });
+    fireEvent.change(screen.getByLabelText("Model locality"), {
+      target: { value: "LOCAL" },
+    });
 
     expect(onModelProviderChange).toHaveBeenCalledWith("CODEX");
+    expect(editableConfigurationState.onModelLocalityChange).toHaveBeenCalledWith(
+      "LOCAL",
+    );
     expect(screen.queryByLabelText("Command")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Collapse worker configuration editor",
+      }),
+    );
+    expect(screen.queryByLabelText("Model provider")).toBeNull();
   });
 
   it("omits optional model fields when they are absent on the worker", () => {

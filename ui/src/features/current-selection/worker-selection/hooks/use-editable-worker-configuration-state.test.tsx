@@ -289,6 +289,64 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("updates locality, executor, type, and hosted provider draft fields", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onModelLocalityChange("LOCAL");
+      result.current.onExecutorProviderChange("SCRIPT_WRAP");
+      result.current.onTypeChange("HOSTED_WORKER");
+      result.current.onProviderChange("LINEAR");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      draft: {
+        executorProvider: "SCRIPT_WRAP",
+        modelLocality: "LOCAL",
+        provider: "LINEAR",
+        type: "HOSTED_WORKER",
+      },
+      isDirty: true,
+    });
+  });
+
+  it("markChangesSaved aligns session drafts with the current worker draft", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onModelChange("gpt-5.9");
+      result.current.markChangesSaved();
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      draft: {
+        model: "gpt-5.9",
+      },
+      isDirty: false,
+      overwriteFieldNames: [],
+    });
+  });
+
   it("resets the editable worker draft when the selected worker changes", async () => {
     const plannerSelection: DashboardSelection = {
       kind: "worker",
