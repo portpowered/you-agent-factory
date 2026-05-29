@@ -14,7 +14,7 @@ complete customer-facing contract.
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, mock workers, and replay | [Author factories](authoring-factories.md) |
 | `config` | Split layout and `factory.json` placement | [Factory JSON and work configuration](work.md) and [Author factories](authoring-factories.md) |
 | `work` | Work types, states, routing, resources, and portability fields | [Factory JSON and work configuration](work.md) |
-| `workstation` | Workstation quick reference | [Workstations](workstations.md) |
+| `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Factory JSON and work configuration](work.md) |
 | `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
@@ -23,6 +23,8 @@ complete customer-facing contract.
 
 `batch-work` remains accepted by the installed CLI as a compatibility alias for
 the canonical `batch-inputs` topic.
+`workstation` remains accepted as a compatibility alias for the canonical
+`workstations` topic.
 
 ## CLI Output And Diagnostics
 

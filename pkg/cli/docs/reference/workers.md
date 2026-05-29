@@ -84,5 +84,5 @@ changes scoped to the current work item.
 ## Related
 
 - `you docs config`
-- `you docs workstation`
+- `you docs workstations`
 - `you docs templates`

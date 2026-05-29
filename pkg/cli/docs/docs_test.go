@@ -15,7 +15,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"authoring-factories",
 		"config",
 		"work",
-		"workstation",
+		"workstations",
 		"workers",
 		"resources",
 		"models",
@@ -35,6 +35,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"authoring-factories",
 		"config",
 		"work",
+		"workstations",
 		"workstation",
 		"workers",
 		"resources",
@@ -75,7 +76,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`config` - Factory configuration",
 		"`work` - Work types",
-		"`workstation` - Workstation state",
+		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
@@ -84,15 +85,17 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`you docs authoring-factories`",
 		"`you docs config`",
 		"`you docs work`",
-		"`you docs workstation`",
+		"`you docs workstations`",
 		"`you docs batch-inputs`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("IndexMarkdown() missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "batch-work") {
-		t.Fatalf("IndexMarkdown() should list canonical topics without batch-work alias noise:\n%s", got)
+	for _, alias := range []string{"`batch-work`", "`workstation`"} {
+		if strings.Contains(got, alias) {
+			t.Fatalf("IndexMarkdown() should list canonical topics without %s alias noise:\n%s", alias, got)
+		}
 	}
 }
 
@@ -217,6 +220,42 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 	}
 }
 
+func TestMarkdown_WorkstationsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	canonical, err := Markdown("workstations")
+	if err != nil {
+		t.Fatalf("Markdown(workstations) error = %v", err)
+	}
+	alias, err := Markdown("workstation")
+	if err != nil {
+		t.Fatalf("Markdown(workstation) error = %v", err)
+	}
+
+	if alias != canonical {
+		t.Fatal("Markdown(workstation) should return the canonical workstations markdown")
+	}
+	for _, want := range []string{
+		"# Workstations Reference",
+		"workstation authoring contract",
+		"MODEL_WORKSTATION",
+		"CLASSIFIER_WORKSTATION",
+		"LOGICAL_MOVE",
+	} {
+		if !strings.Contains(canonical, want) {
+			t.Fatalf("Markdown(workstations) missing %q:\n%s", want, canonical)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs workstations`.",
+	} {
+		if strings.Contains(canonical, wrapper) {
+			t.Fatalf("Markdown(workstations) included wrapper text %q:\n%s", wrapper, canonical)
+		}
+	}
+}
+
 func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	t.Parallel()
 
@@ -224,7 +263,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, work, workstation, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, work, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

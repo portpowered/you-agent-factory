@@ -3,7 +3,7 @@ This is the table of contents for the Agent Factory documentation.
 The installed CLI also packages a fixed reference surface under
 `you docs`. Run `you docs` to list the packaged topics, or
 run `you docs <topic>` for one of `authoring-factories`, `config`, `work`,
-`workstation`, `workers`, `resources`, `models`, `batch-inputs`, or
+`workstations`, `workers`, `resources`, `models`, `batch-inputs`, or
 `templates`.
 
 ## Packaged CLI Reference Topics
@@ -19,7 +19,8 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - `work` is the packaged work configuration reference. Use
   [Factory JSON and work configuration](reference/work.md) for work types,
   states, routing, resources, and portability fields.
-- `workstation` is the packaged workstation quick reference. Use
+- `workstations` is the packaged workstation reference. `workstation` remains
+  accepted as a compatibility alias for the same raw markdown. Use
   [Workstations](reference/workstations.md) for the canonical workstation
   guide.
 - `workers` is the packaged worker quick reference. Use
@@ -41,7 +42,7 @@ These are the fixed topic names accepted by `you docs <topic>`.
 
 ## Customer Guides
 
-- [CLI reference](reference/README.md) is the package-owned topic index for the stable `authoring-factories`, `config`, `work`, `workstation`, `workers`, `resources`, `models`, `batch-inputs`, and `templates` reference pages.
+- [CLI reference](reference/README.md) is the package-owned topic index for the stable `authoring-factories`, `config`, `work`, `workstations`, `workers`, `resources`, `models`, `batch-inputs`, and `templates` reference pages.
 - Canonical concept guides:
   - [Factory JSON and work configuration](reference/work.md) owns work types, work states, top-level `factory.json`, routing, resources, and portability fields.
   - [Workstations reference](reference/workstations.md) owns workstation kinds, route fields, runtime step behavior, and workstation-scoped execution settings.

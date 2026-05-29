@@ -25,7 +25,8 @@ var docsSmokeTopics = []docsSmokeTopic{
 	{name: "authoring-factories", heading: "# Authoring Factories", markers: []string{"factory.json", "workers/<name>/AGENTS.md", "workstations/<name>/AGENTS.md", "you run --dir ./factory --with-mock-workers", "--record ./docs/examples/sample-run.replay.json", "--replay ./docs/examples/sample-run.replay.json"}},
 	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "supportingFiles", "bundledFiles", "share-time starter-work snapshots", "docs/reference/config.md", "docs/reference/work.md", "docs/reference/authoring-factories.md", "--with-mock-workers", "--record", "--replay", "--no-record", "you-agent-factory run"}, absent: []string{"Agent Factory run"}},
 	{name: "work", heading: "# Factory JSON And Work Configuration", markers: []string{"work types, states, workers, workstations, resources, and routing", "supportingFiles", "## Work Types", "## Resources", "[Workstations](workstations.md)", "batch-inputs.md"}},
-	{name: "workstation", heading: "# Workstation", markers: []string{"inputs", "outputs", "LOGICAL_MOVE", "docs/reference/workstations.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
+	{name: "workstations", heading: "# Workstations Reference", markers: []string{"workstation authoring contract", "MODEL_WORKSTATION", "CLASSIFIER_WORKSTATION", "LOGICAL_MOVE"}},
+	{name: "workstation", heading: "# Workstations Reference", markers: []string{"workstation authoring contract", "MODEL_WORKSTATION", "CLASSIFIER_WORKSTATION", "LOGICAL_MOVE"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
 	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider", "docs/reference/workers.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
 	{name: "resources", heading: "# Resources", markers: []string{"capacity", "workstations", "agent-slot", "docs/reference/resources.md"}},
 	{name: "batch-inputs", heading: "# Batch Inputs", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "PARENT_CHILD", "factory/inputs/BATCH/default/<request_id>.json"}},
@@ -74,13 +75,15 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 	}
 
 	index := executeDocsSmokeCommand(t, workingDir, "docs")
-	for _, want := range []string{"# Docs", "`authoring-factories` - Practical factory authoring workflow", "`config` - Factory configuration", "`work` - Work types", "`batch-inputs` - Batch input files", "`workstation` - Workstation state", "`you docs authoring-factories`", "`you docs config`", "`you docs work`", "`you docs batch-inputs`", "`you docs workstation`"} {
+	for _, want := range []string{"# Docs", "`authoring-factories` - Practical factory authoring workflow", "`config` - Factory configuration", "`work` - Work types", "`batch-inputs` - Batch input files", "`workstations` - Workstation kinds", "`you docs authoring-factories`", "`you docs config`", "`you docs work`", "`you docs batch-inputs`", "`you docs workstations`"} {
 		if !strings.Contains(index, want) {
 			t.Fatalf("docs index missing %q:\n%s", want, index)
 		}
 	}
-	if strings.Contains(index, "batch-work") {
-		t.Fatalf("docs index should list canonical topics without batch-work alias noise:\n%s", index)
+	for _, alias := range []string{"`batch-work`", "`workstation`"} {
+		if strings.Contains(index, alias) {
+			t.Fatalf("docs index should list canonical topics without %s alias noise:\n%s", alias, index)
+		}
 	}
 
 	for _, topic := range docsSmokeTopics {

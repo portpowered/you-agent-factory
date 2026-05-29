@@ -15,7 +15,7 @@ const (
 	TopicAuthoringFactories Topic = "authoring-factories"
 	TopicConfig             Topic = "config"
 	TopicWork               Topic = "work"
-	TopicWorkstation        Topic = "workstation"
+	TopicWorkstations       Topic = "workstations"
 	TopicWorkers            Topic = "workers"
 	TopicResources          Topic = "resources"
 	TopicModels             Topic = "models"
@@ -23,13 +23,16 @@ const (
 	TopicTemplates          Topic = "templates"
 )
 
-const TopicBatchWorkAlias Topic = "batch-work"
+const (
+	TopicWorkstationAlias Topic = "workstation"
+	TopicBatchWorkAlias   Topic = "batch-work"
+)
 
 const (
 	referenceAuthoringFactoriesPath = "reference/authoring-factories.md"
 	referenceConfigPath             = "reference/config.md"
 	referenceWorkPath               = "reference/work.md"
-	referenceWorkstationPath        = "reference/workstation.md"
+	referenceWorkstationsPath       = "reference/workstations.md"
 	referenceWorkersPath            = "reference/workers.md"
 	referenceResourcesPath          = "reference/resources.md"
 	referenceModelsPath             = "reference/models.md"
@@ -48,7 +51,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath},
 	{topic: TopicConfig, description: "Factory configuration, work types, workers, resources, and local run options.", path: referenceConfigPath},
 	{topic: TopicWork, description: "Work types, states, routing, resources, and portable factory fields.", path: referenceWorkPath},
-	{topic: TopicWorkstation, description: "Workstation state, inputs, outputs, moves, and dispatch routing.", path: referenceWorkstationPath},
+	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath},
 	{topic: TopicModels, description: "Local and hosted model setup for workers and CLI model commands.", path: referenceModelsPath},

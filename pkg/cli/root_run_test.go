@@ -261,7 +261,7 @@ func TestRootCommand_HelpDocumentsOOTBQuickstart(t *testing.T) {
 		"printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md",
 		"docs",
 		"Print packaged markdown reference topics",
-		"you docs workstation",
+		"you docs workstations",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("root help missing %q:\n%s", want, help)
@@ -321,13 +321,13 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`config` - Factory configuration",
 		"`work` - Work types",
-		"`workstation` - Workstation state",
+		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`batch-inputs` - Batch input files",
 		"`you docs authoring-factories`",
 		"`you docs config`",
 		"`you docs work`",
-		"`you docs workstation`",
+		"`you docs workstations`",
 		"`you docs workers`",
 		"`you docs batch-inputs`",
 	} {

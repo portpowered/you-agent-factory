@@ -113,7 +113,7 @@ For an end-to-end run walkthrough, including `--with-mock-workers`,
 
 ## Related
 
-- `you docs workstation`
+- `you docs workstations`
 - `you docs workers`
 - `you docs resources`
 - `you docs batch-work`

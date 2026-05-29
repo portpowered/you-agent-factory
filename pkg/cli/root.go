@@ -65,8 +65,8 @@ func NewRootCommand() *cobra.Command {
 			"  " + cliBinaryName + "\n\n" +
 			"  # In another terminal, submit a Markdown task to the default scaffold.\n" +
 			"  printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md\n\n" +
-			"  # Print the packaged workstation reference page from the installed binary.\n" +
-			"  " + cliBinaryName + " docs workstation\n\n" +
+			"  # Print the packaged workstations reference page from the installed binary.\n" +
+			"  " + cliBinaryName + " docs workstations\n\n" +
 			"  # Explicit batch-style runs are still available when you need them.\n" +
 			"  " + cliBinaryName + " run --dir factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
