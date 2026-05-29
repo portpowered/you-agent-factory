@@ -18,6 +18,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -48,7 +49,7 @@ type SimpleDashboardRenderer func(input SimpleDashboardRenderInput)
 // import cycles between service and api packages.
 type APIServerStarter func(ctx context.Context, runtime apisurface.APISurface, port int, logger *zap.Logger) error
 
-type secretResolver func(ctx context.Context, runtimeCfg interfaces.RuntimeConfigLookup, secretRef string) (string, error)
+type secretResolver = hostedworkers.SecretResolver
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
 // attempted while the current runtime still had active work.
