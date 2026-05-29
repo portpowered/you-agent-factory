@@ -26,7 +26,7 @@ const (
 	ModelProviderCodex    ModelProvider = "codex"
 	ModelProviderGemini   ModelProvider = "gemini"
 	ModelProviderKiro     ModelProvider = "kiro-cli"
-	ModelProviderCursor   ModelProvider = "cursor-agent"
+	ModelProviderCursor   ModelProvider = "agent"
 	ModelProviderOpenCode ModelProvider = "opencode"
 )
 

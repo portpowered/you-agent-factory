@@ -326,16 +326,25 @@ func (b cursorProviderBehavior) BuildArgs(req interfaces.ProviderInferenceReques
 	if err := validateCursorOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
-	args := []string{"--print", req.UserMessage, "--output-format", "text"}
+	var args []string
+	if skipPermissions {
+		args = append(args, "-f")
+	}
+	args = append(args, "-p")
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
 	if req.SessionID != "" {
 		args = append(args, "--resume", req.SessionID)
 	}
-	if skipPermissions {
-		args = append(args, "--force")
+	if req.WorkingDirectory != "" {
+		args = append(args, "--workspace", req.WorkingDirectory)
 	}
+	prompt := strings.TrimSpace(req.UserMessage)
+	if systemPrompt := strings.TrimSpace(req.SystemPrompt); systemPrompt != "" {
+		prompt = buildKiroPrompt(req)
+	}
+	args = append(args, prompt)
 	return args, nil
 }
 

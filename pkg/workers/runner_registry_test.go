@@ -63,7 +63,7 @@ func TestValidateBuiltInRunnerPrerequisites_ReportsMissingBinary(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing binary validation error")
 	}
-	if !strings.Contains(err.Error(), `Cursor CLI runner requires "cursor-agent" on PATH`) {
+	if !strings.Contains(err.Error(), `Cursor CLI runner requires "agent" on PATH`) {
 		t.Fatalf("error = %q, want runner-specific PATH guidance", err.Error())
 	}
 }

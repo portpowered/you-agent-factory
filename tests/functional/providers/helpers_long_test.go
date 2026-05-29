@@ -86,6 +86,43 @@ func configureExecutionTemplateWorkstation(t *testing.T, dir string) {
 	writeExecutionTemplateWorkstationAgents(t, dir, workstationName)
 }
 
+func configureCursorExecutionTemplateWorkstation(t *testing.T, dir string) {
+	t.Helper()
+
+	workstationName := ""
+	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
+		cfg["resources"] = []any{
+			map[string]any{"name": "template-slot", "capacity": 1},
+		}
+
+		workstations := cfg["workstations"].([]any)
+		workstation := workstations[0].(map[string]any)
+		workstationName = workstation["name"].(string)
+		workstation["resources"] = []any{
+			map[string]any{"name": "template-slot", "capacity": 1},
+		}
+	})
+	writeCursorExecutionTemplateWorkstationAgents(t, dir, workstationName)
+}
+
+func writeCursorExecutionTemplateWorkstationAgents(t *testing.T, dir, workstationName string) {
+	t.Helper()
+
+	agentsMD := strings.Join([]string{
+		"---",
+		"type: MODEL_WORKSTATION",
+		`workingDirectory: '/workspace/{{ (index .Inputs 0).Name }}/{{ index (index .Inputs 0).Tags "branch" }}'`,
+		"env:",
+		`  TEMPLATE_BRANCH: '{{ index (index .Inputs 0).Tags "branch" }}'`,
+		`  TEMPLATE_NAME: '{{ (index .Inputs 0).Name }}'`,
+		`  TEMPLATE_PAYLOAD: '{{ (index .Inputs 0).Payload }}'`,
+		`  TEMPLATE_WORKID: '{{ (index .Inputs 0).WorkID }}'`,
+		"---",
+		executionTemplatePrompt(),
+	}, "\n") + "\n"
+	writeFixtureFile(t, dir, []string{"workstations", workstationName, "AGENTS.md"}, agentsMD)
+}
+
 func configureTwoInputResourceGatedTemplateWorkstation(t *testing.T, dir, workstationName, workerName string) {
 	t.Helper()
 
@@ -196,23 +233,8 @@ func executionTemplateWantPrompt(dir string) string {
 	}, "\n")
 }
 
-func assertProviderArgsPrompt(t *testing.T, req workers.CommandRequest, want string) {
-	t.Helper()
-
-	if len(req.Args) == 0 {
-		t.Fatal("provider args were empty")
-	}
-	if got := req.Args[len(req.Args)-1]; got != want {
-		t.Fatalf("provider prompt arg = %q, want %q", got, want)
-	}
-}
-
-func assertProviderStdin(t *testing.T, req workers.CommandRequest, want string) {
-	t.Helper()
-
-	if got := string(req.Stdin); got != want {
-		t.Fatalf("provider stdin = %q, want %q", got, want)
-	}
+func cursorExecutionTemplateWantPrompt(dir string) string {
+	return cursorMergedPrompt("Process the input task.", executionTemplateWantPrompt(dir))
 }
 
 func assertProviderExecutionFields(t *testing.T, dir string, req workers.CommandRequest) {

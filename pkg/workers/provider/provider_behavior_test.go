@@ -255,7 +255,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				ModelProvider: string(ModelProviderCursor),
 				UserMessage:   "summarize the workspace",
 			},
-			want: []string{"--print", "summarize the workspace", "--output-format", "text"},
+			want: []string{"-p", "summarize the workspace"},
 		},
 		{
 			name: "WithModelSessionAndForce",
@@ -266,7 +266,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				UserMessage:   "run the tests",
 			},
 			skipPermissions: true,
-			want:            []string{"--print", "run the tests", "--output-format", "text", "--model", "gpt-5", "--resume", "cursor-session-123", "--force"},
+			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "run the tests"},
 		},
 	}
 
