@@ -1,18 +1,18 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { dashboardWorkstationRequestFixtures } from "../../components/dashboard/fixtures";
-import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
-import { formatLocalDateTime } from "../../components/ui/formatters";
-import { formatTime } from "../../i18n/formatters";
+import { dashboardWorkstationRequestFixtures } from "../../../components/dashboard/fixtures";
+import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { formatLocalDateTime } from "../../../components/ui/formatters";
+import { formatTime } from "../../../i18n/formatters";
 import {
   DETAIL_CARD_NOW,
   getSelectedWorkItemFixture,
-} from "./base/components/detail-card-test-helpers";
-import { CurrentSelectionLocaleProvider } from "./base/components/current-selection-locale";
-import { StateNodeDetailCard } from "./work-state-selection/components/state-node-detail";
-import { selectWorkItemExecutionDetails } from "./work-selection/state/executionDetails";
-import { WorkItemDetailCard } from "./work-selection/components/work-item-card";
+} from "../base/components/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../base/components/current-selection-locale";
+import { StateNodeDetailCard } from "../work-state-selection/components/state-node-detail";
+import { selectWorkItemExecutionDetails } from "../work-selection/state/executionDetails";
+import { WorkItemDetailCard } from "../work-selection/components/work-item-card";
 
 const sharedStartedAt = "2026-04-08T12:00:01Z";
 
