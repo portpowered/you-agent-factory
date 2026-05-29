@@ -144,6 +144,9 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
     );
   });
 
+});
+
+describe("buildTraceRelationFactoryGraphFlow selection", () => {
   it("marks relation nodes selectable when onSelectWorkID is provided", () => {
     const onSelectWorkID = vi.fn();
     const flow = buildTraceRelationFactoryGraphFlow(RELATIONS, {

@@ -38,7 +38,7 @@ function relationNodeProps(
   };
 }
 
-describe("Trace factory graph node components", () => {
+describe("Trace dispatch factory graph node", () => {
   afterEach(() => {
     cleanup();
   });
@@ -95,6 +95,12 @@ describe("Trace factory graph node components", () => {
     }
     expect(node.className).toContain("border-af-warning-border");
     expect(node.className).toContain("bg-af-warning-surface");
+  });
+});
+
+describe("Trace relation factory graph node", () => {
+  afterEach(() => {
+    cleanup();
   });
 
   it("renders work-type relation chrome with default tone when relation states are empty", () => {
