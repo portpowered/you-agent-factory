@@ -14,6 +14,32 @@ import (
 )
 
 func TestFactoryService_ListFactorySessions_DefaultSessionUsesAbsolutePathsFromRelativeDir(t *testing.T) {
+	harness := startRunningSessionServiceFromRelativeDir(t)
+	defer harness.stop(t)
+
+	wantAbs := cleanResolvedPath(harness.absFactoryDir)
+	summary := requireDefaultSessionSummary(t, harness.svc)
+	assertAbsoluteFactorySessionPaths(t, summary, wantAbs, wantAbs)
+
+	defaultSession := harness.svc.defaultSession()
+	if defaultSession == nil || defaultSession.handle == nil || defaultSession.handle.runtime == nil {
+		t.Fatal("expected live default session runtime")
+	}
+	if got := cleanResolvedPath(defaultSession.handle.runtime.dir); got != wantAbs {
+		t.Fatalf("default runtime dir = %q, want %q", got, wantAbs)
+	}
+}
+
+type relativeDirSessionHarness struct {
+	svc           *FactoryService
+	absFactoryDir string
+	runErrCh      chan error
+	cancelRun     context.CancelFunc
+}
+
+func startRunningSessionServiceFromRelativeDir(t *testing.T) *relativeDirSessionHarness {
+	t.Helper()
+
 	parent := t.TempDir()
 	relativeName := "factory"
 	absFactory := filepath.Join(parent, relativeName)
@@ -26,16 +52,7 @@ func TestFactoryService_ListFactorySessions_DefaultSessionUsesAbsolutePathsFromR
 		t.Fatalf("create inputs dir: %v", err)
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(parent); err != nil {
-		t.Fatalf("Chdir(%s): %v", parent, err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(cwd)
-	})
+	withWorkingDirectory(t, parent)
 
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               relativeName,
@@ -48,51 +65,63 @@ func TestFactoryService_ListFactorySessions_DefaultSessionUsesAbsolutePathsFromR
 	}
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
-	defer cancelRun()
 	runErrCh := make(chan error, 1)
 	go func() {
 		runErrCh <- svc.Run(runCtx)
 	}()
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
-	t.Cleanup(func() {
-		cancelRun()
-		select {
-		case err := <-runErrCh:
-			if err != nil {
-				t.Fatalf("Run: %v", err)
-			}
-		case <-time.After(time.Second):
-			t.Fatal("timed out waiting for service shutdown")
+
+	return &relativeDirSessionHarness{
+		svc:           svc,
+		absFactoryDir: absFactory,
+		runErrCh:      runErrCh,
+		cancelRun:     cancelRun,
+	}
+}
+
+func (h *relativeDirSessionHarness) stop(t *testing.T) {
+	t.Helper()
+
+	h.cancelRun()
+	select {
+	case err := <-h.runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
 		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
+func withWorkingDirectory(t *testing.T, dir string) {
+	t.Helper()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("Chdir(%s): %v", dir, err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
 	})
+}
+
+func requireDefaultSessionSummary(t *testing.T, svc *FactoryService) *factoryapi.FactorySessionSummary {
+	t.Helper()
 
 	response, err := svc.ListFactorySessions(context.Background())
 	if err != nil {
 		t.Fatalf("ListFactorySessions: %v", err)
 	}
-
-	var defaultSummary *factoryapi.FactorySessionSummary
 	for i := range response.Sessions {
-		session := response.Sessions[i]
-		if session.Id == defaultFactorySessionID {
-			defaultSummary = &response.Sessions[i]
-			break
+		if response.Sessions[i].Id == defaultFactorySessionID {
+			return &response.Sessions[i]
 		}
 	}
-	if defaultSummary == nil {
-		t.Fatalf("sessions = %#v, want default session %q", response.Sessions, defaultFactorySessionID)
-	}
-
-	wantAbs := cleanResolvedPath(absFactory)
-	assertAbsoluteFactorySessionPaths(t, defaultSummary, wantAbs, wantAbs)
-
-	defaultSession := svc.defaultSession()
-	if defaultSession == nil || defaultSession.handle == nil || defaultSession.handle.runtime == nil {
-		t.Fatal("expected live default session runtime")
-	}
-	if got := cleanResolvedPath(defaultSession.handle.runtime.dir); got != wantAbs {
-		t.Fatalf("default runtime dir = %q, want %q", got, wantAbs)
-	}
+	t.Fatalf("sessions = %#v, want default session %q", response.Sessions, defaultFactorySessionID)
+	return nil
 }
 
 func TestFactoryService_ListFactorySessions_DefaultSessionAbsolutePathsMatchRuntimeWithCurrentPointer(t *testing.T) {
@@ -102,22 +131,7 @@ func TestFactoryService_ListFactorySessions_DefaultSessionAbsolutePathsMatchRunt
 	})
 	defer harness.stop(t)
 
-	response, err := harness.svc.ListFactorySessions(context.Background())
-	if err != nil {
-		t.Fatalf("ListFactorySessions: %v", err)
-	}
-
-	var defaultSummary *factoryapi.FactorySessionSummary
-	for i := range response.Sessions {
-		session := response.Sessions[i]
-		if session.Id == defaultFactorySessionID {
-			defaultSummary = &response.Sessions[i]
-			break
-		}
-	}
-	if defaultSummary == nil {
-		t.Fatalf("sessions = %#v, want default session %q", response.Sessions, defaultFactorySessionID)
-	}
+	defaultSummary := requireDefaultSessionSummary(t, harness.svc)
 
 	wantFolder := cleanResolvedPath(harness.rootDir)
 	wantFactory := cleanResolvedPath(harness.factoryDirs["alpha"])
@@ -161,18 +175,8 @@ func TestFactoryService_DiscoverFactorySessionTargets_DefaultTargetMatchesAbsolu
 		t.Fatalf("default target paths = folder %q factory %q, want absolute", targets[0].FolderPath, targets[0].FactoryDir)
 	}
 
-	response, err := harness.svc.ListFactorySessions(context.Background())
-	if err != nil {
-		t.Fatalf("ListFactorySessions: %v", err)
-	}
-	for _, session := range response.Sessions {
-		if session.Id != defaultFactorySessionID {
-			continue
-		}
-		assertAbsoluteFactorySessionPaths(t, &session, wantFolder, wantFolder)
-		return
-	}
-	t.Fatalf("sessions = %#v, want default session %q", response.Sessions, defaultFactorySessionID)
+	defaultSummary := requireDefaultSessionSummary(t, harness.svc)
+	assertAbsoluteFactorySessionPaths(t, defaultSummary, wantFolder, wantFolder)
 }
 
 func assertAbsoluteFactorySessionPaths(
