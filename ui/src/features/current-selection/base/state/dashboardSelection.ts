@@ -32,11 +32,17 @@ export interface DashboardWorkstationRequestSelection {
   request: DashboardWorkstationRequest;
 }
 
+export interface DashboardWorkerSelection {
+  kind: "worker";
+  workerName: string;
+}
+
 export type DashboardSelection =
   | DashboardNodeSelection
   | DashboardStateNodeSelection
   | DashboardWorkItemSelection
-  | DashboardWorkstationRequestSelection;
+  | DashboardWorkstationRequestSelection
+  | DashboardWorkerSelection;
 
 export function selectDefaultSelection(snapshot: DashboardSnapshot): DashboardSelection | null {
   const firstActiveNodeId = snapshot.runtime.active_workstation_node_ids?.[0];
@@ -81,6 +87,12 @@ export function resolveDashboardSelection({
       selection,
       workstationRequestsByDispatchID,
     );
+  }
+
+  if (selection.kind === "worker") {
+    return workerExistsInSnapshotFactory(snapshot, selection.workerName)
+      ? selection
+      : selectDefaultSelection(snapshot);
   }
 
   return resolveWorkstationRequestSelection(
@@ -423,6 +435,16 @@ function resolveRetainedRequestNodeID(
     snapshot,
     request.transition_id,
     request.workstation_name,
+  );
+}
+
+function workerExistsInSnapshotFactory(
+  snapshot: DashboardSnapshot,
+  workerName: string,
+): boolean {
+  return (
+    snapshot.factory?.workers?.some((worker) => worker.name === workerName) ??
+    false
   );
 }
 

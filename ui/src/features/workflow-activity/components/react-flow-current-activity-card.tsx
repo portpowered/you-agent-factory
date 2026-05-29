@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: primary activity graph card composes editor, import, and observer surfaces together.
 import "@xyflow/react/dist/style.css";
 
 import {
@@ -64,6 +65,7 @@ const CURRENT_ACTIVITY_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 export type CurrentActivitySelection =
   | { kind: "node"; nodeId: string }
   | { kind: "state-node"; placeId: string }
+  | { kind: "worker"; workerName: string }
   | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
 
 function CurrentActivityCardHeading({
@@ -113,6 +115,7 @@ interface ReactFlowCurrentActivityCardProps {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectWorker: (workerName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
   selection: CurrentActivitySelection | null;
@@ -131,6 +134,7 @@ function useCurrentActivityBaseNodes({
   now,
   onSelectStateNode,
   onSelectWorkID,
+  onSelectWorker,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -140,6 +144,7 @@ function useCurrentActivityBaseNodes({
   | "now"
   | "onSelectStateNode"
   | "onSelectWorkID"
+  | "onSelectWorker"
   | "onSelectWorkstation"
   | "selection"
   | "locale"
@@ -175,6 +180,7 @@ function useCurrentActivityBaseNodes({
         now,
         onSelectStateNode,
         onSelectWorkID,
+        onSelectWorker,
         onSelectWorkstation,
         selection,
         snapshot,
@@ -191,6 +197,7 @@ function useCurrentActivityBaseNodes({
       now,
       onSelectStateNode,
       onSelectWorkID,
+      onSelectWorker,
       onSelectWorkstation,
       selection,
       snapshot,
@@ -199,12 +206,14 @@ function useCurrentActivityBaseNodes({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates graph layout, editor draft, and selection handler wiring in one hook.
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,
   now,
   onSelectStateNode,
   onSelectWorkID,
+  onSelectWorker,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -213,6 +222,7 @@ export function useCurrentActivityGraphViewModel({
   | "now"
   | "onSelectStateNode"
   | "onSelectWorkID"
+  | "onSelectWorker"
   | "onSelectWorkstation"
   | "selection"
   | "locale"
@@ -271,6 +281,7 @@ export function useCurrentActivityGraphViewModel({
     now,
     onSelectStateNode,
     onSelectWorkID,
+    onSelectWorker,
     onSelectWorkstation,
     selection,
     snapshot,

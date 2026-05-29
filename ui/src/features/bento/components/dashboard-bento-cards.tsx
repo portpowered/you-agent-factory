@@ -259,6 +259,7 @@ function buildOverviewWidgetCard({
             now={now}
             onSelectStateNode={currentSelection.selectStateNode}
             onSelectWorkID={currentSelection.selectWorkByID}
+            onSelectWorker={currentSelection.selectWorker}
             onSelectWorkstation={currentSelection.selectWorkstation}
             selection={currentSelection.selection}
             snapshot={snapshot}

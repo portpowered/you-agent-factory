@@ -60,6 +60,7 @@ export interface CurrentSelectionState {
   ) => void;
   selectWorkstation: (nodeId: string) => void;
   selectWorkstationRequest: (request: DashboardWorkstationRequest) => void;
+  selectWorker: (workerName: string) => void;
   terminalWorkDetail: TerminalWorkDetail | null;
   undoSelection: () => void;
 }
@@ -166,6 +167,7 @@ export function useCurrentSelection({
     selectWorkItem: actions.selectWorkItem,
     selectWorkstation: actions.selectWorkstation,
     selectWorkstationRequest: actions.selectWorkstationRequest,
+    selectWorker: actions.selectWorker,
     terminalWorkDetail,
     undoSelection: store.undoSelection,
   };

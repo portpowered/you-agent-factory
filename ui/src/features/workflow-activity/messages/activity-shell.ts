@@ -8,6 +8,7 @@ export interface WorkflowActivityShellMessages {
   emptyTitle: string;
   selectExhaustionRuleLabel: (workstationTitle: string) => string;
   selectStateLabel: (placeLabel: string) => string;
+  selectWorkerLabel: (workerName: string) => string;
   selectWorkstationLabel: (workstationTitle: string) => string;
   title: string;
   viewportLabel: string;
@@ -21,6 +22,7 @@ const workflowActivityShellMessagesByLocale = {
     selectExhaustionRuleLabel: (workstationTitle) =>
       `Select ${workstationTitle} exhaustion rule`,
     selectStateLabel: (placeLabel) => `Select ${placeLabel} state`,
+    selectWorkerLabel: (workerName) => `Select ${workerName} worker`,
     selectWorkstationLabel: (workstationTitle) =>
       `Select ${workstationTitle} workstation`,
     title: "Current activity",
@@ -33,6 +35,7 @@ const workflowActivityShellMessagesByLocale = {
     selectExhaustionRuleLabel: (workstationTitle) =>
       `选择 ${workstationTitle} 枯竭规则`,
     selectStateLabel: (placeLabel) => `选择 ${placeLabel} 状态`,
+    selectWorkerLabel: (workerName) => `选择 ${workerName} 工作者`,
     selectWorkstationLabel: (workstationTitle) =>
       `选择 ${workstationTitle} 工作站`,
     title: "当前活动",

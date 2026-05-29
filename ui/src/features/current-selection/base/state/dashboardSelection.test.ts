@@ -271,4 +271,45 @@ describe("resolveDashboardSelection", () => {
       workItem,
     });
   });
+
+  it("retains worker selections while the authored worker remains in the factory document", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+    snapshot.factory = {
+      ...snapshot.factory,
+      workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
+    };
+
+    const selection = {
+      kind: "worker" as const,
+      workerName: "reviewer",
+    };
+
+    expect(
+      resolveDashboardSelection({
+        selection,
+        snapshot,
+      }),
+    ).toEqual(selection);
+  });
+
+  it("falls back to the default dashboard selection when the selected worker disappears", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+    snapshot.factory = {
+      ...snapshot.factory,
+      workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
+    };
+
+    const resolved = resolveDashboardSelection({
+      selection: {
+        kind: "worker",
+        workerName: "removed-worker",
+      },
+      snapshot,
+    });
+
+    expect(resolved).toEqual({
+      kind: "node",
+      nodeId: "review",
+    });
+  });
 });

@@ -502,6 +502,7 @@ function renderCurrentActivity({
       (workID: string, hint?: { dispatchID?: string; nodeID?: string }) => void
     >();
   const onSelectStateNode = vi.fn<(placeId: string) => void>();
+  const onSelectWorker = vi.fn<(workerName: string) => void>();
   const onSelectWorkstation = vi.fn<(nodeId: string) => void>();
 
   renderWithQueryClient(
@@ -514,6 +515,7 @@ function renderCurrentActivity({
       onFactoryImportReady={onFactoryImportReady}
       onSelectWorkID={onSelectWorkID}
       onSelectStateNode={onSelectStateNode}
+      onSelectWorker={onSelectWorker}
       onSelectWorkstation={onSelectWorkstation}
       readFactoryImportFile={readFactoryImportFile}
       selection={selection}
@@ -522,7 +524,7 @@ function renderCurrentActivity({
     />,
   );
 
-  return { onSelectStateNode, onSelectWorkID, onSelectWorkstation };
+  return { onSelectStateNode, onSelectWorkID, onSelectWorker, onSelectWorkstation };
 }
 
 function renderWithQueryClient(view: ReactElement) {
@@ -2413,6 +2415,61 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     ).toBe(true);
   });
 
+  it("selects worker nodes from the live activity graph", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: workerDenseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      latestDocument: workerDenseFactoryDefinitionDocument,
+      pendingFactoryDefinition: workerDenseFactoryDefinitionDocument,
+    } as never);
+    const snapshot = workerDenseSnapshot();
+    snapshot.factory = workerDenseFactoryDefinitionDocument;
+
+    const { onSelectWorker } = renderCurrentActivity({
+      snapshot,
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Select writer worker" }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Select writer worker" }));
+
+    expect(onSelectWorker).toHaveBeenCalledWith("writer");
+  });
+
+  it("shows selected styling for the active worker selection", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: workerDenseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      latestDocument: workerDenseFactoryDefinitionDocument,
+      pendingFactoryDefinition: workerDenseFactoryDefinitionDocument,
+    } as never);
+    const snapshot = workerDenseSnapshot();
+    snapshot.factory = workerDenseFactoryDefinitionDocument;
+
+    renderCurrentActivity({
+      selection: { kind: "worker", workerName: "writer" },
+      snapshot,
+    });
+
+    const workerButton = await screen.findByRole("button", {
+      name: "Select writer worker",
+    });
+    expect(workerButton.getAttribute("aria-pressed")).toBe("true");
+    expect(workerButton.getAttribute("data-selected-worker")).toBe("true");
+  });
+
   it("keeps observer selection callbacks stable for canonical factory-backed graph nodes", async () => {
     const { onSelectStateNode, onSelectWorkID, onSelectWorkstation } =
       renderCurrentActivity({
@@ -3281,6 +3338,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
         selection={null}
         snapshot={dashboardSnapshotWithActiveWorkItemCount(0)}
         onSelectStateNode={vi.fn()}
+        onSelectWorker={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />,
     );
@@ -3303,6 +3361,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
             selection={null}
             snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
             onSelectStateNode={vi.fn()}
+            onSelectWorker={vi.fn()}
             onSelectWorkstation={vi.fn()}
           />
         </QueryClientProvider>,
@@ -3337,6 +3396,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     const callbacks = {
       onSelectWorkID: vi.fn(),
       onSelectStateNode: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
     };
     const { rerender } = renderWithQueryClient(
