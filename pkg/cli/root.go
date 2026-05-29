@@ -116,10 +116,29 @@ func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
 func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	factoryCmd := &cobra.Command{
 		Use:   "factory",
-		Short: "Inspect factory runtime state",
-		Long: "Inspect factory runtime state from a running you-agent-factory service.\n\n" +
-			"Use the query subcommand to ask the live API server which factory is currently active " +
-			"instead of inferring runtime state from local factory files.",
+		Short: "Inspect and manage factory definitions",
+		Long: "Inspect live factory runtime state and manage persisted named factories.\n\n" +
+			"Subcommands:\n" +
+			"  query   show the current active factory from a running service\n" +
+			"  list    list persisted named factories under a factory root\n" +
+			"  save    create a named factory from factory.json or persist the live current factory\n" +
+			"  update  replace an existing named factory from factory.json\n" +
+			"  delete  remove an unused named factory from disk\n\n" +
+			"Use query against a running service. Use list, save, update, and delete for on-disk " +
+			"named factories under --dir (default factory/). Live save with no name argument uses " +
+			"--port and --session like query.",
+		Example: "  # Show the active factory from the running service.\n" +
+			"  " + cliBinaryName + " factory query\n\n" +
+			"  # List persisted named factories and which one is current.\n" +
+			"  " + cliBinaryName + " factory list\n\n" +
+			"  # Save a new named factory from a config file.\n" +
+			"  " + cliBinaryName + " factory save staging --from ./factory.json --set-current\n\n" +
+			"  # Replace an existing named factory definition.\n" +
+			"  " + cliBinaryName + " factory update staging --from ./factory.json\n\n" +
+			"  # Delete an unused named factory.\n" +
+			"  " + cliBinaryName + " factory delete staging\n\n" +
+			"  # Persist the live current factory back to durable storage.\n" +
+			"  " + cliBinaryName + " factory save",
 	}
 	factoryCmd.AddCommand(
 		newFactoryQueryCommand(diagnostics),
