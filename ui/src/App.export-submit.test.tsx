@@ -1,6 +1,8 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
+import { readFactoryImportPng } from "./features/import/lib/factory-png-import";
+import type { FactoryValue } from "./api/named-factory";
 import {
   baselineSnapshot,
   jsonResponse,
@@ -15,6 +17,30 @@ import {
   installExportDownloadProbe,
   toArrayBuffer,
 } from "./testing/app-shell-export-test-utils";
+
+const currentFactoryWithBundledFiles = {
+  ...currentNamedFactoryExportResponse,
+  supportingFiles: {
+    bundledFiles: [
+      {
+        content: {
+          encoding: "utf-8",
+          inline: "#!/usr/bin/env bash\nprintf 'setup\\n'\n",
+        },
+        targetPath: "factory/scripts/setup-workspace.sh",
+        type: "SCRIPT",
+      },
+      {
+        content: {
+          encoding: "utf-8",
+          inline: "starter task\n",
+        },
+        targetPath: "factory/inputs/task/default/starter.md",
+        type: "INPUT",
+      },
+    ],
+  },
+} satisfies FactoryValue;
 
 describe("App shell export submission flows", () => {
   registerAppDashboardTestLifecycle();
@@ -95,7 +121,13 @@ describe("App shell export submission flows", () => {
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
       .mockResolvedValue({
         blob: new Blob(
-          [toArrayBuffer(fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="))],
+          [
+            toArrayBuffer(
+              fromBase64(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+              ),
+            ),
+          ],
           { type: "image/png" },
         ),
         metadata: {
@@ -155,6 +187,107 @@ describe("App shell export submission flows", () => {
         });
       });
       expect(exportProbe.getDownloadedFilename()).toBe("factory-poster.png");
+    } finally {
+      writeFactoryExportPngSpy.mockRestore();
+      exportProbe.restore();
+    }
+  });
+
+  it("embeds current-factory bundled files in readable PNG metadata", async () => {
+    const exportProbe = installExportDownloadProbe();
+    const writeFactoryExportPng = factoryPngExportModule.writeFactoryExportPng;
+    let exportResultPromise: ReturnType<typeof writeFactoryExportPng> | null =
+      null;
+    const writeFactoryExportPngSpy = vi
+      .spyOn(factoryPngExportModule, "writeFactoryExportPng")
+      .mockImplementation((options) => {
+        exportResultPromise = writeFactoryExportPng({
+          ...options,
+          rasterizeImageToPngBytes: async () =>
+            fromBase64(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+            ),
+        });
+        return exportResultPromise;
+      });
+    const { fetchMock } = renderApp({
+      snapshot: baselineSnapshot,
+      timelineEvents: exportTimelineEvents,
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(currentFactoryWithBundledFiles),
+    );
+
+    try {
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Export PNG" }),
+      );
+
+      const dialog = await screen.findByRole("dialog", {
+        name: "Export factory",
+      });
+      await waitFor(() => {
+        expect(
+          (
+            within(dialog).getByRole("button", {
+              name: "Export PNG",
+            }) as HTMLButtonElement
+          ).disabled,
+        ).toBe(false);
+      });
+
+      const imageInput = within(dialog).getByLabelText(
+        "Cover image",
+      ) as HTMLInputElement;
+      Object.defineProperty(imageInput, "files", {
+        configurable: true,
+        value: [exportImageFile()],
+      });
+      fireEvent.change(imageInput);
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Export PNG" }),
+      );
+
+      await waitFor(() => {
+        expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
+          factory: currentFactoryWithBundledFiles,
+          image: expect.any(File),
+        });
+      });
+      if (!exportResultPromise) {
+        throw new Error("expected export flow to start writing PNG metadata");
+      }
+      const exportResult = await exportResultPromise;
+      if (!exportResult.ok) {
+        throw new Error(exportResult.error.message, {
+          cause: exportResult.error.cause,
+        });
+      }
+      await waitFor(() => {
+        expect(exportProbe.getDownloadedFilename()).toBe(
+          "semantic-workflow.png",
+        );
+      });
+
+      const downloadedBlob = exportProbe.getDownloadedBlob();
+      if (!downloadedBlob) {
+        throw new Error("expected export flow to download a PNG blob");
+      }
+
+      const importResult = await readFactoryImportPng({
+        createPreviewImageSrc: () => "blob:preview",
+        file: downloadedBlob,
+        revokePreviewImageSrc: () => {},
+        validatePreviewImage: async () => {},
+      });
+
+      expect(importResult.ok).toBe(true);
+      if (!importResult.ok) {
+        throw new Error(importResult.error.message);
+      }
+      expect(importResult.value.factory.supportingFiles).toEqual(
+        currentFactoryWithBundledFiles.supportingFiles,
+      );
     } finally {
       writeFactoryExportPngSpy.mockRestore();
       exportProbe.restore();

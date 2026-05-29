@@ -446,6 +446,14 @@ func namedFactoryPayloadWithBundledFiles(t *testing.T, project string) []byte {
 						"inline":   "Write-Output 'portable script'\n",
 					},
 				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/default/starter.md",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "starter work\n",
+					},
+				},
 			},
 		},
 		"workTypes": []map[string]any{
@@ -491,6 +499,17 @@ func assertRuntimeFactoryFileContent(t *testing.T, path, want string) {
 	}
 	if string(got) != want {
 		t.Fatalf("%s content = %q, want %q", path, string(got), want)
+	}
+}
+
+func assertRuntimeFactoryFileMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat(%s): %v", path, err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("%s mode = %v, want %v", path, got, want)
 	}
 }
 

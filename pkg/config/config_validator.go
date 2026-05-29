@@ -440,10 +440,11 @@ func validateBundledFileType(basePath string, file interfaces.BundledFileConfig)
 		Severity: SeverityError,
 		Path:     basePath + ".type",
 		Message: fmt.Sprintf(
-			"type %q must be one of %q, %q, or %q",
+			"type %q must be one of %q, %q, %q, or %q",
 			file.Type,
 			interfaces.BundledFileTypeScript,
 			interfaces.BundledFileTypeDoc,
+			interfaces.BundledFileTypeInput,
 			interfaces.BundledFileTypeRootHelper,
 		),
 		Rule: "bundled-file-type",
@@ -481,6 +482,14 @@ func validateBundledFileTarget(basePath string, file interfaces.BundledFileConfi
 			Severity: SeverityError,
 			Path:     basePath + ".targetPath",
 			Message:  fmt.Sprintf("targetPath %q must stay under %q for %s bundled files", targetPath, expectedRoot, file.Type),
+			Rule:     "bundled-file-target-root",
+		}}
+	}
+	if file.Type == interfaces.BundledFileTypeInput && !isSupportedPortableBundledInputTarget(targetPath) {
+		return []Finding{{
+			Severity: SeverityError,
+			Path:     basePath + ".targetPath",
+			Message:  fmt.Sprintf("targetPath %q must use factory/inputs/<work-type>/<channel>/<file> for INPUT bundled files", targetPath),
 			Rule:     "bundled-file-target-root",
 		}}
 	}
@@ -600,7 +609,13 @@ func isSupportedPortableBundledFile(file interfaces.BundledFileConfig) bool {
 		return isSupportedPortableBundledRootHelperTarget(targetPath)
 	}
 	expectedRoot := bundledFileRootForType(file.Type)
-	return expectedRoot != "" && strings.HasPrefix(targetPath, expectedRoot)
+	if expectedRoot == "" || !strings.HasPrefix(targetPath, expectedRoot) {
+		return false
+	}
+	if file.Type == interfaces.BundledFileTypeInput {
+		return isSupportedPortableBundledInputTarget(targetPath)
+	}
+	return true
 }
 
 func bundledFileRootForType(fileType string) string {
@@ -625,6 +640,23 @@ func isSupportedPortableBundledRootHelperTarget(targetPath string) bool {
 	default:
 		return false
 	}
+}
+
+func isSupportedPortableBundledInputTarget(targetPath string) bool {
+	if !strings.HasPrefix(targetPath, portableBundledInputRoot) {
+		return false
+	}
+	relativePath := strings.TrimPrefix(targetPath, portableBundledInputRoot)
+	parts := strings.Split(relativePath, "/")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func validateBundledFileTargetPath(targetPath string) error {

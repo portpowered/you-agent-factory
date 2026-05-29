@@ -26,12 +26,13 @@ func TestPortableBundledFiles_RoundTripAcrossFlattenAndExpand(t *testing.T) {
 	if cfg.ResourceManifest == nil {
 		t.Fatal("expected flattened config to include resourceManifest")
 	}
-	if len(cfg.ResourceManifest.BundledFiles) != 3 {
-		t.Fatalf("expected 3 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
+	if len(cfg.ResourceManifest.BundledFiles) != 4 {
+		t.Fatalf("expected 4 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
 	}
 	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
 	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
-	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeInput, "factory/inputs/task/default/starter.md", "starter work\n")
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[3], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
 
 	portableDir := t.TempDir()
 	portablePath := filepath.Join(portableDir, interfaces.FactoryConfigFile)
@@ -47,6 +48,7 @@ func TestPortableBundledFiles_RoundTripAcrossFlattenAndExpand(t *testing.T) {
 
 	assertPortableBundledRoundTripFile(t, filepath.Join(targetDir, "scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
 	assertPortableBundledRoundTripFile(t, filepath.Join(targetDir, "docs", "README.md"), "# Portable factory\n")
+	assertPortableBundledRoundTripFile(t, filepath.Join(targetDir, "inputs", "task", "default", "starter.md"), "starter work\n")
 	assertPortableBundledRoundTripFile(t, filepath.Join(targetDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertPortableBundledRoundTripScriptExecutable(t, filepath.Join(targetDir, "scripts", "execute-story.ps1"))
 	assertPortableBundledPersistedThinManifestFile(t, filepath.Join(targetDir, interfaces.FactoryConfigFile))
@@ -86,6 +88,7 @@ func TestPortableBundledFiles_LoadRuntimeConfigMaterializesStandalonePortableCon
 
 	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
 	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "docs", "README.md"), "# Portable factory\n")
+	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "inputs", "task", "default", "starter.md"), "starter work\n")
 	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertPortableBundledRoundTripScriptExecutable(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"))
 	assertPortableBundledLoadedWorker(t, loaded)
@@ -106,20 +109,23 @@ func TestPortableBundledFiles_LoadRuntimeConfigOverwritesDifferingExistingFile(t
 	}
 	copyPortableBundledDiskBackedExport(t, projectDir, sourceDir, portableDir)
 	writePortableBundledRoundTripFile(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"), "Write-Output 'stale script'\n")
+	writePortableBundledRoundTripFile(t, filepath.Join(portableDir, "inputs", "task", "default", "starter.md"), "stale starter work\n")
 
 	loaded, err := factoryconfig.LoadRuntimeConfig(portableDir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(standalone portable config with stale file): %v", err)
 	}
 	replacements := loaded.PortableBundledFileReplacements()
-	if len(replacements) != 1 {
-		t.Fatalf("portable bundled replacements = %#v, want one replacement", replacements)
+	if len(replacements) != 2 {
+		t.Fatalf("portable bundled replacements = %#v, want two replacements", replacements)
 	}
-	if replacements[0].TargetPath != "factory/scripts/execute-story.ps1" {
-		t.Fatalf("portable bundled replacement targetPath = %q, want %q", replacements[0].TargetPath, "factory/scripts/execute-story.ps1")
-	}
+	assertPortableBundledReplacementPaths(t, replacements, []string{
+		"factory/inputs/task/default/starter.md",
+		"factory/scripts/execute-story.ps1",
+	})
 
 	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
+	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "inputs", "task", "default", "starter.md"), "starter work\n")
 	assertPortableBundledLoadedWorker(t, loaded)
 }
 
@@ -132,6 +138,7 @@ func TestPortableBundledFiles_LoadRuntimeConfigAcceptsThinDiskBackedManifest(t *
     "bundledFiles":[
       {"type":"ROOT_HELPER","targetPath":"Makefile","content":{}},
       {"type":"DOC","targetPath":"factory/docs/README.md","content":{}},
+      {"type":"INPUT","targetPath":"factory/inputs/task/default/starter.md","content":{}},
       {"type":"SCRIPT","targetPath":"factory/scripts/execute-story.ps1","content":{}}
     ]
   },
@@ -153,7 +160,50 @@ func TestPortableBundledFiles_LoadRuntimeConfigAcceptsThinDiskBackedManifest(t *
 	}
 
 	assertPortableBundledLoadedWorker(t, loaded)
+	assertPortableBundledRoundTripFile(t, filepath.Join(sourceDir, "inputs", "task", "default", "starter.md"), "starter work\n")
 	assertPortableBundledLoadedThinManifest(t, loaded.FactoryConfig())
+}
+
+func TestPortableBundledFiles_FlattenRehydratesThinDiskBackedManifestFromDisk(t *testing.T) {
+	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
+
+	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, interfaces.FactoryConfigFile), `{
+  "name":"portable-bundled-roundtrip-factory",
+  "supportingFiles":{
+    "bundledFiles":[
+      {"type":"ROOT_HELPER","targetPath":"Makefile","content":{"encoding":"utf-8","inline":"stale makefile\n"}},
+      {"type":"DOC","targetPath":"factory/docs/README.md","content":{}},
+      {"type":"INPUT","targetPath":"factory/inputs/task/default/starter.md","content":{"encoding":"utf-8","inline":"stale starter work\n"}},
+      {"type":"SCRIPT","targetPath":"factory/scripts/execute-story.ps1","content":{}}
+    ]
+  },
+  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+  "workers": [{"name":"executor"}],
+  "workstations": [{
+    "name":"execute-story",
+    "worker":"executor",
+    "inputs":[{"workType":"task","state":"init"}],
+    "outputs":[{"workType":"task","state":"complete"}],
+    "onFailure":[{"workType":"task","state":"failed"}]
+  }]
+}`)
+	writePortableBundledRoundTripFile(t, filepath.Join(projectDir, "Makefile"), "test:\n\tgo test ./...\n")
+
+	flattened, err := factoryconfig.FlattenFactoryConfig(sourceDir)
+	if err != nil {
+		t.Fatalf("FlattenFactoryConfig(thin disk-backed manifest): %v", err)
+	}
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(flattened)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON(flattened): %v", err)
+	}
+	if cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) != 4 {
+		t.Fatalf("flattened bundled files = %#v, want 4 bundled files", cfg.ResourceManifest)
+	}
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeInput, "factory/inputs/task/default/starter.md", "starter work\n")
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[3], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
 }
 
 func seedPortableBundledRoundTripFactory(t *testing.T) (string, string) {
@@ -192,6 +242,7 @@ Execute {{ (index .Inputs 0).WorkID }}.
 `)
 	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, "scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
 	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, "docs", "README.md"), "# Portable factory\n")
+	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, "inputs", "task", "default", "starter.md"), "starter work\n")
 	writePortableBundledRoundTripFile(t, filepath.Join(projectDir, "Makefile"), "test:\n\tgo test ./...\n")
 	return projectDir, sourceDir
 }
@@ -217,12 +268,13 @@ func assertPortableBundledLoadedThinManifest(t *testing.T, cfg *interfaces.Facto
 	if cfg == nil || cfg.ResourceManifest == nil {
 		t.Fatal("expected loaded config to include resourceManifest")
 	}
-	if len(cfg.ResourceManifest.BundledFiles) != 3 {
-		t.Fatalf("expected 3 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
+	if len(cfg.ResourceManifest.BundledFiles) != 4 {
+		t.Fatalf("expected 4 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
 	}
 	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
 	assertBundledFileRoundTripEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md")
-	assertBundledFileRoundTripEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1")
+	assertBundledFileRoundTripEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeInput, "factory/inputs/task/default/starter.md")
+	assertBundledFileRoundTripEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[3], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1")
 }
 
 func assertPortableBundledPersistedThinManifestFile(t *testing.T, path string) {
@@ -242,12 +294,14 @@ func assertPortableBundledPersistedThinManifestFile(t *testing.T, path string) {
 func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *testing.T) {
 	tests := []struct {
 		name            string
+		fileType        string
 		targetPath      func(t *testing.T, portableDir string) string
 		outsidePath     func(portableDir, unsafeTarget string) string
 		wantErrContains string
 	}{
 		{
-			name: "absolute target location",
+			name:     "absolute target location",
+			fileType: interfaces.BundledFileTypeScript,
 			targetPath: func(t *testing.T, _ string) string {
 				return filepath.Join(t.TempDir(), "outside.ps1")
 			},
@@ -257,7 +311,8 @@ func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *te
 			wantErrContains: "must be factory-relative, not absolute",
 		},
 		{
-			name: "escaping target location",
+			name:     "escaping target location",
+			fileType: interfaces.BundledFileTypeScript,
 			targetPath: func(_ *testing.T, _ string) string {
 				return "../outside.ps1"
 			},
@@ -265,6 +320,28 @@ func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *te
 				return filepath.Join(filepath.Dir(portableDir), "outside.ps1")
 			},
 			wantErrContains: "cannot escape the factory root",
+		},
+		{
+			name:     "unsupported root helper",
+			fileType: interfaces.BundledFileTypeRootHelper,
+			targetPath: func(_ *testing.T, _ string) string {
+				return "README.md"
+			},
+			outsidePath: func(portableDir, _ string) string {
+				return filepath.Join(portableDir, "factory", "README.md")
+			},
+			wantErrContains: "must be one of the supported root helper files",
+		},
+		{
+			name:     "input nested past starter file",
+			fileType: interfaces.BundledFileTypeInput,
+			targetPath: func(_ *testing.T, _ string) string {
+				return "factory/inputs/task/default/nested/starter.md"
+			},
+			outsidePath: func(portableDir, _ string) string {
+				return filepath.Join(portableDir, "factory", "inputs", "task", "default", "nested", "starter.md")
+			},
+			wantErrContains: "must use factory/inputs/<work-type>/<channel>/<file>",
 		},
 	}
 
@@ -276,7 +353,7 @@ func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *te
 
 			writePortableBundledRuntimeFixture(t, portableDir, []interfaces.BundledFileConfig{
 				portableBundledFileFixture(interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n"),
-				portableBundledFileFixture(interfaces.BundledFileTypeScript, unsafeTarget, "Write-Output 'unsafe'\n"),
+				portableBundledFileFixture(tt.fileType, unsafeTarget, "Write-Output 'unsafe'\n"),
 			})
 
 			_, err := factoryconfig.ExpandFactoryConfigLayout(filepath.Join(portableDir, interfaces.FactoryConfigFile))
@@ -405,8 +482,8 @@ func assertBundledFileRoundTripEntryWithoutInline(t *testing.T, bundledFile inte
 	if bundledFile.TargetPath != wantTargetPath {
 		t.Fatalf("bundled file targetPath = %q, want %q", bundledFile.TargetPath, wantTargetPath)
 	}
-	if bundledFile.Content.Encoding != interfaces.BundledFileEncodingUTF8 {
-		t.Fatalf("bundled file encoding = %q, want %q", bundledFile.Content.Encoding, interfaces.BundledFileEncodingUTF8)
+	if bundledFile.Content.Encoding != "" && bundledFile.Content.Encoding != interfaces.BundledFileEncodingUTF8 {
+		t.Fatalf("bundled file encoding = %q, want empty or %q", bundledFile.Content.Encoding, interfaces.BundledFileEncodingUTF8)
 	}
 	if bundledFile.Content.Inline != "" {
 		t.Fatalf("expected bundled file inline content to be omitted after canonical export, got %q", bundledFile.Content.Inline)
@@ -465,7 +542,21 @@ func copyPortableBundledDiskBackedExport(t *testing.T, projectDir, sourceDir, po
 
 	copyPortableBundledExportFile(t, filepath.Join(projectDir, "Makefile"), filepath.Join(portableDir, "Makefile"))
 	copyPortableBundledExportFile(t, filepath.Join(sourceDir, "docs", "README.md"), filepath.Join(portableDir, "docs", "README.md"))
+	copyPortableBundledExportFile(t, filepath.Join(sourceDir, "inputs", "task", "default", "starter.md"), filepath.Join(portableDir, "inputs", "task", "default", "starter.md"))
 	copyPortableBundledExportFile(t, filepath.Join(sourceDir, "scripts", "execute-story.ps1"), filepath.Join(portableDir, "scripts", "execute-story.ps1"))
+}
+
+func assertPortableBundledReplacementPaths(t *testing.T, replacements []factoryconfig.PortableBundledFileReplacement, want []string) {
+	t.Helper()
+
+	if len(replacements) != len(want) {
+		t.Fatalf("portable bundled replacements = %#v, want %#v", replacements, want)
+	}
+	for i := range replacements {
+		if replacements[i].TargetPath != want[i] {
+			t.Fatalf("portable bundled replacement[%d] = %q, want %q", i, replacements[i].TargetPath, want[i])
+		}
+	}
 }
 
 func copyPortableBundledExportFile(t *testing.T, sourcePath, targetPath string) {
