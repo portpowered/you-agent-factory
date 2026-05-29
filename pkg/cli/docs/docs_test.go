@@ -211,6 +211,8 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 
 	for _, want := range []string{
 		"# Authoring Factories",
+		"you run --factory ./factory.json \"Fix the lint issues\"",
+		"handlingBehavior: [\"DEFAULT\"]",
 		"you run --dir ./factory --with-mock-workers",
 		"you docs mock-workers",
 		"you docs record-replay",
@@ -242,6 +244,8 @@ func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 		"# Factory JSON And Work Configuration",
 		"work types, states, workers, workstations, resources, and routing",
 		"## Work Types",
+		"handlingBehavior: [\"DEFAULT\"]",
+		"you run --factory",
 		"## Resources",
 		"supportingFiles",
 	} {

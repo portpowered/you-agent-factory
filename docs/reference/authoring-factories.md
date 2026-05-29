@@ -221,10 +221,29 @@ Return REJECTED with concrete feedback when another pass is needed.
 
 ### 3. Start the factory
 
-Use mock workers for the first routing check:
+For a portable `factory.json` and a single customer prompt, mark one work type
+with `handlingBehavior: ["DEFAULT"]` in `factory.json` (see
+[Work types](work.md#default-handling-for-one-shot-cli-runs)) and run:
+
+```bash
+you run --factory ./factory.json "Fix the lint issues"
+```
+
+The command resolves the factory root from the config file path, submits the
+quoted prompt as raw text to the `DEFAULT` work type, and exits after batch idle
+completion. You cannot combine `--factory` with `--dir` or `--work` on the same
+invocation.
+
+Use mock workers for the first routing check with the directory layout:
 
 ```bash
 you run --dir ./factory --with-mock-workers
+```
+
+Or combine `--factory` with mock workers when testing a portable config:
+
+```bash
+you run --factory ./factory.json --with-mock-workers ./docs/examples/mock-workers.json "Fix the lint issues"
 ```
 
 The command loads `factory.json`, resolves the split `AGENTS.md` files, starts

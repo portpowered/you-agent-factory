@@ -244,10 +244,43 @@ A work type describes one kind of work and every state that work can occupy:
 | `states` | Yes | State list for the work type. Each state creates one runtime place. |
 | `states[].name` | Yes | Stable state name used in workstation IO. |
 | `states[].type` | Yes | Lifecycle category: `INITIAL`, `PROCESSING`, `TERMINAL`, or `FAILED`. |
+| `handlingBehavior` | No | Optional CLI routing markers for this work type. Use `["DEFAULT"]` on exactly one work type when customers should run one-shot prompts with `you run --factory`. |
 
 Use one `INITIAL` state for normal submissions. Use one `FAILED` state when you
 want failed dispatches, provider failures, and cascading dependency failures to
 land somewhere visible.
+
+### Default handling for one-shot CLI runs
+
+Mark exactly one work type with `handlingBehavior: ["DEFAULT"]` when you want
+customers to submit a single raw-text prompt through the simplified CLI:
+
+```json
+{
+  "name": "task",
+  "handlingBehavior": ["DEFAULT"],
+  "states": [
+    { "name": "init", "type": "INITIAL" },
+    { "name": "complete", "type": "TERMINAL" },
+    { "name": "failed", "type": "FAILED" }
+  ]
+}
+```
+
+Validation rules:
+
+- A factory may declare `DEFAULT` on at most one work type. More than one
+  `DEFAULT` work type is rejected at config load time.
+- Factories used with `you run --factory <factory.json> <prompt>` must declare
+  `DEFAULT` on exactly one work type. Omitting `handlingBehavior` on every work
+  type fails fast for that command.
+- Factories that only use `--dir`, watched `inputs/`, or `--work` batch files do
+  not need `handlingBehavior` unless you also want the simplified prompt path.
+
+When `DEFAULT` is set, `you run --factory` submits the positional prompt as raw
+text to that work type (equivalent to a single Markdown inbox file) and exits
+after batch idle completion. See [Author factories](authoring-factories.md) for
+the copy-pasteable command form.
 
 ## Workers
 

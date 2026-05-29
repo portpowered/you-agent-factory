@@ -64,10 +64,23 @@ limits, and executor settings.
 
 ## Run Controls
 
-`you run` supports optional mock-worker and record/replay flags:
+`you run` supports optional factory selection, one-shot prompts, mock workers,
+and record/replay flags:
 
+- `--factory <factory.json>` — load a portable `factory.json` by file path and,
+  with a trailing positional prompt, submit raw text to the work type that
+  declares `handlingBehavior: ["DEFAULT"]` (see `you docs work`)
 - `--with-mock-workers` — deterministic worker outcomes without live provider calls
 - `--record`, `--replay`, `--no-record` — control replay artifact capture and playback
+
+Example one-shot run:
+
+```bash
+you run --factory ./factory.json "Fix the lint issues"
+```
+
+`--factory` cannot be combined with `--dir`. Use `--dir` for the traditional
+factory-directory layout and inbox workflows.
 
 Canonical guides: `you docs mock-workers` and `you docs record-replay`. For an
 end-to-end authoring walkthrough and reusable files under `docs/examples/`, use

@@ -142,10 +142,23 @@ through arbitrary project files outside the documented allowlist.
 
 ## Run Controls
 
-`you run` supports optional mock-worker and record/replay flags:
+`you run` supports optional factory selection, one-shot prompts, mock workers,
+and record/replay flags:
 
+- `--factory <factory.json>` — load a portable `factory.json` by file path and,
+  with a trailing positional prompt, submit raw text to the work type that
+  declares `handlingBehavior: ["DEFAULT"]` (see [Work types](work.md#default-handling-for-one-shot-cli-runs))
 - `--with-mock-workers` — deterministic worker outcomes without live provider calls
 - `--record`, `--replay`, `--no-record` — control replay artifact capture and playback
+
+Example one-shot run:
+
+```bash
+you run --factory ./factory.json "Fix the lint issues"
+```
+
+`--factory` cannot be combined with `--dir`. Use `--dir` for the traditional
+factory-directory layout and inbox workflows.
 
 Canonical guides: [Mock workers](mock-workers.md) and
 [Record and replay](record-replay.md). For an end-to-end authoring walkthrough,
