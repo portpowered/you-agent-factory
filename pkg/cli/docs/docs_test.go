@@ -54,6 +54,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"config",
 		"mock-workers",
 		"record-replay",
+		"guards",
 		"work",
 		"workstations",
 		"workers",
@@ -82,6 +83,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"config",
 		"mock-workers",
 		"record-replay",
+		"guards",
 		"work",
 		"workstations",
 		"workstation",
@@ -372,6 +374,45 @@ func TestMarkdown_MockWorkersReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_GuardsReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("guards")
+	if err != nil {
+		t.Fatalf("Markdown(guards) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Guards",
+		"## Quick Choice",
+		"VISIT_COUNT",
+		"MATCHES_FIELDS",
+		"SAME_NAME",
+		"ALL_CHILDREN_COMPLETE",
+		"ANY_CHILD_FAILED",
+		"INFERENCE_THROTTLE_GUARD",
+		"LOGICAL_MOVE",
+		"maxVisits",
+		"matchInput",
+		"limits.maxExecutionTime",
+		"limits.maxRetries",
+		"[Workstations](workstations.md)",
+		"[Relationships](relationships.md)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(guards) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs guards`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(guards) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -413,7 +454,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, record-replay, work, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, record-replay, guards, work, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

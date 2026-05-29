@@ -26,6 +26,7 @@ var docsSmokeTopics = []docsSmokeTopic{
 	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "supportingFiles", "bundledFiles", "share-time starter-work snapshots", "docs/reference/config.md", "docs/reference/work.md", "you docs mock-workers", "you docs record-replay", "you docs authoring-factories", "--factory", "you run --factory ./factory.json \"Fix the lint issues\"", "--with-mock-workers", "--record", "--replay", "--no-record", "you-agent-factory run"}, absent: []string{"Agent Factory run"}},
 	{name: "mock-workers", heading: "# Mock Workers", markers: []string{"--with-mock-workers", "mockWorkers", "runType", "accept", "reject", "script", "docs/examples/mock-workers.json", "docs/examples/startup-work.json"}},
 	{name: "record-replay", heading: "# Record and Replay", markers: []string{"--record", "--replay", "--no-record", "~/.you-agent-factory/recordings/", "docs/examples/sample-run.replay.json", "Recording saved:", "`--record` with `--replay`", "`--no-record` with `--record`"}},
+	{name: "guards", heading: "# Guards", markers: []string{"VISIT_COUNT", "SAME_NAME", "MATCHES_FIELDS", "ALL_CHILDREN_COMPLETE", "ANY_CHILD_FAILED", "INFERENCE_THROTTLE_GUARD", "LOGICAL_MOVE", "limits.maxRetries"}},
 	{name: "work", heading: "# Factory JSON And Work Configuration", markers: []string{"work types, states, workers, workstations, resources, and routing", "supportingFiles", "## Work Types", "handlingBehavior: [\"DEFAULT\"]", "you run --factory", "## Resources", "[Workstations](workstations.md)", "batch-inputs.md"}},
 	{name: "workstations", heading: "# Workstations Reference", markers: []string{"workstation authoring contract", "MODEL_WORKSTATION", "CLASSIFIER_WORKSTATION", "LOGICAL_MOVE"}},
 	{name: "workstation", heading: "# Workstations Reference", markers: []string{"workstation authoring contract", "MODEL_WORKSTATION", "CLASSIFIER_WORKSTATION", "LOGICAL_MOVE"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
@@ -101,7 +102,7 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 		if err == nil {
 			t.Fatal("expected unsupported docs topic to fail")
 		}
-		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, record-replay, work, workstations, workers, resources, models, batch-inputs, templates)` {
+		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, record-replay, guards, work, workstations, workers, resources, models, batch-inputs, templates)` {
 			t.Fatalf("unexpected unsupported topic error %q", got)
 		}
 	})
