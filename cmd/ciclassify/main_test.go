@@ -303,14 +303,17 @@ func TestRunWritesGitHubOutputsAndSummary(t *testing.T) {
 	if !strings.Contains(summary, "- Classification: `ui-only`") {
 		t.Fatalf("GitHub summary = %q, want classification bullet", summary)
 	}
-	if strings.Contains(summary, "- Full required rerun: `make verify`") {
-		t.Fatalf("GitHub summary = %q, did not want shared-risk rerun guidance for ui-only", summary)
+	if !strings.Contains(summary, "- Full required rerun: `make verify`") {
+		t.Fatalf("GitHub summary = %q, want full rerun guidance for skipped backend verification", summary)
 	}
 	if !strings.Contains(summary, "### Required lane routing") {
 		t.Fatalf("GitHub summary = %q, want lane routing section", summary)
 	}
 	if !strings.Contains(summary, "- `Backend Verification`: `skip` via `make test-backend-verification`") {
 		t.Fatalf("GitHub summary = %q, want backend skip line", summary)
+	}
+	if !strings.Contains(summary, "Skipped because UI-only changes do not require backend verification.") {
+		t.Fatalf("GitHub summary = %q, want backend skip reason", summary)
 	}
 	if !strings.Contains(summary, "- `ui/src/App.tsx`") {
 		t.Fatalf("GitHub summary = %q, want changed file list", summary)

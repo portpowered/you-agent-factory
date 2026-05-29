@@ -470,28 +470,55 @@ jobs:
     needs:
       - classify-pr-impact
       - verify-build-contracts
+    if: always()
     timeout-minutes: 35
     steps:
       - name: Report lane routing
         run: |
+          classification="${{ needs.classify-pr-impact.outputs.classification }}"
+          areas="${{ needs.classify-pr-impact.outputs.areas }}"
+          command="${{ needs.classify-pr-impact.outputs.backend_verification_command }}"
+          full_rerun="${{ needs.classify-pr-impact.outputs.full_run_command }}"
+          decision="${{ needs.classify-pr-impact.outputs.run_backend_verification == 'true' && 'run' || 'skip' }}"
+          reason="${{ needs.classify-pr-impact.outputs.backend_verification_reason }}"
+          if [[ -z "$classification" ]]; then
+            classification="unavailable"
+          fi
+          if [[ -z "$areas" ]]; then
+            areas="unavailable"
+          fi
+          if [[ -z "$command" ]]; then
+            command="make test-backend-verification"
+          fi
+          if [[ -z "$full_rerun" ]]; then
+            full_rerun="make verify"
+          fi
+          if [[ "${{ needs.classify-pr-impact.result }}" != "success" ]]; then
+            decision="blocked-upstream"
+            reason="Not executed because Classify PR Impact did not complete successfully."
+          elif [[ "${{ needs.verify-build-contracts.result }}" != "success" ]]; then
+            decision="blocked-upstream"
+            reason="Not executed because Build, Lint, and API did not complete successfully."
+          fi
           {
             echo "## Backend Verification"
             echo
-            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
-            echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_backend_verification == 'true' && 'run' || 'skip' }}\`"
-            echo "- Local command: \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`"
-            echo "- Reason: ${{ needs.classify-pr-impact.outputs.backend_verification_reason }}"
-            echo "- Full required rerun: \`${{ needs.classify-pr-impact.outputs.full_run_command }}\`"
+            echo "- Classification: \`$classification\`"
+            echo "- Areas touched: \`$areas\`"
+            echo "- Decision: \`$decision\`"
+            echo "- Local command: \`$command\`"
+            echo "- Reason: $reason"
+            echo "- Full required rerun: \`$full_rerun\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check out repository
-        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
-        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -500,7 +527,7 @@ jobs:
 
       - name: Run merged backend coverage and functional verification
         id: run_backend_verification
-        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         continue-on-error: true
         shell: bash
         timeout-minutes: 15
@@ -511,7 +538,7 @@ jobs:
           make test-backend-verification 2>&1 | tee "$artifact_root/command.log"
 
       - name: Report lane execution
-        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: always() && needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         shell: bash
         run: |
           artifact_name="backend-verification-failure-artifacts"
