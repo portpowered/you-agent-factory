@@ -1869,6 +1869,8 @@ export interface components {
             stopToken?: string;
             /** @description When true, bypasses permission checks for providers that support permission gating. */
             skipPermissions?: boolean;
+            /** @description Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
+            openCodeAgent?: string;
             /** @description Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef. */
             auth?: components["schemas"]["HostedWorkerAuth"];
             /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
@@ -1946,6 +1948,8 @@ export interface components {
             worker: string;
             /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner. */
             runner?: components["schemas"]["RunnerID"];
+            /** @description Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
+            openCodeAgent?: string;
             /** @description Path to a prompt template file loaded for model-oriented workstation execution. */
             promptFile?: string;
             /** @description JSON schema string used to validate or parse structured model output when configured. */

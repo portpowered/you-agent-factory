@@ -142,7 +142,7 @@ func TestInferenceRequestForExecutionRequest_ForwardsModelOperationContract(t *t
 		Model:         "OMNIVOICE_Q4_K_M",
 		ModelProvider: interfaces.RunnerIDCodex,
 		ModelLocality: interfaces.ModelLocalityLocal,
-	})
+	}, nil)
 
 	if got.ModelOperation != "TTS" {
 		t.Fatalf("model operation = %q, want TTS", got.ModelOperation)

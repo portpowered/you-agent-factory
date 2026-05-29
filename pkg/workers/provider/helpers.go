@@ -230,22 +230,26 @@ func commandEnvDiagnosticMetadata(projection CommandEnvDiagnosticProjection) map
 }
 
 func workDiagnosticsForInferenceRequest(req interfaces.ProviderInferenceRequest) *interfaces.WorkDiagnostics {
+	requestMetadata := map[string]string{
+		"worker_type":       firstNonEmpty(req.WorkerType, req.Dispatch.WorkerType),
+		"workstation_type":  req.WorkstationType,
+		"worktree":          req.Worktree,
+		"working_directory": req.WorkingDirectory,
+		"session_id":        req.SessionID,
+		"output_schema":     req.OutputSchema,
+	}
+	if req.OpenCodeAgent != "" {
+		requestMetadata["opencode_agent"] = req.OpenCodeAgent
+	}
 	return &interfaces.WorkDiagnostics{
 		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
 			SystemPromptHash: hashText(req.SystemPrompt),
 			UserMessageHash:  hashText(req.UserMessage),
 		},
 		Provider: &interfaces.ProviderDiagnostic{
-			Provider: req.ModelProvider,
-			Model:    req.Model,
-			RequestMetadata: map[string]string{
-				"worker_type":       firstNonEmpty(req.WorkerType, req.Dispatch.WorkerType),
-				"workstation_type":  req.WorkstationType,
-				"worktree":          req.Worktree,
-				"working_directory": req.WorkingDirectory,
-				"session_id":        req.SessionID,
-				"output_schema":     req.OutputSchema,
-			},
+			Provider:        req.ModelProvider,
+			Model:           req.Model,
+			RequestMetadata: requestMetadata,
 		},
 	}
 }

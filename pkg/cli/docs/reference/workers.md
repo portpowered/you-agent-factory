@@ -50,6 +50,8 @@ changes scoped to the current work item.
 - Runner selection is separate from `modelProvider`. Use factory or
   workstation `runner` fields to choose `codex`, `gemini`, `kiro`,
   `cursor-cli`, or `opencode`.
+- Optional `openCodeAgent` selects a named OpenCode agent profile when the
+  resolved runner is `opencode`.
 
 ## Common Fields
 
@@ -69,12 +71,16 @@ changes scoped to the current work item.
 | `provider` | Hosted | Built-in provider identifier. V1 supports `LINEAR`. |
 | `auth.secretRef` | Hosted | Secret reference for provider authentication. |
 | `linear` | Hosted | Provider-specific Linear poller configuration. |
+| `openCodeAgent` | Model | Named OpenCode agent profile when runner resolves to `opencode`; discover names with `opencode agent list` ([OpenCode CLI](https://opencode.ai/docs/cli/)). |
 
 ## Authoring Rules
 
 - Use `modelProvider` and `executorProvider` as distinct fields.
 - Use `runner` when the operator needs to choose the execution family; keep
   `modelProvider` for worker-local provider compatibility and diagnostics.
+- Set `openCodeAgent` only with runner `opencode`; non-empty values on other
+  runners fail factory build. See [`docs/reference/workers.md`](../../../docs/reference/workers.md)
+  for validation, dispatch (`opencode run --agent`), and diagnostics.
 - Prefer split `workers/<name>/AGENTS.md` files for long model instructions.
 - Keep inline worker runtime config only when portability or generated output
   matters more than hand-authored readability.

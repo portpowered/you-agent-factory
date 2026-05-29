@@ -1,4 +1,9 @@
 ## Codebase Patterns
+- Parse worker/workstation `openCodeAgent` through `pkg/config/agents_config.go` with `validateOpenCodeAgentInFrontmatter` (rejects explicit empty or whitespace-only values), merge via `applyWorkerRuntimeExecution` / `applyWorkstationRuntimeIdentity`, and resolve dispatch precedence with `interfaces.ResolveOpenCodeAgent(workstation, worker)`.
+- Forward resolved OpenCode agent on `interfaces.ProviderInferenceRequest.OpenCodeAgent` from `pkg/workers/executor/agent.go` `inferenceRequestForExecutionRequest` only when `ModelProvider` is `opencode`; lookup workstation via `runtimeConfig.Workstation(inferenceWorkstationType(request))` and leave the field empty for other providers.
+- Append `opencode run --agent <name>` in `openCodeProviderBehavior.BuildArgs` when `req.OpenCodeAgent` is non-empty, placing `--agent` after `--model` and before `--session`; empty agent leaves today's `opencode run` arg shape unchanged.
+- Record configured OpenCode agents as `opencode_agent` in provider request metadata from `workDiagnosticsForInferenceRequest` in `pkg/workers/executor/diagnostics.go` and `pkg/workers/provider/helpers.go` only when `OpenCodeAgent` is non-empty; allowlist via `isSafeProviderMetadataKey` in `pkg/interfaces/safe_diagnostics.go`.
+- Reject non-empty resolved `openCodeAgent` when `interfaces.ResolveRunnerSelection(...)` is not `opencode` via `interfaces.ValidateOpenCodeAgentForRunnerSelection(...)` from `pkg/service/factory_build.go` `validateConfiguredWorkstationRunners` before worker load; error text includes `openCodeAgent`, agent name, required runner `opencode`, and resolved runner ID.
 - Header-only structured submit-work (`name`, `workTypeName`, `items: []`) is accepted in `pkg/api/submit_work_items.go` via empty-array early returns in `validateSubmitWorkItemsField` and `submitWorkItemsToContent`; API proof lives in `TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork` and `TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission`.
 - Dashboard header-only submit proof belongs in `submit-work-widget.test.tsx` (`completes header-only submission when the default text item is blank`) and the empty-payload segment of `App.follow-up-submit.test.tsx`; assert POST body `items: []`, success trace status copy, and absence of submit error fallback.
 - Hide internal `__system_time` factory graph nodes with `filterFactoryGraphTopologyForCustomerDisplay` in `ui/src/features/factory-graph-editor/lib/factory-graph-customer-display.ts`; reuse `systemTime.ts` constants/predicates and apply the filter at graph render boundaries (layout/projection) before seeding nodes or edges.
@@ -96,4 +101,49 @@
   - Patterns discovered: `buildStructuredSubmitItems` omits blank text items so the default empty `Text item 1` yields `items: []` without UI changes; mirror the full happy-path assertions from the text submission test (trace success + no `errorFallback` copy).
   - Gotchas encountered: `App.follow-up-submit.test.tsx` already asserted empty-payload POST bodies but not post-submit success messaging for the header-only segment.
   - Useful context: Rename widget tests to describe operator flow (`header-only`, `default text item is blank`) so PRD story wording maps directly to test discovery.
+---
+
+## 2026-05-30T18:30:00Z - opencode-agent-support-001
+- What was implemented: Added `openCodeAgent` to worker and workstation config structs, AGENTS.md frontmatter parsing with non-empty validation, runtime merge through factory build, and `interfaces.ResolveOpenCodeAgent` for workstation-over-worker precedence.
+- Files changed: `pkg/interfaces/factory_config.go`, `pkg/interfaces/work_payload_lineage.go`, `pkg/config/agents_config.go`, `pkg/config/layout.go`, `pkg/config/runtime_config.go`, `pkg/config/agenttests/agents_config_test.go`, `pkg/config/runtimetests/runtime_config_test.go`, `pkg/interfaces/interfaces_contract_test.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Use `validateOpenCodeAgentInFrontmatter` on the raw frontmatter map so explicit `openCodeAgent: ""` fails while omitted keys stay optional; workstation override precedence lives in `ResolveOpenCodeAgent` for later dispatch stories.
+  - Gotchas encountered: Struct-only validation cannot distinguish omitted vs empty YAML strings; check the raw frontmatter map when empty explicit values must fail.
+  - Useful context: Story 002 should validate `openCodeAgent` against resolved runner; story 003 should populate `ProviderInferenceRequest.OpenCodeAgent` from `ResolveOpenCodeAgent`.
+---
+
+## 2026-05-30T20:15:00Z - opencode-agent-support-002
+- What was implemented: Added `interfaces.ValidateOpenCodeAgentForRunnerSelection` and wired it into `validateConfiguredWorkstationRunners` so non-empty `openCodeAgent` fails when resolved runner is not `opencode`; added contract and service-layer tests including `loadWorkersFromConfig` integration.
+- Files changed: `pkg/interfaces/work_payload_lineage.go`, `pkg/interfaces/interfaces_contract_test.go`, `pkg/service/factory_build.go`, `pkg/service/factory_test_helpers_test.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Validate OpenCode agent against the same `ResolveRunnerSelection` result used for runner preflight; wrap errors as `workstations[i](name).openCodeAgent` for operator-scoped paths.
+  - Gotchas encountered: Default codex runner applies when only `openCodeAgent` is set on a claude worker, so mismatches surface even without explicit runner overrides.
+  - Useful context: Story 003 should populate `ProviderInferenceRequest.OpenCodeAgent` from `ResolveOpenCodeAgent` after this guard passes.
+---
+
+## 2026-05-30T21:00:00Z - opencode-agent-support-003
+- What was implemented: Added `OpenCodeAgent` to `ProviderInferenceRequest`, populated it in `inferenceRequestForExecutionRequest` for OpenCode model dispatches via `ResolveOpenCodeAgent`, and added executor plus clone contract tests.
+- Files changed: `pkg/interfaces/work_dispatch.go`, `pkg/interfaces/work_runtime_test.go`, `pkg/workers/executor/agent.go`, `pkg/workers/executor/agent_test.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Gate `OpenCodeAgent` on effective `ModelProvider` (`opencode`), not raw runner fields alone; workstation lookup uses `inferenceWorkstationType(request)` to match dispatch naming.
+  - Gotchas encountered: `inferenceRequestForExecutionRequest` needed an optional `*FactoryWorkstationConfig` parameter—pass `nil` in unit tests that only exercise worker fields.
+  - Useful context: Story 004 should read `req.OpenCodeAgent` in `openCodeProviderBehavior.BuildArgs`; story 005 should add `opencode_agent` to provider request metadata in `workDiagnosticsForInferenceRequest`.
+---
+
+## 2026-05-30T22:00:00Z - opencode-agent-support-004
+- What was implemented: Appended `--agent <name>` to `openCodeProviderBehavior.BuildArgs` when `ProviderInferenceRequest.OpenCodeAgent` is set, ordered after `--model` and before `--session`; added BuildArgs tests for agent-only and full-flag shapes.
+- Files changed: `pkg/workers/provider/provider_behavior.go`, `pkg/workers/provider/provider_behavior_test.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: PRD flag order for OpenCode is `run`, `--model`, `--agent`, `--session`, `--dir`, `--dangerously-skip-permissions`, then the user prompt; keep `TestOpenCodeProviderBehavior_BuildArgs` cases aligned when adding metadata in story 005.
+  - Gotchas encountered: `inference_provider_test.go` OpenCode integration case omits `OpenCodeAgent` by design—empty agent must preserve existing `wantArgs` without `--agent`.
+  - Useful context: Story 005 should add `opencode_agent` to provider request metadata in `workDiagnosticsForInferenceRequest` without changing BuildArgs ordering.
+---
+
+## 2026-05-30T23:30:00Z - opencode-agent-support-005
+- What was implemented: Added `opencode_agent` to provider request metadata in executor and provider `workDiagnosticsForInferenceRequest` when `OpenCodeAgent` is set, allowlisted the key in safe diagnostics projection, and added provider plus executor regression tests.
+- Files changed: `pkg/workers/executor/diagnostics.go`, `pkg/workers/executor/agent_test.go`, `pkg/workers/provider/helpers.go`, `pkg/workers/provider/diagnostics_test.go`, `pkg/interfaces/safe_diagnostics.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Omit `opencode_agent` from request metadata entirely when unset rather than emitting an empty string; mirror the conditional in both `pkg/workers/executor/diagnostics.go` and `pkg/workers/provider/helpers.go`.
+  - Gotchas encountered: Safe projection drops unknown metadata keys—add new provider request metadata keys to `isSafeProviderMetadataKey` or inference events will lose them downstream.
+  - Useful context: Story 006 extends OpenAPI factory schemas; story 007 documents `openCodeAgent` for factory authors.
 ---

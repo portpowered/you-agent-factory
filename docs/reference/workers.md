@@ -57,6 +57,9 @@ what it renders, and where it routes results.
 - Runner selection is separate from `modelProvider`. Use factory or
   workstation `runner` fields to choose the built-in runner ID: `codex`,
   `gemini`, `kiro`, `cursor-cli`, or `opencode`.
+- Optional `openCodeAgent` selects a named OpenCode agent profile when the
+  resolved runner is `opencode`. Omit it to keep today's default `opencode run`
+  behavior without `--agent`.
 - The current public `executorProvider` value is `SCRIPT_WRAP`.
 - Older snake_case and alias frontmatter keys are compatibility-only inputs.
   New docs and authored configs should use canonical camelCase fields.
@@ -78,7 +81,7 @@ You are a helpful assistant.
 
 | Put it on the worker | Put it on the workstation |
 |----------------------|---------------------------|
-| `type`, `model`, `modelProvider`, `executorProvider` | `type`, `worker`, `promptFile`, prompt body |
+| `type`, `model`, `modelProvider`, `executorProvider`, `openCodeAgent` | `type`, `worker`, `promptFile`, prompt body, `openCodeAgent` |
 | `command`, `args` | `outputSchema`, `limits.maxExecutionTime`, `limits.maxRetries` |
 | `resources`, `timeout`, `stopToken`, `skipPermissions` | `stopWords`, `workingDirectory`, `worktree`, `env` |
 | Worker body used as the model system prompt | Prompt template used as the rendered user message |
@@ -207,6 +210,7 @@ Runs the Go test suite.
 | `skipPermissions` | model workers | Provider-specific permission shortcut |
 | `modelLocality` | model workers | `LOCAL` or `CLOUD` execution locality for model operations and diagnostics |
 | `operations` | model workers | Provider-agnostic capability declarations with uppercase operation names and typed slots |
+| `openCodeAgent` | model workers | Named OpenCode agent profile for dispatches that resolve to runner `opencode` |
 
 ## Provider Fields
 
@@ -224,6 +228,52 @@ execution adapter should run it.
 Use `runner` when the operator needs to choose the execution family. Keep
 `modelProvider` for worker-local provider compatibility, diagnostics, and the
 legacy fallback path when no explicit runner is configured.
+
+## OpenCode Agent Profiles
+
+Use `openCodeAgent` on a `MODEL_WORKER` when the dispatch should run through
+the OpenCode runner and you want OpenCode to apply a named agent profile
+(system prompt, tool permissions, and other settings created with
+`opencode agent create`) instead of duplicating that guidance in the worker
+body.
+
+```yaml
+---
+type: MODEL_WORKER
+model: gpt-5
+runner: opencode
+openCodeAgent: implementer
+---
+
+Follow the workstation prompt. The OpenCode agent profile supplies shared
+tooling defaults for this worker.
+```
+
+Requirements and behavior:
+
+- `openCodeAgent` must be a non-empty string when set. Explicit empty or
+  whitespace-only values fail validation.
+- The field is honored only when runner selection resolves to `opencode`.
+  Setting `openCodeAgent` while the resolved runner is something else fails
+  during factory build with an error that names `openCodeAgent`, the agent
+  name, and the resolved runner ID.
+- When configured and the runner is `opencode`, dispatches invoke
+  `opencode run --agent <name>` before the rendered user prompt. Inference
+  diagnostics record the resolved value as `opencode_agent`.
+- Omit `openCodeAgent` to keep the existing `opencode run` argument shape with
+  no `--agent` flag.
+
+Discover available agent names with the OpenCode CLI:
+
+```bash
+opencode agent list
+```
+
+See the [OpenCode CLI reference](https://opencode.ai/docs/cli/) for agent
+create/list commands and profile management.
+
+Workstations can override the worker default. See [Workstations](workstations.md)
+for precedence and workstation-level examples.
 
 ## Related
 

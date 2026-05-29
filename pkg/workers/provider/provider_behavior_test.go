@@ -347,6 +347,28 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 			skipPermissions: true,
 			want:            []string{"run", "--model", "openai/gpt-5", "--session", "opencode-session-123", "--dir", "/tmp/project", "--dangerously-skip-permissions", "run the tests"},
 		},
+		{
+			name: "WithOpenCodeAgent",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderOpenCode),
+				OpenCodeAgent: "implementer",
+				UserMessage:   "summarize the workspace",
+			},
+			want: []string{"run", "--agent", "implementer", "summarize the workspace"},
+		},
+		{
+			name: "WithOpenCodeAgentModelSessionWorkingDirectoryAndSkipPermissions",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider:    string(interfaces.ModelProviderOpenCode),
+				Model:            "openai/gpt-5",
+				OpenCodeAgent:    "implementer",
+				SessionID:        "opencode-session-123",
+				WorkingDirectory: "/tmp/project",
+				UserMessage:      "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"run", "--model", "openai/gpt-5", "--agent", "implementer", "--session", "opencode-session-123", "--dir", "/tmp/project", "--dangerously-skip-permissions", "run the tests"},
+		},
 	}
 
 	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
@@ -724,5 +746,48 @@ func assertProviderExitFailureClassification(t *testing.T, behavior providerBeha
 				t.Fatalf("ClassifyExitFailure() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode),
+		Model:         "openai/gpt-5",
+		OpenCodeAgent: "implementer",
+		WorkerType:    interfaces.WorkerTypeModel,
+	})
+
+	if got := diagnostics.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
+		t.Fatalf("opencode_agent = %q, want implementer", got)
+	}
+}
+
+func TestWorkDiagnosticsForInferenceRequest_OmitsOpenCodeAgentWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode),
+		Model:         "openai/gpt-5",
+		WorkerType:    interfaces.WorkerTypeModel,
+	})
+
+	if _, ok := diagnostics.Provider.RequestMetadata["opencode_agent"]; ok {
+		t.Fatalf("request metadata = %#v, want opencode_agent omitted", diagnostics.Provider.RequestMetadata)
+	}
+}
+
+func TestWorkDiagnosticsForInferenceRequest_SafeProjectionPreservesOpenCodeAgent(t *testing.T) {
+	t.Parallel()
+
+	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode),
+		OpenCodeAgent: "implementer",
+	})
+	safe := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+
+	if got := safe.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
+		t.Fatalf("safe opencode_agent = %q, want implementer", got)
 	}
 }

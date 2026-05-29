@@ -3744,6 +3744,9 @@ components:
         skipPermissions:
           type: boolean
           description: When true, bypasses permission checks for providers that support permission gating.
+        openCodeAgent:
+          type: string
+          description: Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
         auth:
           $ref: '#/components/schemas/HostedWorkerAuth'
           description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
@@ -3942,6 +3945,9 @@ components:
         runner:
           $ref: '#/components/schemas/RunnerID'
           description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner.
+        openCodeAgent:
+          type: string
+          description: Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
         promptFile:
           type: string
           description: Path to a prompt template file loaded for model-oriented workstation execution.

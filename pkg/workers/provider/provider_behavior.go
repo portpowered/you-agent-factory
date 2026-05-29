@@ -364,6 +364,9 @@ func (b openCodeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequ
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
+	if req.OpenCodeAgent != "" {
+		args = append(args, "--agent", req.OpenCodeAgent)
+	}
 	if req.SessionID != "" {
 		args = append(args, "--session", req.SessionID)
 	}

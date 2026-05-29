@@ -664,6 +664,89 @@ model: test
 	}
 }
 
+func TestLoadWorkerConfig_OpenCodeAgent(t *testing.T) {
+	dir := t.TempDir()
+	agentsMD := `---
+type: MODEL_WORKER
+model: gpt-5.4
+modelProvider: opencode
+openCodeAgent: reviewer
+---
+
+Use the reviewer agent profile.
+`
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWorkerConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.OpenCodeAgent != "reviewer" {
+		t.Fatalf("OpenCodeAgent = %q, want reviewer", cfg.OpenCodeAgent)
+	}
+}
+
+func TestLoadWorkerConfig_RejectsBlankOpenCodeAgent(t *testing.T) {
+	dir := t.TempDir()
+	agentsMD := `---
+type: MODEL_WORKER
+model: gpt-5.4
+modelProvider: opencode
+openCodeAgent: "   "
+---
+`
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadWorkerConfig(dir)
+	if err == nil || !strings.Contains(err.Error(), "openCodeAgent must be a non-empty string") {
+		t.Fatalf("expected blank openCodeAgent validation error, got %v", err)
+	}
+}
+
+func TestLoadWorkstationConfig_OpenCodeAgent(t *testing.T) {
+	dir := t.TempDir()
+	agentsMD := `---
+type: MODEL_WORKSTATION
+worker: swe
+openCodeAgent: implementer
+---
+Workstation prompt.
+`
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWorkstationConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.OpenCodeAgent != "implementer" {
+		t.Fatalf("OpenCodeAgent = %q, want implementer", cfg.OpenCodeAgent)
+	}
+}
+
+func TestLoadWorkstationConfig_RejectsBlankOpenCodeAgent(t *testing.T) {
+	dir := t.TempDir()
+	agentsMD := `---
+type: MODEL_WORKSTATION
+worker: swe
+openCodeAgent: ""
+---
+`
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadWorkstationConfig(dir)
+	if err == nil || !strings.Contains(err.Error(), "openCodeAgent must be a non-empty string") {
+		t.Fatalf("expected blank openCodeAgent validation error, got %v", err)
+	}
+}
+
 func TestLoadWorkerConfig_MissingOptionalFields(t *testing.T) {
 	dir := t.TempDir()
 	// Minimal frontmatter — only type
