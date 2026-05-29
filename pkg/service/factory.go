@@ -17,12 +17,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
-	"github.com/portpowered/infinite-you/pkg/service/localmodel"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/workers"
 
 	"go.uber.org/zap"
@@ -47,7 +49,7 @@ type SimpleDashboardRenderer func(input SimpleDashboardRenderInput)
 // import cycles between service and api packages.
 type APIServerStarter func(ctx context.Context, runtime apisurface.APISurface, port int, logger *zap.Logger) error
 
-type secretResolver func(ctx context.Context, runtimeCfg interfaces.RuntimeConfigLookup, secretRef string) (string, error)
+type secretResolver = hostedworkers.SecretResolver
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
 // attempted while the current runtime still had active work.
@@ -65,13 +67,13 @@ var ErrInvalidNamedFactory = apisurface.ErrInvalidNamedFactory
 // could be resolved for canonical current-factory reads.
 var ErrCurrentFactoryNotFound = apisurface.ErrCurrentFactoryNotFound
 
-type localModelCacheLayout = localmodel.CacheLayout
-type localModelLoadRequest = localmodel.LoadRequest
-type localModelInvocationRequest = localmodel.InvocationRequest
-type localModelHandle = localmodel.Handle
-type localModelRuntime = localmodel.Runtime
-type localModelResourceLimiter = localmodel.ResourceLimiter
-type managedLocalModelManager = localmodel.Manager
+type localModelCacheLayout = localmodels.CacheLayout
+type localModelLoadRequest = localmodels.LoadRequest
+type localModelInvocationRequest = localmodels.InvocationRequest
+type localModelHandle = localmodels.Handle
+type localModelRuntime = localmodels.Runtime
+type localModelResourceLimiter = localmodels.ResourceLimiter
+type managedLocalModelManager = localmodels.Manager
 
 type replacementFactoryRuntime struct {
 	dir            string
@@ -125,13 +127,18 @@ type runtimeBundleBuildInput struct {
 // FactoryService is an instantiation of a factory along with its runtime
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
+//
+// Extracted domains are composed explicitly: pkg/factorysessions owns the live
+// session registry, pkg/localmodels owns managed model runtime wiring, and
+// pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
 	runtimeMu      sync.RWMutex
 	activationMu   sync.RWMutex
 	runMu          sync.RWMutex
 	runState       *serviceRunState
 	apiServerExit  <-chan error
-	sessions       *liveRuntimeSessionManager
+	sessions       *factorysessions.Registry
+	hostedWorkers  hostedworkers.Config
 	factoryRootDir string
 	factory        factory.Factory
 	listener       *ingest.FileWatcher
@@ -713,8 +720,10 @@ func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
 	if fs == nil {
 		return nil
 	}
-	if currentSession := fs.currentSession(); currentSession != nil && currentSession.handle != nil {
-		return currentSession.handle.runtime
+	if currentSession := fs.currentSession(); currentSession != nil {
+		if handle := liveSessionHandle(currentSession); handle != nil {
+			return handle.runtime
+		}
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
@@ -898,16 +907,17 @@ func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) e
 		return nil
 	}
 	var errs []error
-	for _, sessionID := range fs.sessions.ids() {
+	for _, sessionID := range fs.sessions.IDs() {
 		session := fs.sessionByID(sessionID)
 		if session == nil {
 			continue
 		}
-		if session.handle == except {
+		handle := liveSessionHandle(session)
+		if handle == except {
 			continue
 		}
-		if session.handle != nil {
-			if err := fs.stopLiveRuntime(session.handle); err != nil && !errors.Is(err, context.Canceled) {
+		if handle != nil {
+			if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 				errs = append(errs, err)
 			}
 		}

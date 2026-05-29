@@ -18,11 +18,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
-	"github.com/portpowered/infinite-you/pkg/service/localmodel"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -52,7 +54,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		if err != nil {
 			return nil, fmt.Errorf("resolve factory dir: %w", err)
 		}
-		resolvedDir, err = absolutizeFactoryDirectory(resolvedDir)
+		resolvedDir, err = factorysessions.AbsolutizeFactoryDirectory(resolvedDir)
 		if err != nil {
 			return nil, fmt.Errorf("resolve factory dir: %w", err)
 		}
@@ -90,7 +92,8 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	serviceBuilt = true
 	return &FactoryService{
 		factoryRootDir: factoryRootDir,
-		sessions:       newLiveRuntimeSessionManager(),
+		sessions:       factorysessions.NewRegistry(),
+		hostedWorkers:  buildHostedWorkersConfig(cfg, logger, clock),
 		eventHistory:   runtimeBundle.eventHistory,
 		factory:        runtimeBundle.factory,
 		listener:       runtimeBundle.listener,
@@ -109,7 +112,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 }
 
 func buildPrimaryServiceLogger(cfg *FactoryServiceConfig) (string, *zap.Logger, *logging.RuntimeLogSink, *zap.Logger, error) {
-	factoryRootDir, err := absolutizeFactoryDirectory(cfg.Dir)
+	factoryRootDir, err := factorysessions.AbsolutizeFactoryDirectory(cfg.Dir)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -222,7 +225,7 @@ func buildRuntimeBundle(
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
 	eventHistory := factoryevents.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
-	modelResources, modelAssets, localModels := newRuntimeLocalModelDependencies(input.cfg)
+	localModels := newRuntimeLocalModelDependencies(input.cfg)
 	workerOpts, err := loadWorkersFromConfig(
 		input.loadedFactoryCfg.FactoryDir(),
 		input.loadedFactoryCfg.FactoryConfig(),
@@ -237,8 +240,8 @@ func buildRuntimeBundle(
 		eventHistory.RecordInferenceEvent,
 		eventHistory.RecordModelEvent,
 		input.clock.Now,
-		modelResources,
-		localModels,
+		localModels.resources,
+		localModels.manager,
 	)
 	if err != nil {
 		input.logger.Error("failed to load workers from config", zap.Error(err))
@@ -295,27 +298,39 @@ func buildRuntimeBundle(
 		listener:       listener,
 		net:            net,
 		runtimeCfg:     input.loadedFactoryCfg,
-		modelResources: modelResources,
-		modelAssets:    modelAssets,
-		localModels:    localModels,
+		modelResources: localModels.resources,
+		modelAssets:    localModels.assets,
+		localModels:    localModels.manager,
 		logger:         input.logger,
 		recording:      recording,
 		recordPath:     input.recordPath,
 	}, nil
 }
 
-func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) (*localModelResourceLimiter, modelAssetPuller, *managedLocalModelManager) {
+// localModelDomain wires pkg/localmodels runtime dependencies constructed at
+// service build time and copied onto each replacement runtime bundle.
+type localModelDomain struct {
+	resources *localModelResourceLimiter
+	assets    modelAssetPuller
+	manager   *managedLocalModelManager
+}
+
+func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) localModelDomain {
 	modelResources := newLocalModelResourceLimiter()
 	modelAssets := newModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
 	localModelRuntime := cfg.LocalModelRuntimeOverride
 	if localModelRuntime == nil {
 		localModelRuntime = newOmniVoiceLocalRuntime(nil)
 	}
-	return modelResources, modelAssets, newManagedLocalModelManager(modelAssets, localModelRuntime)
+	return localModelDomain{
+		resources: modelResources,
+		assets:    modelAssets,
+		manager:   newManagedLocalModelManager(modelAssets, localModelRuntime),
+	}
 }
 
-func localModelHooks() localmodel.Hooks {
-	return localmodel.Hooks{
+func localModelHooks() localmodels.Hooks {
+	return localmodels.Hooks{
 		MarkResourceWaitStarted:  markModelExecutionResourceWaitStarted,
 		MarkResourceWaitFinished: markModelExecutionResourceWaitFinished,
 		MarkLoadRequested:        markModelExecutionLoadRequested,
@@ -325,15 +340,28 @@ func localModelHooks() localmodel.Hooks {
 }
 
 func newLocalModelResourceLimiter() *localModelResourceLimiter {
-	return localmodel.NewResourceLimiter(localModelHooks())
+	return localmodels.NewResourceLimiter(localModelHooks())
 }
 
 func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localModelRuntime) *managedLocalModelManager {
-	return localmodel.NewManager(assetPuller, runtime, localModelHooks())
+	return localmodels.NewManager(assetPuller, runtime, localModelHooks())
 }
 
 func newOmniVoiceLocalRuntime(runner workers.CommandRunner) localModelRuntime {
-	return localmodel.NewOmniVoiceRuntime(runner)
+	return localmodels.NewOmniVoiceRuntime(runner)
+}
+
+func buildHostedWorkersConfig(cfg *FactoryServiceConfig, logger *zap.Logger, clock factory.Clock) hostedworkers.Config {
+	hostedCfg := hostedworkers.Config{Logger: logger}
+	if supervisorClock, ok := clock.(clockwork.Clock); ok && supervisorClock != nil {
+		hostedCfg.Clock = supervisorClock
+	}
+	if cfg != nil {
+		hostedCfg.HTTPClient = cfg.HostedPollerHTTPClient
+		hostedCfg.SecretResolver = cfg.HostedPollerSecretResolver
+		hostedCfg.LinearEndpoint = strings.TrimSpace(cfg.HostedLinearEndpoint)
+	}
+	return hostedCfg
 }
 
 func buildRuntimeRecorder(
