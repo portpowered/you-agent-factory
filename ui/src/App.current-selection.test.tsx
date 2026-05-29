@@ -1254,7 +1254,7 @@ describe("App current selection", () => {
       name: "当前选择",
     });
     expect(within(currentSelection).getByRole("heading", { name: "工作站摘要" })).toBeTruthy();
-    expect(within(currentSelection).getByText("未知种类：future-kind")).toBeTruthy();
+    expect(within(currentSelection).getByText("标准")).toBeTruthy();
 
     const configurationSection = within(currentSelection)
       .getByRole("heading", { name: "配置" })
