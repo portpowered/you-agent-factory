@@ -3,13 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
-
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // LoadedFactoryConfig is the effective runtime configuration assembled from
@@ -893,117 +891,6 @@ func ResolveNamedFactoryDir(rootDir, name string) (string, error) {
 		return "", fmt.Errorf("resolve factory %q: %w", segment, err)
 	}
 	return factoryDir, nil
-}
-
-// NamedFactoryListEntry describes one persisted named factory under a factory root.
-type NamedFactoryListEntry struct {
-	Name       string `json:"name"`
-	FactoryDir string `json:"factoryDirectory"`
-	Current    bool   `json:"current"`
-}
-
-// ListNamedFactories discovers persisted named factories by scanning rootDir for
-// subdirectories that contain a valid factory.json layout.
-func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
-	if strings.TrimSpace(rootDir) == "" {
-		return nil, fmt.Errorf("factory root is required")
-	}
-
-	info, err := os.Stat(rootDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("factory root %s does not exist: %w", rootDir, err)
-		}
-		return nil, fmt.Errorf("stat factory root %s: %w", rootDir, err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("factory root %s is not a directory", rootDir)
-	}
-
-	currentName, err := readCurrentFactoryPointerForList(rootDir)
-	if err != nil {
-		return nil, err
-	}
-
-	children, err := os.ReadDir(rootDir)
-	if err != nil {
-		return nil, fmt.Errorf("read factory root %s: %w", rootDir, err)
-	}
-
-	entries := make([]NamedFactoryListEntry, 0, len(children))
-	for _, child := range children {
-		if !child.IsDir() {
-			continue
-		}
-		name := child.Name()
-		if name == interfaces.InputsDir || name == interfaces.WorkersDir || name == interfaces.WorkstationsDir {
-			continue
-		}
-		factoryDir := filepath.Join(rootDir, name)
-		if err := requireFactoryConfig(factoryDir); err != nil {
-			continue
-		}
-		entries = append(entries, NamedFactoryListEntry{
-			Name:       name,
-			FactoryDir: factoryDir,
-			Current:    currentName != "" && name == currentName,
-		})
-	}
-
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
-	})
-	return entries, nil
-}
-
-func readCurrentFactoryPointerForList(rootDir string) (string, error) {
-	name, err := ReadCurrentFactoryPointer(rootDir)
-	if err == nil {
-		return name, nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
-	}
-	return "", fmt.Errorf("read current factory pointer: %w", err)
-}
-
-// ErrNamedFactoryIsCurrent reports that a named factory cannot be deleted
-// because it is selected by .current-factory.
-var ErrNamedFactoryIsCurrent = errors.New("cannot delete current factory")
-
-// DeleteNamedFactory removes a persisted named factory directory under rootDir.
-// It refuses to delete the factory referenced by .current-factory.
-func DeleteNamedFactory(rootDir, name string) error {
-	if strings.TrimSpace(rootDir) == "" {
-		return fmt.Errorf("factory root is required")
-	}
-
-	segment, err := safeFactoryLayoutSegment("factory", name)
-	if err != nil {
-		return err
-	}
-
-	factoryDir, err := ResolveNamedFactoryDir(rootDir, segment)
-	if err != nil {
-		return err
-	}
-
-	current, err := ReadCurrentFactoryPointer(rootDir)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("read current factory pointer: %w", err)
-	}
-	if current == segment {
-		return fmt.Errorf(
-			"delete factory %q: %w: switch .current-factory to another factory first",
-			segment,
-			ErrNamedFactoryIsCurrent,
-		)
-	}
-
-	if err := os.RemoveAll(factoryDir); err != nil {
-		return fmt.Errorf("delete factory %q: %w", segment, err)
-	}
-	return nil
 }
 
 // ResolveCurrentFactoryDir returns the directory that should be treated as the
