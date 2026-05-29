@@ -1844,7 +1844,7 @@ export interface components {
          * @description Canonical model-provider identifiers supported by model workers in factory config.
          * @enum {string}
          */
-        WorkerModelProvider: "CLAUDE" | "CODEX" | "CURSOR";
+        WorkerModelProvider: "CLAUDE" | "CODEX" | "CURSOR" | "GEMINI" | "KIRO" | "OPENCODE";
         /**
          * @description Provider locality for a model worker capability declaration.
          * @enum {string}

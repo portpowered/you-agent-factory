@@ -344,9 +344,12 @@ const (
 
 // Defines values for WorkerModelProvider.
 const (
-	WorkerModelProviderClaude WorkerModelProvider = "CLAUDE"
-	WorkerModelProviderCodex  WorkerModelProvider = "CODEX"
-	WorkerModelProviderCursor WorkerModelProvider = "CURSOR"
+	WorkerModelProviderClaude   WorkerModelProvider = "CLAUDE"
+	WorkerModelProviderCodex    WorkerModelProvider = "CODEX"
+	WorkerModelProviderCursor   WorkerModelProvider = "CURSOR"
+	WorkerModelProviderGemini   WorkerModelProvider = "GEMINI"
+	WorkerModelProviderKiro     WorkerModelProvider = "KIRO"
+	WorkerModelProviderOpenCode WorkerModelProvider = "OPENCODE"
 )
 
 // Defines values for WorkerProvider.
