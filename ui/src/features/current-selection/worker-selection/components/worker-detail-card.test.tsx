@@ -370,6 +370,223 @@ describe("WorkerDetailCard", () => {
     ).toBeTruthy();
   });
 
+  it("shows overwrite warning and server-changed hints for dirty worker drafts", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: true,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CODEX",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: true,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: ["modelProvider"],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByText(/overwrite newer server values for/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /The running factory changed this field while you were editing/i,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("renders hosted worker provider fields in the editable configuration section", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: false,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "",
+        modelLocality: null,
+        modelProvider: null,
+        provider: "LINEAR",
+        type: "HOSTED_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: null,
+        modelLocality: null,
+        modelProvider: null,
+        provider: "LINEAR",
+        type: "HOSTED_WORKER",
+        workerName: "linear-bot",
+        workstationNames: ["Sync"],
+      },
+      isDirty: false,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument({
+        workers: [
+          {
+            name: "linear-bot",
+            provider: "LINEAR",
+            type: "HOSTED_WORKER",
+          },
+        ],
+        workstations: [{ id: "sync", name: "Sync", worker: "linear-bot" }],
+      }),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        workerName="linear-bot"
+      />,
+    );
+
+    expect(screen.getByLabelText("Hosted provider")).toBeTruthy();
+  });
+
+  it("renders script worker command and body fields in the editable configuration section", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: false,
+      draft: {
+        argsText: "check\nlint",
+        body: "Run the check",
+        command: "make check",
+        executorProvider: null,
+        model: "",
+        modelLocality: null,
+        modelProvider: null,
+        provider: null,
+        type: "SCRIPT_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: ["check", "lint"],
+        body: "Run the check",
+        command: "make check",
+        executorProvider: null,
+        model: null,
+        modelLocality: null,
+        modelProvider: null,
+        provider: null,
+        type: "SCRIPT_WORKER",
+        workerName: "script-runner",
+        workstationNames: ["Run"],
+      },
+      isDirty: false,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument({
+        workers: [
+          {
+            body: "Run the check",
+            command: "make check",
+            name: "script-runner",
+            type: "SCRIPT_WORKER",
+          },
+        ],
+        workstations: [{ id: "run", name: "Run", worker: "script-runner" }],
+      }),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        workerName="script-runner"
+      />,
+    );
+
+    expect(screen.getByLabelText("Command")).toBeTruthy();
+    expect(screen.getByLabelText("Body")).toBeTruthy();
+    expect(screen.getByLabelText("Args")).toBeTruthy();
+  });
+
   it("disables save and shows field errors while validation is unresolved", () => {
     const editableConfigurationState: EditableWorkerConfigurationState = {
       canSave: false,
