@@ -197,9 +197,15 @@ func TestSubmitWork_RejectsStructuredItemsCombinedWithPayload(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with payload")
 }
 
-func TestSubmitWork_RejectsEmptyStructuredItems(t *testing.T) {
+func TestSubmitWork_RejectsHeaderOnlyStructuredSubmitWork(t *testing.T) {
+	// Dashboard submit-work sends name, workTypeName, and items: [] when optional text
+	// inputs are blank. Header/type-only submissions must be rejected until validation
+	// accepts explicit empty structured item arrays.
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
-	rec := submitWorkRequest(t, srv, `{"name":"empty-items","workTypeName":"prd","items":[]}`)
+	rec := submitWorkRequest(t, srv, `{"name":"header-only-request","workTypeName":"prd","items":[]}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("header-only structured submit-work: expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items must contain at least one item")
 }
 
