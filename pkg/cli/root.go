@@ -37,6 +37,7 @@ var queryFactory = factorycli.Query
 var listFactories = factorycli.List
 var saveFactoryFromFile = factorycli.SaveFromFile
 var updateFactoryFromFile = factorycli.UpdateFromFile
+var deleteFactory = factorycli.Delete
 var listModels = modelscli.List
 var inspectModel = modelscli.Inspect
 var invokeModel = modelscli.Invoke
@@ -124,8 +125,36 @@ func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		newFactoryListCommand(diagnostics),
 		newFactorySaveFromFileCommand(diagnostics),
 		newFactoryUpdateFromFileCommand(diagnostics),
+		newFactoryDeleteCommand(diagnostics),
 	)
 	return factoryCmd
+}
+
+func newFactoryDeleteCommand(_ *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.DeleteConfig{Dir: defaultcmd.FactoryDir}
+
+	cmd := &cobra.Command{
+		Use:   "delete <name>",
+		Short: "Delete a persisted named factory",
+		Long: "Delete a persisted named factory from disk.\n\n" +
+			"The command removes the named factory directory under the selected factory root " +
+			"after validation. It refuses to delete the factory currently selected by " +
+			".current-factory; switch the current pointer to another factory first.",
+		Example: "  # Delete an unused named factory.\n" +
+			"  " + cliBinaryName + " factory delete staging\n\n" +
+			"  # Delete from a custom factory root.\n" +
+			"  " + cliBinaryName + " factory delete staging --dir my-factory",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Name = args[0]
+			cfg.Output = cmd.OutOrStdout()
+			return deleteFactory(cfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
+	return cmd
 }
 
 func newFactoryUpdateFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
