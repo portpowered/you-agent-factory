@@ -1,30 +1,29 @@
 {
-  "project": "Packaged CLI Docs for Mock Workers and Record/Replay",
-  "branchName": "ralph/docs-extensions-mock-workers-and-record",
-  "description": "Add dedicated you docs mock-workers and record-replay packaged topics so customers can discover how to use --with-mock-workers, mock-workers JSON, and the --record / --replay / --no-record run controls from the installed binary, with cross-links from existing topics and CLI smoke coverage.",
+  "project": "Hide Cron / System-Time Utility Topology from Factory Graph UI",
+  "branchName": "ralph/cron-workstation-ui-hide",
+  "description": "Hide internal __system_time utility workstations, work types, and states from factory graph UI surfaces while preserving canonical factory data, matching existing timeline topology filtering and resource-hiding test patterns.",
   "context": {
-    "customerAsk": "The current ./bin/you docs does not document how customers are supposed to use mock-workers or record/replay commands. Please add support for this.",
-    "problem": "Mock-worker and record/replay guidance is buried inside the long authoring-factories topic and only summarized in config. you docs has no dedicated mock-workers or record-replay topics, so customers cannot discover complete command and JSON contract documentation from the installed CLI index.",
-    "solution": "Introduce two new canonical packaged docs topics (mock-workers and record-replay) with synchronized docs/reference and pkg/cli/docs/reference markdown, register them in pkg/cli/docs/docs.go, cross-link from authoring-factories and config, and extend focused CLI and functional smoke tests so the topics are listed and render stable command guidance outside the repository docs tree."
+    "customerAsk": "Various utility workstations and work states appear in the factory graph because they are not hidden. Hide them from the UI and add tests that validate hiding the same way we validate hiding resources—primarily for __system_time (workstation:__system_time:expire, pending, the work type, and related edges).",
+    "problem": "Factory graph observer and editor paths build full topology from the canonical factory definition, so internal cron/system-time entities (__system_time work type, pending state, __system_time:expire utility workstation, and their edges) appear in the UI even though timeline dashboard topology already omits them and customers do not author this plumbing.",
+    "solution": "Introduce a shared customer-display graph topology filter aligned with existing system-time contracts, apply it at graph render boundaries (current-activity layout and factory graph editor React Flow projection), keep canonical factory and timeline snapshot.factory intact, and add direct layout/projection tests modeled on resource-availability hiding."
   },
   "acceptanceCriteria": [
-    "you docs lists mock-workers and record-replay with descriptions and you docs <topic> commands in the index.",
-    "you docs mock-workers returns a complete customer guide for --with-mock-workers, optional config paths, the mockWorkers JSON contract, selection fields, runType values, and example commands referencing docs/examples/mock-workers.json.",
-    "you docs record-replay returns a complete customer guide for default recording, generated artifact paths, --record, --replay, --no-record, sensitivity warnings, and incompatible flag combinations.",
-    "authoring-factories and config cross-link to the new topics without contradicting you run --help; docs/reference and pkg/cli/docs/reference copies stay synchronized.",
-    "Focused docs unit tests and functional cli_docs smoke tests prove index output and topic rendering from a working directory without a local docs tree.",
-    "Typecheck, lint, and tests pass for all changed packages."
+    "Factory graph UI does not render __system_time work type, __system_time:pending work state, or __system_time:expire utility workstation nodes",
+    "Rendered graphs omit edges to or from filtered system-time nodes; mixed customer workstations show only public routes",
+    "Customer cron workstations and public work types remain visible and interactable",
+    "Canonical factory payloads and timeline snapshot.factory retain __system_time data; existing timeline topology omission tests keep passing",
+    "Automated tests prove filtered rendered graph output using the resource-hiding test pattern",
+    "Typecheck, lint, and tests pass for all touched packages"
   ],
   "userStories": [
     {
-      "id": "docs-extensions-mock-workers-and-record-001",
-      "title": "Add mock-workers packaged docs topic",
-      "description": "As a factory author, I want you docs mock-workers to print a complete mock-worker guide so I can test routing and outcomes without live provider calls.",
+      "id": "cron-workstation-ui-hide-001",
+      "title": "Shared customer-display graph visibility rules",
+      "description": "As a maintainer, I need one authoritative rule set for internal system-time graph entities so observer and editor surfaces hide the same nodes and edges.",
       "acceptanceCriteria": [
-        "docs/reference/mock-workers.md and pkg/cli/docs/reference/mock-workers.md match and document enabling with you run --dir <factory> --with-mock-workers (optional path), empty-config default accept behavior, the mockWorkers JSON array, selection fields, runType values accept/reject/script with their config objects, and default accept when no entry matches.",
-        "The page includes copy-pasteable you run commands and references docs/examples/mock-workers.json with a runnable example that uses docs/examples/startup-work.json when startup work is relevant.",
-        "pkg/cli/docs/docs.go registers canonical topic mock-workers with display order, packaged path, and index description; SupportedTopics() and unsupported-topic errors include it in deterministic order.",
-        "Running you docs lists mock-workers without listing compatibility aliases for it.",
+        "Shared graph visibility module exposes system-time predicates and filterFactoryGraphTopologyForCustomerDisplay aligned with SYSTEM_TIME_* constants in systemTime.ts and pkg/interfaces/factory_config.go",
+        "Filter removes __system_time work-type nodes, __system_time work-state nodes, __system_time:expire workstation nodes, and any edges referencing removed node IDs with no orphans",
+        "Unit tests cover pure system-time fixtures, mixed public/system-time workstation fixtures, and a case where a normal customer workstation remains",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,14 +32,14 @@
       "notes": ""
     },
     {
-      "id": "docs-extensions-mock-workers-and-record-002",
-      "title": "Add record-replay packaged docs topic",
-      "description": "As a factory operator, I want you docs record-replay to explain record and replay run modes so I can capture, locate, and replay sensitive run artifacts safely.",
+      "id": "cron-workstation-ui-hide-002",
+      "title": "Hide system-time topology from current-activity graph layout",
+      "description": "As a customer viewing the workflow graph, I want internal cron/system-time plumbing hidden so I only see my authored factory workflow.",
       "acceptanceCriteria": [
-        "docs/reference/record-replay.md and pkg/cli/docs/reference/record-replay.md match and document default-on recording, generated paths under ~/.you-agent-factory/recordings/, session filename pattern, explicit --record, --replay, --no-record, Recording saved shutdown messaging, sensitivity warnings, no automatic retention cleanup in v1, and rejection of --record with --replay or --no-record with --record.",
-        "The page distinguishes record mode (live run writes history) from replay mode (reads artifact instead of live worker dispatch) without requiring maintainer event-log detail.",
-        "Includes copy-pasteable you run examples using docs/examples/sample-run.replay.json for explicit record and replay paths.",
-        "pkg/cli/docs/docs.go registers canonical topic record-replay with display order, packaged path, and index description.",
+        "buildCurrentActivityGraphLayoutFromFactory applies the shared customer-display filter before seeding layout nodes and edges",
+        "Rendered layout node IDs exclude work-type:__system_time, work-state:__system_time:pending, and workstation:__system_time:expire for factories with cron/system-time definitions",
+        "Mixed workstations render without edges to internal pending or expire nodes while keeping public routes",
+        "Layout test asserts raw buildFactoryGraphTopologyFromDefinition may contain system-time entities but buildCurrentActivityGraphLayoutFromFactory output must not, following the resource-availability test pattern",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -49,14 +48,13 @@
       "notes": ""
     },
     {
-      "id": "docs-extensions-mock-workers-and-record-003",
-      "title": "Cross-link existing packaged topics to new owners",
-      "description": "As a customer reading you docs config or you docs authoring-factories, I want clear pointers to the dedicated mock-worker and record/replay guides so I do not have to search a long workflow page.",
+      "id": "cron-workstation-ui-hide-003",
+      "title": "Hide system-time topology from factory graph editor projection",
+      "description": "As a customer editing the factory graph, I want the editor canvas to match the observer graph and not surface internal utility workstations or states.",
       "acceptanceCriteria": [
-        "config retains brief mentions of --with-mock-workers, --record, --replay, and --no-record but links to you docs mock-workers and you docs record-replay as canonical owners.",
-        "authoring-factories keeps workflow sequencing but replaces duplicated deep mock-worker and record/replay sections with short summaries plus links to the new topics; quick-start commands for the review example remain.",
-        "authoring-factories still links to docs/examples/README.md and example JSON files with repository-relative paths that work from the docs tree.",
-        "docs/reference/README.md packaged-topic table includes mock-workers and record-replay with accurate scope descriptions.",
+        "Factory graph editor React Flow projection applies the shared customer-display filter before materializing nodes and edges",
+        "Projection tests confirm system-time node IDs and incident edges are absent while customer workstations remain in the projected graph",
+        "Canonical factory documents and draft validation paths are unchanged; filtering applies only to display projection",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -65,19 +63,18 @@
       "notes": ""
     },
     {
-      "id": "docs-extensions-mock-workers-and-record-004",
-      "title": "Prove packaged CLI docs behavior for new topics",
-      "description": "As a maintainer, I need automated checks that the installed docs command exposes the new topics reliably so regressions are caught before release.",
+      "id": "cron-workstation-ui-hide-004",
+      "title": "End-to-end graph card verification for cron factories",
+      "description": "As a customer with cron-enabled factories, I want the dashboard graph card to stay readable and free of __system_time clutter in the live UI.",
       "acceptanceCriteria": [
-        "pkg/cli/docs/docs_test.go expects mock-workers and record-replay in supported-topic order, index markdown, and raw markdown markers for each new topic.",
-        "pkg/cli/root_docs_test.go and other root-command docs tests list the new topics in help or unsupported-topic error text where applicable.",
-        "tests/functional/smoke/cli_docs_smoke_test.go runs you docs mock-workers and you docs record-replay from a temp working directory without a local docs tree and asserts stable headings and command markers including --with-mock-workers, --record, --replay, --no-record, and example artifact paths.",
-        "Unsupported-topic errors list all canonical topics including mock-workers and record-replay in deterministic order.",
+        "Current-activity graph card test with a cron/system-time factory fixture asserts no rendered node or control for __system_time:expire or __system_time work type",
+        "Customer cron workstation in the fixture remains discoverable and selectable",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill on a factory graph view that includes cron configuration"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]

@@ -36,6 +36,11 @@ import {
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
 import {
+  SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+  SYSTEM_TIME_WORK_TYPE_ID,
+  systemTimeGraphNodeId,
+} from "../../factory-graph-editor/lib/factory-graph-customer-display";
+import {
   addFactoryGraphNode,
   connectFactoryGraphNodes,
   disconnectFactoryGraphEdge,
@@ -52,7 +57,10 @@ import {
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
-import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
+import {
+  buildCurrentActivityGraphLayoutFromFactory,
+  dashboardWorkstationFromFactory,
+} from "../lib/current-activity-factory-graph-layout";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
@@ -973,6 +981,109 @@ function dashboardSnapshotWithResourceReturnEdge(): DashboardSnapshot {
   }
 
   return refreshFactoryFromTopology(snapshot);
+}
+
+function cronSystemTimeFactoryDefinition(): CanonicalFactoryDefinition {
+  return {
+    name: "cron-system-time-card",
+    workers: [
+      {
+        command: "./cron.sh",
+        name: "scheduler",
+        type: "SCRIPT_WORKER",
+      },
+      {
+        model: "gpt-5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          { name: "new", type: "INITIAL" },
+          { name: "scheduled", type: "PROCESSING" },
+          { name: "done", type: "TERMINAL" },
+        ],
+      },
+      {
+        name: "schedule",
+        states: [{ name: "tick", type: "INITIAL" }],
+      },
+      {
+        name: SYSTEM_TIME_WORK_TYPE_ID,
+        states: [{ name: "pending", type: "PROCESSING" }],
+      },
+    ],
+    workstations: [
+      {
+        behavior: "CRON",
+        cron: { schedule: "0 0 * * *" },
+        id: "nightly-cron",
+        inputs: [{ state: "tick", workType: "schedule" }],
+        name: "Nightly Cron",
+        outputs: [{ state: "scheduled", workType: "story" }],
+        worker: "scheduler",
+      },
+      {
+        behavior: "STANDARD",
+        id: "review",
+        inputs: [{ state: "scheduled", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "done", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "reviewer",
+      },
+      {
+        id: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+        inputs: [{ state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID }],
+        name: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+        outputs: [],
+        worker: "",
+      },
+    ],
+  } satisfies CanonicalFactoryDefinition;
+}
+
+function dashboardSnapshotWithCronSystemTimeFactory(): DashboardSnapshot {
+  const factory = cronSystemTimeFactoryDefinition();
+  const workstations = (factory.workstations ?? []).map(
+    dashboardWorkstationFromFactory,
+  );
+
+  return {
+    factory,
+    factory_state: "IDLE",
+    runtime: {
+      active_executions_by_dispatch_id: {},
+      current_work_items_by_place_id: {},
+      place_occupancy_work_items_by_place_id: {},
+      place_token_counts: {
+        "schedule:tick": 1,
+        "story:scheduled": 1,
+      },
+      session: {
+        completed_count: 0,
+        dispatched_count: 0,
+        failed_count: 0,
+        has_data: true,
+        provider_sessions: [],
+      },
+      workstation_requests_by_dispatch_id: {},
+    },
+    tick_count: 0,
+    topology: {
+      edges: [],
+      workstation_node_ids: workstations.map(
+        (workstation) => workstation.node_id,
+      ),
+      workstation_nodes_by_id: Object.fromEntries(
+        workstations.map((workstation) => [workstation.node_id, workstation]),
+      ),
+    },
+    uptime_seconds: 0,
+  };
 }
 
 function dashboardSnapshotWithExhaustionRuleNode(): DashboardSnapshot {
@@ -2974,6 +3085,58 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     });
 
     expect(cronButton.getAttribute("title")).toBe("Nightly Cron");
+
+    fireEvent.click(cronButton);
+
+    expect(onSelectWorkstation).toHaveBeenCalledWith("nightly-cron");
+  });
+
+  it("hides system-time graph nodes from cron factories while keeping customer cron workstations selectable", async () => {
+    const factory = cronSystemTimeFactoryDefinition();
+    const layout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const renderedNodeIds = layout.nodes.map((node) => node.nodeId);
+
+    expect(renderedNodeIds).not.toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", SYSTEM_TIME_WORK_TYPE_ID),
+        systemTimeGraphNodeId(
+          "work-state",
+          SYSTEM_TIME_WORK_TYPE_ID,
+          "pending",
+        ),
+        systemTimeGraphNodeId("workstation", SYSTEM_TIME_EXPIRY_TRANSITION_ID),
+      ]),
+    );
+    expect(renderedNodeIds).toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("workstation", "Nightly Cron"),
+        systemTimeGraphNodeId("work-type", "story"),
+      ]),
+    );
+
+    const { onSelectWorkstation } = renderCurrentActivity({
+      snapshot: dashboardSnapshotWithCronSystemTimeFactory(),
+    });
+
+    const cronButton = await screen.findByRole("button", {
+      name: "Select Nightly Cron workstation",
+    });
+
+    expect(cronButton.getAttribute("title")).toBe("Nightly Cron");
+    expect(
+      screen.queryByLabelText(`work-type:${SYSTEM_TIME_WORK_TYPE_ID}`),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: `Select ${SYSTEM_TIME_EXPIRY_TRANSITION_ID} workstation`,
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: `Select ${SYSTEM_TIME_WORK_TYPE_ID}:pending state`,
+      }),
+    ).toBeNull();
+    expect(screen.queryByText(SYSTEM_TIME_EXPIRY_TRANSITION_ID)).toBeNull();
 
     fireEvent.click(cronButton);
 

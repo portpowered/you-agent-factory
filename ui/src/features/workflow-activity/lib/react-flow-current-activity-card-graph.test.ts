@@ -5,6 +5,11 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { resolveDashboardSelection } from "../../current-selection/base/public";
+import {
+  SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+  SYSTEM_TIME_WORK_TYPE_ID,
+  systemTimeGraphNodeId,
+} from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
@@ -233,6 +238,111 @@ describe("current activity graph editor handles", () => {
     expect(graphLayout.edges.map((edge) => edge.edgeId)).not.toContain(
       "workstation-input:work-state:executor-slot:available->workstation:process",
     );
+  });
+
+  it("omits system-time topology from current-activity layout while raw topology still contains it", async () => {
+    const mixedSystemTimeFactory = {
+      name: "mixed-public-system-time",
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" as const },
+            { name: "reviewing", type: "PROCESSING" as const },
+            { name: "done", type: "TERMINAL" as const },
+          ],
+        },
+        {
+          name: SYSTEM_TIME_WORK_TYPE_ID,
+          states: [{ name: "pending", type: "PROCESSING" as const }],
+        },
+      ],
+      workstations: [
+        {
+          behavior: "CLASSIFIER_WORKSTATION",
+          classificationRoutes: [
+            {
+              label: "ready",
+              outputs: [{ state: "reviewing", workType: "story" }],
+            },
+            {
+              label: "tick",
+              outputs: [
+                { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+              ],
+            },
+          ],
+          id: "route-story",
+          inputs: [
+            { state: "new", workType: "story" },
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          name: "Route story",
+          onContinue: [
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          onFailure: [{ state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID }],
+          onRejection: [
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          outputs: [
+            { state: "done", workType: "story" },
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          worker: "router",
+        },
+        {
+          id: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+          inputs: [{ state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID }],
+          name: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+          outputs: [],
+          worker: "",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const rawTopology = buildFactoryGraphTopologyFromDefinition(
+      mixedSystemTimeFactory,
+    );
+
+    expect(rawTopology.nodes.map((node) => node.id)).toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", SYSTEM_TIME_WORK_TYPE_ID),
+        systemTimeGraphNodeId(
+          "work-state",
+          SYSTEM_TIME_WORK_TYPE_ID,
+          "pending",
+        ),
+        systemTimeGraphNodeId("workstation", SYSTEM_TIME_EXPIRY_TRANSITION_ID),
+      ]),
+    );
+
+    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(
+      mixedSystemTimeFactory,
+    );
+    const renderedNodeIds = graphLayout.nodes.map((node) => node.nodeId);
+
+    expect(renderedNodeIds).not.toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", SYSTEM_TIME_WORK_TYPE_ID),
+        systemTimeGraphNodeId(
+          "work-state",
+          SYSTEM_TIME_WORK_TYPE_ID,
+          "pending",
+        ),
+        systemTimeGraphNodeId("workstation", SYSTEM_TIME_EXPIRY_TRANSITION_ID),
+      ]),
+    );
+    expect(renderedNodeIds).toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", "story"),
+        systemTimeGraphNodeId("workstation", "Route story"),
+      ]),
+    );
+    expect(
+      graphLayout.edges
+        .flatMap((edge) => [edge.fromNodeId, edge.toNodeId])
+        .some((nodeId) => nodeId.includes(SYSTEM_TIME_WORK_TYPE_ID)),
+    ).toBe(false);
   });
 
   it("renders sample factory work types through the semantic work-type node", async () => {

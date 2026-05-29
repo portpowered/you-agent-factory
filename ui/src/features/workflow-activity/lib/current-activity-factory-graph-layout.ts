@@ -7,6 +7,7 @@ import type {
   StateCategory,
 } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
 import type {
   FactoryGraphEdge,
@@ -551,7 +552,9 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
   const categories = stateCategoryByName(normalizedFactory);
   const resourceAvailabilityWorkTypes =
     resourceAvailabilityWorkTypeNames(normalizedFactory);
-  const topology = buildFactoryGraphTopologyFromDefinition(normalizedFactory);
+  const topology = filterFactoryGraphTopologyForCustomerDisplay(
+    buildFactoryGraphTopologyFromDefinition(normalizedFactory),
+  );
 
   for (const node of topology.nodes) {
     if (

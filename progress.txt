@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- Hide internal `__system_time` factory graph nodes with `filterFactoryGraphTopologyForCustomerDisplay` in `ui/src/features/factory-graph-editor/lib/factory-graph-customer-display.ts`; reuse `systemTime.ts` constants/predicates and apply the filter at graph render boundaries (layout/projection) before seeding nodes or edges.
+- Apply customer-display filtering in `projectFactoryGraphToReactFlow` only; keep `buildFactoryGraphTopologyFromDefinition` and draft-validation topology unfiltered so canonical factory data and editor mutations stay complete.
 - Register new packaged `you docs` topics in the single `topicDocuments` table in `pkg/cli/docs/docs.go` with canonical name, description, `displayOrder`, path, and optional aliases together so `SupportedTopics()`, index output, and unsupported-topic errors stay aligned.
 - Keep `docs/reference/*.md` and `pkg/cli/docs/reference/*.md` synchronized when adding customer-facing packaged topics; embedded markdown is loaded from `pkg/cli/docs/reference/` via `//go:embed`.
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
@@ -29,4 +31,40 @@
   - Patterns discovered: After extracting topics, replace deep sections with `you docs <topic>` pointers and keep only quick-start `you run` commands needed for the walkthrough; sync `docs/reference/authoring-factories.md` to `pkg/cli/docs/reference/` with `cp` when they must stay identical.
   - Gotchas encountered: `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` still asserted record/replay example commands removed from authoring-factories; update markers to `you docs mock-workers` / `you docs record-replay` when trimming.
   - Useful context: Packaged `config` (`pkg/cli/docs/reference/config.md`) and layout `docs/reference/config.md` differ; both need run-control cross-links for story 003.
+---
+
+## 2026-05-30T01:12:00Z - cron-workstation-ui-hide-001
+- What was implemented: Added shared `factory-graph-customer-display` module with system-time graph predicates and `filterFactoryGraphTopologyForCustomerDisplay`, plus unit tests for pure system-time, mixed, and customer-only factory fixtures.
+- Files changed: `ui/src/features/factory-graph-editor/lib/factory-graph-customer-display.ts`, `ui/src/features/factory-graph-editor/lib/factory-graph-customer-display.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Graph node IDs follow `nodeKeyId` prefixes (`work-type:`, `work-state:<workType>:<state>`, `workstation:<name>`); filter by hidden node ID set and drop incident edges, matching resource-availability hiding in layout tests.
+  - Gotchas encountered: Empty `worker: ""` on utility workstations still materializes a `worker:` node after filtering system-time nodes; tests should assert absence of `__system_time` IDs, not zero nodes.
+  - Useful context: Mixed fixture from `factoryTimelineSnapshotFactoryGraph.test.ts` is a good source for cron/system-time topology tests; stories 002–003 wire the filter into `buildCurrentActivityGraphLayoutFromFactory` and React Flow projection.
+---
+
+## 2026-05-30T01:15:00Z - cron-workstation-ui-hide-002
+- What was implemented: Wired `filterFactoryGraphTopologyForCustomerDisplay` into `buildCurrentActivityGraphLayoutFromFactory` before resource-availability skipping; added layout test asserting raw topology still contains system-time nodes while rendered layout output does not.
+- Files changed: `ui/src/features/workflow-activity/lib/current-activity-factory-graph-layout.ts`, `ui/src/features/workflow-activity/lib/react-flow-current-activity-card-graph.test.ts`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Apply customer-display filtering on the topology object immediately after `buildFactoryGraphTopologyFromDefinition`; resource-availability collapsing still runs on the filtered topology during node/edge seeding.
+  - Gotchas encountered: Biome expects `factory-graph-customer-display` imports before `factory-graph-draft.test-helpers` in graph test files.
+  - Useful context: Mirror resource-availability layout tests—assert `buildFactoryGraphTopologyFromDefinition` still exposes internal nodes, then assert `buildCurrentActivityGraphLayoutFromFactory` node IDs and edge endpoints exclude `__system_time`.
+---
+
+## 2026-05-30T01:18:00Z - cron-workstation-ui-hide-003
+- What was implemented: Applied `filterFactoryGraphTopologyForCustomerDisplay` inside `projectFactoryGraphToReactFlow` at the React Flow display boundary; added projection test proving raw topology retains system-time nodes while projected nodes and edges omit them.
+- Files changed: `ui/src/features/factory-graph-editor/lib/factory-graph-react-flow-projection.ts`, `ui/src/features/factory-graph-editor/lib/factory-graph-react-flow-projection.test.ts`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Draft validation and graph operations should keep full topology from `buildFactoryGraphTopologyFromDefinition`; only `projectFactoryGraphToReactFlow` (and current-activity layout) should filter for customer display.
+  - Gotchas encountered: Connection-anchor building must use the filtered `displayTopology` so hidden nodes are not referenced when resolving connection targets.
+  - Useful context: Reuse the mixed `mixed-public-system-time` fixture from customer-display or layout tests for raw-vs-projected assertions.
+---
+
+## 2026-05-30T01:20:00Z - cron-workstation-ui-hide-004
+- What was implemented: Added `cronSystemTimeFactoryDefinition` / `dashboardSnapshotWithCronSystemTimeFactory` and a React Flow current-activity card DOM test that asserts layout and rendered controls omit `__system_time` work type, pending state, and expire utility nodes while the customer cron workstation stays selectable.
+- Files changed: `ui/src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Card tests should assert both `buildCurrentActivityGraphLayoutFromFactory` node IDs and DOM queries (`work-type:__system_time` label, workstation/state select buttons) because the card mounts async layout from `snapshot.factory`.
+  - Gotchas encountered: Workstation graph node IDs use authored `name` (`workstation:Nightly Cron`) while `onSelectWorkstation` callbacks use `id || name` (`nightly-cron`); keep both in mind when wiring fixtures.
+  - Useful context: Browser verification via dev-browser skill was not run this iteration; the Vitest card test is the automated E2E proof for story 004.
 ---
