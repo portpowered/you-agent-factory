@@ -2,6 +2,7 @@ package apicontract_test
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -86,6 +87,41 @@ func TestOpenAPIContract_DocumentsSharedFactoryStarterWorkCopySemantics(t *testi
 		for _, substring := range expectation.substrings {
 			if !strings.Contains(expectation.description, substring) {
 				t.Fatalf("%s description = %q, want substring %q", expectation.path, expectation.description, substring)
+			}
+		}
+	}
+}
+
+func TestGeneratedArtifacts_ExposeBundledFilePortabilitySurface(t *testing.T) {
+	for _, expectation := range []struct {
+		path       string
+		substrings []string
+	}{
+		{
+			path: filepath.Join("..", "..", "..", "pkg", "api", "generated", "server.gen.go"),
+			substrings: []string{
+				`SupportingFiles *ResourceManifest`,
+				`BundledFiles *[]BundledFile`,
+				`BundledFileTypeINPUT      BundledFileType = "INPUT"`,
+			},
+		},
+		{
+			path: filepath.Join("..", "..", "..", "ui", "src", "api", "generated", "openapi.ts"),
+			substrings: []string{
+				`supportingFiles?: components["schemas"]["ResourceManifest"];`,
+				`bundledFiles?: components["schemas"]["BundledFile"][];`,
+				`type: "SCRIPT" | "DOC" | "INPUT" | "ROOT_HELPER";`,
+			},
+		},
+	} {
+		content, err := os.ReadFile(expectation.path)
+		if err != nil {
+			t.Fatalf("read generated artifact %s: %v", expectation.path, err)
+		}
+		text := string(content)
+		for _, substring := range expectation.substrings {
+			if !strings.Contains(text, substring) {
+				t.Fatalf("%s missing generated portability surface marker %q", expectation.path, substring)
 			}
 		}
 	}
