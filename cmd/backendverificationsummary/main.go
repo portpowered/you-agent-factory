@@ -18,10 +18,11 @@ const (
 )
 
 var (
-	goTestFailurePattern           = regexp.MustCompile(`^\s*--- FAIL: ([^\s(]+)`)
-	stdoutWriter         io.Writer = os.Stdout
-	stderrWriter         io.Writer = os.Stderr
-	exitFunc                       = os.Exit
+	goTestFailurePattern             = regexp.MustCompile(`^\s*--- FAIL: ([^\s(]+)`)
+	coverageFailurePattern           = regexp.MustCompile(`go coverage ([0-9.]+)% is below minimum ([0-9.]+)%`)
+	stdoutWriter           io.Writer = os.Stdout
+	stderrWriter           io.Writer = os.Stderr
+	exitFunc                         = os.Exit
 )
 
 type config struct {
@@ -36,6 +37,8 @@ type failureSummary struct {
 	CommandPhase string
 	Package      string
 	TestName     string
+	Measured     string
+	Required     string
 	Excerpt      []string
 	Inferred     bool
 }
@@ -81,6 +84,9 @@ func summarizeBackendVerificationLog(rawLog string) failureSummary {
 	if summary, ok := summarizeFirstGoTestFailure(lines); ok {
 		return summary
 	}
+	if summary, ok := summarizeCoverageGateFailure(lines); ok {
+		return summary
+	}
 	return failureSummary{
 		Kind:     "unclassified backend verification failure",
 		Excerpt:  boundedExcerpt(lines, 0, len(lines)),
@@ -108,6 +114,48 @@ func summarizeFirstGoTestFailure(lines []string) (failureSummary, bool) {
 		}, true
 	}
 	return failureSummary{}, false
+}
+
+func summarizeCoverageGateFailure(lines []string) (failureSummary, bool) {
+	for index, line := range lines {
+		matches := coverageFailurePattern.FindStringSubmatch(line)
+		if matches == nil {
+			continue
+		}
+
+		return failureSummary{
+			Kind:         "coverage gate failure",
+			CommandPhase: findCommandPhase(lines),
+			Measured:     matches[1] + "%",
+			Required:     matches[2] + "%",
+			Excerpt:      boundedExcerpt(lines, coverageExcerptStart(lines, index), coverageExcerptEnd(lines, index)),
+			Inferred:     true,
+		}, true
+	}
+	return failureSummary{}, false
+}
+
+func coverageExcerptStart(lines []string, failureIndex int) int {
+	for index := failureIndex - 1; index >= 0; index-- {
+		if strings.Contains(lines[index], "total:") || strings.HasPrefix(lines[index], "go tool cover") {
+			return index
+		}
+		if strings.HasPrefix(lines[index], "ok  \t") || strings.HasPrefix(lines[index], "?\t") {
+			break
+		}
+	}
+	return failureIndex
+}
+
+func coverageExcerptEnd(lines []string, failureIndex int) int {
+	for index := failureIndex + 1; index < len(lines); index++ {
+		line := lines[index]
+		if strings.HasPrefix(line, "make") || strings.Contains(line, "run go test coverage lane:") {
+			continue
+		}
+		return index
+	}
+	return len(lines)
 }
 
 func splitLogLines(rawLog string) []string {
@@ -215,6 +263,12 @@ func writeMarkdownSummary(output io.Writer, cfg config, summary failureSummary) 
 	}
 	if summary.TestName != "" {
 		fmt.Fprintf(output, "- Test: `%s`\n", summary.TestName)
+	}
+	if summary.Measured != "" {
+		fmt.Fprintf(output, "- Measured coverage: `%s`\n", summary.Measured)
+	}
+	if summary.Required != "" {
+		fmt.Fprintf(output, "- Required coverage: `%s`\n", summary.Required)
 	}
 	if !summary.Inferred {
 		fmt.Fprintln(output, "- Failure identity: specific failing package or test could not be inferred from the command log.")

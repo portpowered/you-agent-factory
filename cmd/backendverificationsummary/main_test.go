@@ -93,6 +93,87 @@ func TestWriteMarkdownSummaryIncludesBackendFailureContract(t *testing.T) {
 	}
 }
 
+func TestSummarizeBackendVerificationLogFindsCoverageGateFailure(t *testing.T) {
+	logLines := []string{
+		"ok  \tgithub.com/portpowered/infinite-you/cmd/factory\t0.041s\tcoverage: 71.0% of statements in github.com/portpowered/infinite-you/cmd/factory,github.com/portpowered/infinite-you/pkg/config",
+		"ok  \tgithub.com/portpowered/infinite-you/pkg/config\t0.031s\tcoverage: 79.3% of statements",
+		"total:                                      (statements)                 82.5%",
+		"go coverage 82.5% is below minimum 90.0%",
+		"make[1]: *** [test-backend-verification] Error 1",
+		"run go test coverage lane: exit status 2",
+	}
+
+	summary := summarizeBackendVerificationLog(strings.Join(logLines, "\n"))
+
+	if summary.Kind != "coverage gate failure" {
+		t.Fatalf("summary.Kind = %q, want coverage gate failure", summary.Kind)
+	}
+	if summary.CommandPhase != "run go test coverage lane" {
+		t.Fatalf("summary.CommandPhase = %q, want run go test coverage lane", summary.CommandPhase)
+	}
+	if summary.Measured != "82.5%" {
+		t.Fatalf("summary.Measured = %q, want 82.5%%", summary.Measured)
+	}
+	if summary.Required != "90.0%" {
+		t.Fatalf("summary.Required = %q, want 90.0%%", summary.Required)
+	}
+	if summary.Package != "" || summary.TestName != "" {
+		t.Fatalf("coverage summary package/test = %q/%q, want empty identities", summary.Package, summary.TestName)
+	}
+
+	excerpt := strings.Join(summary.Excerpt, "\n")
+	for _, want := range []string{
+		"total:                                      (statements)                 82.5%",
+		"go coverage 82.5% is below minimum 90.0%",
+		"run go test coverage lane: exit status 2",
+	} {
+		if !strings.Contains(excerpt, want) {
+			t.Fatalf("summary excerpt = %q, want %q", excerpt, want)
+		}
+	}
+	if strings.Contains(excerpt, "cmd/factory") {
+		t.Fatalf("summary excerpt = %q, did not expect full package output", excerpt)
+	}
+}
+
+func TestWriteMarkdownSummaryIncludesCoverageGateDetails(t *testing.T) {
+	summary := failureSummary{
+		Kind:         "coverage gate failure",
+		CommandPhase: "run go test coverage lane",
+		Measured:     "82.5%",
+		Required:     "90.0%",
+		Excerpt: []string{
+			"total:                                      (statements)                 82.5%",
+			"go coverage 82.5% is below minimum 90.0%",
+		},
+		Inferred: true,
+	}
+
+	var output bytes.Buffer
+	writeMarkdownSummary(&output, config{
+		command:      defaultCommand,
+		artifactName: defaultArtifactName,
+		primaryLog:   defaultPrimaryLog,
+	}, summary)
+
+	got := output.String()
+	for _, want := range []string{
+		"- Result: `failed`",
+		"- Failure type: `coverage gate failure`",
+		"- Command phase: `run go test coverage lane`",
+		"- Measured coverage: `82.5%`",
+		"- Required coverage: `90.0%`",
+		"- Local rerun: `make test-backend-verification`",
+		"- Retained artifact: `backend-verification-failure-artifacts` for 14 days",
+		"- Primary log: `.artifacts/backend-verification/command.log`",
+		"#### First actionable failure excerpt",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("markdown summary = %q, want %q", got, want)
+		}
+	}
+}
+
 func TestRunReadsLogAndWritesSummary(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "command.log")
 	if err := os.WriteFile(logPath, []byte(strings.Join([]string{
