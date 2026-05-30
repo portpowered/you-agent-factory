@@ -359,6 +359,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-coverage-shard-${{ matrix.shard }}
+          include-hidden-files: true
           path: |
             ui/.vitest-reports/
             .artifacts/ui-coverage-shard-${{ matrix.shard }}/
@@ -370,6 +371,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-coverage-shard-${{ matrix.shard }}
+          include-hidden-files: true
           path: |
             .artifacts/ui-coverage-shard-${{ matrix.shard }}/
             ui/.vitest-reports/
