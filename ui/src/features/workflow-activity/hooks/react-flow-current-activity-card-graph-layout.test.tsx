@@ -33,6 +33,7 @@ vi.mock("../../flowchart/lib/layout", async () => {
   };
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: edit-mode layout override cases share one mocked buildGraphLayout harness.
 describe("useCurrentActivityGraphLayout", () => {
   beforeEach(() => {
     mockBuildGraphLayout.mockReset();

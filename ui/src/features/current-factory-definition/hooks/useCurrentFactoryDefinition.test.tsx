@@ -228,6 +228,7 @@ describe("useCurrentFactoryDefinition", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: save/convergence cases share one query-client harness.
 describe("useSaveCurrentFactory", () => {
   it("saves the editable current-factory document and refreshes both query caches", async () => {
     const queryClient = new QueryClient({

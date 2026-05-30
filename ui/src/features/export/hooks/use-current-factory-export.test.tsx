@@ -40,6 +40,7 @@ const documentFactory: CurrentFactoryDocument = {
 /** Fixture-only: snapshot topology that must not become the export payload. */
 const snapshotOnlyWorkstationName = "snapshot-only";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: export document-plane cases share session and divergent-fixture setup.
 describe("useCurrentFactoryExport", () => {
   beforeEach(() => {
     vi.mocked(getCurrentFactoryDocument).mockReset();
