@@ -96,7 +96,11 @@ func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.Wo
 	}
 	if len(normalized) > 0 {
 		result.TraceID = normalized[0].TraceID
+		if result.RequestID == "" {
+			result.RequestID = normalized[0].RequestID
+		}
 	}
+	requests.EnrichWorkRequestSubmitResult(&result, normalized)
 	if m.WorkRequestResults == nil {
 		m.WorkRequestResults = make(map[string]interfaces.WorkRequestSubmitResult)
 	}

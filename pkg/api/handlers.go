@@ -96,7 +96,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, factoryapi.SubmitWorkResponse{TraceId: result.TraceID})
+	s.writeJSON(w, http.StatusCreated, submitWorkResponseFromResult(result))
 }
 
 func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
@@ -162,7 +162,7 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, factoryapi.SubmitWorkResponse{TraceId: result.TraceID})
+	s.writeJSON(w, http.StatusCreated, submitWorkResponseFromResult(result))
 }
 
 func (s *Server) UpsertWorkRequest(w http.ResponseWriter, r *http.Request, requestID string) {

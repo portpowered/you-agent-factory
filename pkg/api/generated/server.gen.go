@@ -2148,7 +2148,15 @@ type SubmitWorkRequest struct {
 
 // SubmitWorkResponse defines model for SubmitWorkResponse.
 type SubmitWorkResponse struct {
-	TraceId string `json:"traceId"`
+	// Name Human-readable work name returned for submit verification.
+	Name    *string `json:"name,omitempty"`
+	TraceId string  `json:"traceId"`
+
+	// WorkId Unique identifier for the accepted work item after normalization.
+	WorkId *string `json:"workId,omitempty"`
+
+	// WorkTypeName Configured work type name for the accepted work item.
+	WorkTypeName *string `json:"workTypeName,omitempty"`
 }
 
 // SubmitWorkTextItem Ordered inline text submission item.

@@ -234,6 +234,7 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 		TraceID:   traceID,
 		Accepted:  true,
 	}
+	requests.EnrichWorkRequestSubmitResult(&result, work)
 
 	e.mu.Lock()
 	if !e.acceptingSubmits {
@@ -788,11 +789,13 @@ func (e *FactoryEngine) recordGeneratedSubmissionRequest(
 	if len(normalized) > 0 {
 		traceID = normalized[0].TraceID
 	}
-	e.workRequests[requestID] = interfaces.WorkRequestSubmitResult{
+	recorded := interfaces.WorkRequestSubmitResult{
 		RequestID: requestID,
 		TraceID:   traceID,
 		Accepted:  true,
 	}
+	requests.EnrichWorkRequestSubmitResult(&recorded, normalized)
+	e.workRequests[requestID] = recorded
 	if e.recordWorkRequest == nil {
 		return
 	}

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ func TestSubmitWork(t *testing.T) {
 	if resp.TraceId != "test-trace-1" {
 		t.Errorf("expected trace_id test-trace-1, got %s", resp.TraceId)
 	}
+	assertSubmitWorkResponseIdentifiers(t, resp, "draft-prd", "prd")
 	if len(mf.WorkRequests) != 1 {
 		t.Fatalf("expected 1 work request, got %d", len(mf.WorkRequests))
 	}
@@ -689,5 +691,63 @@ func assertSubmitSurfaceSmokeEvents(t *testing.T, serverURL string) {
 	streamed := readSSEFactoryEvent(t, bufio.NewReader(eventsResp.Body))
 	if streamed.Id != "factory-event/work-request/api-surface-history" {
 		t.Fatalf("streamed event id = %q, want factory-event/work-request/api-surface-history", streamed.Id)
+	}
+}
+
+func TestSubmitWork_ReturnsWorkIdentifiers(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{"name":"draft-prd","workTypeName":"prd","traceId":"test-trace-1","payload":{"title":"Draft PRD"}}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
+	assertSubmitWorkResponseIdentifiers(t, resp, "draft-prd", "prd")
+	if resp.WorkId == nil || !strings.HasPrefix(*resp.WorkId, "batch-") || !strings.HasSuffix(*resp.WorkId, "-draft-prd") {
+		t.Fatalf("workId = %v, want batch-<requestId>-draft-prd", resp.WorkId)
+	}
+}
+
+func TestSubmitWorkBySessionId_ReturnsWorkIdentifiers(t *testing.T) {
+	betaSession := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"session-beta": betaSession,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-beta/work", bytes.NewBufferString(`{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"scoped"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
+	if resp.TraceId != "trace-scoped-submit" {
+		t.Fatalf("traceId = %q, want trace-scoped-submit", resp.TraceId)
+	}
+	assertSubmitWorkResponseIdentifiers(t, resp, "scoped-submit", "task")
+	if resp.WorkId == nil || !strings.HasPrefix(*resp.WorkId, "batch-") || !strings.HasSuffix(*resp.WorkId, "-scoped-submit") {
+		t.Fatalf("workId = %v, want batch-<requestId>-scoped-submit", resp.WorkId)
+	}
+}
+
+func assertSubmitWorkResponseIdentifiers(t *testing.T, resp factoryapi.SubmitWorkResponse, wantName, wantWorkTypeName string) {
+	t.Helper()
+	if resp.TraceId == "" {
+		t.Fatal("expected non-empty traceId")
+	}
+	if resp.Name == nil || *resp.Name != wantName {
+		t.Fatalf("name = %v, want %q", resp.Name, wantName)
+	}
+	if resp.WorkTypeName == nil || *resp.WorkTypeName != wantWorkTypeName {
+		t.Fatalf("workTypeName = %v, want %q", resp.WorkTypeName, wantWorkTypeName)
+	}
+	if resp.WorkId == nil || strings.TrimSpace(*resp.WorkId) == "" {
+		t.Fatalf("workId = %v, want non-empty normalized work id", resp.WorkId)
 	}
 }

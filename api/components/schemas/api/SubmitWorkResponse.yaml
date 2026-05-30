@@ -5,3 +5,12 @@ required:
 properties:
   traceId:
     type: string
+  workId:
+    type: string
+    description: Unique identifier for the accepted work item after normalization.
+  name:
+    type: string
+    description: Human-readable work name returned for submit verification.
+  workTypeName:
+    type: string
+    description: Configured work type name for the accepted work item.

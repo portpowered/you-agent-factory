@@ -58,9 +58,12 @@ type WorkRequest struct {
 
 // WorkRequestSubmitResult describes accepted request metadata.
 type WorkRequestSubmitResult struct {
-	RequestID string
-	TraceID   string
-	Accepted  bool
+	RequestID    string
+	TraceID      string
+	Accepted     bool
+	WorkID       string
+	Name         string
+	WorkTypeName string
 }
 
 // Work is one public item inside a WorkRequest batch.

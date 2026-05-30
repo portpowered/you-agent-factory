@@ -284,6 +284,24 @@ func SubmitWorkName(req interfaces.SubmitRequest) string {
 	return req.WorkID
 }
 
+// SubmitWorkIdentityFromNormalized returns API-facing identifiers for the primary
+// work item in a normalized submit batch.
+func SubmitWorkIdentityFromNormalized(normalized []interfaces.SubmitRequest) (workID, name, workTypeName string) {
+	if len(normalized) == 0 {
+		return "", "", ""
+	}
+	req := normalized[0]
+	return req.WorkID, SubmitWorkName(req), req.WorkTypeID
+}
+
+// EnrichWorkRequestSubmitResult fills accepted-work identity fields from normalized submit metadata.
+func EnrichWorkRequestSubmitResult(result *interfaces.WorkRequestSubmitResult, normalized []interfaces.SubmitRequest) {
+	if result == nil {
+		return
+	}
+	result.WorkID, result.Name, result.WorkTypeName = SubmitWorkIdentityFromNormalized(normalized)
+}
+
 func sharedSubmitRequestID(requests []interfaces.SubmitRequest) string {
 	var shared string
 	for _, req := range requests {
