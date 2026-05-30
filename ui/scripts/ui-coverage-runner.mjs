@@ -1,6 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { performance } from "node:perf_hooks";
+import {
+  bunCoverageReportsDir,
+  coverageTestTimeoutMs,
+  reactFlowCoverageReportsDir,
+  reactFlowCoverageTestPath,
+} from "./bun-coverage-config.mjs";
 
 export const phaseLogPrefix = "[ui-coverage]";
 export const defaultMainCoveredMaxWorkers = "2";
@@ -16,49 +22,28 @@ export function buildUiCoveragePhases(options = {}) {
   return [
     {
       name: "Main covered Vitest pass",
-      command: "vitest",
-      args: [
-        "run",
-        "--coverage",
-        "--coverage.clean=false",
-        `--maxWorkers=${mainCoveredMaxWorkers}`,
-        "--coverage.thresholds.lines=0",
-        "--coverage.thresholds.functions=0",
-        "--coverage.thresholds.statements=0",
-        "--coverage.thresholds.branches=0",
-        "--reporter=default",
-        "--reporter=blob",
-        "--outputFile.blob=.vitest-reports/main.json",
-        "--exclude",
-        "integration/*.integration.test.mjs",
-        "--exclude",
-        "scripts/dashboard-shell-storybook-responsive.test.mjs",
-        "--exclude",
-        "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
-      ],
+      command: "node",
+      args: ["scripts/run-bun-coverage-main.mjs"],
     },
     {
       name: "Isolated React Flow covered pass",
-      command: "vitest",
+      command: "bun",
       args: [
-        "run",
+        "test",
+        reactFlowCoverageTestPath,
         "--coverage",
-        "--coverage.clean=false",
-        "--maxWorkers=1",
-        "--coverage.thresholds.lines=0",
-        "--coverage.thresholds.functions=0",
-        "--coverage.thresholds.statements=0",
-        "--coverage.thresholds.branches=0",
-        "--reporter=default",
-        "--reporter=blob",
-        "--outputFile.blob=.vitest-reports/react-flow-current-activity-card.json",
-        "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
+        "--coverage-reporter=lcov",
+        `--coverage-dir=${reactFlowCoverageReportsDir}`,
+        "--timeout",
+        String(coverageTestTimeoutMs),
+        "--parallel=1",
+        "--isolate",
       ],
     },
     {
       name: "Blob report merge pass",
-      command: "vitest",
-      args: ["--mergeReports", ".vitest-reports", "--coverage"],
+      command: "node",
+      args: ["scripts/merge-bun-coverage-thresholds.mjs"],
     },
     {
       name: "Standalone script-style test",
@@ -85,6 +70,7 @@ export function formatPhaseElapsed(phaseName, elapsedMs) {
 export function cleanCoverageArtifacts() {
   rmSync("coverage", { force: true, recursive: true });
   rmSync(".vitest-reports", { force: true, recursive: true });
+  rmSync(bunCoverageReportsDir, { force: true, recursive: true });
 }
 
 export function runTimedPhase(phase, spawn = spawnSync) {
