@@ -1,6 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -13,6 +11,7 @@ import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import type { DashboardSelection } from "../state/selection-types";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import { renderWithQueryClient } from "./current-selection-widget-test-utils";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -114,20 +113,6 @@ function buildMultimodalWorkItemSelection(): {
     selection,
     workItem: selectedWorkItem,
   };
-}
-
-function renderWithQueryClient(view: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-    },
-  });
-
-  return render(view, {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    ),
-  });
 }
 
 describe("CurrentSelectionWidget work contents", () => {

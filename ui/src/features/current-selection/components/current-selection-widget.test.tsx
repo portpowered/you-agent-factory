@@ -1,7 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
 import type {
   CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
@@ -12,6 +10,7 @@ import {
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import { renderWithQueryClient } from "./current-selection-widget-test-utils";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
@@ -1128,20 +1127,6 @@ function buildEditableDefinitionResult(
     refetch: vi.fn(),
     status: "success",
   } as never;
-}
-
-function renderWithQueryClient(view: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-    },
-  });
-
-  return render(view, {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    ),
-  });
 }
 
 function expandEditableConfiguration() {
