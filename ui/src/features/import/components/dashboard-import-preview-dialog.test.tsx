@@ -290,6 +290,29 @@ describe("DashboardImportPreviewDialog", () => {
     );
   });
 
+  it("delegates confirmation with CREATE_NEW_NAMED when that save choice is selected", async () => {
+    const { onConfirm } = renderDialog();
+    const messages = getImportPreviewDialogMessages("en");
+
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+
+    fireEvent.click(
+      within(previewDialog).getByRole("button", {
+        name: new RegExp(messages.createNewNamedFactoryLabel),
+      }),
+    );
+    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.activateAction }));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          factory: expect.objectContaining({ name: "Dropped Factory" }),
+        }),
+        "CREATE_NEW_NAMED",
+      );
+    });
+  });
+
   it("shows activation failures and delegates confirmation with the ready preview payload", async () => {
     const { onConfirm } = renderDialog({
       activationState: {
