@@ -1,171 +1,153 @@
-# PRD: Session-Aware Factory PNG Import
+# PRD: CLI Submit Response Contract v3 (`you submit`)
 
----
-author: Codex
-last modified: 2026, may, 30
-status: draft
----
+## Introduction
+
+`you submit` returns HTTP `201` and a trace id, but operators and agents cannot tell which **work id**, **name**, or **work type** were created without immediately running `you work list`. That gap caused duplicate ingress attempts and missed verification during docs PRD submission exercises.
+
+This project makes successful `you submit` output actionable for humans and scripts, extends the `POST /work` response contract so `workId` is available at submit time, and documents the submit → verify loop in agent-facing docs. Field names (`workId`, `name`, `workTypeName`, `traceId`, `sessionId`, `endpointPath`) are the naming source of truth for unary submit and align with [`prd-cli-submit-batch.md`](../prd-cli-submit-batch.md) batch output.
 
 ## Context
 
-### Customer Ask
+| | |
+|---|---|
+| **Customer ask** | Implement [`prd-cli-submit-response-contract.md`](../prd-cli-submit-response-contract.md): actionable success output and `--json` `workId` fields for `you submit`. |
+| **Problem** | Success stdout is only `Submitted work: <traceId>\n`; `--json` emits `factoryapi.SubmitWorkResponse` with `traceId` only. Agents cannot run `you work show <work-id>` or filter by name without a follow-up list call. |
+| **Solution** | Return `workId`, `name`, and `workTypeName` from `POST /work` (and session-scoped submit), render human and JSON CLI confirmation including CLI routing metadata, improve failure messages, and document the verify loop in `you docs agents` and `you docs work`. |
 
-Customers want to import factories from a PNG on **any** factory workspace tab. Today import only behaves correctly on the first/default tab because activation submits to `POST /factories`, which creates and activates a named factory under the **service root** instead of updating the factory owned by the **currently selected live session**.
+## Project-level acceptance criteria
 
-On a second (or later) tab, import still targets the default factory's directory, source directory, and runtime. The import button and drop flow must become **session-context aware**: derive activation context from the active factory session and submit to `PUT /factory-sessions/{session_id}/factory` so the running factory for that session is replaced (including portable bundled files) without mutating unrelated sessions.
-
-Add functional tests that prove the request payload and endpoint are correct when importing from a non-default tab, and add integration tests that exercise the multi-tab import path end to end.
-
-### Problem
-
-The dashboard already tracks `selectedSessionID` in `useDashboardSessionStore` and uses it for export, saves, and work submission. Factory PNG import activation is wired through `useFactoryImportActivation`, which defaults to `createFactory` in `ui/src/api/named-factory/api.ts` and always `POST`s `/factories`.
-
-That global named-factory activation path:
-
-- Switches the durable current-factory pointer and materializes a new subdirectory under the service root.
-- Ignores which workspace tab (live factory session) the operator had selected.
-- Leaves other live sessions unchanged while appearing to "import" on the wrong tab from the operator's perspective.
-
-Operators running multiple factory sessions (for example default `~default` plus an opened `session-beta` tab) expect import on the active tab to update **that** session's factory directory and runtime only.
-
-### Solution
-
-1. **Frontend activation seam:** Introduce a session-scoped import activation function that reads the current factory document for the selected session (`GET /factory-sessions/{session_id}/factory`), adapts the imported canonical `Factory` payload to the session's current factory name and version rules, and saves via `PUT /factory-sessions/{session_id}/factory` (reusing the existing current-factory-definition transport and error mapping where practical).
-2. **Session wiring:** Thread `selectedSessionID` from the dashboard shell through `useCurrentActivityImportController` / `useFactoryImportActivation` the same way export already threads session into `getCurrentFactory`.
-3. **Verification:** Add focused UI unit tests for endpoint, method, and payload per session; update the default-tab app-shell import test to expect the session route; add a backend functional test that imports on a non-default session and proves isolation from the default session's on-disk factory; add a browser integration test that selects a second tab and confirms import hits the session-scoped route.
-
-## Project Acceptance Criteria
-
-- [ ] Confirming a factory PNG import on the **default** session tab activates via `PUT /factory-sessions/~default/factory` (not `POST /factories`) using the imported canonical payload and the session's current factory version metadata.
-- [ ] Confirming import on a **non-default** session tab activates via `PUT /factory-sessions/{that-session-id}/factory` and does not call `POST /factories`.
-- [ ] After import on a non-default tab, the targeted session's factory definition and on-disk factory directory reflect the imported content; the default session's factory remains unchanged.
-- [ ] Import preview, submitting, error, and success states continue to work with accessible dialog semantics and existing activation error codes where applicable.
-- [ ] Unit tests prove the activation client sends the correct method, path, and body for default and non-default selected sessions.
-- [ ] Backend functional and UI integration tests exercise the second-tab import path with direct behavioral evidence.
-- [ ] Quality gate: backend and frontend typecheck, lint, and relevant tests pass before merge.
+- [ ] On HTTP `201`, human-mode `you submit` prints submitted `name`, `workTypeName`, `traceId`, and `workId` when the API returns it, plus a one-line next-step hint (`you work show <work-id>` or `you work list --name <name>`).
+- [ ] On HTTP `201` with global `--json`, stdout is one JSON object with at minimum: `workId`, `name`, `workTypeName`, `traceId`, `sessionId`, `endpointPath` (CLI-derived session and path fields populated from the request context).
+- [ ] Non-`201` responses exit non-zero with status and a bounded API error summary; no success confirmation line on stdout.
+- [ ] OpenAPI `SubmitWorkResponse` and generated server/CLI types include the new API fields; contract tests cover the schema.
+- [ ] Agent docs describe the submit → wait → verify loop using the new output fields.
+- [ ] Quality gate: backend and CLI typecheck, lint, and relevant tests pass before merge.
 
 ## Goals
 
-- [ ] Make factory PNG import respect the operator's active factory session tab.
-- [ ] Align import activation with the existing session-scoped current-factory API used by export and editable saves.
-- [ ] Prevent cross-session mutation when multiple live factory sessions are open.
-- [ ] Preserve the canonical imported `Factory` payload shape from PNG metadata without dashboard-side reshaping beyond required session save rules (name preservation, version echo/increment).
-- [ ] Add regression tests at the API client, app-shell, service, and browser integration layers.
+- Human-mode success tells the operator what was submitted and what command to run next.
+- `--json` success is a single parseable confirmation object scripts can use without listing work.
+- API returns stable `workId` for unary submit using the same id generation rules as batch normalization (`batch-<requestId>-<name>` when caller omits explicit `workId`).
+- Errors distinguish HTTP/API rejection from transport unreachable; include existing work id in error text when the API returns it on conflict.
+- Preserve existing verbose diagnostics on stderr without logging full payload bodies.
 
 ## User Stories
 
-### US-001: Session-scoped factory import activation client
+### cli-submit-response-contract-v3-001: API returns work identifiers on submit
 
-**Description:** As a dashboard operator, I want PNG import activation to save through my active session's current-factory endpoint so import updates the factory I am viewing.
+**Description:** As an API client, I want `POST /work` (and session-scoped submit) to return `workId`, `name`, and `workTypeName` with `traceId` so callers know which work row was accepted without listing.
 
 **Acceptance Criteria:**
-- [ ] A new session-aware activation function (or extension of the import activation seam) reads the current factory document for a supplied `sessionID`, sets the imported payload's `name` to the session's current factory name, includes incremented `version` metadata consistent with `saveCurrentFactoryDocument`, and `PUT`s to `/factory-sessions/{session_id}/factory`.
-- [ ] Activation for `~default` uses `/factory-sessions/~default/factory`; activation for `session-beta` uses `/factory-sessions/session-beta/factory`.
-- [ ] Activation does not call `POST /factories` for session-scoped import.
-- [ ] Structured API failures (`FACTORY_NOT_IDLE`, `STALE_FACTORY_VERSION`, `INVALID_FACTORY`, etc.) surface through the existing import activation error state.
-- [ ] API client unit tests assert method, path, and JSON body for default and non-default session IDs.
+
+- [ ] OpenAPI `SubmitWorkResponse` includes `workId`, `name`, and `workTypeName` (camelCase) alongside required `traceId`; regenerate `pkg/api/generated` artifacts.
+- [ ] `POST /work` and `POST /factory-sessions/{sessionId}/work` success bodies populate all four fields for a valid single-work submit.
+- [ ] `workId` matches the normalized submit id (`batch-<requestId>-<name>` when the request does not specify an explicit work id).
+- [ ] Idempotent resubmit with the same `requestId` returns the same `workId` and `traceId` with HTTP `201` (existing engine behavior).
+- [ ] API unit test asserts response JSON shape from a mocked factory submit.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### US-002: Wire selected session into dashboard import controller
+### cli-submit-response-contract-v3-002: Human success output and verify hint
 
-**Description:** As a dashboard operator, I want the import drop zone and preview confirm action on whichever tab is selected to activate against that tab's session.
+**Description:** As an operator, I want `you submit` to print what was created and a suggested follow-up command so I can verify without guessing filters.
 
 **Acceptance Criteria:**
-- [ ] `useCurrentActivityImportController` (and `DashboardBento`) pass `selectedSessionID` from `useDashboardSessionStore` into import activation, mirroring `useCurrentActivityExport` / `getCurrentFactory({ sessionID })` session threading.
-- [ ] Switching the selected session tab before confirming import activates against the newly selected session without requiring a page reload.
-- [ ] `useFactoryImportActivation` uses the session-scoped activation function by default instead of `createFactory`.
-- [ ] Hook-level tests cover session ID propagation into the activation dependency.
+
+- [ ] On HTTP `201`, stdout includes submitted `name`, `workTypeName`, `traceId`, and `workId` when present in the API response.
+- [ ] Prints exactly one follow-up hint line: `you work show <work-id>` when `workId` is non-empty, otherwise `you work list --name <name>`.
+- [ ] Does not print the full HTTP response body or request payload on stdout.
+- [ ] Verbose diagnostics remain on stderr only (unchanged policy).
+- [ ] CLI test with httptest server asserts human stdout contains name, work type, trace, work id, and hint when API returns enriched response.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### US-003: Update default-tab app-shell import test for session PUT
+### cli-submit-response-contract-v3-003: JSON success confirmation object
 
-**Description:** As a maintainer, I need the primary dashboard import test to reflect the corrected default-session activation route so regressions back to `POST /factories` are caught.
+**Description:** As a script author, I want `you --json submit` to emit one object with identifiers and routing metadata so automation can verify work without parsing human text.
 
 **Acceptance Criteria:**
-- [ ] `App.import.test.tsx` (and any other app-shell import tests that assert `/factories`) expect `PUT /factory-sessions/~default/factory` with the imported canonical factory payload and version field after a current-factory read (mocked or spied as needed).
-- [ ] The test still covers preview dialog confirm, submitting state, and successful activation refresh behavior.
+
+- [ ] On HTTP `201` with global `--json`, stdout is one JSON object with fields: `workId`, `name`, `workTypeName`, `traceId`, `sessionId`, `endpointPath`.
+- [ ] `sessionId` reflects the effective session label from `--session` (including default-session alias behavior via `sessionpath`).
+- [ ] `endpointPath` is the scoped submit path used for the request (e.g. `/work` or `/factory-sessions/<id>/work`).
+- [ ] Exit code is `0` on success.
+- [ ] CLI test unmarshals stdout and asserts all required keys and values against a mocked `201` response.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### US-004: Backend functional test for non-default session import isolation
+### cli-submit-response-contract-v3-004: Clear failure output without false success
 
-**Description:** As a maintainer, I need proof that session-scoped import replacement updates only the targeted session's factory directory and runtime.
+**Description:** As an agent, I want duplicate or invalid submit failures to be obvious so I do not treat a rejection as success or re-submit blindly.
 
 **Acceptance Criteria:**
-- [ ] A functional test under `tests/functional/runtime_api/factory_transformation/` (or `tests/functional/bootstrap_portability/` if better aligned) opens a second live factory session, `PUT`s an imported-style factory payload to `/factory-sessions/{session_id}/factory`, and asserts the saved definition is returned from that session's `GET`.
-- [ ] The default session's current factory name, work types, and on-disk factory directory remain unchanged after the non-default session import.
-- [ ] When the payload includes portable `supportingFiles.bundledFiles` with inline content, materialized files are written under the **target session's** factory directory, not the default session root.
+
+- [ ] Non-`201` responses exit non-zero; stdout contains no success confirmation line.
+- [ ] Error message includes HTTP status and bounded `ErrorResponse.message` when the body parses as API error JSON.
+- [ ] When the error body includes a work identifier field, error text mentions it (e.g. existing `workId` on conflict payloads).
+- [ ] Transport failures (`factory not reachable`) remain distinct from API rejection messages.
+- [ ] CLI tests cover at least `400` with `ErrorResponse` and unreachable server cases.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### US-005: Browser integration test for import on a second session tab
+### cli-submit-response-contract-v3-005: Document submit verify loop for agents
 
-**Description:** As a dashboard operator, I want confidence that selecting a second factory tab and confirming import exercises the session-scoped network path in the real UI shell.
+**Description:** As an agent author, I want `you docs agents` and `you docs work` to describe how to confirm a submit using the new output so the wave-2 playbook is accurate.
 
 **Acceptance Criteria:**
-- [ ] A new or extended test under `ui/integration/` starts the dashboard with at least two session tabs, selects the non-default tab, completes the import preview confirm flow (using harness mocks for PNG read and API), and asserts the activation request targets `/factory-sessions/{non-default-session-id}/factory` with `PUT`.
-- [ ] The test asserts no `POST /factories` request occurs during that flow.
-- [ ] Loading, preview, and post-confirm success or refresh behavior remain observable (no silent failure).
+
+- [ ] `you docs agents` includes a submit → wait → verify subsection referencing `you submit` success fields and `you work show` / `you work list --name`.
+- [ ] `you docs work` documents `POST /work` success response fields (`workId`, `name`, `workTypeName`, `traceId`) and CLI `--json` confirmation fields (`sessionId`, `endpointPath`).
+- [ ] Docs use camelCase field names matching OpenAPI and CLI JSON output.
+- [ ] `pkg/cli/docs` tests that assert topic content still pass after updates.
 - [ ] Typecheck passes
-- [ ] Verify in browser using dev-browser skill
+- [ ] Tests pass
 
-## Functional Requirements
+## Functional requirements
 
-- FR-1: Factory PNG import activation must use the active dashboard `selectedSessionID` (defaulting to `~default` when unset) to choose the session-scoped factory endpoint.
-- FR-2: Activation must `GET` the current factory for that session before `PUT` so version metadata and factory name constraints are satisfied.
-- FR-3: The `PUT` body must be the imported canonical `Factory` payload with `name` matching the session's current factory and `version` advanced per existing save rules.
-- FR-4: `POST /factories` must not be used for dashboard PNG import activation after this change.
-- FR-5: Import preview, drag/drop, and error presentation remain unchanged except for activation targeting and any new stale-version messaging mapped from current-factory save errors.
-- FR-6: Non-default session import must not change another session's factory definition, pointer, or on-disk layout.
-- FR-7: Tests must validate endpoint, payload, session isolation, and the second-tab UI path without meta-inventory checks.
+- FR-1: Extend `SubmitWorkResponse` in OpenAPI with `workId`, `name`, `workTypeName`.
+- FR-2: Populate submit handler responses from normalized submit metadata (request id, submitted name, work type, trace id, resolved work id).
+- FR-3: Human `you submit` success formatting and follow-up hint as specified in US-002.
+- FR-4: `you --json submit` emits the confirmation object in US-003 (API fields plus CLI `sessionId` and `endpointPath`).
+- FR-5: Failure paths in US-004; no success line on stderr or stdout for failures.
+- FR-6: Align field naming with batch submit PRD for shared `works[]` identifiers where both surfaces ship together.
 
-## Non-Goals
+## Non-goals
 
-- Changing PNG metadata parsing, schema version handling, or preview rendering.
-- Replacing `POST /factories` for non-dashboard clients or CLI flows that intentionally create new named factories.
-- Reworking factory session tab open/close UX or multi-session layout.
-- Allowing import to rename the active session's factory to the embedded PNG name when the session save contract requires name preservation (operators keep the session's current factory name; imported topology replaces content in place).
-- Broad refactors of `named-factory` API ownership beyond what is required for session-scoped import activation.
-- Migrating historical factories on disk.
+- Changing submit HTTP routes, session model, or request body shape for unary submit.
+- Batch submit via `you submit` (remains `you submit batch` / API / `you run --work`) — see [`prd-cli-submit-batch.md`](../prd-cli-submit-batch.md).
+- Unary payload input modes (stdin, positional) — see [`prd-cli-submit-unary-input.md`](../prd-cli-submit-unary-input.md).
+- `you work list` filters or `you work show` — see [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md).
+- Dashboard UI submit confirmation changes.
 
-## High-Level Technical Design
+## High-level technical design
 
-**UI import seam (`ui/src/features/import`, `ui/src/features/workflow-activity/hooks/current-activity-import-controller.ts`, `ui/src/features/bento/components/dashboard-bento.tsx`):**
+1. **API layer (`pkg/api`, `api/openapi.yaml`)**  
+   Extend `SubmitWorkResponse`. After `SubmitWorkRequest` / `SubmitWorkRequestForSession` succeeds, map normalized work metadata into the response. `WorkRequestSubmitResult` may need optional work identity fields if the handler cannot read them from the request alone; prefer values from normalization to avoid drift.
 
-- Add `activateImportedFactoryForSession(sessionID, importedFactory)` alongside or instead of default `createFactory`, built on `getCurrentFactoryDocument` + `saveCurrentFactoryDocument` from `ui/src/api/current-factory-definition/api.ts` and `currentFactorySessionPath` from `ui/src/api/session-routing.ts`.
-- Map `CurrentFactoryDefinitionError` codes into `NamedFactoryAPIError` (or extend activation error typing) so the preview dialog keeps working.
-- Pass `useDashboardSessionStore((s) => s.selectedSessionID)` into `useCurrentActivityImportController` the same way `use-current-factory-export.ts` does.
+2. **CLI layer (`pkg/cli/submit`)**  
+   Parse enriched `SubmitWorkResponse`. Human mode: format a short multi-field summary plus hint. JSON mode: encode a CLI confirmation struct (API fields + `sessionId` + `endpointPath` from `SubmitConfig`). Keep diagnostics in `clidiag` on stderr.
 
-**Payload adaptation:**
+3. **Contracts**  
+   Regenerate `pkg/api/generated`. Update `pkg/api/contracttests` for `SubmitWorkResponse` properties. Coordinate with batch PRD if `UpsertWorkRequestResponse.works[]` ships in the same wave.
 
-- After reading the session's current factory document, set `factory.name` to `current.name` before save so `prepareEditableFactoryDefinitionSave` name-preservation rules succeed.
-- Echo/increment `version` using the same helper path as editable workstation saves.
+4. **Verification**  
+   - API: `pkg/api/server_submit_work_test.go` (or adjacent) for response body.  
+   - CLI: `pkg/cli/submit/submit_test.go` httptest cases for human, JSON, and error paths.  
+   - Docs: `pkg/cli/docs/docs_test.go` content assertions.
 
-**Backend (verification only unless gaps found):**
+## Supporting technical considerations
 
-- `SaveCurrentFactoryForSession` in `pkg/service/runtime_sessions.go` already replaces only the targeted session runtime and persists via `replaceEditableFactoryDefinition` / `ReplaceNamedFactoryWithReport`, which materializes portable bundled files.
-- Functional tests should use existing helpers such as `openNamedFactorySession`, `getCurrentFactoryForSession`, and `saveCurrentFactoryForSession` from `api_current_factory_put_test.go`.
+- **Package ownership:** API response shaping in `pkg/api/handlers.go`; CLI rendering in `pkg/cli/submit`; OpenAPI in `api/components/schemas/api/SubmitWorkResponse.yaml`.
+- **Default session:** Use existing `sessionpath.ScopedPath` and `clidiag.SessionLabel` for consistent `sessionId` in JSON output.
+- **Interim fallback:** If API work is split across PRs, CLI may print trace + name and hint `you work list --name` only when `workId` is absent; v3 assumes API story 001 ships first.
+- **Coordination:** [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md) supplies `you work show` and `--name` filter for the verify loop; [`prd-docs-agents-consolidation-wave2.md`](../prd-docs-agents-consolidation-wave2.md) references this contract.
 
-**Integration testing:**
+## Success metrics
 
-- Extend `ui/integration/browser-test-harness.mjs` request recording if needed to assert PUT paths per session, following `dashboard-session-tabs.integration.test.mjs` patterns.
+- An agent can copy `workId` from `you --json submit` and run `you work show <work-id>` without an intermediate list in the common case.
+- Zero false-positive success lines on failed submit in CLI tests.
+- No regression in submit verbose stderr behavior (payload content still not logged).
 
-## Supporting Technical and UX Considerations
+## Open questions
 
-- Normalize null/empty `selectedSessionID` to `~default` via `DEFAULT_FACTORY_SESSION_ID` for routing consistency.
-- If the runtime is not idle, preserve existing `FACTORY_NOT_IDLE` operator messaging.
-- On `STALE_FACTORY_VERSION`, surface a recoverable error (refresh current factory, retry import) using existing dashboard error patterns.
-- After successful activation, keep `onFactoryActivated` / `incrementRefreshToken` behavior so the graph reloads for the active session.
-- Reuse existing import preview copy; only activation targeting changes.
-
-## Success Metrics
-
-- Operators can import on any open factory tab and see the graph refresh for that tab's factory without affecting other tabs.
-- Zero errant `POST /factories` calls from dashboard PNG import in test harnesses.
-- CI functional and integration tests cover default and second-session import paths.
-
-## Open Questions
-
-None. Session-scoped `PUT` replacement, name preservation, and verification expectations are specified by the customer ask and existing current-factory save contract.
+None — work id generation follows existing batch normalization; session and endpoint metadata come from CLI config.

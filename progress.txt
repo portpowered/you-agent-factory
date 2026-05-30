@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Enrich `WorkRequestSubmitResult` with normalized submit identity via `requests.EnrichWorkRequestSubmitResult` after `NormalizeWorkRequest`; map HTTP 201 bodies through `pkg/api/submit_work_response.go` `submitWorkResponseFromResult` for both `POST /work` and session-scoped submit. Default `workId` is `batch-<requestId>-<name>` when callers omit explicit ids.
 - Session-scoped PNG import activation uses `activateImportedFactoryForSession` in `ui/src/api/named-factory/api.ts`: GET current factory via `getCurrentFactoryDocument`, preserve session `name` on the imported payload, PUT via `saveCurrentFactoryDocument` with incremented `version`, and map `CurrentFactoryDefinitionError` (including `STALE_FACTORY_VERSION`) into `NamedFactoryAPIError`; never `POST /factories`.
 - Non-default session import isolation proof lives in `tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go` (`TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles`): `openNamedFactorySession` + `saveCurrentFactoryForSession` with imported-style bundled payload, assert session GET readback, unchanged default session/`alpha` on-disk config, and bundled files materialized only under `rootDir/<session-factory-name>/`.
 - Dashboard import threads `useDashboardSessionStore.selectedSessionID` through `DashboardBento` → `useCurrentActivityImportController` → `useFactoryImportActivation({ sessionID })`, which defaults to `activateImportedFactoryForSession` so tab switches before confirm retarget activation without reload (mirror `useCurrentFactoryExport` session routing).
@@ -8,6 +9,8 @@
 - Forward resolved OpenCode agent on `interfaces.ProviderInferenceRequest.OpenCodeAgent` from `pkg/workers/executor/agent.go` `inferenceRequestForExecutionRequest` only when `ModelProvider` is `opencode`; lookup workstation via `runtimeConfig.Workstation(inferenceWorkstationType(request))` and leave the field empty for other providers.
 - Append `opencode run --agent <name>` in `openCodeProviderBehavior.BuildArgs` when `req.OpenCodeAgent` is non-empty, placing `--agent` after `--model` and before `--session`; empty agent leaves today's `opencode run` arg shape unchanged.
 - Record configured OpenCode agents as `opencode_agent` in provider request metadata from `workDiagnosticsForInferenceRequest` in `pkg/workers/executor/diagnostics.go` and `pkg/workers/provider/helpers.go` only when `OpenCodeAgent` is non-empty; allowlist via `isSafeProviderMetadataKey` in `pkg/interfaces/safe_diagnostics.go`.
+- Human `you submit` success stdout uses `renderHumanSubmitConfirmation` in `pkg/cli/submit/submit.go`: print `name`, `workTypeName`, `traceId`, optional `workId`, then one verify hint (`you work show <workId>` when returned, else `you work list --name <name>`); request payload and full HTTP body stay on stderr via `--verbose` diagnostics only.
+- `--json` submit success stdout emits one `SubmitConfirmation` object (`workId`, `name`, `workTypeName`, `traceId`, `sessionId`, `endpointPath`) from `submitConfirmation` using API fields with CLI fallbacks for missing `name`/`workTypeName`, `clidiag.SessionLabel` for `sessionId`, and the same `sessionpath.ScopedPath` value used for the HTTP request as `endpointPath`.
 - Reject non-empty resolved `openCodeAgent` when `interfaces.ResolveRunnerSelection(...)` is not `opencode` via `interfaces.ValidateOpenCodeAgentForRunnerSelection(...)` from `pkg/service/factory_build.go` `validateConfiguredWorkstationRunners` before worker load; error text includes `openCodeAgent`, agent name, required runner `opencode`, and resolved runner ID.
 - Header-only structured submit-work (`name`, `workTypeName`, `items: []`) is accepted in `pkg/api/submit_work_items.go` via empty-array early returns in `validateSubmitWorkItemsField` and `submitWorkItemsToContent`; API proof lives in `TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork` and `TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission`.
 - Dashboard header-only submit proof belongs in `submit-work-widget.test.tsx` (`completes header-only submission when the default text item is blank`) and the empty-payload segment of `App.follow-up-submit.test.tsx`; assert POST body `items: []`, success trace status copy, and absence of submit error fallback.
@@ -272,4 +275,31 @@
   - Patterns discovered: Reuse `dashboard-session-tabs.integration.test.mjs` session-open flow plus `factory-graph-editor.integration.test.mjs` PNG export/import drag-drop; activation preserves the session current factory `name` on PUT, not the PNG export display name.
   - Gotchas encountered: `Activating factory...` submitting copy can finish before Playwright observes it—poll `onSaveCurrentFactory` / `sessionFactoryPutRequests` instead; PUT bodies carry incremented `version.logical` (`"2"` from `"1"`) and `physical` plus one millisecond.
   - Useful context: Dev-browser skill verification was not run this iteration; Playwright integration test is the automated browser proof for story 005.
+---
+
+## 2026-05-30T15:30:00Z - cli-submit-response-contract-v3-001
+- What was implemented: Extended OpenAPI `SubmitWorkResponse` with `workId`, `name`, and `workTypeName`; enriched `WorkRequestSubmitResult` from normalized submit metadata in engine and mock factory; mapped enriched results in `POST /work` and session-scoped submit handlers; added API unit tests for identifier fields and `batch-<requestId>-<name>` work id shape.
+- Files changed: `api/components/schemas/api/SubmitWorkResponse.yaml`, `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/api/submit_work_response.go`, `pkg/api/handlers.go`, `pkg/api/server_submit_work_test.go`, `pkg/interfaces/factory_runtime.go`, `pkg/factory/requests/work_request.go`, `pkg/factory/engine/engine.go`, `pkg/testutil/mock_factory.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Populate submit success identifiers from normalized `SubmitRequest` values, not pre-normalization `WorkRequest` fields, so `workId` and `requestId` stay aligned with engine normalization.
+  - Gotchas encountered: `make generate-api` updates Go server types even when `generate-ui-api` fails without `ui/node_modules`; run UI codegen separately when touching dashboard TypeScript contracts.
+  - Useful context: Story 002 should update `pkg/cli/submit` human stdout using the enriched API response; story 003 adds CLI JSON confirmation fields (`sessionId`, `endpointPath`).
+---
+
+## 2026-05-30T16:45:00Z - cli-submit-response-contract-v3-002
+- What was implemented: Human HTTP 201 stdout now prints submit identifiers (`name`, `workTypeName`, `traceId`, optional `workId`) and a single verify hint (`you work show <workId>` or `you work list --name <name>`); added httptest coverage for enriched and workId-missing responses.
+- Files changed: `pkg/cli/submit/submit.go`, `pkg/cli/submit/submit_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Fall back to trimmed `--name` and `--work-type-name` when the API omits `name` or `workTypeName`; omit the `workId` line entirely when the API does not return one.
+  - Gotchas encountered: `TestSubmit_HumanReadableStdoutUnchanged` encoded the legacy single-line confirmation — replace with identifier and hint assertions when enriching human output.
+  - Useful context: Story 003 should emit a dedicated JSON confirmation object with `sessionId` and `endpointPath` instead of raw `SubmitWorkResponse` only.
+---
+
+## 2026-05-30T17:30:00Z - cli-submit-response-contract-v3-003
+- What was implemented: `--json` submit success now emits one `SubmitConfirmation` JSON object with `workId`, `name`, `workTypeName`, `traceId`, `sessionId` (`clidiag.SessionLabel`), and `endpointPath` (scoped submit path); added httptest coverage for enriched session-scoped and default-session confirmations.
+- Files changed: `pkg/cli/submit/submit.go`, `pkg/cli/submit/submit_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Build JSON confirmation from the same API-field fallbacks as human stdout (`optionalString` + trimmed `--name` / `--work-type-name`); reuse the request-scoped `endpointPath` variable rather than recomputing from config alone.
+  - Gotchas encountered: `TestSubmit_JSONStdoutEmitsSubmitWorkResponse` encoded raw `SubmitWorkResponse` — replace with `SubmitConfirmation` unmarshaling when changing `--json` success shape.
+  - Useful context: Story 004 should tighten non-201 failure stdout; story 005 documents camelCase confirmation fields in `you docs agents` and `you docs work`.
 ---

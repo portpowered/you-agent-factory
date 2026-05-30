@@ -1,32 +1,30 @@
 {
-  "project": "infinite-you",
-  "branchName": "ralph/factory-import-second-session",
-  "description": "Make dashboard factory PNG import session-aware so activation PUTs to /factory-sessions/{session_id}/factory for the selected workspace tab instead of POST /factories, with unit, functional, and browser integration tests proving correct endpoints, payloads, and session isolation.",
+  "project": "CLI Submit Response Contract v3",
+  "branchName": "ralph/cli-submit-response-contract-v3",
+  "description": "Make `you submit` success output actionable for humans and scripts by returning workId, name, and workTypeName from POST /work, emitting a structured --json confirmation object (including sessionId and endpointPath), improving failure messages, and documenting the submit-to-verify loop in agent docs.",
   "context": {
-    "customerAsk": "Customers want to import factories on any factory tab. Import currently POSTs /factories and updates the default factory directory even on the second tab. Make import derive context from the active session and submit to factory-sessions/{session-id}/factory, and add functional and integration tests for the non-default tab import path.",
-    "problem": "useFactoryImportActivation defaults to createFactory which POSTs /factories globally. The dashboard tracks selectedSessionID for export and saves but not import, so operators on a second live factory session see import mutate the wrong factory root and runtime.",
-    "solution": "Add session-scoped import activation that GETs the current factory for the selected session, adapts the imported payload for name and version, PUTs to the session factory endpoint, wire selectedSessionID through the dashboard import controller, update app-shell tests, and add backend functional plus UI browser integration tests for second-tab import."
+    "customerAsk": "Implement tasks/prd-cli-submit-response-contract.md: actionable success output and --json workId fields for you submit.",
+    "problem": "Successful you submit only prints a trace id (human) or encodes SubmitWorkResponse with traceId alone (--json). Operators and agents cannot verify the created work without immediately running you work list, which led to duplicate submits and missed verification during docs PRD exercises.",
+    "solution": "Extend POST /work SubmitWorkResponse with workId, name, and workTypeName; update you submit human and JSON stdout to include identifiers plus CLI routing metadata and a verify hint; clarify non-201 failures; document the submit, wait, and verify loop in you docs agents and you docs work."
   },
   "acceptanceCriteria": [
-    "Import on the default session tab activates via PUT /factory-sessions/~default/factory with versioned canonical payload, not POST /factories.",
-    "Import on a non-default session tab activates via PUT /factory-sessions/{session_id}/factory and does not call POST /factories.",
-    "Non-default session import updates only that session factory definition and on-disk directory; the default session factory is unchanged.",
-    "Import preview and activation error states continue to work with existing accessible dialog behavior.",
-    "Unit tests assert correct activation method, path, and body per selected session.",
-    "Backend functional and UI integration tests exercise the second-tab import path.",
-    "Quality gate: backend and frontend typecheck, lint, and relevant tests pass before merge."
+    "On HTTP 201, human you submit prints name, workTypeName, traceId, workId when returned, and a one-line you work show or you work list --name hint.",
+    "On HTTP 201 with global --json, stdout is one JSON object with workId, name, workTypeName, traceId, sessionId, and endpointPath.",
+    "Non-201 submit exits non-zero with bounded API error text and no success confirmation on stdout.",
+    "OpenAPI SubmitWorkResponse and generated types include workId, name, and workTypeName; API tests assert the success body.",
+    "you docs agents and you docs work document submit success fields and the verify loop using camelCase names aligned with CLI JSON.",
+    "Quality gate: backend and CLI typecheck, lint, and relevant tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "factory-import-second-session-001",
-      "title": "Session-scoped factory import activation client",
-      "description": "As a dashboard operator, I want PNG import activation to save through my active session current-factory endpoint so import updates the factory I am viewing.",
+      "id": "cli-submit-response-contract-v3-001",
+      "title": "API returns work identifiers on submit",
+      "description": "As an API client, I want POST /work and session-scoped submit to return workId, name, and workTypeName with traceId so I know which work was accepted without listing.",
       "acceptanceCriteria": [
-        "Session-aware activation reads the current factory document for the supplied sessionID, preserves the session current factory name on the imported payload, includes version metadata per saveCurrentFactoryDocument rules, and PUTs to /factory-sessions/{session_id}/factory.",
-        "Activation for ~default uses /factory-sessions/~default/factory; activation for a non-default session uses that session path.",
-        "Activation does not call POST /factories.",
-        "Structured failures such as FACTORY_NOT_IDLE and STALE_FACTORY_VERSION surface through the existing import activation error state.",
-        "API client unit tests assert method, path, and JSON body for default and non-default session IDs.",
+        "OpenAPI SubmitWorkResponse includes workId, name, and workTypeName alongside traceId; generated server types are regenerated.",
+        "POST /work and POST /factory-sessions/{sessionId}/work success bodies populate workId, name, workTypeName, and traceId for a valid single-work submit.",
+        "workId matches normalized submit id (batch-<requestId>-<name> when caller omits explicit workId).",
+        "API unit test asserts success response JSON includes all identifier fields.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -35,14 +33,14 @@
       "notes": ""
     },
     {
-      "id": "factory-import-second-session-002",
-      "title": "Wire selected session into dashboard import controller",
-      "description": "As a dashboard operator, I want the import drop zone and preview confirm action on whichever tab is selected to activate against that tab session.",
+      "id": "cli-submit-response-contract-v3-002",
+      "title": "Human success output and verify hint",
+      "description": "As an operator, I want you submit to print what was created and a suggested follow-up command so I can verify without guessing filters.",
       "acceptanceCriteria": [
-        "useCurrentActivityImportController and DashboardBento pass selectedSessionID from useDashboardSessionStore into import activation, matching export session threading.",
-        "Switching the selected session tab before confirming import activates against the newly selected session without a page reload.",
-        "useFactoryImportActivation uses session-scoped activation by default instead of createFactory.",
-        "Hook-level tests cover session ID propagation into the activation dependency.",
+        "On HTTP 201, stdout includes name, workTypeName, traceId, and workId when the API returns it.",
+        "Prints one follow-up hint: you work show <work-id> when workId is non-empty, otherwise you work list --name <name>.",
+        "Does not print full HTTP body or request payload on stdout; verbose diagnostics stay on stderr.",
+        "CLI httptest asserts human stdout contains identifiers and the hint for an enriched 201 response.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -51,12 +49,14 @@
       "notes": ""
     },
     {
-      "id": "factory-import-second-session-003",
-      "title": "Update default-tab app-shell import test for session PUT",
-      "description": "As a maintainer, I need the primary dashboard import test to expect PUT /factory-sessions/~default/factory so regressions back to POST /factories are caught.",
+      "id": "cli-submit-response-contract-v3-003",
+      "title": "JSON success confirmation object",
+      "description": "As a script author, I want you --json submit to emit one parseable object with identifiers and routing metadata.",
       "acceptanceCriteria": [
-        "App.import.test.tsx expects PUT /factory-sessions/~default/factory with the imported canonical factory payload and version field after the current-factory read.",
-        "The test still covers preview dialog confirm, submitting state, and successful activation refresh behavior.",
+        "On HTTP 201 with global --json, stdout is one JSON object with workId, name, workTypeName, traceId, sessionId, and endpointPath.",
+        "sessionId reflects effective --session labeling; endpointPath matches the scoped submit path used for the request.",
+        "Exit code is 0 on success.",
+        "CLI test unmarshals stdout and asserts all required keys and values against a mocked 201 response.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -65,33 +65,35 @@
       "notes": ""
     },
     {
-      "id": "factory-import-second-session-004",
-      "title": "Backend functional test for non-default session import isolation",
-      "description": "As a maintainer, I need proof that session-scoped import replacement updates only the targeted session factory directory and runtime.",
+      "id": "cli-submit-response-contract-v3-004",
+      "title": "Clear failure output without false success",
+      "description": "As an agent, I want submit failures to be obvious so I do not treat a rejection as success or re-submit blindly.",
       "acceptanceCriteria": [
-        "A functional test opens a second live factory session, PUTs an imported-style factory payload to /factory-sessions/{session_id}/factory, and asserts the saved definition is returned from that session GET.",
-        "The default session current factory and on-disk factory directory remain unchanged after the non-default session import.",
-        "When the payload includes portable supportingFiles.bundledFiles with inline content, materialized files are written under the target session factory directory, not the default session root.",
+        "Non-201 responses exit non-zero with no success confirmation line on stdout.",
+        "Error text includes HTTP status and bounded ErrorResponse.message when parseable.",
+        "When error JSON includes a work identifier, error text mentions it.",
+        "Transport unreachable errors remain distinct from API rejection messages.",
+        "CLI tests cover HTTP 400 with ErrorResponse and unreachable server cases.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "factory-import-second-session-005",
-      "title": "Browser integration test for import on a second session tab",
-      "description": "As a dashboard operator, I want confidence that selecting a second factory tab and confirming import exercises the session-scoped network path in the real UI shell.",
+      "id": "cli-submit-response-contract-v3-005",
+      "title": "Document submit verify loop for agents",
+      "description": "As an agent author, I want you docs agents and you docs work to describe how to confirm a submit using the new output fields.",
       "acceptanceCriteria": [
-        "A ui/integration test selects a non-default session tab, completes the import preview confirm flow, and asserts activation uses PUT /factory-sessions/{non-default-session-id}/factory.",
-        "The test asserts no POST /factories request occurs during that flow.",
-        "Loading, preview, and post-confirm behavior remain observable without silent failure.",
+        "you docs agents documents submit, wait, and verify using you submit success fields and you work show or you work list --name.",
+        "you docs work documents POST /work success fields and CLI --json confirmation fields with camelCase names.",
+        "pkg/cli/docs content tests pass after updates.",
         "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]
