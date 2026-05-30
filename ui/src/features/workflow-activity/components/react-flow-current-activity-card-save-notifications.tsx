@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { GLOBAL_TOAST_DURATION_MS } from "../../notifications/public";
+import { GLOBAL_TOAST_DURATION_MS } from "../../notifications/components/app-notification-toaster";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 
 export function CurrentActivityGraphSaveNotifications({

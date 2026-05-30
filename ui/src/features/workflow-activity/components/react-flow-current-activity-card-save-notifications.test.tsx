@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { toast } from "sonner";
 
-import { GLOBAL_TOAST_DURATION_MS } from "../../notifications/public";
+import { GLOBAL_TOAST_DURATION_MS } from "../../notifications/components/app-notification-toaster";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
 
 vi.mock("sonner", () => ({
