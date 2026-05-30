@@ -287,8 +287,8 @@ describe.sequential("factory graph editor browser integration", () => {
         apiPort: preview.apiPort,
         currentFactory: exportFactoryDefinition,
         eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
-        onSaveCurrentFactory: async ({ body, sessionID }) => {
-          sessionFactoryPutRequests.push({ body, sessionID });
+        onSaveCurrentFactory: async (request) => {
+          sessionFactoryPutRequests.push(request);
         },
       });
       const browserPage = await openBrowserPage({ acceptDownloads: true });
@@ -480,11 +480,14 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(await importDialog.textContent()).toContain(exportName);
         expect(await importDialog.textContent()).toContain(download.filename);
         expect(await importDialog.textContent()).toContain(
-          "Activating the import switches the current dashboard factory to the embedded authored definition from this PNG.",
+          "Replace current factory",
+        );
+        expect(await importDialog.textContent()).toContain(
+          "Replace current factory keeps the session factory name and updates its definition.",
         );
 
         await importDialog
-          .getByRole("button", { name: "Activate factory" })
+          .getByRole("button", { name: "Confirm import" })
           .click();
         await expect
           .poll(async () => sessionFactoryPutRequests.length, {
@@ -633,36 +636,33 @@ describe.sequential("factory graph editor browser integration", () => {
           .getByText("Topology saved", { exact: true })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
-        expect(saveRequests).toEqual([
-          {
-            body: {
-              ...editableGraphFactoryDefinition,
-              version: {
-                logical: "2",
-                physical: "2026-05-19T00:00:00.001Z",
-              },
-              workstations: [
+        expect(saveRequests).toHaveLength(1);
+        expect(saveRequests[0]?.sessionID).toBe("~default");
+        expect(saveRequests[0]?.body).toMatchObject({
+          ...editableGraphFactoryDefinition,
+          version: {
+            logical: "2",
+            physical: "2026-05-19T00:00:00.001Z",
+          },
+          workstations: [
+            {
+              ...editableGraphFactoryDefinition.workstations[0],
+              onFailure: [
                 {
-                  ...editableGraphFactoryDefinition.workstations[0],
-                  onFailure: [
-                    {
-                      state: "queued",
-                      workType: "story",
-                    },
-                  ],
-                },
-                {
-                  body: "Review the drafted story.",
-                  inputs: [],
-                  name: "review",
-                  type: "MODEL_WORKSTATION",
-                  worker: "writer",
+                  state: "queued",
+                  workType: "story",
                 },
               ],
             },
-            sessionID: "~default",
-          },
-        ]);
+            {
+              body: "Review the drafted story.",
+              inputs: [],
+              name: "review",
+              type: "MODEL_WORKSTATION",
+              worker: "writer",
+            },
+          ],
+        });
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,

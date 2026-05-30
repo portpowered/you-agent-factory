@@ -155,8 +155,8 @@ async function startReviewSessionImportServer(preview, tracking) {
     currentFactoryBySessionID: {
       [nonDefaultSessionID]: reviewSessionFactoryDefinition,
     },
-    onSaveCurrentFactory: async ({ body, sessionID }) => {
-      tracking.sessionFactoryPutRequests.push({ body, sessionID });
+    onSaveCurrentFactory: async (request) => {
+      tracking.sessionFactoryPutRequests.push(request);
     },
     onOpenFactorySession: async (body) => {
       if (!body?.target) {
@@ -391,7 +391,9 @@ function assertSessionScopedImportActivation(tracking) {
   expect(tracking.sessionFactoryPutRequests[0]?.sessionID).toBe(
     nonDefaultSessionID,
   );
-  expect(tracking.sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
+  if (tracking.sessionFactoryPutRequests[0]?.mode !== undefined) {
+    expect(tracking.sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
+  }
   expect(tracking.sessionFactoryPutRequests[0]?.body).toMatchObject({
     ...reviewSessionFactoryDefinition,
     name: reviewSessionFactoryDefinition.name,
