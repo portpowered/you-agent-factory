@@ -481,6 +481,45 @@ func latestInferenceDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt
 	return interfaces.CloneSafeWorkDiagnostics(attempt.Diagnostics)
 }
 
+func (r *factoryWorldReducer) applyWorkStateChange(payload factoryapi.WorkStateChangeEventPayload) {
+	workID := payload.WorkId
+	if workID == "" {
+		return
+	}
+
+	item, ok := r.stateValue.WorkItemsByID[workID]
+	if !ok {
+		item = interfaces.FactoryWorkItem{ID: workID}
+	}
+	if payload.WorkTypeName != "" {
+		item.WorkTypeID = firstNonEmpty(item.WorkTypeID, payload.WorkTypeName)
+	}
+	if payload.ToState != "" {
+		item.State = payload.ToState
+	}
+	toPlaceID := payload.ToPlaceId
+	if toPlaceID != "" {
+		item.PlaceID = toPlaceID
+	}
+
+	fromPlaceID := payload.FromPlaceId
+	if fromPlaceID != "" && fromPlaceID != toPlaceID {
+		if r.isFailedPlace(fromPlaceID) {
+			delete(r.stateValue.FailedWorkItemsByID, workID)
+			r.removeTraceFailed(item.TraceID, workID)
+		}
+		if r.isTerminalPlace(fromPlaceID) {
+			delete(r.stateValue.TerminalWorkByID, workID)
+			r.removeTraceTerminal(item.TraceID, workID)
+		}
+	}
+
+	r.stateValue.WorkItemsByID[workID] = item
+	if toPlaceID != "" {
+		r.addWorkToken(workID, toPlaceID, item)
+	}
+}
+
 func (r *factoryWorldReducer) recordFailedWorkDetail(completion interfaces.FactoryWorldDispatchCompletion, item interfaces.FactoryWorkItem) {
 	if item.ID == "" {
 		return

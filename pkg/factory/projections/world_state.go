@@ -111,9 +111,20 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		return r.applyDispatchResponseEvent(event)
 	case factoryapi.FactoryEventTypeFactoryStateResponse:
 		return r.applyFactoryStateResponseEvent(event)
+	case factoryapi.FactoryEventTypeWorkStateChange:
+		return r.applyWorkStateChangeEvent(event)
 	case factoryapi.FactoryEventTypeRunResponse:
 		return nil
 	}
+	return nil
+}
+
+func (r *factoryWorldReducer) applyWorkStateChangeEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsWorkStateChangeEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyWorkStateChange(payload)
 	return nil
 }
 
@@ -708,6 +719,40 @@ func (r *factoryWorldReducer) addTraceFailed(traceID string, workID string) {
 	trace.TraceID = traceID
 	trace.FailedWorkIDs = appendUnique(trace.FailedWorkIDs, workID)
 	r.stateValue.TracesByID[traceID] = trace
+}
+
+func (r *factoryWorldReducer) removeTraceFailed(traceID string, workID string) {
+	if traceID == "" || workID == "" {
+		return
+	}
+	trace := r.stateValue.TracesByID[traceID]
+	trace.FailedWorkIDs = removeString(trace.FailedWorkIDs, workID)
+	r.stateValue.TracesByID[traceID] = trace
+}
+
+func (r *factoryWorldReducer) removeTraceTerminal(traceID string, workID string) {
+	if traceID == "" || workID == "" {
+		return
+	}
+	trace := r.stateValue.TracesByID[traceID]
+	trace.TerminalWork = removeString(trace.TerminalWork, workID)
+	r.stateValue.TracesByID[traceID] = trace
+}
+
+func removeString(values []string, target string) []string {
+	if target == "" || len(values) == 0 {
+		return values
+	}
+	out := values[:0]
+	for _, value := range values {
+		if value != target {
+			out = append(out, value)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (r *factoryWorldReducer) addRelation(relation interfaces.FactoryRelation) {

@@ -539,6 +539,34 @@ func relationshipChangeEvent(tick int, eventTime time.Time, requestID string, tr
 	}, factoryapi.RelationshipChangeRequestEventPayload{Relation: relation})
 }
 
+func workStateChangeEvent(
+	tick int,
+	eventTime time.Time,
+	workID string,
+	fromState string,
+	toState string,
+	fromPlaceID string,
+	toPlaceID string,
+	source factoryapi.WorkStateChangeSource,
+) factoryapi.FactoryEvent {
+	return generatedProjectionEvent(
+		factoryapi.FactoryEventTypeWorkStateChange,
+		"work-state-change/"+workID+"/"+toState,
+		tick,
+		eventTime,
+		factoryapi.FactoryEventContext{WorkIds: stringSlicePtrForProjectionTest([]string{workID})},
+		factoryapi.WorkStateChangeEventPayload{
+			WorkId:       workID,
+			WorkTypeName: "task",
+			FromState:    fromState,
+			ToState:      toState,
+			FromPlaceId:  fromPlaceID,
+			ToPlaceId:    toPlaceID,
+			Source:       source,
+		},
+	)
+}
+
 func factoryStateEvent(tick int, eventTime time.Time, previous string, next string) factoryapi.FactoryEvent {
 	prev := factoryapi.FactoryState(previous)
 	payload := factoryapi.FactoryStateResponseEventPayload{
@@ -606,6 +634,10 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 		}
 	case factoryapi.FactoryStateResponseEventPayload:
 		if err := event.Payload.FromFactoryStateResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.WorkStateChangeEventPayload:
+		if err := event.Payload.FromWorkStateChangeEventPayload(typed); err != nil {
 			panic(err)
 		}
 	case factoryapi.RunResponseEventPayload:
