@@ -5,7 +5,6 @@ import {
   discoverSessionNamedFactoryNames,
   getCurrentFactory,
   resolveImportCreateFactoryName,
-  type FactoryImportSaveChoice,
 } from "../../../api/named-factory";
 
 export interface UseFactoryImportActivationTargetOptions {
@@ -18,7 +17,7 @@ export interface FactoryImportActivationTarget {
   createTargetFactoryName: string | null;
   currentFactoryName: string | null;
   existingNamedFactoryNames: string[];
-  importSaveChoice: FactoryImportSaveChoice;
+  isLoading: boolean;
   replacesExistingCreateTarget: boolean;
 }
 
@@ -26,7 +25,7 @@ export function useFactoryImportActivationTarget({
   enabled = true,
   preferredFactoryName,
   sessionID,
-}: UseFactoryImportActivationTargetOptions = {}) {
+}: UseFactoryImportActivationTargetOptions = {}): FactoryImportActivationTarget {
   const currentFactoryQuery = useQuery({
     enabled,
     queryFn: () => getCurrentFactory({ sessionID }),
