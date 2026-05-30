@@ -56,6 +56,7 @@ import type {
   ScriptRequestEvent,
   ScriptResponseEvent,
   WorkRequestEvent,
+  WorkStateChangeEvent,
 } from "./replayWorldStateTypes";
 import { orderedEvents, uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
@@ -172,7 +173,7 @@ function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
       state.factory_state = (event as FactoryStateResponseEvent).payload.state;
       return;
     case FACTORY_EVENT_TYPES.workStateChange:
-      applyWorkStateChange(state, event);
+      applyWorkStateChange(state, event as WorkStateChangeEvent);
       return;
   }
 }
