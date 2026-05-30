@@ -128,12 +128,15 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         "/factory-sessions/session-beta/factory",
         expect.objectContaining({
           body: JSON.stringify({
-            name: "Current Factory",
-            workers: [],
-            workstations: [],
-            version: {
-              logical: "8",
-              physical: "2026-05-23T15:52:00.001Z",
+            mode: "REPLACE_CURRENT",
+            factory: {
+              name: "Current Factory",
+              workers: [],
+              workstations: [],
+              version: {
+                logical: "8",
+                physical: "2026-05-23T15:52:00.001Z",
+              },
             },
           }),
           headers: {
