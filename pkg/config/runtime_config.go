@@ -66,9 +66,11 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 	return LoadRuntimeConfigFromFactoryDir(resolvedFactoryDir, workstationLoader)
 }
 
-// LoadRuntimeConfigFromFactoryDir reads one concrete factory directory without
-// following the current-factory pointer indirection used by workspace roots.
-func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error) {
+// LoadFromFactoryDir reads one concrete factory directory without following the
+// current-factory pointer indirection used by workspace roots. Production callers
+// should prefer pkg/config/load.LoadFromFactoryDir; this symbol remains the
+// config-package implementation and backward-compatible alias.
+func LoadFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error) {
 	factoryCfg, err := loadFactoryConfig(factoryDir)
 	if err != nil {
 		return nil, err
@@ -95,6 +97,11 @@ func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader Workst
 	}
 	loaded.portableBundledReplacements = clonePortableBundledFileReplacements(replacements)
 	return loaded, nil
+}
+
+// LoadRuntimeConfigFromFactoryDir delegates to LoadFromFactoryDir.
+func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error) {
+	return LoadFromFactoryDir(factoryDir, workstationLoader)
 }
 
 // FactoryDir returns the source directory used to load the factory config.
