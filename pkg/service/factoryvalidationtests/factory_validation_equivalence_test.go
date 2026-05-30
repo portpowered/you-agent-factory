@@ -1,4 +1,4 @@
-package service
+package factoryvalidationtests
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
 
@@ -79,7 +80,7 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               rootDir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
