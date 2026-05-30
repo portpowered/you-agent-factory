@@ -112,9 +112,9 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 }
 
 type factoryServiceCollaborators struct {
-	sessions      *factorysessions.Registry
-	localModels   localModelDomain
-	runtimeBuild  *runtimebuild.Service
+	sessions     *factorysessions.Registry
+	localModels  localModelDomain
+	runtimeBuild *runtimebuild.Service
 }
 
 func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {

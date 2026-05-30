@@ -48,23 +48,25 @@ workers out of `pkg/service`.
 ### `pkg/service/factorysave`
 
 - Preserved behavior:
-  session-scoped REPLACE_CURRENT and UPSERT_NAMED_AND_ACTIVATE outcomes,
-  `STALE_FACTORY_VERSION` and `FACTORY_NOT_IDLE` error families, structured
-  topology validation targets, and activation scoped to the targeted session
-  root via `SessionFactoryPersistRoot`.
+  session-scoped factory save by mode (`REPLACE_CURRENT`,
+  `UPSERT_NAMED_AND_ACTIVATE`), `STALE_FACTORY_VERSION` and `FACTORY_NOT_IDLE`
+  error families, structured validation targets, and post-save activation scoped
+  to the targeted session root via `SessionFactoryPersistRoot`.
 - Dependency direction:
-  `pkg/service` composes `*factorysave.Service` and implements `factorysave.Host`;
-  `pkg/service/factorysave` does not import `pkg/api`.
+  `pkg/service` composes `factorysave.Service` through `wireFactorySaveCollaborator`
+  and implements `factorysave.Host` for registry, idle checks, activation, and
+  readback; `factorysave` does not import `pkg/api` or `pkg/service`.
 
 ### `pkg/service/runtimebuild`
 
 - Preserved behavior:
-  one runtime build path for startup, `OpenFactorySession`, named activation,
-  and post-save replacement; post-save submit and event subscription work without
-  manual restart when save succeeds on an idle session.
+  one runtime bundle build path for default startup, session open, and
+  post-save replacement so work submission, event subscription, and model
+  catalog reads behave the same regardless of which flow activated the runtime.
 - Dependency direction:
-  `pkg/service` wires `runtimebuild.New` with a closure into `buildRuntimeBundle`;
-  `pkg/service/runtimebuild` does not import `pkg/api`.
+  `pkg/service` injects `buildRuntimeBundle` as the `BundleBuilder` from
+  `newRuntimeBuildService`; `runtimebuild` does not import `pkg/api` or
+  `pkg/service`.
 
 ### `pkg/service` (slim orchestration)
 
@@ -104,8 +106,9 @@ Validated on `ralph/backend-service-refactor` after extractions 001–004 (2026-
 - `go test ./pkg/factorysessions/... ./pkg/localmodels/... ./pkg/hostedworkers/...` — passed
 - `go test ./pkg/service/... ./pkg/api/...` — passed
 
-Validated on `ralph/service-composition-seams` after factorysave/runtimebuild extraction and apisurface composition (2026-05-31):
+Validated on `ralph/service-composition-seams` after composition seams 001–006 (2026-05-31):
 
-- `make vet backend-size pkg-maint pkg-file-count` — passed
+- `make vet backend-size pkg-maint pkg-file-count deadcode` — passed
 - `go test ./pkg/factorysessions/... ./pkg/localmodels/... ./pkg/hostedworkers/... ./pkg/service/... ./pkg/api/...` — passed
 - `pkg/apisurface` composes `ModelAPI`, `SessionAPI`, `FactorySaveAPI`, and `WorkAPI`; `FactoryService` satisfies `SessionAPISurface`
+- No new `pkg/service` waivers for logic re-inlined after `factorysave` / `runtimebuild` extraction
