@@ -3,7 +3,6 @@ import {
   SessionFactoryAPIError,
   saveSessionFactory,
 } from "./api";
-import { sessionFactoryAPIErrorMessages } from "./messages";
 import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
 
 const sessionFactoryFixture = {
