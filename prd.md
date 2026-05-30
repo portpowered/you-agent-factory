@@ -1,4 +1,4 @@
-# PRD: Consolidate CLI Factory Save and Update From-File Commands
+# PRD: Extract API Factory Strict JSON Decode Helper
 
 ---
 author: Codex
@@ -8,157 +8,151 @@ status: draft
 
 ## Introduction
 
-Customer ask `11` (backend `pkg/` duplication cleanup) advanced when PR `#508` extracted shared `submitWorkCore` and `upsertWorkRequestCore` in `pkg/api/handlers_work_write.go`. The offline CLI paths `you factory save --from` and `you factory update --from` still carry nearly identical logic in `pkg/cli/factory/save.go` and `pkg/cli/factory/update.go`: argument validation, payload read, canonical JSON validation, persist/replace, optional current-factory pointer write (save only), and success/error rendering.
+Customer ask `11` (backend `pkg/` duplication cleanup) advanced when PR `#512` consolidated factory CLI save/update paths and PR `#508` extracted shared work-write handler cores. Factory HTTP handlers in `pkg/api` still repeat the same strict JSON body-decode skeleton across four request decoders.
 
-This PRD consolidates that flow into one internal implementation with a small save/update mode, while preserving every observable CLI outcome operators and scripts rely on today.
+Each decoder reads the full body, constructs a `json.Decoder` with `DisallowUnknownFields`, decodes into a typed request, and enforces a single top-level JSON object. Two decoders already delegate trailing-decode enforcement to `ensureSingleJSONObject`; two still inline the same guard. `handlers_common.go` already owns `ensureSingleJSONObject` and `requestFieldValidationError`.
+
+This PRD introduces one generic strict JSON decode helper and routes all four factory decoders through it **without changing HTTP status codes, error messages, or request validation behavior**.
 
 ## Context
 
 ### Customer ask
 
-Reduce duplicated file-based factory persistence logic between `SaveFromFile` and `UpdateFromFile` without changing operator-visible behavior for `you factory save` or `you factory update`.
+Consolidate duplicated strict JSON decode logic for factory handler request bodies so maintainers have one decode contract and factory endpoints keep identical validation behavior.
 
-### Concrete problem
+### Problem
 
-`SaveFromFile` and `UpdateFromFile` each implement the same sequence independently. The only meaningful differences are which persist API runs (`PersistNamedFactory` vs `ReplaceNamedFactory`), whether `--set-current` writes the pointer (save only), success message text, and mode-specific error mapping (`factory already exists` vs `factory not found`). Duplication increases the risk that a fix or validation tweak lands in one command but not the other.
+Four factory body decoders (`decodeNamedFactoryBody`, `decodeOpenFactorySessionBody`, `decodeSaveCurrentFactoryBody`, `decodePromptTemplateValidationRequestBody`) duplicate the same read-decode-validate skeleton. Inline trailing-decode blocks in two decoders drift from the shared `ensureSingleJSONObject` helper used by the other two, increasing review cost and regression risk whenever strict-decode rules change.
 
-### High-level solution
+### Solution
 
-Introduce a shared internal `persist from file` implementation in `pkg/cli/factory/` (for example `persist_from_file.go`) keyed by mode (`save` | `update`). Keep public `SaveFromFile` / `UpdateFromFile` entrypoints and their config/result types as thin wrappers that delegate to the shared core and apply mode-specific success strings. Centralize error rendering in one helper that preserves today's wording per mode. Lock behavior with existing CLI tests in `save_test.go` and `update_test.go`, adjusting only when needed to assert outcomes rather than file layout.
+Add a generic `decodeStrictJSON[T any](body io.Reader) (T, error)` helper in `handlers_common.go` that reads the body, decodes with `DisallowUnknownFields`, calls `ensureSingleJSONObject`, and returns decode/validation errors unchanged for existing callers to map. Refactor the four factory decoders into thin typed wrappers. Lock behavior with direct HTTP response and validation-message assertions for the affected endpoints.
 
 ## Goals
 
-- One shared internal implementation for file-based named-factory persistence used by both commands.
-- Zero change to CLI flags, exit codes, human-readable stdout, stderr error text, or JSON field names.
-- Mode-specific persist semantics preserved: create on save, replace on update; pointer write only on save when `SetCurrent` is true.
-- Mode-specific error messages preserved for duplicate save, missing update, and invalid config cases.
-- Existing `pkg/cli/factory` tests remain the primary behavior lock; extend only when a gap appears.
+- Provide one reusable strict JSON decode path for factory handler request bodies.
+- Remove duplicated inline trailing-decode blocks from factory decoders.
+- Preserve identical HTTP outcomes for valid payloads, unknown fields, malformed JSON, empty bodies, and multi-object payloads across all four factory decode call sites.
+- Keep decode error mapping (`requestFieldValidationMessage` vs generic `"invalid request payload"`) unchanged at each handler.
 
-## Project-level acceptance criteria
+## Project-Level Acceptance Criteria
 
-- [ ] `go test ./pkg/cli/factory/...` passes with no intentional behavior changes.
-- [ ] `you factory save <name> --from <path>` still creates a new named factory, rejects duplicates, validates before persist, supports `--set-current`, and emits the same human or `--json` output as before.
-- [ ] `you factory update <name> --from <path>` still replaces an existing named factory, rejects missing names with `factory not found`, validates before persist, and emits the same human or `--json` output as before.
-- [ ] Invalid JSON/topology still fails with `invalid factory config` and does not mutate on-disk layout on save or update failure paths covered by existing tests.
-- [ ] No changes to HTTP/API handlers, `config/persist` semantics, CLI command names, or flag surfaces in `pkg/cli/root.go`.
-- [ ] `SaveFromFile` and `UpdateFromFile` remain the public API used by CLI wiring; they become thin delegators to the shared helper.
-- [ ] Typecheck, lint, and project tests pass.
+- [ ] A generic strict JSON decode helper in `handlers_common.go` reads the full body, uses `DisallowUnknownFields`, and enforces a single top-level JSON object via `ensureSingleJSONObject`.
+- [ ] All four factory decoders delegate to the shared helper and no longer duplicate the read-decode-trailing-guard skeleton inline.
+- [ ] `POST /factory-validations`, `POST /factory-sessions`, `PUT /factory-sessions/{sessionId}/factory`, and `POST /factory-sessions/{sessionId}/factory/workstations/{workstationName}/prompt-template-validation` return the same status codes and error messages as today for valid payloads, unknown fields, malformed JSON, empty bodies, and multi-object payloads.
+- [ ] Work submit/upsert decoders, model invocation decoders, and stage-submit decoders are untouched.
+- [ ] No OpenAPI schema or generated contract changes.
+- [ ] `go test ./pkg/api/...` passes with no weakened assertions.
+- [ ] Typecheck, lint, and tests pass for all touched backend areas.
 
 ## User Stories
 
-### US-001: Shared from-file persistence core for save mode
+### US-001: Shared strict JSON decode helper
 
-**Description:** As an operator running `you factory save --from`, I want the same create, validation, pointer, and output behavior after consolidation so existing scripts and docs stay valid.
-
-**Acceptance Criteria:**
-
-- [ ] A shared internal helper in `pkg/cli/factory/` performs trimmed name/`--from`/root validation, reads the payload, runs `configload.LoadFromCanonicalJSON`, calls `configpersist.PersistNamedFactory`, and optionally `configpersist.WriteCurrentFactoryPointer` when `SetCurrent` is true.
-- [ ] `SaveFromFile` delegates to the shared helper in save mode and still renders `Saved factory <name>\nDirectory: <dir>\n` for human output.
-- [ ] `--json` still emits `{"name":"...","factoryDir":"..."}` with the same field names as `SaveFromFileResult` today.
-- [ ] Save failure paths still surface `factory already exists` for duplicate names and `invalid factory config` for invalid payloads/topology; invalid topology still leaves no new named directory (per `TestSaveFromFile_RejectsInvalidTopologyBeforePersist`).
-- [ ] All `TestSaveFromFile_*` tests pass without relaxing assertions.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### US-002: Update command uses the same shared core in update mode
-
-**Description:** As an operator running `you factory update --from`, I want replace semantics and messaging unchanged so in-place factory upgrades remain predictable.
+**Description:** As an API maintainer, I want one strict JSON decode helper so factory handlers enforce the same body rules from a single implementation.
 
 **Acceptance Criteria:**
 
-- [ ] The shared helper's update mode calls `configpersist.ReplaceNamedFactory` instead of `PersistNamedFactory` and does not write the current-factory pointer.
-- [ ] `UpdateFromFile` delegates to the shared helper in update mode and still renders `Updated factory <name>\nDirectory: <dir>\n` for human output.
-- [ ] `--json` still emits `{"name":"...","factoryDir":"..."}` with the same field names as `UpdateFromFileResult` today.
-- [ ] Missing named factory still returns an error containing `factory not found`; invalid payload/topology still returns `invalid factory config`; failed invalid topology update preserves the prior on-disk factory body (per `TestUpdateFromFile_RejectsInvalidTopologyBeforePersist`).
-- [ ] All `TestUpdateFromFile_*` tests pass without relaxing assertions.
-- [ ] Typecheck passes
-- [ ] Tests pass
+- [ ] `decodeStrictJSON[T any](body io.Reader) (T, error)` lives in `handlers_common.go`, reads the full request body, decodes with `DisallowUnknownFields`, and calls `ensureSingleJSONObject` after the primary decode.
+- [ ] On success, the helper returns the decoded value with a nil error.
+- [ ] On unknown JSON fields, the helper returns the same `json: unknown field ...` decode error the inline decoders produce today (no new wrapper type).
+- [ ] On malformed JSON, empty body, or trailing non-EOF content after one object, the helper returns the same error shapes callers already map (including `requestFieldValidationError` with message `request payload must contain one JSON object` for multi-object payloads).
+- [ ] Unit tests in `handlers_common_test.go` (or equivalent) exercise valid object, unknown field, malformed JSON, empty body, and multi-object inputs directly against the helper.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### US-003: Unified mode-aware error rendering
+### US-002: Factory decoders delegate to shared helper
 
-**Description:** As a maintainer, I want one error-mapping path for from-file persistence so save and update stay aligned on invalid-config handling while keeping mode-specific not-found/duplicate wording.
-
-**Acceptance Criteria:**
-
-- [ ] One internal error renderer handles save vs update mapping: save maps `configpersist.ErrNamedFactoryAlreadyExists` to `factory already exists`; update maps `os.ErrNotExist` to `factory not found`; both map invalid named-factory errors to `invalid factory config`.
-- [ ] Read/persist errors not covered by the mappings pass through unchanged (for example read failures still mention `read factory config`).
-- [ ] `TestSaveFromFile_RejectsDuplicateName`, `TestUpdateFromFile_RejectsMissingName`, and invalid-payload tests for both commands continue to pass with the same error substrings.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### US-004: Thin public wrappers and duplication removed
-
-**Description:** As a reviewer, I want `save.go` and `update.go` to expose only mode-specific config/result types and thin delegators so future CLI changes have one implementation path.
+**Description:** As a reviewer, I want all four factory body decoders to be thin typed wrappers so strict-decode logic is not duplicated across `handlers_factory.go`.
 
 **Acceptance Criteria:**
 
-- [ ] `save.go` and `update.go` contain no duplicated validation/read/load/persist/render logic beyond delegating to the shared helper and mode-specific success formatters.
-- [ ] Public types `SaveFromFileConfig`, `SaveFromFileResult`, `UpdateFromFileConfig`, and `UpdateFromFileResult` remain exported with unchanged JSON tags.
-- [ ] `pkg/cli/root.go` continues to wire `factory save` and `factory update` through `SaveFromFile` and `UpdateFromFile` without flag or help text changes.
-- [ ] `go test ./pkg/cli/factory/...` passes.
-- [ ] Typecheck passes
-- [ ] Tests pass
+- [ ] `decodeNamedFactoryBody`, `decodeOpenFactorySessionBody`, `decodeSaveCurrentFactoryBody`, and `decodePromptTemplateValidationRequestBody` each call `decodeStrictJSON` with their existing request type and return its result unchanged.
+- [ ] No factory decoder retains an inline trailing `decoder.Decode(&struct{}{})` block or duplicated read/decoder setup.
+- [ ] Existing factory handler tests (`server_factory_test.go`, `server_factory_sessions_test.go`, and related) pass without assertion changes except where new coverage is intentionally added in US-003.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-## Functional Requirements
+### US-003: Lock factory endpoint decode behavior with HTTP regression tests
 
-- FR-1: Shared helper accepts mode `save` or `update`, name, from path, factory root dir, optional `SetCurrent` (save only), JSON flag, and output writer.
-- FR-2: Validation errors for empty name, missing `--from`, and missing factory root match today's exact error strings.
-- FR-3: Save mode persists with `PersistNamedFactory`; update mode persists with `ReplaceNamedFactory`.
-- FR-4: Save mode writes current-factory pointer only when `SetCurrent` is true; update mode never changes the pointer.
-- FR-5: Human success output uses mode-specific first line (`Saved factory` vs `Updated factory`) and shared directory line format.
-- FR-6: JSON success output encodes name and factoryDir only; no extra fields.
-- FR-7: Error renderer preserves mode-specific duplicate/not-found messages and shared invalid-config message.
+**Description:** As an API consumer, I want factory endpoints to reject bad request bodies exactly as before so clients do not see silent validation drift after the refactor.
 
-## Non-Goals
+**Acceptance Criteria:**
 
-- HTTP/API handler changes or `clihttp` migration for submit (`pkg/cli/submit/submit.go`).
-- Changes to `pkg/config/persist` or `pkg/config/load` semantics.
-- Renaming CLI commands, flags, or cobra help examples.
-- Consolidating `SaveCurrent` (session HTTP save) with offline from-file save.
-- Broad unrelated cleanup in `pkg/cli/factory` beyond this duplication lane.
+- [ ] Table-driven HTTP tests cover payload edge cases for:
+  - `POST /factory-validations` (factory validate)
+  - `POST /factory-sessions` (open session)
+  - `PUT /factory-sessions/~default/factory` (save current factory)
+  - `POST /factory-sessions/~default/factory/workstations/{workstation}/prompt-template-validation` (prompt template validation)
+- [ ] Each endpoint test matrix includes at minimum: valid minimal payload (success path where applicable), unknown top-level field (`400` with existing message behavior), malformed JSON (`400` + `"invalid request payload"` or field-specific message when applicable), empty body (`400`), and multi-object/array payload (`400` with `request payload must contain one JSON object` when that is today's behavior).
+- [ ] Assertions use HTTP status, response `code`, and `message` fields — not file-layout or registration inventories.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-## High-level technical design
+## High-Level Technical Design
 
 ```mermaid
 flowchart TD
-  subgraph public [Public CLI entrypoints]
-    SF[SaveFromFile]
-    UF[UpdateFromFile]
-  end
-  subgraph shared [pkg/cli/factory shared core]
-    PF[persistNamedFactoryFromFile mode save or update]
-    VAL[validate inputs trim name from dir]
-    LOAD[ReadFile + LoadFromCanonicalJSON]
-    PERSIST[PersistNamedFactory or ReplaceNamedFactory]
-    PTR[WriteCurrentFactoryPointer save + SetCurrent only]
-    ERR[renderPersistFromFileError mode-aware]
-    OUT[human or JSON success render]
-  end
-  SF --> PF
-  UF --> PF
-  PF --> VAL --> LOAD --> PERSIST
-  PERSIST --> PTR
-  PERSIST --> OUT
-  LOAD --> ERR
-  PERSIST --> ERR
-  PTR --> ERR
+  A[HTTP request body] --> B[decodeStrictJSON T]
+  B --> C[io.ReadAll]
+  C --> D["json.Decoder + DisallowUnknownFields"]
+  D --> E[Decode into T]
+  E --> F[ensureSingleJSONObject]
+  F --> G{error?}
+  G -->|yes| H[Return zero T + err]
+  G -->|no| I[Return decoded T]
+  H --> J[Factory handler maps err to 400 response]
+  I --> K[Handler business logic unchanged]
 ```
 
-Package ownership stays in `pkg/cli/factory/`. The shared helper is unexported; tests continue to exercise behavior through `SaveFromFile` and `UpdateFromFile`. Side effects remain isolated to configured factory root directories via existing `configpersist` APIs.
+**Package ownership**
 
-## Supporting technical considerations
+- `pkg/api/handlers_common.go`: generic decode helper, `ensureSingleJSONObject`, `requestFieldValidationError`, and error message extraction.
+- `pkg/api/handlers_factory.go`: typed decoder wrappers and handler error mapping only — no duplicated decode skeleton.
 
-- Follow [`docs/internal/standards/code/general-backend-standards.md`](../../docs/internal/standards/code/general-backend-standards.md) for Go structure and test style.
-- Prefer behavioral assertions on CLI output, exit errors, filesystem effects, and pointer state over inventories of which files exist in the package.
-- `writeFactoryConfigFile` and payload helpers in `save_test.go` may be reused by update tests; do not introduce meta-tests that only assert file names in the package directory.
-- Related prior art: `pkg/api/handlers_work_write.go` shared write cores; `pkg/config/load` and `pkg/config/persist` boundaries from `tasks/prd-config-load-persist-boundary.md`.
+**Error mapping (unchanged)**
 
-## Success metrics
+| Decode outcome | Handler mapping (unchanged) |
+|----------------|----------------------------|
+| `requestFieldValidationError` | `400 BAD_REQUEST` with validation message |
+| Other decode errors | `400 BAD_REQUEST` with `"invalid request payload"` |
+| Save-current decode errors | `400 BAD_REQUEST` with validation targets including form factory payload target |
 
-- `save.go` and `update.go` shrink to thin wrappers; duplicated logic lives in one shared file.
-- Full `pkg/cli/factory` test package green with no changed golden strings.
-- No operator-reported regression in offline save/update workflows after merge.
+**State and side effects**
+
+- Pure decode: no server state mutation; handlers retain existing runtime/session calls after decode succeeds.
+
+## Functional Requirements
+
+- FR-1: `decodeStrictJSON` must read the entire body before decoding (matching current factory decoders).
+- FR-2: `decodeStrictJSON` must set `DisallowUnknownFields` on the decoder.
+- FR-3: `decodeStrictJSON` must call `ensureSingleJSONObject` after the primary decode.
+- FR-4: All four factory decoders must delegate to `decodeStrictJSON` without altering return types or error values.
+- FR-5: Factory handlers must continue mapping decode errors through existing `requestFieldValidationMessage` checks and generic bad-request responses.
+- FR-6: Regression tests must assert observable HTTP outcomes for the four factory endpoints listed above.
+
+## Non-Goals
+
+- Refactoring work submit/upsert decoders in `handlers_work_write.go`.
+- Refactoring model invocation or stage-submit decoders in `handlers_models.go` / `handlers_work_read.go`.
+- OpenAPI schema or generated API contract changes.
+- CLI or service-layer refactors.
+- Broad unrelated cleanup in `pkg/api` beyond the four factory decoders and their tests.
+
+## Supporting Technical Considerations
+
+- Prefer extending existing factory server tests over new test-file topology requirements.
+- Keep the helper generic (`decodeStrictJSON[T]`) so future factory decoders can reuse it without copy-paste.
+- Do not wrap JSON decode errors in new types; callers rely on `errors.As` against `requestFieldValidationError` and standard `json.SyntaxError` / unknown-field errors.
+- Follow `docs/internal/standards/code/general-backend-standards.md` for package boundaries and test placement.
+
+## Success Metrics
+
+- Zero behavioral diffs in factory endpoint HTTP responses for the defined payload matrix.
+- Four factory decoders reduced to single-expression wrappers around `decodeStrictJSON`.
+- `go test ./pkg/api/...` green with added regression coverage for decode edge cases.
+- No increase in duplicated strict-decode logic elsewhere in `handlers_factory.go`.
 
 ## Open Questions
 
-None. Scope and behavioral preservation requirements are explicit in the customer ask.
+None — scope and behavioral preservation requirements are explicit in the customer ask.

@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- `decodeStrictJSON[T any](body io.Reader) (T, error)` in `pkg/api/handlers_common.go` is the shared strict factory body decode path: `io.ReadAll`, `json.Decoder` with `DisallowUnknownFields`, then `ensureSingleJSONObject`; multi-object payloads that trigger the single-object guard use a second decodable `{}` (e.g. `{"name":"a"}{}`), not a second typed object with unknown fields to `struct{}{}`. Factory decoders in `handlers_factory.go` (`decodeNamedFactoryBody`, `decodeOpenFactorySessionBody`, `decodeSaveCurrentFactoryBody`, `decodePromptTemplateValidationRequestBody`) are thin `return decodeStrictJSON[<type>](body)` wrappers—do not re-inline read/decode/guard logic there.
 - `buildSessionScope` in `ui/src/api/session-scope.ts` is the sole pure projection for dashboard session identity and API paths; `isPaused` is true only for a non-default `rawSessionID` listed in `pausedSessionIDs`—never for default/null/empty/`~default` selection even if the pause list includes `~default`.
 - Bento import threads `rawSessionID` from `useDashboardSession()` through `DashboardBento` → `useCurrentActivityImportController` / `useDashboardBentoImport`; prove scope-fed `sessionID` with a `vi.fn` spy on `useCurrentActivityImportController` in `dashboard-bento.test.tsx`—tab selection stays on `useDashboardSessionTabsState` → `dashboardSessionStore`.
 - `App.session-switching.stories.tsx` hides the work-graph bento card (`hidden: true` in stored layout) before `App` mounts—`mergeDashboardLayout` re-merges filtered layouts from `DEFAULT_DASHBOARD_LAYOUT`, so omitting work-graph from storage is not enough; run with `bun run vitest run --config vitest.storybook.config.ts --project=storybook src/App.session-switching.stories.tsx` against static Storybook on port 6008.
@@ -691,4 +692,22 @@
   - Patterns discovered: `mergeStateStatus: DIRTY` on an otherwise green PR usually means main advanced—re-merge before `<COMPLETE>` even when all stories pass.
   - Gotchas encountered: Main may land unrelated Ralph `prd.json`/`progress.txt` edits; always keep branch PRD (`--ours`) during merge conflict resolution.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/514 — push merge commit and await CI before `<COMPLETE>`.
+---
+
+## 2026-05-30T21:06:27Z - extract-api-factory-strict-json-decode-helper-001
+- What was implemented: Added generic `decodeStrictJSON[T any]` in `handlers_common.go` with unit tests for valid object, unknown field, malformed JSON, empty body, and multi-object (`{"name":"a"}{}`) inputs.
+- Files changed: `pkg/api/handlers_common.go`, `pkg/api/handlers_common_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: Trailing second JSON object with fields fails `ensureSingleJSONObject` via `json: unknown field` on `struct{}{}`; the `request payload must contain one JSON object` path needs a second object that decodes cleanly (e.g. `{}`).
+  - Gotchas encountered: PRD `branchName` is `ralph/extract-api-factory-strict-json-decode-helper` — create from worktree branch name if they differ.
+  - Useful context: Story 002 should refactor the four factory decoders in `handlers_factory.go` to thin wrappers; factory decoders still duplicate inline read/decode/guard logic until then.
+---
+
+## 2026-05-30T21:08:04Z - extract-api-factory-strict-json-decode-helper-002
+- What was implemented: Refactored `decodeNamedFactoryBody`, `decodeOpenFactorySessionBody`, `decodeSaveCurrentFactoryBody`, and `decodePromptTemplateValidationRequestBody` to thin wrappers delegating to `decodeStrictJSON`; removed duplicated inline read/decode/trailing-guard logic and unused `bytes`/`encoding/json` imports from `handlers_factory.go`.
+- Files changed: `pkg/api/handlers_factory.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: All four factory decoders unify on `ensureSingleJSONObject` via the shared helper (previously `decodeSaveCurrentFactoryBody` and `decodeNamedFactoryBody` inlined the trailing `decoder.Decode` guard).
+  - Gotchas encountered: No PR exists yet for this branch; story 003 adds HTTP regression tests for endpoint decode behavior.
+  - Useful context: `go test ./pkg/api/...` passes with existing factory handler tests unchanged.
 ---
