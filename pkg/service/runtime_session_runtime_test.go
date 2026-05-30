@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file consolidated session-runtime and absolute-path tests remain together until dedicated service test seams split.
+// pkgmaintcheck:ignore-file-lines consolidated session-runtime and absolute-path tests remain together until dedicated service test seams split.
 package service
 
 import (
@@ -349,6 +351,50 @@ func TestFactoryService_Run_RestartsOnlyDefaultSession(t *testing.T) {
 	if liveSessionHandle(defaultSession).runtime.dir != harness.factoryDirs["alpha"] {
 		t.Fatalf("restarted default runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.dir, harness.factoryDirs["alpha"])
 	}
+}
+
+func TestFactoryService_ActivateNamedFactory_ReplacesOnlyActiveSession(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta", "gamma"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	harness.waitIdle(t, defaultFactorySessionID, "default runtime")
+	harness.waitIdle(t, betaSessionID, "beta runtime")
+
+	defaultHandleBefore := liveSessionHandle(harness.requireSession(t, defaultFactorySessionID))
+	betaHandleBefore := liveSessionHandle(harness.requireSession(t, betaSessionID))
+
+	if err := harness.svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
+		t.Fatalf("ActivateNamedFactory(gamma): %v", err)
+	}
+
+	defaultHandleAfter := liveSessionHandle(harness.requireSession(t, defaultFactorySessionID))
+	betaHandleAfter := liveSessionHandle(harness.requireSession(t, betaSessionID))
+	if defaultHandleBefore == defaultHandleAfter {
+		t.Fatal("expected default session runtime handle to be replaced after named activation")
+	}
+	if betaHandleBefore != betaHandleAfter {
+		t.Fatal("expected beta session runtime handle to remain after default named activation")
+	}
+	if got := harness.svc.sessions.Count(); got != 2 {
+		t.Fatalf("live session count after activation = %d, want 2", got)
+	}
+
+	assertCurrentFactoryPointer(t, harness.rootDir, "gamma", "default session pointer after named activation")
+	defaultCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession(default) after activation: %v", err)
+	}
+	assertFactoryName(t, defaultCurrent.Name, "gamma", "default current factory after named activation")
+
+	betaCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), betaSessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession(beta) after activation: %v", err)
+	}
+	assertFactoryName(t, betaCurrent.Name, "beta", "beta current factory after default named activation")
 }
 
 func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession(t *testing.T) {

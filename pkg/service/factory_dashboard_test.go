@@ -208,7 +208,8 @@ func TestFactoryService_BuildSimpleDashboardRenderInputProjectsSelectedTickFromE
 		engineState:   engineState,
 		factoryEvents: dashboardProjectionEventsForTest(t, dispatch),
 	}
-	svc := &FactoryService{factory: mock, logger: zap.NewNop()}
+	svc := &FactoryService{logger: zap.NewNop()}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: mock})
 
 	input, err := svc.buildSimpleDashboardRenderInput(context.Background(), time.Now())
 	if err != nil {
@@ -274,6 +275,12 @@ func TestFactoryService_RenderDashboardLogsEventProjectionErrors(t *testing.T) {
 			core, observedLogs := observer.New(zap.ErrorLevel)
 			renderCalls := 0
 			svc := &FactoryService{
+				cfg: &FactoryServiceConfig{
+					SimpleDashboardRenderer: func(SimpleDashboardRenderInput) { renderCalls++ },
+				},
+				logger: zap.New(core),
+			}
+			bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 				factory: &aggregateSnapshotFactory{
 					engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 						Topology:  &state.Net{ID: "aggregate-topology"},
@@ -282,11 +289,7 @@ func TestFactoryService_RenderDashboardLogsEventProjectionErrors(t *testing.T) {
 					factoryEvents:    tt.factoryEvents,
 					factoryEventsErr: tt.factoryErr,
 				},
-				cfg: &FactoryServiceConfig{
-					SimpleDashboardRenderer: func(SimpleDashboardRenderInput) { renderCalls++ },
-				},
-				logger: zap.New(core),
-			}
+			})
 
 			svc.renderDashboard(context.Background())
 

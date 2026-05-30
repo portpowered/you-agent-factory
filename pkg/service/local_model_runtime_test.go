@@ -99,16 +99,16 @@ func TestInvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle(t *testin
 	}
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
 	cache := localModelTestCacheLayout(t)
+	puller := staticModelAssetPuller{cache: cache}
 	svc := &FactoryService{
-		runtimeCfg: runtimeCfg,
-		cfg:        &FactoryServiceConfig{},
-		modelAssets: staticModelAssetPuller{
-			cache: cache,
-		},
-		localModels: newManagedLocalModelManager(staticModelAssetPuller{
-			cache: cache,
-		}, runtime),
+		cfg:         &FactoryServiceConfig{},
+		modelAssets: puller,
 	}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		runtimeCfg:  runtimeCfg,
+		modelAssets: puller,
+		localModels: newManagedLocalModelManager(puller, runtime),
+	})
 
 	mode := factoryapi.AUDIOSTREAM
 	request := factoryapi.ModelInvocationRequest{
