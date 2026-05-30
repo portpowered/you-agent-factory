@@ -1,28 +1,40 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
-import {
-  staleFactoryVersionTarget,
-} from "../../../testing/factory-validation-target-fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { createDeferredPromise } from "../../../testing/app-shell-export-test-utils";
+import {
+  factoryDocumentSaveError,
+  mockFactoryDocumentSave,
+} from "../../../testing/factory-document-save-mocks";
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
-import { CurrentSelectionWidget } from "./current-selection-widget";
-import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
+import { CurrentSelectionWidget } from "./current-selection-widget";
 
-const saveCurrentFactoryMutation = vi.fn();
+let saveCurrentFactoryMutation: ReturnType<
+  typeof mockFactoryDocumentSave
+>["mutateAsync"];
 
 vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../current-factory-definition/public");
+  const actual = await vi.importActual(
+    "../../current-factory-definition/public",
+  );
 
   return {
     ...actual,
@@ -31,9 +43,12 @@ vi.mock("../../current-factory-definition/public", async () => {
   };
 });
 
-vi.mock("../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
+vi.mock(
+  "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
+  () => ({
+    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+  }),
+);
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -41,14 +56,12 @@ const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
-    saveCurrentFactoryMutation.mockReset();
+    const saveMutation = mockFactoryDocumentSave();
+    saveCurrentFactoryMutation = saveMutation.mutateAsync;
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
-      isPending: false,
-      mutateAsync: saveCurrentFactoryMutation,
-    } as never);
+    vi.mocked(useSaveCurrentFactory).mockReturnValue(saveMutation as never);
     vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
       data: {
         diagnostics: [],
@@ -217,12 +230,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("preserves edited workstation input when the save request fails", async () => {
     saveCurrentFactoryMutation.mockRejectedValue(
-      new CurrentFactoryDefinitionError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-        },
-      ),
+      factoryDocumentSaveError("factory_not_idle"),
     );
 
     renderWorkstationSelection();
@@ -253,7 +261,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("shows generic save failures without discarding the dirty draft", async () => {
-    saveCurrentFactoryMutation.mockRejectedValue(new Error("Network dropped"));
+    saveCurrentFactoryMutation.mockRejectedValue(
+      factoryDocumentSaveError("generic"),
+    );
 
     renderWorkstationSelection();
     expandEditableConfiguration();
@@ -275,14 +285,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("shows a recoverable stale-write warning without discarding the dirty draft", async () => {
     saveCurrentFactoryMutation.mockRejectedValue(
-      new CurrentFactoryDefinitionError(
-        "Current factory definition is stale. Refresh the graph before saving.",
-        {
-          code: "STALE_FACTORY_VERSION",
-          status: 409,
-          targets: [staleFactoryVersionTarget()],
-        },
-      ),
+      factoryDocumentSaveError("stale_version"),
     );
 
     renderWorkstationSelection();
@@ -556,17 +559,17 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             workers: [
               expect.objectContaining({
                 model: "gpt-5.5",
-              name: "processor",
-            }),
-          ],
-          workstations: [
-            expect.objectContaining({
-              body: "Updated only the review workstation prompt.",
-              name: "Review",
-            }),
-            expect.objectContaining({
-              body: "Plan the implementation.",
-              name: "Plan",
+                name: "processor",
+              }),
+            ],
+            workstations: [
+              expect.objectContaining({
+                body: "Updated only the review workstation prompt.",
+                name: "Review",
+              }),
+              expect.objectContaining({
+                body: "Plan the implementation.",
+                name: "Plan",
               }),
             ],
           }),
@@ -588,7 +591,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
 
@@ -614,7 +619,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getAllByRole("button", { name: "Saving..." })[0]).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: "Saving..." })[0],
+    ).toBeTruthy();
 
     rerender(
       <QueryClientProvider client={queryClient}>
@@ -679,7 +686,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
 
@@ -788,7 +797,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       within(saveDialog).getByRole("button", { name: "Saving..." }).disabled,
     ).toBe(true);
 
-    fireEvent.click(within(saveDialog).getByRole("button", { name: "Saving..." }));
+    fireEvent.click(
+      within(saveDialog).getByRole("button", { name: "Saving..." }),
+    );
     expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
 
     deferredSave.resolve(
@@ -821,7 +832,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
 
@@ -921,7 +934,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
 
@@ -963,14 +978,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     expandEditableConfiguration();
 
-    deferredSave.reject(
-      new CurrentFactoryDefinitionError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-        },
-      ),
-    );
+    deferredSave.reject(factoryDocumentSaveError("factory_not_idle"));
 
     await waitFor(() => {
       expect(screen.queryByText(/^Saving failed\./)).toBeNull();
@@ -1001,15 +1009,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
-      new CurrentFactoryDefinitionError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-        },
-      ),
+      factoryDocumentSaveError("factory_not_idle"),
     );
 
     const { rerender } = renderWithExistingQueryClient(
@@ -1094,15 +1099,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
-      new CurrentFactoryDefinitionError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-        },
-      ),
+      factoryDocumentSaveError("factory_not_idle"),
     );
 
     const { rerender } = renderWithExistingQueryClient(
@@ -1368,9 +1370,9 @@ function buildMultiWorkstationEditableFactoryDefinition(overrides?: {
   };
 }
 
-function buildSharedWorkerFactoryDefinition(
-  overrides?: { prompt?: string },
-): CurrentFactoryDocument {
+function buildSharedWorkerFactoryDefinition(overrides?: {
+  prompt?: string;
+}): CurrentFactoryDocument {
   return {
     name: "Current Factory",
     version: {
@@ -1428,15 +1430,4 @@ function renderWithExistingQueryClient(
   return render(
     <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
   );
-}
-
-function createDeferredPromise<T>() {
-  let reject!: (reason?: unknown) => void;
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((innerResolve, innerReject) => {
-    reject = innerReject;
-    resolve = innerResolve;
-  });
-
-  return { promise, reject, resolve };
 }
