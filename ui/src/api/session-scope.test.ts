@@ -51,4 +51,11 @@ describe("buildSessionScope", () => {
 
     expect(scope.isPaused).toBe(false);
   });
+
+  it("does not mark a non-default session paused when it is absent from the paused list", () => {
+    const scope = buildSessionScope("session-gamma", ["session-beta"]);
+
+    expect(scope.isPaused).toBe(false);
+    expect(scope.sessionID).toBe("session-gamma");
+  });
 });
