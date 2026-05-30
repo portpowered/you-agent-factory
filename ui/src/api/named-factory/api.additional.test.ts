@@ -249,6 +249,50 @@ describe("named factory API error handling", () => {
     );
   });
 
+  it("maps INVALID_FACTORY_NAME and NOT_FOUND codes from the current-factory API", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "INVALID_FACTORY_NAME",
+              message: "Factory name is invalid.",
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 400,
+              statusText: "Bad Request",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY_NAME",
+      message: "Factory name is invalid.",
+    });
+
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "NOT_FOUND",
+              message: "Factory was not found.",
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 404,
+              statusText: "Not Found",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "Factory was not found.",
+    });
+  });
+
   it("preserves raw current-factory error bodies when the response is not JSON", async () => {
     await expect(
       getCurrentFactory({
