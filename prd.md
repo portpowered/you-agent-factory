@@ -1,195 +1,324 @@
-# PRD: Consolidate Validation Target Test Assertions
+# PRD: Manual Work Recovery (`you work move`)
 
 ---
 author: Codex
 last modified: 2026-05-30
 status: draft
+work-item: batch-request-fcb63742c470157a3fdbacb4d83d6dd6-prd-work-manual-recovery
 ---
-
-## Introduction
-
-Customer ask `11` (`pkg/` duplication cleanup) is consolidating repeated test helpers into shared `pkg/testutil` modules. PR `#492` moved `minimalFactoryConfig` / `writeFactoryJSON` into `pkg/testutil/factoryfixtures`. The next non-overlapping slice consolidates duplicated **validation target assertion helpers** used by API, service, and factory-validation tests.
-
-Today, the same “does this validation result include target X?” logic is copy-pasted across `pkg/api`, `pkg/service`, and `pkg/factory/validation` tests. That drift risks subtly different matching rules (for example, different `t.Fatalf` messages or subject-field comparisons) and makes topology validation regressions harder to review.
-
-**Intent:** Provide one canonical, test-only assertion module and retarget call sites so validation topology tests share identical assertion behavior with **no production or validation-semantics change**.
 
 ## Context
 
 ### Customer ask
 
-Consolidate duplicated `assertHasValidationTarget` and `assertHasValidationTargetCode` helpers into a shared test-only package; remove duplicate definitions from API and service tests (and validation package tests where equivalent); retarget imports only.
+Operators need a **session-scoped control plane** to relocate an existing work item to
+another authored marking state after failures, provider errors, or cascading dependency
+failure — without deleting tokens. Deliver `you work move <work-id> <state-name>`,
+matching HTTP API, canonical `WORK_STATE_CHANGE` events, engine marking updates, CLI,
+dashboard replay projection, and record/replay persistence.
 
-### Concrete problem
+### Problem
 
-- `assertHasValidationTarget` (full match on code, subject type, subject id, location) is defined in `pkg/api/server_test_helpers_test.go`, `pkg/api/servertests/server_factory_validation_test.go`, and `pkg/service/factory_test.go`.
-- `assertHasValidationTargetCode` is duplicated in `pkg/api/server_factory_test.go`, `pkg/api/servertests/server_factory_validation_test.go`, and `pkg/service/factory_test.go` (service copy also takes a custom failure label).
-- `pkg/factory/validation/validation_test.go` duplicates the same ideas as `assertHasTargetCode` and `assertHasTargetSubject` on `factoryvalidation.Target` / `factoryvalidation.Subject`.
+Work items can land in bad marking positions (`FAILED`, blocked dependents) when
+`CascadingFailureSubsystem` or dispatch outcomes move tokens on marking only. Today
+work advances only through submit → dispatch → transition paths. Dependents cascaded
+into `FAILED` cannot progress until upstream work is corrected, but there is no
+operator ingress to move an existing item to another authored state. Marking can show
+the truth while `/events`, replay artifacts, and the dashboard stay stale.
 
-### High-level solution
+### Solution
 
-Add `pkg/testutil/validationassert` (or extend an existing `pkg/testutil` submodule if import boundaries require it) with:
+Add **manual work migration**: validate target state name, reject in-flight dispatches,
+apply `MutationMove` on live marking, emit `WORK_STATE_CHANGE` with `source: api` |
+`cli`, fan out on SSE, update backend and UI projections, and persist in replay.
+Operator moves are **allowed while the factory is paused**; automatic subsystem ticks
+must not advance marking while paused. Leaving `FAILED` **retains** failure history and
+**clears** guard-blocking fields via a shared helper (also used by
+[`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md)).
 
-1. **API-shaped helpers** for `[]factoryapi.FactoryValidationTarget`: full target match and code-only match.
-2. **Domain-shaped helpers** for `[]factoryvalidation.Target`: code-only and subject match (replacing `assertHasTargetCode` / `assertHasTargetSubject`).
+| Topic | Decision |
+| --- | --- |
+| Event type | `WORK_STATE_CHANGE` (shared with cascade PRD; distinguish `source`) |
+| Idempotent replay | HTTP **409 Conflict** when same `requestId` repeats |
+| Target | Specific **state name** (e.g. `in-progress`), not state type alone |
+| Delete | **No** — move only |
+| In-flight dispatch | **Reject** move when work is in `ActiveDispatches` |
+| Dependents | **Manual** — operator moves each item; no auto-unfail |
+| Scope | Full vertical slice (contracts, engine, events, API, CLI, UI, replay, tests) |
+| Allowed targets | Any authored state for the work item's work type |
+| Session | Session-aware routes and `--session` on CLI |
+| Paused factory | Operator move **allowed**; automatic ticks **must not** mutate marking |
 
-Retarget test call sites, delete local copies, and prove equivalence by running the existing validation topology test suites unchanged.
+## Introduction
 
-## Goals
+This PRD implements operator-driven work recovery end-to-end. Automatic cascade moves
+remain in [`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md)
+(same event type, `source: cascading-failure`). Coordinate **contract US-001** once
+across both PRDs.
 
-- Exactly one canonical implementation per assertion shape (API full match, API code-only, domain code-only, domain subject match).
-- All listed duplicate definitions removed from API, service, and validation package tests.
-- Existing validation topology tests continue to pass with the same expected codes, subjects, and locations—no assertion weakening or semantic drift.
-- Test-only change: no production API, CLI, UI, or OpenAPI contract changes.
+Maintainer checklist (update after implementation):
+[`docs/internal/development/work-session-runtime-feature-guide.md`](../../docs/internal/development/work-session-runtime-feature-guide.md).
 
 ## Project-level acceptance criteria
 
-- [ ] `pkg/testutil/validationassert` (or approved `pkg/testutil` submodule) exports canonical helpers for API and domain validation target assertions.
-- [ ] No remaining duplicate `assertHasValidationTarget`, `assertHasValidationTargetCode`, `assertHasTargetCode`, or `assertHasTargetSubject` definitions in `pkg/api`, `pkg/service`, or `pkg/factory/validation` test files listed in scope.
-- [ ] All prior call sites use the shared helpers without changing which codes, subjects, or locations each test expects.
-- [ ] `go test ./pkg/api/... ./pkg/service/... ./pkg/factory/validation/...` passes.
-- [ ] No production packages import `validationassert` (test-only boundary preserved).
-- [ ] Typecheck, lint, and targeted tests pass (quality gate).
+- [ ] **PA-1:** `POST /work/{id}/move` and `POST /factory-sessions/{session_id}/work/{id}/move` accept `stateName` and move work to that authored state; response reflects the new position (same work shape as `GET /work/{id}`).
+- [ ] **PA-2:** `you work move <work-id> <state-name>` performs the same operation with `--session`, `--json`, and human summary output (work id, previous state, new state, session).
+- [ ] **PA-3:** Move is rejected with a stable client-visible error when the work item is consumed by an entry in `ActiveDispatches`.
+- [ ] **PA-4:** Each successful operator move appends exactly one `WORK_STATE_CHANGE` (`source: api` | `cli`) to the session event stream before SSE fanout and replay recording.
+- [ ] **PA-5:** Repeating the same operator `requestId` returns **409 Conflict** without a second marking mutation.
+- [ ] **PA-6:** Operator move succeeds while factory lifecycle is `PAUSED`; with factory paused, no automatic cascade or new dispatch advances marking until resumed.
+- [ ] **PA-7:** Dashboard/timeline replay at a tick after a manual move shows the work token in the target place (matches `you work show` / API marking).
+- [ ] **PA-8 (quality gate):** Typecheck, lint, and `make verify-pr` pass for the changed surfaces.
 
-## User Stories
+## Goals
 
-### consolidate-validation-target-test-asserts-001: Canonical API validation target assertions
-
-**Description:** As a maintainer, I want shared helpers for OpenAPI `FactoryValidationTarget` slices so API and service tests assert targets the same way.
-
-**Acceptance Criteria:**
-
-- [ ] `pkg/testutil/validationassert` provides `HasTarget` matching code, subject type, subject id, and location on `[]factoryapi.FactoryValidationTarget`.
-- [ ] `HasTargetCode` matches when any target carries the given validation code (optional human-readable label for failure messages, preserving service-test ergonomics).
-- [ ] Helpers call `t.Helper()` and preserve existing match semantics (code gate first, then subject fields).
-- [ ] Package is test-only (`package validationassert` under `pkg/testutil`, no production imports).
-- [ ] Typecheck passes
-- [ ] Tests pass for any new helper unit coverage added in this story
-
-### consolidate-validation-target-test-asserts-002: API tests use shared validation assertions
-
-**Description:** As a maintainer, I want API validation topology tests to import shared assertions so duplicate helpers are not redefined per test file.
-
-**Acceptance Criteria:**
-
-- [ ] `pkg/api/server_test_helpers_test.go`, `pkg/api/server_factory_test.go`, and `pkg/api/servertests/server_factory_validation_test.go` call `validationassert` instead of local helpers.
-- [ ] Local `assertHasValidationTarget` / `assertHasValidationTargetCode` definitions are removed from those files.
-- [ ] Existing API validation tests (`TestValidateFactory_*`, save/create factory validation target tests, topology multi-target tests) still fail/pass on the same inputs as before this change.
-- [ ] Typecheck passes
-- [ ] Tests pass (`go test ./pkg/api/...`)
-
-### consolidate-validation-target-test-asserts-003: Service tests use shared validation assertions
-
-**Description:** As a maintainer, I want service-layer factory validation tests to share the same target assertions as API tests.
-
-**Acceptance Criteria:**
-
-- [ ] `pkg/service/factory_test.go` imports `validationassert` for topology and canonical target assertions.
-- [ ] Local `assertHasValidationTarget` and `assertHasValidationTargetCode` definitions are removed from `factory_test.go`.
-- [ ] Service tests that assert validation targets (including `assertCanonicalTopologyTargets` call sites) behave identically: same expected codes and subject coordinates.
-- [ ] Typecheck passes
-- [ ] Tests pass (`go test ./pkg/service/...`)
-
-### consolidate-validation-target-test-asserts-004: Domain validation tests use shared assertions
-
-**Description:** As a maintainer, I want `pkg/factory/validation` unit tests to use the same canonical assertion module for domain `Target` slices.
-
-**Acceptance Criteria:**
-
-- [ ] `validationassert` exposes domain helpers equivalent to prior `assertHasTargetCode` and `assertHasTargetSubject` on `[]factoryvalidation.Target`.
-- [ ] `pkg/factory/validation/validation_test.go` retargets to shared helpers and removes local duplicates.
-- [ ] Explicit validation unit tests still report the same missing-code and missing-subject failures for invalid factory configs.
-- [ ] Typecheck passes
-- [ ] Tests pass (`go test ./pkg/factory/validation/...`)
-
-### consolidate-validation-target-test-asserts-005: Duplication cleanup verification
-
-**Description:** As a reviewer, I want confidence that consolidation is complete and behavior-neutral across all touched packages.
-
-**Acceptance Criteria:**
-
-- [ ] Repository search shows no duplicate validation-target assertion helpers remaining in scoped `pkg/api`, `pkg/service`, and `pkg/factory/validation` test files.
-- [ ] `go test ./pkg/api/... ./pkg/service/... ./pkg/factory/validation/...` passes with zero diff in expected validation codes or subject shapes in test assertions.
-- [ ] No changes to production validation logic, handlers, or OpenAPI schemas.
-- [ ] Typecheck passes
-- [ ] Tests pass (full scoped suite above)
-
-## Functional Requirements
-
-- FR-1: Provide canonical API helpers for full validation target match and code-only match on `factoryapi.FactoryValidationTarget` slices.
-- FR-2: Provide canonical domain helpers for code-only and `factoryvalidation.Subject` match on `factoryvalidation.Target` slices.
-- FR-3: Remove duplicate helper definitions from `pkg/api/server_test_helpers_test.go`, `pkg/api/server_factory_test.go`, `pkg/api/servertests/server_factory_validation_test.go`, `pkg/service/factory_test.go`, and `pkg/factory/validation/validation_test.go`.
-- FR-4: Retarget imports and call sites only; do not alter validation rules, error codes, or expected target payloads in tests.
-- FR-5: Keep `pkg/cli/submit` clihttp migration, API handler extraction, and functional-test helper consolidation out of this lane.
-
-## Non-Goals
-
-- Production API, CLI, or UI changes.
-- `pkg/cli/submit` clihttp migration (blocked on open PR `#480`).
-- API handler core extraction (`submitWorkCore`, strict JSON decode helpers).
-- Consolidating Petri/net, bundled-file, or functional-test `hasValidationTarget*` helpers under `tests/functional/...` (separate follow-on).
-- Meta-tests that assert helper file layout, import graphs, or assertion inventories.
-- Changing validation semantics or weakening tests to accommodate helper moves.
+- Operators can move one work item to any valid authored state name for its work type.
+- Move is rejected with a clear error when the work item is in an active dispatch.
+- Move emits `WORK_STATE_CHANGE`, updates marking, streams on `/events`, and is recorded in replay artifacts.
+- Dashboard/timeline projections show the work item at the new place after the event.
+- CLI follows existing `you work` / `you submit` patterns (`--session`, `--json`, diagnostics).
+- Operator move succeeds while factory is **paused**; automatic engine work remains frozen per pause policy.
 
 ## High-level technical design
 
 ```mermaid
 flowchart LR
-  subgraph tests [Test packages]
-    API[pkg/api tests]
-    SVC[pkg/service tests]
-    VAL[pkg/factory/validation tests]
+  subgraph ingress [Operator ingress]
+    CLI["you work move"]
+    API["POST .../work/{id}/move"]
   end
-  subgraph shared [Test-only shared module]
-    VA[pkg/testutil/validationassert]
+  subgraph control [Control plane]
+    FS[FactoryService]
+    MV[MoveWork validation + apply]
   end
-  subgraph types [Target shapes]
-    APIType[factoryapi.FactoryValidationTarget]
-    DomType[factoryvalidation.Target]
+  subgraph engine [Engine marking]
+    MUT[MutationMove]
   end
-  API --> VA
-  SVC --> VA
-  VAL --> VA
-  VA --> APIType
-  VA --> DomType
+  subgraph observe [Observation]
+    HIST[RecordWorkStateChange]
+    SSE["/events SSE"]
+    REC[Replay recorder]
+    GOPROJ[world_state.go]
+    UIPROJ[replayWorldState.ts]
+  end
+
+  CLI --> API --> FS --> MV --> MUT
+  MV --> HIST --> SSE
+  HIST --> REC
+  HIST --> GOPROJ
+  HIST --> UIPROJ
 ```
 
-**Package ownership:** `pkg/testutil/validationassert` owns cross-package test assertions. Production validation remains in `pkg/factory/validation`; API projection remains in handlers/services.
+**Control-plane placement:** Operator move is a synchronous control ingress (dedicated
+hook or subsystem entry), not ad hoc mutation from handler goroutines and not inside
+`TransitionerSubsystem`. **No fake** `DISPATCH_REQUEST` / `DISPATCH_RESPONSE` for moves.
 
-**Import boundaries:** `validationassert` may depend on `pkg/api/generated` and `pkg/factory/validation` types. Production packages must not import `validationassert`. If a cycle appears, split API vs domain helpers into sibling files within the same testutil submodule rather than duplicating logic.
+**Failure exit policy:** When leaving a `FAILED` place, retain `FailureRecords` and
+customer-visible failure history; clear guard-blocking fields via shared helper consumed
+by cascade PRD when moving out of failed.
 
-**Matching semantics (must not change):**
+| Seam | Owner |
+| --- | --- |
+| OpenAPI / contracts | `api/components/schemas/events/`, `make verify-build-contracts` |
+| Engine apply | `pkg/factory/engine/`, control hook |
+| Events | `pkg/factory/events/event_history.go` |
+| API | `pkg/api/handlers.go`, `pkg/service/` |
+| CLI | `pkg/cli/work/` |
+| Backend projection | `pkg/factory/projections/world_state.go` |
+| UI projection | `ui/src/features/timeline/state/timeline/replayWorldState.ts` |
+| Pause policy | `pkg/factory/runtime/factory.go`, engine tick loop |
 
-| Helper | Match rule |
-|--------|------------|
-| Full API target | Same `code`, `subject.type`, `subject.id`, `subject.location` |
-| API code-only | Any target with matching `code` |
-| Domain code-only | Any target with matching `code` |
-| Domain subject | Any target with `subject` equal to expected `factoryvalidation.Subject` |
+## User Stories
 
-**Verification surface:** Existing behavioral tests that exercise validation through API HTTP tests, service factory save/validation paths, and `factoryvalidation.Validate` unit tests. No new inventory or registration tests.
+### US-001: OpenAPI `WORK_STATE_CHANGE` and move routes
 
-## Supporting technical considerations
+**Description:** As a maintainer, I need a canonical event type and move API contract so operator and cascade paths share one vocabulary.
 
-- Follow the `pkg/testutil/factoryfixtures` precedent: small focused submodule under `pkg/testutil`, documented in `pkg/testutil/doc.go` if needed.
-- Prefer preserving distinct failure messages where tests rely on them (service topology messages vs API code-only messages) via optional label parameters—not by keeping duplicate implementations.
-- `pkg/factory/validation/target_equivalence.go` already centralizes signature comparison for equivalence tests; do not conflate signature helpers with per-target presence assertions.
-- Defer `assertFactorySessionValidationTarget` in service session tests (different shape: reason + field); out of scope unless trivially shareable without API/domain coupling.
+**Acceptance Criteria:**
 
-## Success metrics
+- [ ] Add `WORK_STATE_CHANGE` to `FactoryEventType` with payload: `workId`, `workTypeName`, `fromState`, `toState`, `fromPlaceId`, `toPlaceId`, `source` (`api` | `cli` | `cascading-failure`), optional `triggerWorkId`, optional `reason`.
+- [ ] Add request/response schemas for `POST /work/{id}/move` and `POST /factory-sessions/{session_id}/work/{id}/move` (`stateName` required, optional `requestId`).
+- [ ] `FactoryEvent.context` carries `workIds`, `requestId` (idempotency for operator moves), tick/sequence as today.
+- [ ] Contract tests in `pkg/api/contracttests/` cover enum, payload refs, and a sample operator event with `source: cli`.
+- [ ] `make verify-build-contracts` passes.
+- [ ] Coordinate enum/payload merge with [`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md) US-001 so only one contract lands.
 
-- Zero duplicate validation-target assertion implementations in scoped packages after merge.
-- No new validation test failures or changed expected target lists in PR diff.
-- Reviewers can locate all validation-target presence checks via one import path.
+### US-002: Engine control path and marking migration
 
-## Open Questions
+**Description:** As the runtime, I must apply a validated place change on live marking when an operator requests a move.
 
-None. Scope and deferrals are explicit; functional-test duplication is intentionally a follow-on.
+**Acceptance Criteria:**
+
+- [ ] Control ingress validates: work exists, target state exists for work type, target place resolves via topology, work is **not** in `ActiveDispatches`.
+- [ ] Successful move applies `MutationMove`; leaving `FAILED` retains `FailureRecords` and clears guard-blocking fields via shared helper.
+- [ ] Move does **not** emit fake dispatch events.
+- [ ] Rejected moves return stable errors: not found, invalid state, in-flight dispatch, engine terminated.
+- [ ] Operator move **allowed** when factory lifecycle is `PAUSED`.
+- [ ] Unit tests prove accept/reject paths and paused-factory accept for operator move.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-003: Event history and live fanout
+
+**Description:** As a dashboard consumer, I need move operations recorded like other canonical runtime changes.
+
+**Acceptance Criteria:**
+
+- [ ] `RecordWorkStateChange` in `pkg/factory/events/event_history.go` invoked on successful operator move (`source: api` | `cli`).
+- [ ] `FactoryEventHistory` subscribers receive the event in order on `/events` and session-scoped SSE.
+- [ ] Tests assert event shape and UTC `eventTime` consistent with `RecordWorkRequest`.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-004: HTTP API handlers
+
+**Description:** As an integrator, I can move work via the public API on the default or selected session.
+
+**Acceptance Criteria:**
+
+- [ ] Handlers implement both move routes; route through `FactoryService` / runtime factory interface.
+- [ ] `404` when work or session missing; `400` for invalid state or in-flight dispatch; **`409 Conflict`** when the same `requestId` was already applied.
+- [ ] Response returns updated `Work` (aligned with `GET /work/{id}`).
+- [ ] Handler tests cover default session, named session, **409** idempotency, and move **while paused**.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-005: CLI `you work move`
+
+**Description:** As an operator, I can move work from the CLI without using the dashboard.
+
+**Acceptance Criteria:**
+
+- [ ] `you work move <work-id> <state-name>` with `--session`, global `--json`, `clidiag`, `clihttp`, `sessionpath`.
+- [ ] Human output includes work id, previous state, new state, session id.
+- [ ] CLI tests: help, session path, httptest success, in-flight error, **409** on duplicate client request id when exposed.
+- [ ] Functional smoke: `tests/functional/smoke/cli_work_move_smoke_test.go` passes.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-006: Backend world projection
+
+**Description:** As a service consumer, factory world state must reflect manual moves from events.
+
+**Acceptance Criteria:**
+
+- [ ] `pkg/factory/projections/world_state.go` handles `WORK_STATE_CHANGE`: place occupancy, `WorkItemsByID`, failed/terminal maps.
+- [ ] Leaving FAILED updates occupancy maps without dropping retained failure history from stored work facts.
+- [ ] Projection tests: FAILED → in-progress and INITIAL → arbitrary authored state reconstruct expected occupancy.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-007: UI event replay projection
+
+**Description:** As a dashboard user, I see work at the new place after an operator move when scrubbing the timeline.
+
+**Acceptance Criteria:**
+
+- [ ] `replayWorldState.ts` `applyWorkStateChange`: `removeWorkToken`, `addToken`, update `workItemsByID`; adjust `failedWorkItemsByID` when leaving/entering FAILED without erasing historical failure details shown elsewhere.
+- [ ] `FACTORY_EVENT_TYPES` updated after codegen.
+- [ ] Timeline/dashboard tests prove work position at a later tick after a manual move event.
+- [ ] Verify in browser using dev-browser skill: failed work moved to in-progress appears in the target place on the graph/timeline.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-008: Record and replay
+
+**Description:** As a maintainer, recorded runs preserve manual recovery for postmortems.
+
+**Acceptance Criteria:**
+
+- [ ] `replay.Recorder` persists `WORK_STATE_CHANGE` events for operator moves.
+- [ ] Replay reconstructs marking positions including manual moves (same places as live session after move).
+- [ ] Replay test in `pkg/service/replaytests/` or `pkg/factory/runtime/` proves artifact round-trip.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-009: Pause / tick audit (fix if needed)
+
+**Description:** As an operator, pausing the factory freezes automatic subsystem ticks while manual move still works.
+
+**Acceptance Criteria:**
+
+- [ ] Document which subsystems run while `PAUSED` in the work-session guide (dispatcher, cascade, cron, etc.).
+- [ ] Engine tick loop / subsystems do **not** apply marking mutations or scheduling while `PAUSED` (fix if currently violated).
+- [ ] `POST …/move` while paused succeeds without requiring a scheduling tick.
+- [ ] Test: paused factory → no new cascade/dispatch marking changes; operator move still updates marking and emits `WORK_STATE_CHANGE`.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-010: Recovery scenario functional test
+
+**Description:** As CI, we prove failure → cascade (sibling PRD) → manual move → progress.
+
+**Acceptance Criteria:**
+
+- [ ] Fixture: parent fails, child cascaded to FAILED; operator moves parent then child via API; child can progress when factory runs after recovery moves.
+- [ ] In-flight rejection covered in unit/API tests (not duplicated only in this story).
+- [ ] `make verify-pr` green for the recovery lane.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-011: Maintainer guide and AGENTS.md (after implementation)
+
+**Description:** As a future contributor, docs reflect shipped manual recovery behavior.
+
+**Acceptance Criteria:**
+
+- [ ] Update [`work-session-runtime-feature-guide.md`](../../docs/internal/development/work-session-runtime-feature-guide.md) for `WORK_STATE_CHANGE`, pause policy, failure history vs guards.
+- [ ] Cross-link [`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md).
+- [ ] Add standards bullet in root [`AGENTS.md`](../../AGENTS.md) linking the guide **only after US-001–US-010 are complete**.
+- [ ] Typecheck passes
+
+## Functional Requirements
+
+- FR-1: Move targets an authored **state name**; server resolves place ID from topology.
+- FR-2: Session-scoped and default `POST …/work/{id}/move` routes.
+- FR-3: CLI `you work move <work-id> <state-name>` mirrors HTTP.
+- FR-4: Reject move when work is in an active dispatch.
+- FR-5: Each successful operator move appends one `WORK_STATE_CHANGE` (`source: api` | `cli`) before SSE and replay.
+- FR-6: Duplicate `requestId` returns **409 Conflict** without a second mutation.
+- FR-7: Operator move **allowed** while factory is **PAUSED**.
+- FR-8: Automatic subsystem ticks (dispatch, cascade, transition) **must not** advance marking while **PAUSED** — fix if violated (US-009).
+- FR-9: Leaving FAILED: **keep** failure history; **clear** guard-blocking fields (shared helper with cascade PRD).
+- FR-10: Dependents are not auto-moved when parent recovers.
+- FR-11: No delete API/CLI.
+- FR-12: UI and backend projections both consume `WORK_STATE_CHANGE`; no marking-only operator moves.
+
+## Non-Goals
+
+- `you work delete` or token removal.
+- Move by state **type** only when ambiguous.
+- `--force` through in-flight dispatches.
+- Auto-unfail dependents.
+- Batch move.
+- Dashboard move button (follow-up).
+- Cascade event emission (see cascade PRD).
+- Authorization beyond local-trust model.
+
+## Supporting technical and UX considerations
+
+- **Idempotency:** Clients may supply `requestId`; server stores applied operator move ids per session and returns 409 on replay.
+- **CLI errors:** Map HTTP status to exit codes; surface in-flight and invalid-state messages on stderr per CLI standards.
+- **UI:** No new move button in this PRD; timeline/graph must reflect events from API/CLI moves only.
+- **Codegen:** Run `make verify-build-contracts` and commit `pkg/api/generated/` and `ui/src/api/generated/` when contracts change.
+
+## Success Metrics
+
+- Operator recovers cascaded-failed work via one CLI command; dashboard matches `you work show` at the selected tick.
+- Duplicate `requestId` returns 409 without double move.
+- Paused factory: no automatic cascade/dispatch marking changes; manual move still works.
 
 ## Dependencies
 
-| Relationship | Item |
-|--------------|------|
-| Upstream context | Customer ask `11`, PR `#492` (`factoryfixtures`) |
-| Blocked elsewhere | PR `#480` (`cli-submit-response-contract-v3`) — do not touch `pkg/cli/submit` |
-| Independent follow-ons | Petri/net assertions, functional `hasValidationTarget*` under `tests/functional/` |
+| Upstream | Notes |
+| --- | --- |
+| [`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md) | Shares `WORK_STATE_CHANGE`; coordinate US-001 |
+| [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md) | Verify loop after move |
+| [`work-session-runtime-feature-guide.md`](../../docs/internal/development/work-session-runtime-feature-guide.md) | Implementer checklist |
+
+## Related Documents
+
+- [`tasks/prd-cascading-failure-events.md`](../prd-cascading-failure-events.md)
+- [`docs/internal/development/work-session-runtime-feature-guide.md`](../../docs/internal/development/work-session-runtime-feature-guide.md)
+- [`docs/internal/development/record-replay.md`](../../docs/internal/development/record-replay.md)
+- [`tasks/prd-cli-work-inspection.md`](../prd-cli-work-inspection.md)

@@ -1,4 +1,8 @@
 ## Codebase Patterns
+- Manual work recovery OpenAPI: add `WORK_STATE_CHANGE` on `FactoryEventType` with `WorkStateChangeEventPayload` and `WorkStateChangeSource` (`api` | `cli` | `cascading-failure`); extend `canonicalFactoryEventTypeValues`, `bundledFactoryEventPayloadRefs`, `canonical-event-vocabulary-stream.json`, and `generated_contract_*` decoder maps together; add `MoveWorkRequest` plus `POST /work/{id}/move` and session-scoped move routes with `MOVE_WORK_REQUEST_ALREADY_APPLIED` on `ErrorResponse.code`; run `make bundle-api generate-api`; keep `pkg/api/handlers_move.go` compile stubs until story 004 implements handlers.
+- Manual work recovery engine control: `FactoryEngine.MoveWork` validates work existence, authored target state/place, active-dispatch rejection, and terminated engine; applies `MutationMove` synchronously without dispatch events; `interfaces.ClearGuardBlockingFields` retains `FailureLog`/`LastError` when leaving `FAILED`; `factory.WorkMover` + `factoryImpl.MoveWork` expose pause-safe operator ingress with `interfaces.WorkStateChangeSource` for event recording.
+- Manual work recovery event fanout: `FactoryEventHistory.RecordWorkStateChange` emits `WORK_STATE_CHANGE` with `WorkStateChangeEventPayload` and UTC `eventTime` aligned with `RecordWorkRequest`; `factoryImpl.MoveWork` records when `source` is non-empty; live/history subscribers use `SubscribeFactoryEvents` (session-scoped SSE delegates to the same history on the active factory).
+- Manual work recovery HTTP move: `handlers_move.go` routes through `factory.WorkMover` (default) and `SessionAPISurface.MoveWorkForSession`; duplicate `requestId` returns `409 MOVE_WORK_REQUEST_ALREADY_APPLIED` via `factoryImpl.operatorMoveRequests`; handler tests in `server_move_work_test.go`.
 - Canonical validation-target test assertions for API-shaped targets live in `pkg/testutil/validationassert` (`HasTarget`, `HasTargetCode` on `[]factoryapi.FactoryValidationTarget`); `HasTargetCode` accepts an optional topology failure label to preserve service-test diagnostics—import only from `_test.go` files. API tests in `pkg/api/server_factory_test.go` and `pkg/api/servertests/server_factory_validation_test.go` use `validationassert` directly (no local `assertHasValidationTarget*` in `pkg/api`).
 - Batch upsert success responses expose per-work identifiers via `UpsertWorkRequestResponse.works` (`name`, `workTypeName`, `workId`); build domain metadata with `requests.WorkRequestSubmitResultFromNormalized` in the engine and mock factory (primary-work fields plus `Works` slice), then map through `upsertWorkRequestResponse` in `pkg/api/handlers.go` for default and session-scoped PUT routes.
 - Load filesystem-path `FACTORY_REQUEST_BATCH` JSON for CLI ingress through `pkg/cli/batchload.LoadFromFile`, which wraps `pkg/factory/requests.ParseCanonicalWorkRequestJSON`; keep `run.LoadWorkFile` as a thin delegate for existing callers and future `you submit batch` file modes.
@@ -508,4 +512,40 @@
   - Patterns discovered: `apiserver_test` package imports `validationassert` like `api` tests; use targeted replacements for call sites—`replace_all` on `assertHasValidationTargetCode` will corrupt local function definitions if helpers remain in the same file.
   - Gotchas encountered: After `replace_all`, delete leftover `func assertHasValidationTarget*` blocks manually before committing.
   - Useful context: Story 003 retargets `pkg/service/factory_test.go`; story 004 adds domain helpers and retargets `pkg/factory/validation/validation_test.go`.
+---
+
+## 2026-05-30T17:45:00Z - prd-work-manual-recovery-001
+- What was implemented: Added `WORK_STATE_CHANGE` event type with `WorkStateChangeEventPayload` and `WorkStateChangeSource`, `MoveWorkRequest` schema, default and session-scoped `POST .../work/{id}/move` routes with 409 `MoveWorkConflict`, contract tests and canonical fixture sample with `source: cli`, regenerated Go/UI OpenAPI artifacts, and compile-only move handler stubs.
+- Files changed: `api/components/schemas/events/*`, `api/components/schemas/api/MoveWorkRequest.yaml`, `api/components/responses/MoveWorkConflict.yaml`, `api/openapi-main.yaml`, `api/openapi.yaml`, `api/components/schemas/api/ErrorResponse.yaml`, `pkg/api/contracttests/*`, `pkg/api/testdata/canonical-event-vocabulary-stream.json`, `pkg/api/generated/server.gen.go`, `pkg/api/handlers_move.go`, `ui/src/api/generated/openapi.ts`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: New `ErrorResponse.code` values must land in `ErrorResponse.yaml` enum and `assertResponseExampleCodeFamilies` when adding conflict response examples; extend `canonicalFactoryEventTypeValues`, payload refs, fixture JSON, and `generatedFactoryEventPayloadDecoders` in one change.
+  - Gotchas encountered: Generated const is `WorkStateChangeSourceCLI` (all-caps CLI), not `Cli`; `make verify-build-contracts` needs UI `tsc` on PATH—`go test ./pkg/api/contracttests/...` plus `make api-smoke` after `make ui-deps` suffices locally.
+  - Useful context: Branch `ralph/work-manual-recovery` created from `origin/main`; story 002 implements engine `MutationMove` path; story 004 replaces `handlers_move.go` stubs with real handlers.
+---
+
+## 2026-05-30T18:00:00Z - prd-work-manual-recovery-002
+- What was implemented: Added synchronous `FactoryEngine.MoveWork` control ingress with validation for missing work, invalid target state, in-flight dispatches, and terminated engine; applies `MutationMove` without dispatch events; `interfaces.ClearGuardBlockingFields` retains failure history when leaving `FAILED`; wired `factory.WorkMover`/`factoryImpl.MoveWork`; engine and runtime tests cover accept, reject, failed-state recovery, and paused-factory accept paths.
+- Files changed: `pkg/factory/engine/work_move.go`, `pkg/factory/engine/work_move_test.go`, `pkg/interfaces/work_dispatch.go`, `pkg/factory/interfaces.go`, `pkg/factory/runtime/factory.go`, `pkg/factory/runtime/factory_move_work_test.go`, `pkg/testutil/mock_factory.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep operator move on the engine mutex path (`MoveWork`) separate from subsystem ticks; scan `runtimeState.Dispatches[].ConsumedTokens` for in-flight work rejection; use transition-free nets in runtime move tests to avoid incidental dispatch failures during setup.
+  - Gotchas encountered: `pkg/factory/engine` has a 15-file cap—colocate sentinel errors in `work_move.go` instead of adding `work_move_errors.go`; `buildSimpleNet()` dispatches on first tick so paused-move runtime proof needs a no-transition net.
+  - Useful context: Story 003 should call `RecordWorkStateChange` after successful `MoveWork`; story 004 routes HTTP handlers through `FactoryService` using the same `WorkMover` seam.
+---
+
+## 2026-05-30T16:50:00Z - prd-work-manual-recovery-003
+- What was implemented: Added `FactoryEventHistory.RecordWorkStateChange` for `WORK_STATE_CHANGE` operator events with UTC `eventTime` aligned to `RecordWorkRequest`; extended `WorkMover.MoveWork` with `interfaces.WorkStateChangeSource` so `factoryImpl` records successful moves; added event-history and runtime subscription regressions.
+- Files changed: `pkg/interfaces/work_dispatch.go`, `pkg/factory/events/event_history.go`, `pkg/factory/events/event_history_work_state_change_test.go`, `pkg/factory/interfaces.go`, `pkg/factory/runtime/factory.go`, `pkg/factory/runtime/factory_move_work_test.go`, `pkg/testutil/mock_factory.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Pass `WorkStateChangeSource` on `factory.MoveWork` from HTTP/CLI ingress in story 004; empty source skips history so engine-only tests stay unchanged; event IDs use `factory-event/work-state-change/<workId>/<tick>`.
+  - Gotchas encountered: Live SSE tests must subscribe after setup ticks so earlier `WORK_REQUEST` events do not mask the move event; use `event.Context.WorkIds` pointer deref in event-history tests—there is no `sliceValueForEventHistoryTest` helper.
+  - Useful context: Session-scoped SSE uses `FactoryService.SubscribeFactoryEventsForSession` delegating to the same `FactoryEventHistory.Subscribe` on the active factory instance.
+---
+
+## 2026-05-30T16:54:04Z - prd-work-manual-recovery-004
+- What was implemented: HTTP `POST /work/{id}/move` and session-scoped move routes with status mapping (404/400/409/200), `requestId` idempotency on `factoryImpl`, `FactoryService.MoveWorkForSession`, and handler/runtime/API tests including paused-factory integration.
+- Files changed: `pkg/api/handlers_move.go`, `pkg/api/server_move_work_test.go`, `pkg/apisurface/contract.go`, `pkg/factory/interfaces.go`, `pkg/factory/runtime/factory.go`, `pkg/factory/runtime/factory_move_work_idempotency_test.go`, `pkg/interfaces/work_dispatch.go`, `pkg/service/runtime_sessions.go`, `pkg/service/factory_test.go`, `pkg/service/ingest/filewatcher_test.go`, `pkg/testutil/mock_factory.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Default move handlers type-assert `factory.WorkMover` on `APISurface`; session moves use `MoveWorkForSession` on `SessionAPISurface` to avoid `MoveWork` signature conflicts between API and factory layers.
+  - Gotchas encountered: `MockFactory` cannot implement both `factory.WorkMover.MoveWork(..., source, requestID)` and a shorter APISurface `MoveWork` on the same type—keep factory ingress on `WorkMover` and session routing on `MoveWorkForSession`.
+  - Useful context: Story 005 implements `you work move` CLI calling the same engine path with `WorkStateChangeSourceCLI`.
 ---
