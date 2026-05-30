@@ -231,10 +231,7 @@ func TestStartLinearPoller_RestartsOnMissingAuthConfig(t *testing.T) {
 
 	waitForFakeClockWaiters(t, fakeClock, 1)
 	fakeClock.Advance(restartBackoffMin)
-	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
-	if observedLogs.FilterMessage("hosted linear poller restarting").Len() < 2 {
-		t.Fatalf("restart log count = %d, want at least 2 after backoff", observedLogs.FilterMessage("hosted linear poller restarting").Len())
-	}
+	waitForObservedLogCount(t, observedLogs, "hosted linear poller restarting", 2, time.Second)
 }
 
 func waitForSubmitCalls(t *testing.T, submitCalls *int, want int, timeout time.Duration) {
@@ -251,14 +248,19 @@ func waitForSubmitCalls(t *testing.T, submitCalls *int, want int, timeout time.D
 
 func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, message string, timeout time.Duration) {
 	t.Helper()
+	waitForObservedLogCount(t, logs, message, 1, timeout)
+}
+
+func waitForObservedLogCount(t *testing.T, logs *observer.ObservedLogs, message string, want int, timeout time.Duration) {
+	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if logs.FilterMessage(message).Len() > 0 {
+		if logs.FilterMessage(message).Len() >= want {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for log message %q", message)
+	t.Fatalf("timed out waiting for %d log message(s) %q; got %d", want, message, logs.FilterMessage(message).Len())
 }
 
 func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
