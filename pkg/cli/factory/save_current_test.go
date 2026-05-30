@@ -60,7 +60,7 @@ func TestSaveCurrent_PutSendsCurrentFactoryIncludingVersion(t *testing.T) {
 		Name:    "beta",
 		Version: &factoryapi.HybridLogicalTimestamp{Logical: 44, Physical: versionTime},
 	}
-	var putPayload factoryapi.Factory
+	var putPayload factoryapi.SaveFactoryForSessionRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/factory-sessions/~default/factory" {
 			t.Fatalf("path = %q, want /factory-sessions/~default/factory", r.URL.Path)
@@ -76,7 +76,7 @@ func TestSaveCurrent_PutSendsCurrentFactoryIncludingVersion(t *testing.T) {
 				t.Fatalf("decode PUT body: %v", err)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(putPayload); err != nil {
+			if err := json.NewEncoder(w).Encode(putPayload.Factory); err != nil {
 				t.Fatalf("encode PUT response: %v", err)
 			}
 		default:
@@ -88,11 +88,14 @@ func TestSaveCurrent_PutSendsCurrentFactoryIncludingVersion(t *testing.T) {
 	if err := SaveCurrent(SaveCurrentConfig{Server: serverBase(t, srv), Output: ioDiscard(t)}); err != nil {
 		t.Fatalf("SaveCurrent: %v", err)
 	}
-	if putPayload.Name != "beta" {
-		t.Fatalf("PUT payload name = %q, want beta", putPayload.Name)
+	if putPayload.Mode == nil || *putPayload.Mode != factoryapi.FactorySaveModeReplaceCurrent {
+		t.Fatalf("PUT payload mode = %#v, want REPLACE_CURRENT", putPayload.Mode)
 	}
-	if putPayload.Version == nil || putPayload.Version.Logical != 44 {
-		t.Fatalf("PUT payload version = %#v, want logical 44", putPayload.Version)
+	if putPayload.Factory.Name != "beta" {
+		t.Fatalf("PUT payload factory name = %q, want beta", putPayload.Factory.Name)
+	}
+	if putPayload.Factory.Version == nil || putPayload.Factory.Version.Logical.Int64() != 45 {
+		t.Fatalf("PUT payload factory version = %#v, want logical 45", putPayload.Factory.Version)
 	}
 }
 

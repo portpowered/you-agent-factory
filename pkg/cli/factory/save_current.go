@@ -14,6 +14,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
@@ -93,9 +94,10 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 		current.Name,
 	)
 
-	payload, err := json.Marshal(current)
+	requestBody := buildSaveFactoryForSessionRequest(current)
+	payload, err := json.Marshal(requestBody)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("encode current factory payload: %w", err)
+		return factoryapi.Factory{}, fmt.Errorf("encode save factory for session payload: %w", err)
 	}
 
 	client := &http.Client{Timeout: saveCurrentRequestTimeout}
@@ -168,6 +170,26 @@ func saveCurrentError(statusCode int, body []byte) error {
 		return unexpectedSaveCurrentStatusError(statusCode, body)
 	}
 	return fmt.Errorf("save current factory failed (%d): %s", statusCode, errResp.Message)
+}
+
+func buildSaveFactoryForSessionRequest(current factoryapi.Factory) factoryapi.SaveFactoryForSessionRequest {
+	factoryPayload := current
+	factoryPayload.Version = advanceFactoryVersionForSave(current.Version)
+	mode := factoryapi.FactorySaveModeReplaceCurrent
+	return factoryapi.SaveFactoryForSessionRequest{
+		Factory: factoryPayload,
+		Mode:    &mode,
+	}
+}
+
+func advanceFactoryVersionForSave(current *factoryapi.HybridLogicalTimestamp) *factoryapi.HybridLogicalTimestamp {
+	if current == nil {
+		return nil
+	}
+	advanced := *current
+	advanced.Logical = apitypes.Int64String(current.Logical.Int64() + 1)
+	advanced.Physical = current.Physical.UTC().Add(time.Millisecond)
+	return &advanced
 }
 
 func unexpectedSaveCurrentStatusError(statusCode int, body []byte) error {
