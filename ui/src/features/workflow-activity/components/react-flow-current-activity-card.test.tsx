@@ -43,12 +43,7 @@ import {
   SYSTEM_TIME_WORK_TYPE_ID,
   systemTimeGraphNodeId,
 } from "../../factory-graph-editor/lib/factory-graph-customer-display";
-import {
-  addFactoryGraphNode,
-  connectFactoryGraphNodes,
-  disconnectFactoryGraphEdge,
-  removeFactoryGraphNode,
-} from "../../factory-graph-editor/lib/factory-graph-operations";
+import { removeFactoryGraphNode } from "../../factory-graph-editor/lib/factory-graph-operations";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 import {
