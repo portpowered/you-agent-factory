@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test, vi } from "vitest";
 
 import {
+  buildMainCoveredShardPhase,
   buildUiCoveragePhases,
   defaultMainCoveredMaxWorkers,
   formatElapsedMs,
@@ -11,10 +12,13 @@ import {
   formatSlowFileSummaryLines,
   getMainCoveredMaxWorkers,
   mainCoveredPhaseName,
+  mainCoveredShardBlobPath,
+  parseUiCoverageShard,
   parseVitestFileDurationsFromLog,
   phaseLogPrefix,
   rankSlowestTestFiles,
   runTimedPhase,
+  runUiCoverage,
   uiCoveragePhases,
 } from "./ui-coverage-runner.mjs";
 
@@ -131,6 +135,83 @@ test("formats a bounded slow-file summary with stable labels", () => {
     `${phaseLogPrefix}   src/features/timeline/state/factoryTimelineStore.test.ts 5.00s`,
     `${phaseLogPrefix}   src/i18n/formatters.test.ts 0.12s`,
   ]);
+});
+
+test("parses UI_COVERAGE_SHARD index/total pairs", () => {
+  expect(parseUiCoverageShard({ UI_COVERAGE_SHARD: "3/10" })).toEqual({
+    index: 3,
+    label: "3/10",
+    total: 10,
+  });
+  expect(parseUiCoverageShard({ UI_COVERAGE_SHARD: " 1/1 " })).toEqual({
+    index: 1,
+    label: "1/1",
+    total: 1,
+  });
+  expect(parseUiCoverageShard({})).toBeNull();
+});
+
+test("rejects invalid UI_COVERAGE_SHARD values", () => {
+  expect(() => parseUiCoverageShard({ UI_COVERAGE_SHARD: "shard-3" })).toThrow(
+    /expected format index\/total/,
+  );
+  expect(() => parseUiCoverageShard({ UI_COVERAGE_SHARD: "0/10" })).toThrow(
+    /index must be between 1 and 10/,
+  );
+  expect(() => parseUiCoverageShard({ UI_COVERAGE_SHARD: "11/10" })).toThrow(
+    /index must be between 1 and 10/,
+  );
+});
+
+test("builds shard main pass with vitest shard flag and unique blob output", () => {
+  const shard = { index: 3, label: "3/10", total: 10 };
+  const phase = buildMainCoveredShardPhase(shard, {
+    mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
+  });
+
+  expect(phase.name).toBe(`${mainCoveredPhaseName} (shard 3/10)`);
+  expect(phase.args).toContain("--shard=3/10");
+  expect(phase.args).toContain(
+    `--outputFile.blob=${mainCoveredShardBlobPath(3)}`,
+  );
+  expect(phase.args).not.toContain("--outputFile.blob=.vitest-reports/main.json");
+  expect(phase.args).toContain(
+    `--maxWorkers=${defaultMainCoveredMaxWorkers}`,
+  );
+  expect(phase.args).toEqual(
+    expect.arrayContaining([
+      "--exclude",
+      "integration/*.integration.test.mjs",
+      "--exclude",
+      "scripts/dashboard-shell-storybook-responsive.test.mjs",
+      "--exclude",
+      "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
+    ]),
+  );
+});
+
+test("runUiCoverage in shard mode runs only the shard main pass", () => {
+  const spawn = vi.fn(() => ({ status: 0, stdout: fixtureLogSnippet }));
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
+
+  runUiCoverage(uiCoveragePhases, {
+    env: { UI_COVERAGE_SHARD: "2/10" },
+    spawn,
+  });
+
+  expect(spawn).toHaveBeenCalledTimes(1);
+  expect(spawn.mock.calls[0][1]).toContain("--shard=2/10");
+  expect(spawn.mock.calls[0][1]).toContain(
+    `--outputFile.blob=${mainCoveredShardBlobPath(2)}`,
+  );
+  expect(log).toHaveBeenCalledWith(
+    expect.stringContaining("Main covered Vitest pass (shard 2/10) elapsed:"),
+  );
+  expect(exit).not.toHaveBeenCalled();
+
+  log.mockRestore();
+  exit.mockRestore();
 });
 
 test("emits elapsed output before returning a failing phase status", () => {

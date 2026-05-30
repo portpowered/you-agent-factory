@@ -16,33 +16,99 @@ export function getMainCoveredMaxWorkers(env = process.env) {
   return env.UI_COVERAGE_MAIN_MAX_WORKERS || defaultMainCoveredMaxWorkers;
 }
 
+const mainCoveredPassKind = "main-covered";
+
+export function parseUiCoverageShard(env = process.env) {
+  const raw = env.UI_COVERAGE_SHARD?.trim();
+  if (!raw) {
+    return null;
+  }
+
+  const match = /^(\d+)\/(\d+)$/.exec(raw);
+  if (!match) {
+    throw new Error(
+      `Invalid UI_COVERAGE_SHARD "${raw}"; expected format index/total (e.g. 3/10)`,
+    );
+  }
+
+  const index = Number(match[1]);
+  const total = Number(match[2]);
+  if (!Number.isInteger(index) || !Number.isInteger(total) || total < 1) {
+    throw new Error(
+      `Invalid UI_COVERAGE_SHARD "${raw}"; total must be a positive integer`,
+    );
+  }
+  if (index < 1 || index > total) {
+    throw new Error(
+      `Invalid UI_COVERAGE_SHARD "${raw}"; index must be between 1 and ${total}`,
+    );
+  }
+
+  return { index, label: raw, total };
+}
+
+export function mainCoveredShardBlobPath(shardIndex) {
+  return `.vitest-reports/main-shard-${shardIndex}.json`;
+}
+
+export function buildMainCoveredVitestArgs(options = {}) {
+  const mainCoveredMaxWorkers =
+    options.mainCoveredMaxWorkers ?? getMainCoveredMaxWorkers(options.env);
+  const blobPath =
+    options.blobPath ?? ".vitest-reports/main.json";
+  const args = [
+    "run",
+    "--coverage",
+    "--coverage.clean=false",
+    `--maxWorkers=${mainCoveredMaxWorkers}`,
+    "--coverage.thresholds.lines=0",
+    "--coverage.thresholds.functions=0",
+    "--coverage.thresholds.statements=0",
+    "--coverage.thresholds.branches=0",
+    "--reporter=default",
+    "--reporter=blob",
+    `--outputFile.blob=${blobPath}`,
+    "--exclude",
+    "integration/*.integration.test.mjs",
+    "--exclude",
+    "scripts/dashboard-shell-storybook-responsive.test.mjs",
+    "--exclude",
+    "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
+  ];
+
+  if (options.shard) {
+    args.push(`--shard=${options.shard.index}/${options.shard.total}`);
+  }
+
+  return args;
+}
+
+export function buildMainCoveredShardPhase(shard, options = {}) {
+  return {
+    kind: mainCoveredPassKind,
+    name: `${mainCoveredPhaseName} (shard ${shard.label})`,
+    command: "vitest",
+    args: buildMainCoveredVitestArgs({
+      ...options,
+      blobPath: mainCoveredShardBlobPath(shard.index),
+      shard,
+    }),
+  };
+}
+
 export function buildUiCoveragePhases(options = {}) {
   const mainCoveredMaxWorkers =
     options.mainCoveredMaxWorkers ?? getMainCoveredMaxWorkers(options.env);
 
   return [
     {
+      kind: mainCoveredPassKind,
       name: mainCoveredPhaseName,
       command: "vitest",
-      args: [
-        "run",
-        "--coverage",
-        "--coverage.clean=false",
-        `--maxWorkers=${mainCoveredMaxWorkers}`,
-        "--coverage.thresholds.lines=0",
-        "--coverage.thresholds.functions=0",
-        "--coverage.thresholds.statements=0",
-        "--coverage.thresholds.branches=0",
-        "--reporter=default",
-        "--reporter=blob",
-        "--outputFile.blob=.vitest-reports/main.json",
-        "--exclude",
-        "integration/*.integration.test.mjs",
-        "--exclude",
-        "scripts/dashboard-shell-storybook-responsive.test.mjs",
-        "--exclude",
-        "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
-      ],
+      args: buildMainCoveredVitestArgs({
+        env: options.env,
+        mainCoveredMaxWorkers,
+      }),
     },
     {
       name: "Isolated React Flow covered pass",
@@ -178,12 +244,35 @@ export function logSlowFileSummary(capturedStdout) {
   }
 }
 
-export function runUiCoverage(phases = uiCoveragePhases) {
+export function runUiCoverageShard(shard, options = {}) {
+  const spawn = options.spawn ?? spawnSync;
+  const phase = buildMainCoveredShardPhase(shard, options);
+  const { capturedStdout, status } = runTimedPhase(phase, spawn, {
+    captureStdout: true,
+  });
+
+  if (status !== 0) {
+    process.exit(status);
+  }
+
+  logSlowFileSummary(capturedStdout);
+}
+
+export function runUiCoverage(phases = uiCoveragePhases, options = {}) {
+  const env = options.env ?? process.env;
+  const spawn = options.spawn ?? spawnSync;
+  const shard = parseUiCoverageShard(env);
+
+  if (shard) {
+    runUiCoverageShard(shard, options);
+    return;
+  }
+
   cleanCoverageArtifacts();
 
   for (const phase of phases) {
-    const captureStdout = phase.name === mainCoveredPhaseName;
-    const { capturedStdout, status } = runTimedPhase(phase, spawnSync, {
+    const captureStdout = phase.kind === mainCoveredPassKind;
+    const { capturedStdout, status } = runTimedPhase(phase, spawn, {
       captureStdout,
     });
 

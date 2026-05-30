@@ -142,7 +142,7 @@ verify-extended:
 
 test-ui-coverage:
 	$(MAKE) ui-test-coverage
-	$(MAKE) ui-replay-coverage-check
+	@if [ -z "$$UI_COVERAGE_SHARD" ]; then $(MAKE) ui-replay-coverage-check; fi
 
 test-ui-browser-integration:
 	$(MAKE) ui-integration-test
