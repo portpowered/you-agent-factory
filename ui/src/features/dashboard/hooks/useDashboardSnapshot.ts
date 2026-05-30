@@ -1,172 +1,21 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
-import { FACTORY_EVENT_TYPES, openFactoryEventStream } from "../../../api/events";
-import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import {
-  currentFactoryDocumentQueryKey,
-  currentFactoryDefinitionQueryKey,
-} from "../../current-factory-definition/public";
-import {
-  compactFactoryEventForTimeline,
   installFactoryTimelineDebugGlobal,
   persistFactoryTimelineMemorySummary,
   readFactoryTimelineDebugOptions,
   summarizeFactoryTimelineMemory,
 } from "../../timeline/state/factoryTimelineDebug";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
-import {
-  useDashboardStreamStore,
-} from "../state/dashboardStreamStore";
-import { dashboardSessionKey } from "../lib/dashboard-session-lifecycle";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardWorldView } from "./useDashboardWorldView";
+import { useFactoryEventStream } from "./useFactoryEventStream";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;
   refreshToken?: number;
-}
-
-interface DashboardStreamConnectionOptions {
-  debugOptions: ReturnType<typeof readFactoryTimelineDebugOptions>;
-  flushHandleRef: RefObject<number | null>;
-  flushQueuedEvents: () => void;
-  queryClient: ReturnType<typeof useQueryClient>;
-  queuedEventsRef: RefObject<FactoryEvent[]>;
-  isPaused: boolean;
-  rawSessionID: string | null;
-  refreshToken: number;
-  scheduleQueuedFlush: () => void;
-  sessionID: string;
-  setStreamState: (streamState: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]) => void;
-}
-
-function clearQueuedFlush(flushHandleRef: RefObject<number | null>): void {
-  if (flushHandleRef.current === null) {
-    return;
-  }
-  if (typeof window.cancelAnimationFrame === "function") {
-    window.cancelAnimationFrame(flushHandleRef.current);
-  } else {
-    window.clearTimeout(flushHandleRef.current);
-  }
-  flushHandleRef.current = null;
-}
-
-function prepareDashboardStreamSession({
-  hasOpenedStreamRef,
-  previousSessionKey,
-  queuedEventsRef,
-  refreshToken,
-  selectedSessionID,
-}: {
-  hasOpenedStreamRef: RefObject<boolean>;
-  previousSessionKey: string | null;
-  queuedEventsRef: RefObject<FactoryEvent[]>;
-  refreshToken: number;
-  selectedSessionID: string | null;
-}): boolean {
-  if (selectedSessionID == null) {
-    queuedEventsRef.current = [];
-    hasOpenedStreamRef.current = false;
-    return false;
-  }
-
-  if (previousSessionKey !== null || refreshToken !== 0) {
-    queuedEventsRef.current = [];
-  }
-  hasOpenedStreamRef.current = true;
-
-  return true;
-}
-
-function pausedDashboardStreamState() {
-  return {
-    status: "offline" as const,
-    // hardcoded-ui-copy-exception: non-product-diagnostic
-    message: "Live session updates paused. Showing last event state.",
-  };
-}
-
-function useDashboardStreamConnection({
-  debugOptions,
-  flushHandleRef,
-  flushQueuedEvents,
-  isPaused,
-  queryClient,
-  queuedEventsRef,
-  rawSessionID,
-  refreshToken,
-  scheduleQueuedFlush,
-  sessionID,
-  setStreamState,
-}: DashboardStreamConnectionOptions) {
-  const hasOpenedStreamRef = useRef(false);
-  const lastSessionKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const sessionKey = dashboardSessionKey(rawSessionID, refreshToken);
-    const previousSessionKey = lastSessionKeyRef.current;
-    const sessionSelectionChanged = sessionKey !== previousSessionKey;
-    lastSessionKeyRef.current = sessionKey;
-
-    if (!sessionSelectionChanged && isPaused) {
-      setStreamState(pausedDashboardStreamState());
-      return;
-    }
-
-    if (!sessionSelectionChanged && !isPaused && rawSessionID == null) {
-      return;
-    }
-
-    const shouldOpenStream = prepareDashboardStreamSession({
-      hasOpenedStreamRef,
-      previousSessionKey: sessionSelectionChanged ? previousSessionKey : null,
-      queuedEventsRef,
-      refreshToken,
-      selectedSessionID: rawSessionID,
-    });
-    if (!shouldOpenStream || rawSessionID == null) {
-      return;
-    }
-    if (isPaused) {
-      setStreamState(pausedDashboardStreamState());
-      return;
-    }
-
-    const stream = openFactoryEventStream(
-      (event) => {
-        syncCurrentFactoryDefinition(queryClient, event, sessionID);
-        queuedEventsRef.current.push(
-          compactFactoryEventForTimeline(event, debugOptions),
-        );
-        scheduleQueuedFlush();
-      },
-      (status, message) => {
-        setStreamState({ status, message });
-      },
-      sessionID,
-    );
-    return () => {
-      clearQueuedFlush(flushHandleRef);
-      flushQueuedEvents();
-      stream?.close();
-    };
-  }, [
-    debugOptions,
-    flushHandleRef,
-    flushQueuedEvents,
-    isPaused,
-    queryClient,
-    queuedEventsRef,
-    rawSessionID,
-    refreshToken,
-    scheduleQueuedFlush,
-    sessionID,
-    setStreamState,
-  ]);
 }
 
 function useDashboardTimelineMemoryDebug({
@@ -207,15 +56,14 @@ export function useDashboardSnapshot({
   locale,
   refreshToken = 0,
 }: UseDashboardSnapshotOptions = {}) {
-  const queryClient = useQueryClient();
   const appendEvents = useFactoryTimelineStore((state) => state.appendEvents);
   const eventCount = useFactoryTimelineStore((state) => state.events.length);
   const { error, isInitialLoading, snapshot, streamState } = useDashboardWorldView();
-  const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
-  const { isPaused, rawSessionID, sessionID } = useDashboardSession();
-  const queuedEventsRef = useRef<FactoryEvent[]>([]);
-  const flushHandleRef = useRef<number | null>(null);
+  const { isPaused, rawSessionID } = useDashboardSession();
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
+  const queuedAppendRef = useRef<(events: FactoryEvent[]) => void>(appendEvents);
+
+  queuedAppendRef.current = appendEvents;
 
   useDashboardSessionLifecycle({
     locale,
@@ -223,49 +71,16 @@ export function useDashboardSnapshot({
     sessionID: rawSessionID,
   });
 
-  const flushQueuedEvents = useCallback(() => {
-    flushHandleRef.current = null;
-    if (queuedEventsRef.current.length === 0) {
-      return;
-    }
-    const events = queuedEventsRef.current;
-    queuedEventsRef.current = [];
-    appendEvents(events);
-  }, [appendEvents]);
-
-  const scheduleQueuedFlush = useCallback(() => {
-    if (flushHandleRef.current !== null) {
-      return;
-    }
-    if (typeof window.requestAnimationFrame === "function") {
-      flushHandleRef.current = window.requestAnimationFrame(() => {
-        flushQueuedEvents();
-      });
-      return;
-    }
-    flushHandleRef.current = window.setTimeout(() => {
-      flushQueuedEvents();
-    }, 16);
-  }, [flushQueuedEvents]);
-
-  useEffect(() => {
-    return () => {
-      clearQueuedFlush(flushHandleRef);
-    };
+  const handleStreamEvent = useCallback((event: FactoryEvent) => {
+    queuedAppendRef.current([event]);
   }, []);
 
-  useDashboardStreamConnection({
-    debugOptions,
-    flushHandleRef,
-    flushQueuedEvents,
-    isPaused,
-    queryClient,
-    queuedEventsRef,
-    rawSessionID,
+  useFactoryEventStream({
+    enabled: rawSessionID != null && !isPaused,
+    locale,
+    onEvent: handleStreamEvent,
     refreshToken,
-    scheduleQueuedFlush,
-    sessionID,
-    setStreamState,
+    sessionID: rawSessionID,
   });
 
   useDashboardTimelineMemoryDebug({
@@ -282,29 +97,4 @@ export function useDashboardSnapshot({
     }),
     [error, snapshot, streamState, isInitialLoading],
   );
-}
-
-function syncCurrentFactoryDefinition(
-  queryClient: ReturnType<typeof useQueryClient>,
-  event: FactoryEvent,
-  sessionID: string,
-): void {
-  if (event.type !== FACTORY_EVENT_TYPES.factoryChange) {
-    return;
-  }
-  const payloadFactory = (event.payload as { factory?: unknown }).factory;
-  if (payloadFactory == null) {
-    return;
-  }
-  try {
-    queryClient.setQueryData(
-      currentFactoryDefinitionQueryKey(sessionID),
-      normalizeFactoryDefinition(payloadFactory),
-    );
-    void queryClient.invalidateQueries({
-      queryKey: currentFactoryDocumentQueryKey(sessionID),
-    });
-  } catch {
-    return;
-  }
 }
