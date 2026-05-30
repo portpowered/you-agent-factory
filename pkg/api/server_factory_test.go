@@ -569,6 +569,51 @@ func TestValidateFactory_ReturnsMultipleTargetsForInvalidFactory(t *testing.T) {
 	assertHasValidationTargetCode(t, result.Targets, factoryvalidation.CodeDanglingPlaceReference)
 }
 
+func TestValidateFactory_ReturnsCanonicalWorkstationSubjects(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	body := `{
+		"name":"alpha",
+		"workTypes":[{"name":"task","states":[{"name":"queued","type":"INITIAL"}]}],
+		"workers":[{"name":"worker-a"}],
+		"workstations":[{
+			"name":"process",
+			"behavior":"REPEATER",
+			"worker":"worker-a",
+			"outputs":[{"workType":"task","state":"queued"}]
+		}]
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	result := decodeJSONResponse[factoryapi.FactoryValidationResult](t, rec)
+	assertHasValidationTarget(
+		t,
+		result.Targets,
+		factoryvalidation.CodeWorkstationMissingRejectionRoute,
+		factoryapi.FactoryValidationSubjectTypeWorkstation,
+		"process",
+		factoryapi.FactoryValidationSubjectLocationOnRejection,
+		"process ON_REJECTION target",
+	)
+	assertHasValidationTarget(
+		t,
+		result.Targets,
+		factoryvalidation.CodeWorkTypeMissingCompletionState,
+		factoryapi.FactoryValidationSubjectTypeWorkType,
+		"task",
+		factoryapi.FactoryValidationSubjectLocationStates,
+		"task STATES target",
+	)
+}
+
 func TestValidateFactory_RejectsMalformedPayload(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 
