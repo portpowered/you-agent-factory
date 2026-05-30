@@ -284,7 +284,7 @@ ui-test:
 ifeq ($(BUN_BIN),)
 	$(error UI unit tests require Bun 1.3.12+ on PATH. Install from https://bun.sh and retry.)
 endif
-	cd ui && $(BUN_BIN) run test:unit
+	cd ui && $(UI_SCRIPT) test:unit
 
 ui-integration-test:
 ifeq ($(BUN_BIN),)
@@ -297,7 +297,7 @@ ui-test-coverage:
 ifeq ($(BUN_BIN),)
 	$(error UI coverage requires Bun 1.3.12+ on PATH. Install from https://bun.sh and retry.)
 endif
-	cd ui && $(BUN_BIN) run test:coverage
+	cd ui && $(UI_SCRIPT) test:coverage
 
 ui-replay-coverage-check:
 ifeq ($(BUN_BIN),)
