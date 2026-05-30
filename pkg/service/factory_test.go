@@ -489,6 +489,17 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 func (h *runningSessionService) stop(t *testing.T) {
 	t.Helper()
 
+	if h.svc != nil && h.svc.sessions != nil {
+		for _, sessionID := range append([]string(nil), h.svc.sessions.IDs()...) {
+			if sessionID == defaultFactorySessionID {
+				continue
+			}
+			if err := h.svc.CloseFactorySession(context.Background(), sessionID); err != nil {
+				t.Fatalf("CloseFactorySession(%s): %v", sessionID, err)
+			}
+		}
+	}
+
 	h.cancelRun()
 	select {
 	case err := <-h.runErrCh:
