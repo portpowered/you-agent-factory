@@ -1,3 +1,4 @@
+import "../testing/bun-app-shell-module-mocks";
 import {
   act,
   fireEvent,

@@ -1,5 +1,3 @@
-// @vitest-environment node
-
 import type { UserConfig } from "vite";
 import viteConfig from "./vite.config";
 

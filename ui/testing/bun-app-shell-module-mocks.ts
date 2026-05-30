@@ -14,6 +14,12 @@ export const useCurrentFactoryDocumentMock = mock(() => {
   throw new Error("useCurrentFactoryDocumentMock not configured");
 });
 
+(
+  globalThis as typeof globalThis & {
+    __useCurrentFactoryDocumentMock?: typeof useCurrentFactoryDocumentMock;
+  }
+).__useCurrentFactoryDocumentMock = useCurrentFactoryDocumentMock;
+
 const layoutActual = await import(LAYOUT_MODULE);
 const { buildDashboardTestGraphLayout } = await import(
   "../src/testing/app-shell-test-graph-layout"

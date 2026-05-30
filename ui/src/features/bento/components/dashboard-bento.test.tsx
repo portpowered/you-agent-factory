@@ -49,10 +49,7 @@ const SHARED_SELECTED_SESSION: LoadableProviderSessionRef = {
   provider: "codex",
 };
 
-vi.mock("../../current-selection/public", async () => {
-  const React = await vi.importActual<typeof import("react")>("react");
-
-  return {
+vi.mock("../../current-selection/public", () => ({
     CurrentSelectionWidget: ({
       headerAction,
       onSelectProviderSession,
@@ -86,8 +83,7 @@ vi.mock("../../current-selection/public", async () => {
         setSelectedProviderSession,
       };
     },
-  };
-});
+}));
 
 vi.mock("../../provider-session-detail/public", () => ({
   ProviderSessionWidget: ({

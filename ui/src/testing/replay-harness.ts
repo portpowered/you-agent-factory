@@ -118,16 +118,27 @@ export function createReplayHarness(): ReplayHarness {
     ReplayEventSource.instances = [];
     originalEventSource = globalThis.EventSource;
     globalThis.EventSource = ReplayEventSource as unknown as typeof EventSource;
+    if (typeof globalThis.window !== "undefined") {
+      (globalThis.window as typeof globalThis & { EventSource: typeof EventSource }).EventSource =
+        ReplayEventSource as unknown as typeof EventSource;
+    }
   }
 
   function reset(): void {
     ReplayEventSource.instances = [];
     if (typeof originalEventSource === "undefined") {
       delete (globalThis as { EventSource?: typeof EventSource }).EventSource;
+      if (typeof globalThis.window !== "undefined") {
+        delete (globalThis.window as { EventSource?: typeof EventSource }).EventSource;
+      }
       return;
     }
 
     globalThis.EventSource = originalEventSource;
+    if (typeof globalThis.window !== "undefined") {
+      (globalThis.window as typeof globalThis & { EventSource: typeof EventSource }).EventSource =
+        originalEventSource;
+    }
   }
 
   function emitSnapshot(snapshot: DashboardSnapshot): void {

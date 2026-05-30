@@ -1,3 +1,4 @@
+import "../testing/bun-app-shell-module-mocks";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";

@@ -1,0 +1,12 @@
+[test]
+# Node-only unit specs (vite config, *.node.test.*, script verifiers). No jsdom preload side effects.
+preload = [
+  "./testing/bun-node-fs.preload.ts",
+  "./testing/bun-dom.preload.ts",
+  "./testing/bun-test.preload.ts",
+  "./testing/bun-vitest-globals.preload.ts",
+]
+timeout = 30000
+pathIgnorePatterns = [
+  "node_modules/**",
+]

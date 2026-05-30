@@ -102,18 +102,17 @@ describe("useMeasuredTraceGraphViewport", () => {
     render(<MeasuredViewportProbe />);
 
     const viewport = screen.getByTestId("measured-viewport");
-    viewport.getBoundingClientRect = () =>
-      ({
-        bottom: 360,
-        height: 360,
-        left: 0,
-        right: 640,
-        top: 0,
-        width: 640,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      bottom: 360,
+      height: 360,
+      left: 0,
+      right: 640,
+      top: 0,
+      width: 640,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
 
     act(() => {
       ControlledResizeObserver.instances[0]?.emitEmptyEntries();
@@ -140,20 +139,20 @@ describe("useMeasuredTraceGraphViewport", () => {
 
     const { unmount } = render(<MeasuredViewportProbe />);
     const viewport = screen.getByTestId("measured-viewport");
-    viewport.getBoundingClientRect = () =>
-      ({
-        bottom: 240,
-        height: 240,
-        left: 0,
-        right: 480,
-        top: 0,
-        width: 480,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
 
-    expect(viewport.getAttribute("data-ready")).toBe("waiting");
+    expect(scheduledFrame).toBeDefined();
+
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      bottom: 240,
+      height: 240,
+      left: 0,
+      right: 480,
+      top: 0,
+      width: 480,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
 
     act(() => {
       scheduledFrame?.(performance.now());

@@ -1,3 +1,4 @@
+import "../testing/bun-app-shell-module-mocks";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { act } from "react";
 import { describe, expect, it } from "vitest";

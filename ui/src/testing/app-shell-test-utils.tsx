@@ -429,10 +429,12 @@ export function mockCurrentFactoryDocument(
   result: CurrentFactoryDocumentResult,
 ): void {
   if (isBunTestRuntime) {
-    const { useCurrentFactoryDocumentMock } =
-      require("../../testing/bun-app-shell-module-mocks") as typeof import(
-        "../../testing/bun-app-shell-module-mocks"
+    const useCurrentFactoryDocumentMock = globalThis.__useCurrentFactoryDocumentMock;
+    if (!useCurrentFactoryDocumentMock) {
+      throw new Error(
+        "Bun app-shell mocks are not loaded; ensure ui/testing/bun-test.preload.ts runs before tests.",
       );
+    }
     useCurrentFactoryDocumentMock.mockReturnValue(result as never);
     return;
   }

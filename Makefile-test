@@ -282,10 +282,9 @@ endif
 
 ui-test:
 ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec vitest run --exclude 'integration/*.integration.test.mjs'
-else
-	cd ui && $(UI_SCRIPT) test:unit
+	$(error UI unit tests require Bun 1.3.12+ on PATH. Install from https://bun.sh and retry.)
 endif
+	cd ui && $(BUN_BIN) run test:unit
 
 ui-integration-test:
 ifeq ($(BUN_BIN),)
@@ -295,7 +294,10 @@ else
 endif
 
 ui-test-coverage:
-	cd ui && $(UI_SCRIPT) test:coverage
+ifeq ($(BUN_BIN),)
+	$(error UI coverage requires Bun 1.3.12+ on PATH. Install from https://bun.sh and retry.)
+endif
+	cd ui && $(BUN_BIN) run test:coverage
 
 ui-replay-coverage-check:
 ifeq ($(BUN_BIN),)

@@ -3,4 +3,15 @@
 preload = [
   "./testing/bun-dom.preload.ts",
   "./testing/bun-test.preload.ts",
+  "./testing/bun-vitest-globals.preload.ts",
+]
+timeout = 30000
+pathIgnorePatterns = [
+  "integration/**",
+  "**/*storybook*.test.mjs",
+  "**/*.node.test.ts",
+  "scripts/check-hardcoded-ui-copy.test.ts",
+  "scripts/verify-test-output-cleanup.test.mjs",
+  "vite.config.test.ts",
+  "node_modules/**",
 ]

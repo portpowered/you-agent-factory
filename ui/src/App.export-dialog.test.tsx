@@ -1,3 +1,4 @@
+import "../testing/bun-app-shell-module-mocks";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";

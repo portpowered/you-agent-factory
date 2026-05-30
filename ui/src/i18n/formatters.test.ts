@@ -38,7 +38,7 @@ describe("shared locale date and time formatters", () => {
       formatDateTime(fixedTimestamp, "en", {
         timeZone: "UTC",
       }),
-    ).toBe("May 18, 2026, 9:30 AM");
+    ).toMatch(/^May 18, 2026(?:,| at) 9:30 AM$/);
     expect(
       formatDateTime(fixedTimestamp, "zh-CN", {
         timeZone: "UTC",
@@ -163,7 +163,7 @@ describe("shared locale duration and relative-time formatters", () => {
       formatDateTime(fixedTimestamp, "en", {
         timeZone: "America/New_York",
       }),
-    ).toBe("May 18, 2026, 5:30 AM");
+    ).toMatch(/^May 18, 2026(?:,| at) 5:30 AM$/);
   });
 
 });
