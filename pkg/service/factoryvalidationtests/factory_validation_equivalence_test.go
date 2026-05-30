@@ -11,6 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
@@ -82,12 +84,21 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 
 	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+	waitForDefaultSessionIdle(t, svc)
 
 	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
@@ -103,12 +114,34 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 		Physical: current.Version.Physical.Add(time.Second),
 	}
 
-	_, err = svc.SaveCurrentFactory(context.Background(), invalid)
+	_, err = svc.SaveFactoryForSession(
+		context.Background(),
+		factorysessions.DefaultSessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		invalid,
+	)
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(err, &topologyErr) {
-		t.Fatalf("SaveCurrentFactory error = %v, want topology validation error", err)
+		t.Fatalf("SaveFactoryForSession(replace current) error = %v, want topology validation error", err)
 	}
 	return factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
+}
+
+func waitForDefaultSessionIdle(t *testing.T, svc *service.FactoryService) {
+	t.Helper()
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		snap, err := svc.GetEngineStateSnapshotForSession(
+			context.Background(),
+			factorysessions.DefaultSessionID,
+		)
+		if err == nil && snap.RuntimeStatus == interfaces.RuntimeStatusIdle {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for default session runtime to reach idle")
 }
 
 func assertConfigFindingExists(t *testing.T, findings []config.Finding, rule string) {
