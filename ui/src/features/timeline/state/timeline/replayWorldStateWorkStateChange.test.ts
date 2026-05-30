@@ -173,6 +173,43 @@ describe("applyWorkStateChange occupancy", () => {
 });
 
 describe("applyWorkStateChange work item metadata", () => {
+  it("preserves existing work_type_id when payload workTypeName is present", () => {
+    const state = replayStateWithWork("work-keep-type", "task:init", "PROCESSING");
+    state.workItemsByID["work-keep-type"] = {
+      id: "work-keep-type",
+      place_id: "task:init",
+      work_type_id: "existing-type",
+    };
+    state.topology.places = [
+      { category: "PROCESSING", id: "task:init", name: "task:init" },
+      { category: "PROCESSING", id: "task:review", name: "task:review" },
+    ];
+    applyWorkStateChange(state, workStateChangeEvent({
+      fromPlaceId: "task:init",
+      fromState: "init",
+      source: "cli",
+      toPlaceId: "task:review",
+      toState: "review",
+      workId: "work-keep-type",
+      workTypeName: "task",
+    }));
+    expect(state.workItemsByID["work-keep-type"]?.work_type_id).toBe("existing-type");
+  });
+
+  it("clears source occupancy without addToken when toPlaceId is omitted", () => {
+    const state = replayStateWithWork("work-no-dest", "task:init", "PROCESSING");
+    applyWorkStateChange(state, workStateChangeEvent({
+      fromPlaceId: "task:init",
+      fromState: "init",
+      source: "api",
+      toState: "init",
+      workId: "work-no-dest",
+      workTypeName: "task",
+    }));
+    expect(state.occupancyByID["task:init"]?.workItemIDs ?? []).toEqual([]);
+    expect(state.occupancyByID["task:review"]?.workItemIDs).toBeUndefined();
+  });
+
   it("creates work item and fills work_type_id when absent from workItemsByID", () => {
     const state = replayStateWithWork("work-new", "task:init", "PROCESSING");
     delete state.workItemsByID["work-new"];
