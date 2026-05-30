@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { FactoryValidationResult } from "../../../api/factory-validation";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import { connectFactoryGraphNodes } from "../../factory-graph-editor/public";
+import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/factory-graph-operations";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-apply";
 import { FACTORY_VALIDATION_DEBOUNCE_MS } from "../../factory-graph-editor/hooks/use-factory-validation";

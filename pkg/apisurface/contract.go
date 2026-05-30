@@ -17,9 +17,7 @@ import (
 // state.
 type APISurface interface {
 	factory.APIFactory
-	CreateNamedFactory(ctx context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error)
 	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
-	SaveCurrentFactory(ctx context.Context, request factoryapi.Factory) (factoryapi.Factory, error)
 	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
 	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
 	InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (ModelInvocationResult, error)
@@ -37,6 +35,12 @@ type SessionAPISurface interface {
 	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
+	SaveFactoryForSession(
+		ctx context.Context,
+		sessionID string,
+		mode factoryapi.FactorySaveMode,
+		request factoryapi.Factory,
+	) (factoryapi.Factory, error)
 	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
 }
 

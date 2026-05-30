@@ -553,32 +553,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories:
-    post:
-      tags:
-        - Factory
-      operationId: createFactory
-      summary: Create factory
-      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory-sessions/~default/factory` readback only and cannot be activated as a customer-named factory.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Factory'
-      responses:
-        '201':
-          description: Factory was stored and activated.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Factory'
-        '400':
-          $ref: '#/components/responses/CreateFactoryBadRequest'
-        '409':
-          $ref: '#/components/responses/CreateFactoryConflict'
-        '500':
-          $ref: '#/components/responses/InternalError'
   /factory-sessions:
     get:
       tags:
@@ -692,8 +666,8 @@ paths:
       tags:
         - Factory
       operationId: saveCurrentFactoryBySessionId
-      summary: Save current factory for one session
-      description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      summary: Save factory for one session
+      description: Submits one complete factory definition to the explicitly selected live session using an explicit save mode. Omitted `mode` defaults to `REPLACE_CURRENT`, which replaces the factory already current in the session. `UPSERT_NAMED_AND_ACTIVATE` persists under the session factory root using `factory.name`, updates the session current-factory pointer, and activates that runtime when idle. Clients should echo the server-managed `factory.version` field from the latest current-factory read for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -701,7 +675,41 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Factory'
+              $ref: '#/components/schemas/SaveFactoryForSessionRequest'
+            examples:
+              replaceCurrent:
+                summary: Replace the factory already current in the session.
+                value:
+                  mode: REPLACE_CURRENT
+                  factory:
+                    name: alpha
+                    version:
+                      logical: '2'
+                      physical: '2026-05-30T12:00:00.000000000Z'
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers: []
+                    workstations: []
+              upsertNamedAndActivate:
+                summary: Create or replace a named factory and activate it in the session.
+                value:
+                  mode: UPSERT_NAMED_AND_ACTIVATE
+                  factory:
+                    name: beta
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers: []
+                    workstations: []
       responses:
         '200':
           description: Saved current factory definition and new version metadata for the targeted session.
@@ -3449,6 +3457,62 @@ components:
         finishedAt:
           type: string
           format: date-time
+    FactorySaveMode:
+      type: string
+      description: Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+      default: REPLACE_CURRENT
+      x-enum-varnames:
+        - FactorySaveModeReplaceCurrent
+        - FactorySaveModeUpsertNamedAndActivate
+      enum:
+        - REPLACE_CURRENT
+        - UPSERT_NAMED_AND_ACTIVATE
+      x-enum-descriptions:
+        - Replace the factory already current in the selected live session.
+        - Create or replace a named factory under the session root and activate it in that session.
+    SaveFactoryForSessionRequest:
+      type: object
+      description: Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
+      additionalProperties: false
+      required:
+        - factory
+      properties:
+        mode:
+          $ref: '#/components/schemas/FactorySaveMode'
+          default: REPLACE_CURRENT
+        factory:
+          $ref: '#/components/schemas/Factory'
+      example:
+        mode: REPLACE_CURRENT
+        factory:
+          name: alpha
+          version:
+            logical: '2'
+            physical: '2026-05-30T12:00:00.000000000Z'
+          workTypes:
+            - name: task
+              states:
+                - name: init
+                  type: INITIAL
+                - name: done
+                  type: TERMINAL
+          workers:
+            - name: planner
+              type: MODEL_WORKER
+              modelProvider: CLAUDE
+              executorProvider: SCRIPT_WRAP
+              model: claude-sonnet-4-20250514
+          workstations:
+            - name: plan-task
+              behavior: STANDARD
+              type: MODEL_WORKSTATION
+              worker: planner
+              inputs:
+                - workType: task
+                  state: init
+              outputs:
+                - workType: task
+                  state: done
     Factory:
       type: object
       description: Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.

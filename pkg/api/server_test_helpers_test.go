@@ -22,28 +22,6 @@ import (
 	"go.uber.org/zap"
 )
 
-func assertHasValidationTarget(
-	t *testing.T,
-	targets []factoryapi.FactoryValidationTarget,
-	code string,
-	subjectType factoryapi.FactoryValidationSubjectType,
-	subjectID string,
-	location factoryapi.FactoryValidationSubjectLocation,
-	want string,
-) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code != code {
-			continue
-		}
-		if target.Subject.Type != subjectType || target.Subject.Id != subjectID || target.Subject.Location != location {
-			continue
-		}
-		return
-	}
-	t.Fatalf("validation targets = %#v, want %s", targets, want)
-}
-
 func newTestServer(f *testutil.MockFactory) *Server {
 	logger, _ := zap.NewDevelopment()
 	return NewServer(f, 8080, logger)
@@ -360,17 +338,12 @@ func stringPointerForAPITest(value string) *string {
 	return &value
 }
 
-func engineStateWithRuntimeStatus(status interfaces.RuntimeStatus) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		RuntimeStatus: status,
-		Marking: petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
-		},
-	}
-}
-
 func validNamedFactoryBody(name, workType string) string {
 	return fmt.Sprintf(`{"name":%q,%s`, name, strings.TrimPrefix(namedFactoryPayloadJSON(name, workType), "{"))
+}
+
+func saveFactoryForSessionRequestBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
 }
 
 func namedFactoryPayloadJSON(project, workType string) string {

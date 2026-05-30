@@ -543,6 +543,25 @@ export async function startFactoryApiServer({
     };
   }
 
+  function parseSaveFactoryForSessionBody(body) {
+    if (!body || typeof body !== "object") {
+      return null;
+    }
+    if (body.factory && typeof body.factory === "object") {
+      return {
+        factory: body.factory,
+        mode: body.mode ?? "REPLACE_CURRENT",
+      };
+    }
+    if (body.name != null) {
+      return {
+        factory: body,
+        mode: "REPLACE_CURRENT",
+      };
+    }
+    return null;
+  }
+
   const server = http.createServer((request, response) => {
     if (request.method === "OPTIONS") {
       response.writeHead(204, {
@@ -661,8 +680,10 @@ export async function startFactoryApiServer({
         requestBody += chunk;
       });
       request.on("end", async () => {
-        const body = requestBody.length === 0 ? null : JSON.parse(requestBody);
-        if (!body || typeof body !== "object" || body.name == null) {
+        const parsedBody =
+          requestBody.length === 0 ? null : JSON.parse(requestBody);
+        const saveRequest = parseSaveFactoryForSessionBody(parsedBody);
+        if (!saveRequest?.factory?.name) {
           response.writeHead(400, {
             "Access-Control-Allow-Origin": "*",
             "Content-Type": "application/json",
@@ -678,11 +699,12 @@ export async function startFactoryApiServer({
 
         if (onSaveCurrentFactory) {
           await onSaveCurrentFactory({
-            body,
+            body: saveRequest.factory,
+            mode: saveRequest.mode,
             sessionID,
           });
         }
-        sessionState.currentFactory = body;
+        sessionState.currentFactory = saveRequest.factory;
         bumpEditableFactoryDefinitionVersion(sessionID);
         response.writeHead(200, {
           "Access-Control-Allow-Origin": "*",

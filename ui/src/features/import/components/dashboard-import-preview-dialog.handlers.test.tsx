@@ -103,8 +103,12 @@ describe("FactoryImportPreviewDialog close guards", () => {
     render(
       <FactoryImportPreviewDialog
         activationState={{ status: "idle" }}
+        createTargetFactoryName="Dropped Factory"
+        currentFactoryName="Current Session Factory"
+        importSaveChoice="REPLACE_CURRENT"
         onCancel={onCancel}
         onConfirm={vi.fn()}
+        onImportSaveChoiceChange={vi.fn()}
         previewState={createReadyPreviewState()}
       />,
     );
@@ -126,8 +130,12 @@ describe("FactoryImportPreviewDialog close guards", () => {
     render(
       <FactoryImportPreviewDialog
         activationState={{ status: "submitting" }}
+        createTargetFactoryName="Dropped Factory"
+        currentFactoryName="Current Session Factory"
+        importSaveChoice="REPLACE_CURRENT"
         onCancel={onCancel}
         onConfirm={vi.fn()}
+        onImportSaveChoiceChange={vi.fn()}
         previewState={createReadyPreviewState()}
       />,
     );
