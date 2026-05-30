@@ -96,6 +96,38 @@ func TestValidate_MissingOutcomeRoutesUseCanonicalWorkstationLocations(t *testin
 	})
 }
 
+func TestValidate_RepresentativeCanonicalSubjects(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "queued", Type: interfaces.StateTypeInitial},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "process",
+			Kind:           interfaces.WorkstationKindRepeater,
+			WorkerTypeName: "worker-a",
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "queued"}},
+		}},
+	}
+
+	result := factoryvalidation.Validate(cfg)
+	assertHasTargetSubject(t, result.Targets, factoryvalidation.Subject{
+		Type:     factoryvalidation.SubjectTypeWorkstation,
+		ID:       "process",
+		Location: factoryvalidation.SubjectLocationOnRejection,
+	})
+	assertHasTargetSubject(t, result.Targets, factoryvalidation.Subject{
+		Type:     factoryvalidation.SubjectTypeWorkType,
+		ID:       "task",
+		Location: factoryvalidation.SubjectLocationStates,
+	})
+}
+
 func TestValidate_MissingWorkTypeOutcomeStates(t *testing.T) {
 	t.Parallel()
 
