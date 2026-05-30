@@ -1,4 +1,8 @@
-import { createFactory, getCurrentFactory, NamedFactoryAPIError } from "./api";
+import {
+  activateImportedFactoryAsNewNamedForSession,
+  getCurrentFactory,
+  NamedFactoryAPIError,
+} from "./api";
 
 const canonicalFactory = {
   name: "Current Factory",
@@ -7,14 +11,17 @@ const canonicalFactory = {
   workstations: [],
 } as const;
 
+const existingNamedFactoryNames = ["Current Factory"] as const;
+
 describe("named factory API error handling", () => {
-  it("fails fast when activation fetch is unavailable", async () => {
+  it("fails fast when create-new-named activation fetch is unavailable", async () => {
     await expect(
-      createFactory(canonicalFactory, {
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: true as unknown as typeof fetch,
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("Named factory activation is unavailable in this environment.", {
+      new NamedFactoryAPIError("Current factory editing is unavailable in this environment.", {
         code: "NETWORK_ERROR",
       }),
     );
@@ -22,7 +29,8 @@ describe("named factory API error handling", () => {
 
   it("rejects upsert responses that are not shaped like a factory object", async () => {
     await expect(
-      createFactory(canonicalFactory, {
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockResolvedValue(
           new Response(JSON.stringify("not-a-factory"), {
             headers: {
@@ -47,7 +55,8 @@ describe("named factory API error handling", () => {
     const networkError = new Error("socket closed");
 
     await expect(
-      createFactory(canonicalFactory, {
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockRejectedValue(networkError),
       }),
     ).rejects.toEqual(
@@ -60,7 +69,8 @@ describe("named factory API error handling", () => {
 
   it("falls back to INTERNAL_ERROR when the upsert API returns an unknown error code", async () => {
     await expect(
-      createFactory(canonicalFactory, {
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockResolvedValue(
           new Response(JSON.stringify({ code: "SOMETHING_NEW", message: "Activation failed." }), {
             headers: {
@@ -86,7 +96,8 @@ describe("named factory API error handling", () => {
 
   it("preserves BAD_REQUEST upsert failures as typed API errors", async () => {
     await expect(
-      createFactory(canonicalFactory, {
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockResolvedValue(
           new Response(JSON.stringify({ code: "BAD_REQUEST", message: "Factory name is required." }), {
             headers: {
@@ -112,7 +123,8 @@ describe("named factory API error handling", () => {
 
   it("falls back to the default upsert error message when the error body has no string fields", async () => {
     await expect(
-      createFactory(canonicalFactory, {
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockResolvedValue(
           new Response(JSON.stringify({ code: 42, message: false }), {
             headers: {

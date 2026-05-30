@@ -11,6 +11,7 @@ import {
 } from "./testing/app-shell-test-utils";
 import {
   currentNamedFactoryExportResponse,
+  currentSessionFactoryExportAPIResponse,
   exportImageFile,
   exportTimelineEvents,
   fromBase64,
@@ -42,6 +43,11 @@ const currentFactoryWithBundledFiles = {
   },
 } satisfies FactoryValue;
 
+const currentFactoryWithBundledFilesAPIResponse = {
+  ...currentFactoryWithBundledFiles,
+  version: currentSessionFactoryExportAPIResponse.version,
+};
+
 describe("App shell export submission flows", () => {
   registerAppDashboardTestLifecycle();
 
@@ -52,7 +58,7 @@ describe("App shell export submission flows", () => {
       timelineEvents: exportTimelineEvents,
     });
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentNamedFactoryExportResponse),
+      jsonResponse(currentSessionFactoryExportAPIResponse),
     );
 
     try {
@@ -142,7 +148,7 @@ describe("App shell export submission flows", () => {
       timelineEvents: exportTimelineEvents,
     });
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentNamedFactoryExportResponse),
+      jsonResponse(currentSessionFactoryExportAPIResponse),
     );
 
     try {
@@ -215,7 +221,7 @@ describe("App shell export submission flows", () => {
       timelineEvents: exportTimelineEvents,
     });
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentFactoryWithBundledFiles),
+      jsonResponse(currentFactoryWithBundledFilesAPIResponse),
     );
 
     try {

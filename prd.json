@@ -1,31 +1,30 @@
 {
-  "project": "UI Dashboard Stream and Timeline Split (U8 Recovery v2)",
-  "branchName": "ralph/ui-dashboard-stream-timeline-split-recovery-v2",
-  "description": "Recovery implementation of the dashboard stream/timeline split (U8): isolate factory SSE transport, session lifecycle resets, and world-view shell derivation behind focused hooks while preserving DashboardScreen loading, error, pause, refresh, and snapshot behavior. Retriggers after wave-2 plan failure on U2; baseline spec at tasks/prd-ui-dashboard-stream-timeline-split.md. Requires ui-session-scope-context-recovery-v2 complete first.",
+  "project": "UI API Module Cleanup (Recovery v2)",
+  "branchName": "ralph/ui-api-module-cleanup-recovery-v2",
+  "description": "Consolidate dashboard session factory GET/PUT into ui/src/api/session-factory/, retire legacy createFactory/POST /factories surfaces, thin current-factory-definition wrappers, and document normalization-only and prompt-template boundaries—without changing operator-visible editor, import, or export behavior.",
   "context": {
-    "customerAsk": "Retrigger U8 (UI dashboard stream timeline split) after the prior recovery token blocked on failed U2 recovery. Deliver the split hook seams from tasks/prd-ui-dashboard-stream-timeline-split.md so live dashboard stream, timeline, and shell states remain correct with testable ownership.",
-    "problem": "useDashboardSnapshot combined SSE transport, session-switch resets, queued timeline appends, debug memory hooks, and snapshot projection, making the dashboard shell hard to test and causing fragile loading/error derivation from snapshot truthiness instead of stream plus timeline event ownership.",
-    "solution": "Extract useFactoryEventStream, useDashboardSessionLifecycle, and useDashboardWorldView; keep useDashboardSnapshot as a thin composer wired through useDashboardSession for rawSessionID and isPaused; gate timeline memory debug behind existing flags; prove behavior with focused hook tests and dashboard shell stream/timeline regressions."
+    "customerAsk": "Retrigger if ui-session-factory-client-recovery (v1) stalls. Full spec: tasks/prd-ui-api-module-cleanup.md (U7 UI API module cleanup).",
+    "problem": "Session factory HTTP is split across current-factory-definition and named-factory with overlapping GET/PUT, a misleading createFactory export, duplicate getCurrentFactory fetch logic, and unclear ownership for factory-definition normalization versus prompt-template routes.",
+    "solution": "Establish session-factory as the sole HTTP owner for session factory GET/PUT with typed errors and tests; delegate current-factory-definition; migrate import/export activation off createFactory; document factory-definition as normalization-only; group or cross-link prompt-template routes while preserving existing URL shapes and UX."
   },
   "acceptanceCriteria": [
-    "useFactoryEventStream owns session-scoped SSE open/close, stream status, queued onEvent delivery, and FACTORY_CHANGE query sync; pause disables live connection with existing offline copy",
-    "useDashboardSessionLifecycle resets timeline, localized stream state, selection history, and current-factory definition queries once per qualifying session or refreshToken change without duplicate removeQueries",
-    "useDashboardWorldView derives isInitialLoading and error from stream state plus selectedTick===0 and eventCount===0, not snapshot truthiness alone",
-    "useDashboardSnapshot composes lifecycle, stream, world view, and optional debug in ≤80 LOC using useDashboardSession in production without dashboardSessionStore imports in stream modules",
-    "useDashboardTimelineMemoryDebug runs only when memoryDebug is enabled; default sessions install no debug globals or localStorage persistence",
-    "Dashboard shell regression proves loading, refresh reset, pause/resume, and session-scoped stream behavior without cross-session EventSource leaks",
-    "Typecheck, lint, and targeted UI tests pass for all touched areas"
+    "All dashboard session factory GET/PUT uses ui/src/api/session-factory/ with { mode, factory } bodies and shared transport helpers.",
+    "Editor save and import confirm (replace current / create new named) behave as before, including stale-version and not-idle errors.",
+    "No production or integration test path issues POST /factories for factory activation.",
+    "factory-definition performs normalization only with no fetch-based network I/O.",
+    "Session-scoped prompt-template HTTP is discoverable under the session-factory family without changing route paths.",
+    "Quality gate: UI typecheck, lint, and targeted tests pass for all touched modules."
   ],
   "userStories": [
     {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-001",
-      "title": "Factory event stream transport hook",
-      "description": "As a maintainer, I want SSE connection wiring isolated so I can test transport without mounting the full dashboard.",
+      "id": "ui-api-module-cleanup-recovery-v2-001",
+      "title": "Session factory HTTP owner",
+      "description": "As a frontend maintainer, I want one module that performs session factory GET and PUT so transport, paths, and error codes are not duplicated.",
       "acceptanceCriteria": [
-        "useFactoryEventStream opens the session-scoped events URL, updates dashboardStreamStore status, compacts events before onEvent, and syncs FACTORY_CHANGE into current-factory React Query keys",
-        "When enabled is false for a selected session, no EventSource opens and stream state shows the paused offline message; re-enabling opens a new connection",
-        "refreshToken change closes and reopens the stream for the same sessionID; sessionID null never opens a stream",
-        "useFactoryEventStream.test.tsx covers open URL, paused/disabled, refresh reopen, resume-after-pause, offline-before-first-event, and factory-change query sync via replay harness or injected openStream",
+        "getSessionFactory(sessionID) issues GET to /factory-sessions/{session_id}/factory via factoryAPIURL and currentFactorySessionPath",
+        "saveSessionFactory({ sessionID, mode?, factory }) issues PUT with body { mode?: REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE, factory } and version rules matching current editor save behavior",
+        "Typed errors expose STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, INVALID_FACTORY, INVALID_FACTORY_NAME, and NOT_FOUND",
+        "Colocated unit tests assert method, path, and request body for default and non-default session IDs",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,13 +33,13 @@
       "notes": ""
     },
     {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-002",
-      "title": "Dashboard session lifecycle hook",
-      "description": "As an operator switching factory tabs or refreshing the dashboard, I want prior session timeline, stream, selection, and factory-definition cache cleared once so I never see cross-session bleed.",
+      "id": "ui-api-module-cleanup-recovery-v2-002",
+      "title": "Editor save and load use the session factory owner",
+      "description": "As a factory editor, I want saving and loading the current factory to behave exactly as today while the API layer delegates to the session factory module.",
       "acceptanceCriteria": [
-        "useDashboardSessionLifecycle calls resetDashboardSessionScopedState on qualifying sessionID or refreshToken changes: timeline reset, localized stream reset, resetSelectionHistoryStore, and one removeQueries for CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX",
-        "shouldResetDashboardSessionScopedState skips initial mount for refreshToken 0 but resets on later refresh increments and session key changes",
-        "dashboard-session-lifecycle.test.ts and useDashboardSessionLifecycle.test.tsx prove no duplicate removes and correct reset on session switch versus first mount",
+        "getCurrentFactoryDocument, saveCurrentFactoryDocument, and saveFactoryForSessionDocument delegate to session-factory without changing wire semantics",
+        "useCurrentFactoryDefinition and useSaveCurrentFactory keep existing React Query keys unless regression tests require a documented change",
+        "Stale-version and not-idle failures surface with the same user-visible messages in covered save-flow tests",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -49,44 +48,44 @@
       "notes": ""
     },
     {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-003",
-      "title": "Dashboard world view and shell state derivation",
-      "description": "As a dashboard user, I want the shell loading spinner and connection error to reflect stream progress before the first timeline event, not whether a cached snapshot object exists.",
+      "id": "ui-api-module-cleanup-recovery-v2-003",
+      "title": "Import activation uses session PUT only",
+      "description": "As a dashboard operator, I want factory PNG import confirm (replace current vs create new named) to keep working without any legacy factory-create endpoint.",
       "acceptanceCriteria": [
-        "useDashboardWorldView selects worldViewCache[selectedTick] and exposes selectedTick, hasEvents, streamState, isInitialLoading, and error",
-        "deriveDashboardWorldViewShellState sets isInitialLoading only while rawSessionID is set, selectedTick is 0, eventCount is 0, and stream status is not offline; sets error from stream message only in the offline-before-first-event case",
-        "Unit tests for deriveDashboardWorldViewShellState cover connecting, offline-before-first-event, and post-first-event success paths",
+        "Replace-current import issues GET then PUT REPLACE_CURRENT with the current session factory name preserved",
+        "Create-new-named import issues PUT UPSERT_NAMED_AND_ACTIVATE with suffixed naming on collision matching today's confirm dialog resolved name",
+        "createFactory is removed from the public API surface (or throws in development builds only until callers migrate—prefer full removal)",
+        "App.import.test.tsx and import hook tests complete without any mocked or real POST /factories activation call",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser: drop a factory PNG, confirm replace-current and create-new-named both activate on default and a non-default session tab"
       ],
       "priority": 3,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-004",
-      "title": "Thin dashboard snapshot composer and screen wiring",
-      "description": "As a reader of DashboardScreen, I want stream, lifecycle, and world-view concerns composed in one obvious place without re-embedding transport logic.",
+      "id": "ui-api-module-cleanup-recovery-v2-004",
+      "title": "Export and duplicate GET paths use session factory owner",
+      "description": "As a dashboard operator, I want exporting the current factory to keep working while the client stops maintaining a second raw GET implementation.",
       "acceptanceCriteria": [
-        "useDashboardSnapshot composes useDashboardSessionLifecycle, useFactoryEventStream with enabled from useDashboardSession rawSessionID and isPaused, useDashboardWorldView, and queued timeline append; file length is at most 80 lines",
-        "DashboardScreen continues to drive loading, error, empty, and success panels from useDashboardSnapshot with locale and refreshToken; DashboardBento keeps the existing snapshot contract without forking timeline ownership",
-        "useDashboardSnapshot.test.tsx proves refresh resets timeline to tick 0 with loading, streamed events append to timeline state, and default sessions do not enable timeline memory debug side effects",
+        "getCurrentFactory for export reads through session-factory or current-factory-definition delegation with no standalone fetch duplicate in named-factory",
+        "Export error mapping remains consistent for network, not-found, and invalid-response cases covered by export hook tests",
         "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill: dashboard loads live stream, shows loading before first event, and recovers after refresh without stale cross-session UI"
+        "Tests pass"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-005",
-      "title": "Optional timeline memory debug isolation",
-      "description": "As a maintainer debugging timeline memory, I want debug globals and persistence opt-in only so normal operators are unaffected.",
+      "id": "ui-api-module-cleanup-recovery-v2-005",
+      "title": "Normalization-only factory-definition boundary",
+      "description": "As a contributor, I want it obvious that factory-definition shapes data but never performs HTTP.",
       "acceptanceCriteria": [
-        "useDashboardTimelineMemoryDebug runs only when readFactoryTimelineDebugOptions().memoryDebug is true (?afMemoryDebug=1)",
-        "Default sessions do not set window __agentFactoryTimelineDebug__ or write agentFactory.timelineDebugSummary to localStorage; useDashboardTimelineMemoryDebug.test.tsx proves off and on paths",
-        "useDashboardSnapshot invokes the debug hook only from the composer; no behavior change for default users",
+        "factory-definition/api.ts contains no fetch calls and no transport.ts imports used for network I/O",
+        "Module-level documentation states normalization lives here and session HTTP lives under session-factory",
+        "Existing normalization tests pass without behavior change",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -95,15 +94,15 @@
       "notes": ""
     },
     {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-006",
-      "title": "Dashboard stream/timeline shell regression proof",
-      "description": "As an operator, I want confidence that session tab switches and pause/resume do not leak streams or show the wrong session timeline state.",
+      "id": "ui-api-module-cleanup-recovery-v2-006",
+      "title": "Session-scoped prompt template routes are discoverable",
+      "description": "As a maintainer, I want prompt-template HTTP grouped with session factory routes so I do not search unrelated API folders.",
       "acceptanceCriteria": [
-        "Existing app-shell, Storybook, or integration regression exercises session-scoped stream URLs and observable shell outcomes: loading clears after first event, pause stops live connection, tab switch resets timeline and stream targets",
-        "Regression asserts observable timeline scrubber or shell status outcomes, not internal hook file names or module registration inventories",
+        "Prompt-template GET/PUT remains on currentFactorySessionPath plus workstation segment with no URL change",
+        "Either current-factory-prompt-template moves under session-factory/prompt-template/ or session-factory/index.ts documents and re-exports the sibling with stable feature import paths",
+        "Prompt-template hook tests pass for success, not-found, and network error cases",
         "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill when the regression surface is Storybook-backed"
+        "Tests pass"
       ],
       "priority": 6,
       "passes": true,

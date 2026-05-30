@@ -1,3 +1,11 @@
+/**
+ * Canonical factory-definition normalization for the dashboard API boundary.
+ *
+ * This module shapes and validates `Factory` payloads against the generated OpenAPI
+ * contract. It performs no HTTP, no `fetch`, and does not import `transport.ts`.
+ * Session-scoped factory GET/PUT lives in `ui/src/api/session-factory/`; editor and
+ * import adapters delegate there after normalizing documents through this module.
+ */
 import type { components } from "../generated/openapi";
 
 export type CanonicalFactoryDefinition = components["schemas"]["Factory"];
