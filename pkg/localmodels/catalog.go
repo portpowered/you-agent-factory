@@ -1,6 +1,7 @@
 package localmodels
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -461,4 +462,71 @@ func GetModel(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (
 // CanonicalModelName normalizes model identifiers for catalog lookup.
 func CanonicalModelName(model string) string {
 	return canonicalModelName(model)
+}
+
+// PullModel validates catalog locality and delegates asset pull to the injected puller.
+func PullModel(
+	puller AssetPuller,
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) (apisurface.ModelPullResult, error) {
+	if runtimeCfg == nil {
+		return apisurface.ModelPullResult{}, fmt.Errorf("factory service runtime is not available")
+	}
+	if puller == nil {
+		return apisurface.ModelPullResult{}, fmt.Errorf("model asset puller is not available")
+	}
+	catalog := BuildCatalog(runtimeCfg)
+	key := CanonicalModelName(modelName)
+	if key == "" {
+		return apisurface.ModelPullResult{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
+	}
+	entry, ok := catalog[key]
+	if !ok {
+		return apisurface.ModelPullResult{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
+	}
+	if entry.Summary.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
+		return apisurface.ModelPullResult{}, fmt.Errorf("%w: model %q is not a local model", apisurface.ErrModelPullUnsupported, modelName)
+	}
+	return puller.PullModel(ctx, runtimeCfg, modelName)
+}
+
+// SelectInvocationWorker resolves the model worker and operation for direct invocation.
+func SelectInvocationWorker(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName, operationName string,
+) (*interfaces.WorkerConfig, interfaces.ModelOperation, error) {
+	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
+		return nil, interfaces.ModelOperation{}, fmt.Errorf("runtime config is not available")
+	}
+	modelKey := CanonicalModelName(modelName)
+	operationName = strings.TrimSpace(operationName)
+	if modelKey == "" {
+		return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
+	}
+	if operationName == "" {
+		return nil, interfaces.ModelOperation{}, fmt.Errorf("operation is required")
+	}
+
+	var modelMatched bool
+	for _, worker := range runtimeCfg.FactoryConfig().Workers {
+		workerDef, ok := runtimeCfg.Worker(worker.Name)
+		if !ok || workerDef == nil || workerDef.Type != interfaces.WorkerTypeModel {
+			continue
+		}
+		if CanonicalModelName(workerDef.Model) != modelKey {
+			continue
+		}
+		modelMatched = true
+		for _, operation := range workerDef.Operations {
+			if strings.TrimSpace(operation.Name) == operationName {
+				return workerDef, operation, nil
+			}
+		}
+	}
+	if modelMatched {
+		return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: model %q does not support operation %q", apisurface.ErrModelInvocationUnsupportedOperation, modelName, operationName)
+	}
+	return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
 }
