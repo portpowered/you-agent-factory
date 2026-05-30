@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file consolidated runtime-mode and session-registry tests remain together until dedicated service test seams split.
+// pkgmaintcheck:ignore-file-lines consolidated runtime-mode and session-registry tests remain together until dedicated service test seams split.
 package service
 
 import (
@@ -644,13 +646,81 @@ func TestBuildReplacementFactoryRuntime_WiresLocalModelDelegationSeam(t *testing
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
 	if replacement.localModels == nil {
-		t.Fatal("replacement runtime localModels = nil, want managed localmodels.Manager from buildRuntimeBundle seam")
+		t.Fatal("runtime bundle localModels = nil, want managed localmodels.Manager from buildRuntimeBundle seam")
 	}
 	if replacement.modelAssets == nil {
-		t.Fatal("replacement runtime modelAssets = nil, want localmodels.AssetPuller from buildRuntimeBundle seam")
+		t.Fatal("runtime bundle modelAssets = nil, want localmodels.AssetPuller from buildRuntimeBundle seam")
 	}
 	if replacement.modelResources == nil {
-		t.Fatal("replacement runtime modelResources = nil, want localmodels.ResourceLimiter from buildRuntimeBundle seam")
+		t.Fatal("runtime bundle modelResources = nil, want localmodels.ResourceLimiter from buildRuntimeBundle seam")
+	}
+	if replacement.logSink == nil {
+		t.Fatal("runtime bundle logSink = nil, want runtime log sink from buildRuntimeBundle seam")
+	}
+	if replacement.logger == nil {
+		t.Fatal("runtime bundle logger = nil, want session logger from buildRuntimeBundle seam")
+	}
+}
+
+func TestBuildFactoryService_StartupRuntimeBundleMatchesLiveHandleShape(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	bundle := svc.currentRuntimeBundle()
+	if bundle == nil {
+		t.Fatal("currentRuntimeBundle = nil, want startup bundle before Run")
+	}
+	if bundle.logSink == nil {
+		t.Fatal("startup bundle logSink = nil, want runtime log sink")
+	}
+	if bundle.factory == nil {
+		t.Fatal("startup bundle factory = nil")
+	}
+	if svc.startupRuntimeBundle() != bundle {
+		t.Fatal("currentRuntimeBundle should resolve to startup bundle before Run registers ~default")
+	}
+}
+
+func TestFactoryService_Run_ClearsStartupBundleAfterDefaultRegisters(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.startupRuntimeBundle() == nil {
+		t.Fatal("expected startup bundle before Run")
+	}
+
+	runFactoryServiceWithCleanup(t, svc)
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	if svc.startupRuntimeBundle() != nil {
+		t.Fatal("startup bundle should be cleared after ~default registers at Run")
+	}
+	defaultHandle := liveSessionHandle(svc.defaultSession())
+	if bundle := svc.currentRuntimeBundle(); bundle == nil || defaultHandle == nil || bundle != defaultHandle.runtime {
+		t.Fatal("currentRuntimeBundle should resolve only through the default session handle after Run")
 	}
 }
 
@@ -714,59 +784,96 @@ func TestBuildFactoryService_InitializesFactorySessionsRegistry(t *testing.T) {
 	}
 }
 
-func createReplacementWatchChannel(t *testing.T, factoryDir, workType, channel string) {
-	t.Helper()
-
-	inputDir := filepath.Join(factoryDir, interfaces.InputsDir, workType, channel)
-	if err := os.MkdirAll(inputDir, 0o755); err != nil {
-		t.Fatalf("create watched input dir %q: %v", inputDir, err)
+func TestFactoryService_Run_RegistersDefaultSessionInRegistry(t *testing.T) {
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
-}
 
-func writeNamedFactoryFixture(t *testing.T, rootDir, name string) string {
-	t.Helper()
-
-	payload, err := json.Marshal(map[string]any{
-		"name": name,
-		"id":   name,
-		"workTypes": []map[string]any{
-			{
-				"name": "task",
-				"states": []map[string]string{
-					{"name": "init", "type": "INITIAL"},
-					{"name": "complete", "type": "TERMINAL"},
-					{"name": "failed", "type": "FAILED"},
-				},
-			},
-		},
-		"workers": []map[string]any{
-			{
-				"name": "executor",
-				"type": "MODEL_WORKER",
-				"body": "You are the executor.",
-			},
-		},
-		"workstations": []map[string]any{
-			{
-				"name":      "execute-" + name,
-				"worker":    "executor",
-				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
-				"type":      "MODEL_WORKSTATION",
-				"body":      "Implement {{ .WorkID }}.",
-			},
-		},
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
 	})
 	if err != nil {
-		t.Fatalf("Marshal(named factory fixture): %v", err)
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.sessions.Count() != 0 {
+		t.Fatalf("sessions.Count() = %d before Run, want 0 until default registers", svc.sessions.Count())
 	}
 
-	factoryDir, err := config.PersistNamedFactory(rootDir, name, payload)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(%s): %v", name, err)
+	runFactoryServiceWithCleanup(t, svc)
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	assertDefaultSessionRegisteredAfterRun(t, svc, rootDir, alphaDir)
+}
+
+func runFactoryServiceWithCleanup(t *testing.T, svc *FactoryService) {
+	t.Helper()
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+	t.Cleanup(func() {
+		cancelRun()
+		select {
+		case err := <-runErrCh:
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for service shutdown")
+		}
+	})
+}
+
+func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, rootDir, alphaDir string) {
+	t.Helper()
+
+	defaultSession := svc.defaultSession()
+	if defaultSession == nil {
+		t.Fatal("defaultSession = nil after Run, want ~default registry entry")
 	}
-	return factoryDir
+	if defaultSession.ID != defaultFactorySessionID {
+		t.Fatalf("default session id = %q, want %q", defaultSession.ID, defaultFactorySessionID)
+	}
+	if !defaultSession.IsDefault {
+		t.Fatal("default session IsDefault = false, want true")
+	}
+	if got := cleanResolvedPath(defaultSession.FactoryDir); got != cleanResolvedPath(alphaDir) {
+		t.Fatalf("default session factoryDir = %q, want %q", defaultSession.FactoryDir, alphaDir)
+	}
+	if got := cleanResolvedPath(defaultSession.FolderPath); got != cleanResolvedPath(rootDir) {
+		t.Fatalf("default session folderPath = %q, want %q", defaultSession.FolderPath, rootDir)
+	}
+
+	defaultHandle := liveSessionHandle(defaultSession)
+	if defaultHandle == nil || defaultHandle.runtime == nil {
+		t.Fatal("default session live handle is required after Run")
+	}
+	if got := cleanResolvedPath(defaultHandle.runtime.dir); got != cleanResolvedPath(alphaDir) {
+		t.Fatalf("default live handle runtime dir = %q, want %q", defaultHandle.runtime.dir, alphaDir)
+	}
+
+	runState := svc.currentRunState()
+	if runState == nil {
+		t.Fatal("runState = nil after Run, want default session run state")
+	}
+	if runState.sessionID != defaultFactorySessionID {
+		t.Fatalf("runState.sessionID = %q, want %q", runState.sessionID, defaultFactorySessionID)
+	}
+	if runState.runtime != defaultHandle {
+		t.Fatal("runState.runtime != default session live handle")
+	}
+	if current := svc.currentSession(); current == nil || current.ID != defaultFactorySessionID {
+		t.Fatalf("currentSession = %#v, want selected %q", current, defaultFactorySessionID)
+	}
+	if bundle := svc.currentRuntimeBundle(); bundle != defaultHandle.runtime {
+		t.Fatal("currentRuntimeBundle should resolve through the default session registry handle after Run")
+	}
 }
 
 func TestGetEngineStateSnapshot_AggregatesAllState(t *testing.T) {
@@ -823,7 +930,8 @@ func TestFactoryService_GetEngineStateSnapshot_DelegatesToFactoryAggregateSnapsh
 		TickCount:     7,
 	}
 	mock := &aggregateSnapshotFactory{engineState: expected}
-	svc := &FactoryService{factory: mock}
+	svc := &FactoryService{}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: mock})
 
 	got, err := svc.GetEngineStateSnapshot(context.Background())
 	if err != nil {

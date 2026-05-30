@@ -13,11 +13,19 @@ export interface UseFactoryImportActivationTargetOptions {
   sessionID?: string | null;
 }
 
+export interface FactoryImportActivationTarget {
+  createTargetFactoryName: string | null;
+  currentFactoryName: string | null;
+  existingNamedFactoryNames: string[];
+  isLoading: boolean;
+  replacesExistingCreateTarget: boolean;
+}
+
 export function useFactoryImportActivationTarget({
   enabled = true,
   preferredFactoryName,
   sessionID,
-}: UseFactoryImportActivationTargetOptions = {}) {
+}: UseFactoryImportActivationTargetOptions = {}): FactoryImportActivationTarget {
   const currentFactoryQuery = useQuery({
     enabled,
     queryFn: () => getCurrentFactory({ sessionID }),

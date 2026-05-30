@@ -77,4 +77,40 @@ describe("validateRequiredLocaleMessages", () => {
       },
     ]);
   });
+
+  it("reports when a required locale catalog entry is null", () => {
+    const messages = {
+      en: {
+        title: "Dashboard",
+      },
+      "zh-CN": null,
+    };
+
+    expect(validateRequiredLocaleMessages(messages)).toEqual([
+      {
+        locale: "zh-CN",
+        path: "zh-CN",
+      },
+    ]);
+  });
+
+  it("reports when a required locale catalog nests a non-object message group", () => {
+    const messages = {
+      en: {
+        errors: {
+          unavailable: "Unavailable",
+        },
+      },
+      "zh-CN": {
+        errors: "not-a-message-group",
+      },
+    };
+
+    expect(validateRequiredLocaleMessages(messages)).toEqual([
+      {
+        locale: "zh-CN",
+        path: "zh-CN.errors",
+      },
+    ]);
+  });
 });
