@@ -36,17 +36,20 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
 	)
-	composed, err := service.ComposeFactoryService(
+	composeCfg := &service.FactoryServiceConfig{Dir: dir}
+	shell, err := service.ComposeFactoryService(
 		ctx,
-		&service.FactoryServiceConfig{Dir: dir},
+		composeCfg,
 		root,
 		collaborators,
 		load,
 		clock,
+		service.NewHostedWorkersConfig(composeCfg, root.BaseLogger, clock),
 	)
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
+	composed := service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, composeCfg))
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())

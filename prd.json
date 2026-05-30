@@ -1,31 +1,29 @@
 {
-  "project": "UI Session Scope Context (U2 Recovery v2)",
-  "branchName": "ralph/ui-session-scope-context-recovery-v2",
-  "description": "Recovery implementation of dashboard session scope context (U2): project Zustand tab selection into SessionScope at the dashboard shell so factory, export, submit-work, import, and stream hooks share useDashboardSession() instead of scattering dashboardSessionStore access. Retriggers after work-plan-85 failed; baseline spec at tasks/prd-ui-session-scope-context.md.",
+  "project": "Command Wiring with Wire (S8)",
+  "branchName": "ralph/cmd-wire-composition",
+  "description": "Optional compile-time dependency injection at the factory CLI entrypoint: add cmd/factory/composition with google/wire, register the generated FactoryService builder before cli.Execute, expand providers after S6 collaborator extraction, and preserve all you run and local API server behavior with documented go generate workflow.",
   "context": {
-    "customerAsk": "Retrigger U2 (UI session scope context) after work-plan-85 failed on ui-session-scope-context-recovery. Deliver the session-scope seam from tasks/prd-ui-session-scope-context.md so dashboard features share one normalized session identity and API path surface.",
-    "problem": "Dashboard features read useDashboardSessionStore directly or duplicate sessionID and path normalization, so tab switches and pause state are easy to wire incorrectly across factory saves, export, submit-work, import, prompt templates, and the live event stream.",
-    "solution": "Keep dashboardSessionStore for selection and pause; project it through buildSessionScope and DashboardSessionProvider at the dashboard shell; migrate high-traffic hooks to useDashboardSession(); pin sessions in tests with DashboardSessionTestProvider; enforce store import boundaries with Biome and documentation; prove session-switch behavior with focused UI regression."
+    "customerAsk": "Optional wire in cmd/ after composition stabilizes. Full spec: tasks/prd-cmd-wire-composition.md — Command Wiring with Wire (S8).",
+    "problem": "FactoryService construction is invoked from pkg/cli/run while process wiring belongs in cmd/. As S6 injects collaborators (factorysave, runtimebuild, sessions, localmodels, hostedworkers), manual edge wiring risks duplication and ordering drift. cmd/factory/main.go is currently a one-line delegate, and pkg cannot import cmd, so Wire must register into the existing buildFactoryService hook from main.",
+    "solution": "Introduce cmd/factory/composition with wire.go (wireinject) and checked-in wire_gen.go that calls plain pkg/service constructors; register the generated builder from cmd/factory/main.go via pkg/cli/run before cli.Execute. Bootstrap by wrapping service.BuildFactoryService, then expand explicit providers after S6. Document go generate workflow and optional CI stale-gen check. No API, CLI flag, or UI behavior changes."
   },
   "acceptanceCriteria": [
-    "buildSessionScope is the single normalization point for sessionID, isDefault, factoryPath, workPath, eventsPath, and isPaused aligned with session-routing.ts",
-    "DashboardScreen wraps dashboard content in DashboardSessionProvider and useDashboardSession throws clearly outside the provider",
-    "High-traffic hooks (factory definition/document/save, export, submit-work, dashboard snapshot/stream) use useDashboardSession in production without importing dashboardSessionStore",
-    "Bento and import flows use session identity from scope consistent with factory saves; session tabs continue to mutate the store and refresh scope for children",
-    "DashboardSessionTestProvider and renderApp/renderWithDashboardSessionTest pin session scope for tests and Storybook",
-    "Biome noRestrictedImports and dashboard-session-scope-import-boundaries.md block store imports outside the documented allowlist",
-    "Session-switch regression (App.session-switching.stories.tsx or equivalent) proves tab changes retarget session-scoped behavior",
-    "Typecheck, lint, and targeted UI tests pass for all touched areas"
+    "Wire usage is confined to cmd/factory/composition; pkg/service, pkg/api, and pkg/cli have no wireinject tags and no wire struct tags in production code.",
+    "you run and go build ./cmd/factory preserve existing CLI flags, help, defaults, and startup behavior covered by pkg/cli/run tests.",
+    "cmd/factory/main.go registers the wire-generated factory builder before cli.Execute; pkg/cli/run tests can still override buildFactoryService without Wire.",
+    "wire_gen.go is generated via go generate, committed, and never hand-edited; maintainer docs describe install and regeneration.",
+    "After S6, collaborator wiring is expressed in one provider set; adding a dependency does not require parallel manual entrypoint edits.",
+    "Existing integration and functional tests for you run and the local API server pass without assertion weakening.",
+    "Quality gate: go build ./..., repository lint/typecheck surfaces, and targeted tests for cmd/factory/composition, pkg/cli/run, and pkg/service pass."
   ],
   "userStories": [
     {
-      "id": "ui-session-scope-context-recovery-v2-001",
-      "title": "Session scope contract and pure builder",
-      "description": "As a feature developer, I want a typed SessionScope and pure buildSessionScope helper so session normalization and API paths are defined once.",
+      "id": "cmd-wire-composition-001",
+      "title": "Factory service builder registration seam",
+      "description": "As a maintainer, I want the CLI run path to accept a factory service builder registered from cmd/factory/main so compile-time DI can live under cmd/ without pkg importing cmd.",
       "acceptanceCriteria": [
-        "ui/src/api/session-scope.ts exports SessionScope with sessionID, rawSessionID, isDefault, factoryPath, workPath, eventsPath, and isPaused",
-        "buildSessionScope maps null, empty, and ~default to the default session, encodes non-default paths per session-routing.ts, and sets isPaused only for the active raw session when listed in pausedSessionIDs",
-        "session-scope.test.ts covers default, encoded non-default, and pause cases",
+        "pkg/cli/run exports a registration function that assigns the package-level buildFactoryService used by Run; when unset, behavior matches today's default service.BuildFactoryService.",
+        "pkg/cli/run tests that override buildFactoryService continue to pass without calling the registration function.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,14 +32,13 @@
       "notes": ""
     },
     {
-      "id": "ui-session-scope-context-recovery-v2-002",
-      "title": "Dashboard session provider at shell boundary",
-      "description": "As a dashboard user, I want every widget under the dashboard shell to see the same active session projection when I change tabs.",
+      "id": "cmd-wire-composition-002",
+      "title": "Wire toolchain and composition package bootstrap",
+      "description": "As a contributor, I want a checked-in Wire-generated injector in cmd/factory/composition so the factory binary has a single generated composition root.",
       "acceptanceCriteria": [
-        "DashboardSessionProvider subscribes to selectedSessionID and pausedSessionIDs and supplies memoized SessionScope via context",
-        "useDashboardSession throws with message useDashboardSession must be used within DashboardSessionProvider when context is missing",
-        "DashboardScreen wraps inner dashboard content in DashboardSessionProvider",
-        "Provider tests prove scope updates when setSelectedSessionID changes",
+        "github.com/google/wire is available to the repo; cmd/factory/composition/wire.go uses wireinject and go generate to produce wire_gen.go.",
+        "wire_gen.go builds without the wireinject tag and exposes a function that builds *service.FactoryService from context.Context and *service.FactoryServiceConfig by delegating to service.BuildFactoryService.",
+        "go build ./cmd/factory succeeds on a clean checkout after go generate ./cmd/factory/composition/...",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -50,13 +47,13 @@
       "notes": ""
     },
     {
-      "id": "ui-session-scope-context-recovery-v2-003",
-      "title": "High-traffic hooks consume session scope",
-      "description": "As an operator switching factory tabs, I want saves, export, submit-work, factory queries, and the live stream to target the newly selected session without reloading the app.",
+      "id": "cmd-wire-composition-003",
+      "title": "Register wire-built builder in factory main",
+      "description": "As an operator, I want you run to use the wire-generated factory builder by default so runtime behavior stays the same while composition moves to cmd/.",
       "acceptanceCriteria": [
-        "useCurrentFactoryDefinition, useCurrentFactoryDocument, useSaveCurrentFactory, use-current-factory-export, and submit-work-widget use useDashboardSession for sessionID in production code",
-        "useDashboardSnapshot and useFactoryEventStream use rawSessionID and isPaused from scope; production modules do not import dashboardSessionStore",
-        "Tests prove changing selected session retargets query keys or stream session keys",
+        "cmd/factory/main.go registers the composition package generated builder via pkg/cli/run before cli.Execute().",
+        "go test ./pkg/cli/run/... passes with no intentional changes to flag parsing, auto-port, dashboard URL, or API server startup tests.",
+        "A focused composition test asserts the registered builder returns non-nil *service.FactoryService for a minimal valid FactoryServiceConfig fixture, or the same error family as service.BuildFactoryService for an invalid fixture.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -65,13 +62,13 @@
       "notes": ""
     },
     {
-      "id": "ui-session-scope-context-recovery-v2-004",
-      "title": "Bento import uses the same session identity as saves",
-      "description": "As an operator importing a factory PNG, I want activation to apply to the same session tab I have selected for edits.",
+      "id": "cmd-wire-composition-004",
+      "title": "Explicit collaborator provider set (post-S6)",
+      "description": "As a maintainer, I want Wire providers for each FactoryService collaborator so dependency order is visible in one place after S6 extraction.",
       "acceptanceCriteria": [
-        "DashboardBento reads rawSessionID and sessionID from useDashboardSession and passes rawSessionID into import controller and bento import hooks",
-        "Import hooks accept optional sessionID for tests but dashboard production path uses scope-fed identity",
-        "DashboardSessionTabs mutates selection via header tabs state; bento and import production code do not import dashboardSessionStore",
+        "cmd/factory/composition/wire.go defines providers for S6 collaborators (logger/config inputs, factorysessions registry, factorysave, runtimebuild, localmodels, hostedworkers) and assembles *service.FactoryService without duplicating pkg/service business logic.",
+        "The wire-generated build path is behaviorally equivalent to service.BuildFactoryService for the same FactoryServiceConfig on fixtures covered by existing pkg/service build tests.",
+        "go test ./pkg/service/... and go test ./pkg/cli/run/... pass without weakening assertions.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -80,47 +77,29 @@
       "notes": ""
     },
     {
-      "id": "ui-session-scope-context-recovery-v2-005",
-      "title": "Test and Storybook session pinning",
-      "description": "As a test author, I want to pin a session in one line so stories and hook tests do not reimplement store seeding when only session identity matters.",
+      "id": "cmd-wire-composition-005",
+      "title": "Document Wire regeneration workflow",
+      "description": "As a contributor, I want clear instructions for regenerating composition code after changing providers.",
       "acceptanceCriteria": [
-        "DashboardSessionTestProvider exports with default ~default and optional sessionID and paused props",
-        "renderWithDashboardSessionTest and renderApp sessionID wrap trees with the test provider; Storybook dashboard runtime applies dashboardApi.sessionID via the same provider",
-        "ui/src/testing/index.ts re-exports test provider utilities",
-        "Test provider tests assert normalized paths for a non-default sessionID",
-        "Typecheck passes",
-        "Tests pass"
+        "docs/internal/development/ or the development guide documents installing Wire CLI, running go generate ./cmd/factory/composition/..., committing wire_gen.go, and never hand-editing generated files.",
+        "Documentation states Wire is limited to cmd/factory/composition and pkg/service stays tag-free.",
+        "Typecheck passes"
       ],
       "priority": 5,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ui-session-scope-context-recovery-v2-006",
-      "title": "Enforce dashboard session store import boundaries",
-      "description": "As a reviewer, I want new dashboard features blocked from importing the session store outside approved seams.",
+      "id": "cmd-wire-composition-006",
+      "title": "Optional CI guard for stale wire_gen",
+      "description": "As a maintainer, I want CI to fail when wire_gen.go is out of date so generated composition does not drift silently.",
       "acceptanceCriteria": [
-        "dashboard-session-scope-import-boundaries.md documents allowed production importers and the default useDashboardSession rule",
-        "ui/biome.jsonc noRestrictedImports blocks dashboardSessionStore outside allowlisted production modules, Storybook runtime, app-shell test utilities, and test/story files",
-        "UI lint reports no violations in production feature modules outside the allowlist",
+        "A CI or make target runs go generate ./cmd/factory/composition/... and fails if git diff shows changes to wire_gen.go, or documents an intentional skip.",
+        "When enabled, the check passes on a clean tree after regeneration.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "ui-session-scope-context-recovery-v2-007",
-      "title": "Session-switch regression proof",
-      "description": "As an operator, I want confidence that switching session tabs updates visible session-scoped data and network targets.",
-      "acceptanceCriteria": [
-        "App.session-switching.stories.tsx or focused replacement exercises default-to-named session switch and asserts session-scoped UI or network behavior changes with the tab",
-        "Story test passes in CI via the project UI test command",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 7,
       "passes": true,
       "notes": ""
     }

@@ -59,9 +59,6 @@ func provideFactoryServiceCollaborators(
 	return service.NewFactoryServiceCollaboratorsFromParts(sessions, localModels, runtimeBuild)
 }
 
-// provideHostedWorkersConfig documents the hosted-workers collaborator seam for
-// wire; ComposeFactoryService applies the same buildHostedWorkersConfig path
-// using the runtime bundle logger after the bundle is built.
 func provideHostedWorkersConfig(
 	cfg *service.FactoryServiceConfig,
 	logger *zap.Logger,
@@ -70,14 +67,21 @@ func provideHostedWorkersConfig(
 	return service.NewHostedWorkersConfig(cfg, logger, clock)
 }
 
-func provideFactoryService(
+func provideFactoryServiceShell(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
 	root service.FactoryServiceRoot,
 	collaborators service.FactoryServiceCollaborators,
 	load service.FactoryConfigLoadResult,
 	clock factory.Clock,
-	_ hostedworkers.Config,
-) (*service.FactoryService, error) {
-	return service.ComposeFactoryService(ctx, cfg, root, collaborators, load, clock)
+	hostedWorkers hostedworkers.Config,
+) (service.FactoryServiceShell, error) {
+	return service.ComposeFactoryService(ctx, cfg, root, collaborators, load, clock, hostedWorkers)
+}
+
+func provideFactoryService(
+	shell service.FactoryServiceShell,
+	cfg *service.FactoryServiceConfig,
+) *service.FactoryService {
+	return service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, cfg))
 }
