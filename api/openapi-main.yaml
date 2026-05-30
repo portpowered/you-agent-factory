@@ -83,6 +83,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens.
@@ -157,6 +160,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens for the targeted session.
@@ -266,17 +272,17 @@ paths:
       tags:
         - Work
       operationId: getWork
-      summary: Get work token
-      description: Returns one token by token ID from the current marking.
+      summary: Get work
+      description: Returns one work item by work or token identifier from the current marking.
       parameters:
         - $ref: '#/components/parameters/WorkOrTokenID'
       responses:
         '200':
-          description: Work token with history.
+          description: One work item from the current marking.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenResponse'
+                $ref: '#/components/schemas/Work'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -286,18 +292,18 @@ paths:
       tags:
         - Work
       operationId: getWorkBySessionId
-      summary: Get work token for one session
-      description: Returns one token by token ID from the current marking owned by the explicitly selected live factory session.
+      summary: Get work for one session
+      description: Returns one work item by work or token identifier from the current marking owned by the explicitly selected live factory session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/WorkOrTokenID'
       responses:
         '200':
-          description: Work token with history for the targeted session.
+          description: One work item for the targeted session.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenResponse'
+                $ref: '#/components/schemas/Work'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -783,6 +789,12 @@ components:
       $ref: './components/parameters/StateType.yaml'
     SortBy:
       $ref: './components/parameters/SortBy.yaml'
+    WorkListName:
+      $ref: './components/parameters/WorkListName.yaml'
+    WorkListWorkTypeName:
+      $ref: './components/parameters/WorkListWorkTypeName.yaml'
+    WorkListTraceId:
+      $ref: './components/parameters/WorkListTraceId.yaml'
     WorkOrTokenID:
       $ref: './components/parameters/WorkOrTokenID.yaml'
   responses:

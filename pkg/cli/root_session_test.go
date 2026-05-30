@@ -85,9 +85,37 @@ func TestWorkListCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
 	for _, want := range []string{
 		"you session list",
 		"discover live session ids",
+		"--name",
+		"--work-type-name",
+		"--trace-id",
+		"before pagination",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("work list help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestWorkShowCommand_HelpDocumentsVerifyFlow(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"work", "show", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work show --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"you session list",
+		"work show <work-id>",
+		"work list",
+		"--session",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("work show help missing %q:\n%s", want, help)
 		}
 	}
 }

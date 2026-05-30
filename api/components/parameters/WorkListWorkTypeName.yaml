@@ -1,0 +1,6 @@
+name: workTypeName
+in: query
+required: false
+description: Optional work type name filter. Matches when workTypeName equals this value exactly.
+schema:
+  type: string

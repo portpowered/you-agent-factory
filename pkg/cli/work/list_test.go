@@ -60,8 +60,95 @@ func TestList_SendsStateFilters(t *testing.T) {
 	if gotPath != "/factory-sessions/~default/work" {
 		t.Fatalf("path = %q, want /factory-sessions/~default/work", gotPath)
 	}
-	if got := out.String(); got != "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\nwork-1\tReview PRD\treview\tPROCESSING\tnone\n" {
+	if got := out.String(); got != "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\nwork-1\tReview PRD\tstory\treview\tPROCESSING\tnone\n" {
 		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestList_SendsNameAndWorkTypeNameFilters(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		if r.URL.Query().Get("name") != "prd" {
+			t.Fatalf("name query = %q, want prd", r.URL.Query().Get("name"))
+		}
+		if r.URL.Query().Get("workTypeName") != "story" {
+			t.Fatalf("workTypeName query = %q, want story", r.URL.Query().Get("workTypeName"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Server:       serverBase(t, srv),
+		Name:         "prd",
+		WorkTypeName: "story",
+		Output:       &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if gotQuery == "" {
+		t.Fatal("expected request query")
+	}
+	if got := out.String(); got != "No work found.\n" {
+		t.Fatalf("output = %q, want empty-state output", got)
+	}
+}
+
+func TestList_SendsTraceIdFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("traceId") != "trace-submit-1" {
+			t.Fatalf("traceId query = %q, want trace-submit-1", r.URL.Query().Get("traceId"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Server:  serverBase(t, srv),
+		TraceID: "trace-submit-1",
+		Output:  &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+}
+
+func TestList_VerboseDiagnosticsIncludeActiveFilterKeys(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	var diagnostics bytes.Buffer
+	err := List(ListConfig{
+		Server:       serverBase(t, srv),
+		Name:         "alpha",
+		WorkTypeName: "story",
+		TraceID:      "trace-1",
+		Verbose:      true,
+		Output:       &out,
+		Diagnostics:  &diagnostics,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	diag := diagnostics.String()
+	if !strings.Contains(diag, "filters=name,workTypeName,traceId") {
+		t.Fatalf("diagnostics missing active filter keys:\n%s", diag)
 	}
 }
 
@@ -147,8 +234,42 @@ func TestList_HumanOutputShowsOneWorkItemIdentityAndState(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tReview PRD\treview\tPROCESSING\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tReview PRD\tstory\treview\tPROCESSING\tnone\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestList_HumanOutputLeavesWorkTypeEmptyWhenAbsent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:   "Legacy work",
+				WorkId: stringPtr("work-legacy"),
+				State: &factoryapi.WorkState{
+					Name: "init",
+					Type: factoryapi.WorkStateTypeINITIAL,
+				},
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Server: serverBase(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-legacy\tLegacy work\t\tinit\tINITIAL\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -193,9 +314,9 @@ func TestList_HumanOutputShowsManyWorkItems(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tPlan feature\tinit\tINITIAL\tnone\n" +
-		"work-2\tReview PRD\treview\tPROCESSING\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tPlan feature\tstory\tinit\tINITIAL\tnone\n" +
+		"work-2\tReview PRD\tstory\treview\tPROCESSING\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -241,9 +362,9 @@ func TestList_HumanOutputOmitsRuntimeResourcesWhenMixedResponseContainsOnlyVisib
 	}
 
 	got := out.String()
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tPlan feature\tinit\tINITIAL\tnone\n" +
-		"work-2\tReview PRD\treview\tPROCESSING\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tPlan feature\tstory\tinit\tINITIAL\tnone\n" +
+		"work-2\tReview PRD\tstory\treview\tPROCESSING\tnone\n"
 	if got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -288,8 +409,8 @@ func TestList_HumanOutputShowsRelationSummaryForOneRelation(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tReview PRD\treview\tPROCESSING\tDEPENDS_ON: Draft PRD [work-draft] (requires complete)\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tReview PRD\tstory\treview\tPROCESSING\tDEPENDS_ON: Draft PRD [work-draft] (requires complete)\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -345,8 +466,8 @@ func TestList_HumanOutputShowsDeterministicSummaryForMultipleRelations(t *testin
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-3\tPublish Release\tblocked\tFAILED\tDEPENDS_ON: Review PRD [work-review] (requires reviewed); PARENT_CHILD: Epic Release [work-epic]; SPAWNED_BY: Release Train [work-parent]\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-3\tPublish Release\tstory\tblocked\tFAILED\tDEPENDS_ON: Review PRD [work-review] (requires reviewed); PARENT_CHILD: Epic Release [work-epic]; SPAWNED_BY: Release Train [work-parent]\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -603,8 +724,8 @@ func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("state = %#v, want JSON object", work["state"])
 	}
-	if work["workId"] != "work-1" || state["name"] != "review" || state["type"] != "PROCESSING" {
-		t.Fatalf("work JSON = %#v, want workId and structured state fields", work)
+	if work["workId"] != "work-1" || work["workTypeName"] != "story" || state["name"] != "review" || state["type"] != "PROCESSING" {
+		t.Fatalf("work JSON = %#v, want workId, workTypeName, and structured state fields", work)
 	}
 	pagination, ok := got["paginationContext"].(map[string]any)
 	if !ok {

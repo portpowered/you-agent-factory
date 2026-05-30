@@ -22,13 +22,16 @@ const listRequestTimeout = 10 * time.Second
 
 // ListConfig holds parameters for the work list command.
 type ListConfig struct {
-	Server      string
-	SessionID   string
-	StateName   string
-	StateType   string
-	SortBy      string
-	MaxResults  int
-	NextToken   string
+	Server       string
+	SessionID    string
+	StateName    string
+	StateType    string
+	Name         string
+	WorkTypeName string
+	TraceID      string
+	SortBy       string
+	MaxResults   int
+	NextToken    string
 	JSON        bool
 	Verbose     bool
 	Debug       bool
@@ -112,12 +115,21 @@ func validateListConfig(cfg ListConfig) error {
 }
 
 func listFilterSummary(cfg ListConfig) string {
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 6)
 	if cfg.StateName != "" {
 		parts = append(parts, "state.name")
 	}
 	if cfg.StateType != "" {
 		parts = append(parts, "state.type")
+	}
+	if cfg.Name != "" {
+		parts = append(parts, "name")
+	}
+	if cfg.WorkTypeName != "" {
+		parts = append(parts, "workTypeName")
+	}
+	if cfg.TraceID != "" {
+		parts = append(parts, "traceId")
 	}
 	if cfg.SortBy != "" {
 		parts = append(parts, "sortBy")
@@ -141,6 +153,9 @@ func listEndpoint(cfg ListConfig) (url.URL, error) {
 	query := endpoint.Query()
 	setListQueryParam(query, "state.name", cfg.StateName)
 	setListQueryParam(query, "state.type", cfg.StateType)
+	setListQueryParam(query, "name", cfg.Name)
+	setListQueryParam(query, "workTypeName", cfg.WorkTypeName)
+	setListQueryParam(query, "traceId", cfg.TraceID)
 	setListQueryParam(query, "sortBy", cfg.SortBy)
 	if cfg.MaxResults > 0 {
 		query.Set("maxResults", fmt.Sprintf("%d", cfg.MaxResults))
@@ -162,16 +177,17 @@ func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) erro
 		return err
 	}
 
-	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
+	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
 		return err
 	}
 	for _, work := range result.Results {
 		stateName, stateType := workStateColumns(work.State)
 		if _, err := fmt.Fprintf(
 			output,
-			"%s\t%s\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\n",
 			stringValue(work.WorkId),
 			work.Name,
+			stringValue(work.WorkTypeName),
 			stateName,
 			stateType,
 			formatWorkRelations(work.Relations),

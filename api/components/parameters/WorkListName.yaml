@@ -1,0 +1,6 @@
+name: name
+in: query
+required: false
+description: Optional work name filter. Matches when the work name contains this value, case-insensitively.
+schema:
+  type: string

@@ -140,8 +140,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get work token
-         * @description Returns one token by token ID from the current marking.
+         * Get work
+         * @description Returns one work item by work or token identifier from the current marking.
          */
         get: operations["getWork"];
         put?: never;
@@ -160,8 +160,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get work token for one session
-         * @description Returns one token by token ID from the current marking owned by the explicitly selected live factory session.
+         * Get work for one session
+         * @description Returns one work item by work or token identifier from the current marking owned by the explicitly selected live factory session.
          */
         get: operations["getWorkBySessionId"];
         put?: never;
@@ -531,7 +531,20 @@ export interface components {
             requiredState?: string;
         };
         SubmitWorkResponse: {
+            /** @description Trace identifier for the submitted work request batch. */
             traceId: string;
+            /** @description Stable request identifier assigned during normalization. */
+            requestId: string;
+            /** @description False when the same requestId was already accepted (idempotent replay). */
+            accepted: boolean;
+            /** @description Primary work identifier for single-work submits (batch-<requestId>-<name> when omitted). */
+            workId?: string;
+            /** @description Submitted work display name. */
+            name?: string;
+            /** @description Configured work type name for the submitted work. */
+            workTypeName?: string;
+            /** @description Factory session that accepted the submit (~default for POST /work). */
+            sessionId?: string;
         };
         /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
         SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
@@ -2477,6 +2490,12 @@ export interface components {
         StateType: components["schemas"]["WorkStateType"];
         /** @description Optional list-work sort field. Use state.type to order by current work state type. */
         SortBy: "state.type";
+        /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
+        WorkListName: string;
+        /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
+        WorkListWorkTypeName: string;
+        /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
+        WorkListTraceId: string;
         /** @description Work or token identifier, depending on route. */
         WorkOrTokenID: string;
     };
@@ -2499,6 +2518,12 @@ export interface operations {
                 "state.type"?: components["parameters"]["StateType"];
                 /** @description Optional list-work sort field. Use state.type to order by current work state type. */
                 sortBy?: components["parameters"]["SortBy"];
+                /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
+                name?: components["parameters"]["WorkListName"];
+                /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
+                workTypeName?: components["parameters"]["WorkListWorkTypeName"];
+                /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
+                traceId?: components["parameters"]["WorkListTraceId"];
             };
             header?: never;
             path?: never;
@@ -2583,6 +2608,12 @@ export interface operations {
                 "state.type"?: components["parameters"]["StateType"];
                 /** @description Optional list-work sort field. Use state.type to order by current work state type. */
                 sortBy?: components["parameters"]["SortBy"];
+                /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
+                name?: components["parameters"]["WorkListName"];
+                /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
+                workTypeName?: components["parameters"]["WorkListWorkTypeName"];
+                /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
+                traceId?: components["parameters"]["WorkListTraceId"];
             };
             header?: never;
             path: {
@@ -2739,13 +2770,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Work token with history. */
+            /** @description One work item from the current marking. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TokenResponse"];
+                    "application/json": components["schemas"]["Work"];
                 };
             };
             404: components["responses"]["NotFound"];
@@ -2766,13 +2797,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Work token with history for the targeted session. */
+            /** @description One work item for the targeted session. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TokenResponse"];
+                    "application/json": components["schemas"]["Work"];
                 };
             };
             404: components["responses"]["NotFound"];

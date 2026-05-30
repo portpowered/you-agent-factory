@@ -150,13 +150,33 @@ func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*int
 }
 
 func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *interfaces.Token {
+	return listWorkTokenWithTraces(id, workID, "", placeID, workTypeID, "", "", now)
+}
+
+func listWorkTokenWithTraces(id, workID, name, placeID, workTypeID, traceID, currentChainingTraceID string, now time.Time) *interfaces.Token {
+	color := interfaces.TokenColor{
+		WorkID:                 workID,
+		WorkTypeID:             workTypeID,
+		TraceID:                traceID,
+		CurrentChainingTraceID: currentChainingTraceID,
+	}
+	if name != "" {
+		color.Name = name
+	}
+	return listWorkTokenWithColor(id, workID, placeID, workTypeID, now, color)
+}
+
+func listWorkTokenWithColor(id, workID, placeID, workTypeID string, now time.Time, color interfaces.TokenColor) *interfaces.Token {
+	if color.WorkID == "" {
+		color.WorkID = workID
+	}
+	if color.WorkTypeID == "" {
+		color.WorkTypeID = workTypeID
+	}
 	return &interfaces.Token{
-		ID:      id,
-		PlaceID: placeID,
-		Color: interfaces.TokenColor{
-			WorkID:     workID,
-			WorkTypeID: workTypeID,
-		},
+		ID:        id,
+		PlaceID:   placeID,
+		Color:     color,
 		CreatedAt: now,
 		EnteredAt: now,
 		History: interfaces.TokenHistory{

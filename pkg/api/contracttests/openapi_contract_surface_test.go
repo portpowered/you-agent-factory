@@ -204,6 +204,9 @@ func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 	assertParameterRef(t, parameters, "#/components/parameters/StateName")
 	assertParameterRef(t, parameters, "#/components/parameters/StateType")
 	assertParameterRef(t, parameters, "#/components/parameters/SortBy")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListName")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListWorkTypeName")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListTraceId")
 }
 
 func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *testing.T) {
@@ -374,6 +377,11 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	stageSubmitWorkFileResponse := schemaObject(t, schemas, "StageSubmitWorkFileResponse")
 	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType")
+
+	submitWorkResponseSchema := schemaObject(t, schemas, "SubmitWorkResponse")
+	assertRequiredFields(t, submitWorkResponseSchema, "traceId", "requestId", "accepted")
+	submitWorkResponseProperties := schemaProperties(t, submitWorkResponseSchema, "SubmitWorkResponse")
+	assertSchemaPropertiesPresent(t, submitWorkResponseProperties, "SubmitWorkResponse", "traceId", "requestId", "accepted", "workId", "name", "workTypeName", "sessionId")
 }
 
 func assertWorkRequestSurfaceSchemas(t *testing.T, schemas map[string]any) {
