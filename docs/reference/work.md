@@ -86,6 +86,57 @@ and batch `WorkRequest` payloads use the OpenAPI camelCase fields from
 See [Batch Inputs](batch-inputs.md) for the full `FACTORY_REQUEST_BATCH` contract,
 including `requestId`, relation fields, and optional `currentChainingTraceId`.
 
+## Submit Success Response
+
+On HTTP `201`, `POST /work` and session-scoped
+`POST /factory-sessions/{sessionId}/work` return a `SubmitWorkResponse` body
+with camelCase fields aligned to `api/openapi.yaml`:
+
+| Field | Description |
+|-------|-------------|
+| `traceId` | Required trace identifier for the accepted submission. |
+| `workId` | Normalized work identifier after submit acceptance (for example `batch-<requestId>-<name>` when callers omit an explicit id). |
+| `name` | Authored work name returned for verification. |
+| `workTypeName` | Configured work type for the accepted item. |
+
+Example success body:
+
+```json
+{
+  "traceId": "trace-abc",
+  "workId": "batch-req-1-driver-incident-review",
+  "name": "driver-incident-review",
+  "workTypeName": "task"
+}
+```
+
+Use these fields to confirm which work was accepted before listing or
+re-submitting. See [Agents](agents.md) for the submit → wait → verify loop.
+
+## CLI Submit Confirmation
+
+`you submit` posts the same unary contract to the scoped submit path for the
+effective session (`/work` for the default session alias, or
+`/factory-sessions/{sessionId}/work` when `--session` is set).
+
+On HTTP `201` with global `--json`, stdout is one confirmation object (not the
+raw API envelope alone). Fields mirror the API identifiers plus CLI routing
+metadata:
+
+| Field | Source |
+|-------|--------|
+| `workId`, `name`, `workTypeName`, `traceId` | `SubmitWorkResponse` (CLI falls back to `--name` / `--work-type-name` when the API omits optional strings). |
+| `sessionId` | Effective session label (`~default` for the default session). |
+| `endpointPath` | Scoped submit path used for the HTTP request (for example `/factory-sessions/~default/work`). |
+
+Human mode prints the same identifiers and one verify hint:
+`you work show <workId>` when `workId` is non-empty, otherwise
+`you work list --name <name>`.
+
+Non-`201` responses exit non-zero with bounded error text on stderr; stdout
+has no success confirmation. Transport failures (`factory not reachable at ...`)
+remain distinct from API rejection messages.
+
 ## Tags And Prompt Templates
 
 Tags declared on submitted work items are available after the batch request has

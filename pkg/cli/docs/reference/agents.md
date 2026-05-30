@@ -90,6 +90,53 @@ flow; see [Batch Inputs](batch-inputs.md) for batch shape, inbox placement,
 - [ ] Add `relations[]` when ordering or parent membership matters
   ([Relationships](relationships.md)).
 
+### Submit, Wait, and Verify
+
+After a successful `you submit` (HTTP `201`), confirm the accepted work before
+submitting again or assuming failure. Do not treat stderr diagnostics or a
+non-zero exit as success; non-`201` responses exit non-zero with no success
+confirmation on stdout.
+
+| Step | Action |
+|------|--------|
+| 1. **Submit** | Run `you submit` (or `POST /work`) with explicit `name` and `workTypeName`. |
+| 2. **Read success output** | Human mode prints `name`, `workTypeName`, `traceId`, optional `workId`, and one verify hint. With global `--json`, stdout is one object (see [Work](work.md)). |
+| 3. **Wait** | Let the factory accept the token and advance scheduling; use `you work list` or factory-local guidance for expected latency. |
+| 4. **Verify** | When `workId` is present, run `you work show <workId>`. Otherwise run `you work list --name <name>`. |
+
+Human success output looks like:
+
+```text
+Submitted work
+name: my-task
+workTypeName: task
+traceId: trace-abc
+workId: batch-req-1-my-task
+Verify with: you work show batch-req-1-my-task
+```
+
+Scripted runs should parse global `--json` and copy `workId` when present:
+
+```json
+{
+  "workId": "batch-req-1-my-task",
+  "name": "my-task",
+  "workTypeName": "task",
+  "traceId": "trace-abc",
+  "sessionId": "~default",
+  "endpointPath": "/factory-sessions/~default/work"
+}
+```
+
+Use `sessionId` and `endpointPath` to confirm which session-scoped submit path
+was called (`--session` on the CLI). Request payloads and full HTTP bodies stay
+on stderr via `--verbose` only.
+
+If submit fails, read the bounded error text (HTTP status plus
+`ErrorResponse.message` when parseable). When the error JSON includes
+`workId`, the CLI mentions it so you can inspect an existing work item instead
+of re-submitting blindly.
+
 ## Command Matrix
 
 | Command | Purpose | Factory must already be running? |
