@@ -40,3 +40,7 @@ factory/logs/meta/*
 !factory/logs/meta/view.md
 
 **/__pycache__/*
+
+prd.json
+prd.md
+progress.txt
