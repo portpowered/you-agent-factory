@@ -384,6 +384,48 @@ describe("useFactoryValidation draft mutation refresh", () => {
     });
   });
 
+  it("refreshes targets after a connect operation changes the draft-applied factory", async () => {
+    vi.mocked(validateFactoryDefinition)
+      .mockResolvedValueOnce(validationFixtures.disconnectedFailureRoute)
+      .mockResolvedValueOnce(validationFixtures.validFactory);
+
+    const queryClient = createQueryClient();
+    const disconnectedDraft = createEmptyFactoryGraphDraft();
+    const connectedDraft = connectFactoryGraphNodes({
+      baseFactoryDefinition,
+      draft: disconnectedDraft,
+      sourceAnchorId: "workstation-on-failure-source",
+      sourceNodeId: "workstation:draft",
+      targetAnchorId: "work-state-input-target",
+      targetNodeId: "work-state:story:done",
+    });
+    expect(connectedDraft.ok).toBe(true);
+
+    const { rerender, result } = renderValidationHook(
+      queryClient,
+      buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        disconnectedDraft,
+      ),
+    );
+
+    await waitFor(() => {
+      expect(result.current.targets).toHaveLength(1);
+      expect(result.current.targets[0]?.subject.location).toBe("ON_FAILURE");
+    });
+
+    rerender({
+      definition: buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        expectOk(connectedDraft).value,
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.targets).toEqual([]);
+    });
+  });
+
   it("refreshes targets after a disconnect operation changes the draft-applied factory", async () => {
     vi.mocked(validateFactoryDefinition)
       .mockResolvedValueOnce(validationFixtures.validFactory)
