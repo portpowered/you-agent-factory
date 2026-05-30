@@ -1,7 +1,8 @@
 ## Codebase Patterns
-- Wire S6 collaborator providers are exported from `pkg/service/factory_build.go` (`ProvideFactorySessionsRegistry`, `ProvideStartupLocalModelDomainPtr`, `ProvideFactoryServiceBuildContext`, `ProvideRuntimeBuildService`, `ProvideFactoryServiceCollaborators`, `ProvideFactoryRuntimeBundle`, `ProvideHostedWorkersConfig`, `ProvideFactoryServiceShell`, `ProvideFactorySaveCollaborator`, `AttachFactorySaveCollaborator`, `BuildFactoryServiceFromCollaborators`); `cmd/factory/composition/wire.go` lists the full provider set in `wire.Build` and generated `wire_gen.go` mirrors the same chain as `service.BuildFactoryService`.
-- Google Wire lives only in `cmd/factory/composition`: `wire.go` uses `//go:build wireinject` and `//go:generate go run -mod=mod github.com/google/wire/cmd/wire`; commit `wire_gen.go` (never hand-edit) and regenerate with `go generate ./cmd/factory/composition/...` after changing providers—`pkg/service` stays free of wire tags.
-- `you run` factory construction uses `pkg/cli/run` package-level `buildFactoryService` (`FactoryServiceBuilder`); register production wiring with `run.SetBuildFactoryService(run.FactoryServiceBuilderFromService(composition.BuildFactoryService))` from `cmd/factory/main` before `cli.Execute`, and keep tests overriding `buildFactoryService` directly without calling registration.
+- Wire S6 collaborator providers live in `pkg/service/factory_build.go` and `factory_editable_definition.go`; `cmd/factory/compose/wire.go` lists `provideFactoryServiceRoot` through `provideFactoryService` (including `provideHostedWorkersConfig`, `provideFactoryServiceShell`, factorysave via `ProvideFactorySaveCollaborator` / `AttachFactorySaveCollaborator` in `providers.go`); generated `wire_gen.go` mirrors `service.BuildFactoryService`.
+- Google Wire lives only in `cmd/factory/compose`: regenerate with `go generate ./cmd/factory/compose/...`; commit `wire_gen.go` (never hand-edit); `pkg/service` stays free of wire tags.
+- `you run` uses `pkg/cli/run` `buildFactoryService`; **default** is `service.BuildFactoryService` (no `cmd` import). Production registers `compose.InjectFactoryService` from `cmd/factory/main` via `SetBuildFactoryService` before `cli.Execute`.
+- Offline `you factory save --from` and `you factory update --from` share `persistFromFile` in `pkg/cli/factory/persist_from_file.go` for validation, canonical JSON load, and mode-specific persist; keep `SaveFromFile` / `UpdateFromFile` as thin wrappers for human/JSON output and mode-specific error rendering in `save.go` / `update.go`.
 - `buildRuntimeBundle` in `pkg/service/factory_build.go` returns `factoryRuntimeBundle`, the single runtime wiring struct referenced from `liveRuntimeHandle`; add new runtime sidecars on `factoryRuntimeBundle` only—startup (`BuildFactoryService`) and `buildReplacementFactoryRuntime` both create `logSink` and session loggers inside `buildRuntimeBundle`, not after the fact.
 - Register every live session (including `~default` at `Run` startup and `OpenFactorySession` launches) through `registerLiveSession` in `pkg/service/runtime_sessions.go` with explicit `FactorySessionTarget` metadata; use `defaultSessionTargetFromRuntimeBundle` for default startup—do not call `sessions.Upsert` directly except in `replaceSessionRuntime` replacement updates.
 - Route session-scoped work, snapshots, idle guards, and record/replay paths through `SubmitWorkRequestForSession`, `GetEngineStateSnapshotForSession`, and `requireIdleRuntimeForSession` in `pkg/service/runtime_sessions.go`; use `sessionScopedRecordPath` for per-session replay artifacts—do not read `fs.currentFactory()` when `session_id` is explicit.
@@ -35,8 +36,6 @@
 - Keep `docs/reference/*.md` and `pkg/cli/docs/reference/*.md` synchronized when adding customer-facing packaged topics; embedded markdown is loaded from `pkg/cli/docs/reference/` via `//go:embed`.
 - When extending `batch-inputs.md`, add the ingress comparison table and `## CLI batch submit` examples to both trees together; guard new CLI markers in `TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown` and `cli_docs_smoke_test.go` `batch-inputs` topic markers.
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
-- Factory CLI Wire maintainer workflow is documented in `docs/internal/development/factory-cli-wire-composition.md` with a short section in `docs/internal/development/development.md`; regenerate with `go generate ./cmd/factory/composition/...`, commit `wire_gen.go`, never hand-edit generated output, and keep Wire confined to `cmd/factory/composition` (no `wireinject` or Wire struct tags in `pkg/service`, `pkg/api`, or `pkg/cli`).
-- CI stale Wire guard: `make factory-composition-smoke` runs `generate-factory-composition` twice then `scripts/check-factory-composition-drift.js` on `cmd/factory/composition/wire_gen.go`; wired into `verify-build-contracts`, `verify-pr`, and the CI Build/Lint/API job beside `api-smoke`.
 - When trimming `authoring-factories` after new topics land, point readers at `you docs mock-workers` and `you docs record-replay` and update `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` markers away from removed deep-dive strings.
 - Register `relationships` at `displayOrder` 28 immediately after `guards` (27); relationships content adapts `batch-inputs.md` relation sections and `parent-aware-fan-in.md` with `SPAWNED_BY` called out as runtime/template-only, not batch-authored.
 - Story 003 index assertions belong in `root_docs_test.go` and `cli_docs_smoke_test.go` immediately after `record-replay` lines; smoke topic tests can use `absent` for `../internal/development/...` paths when replacing packaged cross-links.
@@ -600,65 +599,11 @@
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories `passes: true`; prior BLOCKING merge-conflict + missing CI items addressed on head `77399175`.
 ---
 
-## 2026-05-30T19:49:51Z - cmd-wire-composition-002
-- What was implemented: Added `cmd/factory/composition` with Wire injector bootstrap (`wire.go` + generated `wire_gen.go`) delegating to `service.BuildFactoryService`, `github.com/google/wire` module/tool dependency, and composition test proving error parity with the service builder.
-- Files changed: `cmd/factory/composition/wire.go`, `cmd/factory/composition/wire_gen.go`, `cmd/factory/composition/composition_test.go`, `go.mod`, `go.sum`, `docs/internal/processes/development-guide-relevant-files.md`
+## 2026-05-31T00:00:00Z - consolidate-cli-factory-save-update-from-file-001
+- What was implemented: Added `persistFromFile` shared core in save mode (validation, payload read, `LoadFromCanonicalJSON`, `PersistNamedFactory`, optional `WriteCurrentFactoryPointer`); refactored `SaveFromFile` into a thin delegator preserving human/JSON output and save-specific error mapping.
+- Files changed: `pkg/cli/factory/persist_from_file.go`, `pkg/cli/factory/save.go`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: Run `go run -mod=mod github.com/google/wire/cmd/wire` from `cmd/factory/composition` when the package has only `wireinject`-tagged sources—`go generate ./cmd/factory/composition/...` works once `wire_gen.go` exists.
-  - Gotchas encountered: Wire is an indirect module dependency until `wire.go` is present; add `tool github.com/google/wire/cmd/wire` beside `oapi-codegen` for reproducible generation.
-  - Useful context: Story 003 registers `composition.BuildFactoryService` from `cmd/factory/main` via `run.SetBuildFactoryService`; story 004 replaces the single-provider set with explicit S6 collaborators.
----
-
-## 2026-05-30T19:48:06Z - cmd-wire-composition-001
-- What was implemented: Added `FactoryServiceBuilder`, `defaultBuildFactoryService`, and `SetBuildFactoryService` in `pkg/cli/run` so `cmd/factory/main` can register compile-time DI without `pkg` importing `cmd`; existing tests continue overriding `buildFactoryService` directly.
-- Files changed: `pkg/cli/run/run.go`, `pkg/cli/run/run_builder_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Keep the default builder as a named `defaultBuildFactoryService` function so `SetBuildFactoryService(nil)` can restore production behavior; export the builder type for Wire registration in story 003.
-  - Gotchas encountered: `go build ./cmd/factory` can fail when a sibling `factory/` directory exists in cwd—use `go build -o <tmp> ./cmd/factory` for local verification.
-  - Useful context: Branch renamed to `ralph/cmd-wire-composition`; no PR yet—story 002 adds `cmd/factory/composition` Wire bootstrap.
----
-
-## 2026-05-31T00:15:00Z - cmd-wire-composition-003
-- What was implemented: Registered `composition.BuildFactoryService` from `cmd/factory/main` via `run.SetBuildFactoryService(run.FactoryServiceBuilderFromService(...))` before `cli.Execute`; added `FactoryServiceBuilderFromService` adapter for cross-package concrete builders; extended composition tests with minimal-fixture non-nil service proof.
-- Files changed: `cmd/factory/main.go`, `cmd/factory/composition/composition_test.go`, `pkg/cli/run/run.go`, `pkg/cli/run/run_builder_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Go will not assign `func(...) (*service.FactoryService, error)` to `run.FactoryServiceBuilder` from another package because the return type uses the unexported `factoryServiceRunner` interface—adapt with `run.FactoryServiceBuilderFromService` at the `cmd/factory/main` registration site.
-  - Gotchas encountered: `go build ./cmd/factory` fails with a sibling `factory/` directory in cwd; use `go build -o <tmp> ./cmd/factory` for local verification.
-  - Useful context: Story 004 replaces the single Wire provider with explicit S6 collaborator providers; story 005 documents regeneration workflow.
----
-
-## 2026-05-31T01:30:00Z - cmd-wire-composition-004
-- What was implemented: Expanded `cmd/factory/composition/wire.go` with explicit S6 provider set wired through exported `pkg/service/factory_build.go` helpers; regenerated `wire_gen.go` to call `ProvideFactoryServiceBuildContext`, session registry, local models, runtime build, and `BuildFactoryServiceFromCollaborators`; refactored `service.BuildFactoryService` to share `assembleFactoryService`; added composition regression proving wire and service paths match on a minimal fixture.
-- Files changed: `pkg/service/factory_build.go`, `cmd/factory/composition/wire.go`, `cmd/factory/composition/wire_gen.go`, `cmd/factory/composition/composition_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Wire needs `ProvideStartupLocalModelDomainPtr` because `ProvideRuntimeBuildService` mutates local-model domain state; `ProvideFactoryServiceCollaborators` should accept `*LocalModelDomain` after runtime build runs.
-  - Gotchas encountered: Adding `factory_composition.go` trips `pkg-file-count` (15-file cap)—colocate wire exports in `factory_build.go` and use paired `backendsizecheck:ignore-file` / `pkgmaintcheck:ignore-file-lines` waivers until build helpers split out.
-  - Useful context: `factorysave` and `hostedworkers` remain assembled inside `assembleFactoryService` (`wireFactorySaveCollaborator`, `buildHostedWorkersConfig`); stories 005–006 document regeneration and optional CI stale-gen guard.
----
-
-## 2026-05-31T02:00:00Z - cmd-wire-composition-005
-- What was implemented: Added `docs/internal/development/factory-cli-wire-composition.md` covering Wire CLI install (`go install` and `go.mod` tool), `go generate ./cmd/factory/composition/...`, commit rules for `wire_gen.go`, and the `cmd/`-only / tag-free `pkg/` boundary; linked from a new Factory CLI Wire Composition section in `development.md` and the development-guide relevant-files inventory row.
-- Files changed: `docs/internal/development/factory-cli-wire-composition.md`, `docs/internal/development/development.md`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Mirror other maintainer deep-dives (`openapi-component-authoring.md`) as a focused `docs/internal/development/*.md` file plus a short procedural section in `development.md` for discoverability.
-  - Gotchas encountered: No PR exists on `ralph/cmd-wire-composition` yet—story 006 adds optional CI stale-gen guard before PR creation when all stories pass.
-  - Useful context: Commit `f9c0757e`; story 006 should add `make` or CI check that fails when `wire_gen.go` drifts after `go generate`.
----
-
-## 2026-05-31T03:00:00Z - cmd-wire-composition-006
-- What was implemented: Added `make generate-factory-composition` and `make factory-composition-smoke` (double `go generate`, `scripts/check-factory-composition-drift.js`, composition tests); wired into `verify-build-contracts`, `ci-verify-build-contracts`, and CI Build/Lint/API; updated Wire maintainer docs and development-guide relevant-files inventory.
-- Files changed: `Makefile`, `Makefile-test`, `.github/workflows/ci.yml`, `scripts/check-factory-composition-drift.js`, `docs/internal/development/factory-cli-wire-composition.md`, `docs/internal/development/development.md`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Mirror `api-smoke` / `check-api-generated-drift.js` for Wire—dedicated drift script plus make target keeps CI and local `verify-pr` aligned without hand-editing `wire_gen.go`.
-  - Gotchas encountered: `go generate ./cmd/factory/composition/...` is idempotent on a clean tree; the drift check only fails when committed `wire_gen.go` lags `wire.go` or provider signatures.
-  - Useful context: All six PRD stories now pass; create PR `cmd-wire-composition` with `prd.json` description when pushing the code commit.
----
-
-## 2026-05-31T04:00:00Z - mergeability (PR #511 deadcode + provider set)
-- What was implemented: Addressed BLOCKING PR #511 review—removed dead `newFactoryServiceCollaborators`; wired `ProvideHostedWorkersConfig`, `ProvideFactoryRuntimeBundle`, `ProvideFactoryServiceShell`, `ProvideFactorySaveCollaborator`, and `AttachFactorySaveCollaborator` into `cmd/factory/composition/wire.go` and regenerated `wire_gen.go`; `make deadcode` and `make factory-composition-smoke` pass locally.
-- Files changed: `pkg/service/factory_build.go`, `cmd/factory/composition/wire.go`, `cmd/factory/composition/wire_gen.go`, `docs/internal/development/factory-cli-wire-composition.md`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Wire cannot bind two providers to `*FactoryService`—use `FactoryServiceShell` for the pre-factorysave shell and `AttachFactorySaveCollaborator` as the final `*FactoryService` provider.
-  - Gotchas encountered: Exporting `ProvideHostedWorkersConfig` without listing it in `wire.Build` still fails `make deadcode`; every Wire-facing provider must appear in both `wire.go` and generated `wire_gen.go`.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/511 — BLOCKING items were deadcode drift and missing `factorysave`/`hostedworkers` in the Wire provider set.
+  - Patterns discovered: Keep mode enum and `persistFromFileNamedFactory` switch in `persist_from_file.go`; leave success formatters and `renderSaveFromFileError` / `renderUpdateFromFileError` on the public wrappers until story 003 unifies errors.
+  - Gotchas encountered: PRD `branchName` is `ralph/consolidate-cli-factory-save-update-from-file` — create/switch from the worktree branch name if they differ.
+  - Useful context: Story 002 adds `persistFromFileModeUpdate` and delegates `UpdateFromFile`; `update.go` still duplicates the flow until then.
 ---
