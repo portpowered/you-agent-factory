@@ -149,7 +149,7 @@ describe("App shell import flows", () => {
     expect(previewDialog.textContent).toContain("factory-import.png");
 
     fireEvent.click(
-      within(previewDialog).getByRole("button", { name: "Activate factory" }),
+      within(previewDialog).getByRole("button", { name: "Confirm import" }),
     );
 
     await waitFor(() => {
@@ -195,6 +195,90 @@ describe("App shell import flows", () => {
           method: "PUT",
         }),
       );
+    });
+    expectNoPostFactoriesActivation(fetchMock);
+  });
+
+  it("activates create-new-named imports through UPSERT_NAMED_AND_ACTIVATE on the selected session", async () => {
+    const file = new File(["png"], "factory-import.png", { type: "image/png" });
+    const importValue = createFactoryImportValue();
+    const currentSessionFactory = {
+      name: "Session Current Name",
+      workTypes: [],
+      workers: [],
+      workstations: [],
+      version: defaultSessionFactoryVersion,
+    };
+    vi.spyOn(factoryPngImportModule, "readFactoryImportPng").mockResolvedValue({
+      ok: true,
+      value: importValue,
+    });
+    const { fetchMock } = renderApp({
+      snapshot: importedFactorySnapshot,
+    });
+
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = resolveFetchPath(input);
+        const method = resolveFetchMethod(input, init);
+
+        if (path === "/factory-sessions/~default/factory" && method === "GET") {
+          return jsonResponse(currentSessionFactory);
+        }
+
+        if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+          return jsonResponse({
+            name: "Dropped Factory",
+            ...importValue.factory,
+            version: {
+              logical: "1",
+              physical: "2026-05-18T14:41:00Z",
+            },
+          });
+        }
+
+        throw new Error(`unexpected fetch for ${path} (${method})`);
+      },
+    );
+
+    const viewport = await screen.findByRole("region", {
+      name: "Work graph viewport",
+    });
+    fireEvent.drop(viewport, createFileDropTransfer([file]));
+
+    const previewDialog = await screen.findByRole("dialog", {
+      name: "Review factory import",
+    });
+    const messages = within(previewDialog).getByRole("radiogroup", {
+      name: "Import save choice",
+    });
+    fireEvent.click(
+      within(messages).getByRole("radio", {
+        name: /Create new named factory/i,
+      }),
+    );
+
+    fireEvent.click(
+      within(previewDialog).getByRole("button", { name: "Confirm import" }),
+    );
+
+    await waitFor(() => {
+      const putActivationCall = fetchMock.mock.calls.find(([url, init]) => {
+        return (
+          resolveFetchPath(url) === "/factory-sessions/~default/factory" &&
+          resolveFetchMethod(url, init) === "PUT"
+        );
+      });
+      expect(putActivationCall).toBeDefined();
+      expect(JSON.parse(String(putActivationCall?.[1]?.body))).toEqual({
+        mode: "UPSERT_NAMED_AND_ACTIVATE",
+        factory: {
+          name: "Dropped Factory-2",
+          workTypes: importValue.factory.workTypes,
+          workers: importValue.factory.workers,
+          workstations: importValue.factory.workstations,
+        },
+      });
     });
     expectNoPostFactoriesActivation(fetchMock);
   });
@@ -323,7 +407,7 @@ describe("App shell import flows", () => {
       expect(previewDialog.textContent).toContain("semantic-workflow.png");
 
       fireEvent.click(
-        within(previewDialog).getByRole("button", { name: "Activate factory" }),
+        within(previewDialog).getByRole("button", { name: "Confirm import" }),
       );
 
       await waitFor(() => {

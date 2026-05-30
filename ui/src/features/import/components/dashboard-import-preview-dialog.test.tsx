@@ -281,6 +281,7 @@ describe("DashboardImportPreviewDialog", () => {
       expect(onConfirm).toHaveBeenCalledWith({
         choice: "replace_current",
         createFactoryName: "Dropped Factory-2",
+        existingFactoryNames: ["alpha", "Dropped Factory"],
         value: expect.objectContaining({
           factory: expect.objectContaining({ name: "Dropped Factory" }),
         }),
@@ -351,7 +352,7 @@ describe("DashboardImportPreviewDialog", () => {
             setImportPreviewState({ status: "idle" });
           }}
           onConfirm={async (input) => {
-            await activateImport(input.value);
+            await activateImport(input);
             setImportPreviewState({ status: "idle" });
           }}
         />
@@ -367,7 +368,10 @@ describe("DashboardImportPreviewDialog", () => {
     await waitFor(() => {
       expect(activateImport).toHaveBeenCalledWith(
         expect.objectContaining({
-          factory: expect.objectContaining({ name: "Dropped Factory" }),
+          choice: "replace_current",
+          value: expect.objectContaining({
+            factory: expect.objectContaining({ name: "Dropped Factory" }),
+          }),
         }),
       );
     });

@@ -686,6 +686,13 @@ export async function startFactoryApiServer({
         if (onSaveCurrentFactory) {
           await onSaveCurrentFactory({
             body: factory,
+            mode:
+              parsedBody &&
+              typeof parsedBody === "object" &&
+              typeof parsedBody.mode === "string"
+                ? parsedBody.mode
+                : undefined,
+            requestBody: parsedBody,
             sessionID,
           });
         }

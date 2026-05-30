@@ -38,7 +38,7 @@ export function CurrentActivityGraphEditorDialogs({
             imports.closeImportPreview();
           }}
           onConfirm={(input) => {
-            void imports.activateImport(input.value);
+            void imports.activateImport(input);
           }}
           previewState={readyImportPreviewState}
         />

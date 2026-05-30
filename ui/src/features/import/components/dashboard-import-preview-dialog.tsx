@@ -283,6 +283,7 @@ export function FactoryImportPreviewDialog({
     onConfirm({
       choice,
       createFactoryName,
+      existingFactoryNames: resolvedExistingFactoryNames,
       value: previewState.value,
     });
   };

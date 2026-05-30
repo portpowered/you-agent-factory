@@ -239,6 +239,6 @@ function createDashboardImportPreviewConfirmHandler(
   importController: ReturnType<typeof useCurrentActivityImportController>,
 ) {
   return (input: FactoryImportConfirmInput) => {
-    void importController.activateImport(input.value);
+    void importController.activateImport(input);
   };
 }

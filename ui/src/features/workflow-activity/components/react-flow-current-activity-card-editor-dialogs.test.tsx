@@ -98,7 +98,12 @@ vi.mock("../../import/public", () => ({
     previewState,
   }: {
     onCancel: () => void;
-    onConfirm: (input: { value: { kind: string } }) => void;
+    onConfirm: (input: {
+      choice: string;
+      createFactoryName: string;
+      existingFactoryNames: string[];
+      value: { kind: string };
+    }) => void;
     previewState: { status: string; value: { kind: string } };
   }) => (
     <div data-status={previewState.status} data-testid="import-preview-dialog">
@@ -107,7 +112,12 @@ vi.mock("../../import/public", () => ({
       </button>
       <button
         onClick={() => {
-          onConfirm({ value: previewState.value });
+          onConfirm({
+            choice: "replace_current",
+            createFactoryName: "alpha",
+            existingFactoryNames: ["alpha"],
+            value: previewState.value,
+          });
         }}
         type="button"
       >
@@ -197,9 +207,12 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Trigger import confirm" }),
     );
-    expect(imports.activateImport).toHaveBeenCalledWith(
-      imports.importPreviewState.value,
-    );
+    expect(imports.activateImport).toHaveBeenCalledWith({
+      choice: "replace_current",
+      createFactoryName: "alpha",
+      existingFactoryNames: ["alpha"],
+      value: imports.importPreviewState.value,
+    });
 
     fireEvent.click(
       screen.getByRole("button", { name: "Trigger import error dismiss" }),
