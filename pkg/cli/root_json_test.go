@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
+	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
+	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 )
 
@@ -145,5 +147,86 @@ func TestWorkListCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	}
 	if !got.JSON {
 		t.Fatal("expected global --json to map to ListConfig.JSON")
+	}
+}
+
+func TestSubmitCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalSubmitWork := submitWork
+	defer func() {
+		submitWork = originalSubmitWork
+	}()
+
+	var got submitcli.SubmitConfig
+	submitWork = func(cfg submitcli.SubmitConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json",
+		"submit",
+		"--name", "request-name",
+		"--work-type-name", "tasks",
+		"--payload", "request.md",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute submit with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to SubmitConfig.JSON")
+	}
+}
+
+func TestFactoryDeleteCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalDeleteFactory := deleteFactory
+	defer func() {
+		deleteFactory = originalDeleteFactory
+	}()
+
+	var got factorycli.DeleteConfig
+	deleteFactory = func(cfg factorycli.DeleteConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "factory", "delete", "staging"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory delete with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to DeleteConfig.JSON")
+	}
+}
+
+func TestInitCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalInitFactory := initFactory
+	defer func() {
+		initFactory = originalInitFactory
+	}()
+
+	var got initcmd.InitConfig
+	initFactory = func(cfg initcmd.InitConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "init"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute init with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to InitConfig.JSON")
 	}
 }

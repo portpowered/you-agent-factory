@@ -24,6 +24,8 @@ type SubmitConfig struct {
 	Payload      string
 	Server       string
 	SessionID    string
+	JSON         bool
+	Output       io.Writer
 	Verbose      bool
 	Debug        bool
 	Diagnostics  io.Writer
@@ -31,6 +33,10 @@ type SubmitConfig struct {
 
 // Submit posts work to a running factory via HTTP.
 func Submit(cfg SubmitConfig) error {
+	if cfg.Output == nil {
+		cfg.Output = os.Stdout
+	}
+
 	name := strings.TrimSpace(cfg.Name)
 	if name == "" {
 		return fmt.Errorf("--name is required")
@@ -125,6 +131,9 @@ func Submit(cfg SubmitConfig) error {
 	}
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d traceId=%s", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody), result.TraceId)
 
-	fmt.Printf("Submitted work: %s\n", result.TraceId)
-	return nil
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(result)
+	}
+	_, err = fmt.Fprintf(cfg.Output, "Submitted work: %s\n", result.TraceId)
+	return err
 }

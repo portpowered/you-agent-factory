@@ -100,7 +100,7 @@ func NewRootCommand() *cobra.Command {
 		newConfigCommand(diagnostics),
 		newDocsCommand(diagnostics),
 		newFactoryCommand(globals, diagnostics),
-		newInitCommand(diagnostics),
+		newInitCommand(globals, diagnostics),
 		newModelsCommand(globals, diagnostics),
 		newRunCommand(globals, diagnostics),
 		newSubmitCommand(globals, diagnostics),
@@ -174,12 +174,12 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 		newFactoryListCommand(globals, diagnostics),
 		newFactorySaveCommand(globals, diagnostics),
 		newFactoryUpdateFromFileCommand(globals, diagnostics),
-		newFactoryDeleteCommand(diagnostics),
+		newFactoryDeleteCommand(globals, diagnostics),
 	)
 	return factoryCmd
 }
 
-func newFactoryDeleteCommand(_ *cliDiagnosticsOptions) *cobra.Command {
+func newFactoryDeleteCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
 	cfg := factorycli.DeleteConfig{Dir: defaultcmd.FactoryDir}
 
 	cmd := &cobra.Command{
@@ -197,6 +197,7 @@ func newFactoryDeleteCommand(_ *cliDiagnosticsOptions) *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Name = args[0]
+			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			return deleteFactory(cfg)
 		},
@@ -708,7 +709,7 @@ func Execute() {
 	}
 }
 
-func newInitCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := initcmd.InitConfig{
 		Dir:      defaultcmd.FactoryDir,
 		Type:     string(initcmd.DefaultScaffoldType),
@@ -733,6 +734,8 @@ func newInitCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"  # Create the minimal Ralph PRD-to-execution scaffold.\n" +
 			"  " + cliBinaryName + " init --type ralph --dir ralph-factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
@@ -936,6 +939,8 @@ func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug

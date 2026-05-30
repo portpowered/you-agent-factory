@@ -45,6 +45,32 @@ func requireOmitsAll(t *testing.T, label, content string, disallowed []string) {
 	}
 }
 
+func TestInit_JSONEmitsStructuredSummary(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "factory")
+
+	var out bytes.Buffer
+	if err := Init(InitConfig{Dir: base, JSON: true, Output: &out}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	var result InitResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("stdout is not valid InitResult JSON: %v\n%s", err, out.String())
+	}
+	if result.ScaffoldType != string(DefaultScaffoldType) {
+		t.Fatalf("scaffoldType = %q, want %q", result.ScaffoldType, DefaultScaffoldType)
+	}
+	if result.TargetDir != base {
+		t.Fatalf("targetDir = %q, want %q", result.TargetDir, base)
+	}
+	if strings.Contains(out.String(), "Initialized ") {
+		t.Fatalf("json stdout should not include human init banner: %s", out.String())
+	}
+
+	assertInitDirectoryTree(t, base)
+}
+
 func TestInit_CreatesDirectoryStructure(t *testing.T) {
 	dir := t.TempDir()
 	base := filepath.Join(dir, "factory")

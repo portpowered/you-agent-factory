@@ -280,6 +280,74 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	}
 }
 
+func TestSubmit_JSONStdoutEmitsSubmitWorkResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "json-trace-1"}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"json stdout task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Submit(SubmitConfig{
+		Name:         "json-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		JSON:         true,
+		Output:       &out,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	var result factoryapi.SubmitWorkResponse
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("stdout is not valid SubmitWorkResponse JSON: %v\n%s", err, out.String())
+	}
+	if result.TraceId != "json-trace-1" {
+		t.Fatalf("traceId = %q, want json-trace-1", result.TraceId)
+	}
+}
+
+func TestSubmit_HumanReadableStdoutUnchanged(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "human-trace-1"}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"human stdout task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Submit(SubmitConfig{
+		Name:         "human-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if got := out.String(); got != "Submitted work: human-trace-1\n" {
+		t.Fatalf("stdout = %q, want human confirmation", got)
+	}
+}
+
 func TestSubmit_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

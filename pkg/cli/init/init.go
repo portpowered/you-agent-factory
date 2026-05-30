@@ -2,6 +2,7 @@
 package initcmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -17,9 +18,17 @@ type InitConfig struct {
 	Dir         string
 	Type        string
 	Executor    string
+	JSON        bool
+	Output      io.Writer
 	Verbose     bool
 	Debug       bool
 	Diagnostics io.Writer
+}
+
+// InitResult reports a successful init scaffold write.
+type InitResult struct {
+	ScaffoldType string `json:"scaffoldType"`
+	TargetDir    string `json:"targetDir"`
 }
 
 const (
@@ -106,6 +115,10 @@ resources:
 // Submit work via the API (POST /work) or by placing files in the scaffold's
 // default inputs/<work-type>/default/ directory.
 func Init(cfg InitConfig) error {
+	if cfg.Output == nil {
+		cfg.Output = os.Stdout
+	}
+
 	scaffoldType, scaffold, err := resolveScaffoldDefinition(cfg.Type)
 	if err != nil {
 		return err
@@ -150,8 +163,11 @@ func Init(cfg InitConfig) error {
 		if written {
 			writtenByCategory[initPathCategory(relativePath)]++
 		}
-		if relativePath == interfaces.FactoryConfigFile && written {
-			fmt.Printf("Created %s\n", filepath.Join(cfg.Dir, relativePath))
+		if !cfg.JSON && relativePath == interfaces.FactoryConfigFile && written {
+			_, err := fmt.Fprintf(cfg.Output, "Created %s\n", filepath.Join(cfg.Dir, relativePath))
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -167,8 +183,19 @@ func Init(cfg InitConfig) error {
 		return fmt.Errorf("create inputs/%s/default: %w", scaffold.inputWorkType, err)
 	}
 
-	fmt.Printf("Initialized %s factory directory structure at %s/\n", scaffoldType, cfg.Dir)
-	fmt.Printf("  → Drop work files into %s/ to preseed on startup\n", defaultInputDir)
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(InitResult{
+			ScaffoldType: string(scaffoldType),
+			TargetDir:    cfg.Dir,
+		})
+	}
+
+	if _, err := fmt.Fprintf(cfg.Output, "Initialized %s factory directory structure at %s/\n", scaffoldType, cfg.Dir); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(cfg.Output, "  → Drop work files into %s/ to preseed on startup\n", defaultInputDir); err != nil {
+		return err
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
