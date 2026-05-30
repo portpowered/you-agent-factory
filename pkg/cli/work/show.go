@@ -2,6 +2,7 @@
 package work
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
@@ -59,33 +61,35 @@ func Show(cfg ShowConfig) error {
 
 	client := &http.Client{Timeout: showRequestTimeout}
 	started := time.Now()
-	resp, err := client.Get(endpoint.String())
+	var work factoryapi.Work
+	resp, err := clihttp.GetJSON(
+		context.Background(),
+		client,
+		endpoint.String(),
+		&work,
+		clihttp.RequestOptions{
+			Diagnostics:  cfg.Diagnostics,
+			Verbose:      cfg.Verbose,
+			EndpointPath: endpoint.Path,
+			LogLabel:     "work show",
+		},
+	)
 	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, time.Since(started).Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds())
-		var errResp factoryapi.ErrorResponse
-		if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
+		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("work %q not found: %s", cfg.WorkID, errResp.Message)
 		}
 		return fmt.Errorf("work %q not found", cfg.WorkID)
 	}
 	if resp.StatusCode != http.StatusOK {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds())
-		var errResp factoryapi.ErrorResponse
-		if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
+		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("get work failed (%d): %s", resp.StatusCode, errResp.Message)
 		}
 		return fmt.Errorf("get work failed (%d)", resp.StatusCode)
-	}
-
-	var work factoryapi.Work
-	if err := json.NewDecoder(resp.Body).Decode(&work); err != nil {
-		return fmt.Errorf("parse response: %w", err)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
