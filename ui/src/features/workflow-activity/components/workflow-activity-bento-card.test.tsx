@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -101,6 +102,7 @@ function renderWorkflowActivityBentoCard({
 
   render(
     <QueryClientProvider client={queryClient}>
+      <DashboardSessionTestProvider>
       <WorkflowActivityBentoCard
         headerAction={headerAction}
         importController={createImportController()}
@@ -114,6 +116,7 @@ function renderWorkflowActivityBentoCard({
         onSelectWorker={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />
+      </DashboardSessionTestProvider>
     </QueryClientProvider>,
   );
 }
@@ -129,6 +132,7 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
 
   return render(
     <QueryClientProvider client={queryClient}>
+      <DashboardSessionTestProvider>
       <div>
         <WorkflowActivityBentoCard
           importController={createImportController()}
@@ -155,6 +159,7 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
           onSelectWorkstation={vi.fn()}
         />
       </div>
+      </DashboardSessionTestProvider>
     </QueryClientProvider>,
   );
 }

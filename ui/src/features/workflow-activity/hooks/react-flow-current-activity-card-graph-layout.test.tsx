@@ -1,10 +1,15 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import "../../../../testing/bun-flowchart-layout-mocks";
 import { beforeEach, describe, expect, it } from "bun:test";
+import { renderHook, waitFor } from "@testing-library/react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { mockBuildGraphLayout } from "../../../../testing/bun-flowchart-layout-mocks";
-import { useCurrentActivityGraphLayout } from "./react-flow-current-activity-card-graph-layout";
+import {
+  useCurrentActivityGraphLayout,
+  useCurrentActivityGraphLayoutForFactory,
+} from "./react-flow-current-activity-card-graph-layout";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: edit-mode layout override cases share one mocked buildGraphLayout harness.
 describe("useCurrentActivityGraphLayout", () => {
   beforeEach(() => {
     mockBuildGraphLayout.mockReset();
@@ -92,6 +97,79 @@ describe("useCurrentActivityGraphLayout", () => {
       "workstation-output:workstation:Draft->work-state:story:done",
       "workstation-resource:resource:gpu->workstation:Draft",
     ]);
+  });
+
+  it("builds edit-mode layout from the document factory override instead of snapshot factory", async () => {
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        name: "snapshot-factory",
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            id: "snapshot-only",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Snapshot Only",
+            outputs: [{ state: "done", workType: "story" }],
+            type: "MODEL_WORKSTATION",
+            worker: "",
+          },
+        ],
+      },
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+    const documentFactoryOverride: NonNullable<DashboardSnapshot["factory"]> = {
+      name: "document-factory",
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          id: "document-only",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Document Only",
+          outputs: [{ state: "done", workType: "story" }],
+          type: "MODEL_WORKSTATION",
+          worker: "",
+        },
+      ],
+    };
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphLayoutForFactory(
+        snapshot,
+        documentFactoryOverride,
+      ),
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.length).toBeGreaterThan(0);
+    });
+
+    expect(result.current.nodes.map((node) => node.nodeId).sort()).toContain(
+      "workstation:Document Only",
+    );
+    expect(result.current.nodes.map((node) => node.nodeId).sort()).not.toContain(
+      "workstation:Snapshot Only",
+    );
   });
 });
 

@@ -12,6 +12,7 @@ import {
 } from "./testing/app-shell-test-utils";
 import {
   currentNamedFactoryExportResponse,
+  currentSessionFactoryExportAPIResponse,
   exportImageFile,
   exportTimelineEvents,
   fromBase64,
@@ -43,6 +44,11 @@ const currentFactoryWithBundledFiles = {
   },
 } satisfies FactoryValue;
 
+const currentFactoryWithBundledFilesAPIResponse = {
+  ...currentFactoryWithBundledFiles,
+  version: currentSessionFactoryExportAPIResponse.version,
+};
+
 describe("App shell export submission flows", () => {
   registerAppDashboardTestLifecycle();
 
@@ -53,7 +59,7 @@ describe("App shell export submission flows", () => {
       timelineEvents: exportTimelineEvents,
     });
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentNamedFactoryExportResponse),
+      jsonResponse(currentSessionFactoryExportAPIResponse),
     );
 
     try {
@@ -143,7 +149,7 @@ describe("App shell export submission flows", () => {
       timelineEvents: exportTimelineEvents,
     });
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentNamedFactoryExportResponse),
+      jsonResponse(currentSessionFactoryExportAPIResponse),
     );
 
     try {
@@ -178,10 +184,13 @@ describe("App shell export submission flows", () => {
         within(dialog).getByRole("button", { name: "Export PNG" }),
       );
 
+      const { version: _exportVersion, ...exportFactoryWithoutVersion } =
+        currentNamedFactoryExportResponse;
+
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
           factory: {
-            ...currentNamedFactoryExportResponse,
+            ...exportFactoryWithoutVersion,
             name: "Factory Poster",
           },
           image: expect.any(File),
@@ -216,7 +225,7 @@ describe("App shell export submission flows", () => {
       timelineEvents: exportTimelineEvents,
     });
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentFactoryWithBundledFiles),
+      jsonResponse(currentFactoryWithBundledFilesAPIResponse),
     );
 
     try {
@@ -249,9 +258,12 @@ describe("App shell export submission flows", () => {
         within(dialog).getByRole("button", { name: "Export PNG" }),
       );
 
+      const { version: _bundledVersion, ...bundledFactoryWithoutVersion } =
+        currentFactoryWithBundledFiles;
+
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
-          factory: currentFactoryWithBundledFiles,
+          factory: bundledFactoryWithoutVersion,
           image: expect.any(File),
         });
       });

@@ -13,6 +13,7 @@ import {
 } from "./testing/app-shell-test-utils";
 import {
   currentNamedFactoryExportResponse,
+  currentSessionFactoryExportAPIResponse,
   createDeferredPromise,
   exportTimelineEvents,
   exportImageFile,
@@ -31,7 +32,7 @@ describe("App shell export dialog flows", () => {
       timelineEvents: exportTimelineEvents,
     });
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentNamedFactoryExportResponse),
+      jsonResponse(currentSessionFactoryExportAPIResponse),
     );
 
     try {
@@ -91,7 +92,15 @@ describe("App shell export dialog flows", () => {
       },
       id: "authored-refetched-factory",
       name: "imported-workflow",
+      version: {
+        logical: "2",
+        physical: "2026-04-16T12:05:00Z",
+      },
     } satisfies FactoryValue;
+    const refreshedCurrentFactoryAPIResponse = {
+      ...refreshedCurrentFactoryExportResponse,
+      version: currentSessionFactoryExportAPIResponse.version,
+    };
     const refreshedCurrentFactoryResponse = createDeferredPromise<Response>();
     const writeFactoryExportPngSpy = vi
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
@@ -130,7 +139,7 @@ describe("App shell export dialog flows", () => {
       currentFactoryFetchCount += 1;
 
       if (currentFactoryFetchCount === 1) {
-        return jsonResponse(currentNamedFactoryExportResponse);
+        return jsonResponse(currentSessionFactoryExportAPIResponse);
       }
 
       if (currentFactoryFetchCount === 2) {
@@ -178,7 +187,7 @@ describe("App shell export dialog flows", () => {
 
       await act(async () => {
         refreshedCurrentFactoryResponse.resolve(
-          jsonResponse(refreshedCurrentFactoryExportResponse),
+          jsonResponse(refreshedCurrentFactoryAPIResponse),
         );
         await refreshedCurrentFactoryResponse.promise;
       });
@@ -201,9 +210,12 @@ describe("App shell export dialog flows", () => {
         within(secondDialog).getByRole("button", { name: "Export PNG" }),
       );
 
+      const { version: _refetchedVersion, ...refreshedExportFactory } =
+        refreshedCurrentFactoryExportResponse;
+
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
-          factory: refreshedCurrentFactoryExportResponse,
+          factory: refreshedExportFactory,
           image: expect.any(File),
         });
       });
@@ -226,7 +238,7 @@ describe("App shell export dialog flows", () => {
       timelineEvents: exportTimelineEvents,
     });
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentNamedFactoryExportResponse),
+      jsonResponse(currentSessionFactoryExportAPIResponse),
     );
 
     try {

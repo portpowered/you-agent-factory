@@ -8,6 +8,8 @@ import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
+import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import { syncCurrentFactoryDefinition } from "../../dashboard/lib/dashboard-event-stream";
 import {
   getCurrentFactoryDefinitionMock,
   getCurrentFactoryDocumentMock,
@@ -212,6 +214,7 @@ describe("useCurrentFactoryDefinition", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: save/convergence cases share one query-client harness.
 describe("useSaveCurrentFactory", () => {
   it("saves the editable current-factory document and refreshes both query caches", async () => {
     const queryClient = new QueryClient({
@@ -272,6 +275,107 @@ describe("useSaveCurrentFactory", () => {
     expect(queryClient.getQueryData(result.current.definitionKey)).toEqual(
       savedDocument,
     );
+  });
+
+  it("does not refetch the document query after a successful save", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: 0,
+          retry: false,
+        },
+      },
+    });
+    const savedDocument: CurrentFactoryDocument = {
+      ...editableFactoryDefinition,
+      version: {
+        logical: "8",
+        physical: "2026-05-27T08:00:00Z",
+      },
+    };
+    saveCurrentFactoryDocumentMock.mockResolvedValue(savedDocument);
+    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+
+    const { result } = renderHook(() => useSaveCurrentFactory(), {
+      wrapper: createQueryClientWrapper(queryClient),
+    });
+
+    await result.current.mutateAsync({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-27T07:59:00Z",
+      },
+      factoryDefinition: editableFactoryDefinition,
+    });
+
+    expect(getCurrentFactoryDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it("converges document cache on FACTORY_CHANGE with version without a document GET", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: 0,
+          retry: false,
+        },
+      },
+    });
+    const savedDocument: CurrentFactoryDocument = {
+      ...editableFactoryDefinition,
+      version: {
+        logical: "8",
+        physical: "2026-05-27T08:00:00Z",
+      },
+    };
+    saveCurrentFactoryDocumentMock.mockResolvedValue(savedDocument);
+    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+
+    const { result } = renderHook(
+      () => ({
+        documentKey: currentFactoryDocumentQueryKey("session-2"),
+        save: useSaveCurrentFactory(),
+      }),
+      {
+        wrapper: createQueryClientWrapper(queryClient),
+      },
+    );
+
+    await result.current.save.mutateAsync({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-27T07:59:00Z",
+      },
+      factoryDefinition: editableFactoryDefinition,
+    });
+
+    expect(getCurrentFactoryDocumentMock).not.toHaveBeenCalled();
+
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-05-27T08:00:01Z", sequence: 9, tick: 9 },
+        id: "factory-event/factory-change/9",
+        payload: {
+          factory: {
+            ...editableFactoryDefinition,
+            version: {
+              logical: "9",
+              physical: "2026-05-27T08:00:01Z",
+            },
+          },
+        },
+        type: FACTORY_EVENT_TYPES.factoryChange,
+      },
+      "session-2",
+    );
+
+    expect(getCurrentFactoryDocumentMock).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(result.current.documentKey)).toMatchObject({
+      version: {
+        logical: "9",
+        physical: "2026-05-27T08:00:01Z",
+      },
+    });
   });
 
   it("preserves current-factory save API errors through the mutation", async () => {

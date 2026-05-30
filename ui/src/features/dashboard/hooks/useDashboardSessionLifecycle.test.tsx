@@ -1,18 +1,22 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
+import { vi } from "vitest";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   CURRENT_FACTORY_DEFINITION_QUERY_KEY,
+  CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
+  currentFactoryDefinitionQueryKey,
+  currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/public";
-import { useDashboardSessionStore } from "../state/dashboardSessionStore";
-import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import {
-  type WorldState,
   useFactoryTimelineStore,
+  type WorldState,
 } from "../../timeline/state/factoryTimelineStore";
+import { DashboardSessionProvider } from "../session/dashboard-session-provider";
+import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 
 const SEEDED_SNAPSHOT: DashboardSnapshot = {
@@ -55,137 +59,246 @@ function createWrapper(queryClient: QueryClient) {
   };
 }
 
-describe("useDashboardSessionLifecycle", () => {
+function createQueryClient(): QueryClient {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      mutations: { retry: false },
+      queries: { retry: false },
+    },
+  });
+  queryClient.setQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY, {
+    workers: [],
+    workstations: [],
+    workTypes: [],
+  });
+  return queryClient;
+}
+
+function resetStores(): void {
+  useDashboardSessionStore.setState({
+    pausedSessionIDs: [],
+    selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+  });
+  useFactoryTimelineStore.getState().reset();
+}
+
+function seedTimelineAtTick(tick: number): void {
+  act(() => {
+    useFactoryTimelineStore.setState({
+      events: [{ id: "event-1" } as never],
+      latestTick: tick,
+      mode: "current",
+      receivedEventIDs: ["event-1"],
+      selectedTick: tick,
+      worldViewCache: {
+        [tick]: timelineSnapshot(SEEDED_SNAPSHOT),
+      },
+    });
+  });
+}
+
+function renderLifecycleFromSessionStore(queryClient: QueryClient) {
+  return renderHook(
+    () => {
+      const sessionID = useDashboardSessionStore(
+        (state) => state.selectedSessionID,
+      );
+      return useDashboardSessionLifecycle({
+        sessionID,
+        refreshToken: 0,
+      });
+    },
+    { wrapper: createWrapper(queryClient) },
+  );
+}
+
+describe("useDashboardSessionLifecycle document cache", () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
+    queryClient = createQueryClient();
+    resetStores();
+  });
+
+  afterEach(() => {
+    resetStores();
+  });
+
+  it("removes scoped factory document queries when switching to a different session", () => {
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID),
+      {
+        name: "Default Factory",
+        version: { logical: "1", physical: "2026-05-31T00:00:00Z" },
+        workers: [],
+        workstations: [],
+        workTypes: [],
       },
-    });
-    queryClient.setQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY, {
+    );
+    queryClient.setQueryData(currentFactoryDocumentQueryKey("session-beta"), {
+      name: "Beta Factory",
+      version: { logical: "2", physical: "2026-05-31T01:00:00Z" },
       workers: [],
       workstations: [],
       workTypes: [],
     });
-    useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
-      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
-    });
-    useFactoryTimelineStore.getState().reset();
-  });
 
-  afterEach(() => {
-    useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
-      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
-    });
-    useFactoryTimelineStore.getState().reset();
-  });
-
-  it("clears timeline state when switching to a different session", () => {
-    renderHook(
-      () => {
-        const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
-        return useDashboardSessionLifecycle({
-          sessionID,
-          refreshToken: 0,
-        });
-      },
-      { wrapper: createWrapper(queryClient) },
-    );
-
-    act(() => {
-      useFactoryTimelineStore.setState({
-        events: [{ id: "event-1" } as never],
-        latestTick: 6,
-        mode: "current",
-        receivedEventIDs: ["event-1"],
-        selectedTick: 6,
-        worldViewCache: {
-          6: timelineSnapshot(SEEDED_SNAPSHOT),
-        },
-      });
-    });
+    renderLifecycleFromSessionStore(queryClient);
 
     act(() => {
       useDashboardSessionStore.getState().setSelectedSessionID("session-beta");
     });
 
-    expect(useFactoryTimelineStore.getState().events).toEqual([]);
-    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
-    expect(useFactoryTimelineStore.getState().worldViewCache[6]).toBeUndefined();
-  });
-
-  it("resets timeline and factory-definition cache when the last session is deselected", () => {
-    renderHook(
-      () => {
-        const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
-        return useDashboardSessionLifecycle({
-          sessionID,
-          refreshToken: 0,
-        });
-      },
-      { wrapper: createWrapper(queryClient) },
-    );
-
-    act(() => {
-      useFactoryTimelineStore.setState({
-        events: [{ id: "event-1" } as never],
-        latestTick: 6,
-        mode: "current",
-        receivedEventIDs: ["event-1"],
-        selectedTick: 6,
-        worldViewCache: {
-          6: timelineSnapshot(SEEDED_SNAPSHOT),
-        },
-      });
-    });
-
-    act(() => {
-      useDashboardSessionStore.getState().setSelectedSessionID(null);
-    });
-
-    expect(useFactoryTimelineStore.getState().events).toEqual([]);
-    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
     expect(
-      queryClient.getQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY),
+      queryClient.getQueryData(
+        currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID),
+      ),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey("session-beta")),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData(
+        currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID),
+      ),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData(currentFactoryDefinitionQueryKey("session-beta")),
     ).toBeUndefined();
   });
+});
 
-  it("resets timeline when refresh token changes", () => {
-    const { rerender } = renderHook(
-      ({ refreshToken }: { refreshToken: number }) =>
-        useDashboardSessionLifecycle({
-          sessionID: DEFAULT_FACTORY_SESSION_ID,
-          refreshToken,
-        }),
-      {
-        initialProps: { refreshToken: 0 },
-        wrapper: createWrapper(queryClient),
-      },
-    );
+describe("useDashboardSessionLifecycle", () => {
+  let queryClient: QueryClient;
 
-    act(() => {
-      useFactoryTimelineStore.setState({
-        events: [{ id: "event-1" } as never],
-        latestTick: SEEDED_SNAPSHOT.tick_count,
-        mode: "current",
-        receivedEventIDs: ["event-1"],
-        selectedTick: SEEDED_SNAPSHOT.tick_count,
-        worldViewCache: {
-          [SEEDED_SNAPSHOT.tick_count]: timelineSnapshot(SEEDED_SNAPSHOT),
-        },
+  beforeEach(() => {
+    queryClient = createQueryClient();
+    resetStores();
+  });
+
+  afterEach(() => {
+    resetStores();
+  });
+
+  describe("first mount and factory-definition cache", () => {
+    it("does not reset timeline on first mount for refreshToken 0", () => {
+      seedTimelineAtTick(6);
+
+      renderHook(
+        () =>
+          useDashboardSessionLifecycle({
+            sessionID: DEFAULT_FACTORY_SESSION_ID,
+            refreshToken: 0,
+          }),
+        { wrapper: createWrapper(queryClient) },
+      );
+
+      expect(useFactoryTimelineStore.getState().events).toHaveLength(1);
+      expect(useFactoryTimelineStore.getState().selectedTick).toBe(6);
+    });
+
+    it("removes factory-definition queries once when switching sessions", () => {
+      const removeQueries = vi.spyOn(queryClient, "removeQueries");
+
+      renderLifecycleFromSessionStore(queryClient);
+
+      removeQueries.mockClear();
+
+      act(() => {
+        useDashboardSessionStore
+          .getState()
+          .setSelectedSessionID("session-beta");
+      });
+
+      expect(removeQueries).toHaveBeenCalledTimes(1);
+      expect(removeQueries).toHaveBeenCalledWith({
+        queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
+        exact: false,
       });
     });
 
-    act(() => {
-      rerender({ refreshToken: 1 });
+    it("does not remove factory-definition queries again when session key is unchanged", () => {
+      const removeQueries = vi.spyOn(queryClient, "removeQueries");
+
+      const { rerender } = renderHook(
+        ({ refreshToken }: { refreshToken: number }) =>
+          useDashboardSessionLifecycle({
+            sessionID: DEFAULT_FACTORY_SESSION_ID,
+            refreshToken,
+          }),
+        {
+          initialProps: { refreshToken: 0 },
+          wrapper: createWrapper(queryClient) },
+      );
+
+      act(() => {
+        rerender({ refreshToken: 1 });
+      });
+
+      removeQueries.mockClear();
+
+      act(() => {
+        rerender({ refreshToken: 1 });
+      });
+
+      expect(removeQueries).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("session scoped timeline resets", () => {
+    it("clears timeline state when switching to a different session", () => {
+      renderLifecycleFromSessionStore(queryClient);
+      seedTimelineAtTick(6);
+
+      act(() => {
+        useDashboardSessionStore
+          .getState()
+          .setSelectedSessionID("session-beta");
+      });
+
+      expect(useFactoryTimelineStore.getState().events).toEqual([]);
+      expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+      expect(
+        useFactoryTimelineStore.getState().worldViewCache[6],
+      ).toBeUndefined();
     });
 
-    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
-    expect(useFactoryTimelineStore.getState().events).toEqual([]);
+    it("resets timeline and factory-definition cache when the last session is deselected", () => {
+      renderLifecycleFromSessionStore(queryClient);
+      seedTimelineAtTick(6);
+
+      act(() => {
+        useDashboardSessionStore.getState().setSelectedSessionID(null);
+      });
+
+      expect(useFactoryTimelineStore.getState().events).toEqual([]);
+      expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+      expect(
+        queryClient.getQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY),
+      ).toBeUndefined();
+    });
+
+    it("resets timeline when refresh token changes", () => {
+      const { rerender } = renderHook(
+        ({ refreshToken }: { refreshToken: number }) =>
+          useDashboardSessionLifecycle({
+            sessionID: DEFAULT_FACTORY_SESSION_ID,
+            refreshToken,
+          }),
+        {
+          initialProps: { refreshToken: 0 },
+          wrapper: createWrapper(queryClient),
+        },
+      );
+
+      seedTimelineAtTick(SEEDED_SNAPSHOT.tick_count);
+
+      act(() => {
+        rerender({ refreshToken: 1 });
+      });
+
+      expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+      expect(useFactoryTimelineStore.getState().events).toEqual([]);
+    });
   });
 });

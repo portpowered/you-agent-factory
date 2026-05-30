@@ -1,28 +1,42 @@
+import "../../../../testing/bun-current-factory-definition-api-mocks";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 
-import { getCurrentFactoryMock } from "../../../../testing/bun-named-factory-api-mocks";
 import {
-  NamedFactoryAPIError,
-  type FactoryValue,
-  getCurrentFactory,
-} from "../../../api/named-factory";
+  CurrentFactoryDefinitionError,
+  type CurrentFactoryDocument,
+} from "../../../api/current-factory-definition";
+import { getCurrentFactoryDocumentMock } from "../../../../testing/bun-current-factory-definition-api-mocks";
+import { wrapWithDashboardSessionTest } from "../../../testing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useCurrentFactoryExport } from "./use-current-factory-export";
 
-const factory: FactoryValue = {
+const documentFactory: CurrentFactoryDocument = {
   id: "factory-aurora",
   name: "Factory Aurora",
   workers: [],
-  workstations: [],
+  workstations: [
+    {
+      name: "document-only",
+      workTypes: [],
+    },
+  ],
   workTypes: [],
+  version: {
+    logical: 1,
+    physical: 1,
+  },
 };
 
+/** Fixture-only: snapshot topology that must not become the export payload. */
+const snapshotOnlyWorkstationName = "snapshot-only";
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: export document-plane cases share session and divergent-fixture setup.
 describe("useCurrentFactoryExport", () => {
   beforeEach(() => {
-    getCurrentFactoryMock.mockReset();
+    getCurrentFactoryDocumentMock.mockReset();
     useDashboardSessionStore.setState({ selectedSessionID: "~default" });
   });
 
@@ -31,7 +45,7 @@ describe("useCurrentFactoryExport", () => {
       wrapper: createQueryClientWrapper(),
     });
 
-    expect(getCurrentFactory).not.toHaveBeenCalled();
+    expect(getCurrentFactoryDocumentMock).not.toHaveBeenCalled();
     expect(result.current).toEqual({
       currentFactoryExport: {
         code: "FACTORY_DEFINITION_UNAVAILABLE",
@@ -43,9 +57,9 @@ describe("useCurrentFactoryExport", () => {
     });
   });
 
-  it("reports a visible preparing state until the current factory loads", async () => {
-    const pending = createDeferred<FactoryValue>();
-    getCurrentFactoryMock.mockReturnValue(pending.promise);
+  it("reports a visible preparing state until the factory document loads", async () => {
+    const pending = createDeferred<CurrentFactoryDocument>();
+    getCurrentFactoryDocumentMock.mockReturnValue(pending.promise);
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
       wrapper: createQueryClientWrapper(),
     });
@@ -63,14 +77,25 @@ describe("useCurrentFactoryExport", () => {
     });
 
     await act(async () => {
-      pending.resolve(factory);
+      pending.resolve(documentFactory);
       await pending.promise;
     });
 
     await waitFor(() => {
       expect(result.current).toEqual({
         currentFactoryExport: {
-          factoryDefinition: factory,
+          factoryDefinition: {
+            id: "factory-aurora",
+            name: "Factory Aurora",
+            workers: [],
+            workstations: [
+              {
+                name: "document-only",
+                workTypes: [],
+              },
+            ],
+            workTypes: [],
+          },
           ok: true,
         },
         isPreparing: false,
@@ -78,16 +103,15 @@ describe("useCurrentFactoryExport", () => {
     });
   });
 
-  it("loads export data from the selected non-default session route", async () => {
-    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
-    getCurrentFactoryMock.mockResolvedValue(factory);
+  it("loads export data for session-beta through session factory document GET", async () => {
+    getCurrentFactoryDocumentMock.mockResolvedValue(documentFactory);
 
     renderHook(() => useCurrentFactoryExport(true), {
       wrapper: createQueryClientWrapper("session-beta"),
     });
 
     await waitFor(() => {
-      expect(getCurrentFactory).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDocumentMock).toHaveBeenCalledWith({
         sessionID: "session-beta",
       });
     });
@@ -98,7 +122,7 @@ describe("useCurrentFactoryExport", () => {
       wrapper: createQueryClientWrapper(null),
     });
 
-    expect(getCurrentFactory).not.toHaveBeenCalled();
+    expect(getCurrentFactoryDocumentMock).not.toHaveBeenCalled();
     expect(result.current).toEqual({
       currentFactoryExport: {
         code: "FACTORY_DEFINITION_UNAVAILABLE",
@@ -110,9 +134,11 @@ describe("useCurrentFactoryExport", () => {
     });
   });
 
-  it("maps current-factory not-found errors to the unavailable export copy", async () => {
-    getCurrentFactoryMock.mockRejectedValue(
-      new NamedFactoryAPIError("Factory definition missing", { code: "NOT_FOUND" }),
+  it("maps factory document not-found errors to the unavailable export copy", async () => {
+    getCurrentFactoryDocumentMock.mockRejectedValue(
+      new CurrentFactoryDefinitionError("Factory definition missing", {
+        code: "NOT_FOUND",
+      }),
     );
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
       wrapper: createQueryClientWrapper(),
@@ -132,7 +158,7 @@ describe("useCurrentFactoryExport", () => {
   });
 
   it("includes generic transport error messages in the export preparation failure", async () => {
-    getCurrentFactoryMock.mockRejectedValue(new Error("Gateway timeout"));
+    getCurrentFactoryDocumentMock.mockRejectedValue(new Error("Gateway timeout"));
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
       wrapper: createQueryClientWrapper(),
     });
@@ -148,6 +174,34 @@ describe("useCurrentFactoryExport", () => {
         isPreparing: false,
       });
     });
+  });
+
+  it("exports the factory document when snapshot topology would diverge", async () => {
+    getCurrentFactoryDocumentMock.mockResolvedValue(documentFactory);
+
+    const { result } = renderHook(() => useCurrentFactoryExport(true), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentFactoryExport.ok).toBe(true);
+    });
+
+    if (!result.current.currentFactoryExport.ok) {
+      throw new Error("Expected export to succeed from the document plane.");
+    }
+
+    expect(result.current.currentFactoryExport.factoryDefinition.workstations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "document-only" }),
+      ]),
+    );
+    expect(result.current.currentFactoryExport.factoryDefinition.workstations).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: snapshotOnlyWorkstationName }),
+      ]),
+    );
+    expect(snapshotOnlyWorkstationName).toBe("snapshot-only");
   });
 });
 

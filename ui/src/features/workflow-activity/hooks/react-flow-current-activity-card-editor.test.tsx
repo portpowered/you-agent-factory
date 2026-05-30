@@ -107,6 +107,7 @@ const hookState = vi.hoisted(() => ({
     status: "idle" as const,
   },
   unsupportedFromDefinition: undefined as string | undefined,
+  saveStateIsStale: false,
 }));
 
 vi.mock("../../current-factory-definition/public", () => ({
@@ -135,8 +136,9 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       canSave:
         hookState.draftState.hasChanges &&
         hookState.draftState.pendingFactoryDefinition !== null &&
-        hookState.draftState.latestDocument !== null,
-      isStale: false,
+        hookState.draftState.latestDocument !== null &&
+        !hookState.saveStateIsStale,
+      isStale: hookState.saveStateIsStale,
     },
   }),
 }));
@@ -227,6 +229,7 @@ describe("useCurrentActivityGraphEditor", () => {
       status: "idle",
     };
     hookState.unsupportedFromDefinition = undefined;
+    hookState.saveStateIsStale = false;
   });
 
   it("enters and leaves editor mode while resetting transient state", () => {
@@ -299,6 +302,39 @@ describe("useCurrentActivityGraphEditor", () => {
 
     expect(didSave).toBe(false);
     expect(hookState.saveEditableDefinition.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("blocks saving while snapshot runtime reports in-flight dispatches", () => {
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.runtime.in_flight_dispatch_count = 2;
+    hookState.draftState.hasChanges = true;
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphEditor(snapshot),
+    );
+
+    expect(result.current.hasActiveWork).toBe(true);
+    expect(result.current.canSaveDraft).toBe(false);
+    expect(result.current.saveBlockedReason).toBe(
+      "Topology save is unavailable while active work is still running in this factory.",
+    );
+  });
+
+  it("blocks saving with stale-draft messaging when the document version drifts", () => {
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.runtime.in_flight_dispatch_count = 0;
+    hookState.draftState.hasChanges = true;
+    hookState.saveStateIsStale = true;
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphEditor(snapshot),
+    );
+
+    expect(result.current.isStaleDraft).toBe(true);
+    expect(result.current.canSaveDraft).toBe(false);
+    expect(result.current.saveBlockedReason).toBe(
+      "A newer factory topology arrived while this draft was open. Refresh or discard before saving.",
+    );
   });
 
   it("closes the save confirmation when saving fails", async () => {
