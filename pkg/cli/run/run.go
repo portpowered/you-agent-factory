@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	"github.com/portpowered/infinite-you/pkg/api"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/batchload"
@@ -92,11 +93,13 @@ type runtimeLogDiagnosticsProvider interface {
 	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
 }
 
-var buildFactoryService = func(
+var buildFactoryService = wireBuildFactoryService
+
+func wireBuildFactoryService(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
 ) (factoryServiceRunner, error) {
-	return service.BuildFactoryService(ctx, cfg)
+	return compose.InjectFactoryService(ctx, cfg)
 }
 
 const (
