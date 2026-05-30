@@ -2,6 +2,7 @@
 package work
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
@@ -67,25 +69,29 @@ func List(cfg ListConfig) error {
 
 	client := &http.Client{Timeout: listRequestTimeout}
 	started := time.Now()
-	resp, err := client.Get(endpoint.String())
+	var result factoryapi.ListWorkResponse
+	resp, err := clihttp.GetJSON(
+		context.Background(),
+		client,
+		endpoint.String(),
+		&result,
+		clihttp.RequestOptions{
+			Diagnostics:  cfg.Diagnostics,
+			Verbose:      cfg.Verbose,
+			EndpointPath: endpoint.Path,
+			LogLabel:     "work list",
+		},
+	)
 	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, time.Since(started).Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds())
-		var errResp factoryapi.ErrorResponse
-		if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
+		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("list work failed (%d): %s", resp.StatusCode, errResp.Message)
 		}
 		return fmt.Errorf("list work failed (%d)", resp.StatusCode)
-	}
-
-	var result factoryapi.ListWorkResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("parse response: %w", err)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
