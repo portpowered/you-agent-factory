@@ -28,12 +28,14 @@ describe("DashboardWidgetFrame", () => {
       level: 3,
       name: "Submit work",
     });
-    const moveButton = within(card).getByRole("button", {
-      name: "Move Submit work",
-    });
+    const header = card.querySelector("header");
 
     expect(title).toBeTruthy();
-    expect(moveButton.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(header?.className).toContain("cursor-grab");
+    expect(
+      within(card).queryByRole("button", { name: "Move Submit work" }),
+    ).toBeNull();
     expect(card.querySelectorAll("header")).toHaveLength(1);
 
     const subtitle = within(card).getByText("Queue a new request");
@@ -77,11 +79,11 @@ describe("DashboardWidgetFrame", () => {
     expect(
       within(card).getByRole("button", { name: "Remove card" }),
     ).toBeTruthy();
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(header?.className).toContain("cursor-grab");
     expect(
-      within(card)
-        .getByRole("button", { name: "Move Provider session" })
-        .getAttribute("data-bento-drag-handle"),
-    ).toBe("true");
+      within(card).queryByRole("button", { name: "Move Provider session" }),
+    ).toBeNull();
     expect(toolsRegion?.contains(screen.getByRole("button", { name: "Remove card" }))).toBe(
       true,
     );
