@@ -14,6 +14,7 @@ import (
 type Topic string
 
 const (
+	TopicAgents             Topic = "agents"
 	TopicAuthoringFactories Topic = "authoring-factories"
 	TopicConfig             Topic = "config"
 	TopicMockWorkers        Topic = "mock-workers"
@@ -35,6 +36,7 @@ const (
 )
 
 const (
+	referenceAgentsPath             = "reference/agents.md"
 	referenceAuthoringFactoriesPath = "reference/authoring-factories.md"
 	referenceConfigPath             = "reference/config.md"
 	referenceMockWorkersPath        = "reference/mock-workers.md"
@@ -59,6 +61,7 @@ type topicDocument struct {
 }
 
 var topicDocuments = []topicDocument{
+	{topic: TopicAgents, description: "Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router.", path: referenceAgentsPath, displayOrder: 5},
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath, displayOrder: 10},
 	{topic: TopicConfig, description: "factory.json topology, work types, states, workers, workstations, resources, and portability.", path: referenceConfigPath, displayOrder: 20},
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},
