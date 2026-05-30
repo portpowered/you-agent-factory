@@ -201,6 +201,18 @@ func sameFactoryDir(left, right string) bool {
 	return factorysessions.SameFactoryDir(left, right)
 }
 
+// factorySaveSaver is the injectable factory-save collaborator seam.
+type factorySaveSaver interface {
+	Save(
+		ctx context.Context,
+		sessionID string,
+		mode factoryapi.FactorySaveMode,
+		request factoryapi.Factory,
+	) (factoryapi.Factory, error)
+}
+
+var _ factorySaveSaver = (*factorysave.Service)(nil)
+
 // SaveFactoryForSession is the single orchestrated pipeline for session-scoped
 // factory submission. It delegates to the factorysave collaborator.
 func (fs *FactoryService) SaveFactoryForSession(
@@ -289,6 +301,13 @@ func newFactorySaveService(fs *FactoryService) *factorysave.Service {
 		fs.workstationLoaderFromConfig,
 		factorySaveHost{fs},
 	)
+}
+
+func wireFactorySaveCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) factorySaveSaver {
+	if cfg != nil && cfg.FactorySave != nil {
+		return cfg.FactorySave
+	}
+	return newFactorySaveService(fs)
 }
 
 func (fs *FactoryService) workstationLoaderFromConfig() factoryconfig.WorkstationLoader {

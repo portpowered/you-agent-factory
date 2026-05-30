@@ -23,7 +23,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
@@ -128,6 +127,7 @@ type runtimeBundleBuildInput struct {
 	providerCommandRunner workers.CommandRunner
 	commandRunnerOverride workers.CommandRunner
 	additionalFactoryOpts []factory.FactoryOption
+	prefetchedLocalModels localModelDomain
 }
 
 // FactoryService is an instantiation of a factory along with its runtime
@@ -144,7 +144,7 @@ type FactoryService struct {
 	runState      *serviceRunState
 	apiServerExit <-chan error
 	sessions      *factorysessions.Registry
-	factorySave   *factorysave.Service
+	factorySave   factorySaveSaver
 	runtimeBuild  *runtimebuild.Service
 	hostedWorkers hostedworkers.Config
 	factoryRootDir string
@@ -275,6 +275,10 @@ type FactoryServiceConfig struct {
 	// supported LOCAL model workers. Package tests use this to exercise the
 	// load/invoke/reuse path without a live embedded backend.
 	LocalModelRuntimeOverride localModelRuntime
+	// FactorySave, when non-nil, replaces the default factorysave.Service
+	// collaborator. Tests use this to assert SaveFactoryForSession delegates
+	// without running the full save orchestration pipeline.
+	FactorySave factorySaveSaver
 }
 
 const serviceModeStartupWorkReadabilityDelay = 250 * time.Millisecond
