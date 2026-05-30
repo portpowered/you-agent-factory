@@ -133,6 +133,28 @@ describe("useDashboardSnapshot composer", () => {
     expect(result.current.error).toBeNull();
   });
 
+  it("reopens the event stream when the selected session tab changes", async () => {
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    expect(replayHarness.getStreams()).toHaveLength(1);
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+
+    act(() => {
+      useDashboardSessionStore.getState().setSelectedSessionID("session-beta");
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams().length).toBeGreaterThanOrEqual(2);
+    });
+    expect(replayHarness.getStreams().at(-1)?.url).toBe(
+      "/factory-sessions/session-beta/events",
+    );
+  });
+
   it("routes streamed events through the composer into timeline state", async () => {
     useFactoryTimelineStore.getState().reset();
 
