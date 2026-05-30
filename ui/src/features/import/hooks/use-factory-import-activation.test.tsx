@@ -3,9 +3,22 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import {
+  activateImportedFactoryForSession,
+  createFactory,
   NamedFactoryAPIError,
   type FactoryValue,
 } from "../../../api/named-factory";
+
+vi.mock("../../../api/named-factory", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/named-factory")>(
+    "../../../api/named-factory",
+  );
+  return {
+    ...actual,
+    activateImportedFactoryForSession: vi.fn(actual.activateImportedFactoryForSession),
+    createFactory: vi.fn(actual.createFactory),
+  };
+});
 import { writeFactoryExportPng } from "../../export/lib/factory-png-export";
 import {
   PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
@@ -59,7 +72,74 @@ const canonicalFactory: FactoryValue = {
   ],
 };
 
+const mockedActivateImportedFactoryForSession = vi.mocked(activateImportedFactoryForSession);
+const mockedCreateFactory = vi.mocked(createFactory);
+
 describe("useFactoryImportActivation", () => {
+  beforeEach(() => {
+    mockedActivateImportedFactoryForSession.mockClear();
+    mockedCreateFactory.mockClear();
+  });
+
+  it("uses session-scoped activation by default instead of createFactory", async () => {
+    mockedActivateImportedFactoryForSession.mockResolvedValue(canonicalFactory);
+
+    const { result } = renderHook(
+      () => useFactoryImportActivation({ sessionID: "session-2" }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.activateImport({
+        factory: canonicalFactory,
+        previewImageSrc: "blob:factory-roundtrip-preview",
+        revokePreviewImageSrc: vi.fn(),
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockedActivateImportedFactoryForSession).toHaveBeenCalledWith(
+        canonicalFactory,
+        { sessionID: "session-2" },
+      );
+    });
+    expect(mockedCreateFactory).not.toHaveBeenCalled();
+  });
+
+  it("activates against the current sessionID when the selected session changes before confirm", async () => {
+    mockedActivateImportedFactoryForSession.mockResolvedValue(canonicalFactory);
+    const importValue = {
+      factory: canonicalFactory,
+      previewImageSrc: "blob:factory-roundtrip-preview",
+      revokePreviewImageSrc: vi.fn(),
+      schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+    };
+
+    const { result, rerender } = renderHook(
+      ({ sessionID }: { sessionID: string }) =>
+        useFactoryImportActivation({ sessionID }),
+      {
+        initialProps: { sessionID: "~default" },
+        wrapper: createQueryClientWrapper(),
+      },
+    );
+
+    rerender({ sessionID: "session-2" });
+
+    await act(async () => {
+      await result.current.activateImport(importValue);
+    });
+
+    await waitFor(() => {
+      expect(mockedActivateImportedFactoryForSession).toHaveBeenCalledWith(
+        canonicalFactory,
+        { sessionID: "session-2" },
+      );
+    });
+    expect(mockedActivateImportedFactoryForSession).toHaveBeenCalledTimes(1);
+  });
+
   it("activates the direct factory payload while preserving the PNG factory metadata", async () => {
     const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
       .mockImplementation(async (value) => value);
