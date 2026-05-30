@@ -1,9 +1,17 @@
 import type { Connection } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   createFactoryGraphWorkstationResolver,
+  type FactoryGraphConnectionResolver,
   resolveFactoryGraphConnectionAnchorContext,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import {
@@ -11,6 +19,87 @@ import {
   type FactoryGraphConnectionEndpoint,
   getFactoryGraphConnectionAnchor,
 } from "../../factory-graph-editor/public";
+
+type FactoryGraphConnectionCommit = (connection: {
+  sourceAnchorId: string;
+  sourceNodeId: string;
+  targetAnchorId: string;
+  targetNodeId: string;
+}) => void;
+
+function handleFactoryGraphConnectionAnchorClick(
+  endpoint: FactoryGraphConnectionEndpoint,
+  {
+    activeTool,
+    canInteractWithEditor,
+    commitConnection,
+    draftNodes,
+    locale,
+    pendingConnectionSource,
+    setConnectionNotice,
+    setPendingConnectionSource,
+    workstationResolver,
+  }: {
+    activeTool: FactoryGraphEditorTool;
+    canInteractWithEditor: boolean;
+    commitConnection: FactoryGraphConnectionCommit;
+    draftNodes: EditableFactoryGraphViewModel["draftState"]["graph"]["nodes"];
+    locale?: string | null;
+    pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
+    setConnectionNotice: (notice: string | null) => void;
+    setPendingConnectionSource: Dispatch<
+      SetStateAction<FactoryGraphConnectionEndpoint | null>
+    >;
+    workstationResolver: FactoryGraphConnectionResolver;
+  },
+): void {
+  if (!canInteractWithEditor || activeTool !== "connect") {
+    return;
+  }
+
+  const node = draftNodes.find((entry) => entry.id === endpoint.nodeId);
+  if (!node) {
+    return;
+  }
+
+  const anchorContext = resolveFactoryGraphConnectionAnchorContext(
+    node,
+    workstationResolver,
+  );
+  const anchor = getFactoryGraphConnectionAnchor(
+    node.kind,
+    endpoint.anchorId,
+    anchorContext,
+  );
+  if (!anchor) {
+    return;
+  }
+
+  if (anchor.role === "source") {
+    setPendingConnectionSource((currentSource) =>
+      currentSource &&
+      currentSource.nodeId === endpoint.nodeId &&
+      currentSource.anchorId === endpoint.anchorId
+        ? null
+        : endpoint,
+    );
+    setConnectionNotice(null);
+    return;
+  }
+
+  if (!pendingConnectionSource) {
+    const messages = getFactoryGraphEditorMessages(locale);
+    setConnectionNotice(messages.connectionSelectSourceNotice);
+    return;
+  }
+
+  commitConnection({
+    sourceAnchorId: pendingConnectionSource.anchorId,
+    sourceNodeId: pendingConnectionSource.nodeId,
+    targetAnchorId: endpoint.anchorId,
+    targetNodeId: endpoint.nodeId,
+  });
+}
 
 export function useFactoryGraphConnectionController({
   activeTool,
@@ -84,53 +173,16 @@ export function useFactoryGraphConnectionController({
   );
   const handleConnectionAnchorClick = useCallback(
     (endpoint: FactoryGraphConnectionEndpoint) => {
-      if (!canInteractWithEditor || activeTool !== "connect") {
-        return;
-      }
-
-      const node = draftState.graph.nodes.find(
-        (entry) => entry.id === endpoint.nodeId,
-      );
-      if (!node) {
-        return;
-      }
-
-      const anchorContext = resolveFactoryGraphConnectionAnchorContext(
-        node,
+      handleFactoryGraphConnectionAnchorClick(endpoint, {
+        activeTool,
+        canInteractWithEditor,
+        commitConnection,
+        draftNodes: draftState.graph.nodes,
+        locale,
+        pendingConnectionSource,
+        setConnectionNotice,
+        setPendingConnectionSource,
         workstationResolver,
-      );
-      const anchor = getFactoryGraphConnectionAnchor(
-        node.kind,
-        endpoint.anchorId,
-        anchorContext,
-      );
-      if (!anchor) {
-        return;
-      }
-
-      if (anchor.role === "source") {
-        setPendingConnectionSource((currentSource) =>
-          currentSource &&
-          currentSource.nodeId === endpoint.nodeId &&
-          currentSource.anchorId === endpoint.anchorId
-            ? null
-            : endpoint,
-        );
-        setConnectionNotice(null);
-        return;
-      }
-
-      if (!pendingConnectionSource) {
-        const messages = getFactoryGraphEditorMessages(locale);
-        setConnectionNotice(messages.connectionSelectSourceNotice);
-        return;
-      }
-
-      commitConnection({
-        sourceAnchorId: pendingConnectionSource.anchorId,
-        sourceNodeId: pendingConnectionSource.nodeId,
-        targetAnchorId: endpoint.anchorId,
-        targetNodeId: endpoint.nodeId,
       });
     },
     [
