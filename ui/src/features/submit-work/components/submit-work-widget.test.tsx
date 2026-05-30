@@ -10,6 +10,7 @@ import {
 } from "@testing-library/react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { getSubmitWorkMessages } from "../messages/submit-work";
@@ -1163,7 +1164,9 @@ describe("SubmitWorkWidget submission behavior", () => {
 
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "task" }]} />
+        <DashboardSessionProvider>
+          <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "task" }]} />
+        </DashboardSessionProvider>
       </QueryClientProvider>,
     );
 
@@ -1377,6 +1380,46 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(requestText.value).toBe("Retry the broken submission.");
   });
 
+  it("submits work to the session-beta route when that tab is selected", async () => {
+    useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-submit-beta" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    fireEvent.change(screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    }), { target: { value: "story" } });
+    fireEvent.change(screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Request name",
+    }), {
+      target: { value: "Beta submission" },
+    });
+    fireEvent.change(screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Text item 1",
+    }), {
+      target: { value: "Submit the beta session request." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/factory-sessions/session-beta/work",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
+    });
+  });
+
   it("clears the draft and switches submit routing when the selected session changes", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
@@ -1502,7 +1545,9 @@ function renderSubmitWorkWidget(element: React.ReactElement) {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
+    <QueryClientProvider client={queryClient}>
+      <DashboardSessionProvider>{element}</DashboardSessionProvider>
+    </QueryClientProvider>,
   );
 }
 

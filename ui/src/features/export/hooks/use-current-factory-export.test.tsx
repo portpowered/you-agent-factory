@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { getCurrentFactory, NamedFactoryAPIError, type FactoryValue } from "../../../api/named-factory";
+import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useCurrentFactoryExport } from "./use-current-factory-export";
 
@@ -81,8 +82,8 @@ describe("useCurrentFactoryExport", () => {
     });
   });
 
-  it("loads export data from the selected non-default session route", async () => {
-    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+  it("loads export data for session-beta through session scope", async () => {
+    useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
     vi.mocked(getCurrentFactory).mockResolvedValue(factory);
 
     renderHook(() => useCurrentFactoryExport(true), {
@@ -91,7 +92,7 @@ describe("useCurrentFactoryExport", () => {
 
     await waitFor(() => {
       expect(getCurrentFactory).toHaveBeenCalledWith({
-        sessionID: "session-2",
+        sessionID: "session-beta",
       });
     });
   });
@@ -167,7 +168,11 @@ function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => 
   });
 
   return function QueryClientWrapper({ children }: { children: ReactNode }): ReactNode {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+      </QueryClientProvider>
+    );
   };
 }
 

@@ -6,7 +6,7 @@ import {
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
-import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 
 const CURRENT_FACTORY_EXPORT_QUERY_KEY = "agent-factory-current-export";
 const CURRENT_FACTORY_UNAVAILABLE_MESSAGE =
@@ -35,8 +35,8 @@ export interface UseCurrentFactoryExportResult {
 }
 
 export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryExportResult {
-  const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
-  const isQueryEnabled = isEnabled && sessionID != null;
+  const { rawSessionID, sessionID } = useDashboardSession();
+  const isQueryEnabled = isEnabled && rawSessionID != null;
   const query = useQuery({
     queryKey: [CURRENT_FACTORY_EXPORT_QUERY_KEY, sessionID],
     queryFn: () => getCurrentFactory({ sessionID }),
@@ -60,7 +60,7 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
 
     const isRefreshingCurrentFactory = isQueryEnabled && query.isFetching;
 
-    if (sessionID == null) {
+    if (rawSessionID == null) {
       return {
         currentFactoryExport: {
           code: "FACTORY_DEFINITION_UNAVAILABLE",
@@ -107,6 +107,7 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
     query.error,
     query.isFetching,
     query.isPending,
+    rawSessionID,
     sessionID,
   ]);
 }
