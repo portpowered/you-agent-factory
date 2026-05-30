@@ -14,7 +14,7 @@ only under `cmd/**`; `pkg/service`, `pkg/api`, and `pkg/cli` must not add
 | `cmd/factory/compose/wire_gen.go` | Generated injector (checked in; normal builds) |
 | `cmd/factory/compose/generate.go` | `//go:generate` hook that runs the Wire CLI |
 | `cmd/factory/compose/api_server.go` | `ServeAPIServer` (`api.NewServer` on the wired runtime) |
-| `pkg/service/factory_compose.go` | Composition seams (`ComposeFactoryService`, collaborator snapshot); no Wire tags |
+| `pkg/service/factory_editable_definition.go` (composition section) | Composition seams (`ComposeFactoryService`, collaborator snapshot); no Wire tags |
 
 `pkg/cli/run` calls `compose.InjectFactoryService` through overrideable
 `buildFactoryService` / `wireBuildFactoryService`. Tests replace
@@ -71,7 +71,7 @@ make wire-smoke
 - **Never hand-edit** `wire_gen.go`. Change providers or `wire.Build` in
   `wire.go`, regenerate, and commit the generated file.
 - **Do not add Wire** under `pkg/**`. Keep composition logic in
-  `pkg/service/factory_compose.go` and providers in `cmd/factory/compose/`.
+  the composition section of `pkg/service/factory_editable_definition.go` and providers in `cmd/factory/compose/`.
 - **Preserve behavior**: invalid `FactoryServiceConfig` must still fail with the
   same semantics as `service.BuildFactoryService` (see
   `cmd/factory/compose/compose_test.go` and `pkg/cli/run/run_compose_test.go`).
@@ -82,7 +82,7 @@ Regenerate after any of the following:
 
 - New or removed provider in `providers.go` or `wire.go`
 - Changed constructor signatures in the wired graph
-- Moved composition seam in `pkg/service/factory_compose.go` that alters what
+- Moved composition seam in `pkg/service/factory_editable_definition.go` that alters what
   providers must supply
 
 No regeneration is required for changes that only touch
