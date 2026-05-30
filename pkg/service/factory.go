@@ -138,29 +138,22 @@ type runtimeBundleBuildInput struct {
 // session registry, pkg/localmodels owns managed model runtime wiring, and
 // pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
-	runtimeMu      sync.RWMutex
-	activationMu   sync.RWMutex
-	runMu          sync.RWMutex
-	runState       *serviceRunState
-	apiServerExit  <-chan error
-	sessions       *factorysessions.Registry
-	hostedWorkers  hostedworkers.Config
+	runtimeMu     sync.RWMutex
+	activationMu  sync.RWMutex
+	runMu         sync.RWMutex
+	runState      *serviceRunState
+	apiServerExit <-chan error
+	sessions      *factorysessions.Registry
+	hostedWorkers hostedworkers.Config
 	factoryRootDir string
-	factory        factory.Factory
-	listener       *ingest.FileWatcher
-	net            *state.Net
-	cfg            *FactoryServiceConfig
-	runtimeCfg     *factoryconfig.LoadedFactoryConfig
-	eventHistory   *factoryevents.FactoryEventHistory
-	baseLogger     *zap.Logger
-	logger         *zap.Logger
-	startTime      time.Time
-	clock          factory.Clock
-	recording      *replay.Recorder
-	logSink        *logging.RuntimeLogSink
-	modelResources *localModelResourceLimiter
-	modelAssets    modelAssetPuller
-	localModels    *managedLocalModelManager
+	// startupBundle holds the built default runtime before Run registers ~default.
+	startupBundle *factoryRuntimeBundle
+	cfg           *FactoryServiceConfig
+	baseLogger    *zap.Logger
+	logger        *zap.Logger
+	startTime     time.Time
+	clock         factory.Clock
+	modelAssets   modelAssetPuller
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -390,11 +383,13 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	serviceMode := runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
 
 	defer func() {
-		if currentRuntime != nil || fs.logSink == nil {
+		if currentRuntime != nil {
 			return
 		}
-		if err := fs.logSink.Close(); err != nil {
-			fs.logger.Warn("runtime log close failed", zap.Error(err))
+		if bundle := fs.startupRuntimeBundle(); bundle != nil && bundle.logSink != nil {
+			if err := bundle.logSink.Close(); err != nil {
+				fs.logger.Warn("runtime log close failed", zap.Error(err))
+			}
 		}
 	}()
 	defer func() {
@@ -456,7 +451,11 @@ func (fs *FactoryService) startRunRuntime(
 
 func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGroup, serviceMode bool) {
 	if !serviceMode {
-		fs.startListenerSidecar(runCtx, sidecars, fs.listener, fs.logger)
+		var listener *ingest.FileWatcher
+		if bundle := fs.currentRuntimeBundle(); bundle != nil {
+			listener = bundle.listener
+		}
+		fs.startListenerSidecar(runCtx, sidecars, listener, fs.logger)
 	}
 	fs.startDashboardSidecar(runCtx, sidecars)
 }
@@ -587,12 +586,16 @@ func (fs *FactoryService) startAPIServerSidecar(runCtx context.Context, sidecars
 }
 
 func (fs *FactoryService) logServiceStartup() {
-	runtimeLogConfig := fs.logSink.Config()
+	bundle := fs.currentRuntimeBundle()
+	if bundle == nil || bundle.logSink == nil {
+		return
+	}
+	runtimeLogConfig := bundle.logSink.Config()
 	fs.logger.Info("factory started",
 		zap.String("dir", fs.cfg.Dir),
-		zap.String("runtime_log_path", fs.logSink.Path()),
-		zap.String("runtime_log_root", fs.logSink.RootDir()),
-		zap.String("runtime_log_start_time_utc", runtimeLogStartTimeString(fs.logSink.StartTimeUTC())),
+		zap.String("runtime_log_path", bundle.logSink.Path()),
+		zap.String("runtime_log_root", bundle.logSink.RootDir()),
+		zap.String("runtime_log_start_time_utc", runtimeLogStartTimeString(bundle.logSink.StartTimeUTC())),
 		zap.String("runtime_log_appender", logging.RuntimeLogAppenderZapRollingFile),
 		zap.Int("runtime_log_max_size_mb", runtimeLogConfig.MaxSize),
 		zap.Int("runtime_log_max_backups", runtimeLogConfig.MaxBackups),
@@ -617,7 +620,8 @@ func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
 	if err := configpersist.WriteCurrentFactoryPointer(rootDir, name); err != nil {
 		return err
 	}
-	fs.swapActiveRuntime(replacement)
+	fs.setStartupBundle(replacement)
+	fs.syncActiveSessionDir(replacement)
 	return nil
 }
 
@@ -674,34 +678,7 @@ func (fs *FactoryService) currentRuntimeBundle() *factoryRuntimeBundle {
 			return handle.runtime
 		}
 	}
-	return fs.shadowRuntimeBundle()
-}
-
-func (fs *FactoryService) shadowRuntimeBundle() *factoryRuntimeBundle {
-	if fs == nil {
-		return nil
-	}
-	fs.runtimeMu.RLock()
-	defer fs.runtimeMu.RUnlock()
-	if fs.factory == nil {
-		return nil
-	}
-	return &factoryRuntimeBundle{
-		dir:            fs.cfg.Dir,
-		folderPath:     fs.factoryRootDir,
-		eventHistory:   fs.eventHistory,
-		factory:        fs.factory,
-		listener:       fs.listener,
-		net:            fs.net,
-		runtimeCfg:     fs.runtimeCfg,
-		modelResources: fs.modelResources,
-		modelAssets:    fs.modelAssets,
-		localModels:    fs.localModels,
-		logger:         fs.logger,
-		logSink:        fs.logSink,
-		recording:      fs.recording,
-		recordPath:     fs.cfg.RecordPath,
-	}
+	return fs.startupRuntimeBundle()
 }
 
 func (fs *FactoryService) publishFactoryChangeEvent(

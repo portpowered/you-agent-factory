@@ -29,6 +29,13 @@ func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
 	factoryfixtures.WriteFactoryJSON(t, dir, cfg)
 }
 
+func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle) {
+	if svc == nil {
+		return
+	}
+	svc.setStartupBundle(bundle)
+}
+
 type recordingDiagnosticsProvider struct{}
 
 func (recordingDiagnosticsProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
