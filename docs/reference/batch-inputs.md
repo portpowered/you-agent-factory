@@ -18,7 +18,24 @@ print identical markdown.
 parent-aware input guards such as `ALL_CHILDREN_COMPLETE`.
 
 This guide covers the public batch input shape used by watched input files,
-`you run --work`, and `PUT /work-requests/{request_id}`.
+`you run --work`, `you submit batch`, and `PUT /work-requests/{request_id}`.
+
+## Batch ingress comparison
+
+Use the same canonical `FACTORY_REQUEST_BATCH` document for every path below.
+The factory validates the full batch before creating work; invalid batches reject
+the whole submission with no partial work.
+
+| Ingress | When to use |
+|---------|-------------|
+| `you submit` | Submit one work item to a **running** factory through the CLI (unary submit). |
+| `you submit batch` | Upsert a batch JSON document to a **running** factory session without restarting it. |
+| `you run --work <path>` | Submit a batch file as part of **startup** before or while starting a local factory run. |
+| `factory/inputs/BATCH/default/<request_id>.json` | Steady-state **watched-folder** ingress while the factory is already running. |
+| `PUT /work-requests/{request_id}` | HTTP upsert with the same JSON body (session-scoped routes use `/factory-sessions/{session}/work-requests/{request_id}`). |
+
+For single-work CLI or dashboard submission, see [Submitted work](work.md). For
+relation semantics, see [Relationships](relationships.md).
 
 ## Quick reference
 
@@ -36,6 +53,7 @@ This guide covers the public batch input shape used by watched input files,
 | `factory/inputs/BATCH/default/<request_id>.json` | Mixed-work-type batches and canonical parent-child file input. |
 | `factory/inputs/<work_type>/default/<request_id>.json` | Single-work-type watched batches. |
 | Any readable `.json` path passed to `you run --work <path>` | Startup batch submission before runtime start. |
+| `you submit batch <path>` (or `--file`, pipe, inline JSON) | Upsert a batch to a running factory session via CLI. |
 
 Minimal batch:
 
@@ -159,6 +177,60 @@ curl -X PUT "http://localhost:7437/work-requests/release-story-set" \
 ```
 
 The path `{request_id}` and body `requestId` must match.
+
+## CLI batch submit (`you submit batch`)
+
+When a factory is already running, upsert the same JSON body with
+`you submit batch` instead of writing to a watched inbox or calling `curl`.
+The command validates locally, then issues `PUT` to
+`/factory-sessions/{session}/work-requests/{requestId}` (default session
+`~default` when `--session` is omitted).
+
+File path (primary form):
+
+```bash
+you submit batch ./factory/inputs/BATCH/default/release-story-set.json
+```
+
+Explicit file flag (`--file` wins when both a flag and a positional path are set):
+
+```bash
+you submit batch --file ./batches/deploy.json
+```
+
+Pipe batch JSON without a temp file:
+
+```bash
+cat batch.json | you submit batch
+```
+
+Read batch JSON from stdin explicitly:
+
+```bash
+you submit batch - < batch.json
+```
+
+Inline JSON positional (convenient for small batches; shell argument length limits apply):
+
+```bash
+you submit batch '{"requestId":"release-story-set","type":"FACTORY_REQUEST_BATCH","works":[{"name":"story-auth","workTypeName":"story","payload":{"title":"Harden auth session handling"}}]}'
+```
+
+Validate locally without contacting the server (`--dry-run` exits 0 on valid input
+even when the factory is unreachable):
+
+```bash
+you submit batch --dry-run ./factory/inputs/BATCH/default/release-story-set.json
+```
+
+Target a non-default live session with structured output:
+
+```bash
+you --server http://localhost:7437 --json submit batch --session session-beta ./batch.json
+```
+
+Run `you submit batch --help` for the full input-mode matrix, global `--server`,
+`--json`, and `--verbose` flags.
 
 ## Poller Stdout Contract
 

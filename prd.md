@@ -1,180 +1,317 @@
-# PRD: CLI Submit Response Contract (`you submit`)
-
----
-author: Codex
-last modified: 2026-05-30
-status: draft
-work-item: batch-request-b8e7cd2f426dfb741e49b31aef9753d4-cli-submit-response-contract
----
-
-## Introduction
-
-`you submit` posts a single work item to a running factory session and today prints only `Submitted work: <traceId>` on success (or encodes the raw `SubmitWorkResponse` object under `--json`). Operators and autonomous agents cannot tell which **work id**, **name**, or **work type** were accepted without immediately running `you work list`. That gap caused duplicate ingress attempts and missed verification during the docs PRD submission exercise.
-
-This project makes successful submit output **actionable** (human and `--json`), clarifies failure modes (transport vs API rejection), extends the HTTP contract when needed so `workId` is available at `201`, and documents the submit → verify loop alongside [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md) and [`prd-docs-agents-consolidation-wave2.md`](../prd-docs-agents-consolidation-wave2.md).
+# PRD: CLI Batch Work Submission (`you submit batch`)
 
 ## Context
 
-| | |
-|---|---|
-| **Customer ask** | After `you submit`, stdout/`--json` must identify the created work and suggest the next inspection command; errors must distinguish unreachable factory vs API rejection. |
-| **Concrete problem** | Success output exposes only `traceId`; `SubmitWorkResponse` OpenAPI schema requires only `traceId`; agents re-submit or poll blindly. |
-| **High-level solution** | Return stable work identifiers from the submit API where normalization already assigns them; shape CLI human/JSON output around those fields plus session/route context; improve bounded error text; document verify commands in `you docs work`. |
+### Customer ask
 
-## Project-level acceptance criteria
+Implement CLI batch work submission so operators and agents can submit a
+`FACTORY_REQUEST_BATCH` to a **running** factory via file path, stdin, or inline
+JSON—without hand-written `curl` boilerplate.
 
-- [ ] On HTTP `201`, human-mode stdout includes submitted **name**, **workTypeName**, **traceId**, and **workId** when the API returns it; otherwise it states the list-by-name fallback explicitly.
-- [ ] Human-mode stdout prints a one-line next-step hint: `you work show <work-id>` when `workId` is present, else `you work list --name <name>` (aligned with work-inspection filters).
-- [ ] `--json` on success emits one object with `workId`, `name`, `workTypeName`, `traceId`, `sessionId`, and `endpointPath`; exit code `0`.
-- [ ] Non-success paths never print the success confirmation line; transport failures and API failures are distinguishable by message shape.
-- [ ] OpenAPI `SubmitWorkResponse` and generated Go/TS types include new fields when the API is extended; contract tests updated.
-- [ ] `you docs work` documents the submit success and verify loop; cross-links work-inspection commands.
-- [ ] Quality gate: backend typecheck, lint, and targeted CLI/API tests pass without unrelated refactors.
+### Problem
+
+Today, batch ingress to a live factory is only practical through:
+
+- `curl -X PUT …/factory-sessions/{session}/work-requests/{request_id}` with a
+  JSON body, or
+- Dropping files under `factory/inputs/BATCH/` for the watcher.
+
+Unary `you submit` handles one work item. `you run --work` submits a batch only
+at factory startup. There is no first-class CLI that mirrors the documented HTTP
+upsert path for an already-running session.
+
+### Solution
+
+Add `you submit batch` under `you submit`. It reads the same canonical
+`FACTORY_REQUEST_BATCH` JSON as watched inputs and `you run --work`, validates it
+locally, and upserts via `PUT /factory-sessions/{session}/work-requests/{requestId}`.
+Support file path, piped stdin, explicit `-`, optional `--file`, inline JSON, and
+`--dry-run` for validate-only runs. Success output (human and `--json`) aligns
+with the unary submit response contract, including per-work identifiers when the
+API returns them.
 
 ## Goals
 
-- Human-mode success prints actionable identifiers and a suggested follow-up command.
-- `--json` success is stable for scripts and agents (not only the generated API DTO).
-- Errors distinguish factory unreachable (transport) vs HTTP API rejection with bounded body summary.
-- API `201` body exposes `workId`, `name`, and `workTypeName` using the same normalization rules as ingress (no second id scheme).
-- Documentation tells agents to submit → verify with `you work show` / `you work list --name`.
+- Operators discover batch submit next to unary `you submit`.
+- Scripts and agents submit multi-work batches to a running factory in one command.
+- All ingress modes (file, pipe, inline) produce the same validated HTTP body.
+- Invalid batch JSON fails locally before any network call.
+- `--dry-run` confirms shape and summarizes work without contacting the server.
+- Packaged and reference docs describe CLI batch submit alongside `curl` and
+  watched-folder ingress.
 
-## User Stories
+## Project-level acceptance criteria
 
-### US-001: Submit API returns work identifiers on 201
+- [ ] `you submit batch` is registered under `you submit` (not a separate top-level verb).
+- [ ] Running `you submit batch` with valid `FACTORY_REQUEST_BATCH` JSON results in
+  HTTP `201` and accepted work on a reachable factory (default session `~default`
+  when `--session` is omitted).
+- [ ] Batch JSON is accepted from: filesystem path (positional or `--file`), piped
+  stdin or positional `-`, and inline `{…}` positional when the argument is JSON.
+- [ ] `--dry-run` validates input, prints a summary, performs no HTTP, and exits `0`
+  on valid input even when the factory is unreachable.
+- [ ] Human stdout and `--json` on success include `requestId`, `traceId`, work
+  count, and per-work `name`, `workTypeName`, and `workId` when the API provides them.
+- [ ] Reference and packaged docs (`you docs batch-inputs`) include CLI examples
+  for file, pipe, inline, and dry-run alongside existing `curl` guidance.
+- [ ] Typecheck, lint, and project tests pass.
 
-**Description:** As an API consumer, I need `SubmitWorkResponse` to include the accepted work identifiers so CLI and UI do not guess after submit.
+## User stories
 
-**Acceptance Criteria:**
+### cli-submit-batch-001: Shared canonical batch loader (file path)
 
-- [ ] OpenAPI `SubmitWorkResponse` adds `workId`, `name`, and `workTypeName` (required when a single work item is accepted); `traceId` remains required.
-- [ ] Session-scoped submit (`POST /factory-sessions/{sessionId}/work`) includes `sessionId` in the response body matching the path parameter (default label `~default` for the legacy `/work` route).
-- [ ] `pkg/api` submit handlers populate fields using the same `WorkRequest` normalization path that assigns `batch-{requestId}-{name}` (or caller-provided `workId`) before returning `201`.
-- [ ] API unit/contract tests assert the JSON body shape for default and session-scoped submit on success.
-- [ ] Regenerated `pkg/api/generated` and UI OpenAPI types compile; no handwritten duplicate DTOs in handlers.
-- [ ] Typecheck passes
-- [ ] Tests pass
+**Description:** As a maintainer, I want one canonical batch JSON loader used by
+`you run --work` and `you submit batch` so parsing rules never diverge.
 
-### US-002: Human success output for `you submit`
+**Acceptance criteria:**
 
-**Description:** As an operator, I want submit to tell me what was accepted and what command to run next so I can verify without listing the whole factory.
+- [ ] Reading batch JSON from an existing filesystem path returns a validated
+  `FACTORY_REQUEST_BATCH` work request (same semantics as today’s `you run --work`
+  file load).
+- [ ] Retired field aliases and conflicting trace fields are rejected with the same
+  error guidance as today’s run loader tests.
+- [ ] `you run --work` behavior is unchanged for file-based batches (regression tests pass).
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-002: Upsert API returns per-work identifiers
 
-- [x] On `201`, stdout includes at minimum: trimmed submitted **name**, **workTypeName**, **traceId**, and **workId** when the response includes it.
-- [x] When `workId` is present, stdout includes a one-line hint containing `you work show <work-id>`; when absent, the hint uses `you work list --name <name>` and states that work id was not returned.
-- [x] Stdout does not dump the full HTTP response body or request payload.
-- [x] Existing verbose diagnostics remain on stderr only (`clidiag`); payload content is not logged on success paths.
-- [x] CLI tests with `httptest` mock `201` responses assert human stdout lines and hint selection.
-- [x] Typecheck passes
-- [x] Tests pass
+**Description:** As an agent, I want the batch upsert response to include work
+identifiers so I can verify submission without listing all work.
 
-### US-003: JSON success output for `you submit --json`
+**Acceptance criteria:**
 
-**Description:** As a script, I want a single parseable confirmation object so I can branch on `workId` without scraping text.
+- [ ] Successful `PUT /work-requests/{request_id}` (session-scoped variant included)
+  returns `201` with `requestId`, `traceId`, and a `works` array where each item
+  includes `name`, `workTypeName`, and `workId`.
+- [ ] Multi-work batch upsert populates `works` for every accepted item in API tests.
+- [ ] OpenAPI schema and generated types reflect optional `works` on upsert response.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-003: Command discovery and help
 
-- [ ] Global `--json` success emits one JSON object with keys: `workId`, `name`, `workTypeName`, `traceId`, `sessionId`, `endpointPath` (CLI-scoped path such as `/factory-sessions/~default/work`).
-- [ ] Omitted or empty `workId` is encoded as JSON `null` or omitted consistently (document the chosen rule in `you docs work`).
-- [ ] Exit code `0` on success; stdout contains only the JSON object (no extra prose).
-- [ ] CLI test asserts JSON shape from a mocked `201` response including session-scoped route.
-- [ ] Typecheck passes
-- [ ] Tests pass
+**Description:** As an operator, I want to discover batch submit next to unary
+submit so I know which command to use for multi-work ingress.
 
-### US-004: Clear submit error surfaces
+**Acceptance criteria:**
 
-**Description:** As an agent, I want duplicate, invalid, or unreachable submit attempts to fail with messages I can classify without mistaking them for success.
+- [ ] `you submit batch --help` documents batch input modes (positional path,
+  optional `--file`, `-`/stdin, pipe-with-no-args, inline JSON), `--dry-run`,
+  `--session`, and global `--server` / `--json` / `--verbose`.
+- [ ] Help states the command expects `FACTORY_REQUEST_BATCH` and points to
+  `you docs batch-inputs`.
+- [ ] Help does not advertise unary-only flags (`--name`, `--work-type-name`,
+  `--payload`, `--work-type-id`).
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-004: Submit batch to running factory (HTTP + dry-run)
 
-- [ ] When `http.Post` fails (connection refused, timeout, DNS), the error message states the factory is not reachable at the resolved URL and does not print a success line.
-- [ ] When HTTP status is not `201`, stderr/returned error includes HTTP status and a bounded API summary (`ErrorResponse.message` when JSON parses; otherwise a capped raw snippet).
-- [ ] If the error JSON body includes `workId` (present or added on conflict responses), the CLI error text appends it in a stable `workId=` form.
-- [ ] No `Submitted work:` or JSON success object is written on failure.
-- [ ] CLI tests cover at least: unreachable server, `400` with `ErrorResponse`, and non-JSON error body.
-- [ ] Typecheck passes
-- [ ] Tests pass
+**Description:** As an operator, I want to upsert a canonical batch to a running
+factory session, or validate locally without sending traffic.
 
-### US-005: Document submit output and verify loop
+**Acceptance criteria:**
 
-**Description:** As an agent author, I want packaged docs to describe the submit contract and the verify commands that follow.
+- [ ] With valid batch JSON from a file, the CLI issues `PUT` to
+  `/factory-sessions/{session}/work-requests/{requestId}` where `requestId` in
+  the path matches the body; `Content-Type` is `application/json`.
+- [ ] Body `type` must be `FACTORY_REQUEST_BATCH` with at least one `works` entry;
+  violations fail locally with a clear message before HTTP.
+- [ ] HTTP `201` is treated as success; other statuses surface API error message when
+  present; unreachable factory errors match unary submit transport style.
+- [ ] `--session` scopes the request like unary submit.
+- [ ] `--dry-run` parses and validates only, prints summary including `requestId`,
+  work count, work names, `relationCount`, `batchSource`, and
+  `dry-run: no request sent`; performs zero HTTP calls; exits `0` on valid input
+  even when the server is down.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-005: Piped stdin and explicit `-`
 
-- [ ] `you docs work` includes a **CLI submit success** subsection listing human fields, `--json` keys, and example success objects.
-- [ ] The same section documents the verify loop: `you work show <work-id>` or `you work list --name <name> --work-type-name <type>` (cross-reference work-inspection PRD behavior).
-- [ ] Docs state that diagnostics and verbose output stay on stderr; payloads are never echoed on success.
-- [ ] `pkg/cli/docs` test coverage updated if topic text assertions exist for `work`.
-- [ ] Typecheck passes
-- [ ] Tests pass
+**Description:** As an agent, I want to pipe batch JSON so I can submit without a
+temp file.
 
-## Functional Requirements
+**Acceptance criteria:**
 
-- **FR-1:** Extend `SubmitWorkResponse` in OpenAPI and propagate through codegen to Go (`factoryapi.SubmitWorkResponse`) and UI generated types.
-- **FR-2:** Populate response fields in `pkg/api` submit handlers from normalized submit metadata (`requestId`, work name, work type, trace, session).
-- **FR-3:** `pkg/cli/submit` maps API response + `SubmitConfig` (`SessionID`, scoped path) into human lines and the stable `--json` envelope.
-- **FR-4:** If the API cannot return `workId` for a documented edge case, human and JSON output must use the list-by-name fallback and docs must say so; prefer fixing normalization over leaving the gap.
-- **FR-5:** Error formatting reuses existing `ErrorResponse` parsing; optional `workId` in error JSON is best-effort without requiring schema changes in this lane unless needed for conflict cases.
-- **FR-6:** Align verify hints with [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md) (`--name`, `--work-type-name`, `you work show`).
+- [ ] `cat batch.json | you submit batch` submits when stdin is not a TTY.
+- [ ] `you submit batch -` reads batch JSON from stdin.
+- [ ] `you submit batch` with no args and interactive TTY stdin fails immediately
+  with usage guidance (does not hang waiting for input).
+- [ ] Empty piped stdin fails with a clear empty-input error.
+- [ ] When a file path or `--file` is provided, stdin is ignored.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-## Non-Goals
+### cli-submit-batch-006: Inline JSON positional
 
-- Changing submit HTTP routes, session model, or request body schema beyond `SubmitWorkResponse`.
-- Batch submit via `you submit` (batch remains file ingest, API batch, `you run --work`).
-- Returning dispatch history, workstation state, or full work payloads in submit output.
-- Dashboard/UI submit UX changes (CLI and contract only).
-- Converting idempotent duplicate `201` (engine `Accepted=false`) into `409` in this project unless required for a listed acceptance criterion.
+**Description:** As a script author, I want to pass a small batch document as one
+positional argument.
+
+**Acceptance criteria:**
+
+- [ ] Positional whose first non-whitespace byte is `{` is parsed as inline JSON,
+  not as a filesystem path.
+- [ ] A non-existent path that does not look like JSON errors as missing file/JSON,
+  not as JSON parse of the path string.
+- [ ] Inline JSON uses the same canonical validation as file and stdin input.
+- [ ] Help notes shell length limits; large batches should use file or pipe.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-007: Optional `--file` flag
+
+**Description:** As a script author, I want an explicit file flag when positional
+arguments are awkward.
+
+**Acceptance criteria:**
+
+- [ ] `--file <path>` reads batch JSON; `--file -` reads stdin.
+- [ ] When both `--file` and a positional path are set, `--file` wins (documented in help).
+- [ ] Positional path remains the primary documented form.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-008: Human success output
+
+**Description:** As an operator, I want confirmation that lists what was submitted
+and what to run next.
+
+**Acceptance criteria:**
+
+- [ ] On `201`, stdout includes `requestId`, `traceId`, work count, and each accepted
+  work’s `name` and `workTypeName`.
+- [ ] When the API returns `workId`, each work line includes it and a hint
+  `you work show <work-id>`; otherwise hints use `you work list --name <name>`.
+- [ ] Long name lists truncate (at most ten lines); `relationCount` shown when
+  relations are non-empty.
+- [ ] Full batch JSON and per-work payloads are not printed on stdout.
+- [ ] `--verbose` logs endpoint, `batchSource` (`file`, `stdin`, `inline`), byte size,
+  `requestId`, and work count on stderr—never payload content.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-009: JSON success output
+
+**Description:** As a script, I want machine-readable batch submit confirmation.
+
+**Acceptance criteria:**
+
+- [ ] Global `--json` emits one object with at minimum: `requestId`, `traceId`,
+  `workCount`, `relationCount`, `sessionId`, `endpointPath`, `batchSource`, and
+  `works` (each with `name`, `workTypeName`, `workId` when returned).
+- [ ] `--json` with `--dry-run` emits `dryRun: true` and summary fields without
+  `traceId` unless present in input.
+- [ ] Exit code `0` on success; non-zero on validation or HTTP errors.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-010: Error surfaces
+
+**Description:** As an agent, I want validation failures before HTTP and API
+failures after HTTP to be distinguishable.
+
+**Acceptance criteria:**
+
+- [x] Canonical validation errors include retired-field guidance where applicable.
+- [x] Missing or empty `requestId`, empty `works`, and invalid JSON fail locally.
+- [x] HTTP `400`/`404` (and `409` if applicable) print status and bounded API message;
+  no success JSON on failure.
+- [x] Tests cover invalid JSON, empty works, mocked `400`, and mocked `404`.
+- [x] Typecheck passes.
+- [x] Tests pass.
+
+### cli-submit-batch-011: Reference and packaged documentation
+
+**Description:** As a new contributor, I want docs to show CLI batch submit
+alongside curl and watched-folder ingress.
+
+**Acceptance criteria:**
+
+- [ ] `docs/reference/batch-inputs.md` adds a CLI subsection with examples for
+  file, `--file`, pipe, inline JSON, and `--dry-run`; keeps existing `curl` example.
+- [ ] Ingress comparison covers: `you submit` (single), `you submit batch` (running
+  factory), `you run --work` (startup), watched `factory/inputs/BATCH/`.
+- [ ] Packaged `you docs batch-inputs` content matches reference updates.
+- [ ] Doc tests guard `you submit batch` and `FACTORY_REQUEST_BATCH` markers where
+  other CLI examples are guarded.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-012: End-to-end smoke (optional)
+
+**Description:** As a maintainer, I want one functional smoke proving batch CLI
+reaches a running factory when the harness supports it.
+
+**Acceptance criteria:**
+
+- [x] If the existing smoke harness can start a factory and accept work-request
+  upserts, one smoke runs `you submit batch` with a minimal checked-in batch file
+  and asserts success markers in output.
+- [x] If harness cost is prohibitive, implementation notes document deferral and
+  httptest coverage from earlier stories is cited as the verification substitute.
+- [x] Typecheck passes.
+- [x] Tests pass (or smoke story cancelled with documented justification).
+
+## Functional requirements
+
+- FR-1: Register `you submit batch` under `you submit`.
+- FR-2: Input precedence: `--file` (including `-`) → positional `-` → existing file
+  path → inline `{…}` → piped stdin when no positional/`--file` → usage error on TTY
+  with no input.
+- FR-3: Validate with canonical batch parser before HTTP; `--dry-run` skips HTTP.
+- FR-4: Upsert via `PUT` to session-scoped `/work-requests/{requestId}` only (not
+  `POST /work`).
+- FR-5: Preserve unary `you submit` behavior and flag surface on the parent command.
+- FR-6: Success output field names align with unary submit response contract
+  (`workId`, `workTypeName`, `name`, `traceId`, `sessionId`, `endpointPath`).
+- FR-7: Reuse existing CLI HTTP, session path, and diagnostic patterns from unary submit.
+
+## Non-goals
+
+- Extending unary `you submit` with batch flags or multiple payloads.
+- Replacing `you run --work` or watched-folder ingestion.
+- Staging multimodal files from the CLI in v1.
+- Top-level `you batch submit` verb.
+- Pipe or inline input for unary `you submit` in this feature.
 
 ## High-level technical design
 
-```mermaid
-sequenceDiagram
-  participant Op as Operator_or_agent
-  participant CLI as you_submit
-  participant API as Factory_HTTP_API
-  participant RT as Runtime_normalize_and_accept
+1. **Shared loader** — Extract file-path batch loading from the run command into a
+   shared CLI package; run delegates without behavior change. Extend with stdin,
+   inline JSON, and `--file` resolution for batch submit only.
+2. **Command** — New batch subcommand on submit with config mirroring unary HTTP
+   fields (`Server`, `SessionID`, `JSON`, diagnostics). Wire test injection hook
+   like unary submit.
+3. **API** — Extend `UpsertWorkRequestResponse` with `works[]` populated from
+   accepted batch items; regenerate OpenAPI types before CLI success output stories.
+4. **Output** — Human and JSON formatters share identifier vocabulary with unary
+   submit; dry-run uses a distinct JSON shape with `dryRun: true`.
+5. **Docs** — Update reference and embedded packaged topic together; extend doc
+   tests and optional smoke.
 
-  Op->>CLI: you submit --name --work-type-name --payload
-  CLI->>API: POST /factory-sessions/{session}/work
-  API->>RT: NormalizeWorkRequest + SubmitWorkRequest
-  RT-->>API: traceId + work metadata
-  API-->>CLI: 201 SubmitWorkResponse (extended)
-  CLI-->>Op: human lines or --json envelope + hint
-```
+**Dependencies:** Coordinate field naming with CLI submit response contract PRD;
+post-submit inspection (`you work show` / `you work list`) is the documented verify loop.
 
-**Package ownership**
+## Supporting considerations
 
-| Layer | Owner | Notes |
-|-------|--------|------|
-| OpenAPI + codegen | `api/`, `pkg/api/generated`, `ui/src/api/generated` | Single schema source for `SubmitWorkResponse`. |
-| HTTP handlers | `pkg/api/handlers.go` | Build response after successful submit; session id from route. |
-| Normalization | `pkg/factory/requests` | Existing `batch-{requestId}-{name}` work id assignment. |
-| CLI presentation | `pkg/cli/submit` | Human/JSON mapping, hints, errors; no HTTP in tests beyond httptest. |
-| Docs | `pkg/cli/docs/reference/work.md` | Customer-facing contract; agents topic links when wave-2 lands. |
-
-**CLI `--json` envelope vs API DTO:** The API returns `SubmitWorkResponse`; the CLI may add `endpointPath` and normalized `sessionId` that are known at the client. Scripts should treat the CLI envelope as the stable `you submit --json` contract.
-
-## Supporting technical and UX considerations
-
-- Global `--json` is registered on the root command; submit must not add a per-subcommand duplicate flag.
-- Use `clidiag.SessionLabel` for empty session display consistency with other CLI commands.
-- Bound error body snippets (for example 512 bytes) to avoid dumping HTML or large payloads.
-- Regenerate OpenAPI artifacts per repository process after schema edits.
-- Pair implementation order with work-inspection PRD so hints reference commands that exist or land in the same release train.
+- **Idempotency:** `requestId` is the stable upsert key; re-submit behavior follows
+  server rules—no client-side dedupe beyond the document’s id.
+- **Diagnostics:** No payload bodies, tokens, or prompts in verbose stderr lines.
+- **Security:** Same trust model as unary submit (local factory URL, no new auth).
 
 ## Success metrics
 
-- Agents can copy `workId` or the suggested `you work` command from one successful submit without running list first (when API returns `workId`).
-- Duplicate submit attempts during docs exercises drop because verify commands are visible in stdout.
-- Scripted flows parse `--json` with a single `jq` expression (no trace-only workaround).
+- An agent submits a multi-work batch to a running factory in one command without `curl`.
+- Pipe and file paths produce identical HTTP bodies for the same JSON document.
+- Invalid batch JSON fails locally with zero network calls in automated tests.
+- `you docs batch-inputs` examples match implemented CLI behavior.
 
-## Open Questions
+## Decisions (resolved)
 
-- None blocking: `workId` assignment at accept time follows existing `NormalizeWorkRequest` rules; if product later requires caller-supplied ids only, document in `you docs work` without changing this PRD scope.
-
-## Related documents
-
-- [`tasks/prd-cli-submit-response-contract.md`](../prd-cli-submit-response-contract.md) (source ask)
-- [`tasks/prd-cli-work-inspection.md`](../prd-cli-work-inspection.md)
-- [`tasks/prd-docs-agents-consolidation-wave2.md`](../prd-docs-agents-consolidation-wave2.md)
+| ID | Decision |
+|----|----------|
+| D-1 | `--file` is optional; positional path is primary; `--file` wins when both set. |
+| D-2 | Ship API `works[]` on upsert response together with CLI success output when possible. |
+| D-3 | `--dry-run` is in v1: validate locally, summarize, no HTTP, exit `0` on valid input. |

@@ -176,6 +176,40 @@ func TestUpsertWorkRequest_MapsWorkTypeNameAndRelationsToRuntime(t *testing.T) {
 	}
 }
 
+func TestUpsertWorkRequest_ReturnsPerWorkIdentifiers(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := upsertWorkRequest(t, srv, "/work-requests/request-api-batch", `{
+		"requestId":"request-api-batch",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[
+			{"name":"draft","workTypeName":"task","payload":{"title":"Draft"}},
+			{"name":"review","workTypeName":"review","payload":"review draft"}
+		]
+	}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("PUT /work-requests status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.UpsertWorkRequestResponse](t, rec)
+	if resp.RequestId != "request-api-batch" || resp.TraceId == "" {
+		t.Fatalf("upsert response = %#v, want request and trace", resp)
+	}
+	if len(resp.Works) != 2 {
+		t.Fatalf("upsert works = %#v, want 2 items", resp.Works)
+	}
+	want := []factoryapi.UpsertWorkRequestSubmittedWork{
+		{Name: "draft", WorkTypeName: "task", WorkId: "batch-request-api-batch-draft"},
+		{Name: "review", WorkTypeName: "review", WorkId: "batch-request-api-batch-review"},
+	}
+	for i, work := range resp.Works {
+		if work != want[i] {
+			t.Fatalf("upsert works[%d] = %#v, want %#v", i, work, want[i])
+		}
+	}
+}
+
 func TestUpsertWorkRequest_AcceptsParentChildRelationsByWorkName(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)

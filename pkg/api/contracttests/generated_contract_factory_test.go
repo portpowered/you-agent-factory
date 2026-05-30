@@ -138,7 +138,13 @@ func assertGeneratedOpenAPISurfaceTypes(
 	t.Helper()
 
 	submitResponse := factoryapi.SubmitWorkResponse{TraceId: "trace-1", RequestId: "request-1", Accepted: true}
-	upsertResponse := factoryapi.UpsertWorkRequestResponse{RequestId: workRequest.RequestId, TraceId: "trace-1"}
+	upsertResponse := factoryapi.UpsertWorkRequestResponse{
+		RequestId: workRequest.RequestId,
+		TraceId:   "trace-1",
+		Works: []factoryapi.UpsertWorkRequestSubmittedWork{
+			{Name: "generated", WorkTypeName: "task", WorkId: "work-generated"},
+		},
+	}
 	triggerAtStart := true
 	workstationKind := factoryapi.WorkstationKindCron
 	workstationRuntimeType := factoryapi.WorkstationTypeModelWorkstation
