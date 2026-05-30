@@ -125,10 +125,8 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 	}
 	sessionRootDir := sessionFactoryPersistRoot(fs.factoryRootDir, session)
 
-	replaceExisting := false
-	if _, err := factoryconfig.ResolveNamedFactoryDir(sessionRootDir, string(request.Name)); err == nil {
-		replaceExisting = true
-	} else if !errors.Is(err, os.ErrNotExist) && !isNamedFactoryResolveNotFound(err) {
+	replaceExisting, err := upsertNamedReplacesExistingAtSessionRoot(sessionRootDir, request.Name)
+	if err != nil {
 		return factoryapi.Factory{}, err
 	}
 
@@ -139,16 +137,9 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 		return factoryapi.Factory{}, err
 	}
 
-	var currentVersion *factoryapi.HybridLogicalTimestamp
-	if replaceExisting {
-		version, versionErr := fs.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
-		if versionErr != nil {
-			return factoryapi.Factory{}, versionErr
-		}
-		currentVersion = &version
-		if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, request.Name); err != nil {
-			return factoryapi.Factory{}, err
-		}
+	currentVersion, err := fs.currentVersionForUpsertReplace(sessionRootDir, request, replaceExisting)
+	if err != nil {
+		return factoryapi.Factory{}, err
 	}
 
 	nextVersion := nextEditableFactoryVersion(currentVersion, factory.EnsureClock(fs.clock).Now().UTC())
@@ -168,26 +159,72 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 		return factoryapi.Factory{}, fmt.Errorf("write session current factory pointer: %w", err)
 	}
 
-	replacement, err := fs.buildSessionEditableFactoryReplacement(ctx, sessionRootDir, factoryDir, sessionID, request.Name)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
-		return factoryapi.Factory{}, err
-	}
-	if err := fs.replaceSessionRuntime(ctx, session, string(request.Name), replacement); err != nil {
+	if err := fs.activateUpsertNamedFactoryForSession(ctx, sessionID, session, sessionRootDir, factoryDir, request.Name); err != nil {
 		return factoryapi.Factory{}, err
 	}
 
+	return fs.serializeUpsertNamedActivateResponse(sessionRootDir, request.Name, sessionID)
+}
+
+func upsertNamedReplacesExistingAtSessionRoot(sessionRootDir string, name factoryapi.FactoryName) (bool, error) {
+	if _, err := factoryconfig.ResolveNamedFactoryDir(sessionRootDir, string(name)); err == nil {
+		return true, nil
+	} else if !errors.Is(err, os.ErrNotExist) && !isNamedFactoryResolveNotFound(err) {
+		return false, err
+	}
+	return false, nil
+}
+
+func (fs *FactoryService) currentVersionForUpsertReplace(
+	sessionRootDir string,
+	request factoryapi.Factory,
+	replaceExisting bool,
+) (*factoryapi.HybridLogicalTimestamp, error) {
+	if !replaceExisting {
+		return nil, nil
+	}
+	version, err := fs.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
+	if err != nil {
+		return nil, err
+	}
+	if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, request.Name); err != nil {
+		return nil, err
+	}
+	return &version, nil
+}
+
+func (fs *FactoryService) activateUpsertNamedFactoryForSession(
+	ctx context.Context,
+	sessionID string,
+	session *factorysessions.LiveSession,
+	sessionRootDir string,
+	factoryDir string,
+	name factoryapi.FactoryName,
+) error {
+	replacement, err := fs.buildSessionEditableFactoryReplacement(ctx, sessionRootDir, factoryDir, sessionID, name)
+	if err != nil {
+		return err
+	}
+	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+		return err
+	}
+	return fs.replaceSessionRuntime(ctx, session, string(name), replacement)
+}
+
+func (fs *FactoryService) serializeUpsertNamedActivateResponse(
+	sessionRootDir string,
+	name factoryapi.FactoryName,
+	sessionID string,
+) (factoryapi.Factory, error) {
 	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	serialized, err := fs.serializeNamedFactoryUpsertResponse(request.Name, runtimeCfg)
+	serialized, err := fs.serializeNamedFactoryUpsertResponse(name, runtimeCfg)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	version, err := fs.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
+	version, err := fs.currentFactoryDefinitionVersionAtRoot(sessionRootDir, name)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
