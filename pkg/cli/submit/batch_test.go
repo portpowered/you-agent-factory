@@ -454,6 +454,156 @@ func TestSubmitBatch_HTTPErrorSurfacesAPIMessage(t *testing.T) {
 	}
 }
 
+func TestSubmitBatch_HTTP404SurfacesAPIMessage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "factory session not found"})
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, validBatchJSON("batch-404", "alpha"))
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected HTTP error")
+	}
+	if !strings.Contains(err.Error(), "404") || !strings.Contains(err.Error(), "factory session not found") {
+		t.Fatalf("error = %v, want status and API message", err)
+	}
+}
+
+func TestSubmitBatch_HTTPErrorUsesBoundedNonJSONBodyPreview(t *testing.T) {
+	longBody := strings.Repeat("x", batchErrorBodyPreviewLimit+30)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, longBody)
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, validBatchJSON("batch-bounded", "alpha"))
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected HTTP error")
+	}
+	wantPreview := longBody[:batchErrorBodyPreviewLimit] + "..."
+	if !strings.Contains(err.Error(), wantPreview) {
+		t.Fatalf("error = %v, want bounded preview %q", err, wantPreview)
+	}
+	if strings.Contains(err.Error(), longBody) {
+		t.Fatalf("error included full response body")
+	}
+}
+
+func TestSubmitBatch_InvalidJSONFailsBeforeHTTP(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{`{not-json`},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected JSON parse error")
+	}
+	if !strings.Contains(err.Error(), "parse inline JSON") {
+		t.Fatalf("error = %v, want inline JSON parse context", err)
+	}
+	if !strings.Contains(err.Error(), "invalid character") {
+		t.Fatalf("error = %v, want JSON parse detail", err)
+	}
+	if called {
+		t.Fatal("expected no HTTP call for invalid JSON")
+	}
+}
+
+func TestSubmitBatch_EmptyRequestIDFailsBeforeHTTP(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, `{"requestId":"","type":"FACTORY_REQUEST_BATCH","works":[{"name":"alpha","workTypeName":"task","payload":{"title":"A"}}]}`)
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "requestId is required") {
+		t.Fatalf("error = %v, want empty requestId validation", err)
+	}
+	if called {
+		t.Fatal("expected no HTTP call for empty requestId")
+	}
+}
+
+func TestSubmitBatch_RetiredFieldFailsWithGuidanceBeforeHTTP(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, `{
+		"requestId": "batch-retired",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{"name": "alpha", "work_type_id": "task", "payload": {"title": "A"}}]
+	}`)
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected retired-field validation error")
+	}
+	if !strings.Contains(err.Error(), "retired work_type_id") || !strings.Contains(err.Error(), "workTypeName") {
+		t.Fatalf("error = %v, want retired-field guidance", err)
+	}
+	if called {
+		t.Fatal("expected no HTTP call for retired-field batch")
+	}
+}
+
+func TestSubmitBatch_HTTPErrorDoesNotEmitSuccessJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "invalid batch"})
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, validBatchJSON("batch-json-err", "alpha"))
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		JSON:   true,
+		Output: &out,
+	})
+	if err == nil {
+		t.Fatal("expected HTTP error")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on HTTP failure with --json", out.String())
+	}
+}
+
 func TestSubmitBatch_UnreachableFactoryMatchesUnaryStyle(t *testing.T) {
 	path := writeBatchFile(t, validBatchJSON("batch-offline", "alpha"))
 	err := SubmitBatch(BatchConfig{

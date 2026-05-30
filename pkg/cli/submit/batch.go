@@ -17,6 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+const batchErrorBodyPreviewLimit = 200
+
 // BatchConfig holds parameters for the submit batch command.
 type BatchConfig struct {
 	FilePath    string
@@ -148,11 +150,7 @@ func upsertBatchHTTP(cfg BatchConfig, req interfaces.WorkRequest, body []byte, b
 
 	if resp.StatusCode != http.StatusCreated {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody))
-		var errResp factoryapi.ErrorResponse
-		if json.Unmarshal(respBody, &errResp) == nil && errResp.Message != "" {
-			return fmt.Errorf("batch submission failed (%d): %s", resp.StatusCode, errResp.Message)
-		}
-		return fmt.Errorf("batch submission failed (%d): %s", resp.StatusCode, string(respBody))
+		return batchSubmissionHTTPError(resp.StatusCode, respBody)
 	}
 
 	var result factoryapi.UpsertWorkRequestResponse
@@ -166,4 +164,19 @@ func upsertBatchHTTP(cfg BatchConfig, req interfaces.WorkRequest, body []byte, b
 	}
 
 	return printBatchSuccessHuman(cfg.Output, req, result)
+}
+
+func batchSubmissionHTTPError(statusCode int, body []byte) error {
+	var errResp factoryapi.ErrorResponse
+	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
+		return fmt.Errorf("batch submission failed (%d): %s", statusCode, errResp.Message)
+	}
+	preview := strings.TrimSpace(string(body))
+	if preview == "" {
+		return fmt.Errorf("batch submission failed (%d)", statusCode)
+	}
+	if len(preview) > batchErrorBodyPreviewLimit {
+		preview = preview[:batchErrorBodyPreviewLimit] + "..."
+	}
+	return fmt.Errorf("batch submission failed (%d): %s", statusCode, preview)
 }
