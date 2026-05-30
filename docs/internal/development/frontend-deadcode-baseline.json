@@ -10,11 +10,6 @@
     "name": "emptyFactoryGraphReactFlowEditorOverlay"
   },
   {
-    "file": "src/testing/graph-editor-harness.ts",
-    "kind": "export",
-    "name": "workerDenseFactoryDefinitionDocument"
-  },
-  {
     "file": "src/testing/session-factory-mocks.ts",
     "kind": "export",
     "name": "parseSessionFactoryPutFactory"
