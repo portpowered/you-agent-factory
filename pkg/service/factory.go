@@ -77,7 +77,9 @@ type localModelRuntime = localmodels.Runtime
 type localModelResourceLimiter = localmodels.ResourceLimiter
 type managedLocalModelManager = localmodels.Manager
 
-type replacementFactoryRuntime struct {
+// factoryRuntimeBundle is the single runtime wiring struct produced by
+// buildRuntimeBundle and referenced from liveRuntimeHandle.
+type factoryRuntimeBundle struct {
 	dir            string
 	folderPath     string
 	eventHistory   *factoryevents.FactoryEventHistory
@@ -95,7 +97,7 @@ type replacementFactoryRuntime struct {
 }
 
 type liveRuntimeHandle struct {
-	runtime       *replacementFactoryRuntime
+	runtime       *factoryRuntimeBundle
 	runCancel     context.CancelFunc
 	runDone       chan struct{}
 	sidecarCancel context.CancelFunc
@@ -114,9 +116,11 @@ type serviceRunState struct {
 type runtimeBundleBuildInput struct {
 	dir                   string
 	folderPath            string
+	sessionID             string
 	cfg                   *FactoryServiceConfig
 	loadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
-	logger                *zap.Logger
+	baseLogger            *zap.Logger
+	runtimeInstanceID     string
 	clock                 factory.Clock
 	recordPath            string
 	workflowID            string
@@ -134,29 +138,22 @@ type runtimeBundleBuildInput struct {
 // session registry, pkg/localmodels owns managed model runtime wiring, and
 // pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
-	runtimeMu      sync.RWMutex
-	activationMu   sync.RWMutex
-	runMu          sync.RWMutex
-	runState       *serviceRunState
-	apiServerExit  <-chan error
-	sessions       *factorysessions.Registry
-	hostedWorkers  hostedworkers.Config
+	runtimeMu     sync.RWMutex
+	activationMu  sync.RWMutex
+	runMu         sync.RWMutex
+	runState      *serviceRunState
+	apiServerExit <-chan error
+	sessions      *factorysessions.Registry
+	hostedWorkers hostedworkers.Config
 	factoryRootDir string
-	factory        factory.Factory
-	listener       *ingest.FileWatcher
-	net            *state.Net
-	cfg            *FactoryServiceConfig
-	runtimeCfg     *factoryconfig.LoadedFactoryConfig
-	eventHistory   *factoryevents.FactoryEventHistory
-	baseLogger     *zap.Logger
-	logger         *zap.Logger
-	startTime      time.Time
-	clock          factory.Clock
-	recording      *replay.Recorder
-	logSink        *logging.RuntimeLogSink
-	modelResources *localModelResourceLimiter
-	modelAssets    modelAssetPuller
-	localModels    *managedLocalModelManager
+	// startupBundle holds the built default runtime before Run registers ~default.
+	startupBundle *factoryRuntimeBundle
+	cfg           *FactoryServiceConfig
+	baseLogger    *zap.Logger
+	logger        *zap.Logger
+	startTime     time.Time
+	clock         factory.Clock
+	modelAssets   modelAssetPuller
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -289,31 +286,77 @@ func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string)
 	fs.activationMu.Lock()
 	defer fs.activationMu.Unlock()
 
-	if err := fs.requireIdleRuntime(ctx); err != nil {
+	sessionID := fs.runSessionID()
+	session := fs.sessionByID(sessionID)
+	persistRoot, folderPath := fs.namedFactoryActivationPaths(session)
+
+	if err := fs.requireIdleBeforeNamedFactoryActivation(ctx, sessionID, session); err != nil {
 		return err
 	}
 
-	rootDir := fs.factoryRootDir
-	if rootDir == "" && fs.cfg != nil {
-		rootDir = fs.cfg.Dir
-	}
-	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(rootDir, name)
+	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(persistRoot, name)
 	if err != nil {
 		return err
 	}
 
-	sessionID := defaultFactorySessionID
-	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
-		sessionID = runState.sessionID
-	}
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, folderPath, factoryDir, sessionID)
 	if err != nil {
 		return fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
 	}
+
+	return fs.applyNamedFactoryReplacement(ctx, sessionID, session, persistRoot, name, replacement)
+}
+
+func (fs *FactoryService) namedFactoryActivationPaths(session *factorysessions.LiveSession) (persistRoot, folderPath string) {
+	persistRoot = fs.factoryRootDir
+	if persistRoot == "" && fs.cfg != nil {
+		persistRoot = fs.cfg.Dir
+	}
+	folderPath = persistRoot
+	if session == nil {
+		return persistRoot, folderPath
+	}
+	persistRoot = sessionFactoryPersistRoot(fs.factoryRootDir, session)
+	if trimmed := strings.TrimSpace(session.FolderPath); trimmed != "" {
+		folderPath = trimmed
+	} else {
+		folderPath = persistRoot
+	}
+	return persistRoot, folderPath
+}
+
+func (fs *FactoryService) requireIdleBeforeNamedFactoryActivation(
+	ctx context.Context,
+	sessionID string,
+	session *factorysessions.LiveSession,
+) error {
+	if session != nil && liveSessionHandle(session) != nil {
+		return fs.requireIdleRuntimeForSession(ctx, sessionID)
+	}
+	return fs.requireIdleRuntime(ctx)
+}
+
+func (fs *FactoryService) applyNamedFactoryReplacement(
+	ctx context.Context,
+	sessionID string,
+	session *factorysessions.LiveSession,
+	persistRoot string,
+	name string,
+	replacement *factoryRuntimeBundle,
+) error {
+	if session != nil && liveSessionHandle(session) != nil {
+		if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+			return err
+		}
+		if err := factoryconfig.WriteCurrentFactoryPointer(persistRoot, name); err != nil {
+			return err
+		}
+		return fs.replaceSessionRuntime(ctx, session, name, replacement)
+	}
 	if err := fs.requireIdleRuntime(ctx); err != nil {
 		return err
 	}
-	return fs.activateReplacementRuntime(ctx, rootDir, name, replacement)
+	return fs.activateReplacementWithoutLiveRuntime(persistRoot, name, replacement)
 }
 
 func (fs *FactoryService) buildReplacementFactoryRuntime(
@@ -321,7 +364,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	folderPath string,
 	factoryDir string,
 	sessionID string,
-) (*replacementFactoryRuntime, error) {
+) (*factoryRuntimeBundle, error) {
 	baseLogger := fs.baseLogger
 	if baseLogger == nil {
 		baseLogger = zap.NewNop()
@@ -331,28 +374,19 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	if err != nil {
 		return nil, fmt.Errorf("load factory config: %w", err)
 	}
-	runtimeInstanceID := uuid.NewString()
-	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, fs.cfg.RuntimeLogDir, fs.cfg.RuntimeLogConfig)
-	if err != nil {
-		return nil, fmt.Errorf("build runtime logger: %w", err)
-	}
-	logger := newSessionLogger(logSink.Logger(), sessionID, folderPath, loadedFactoryCfg.FactoryDir())
-	runtimeBuilt := false
-	defer func() {
-		if !runtimeBuilt {
-			_ = logSink.Close()
-		}
-	}()
+	logger := newSessionLogger(baseLogger, sessionID, folderPath, loadedFactoryCfg.FactoryDir())
 	warnPortableBundledReplacementReport(logger, "named factory activation replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
 	loadedFactoryCfg.SetRuntimeBaseDir(fs.cfg.ExecutionBaseDir)
 	clock := factory.EnsureClock(fs.clock)
 	recordPath := sessionScopedRecordPath(fs.cfg.RecordPath, sessionID)
-	replacementRuntime, err := buildRuntimeBundle(ctx, runtimeBundleBuildInput{
+	return buildRuntimeBundle(ctx, runtimeBundleBuildInput{
 		dir:                   factoryDir,
 		folderPath:            folderPath,
+		sessionID:             sessionID,
 		cfg:                   fs.cfg,
 		loadedFactoryCfg:      loadedFactoryCfg,
-		logger:                logger,
+		baseLogger:            baseLogger,
+		runtimeInstanceID:     uuid.NewString(),
 		clock:                 clock,
 		recordPath:            recordPath,
 		workflowID:            fs.cfg.WorkflowID,
@@ -360,12 +394,6 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 		providerCommandRunner: providerCommandRunnerForMode(fs.cfg, loadedFactoryCfg),
 		commandRunnerOverride: commandRunnerOverrideForMode(fs.cfg, loadedFactoryCfg, nil),
 	})
-	if err != nil {
-		return nil, err
-	}
-	runtimeBuilt = true
-	replacementRuntime.logSink = logSink
-	return replacementRuntime, nil
 }
 
 // Run starts the file watcher, dashboard, API server, and factory engine.
@@ -378,11 +406,13 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	serviceMode := runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
 
 	defer func() {
-		if currentRuntime != nil || fs.logSink == nil {
+		if currentRuntime != nil {
 			return
 		}
-		if err := fs.logSink.Close(); err != nil {
-			fs.logger.Warn("runtime log close failed", zap.Error(err))
+		if bundle := fs.startupRuntimeBundle(); bundle != nil && bundle.logSink != nil {
+			if err := bundle.logSink.Close(); err != nil {
+				fs.logger.Warn("runtime log close failed", zap.Error(err))
+			}
 		}
 	}()
 	defer func() {
@@ -444,7 +474,11 @@ func (fs *FactoryService) startRunRuntime(
 
 func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGroup, serviceMode bool) {
 	if !serviceMode {
-		fs.startListenerSidecar(runCtx, sidecars, fs.listener, fs.logger)
+		var listener *ingest.FileWatcher
+		if bundle := fs.currentRuntimeBundle(); bundle != nil {
+			listener = bundle.listener
+		}
+		fs.startListenerSidecar(runCtx, sidecars, listener, fs.logger)
 	}
 	fs.startDashboardSidecar(runCtx, sidecars)
 }
@@ -512,8 +546,14 @@ func (fs *FactoryService) startDefaultRuntime(
 	runCtx context.Context,
 	serviceMode bool,
 ) (*liveRuntimeHandle, error) {
-	currentRuntime := fs.startLiveRuntime(runCtx, fs.currentRuntimeBundle())
-	fs.registerLiveSession(defaultFactorySessionID, currentRuntime, true)
+	runtimeBundle := fs.currentRuntimeBundle()
+	currentRuntime := fs.startLiveRuntime(runCtx, runtimeBundle)
+	fs.registerLiveSession(
+		defaultFactorySessionID,
+		currentRuntime,
+		defaultSessionTargetFromRuntimeBundle(runtimeBundle, fs.factoryRootDir),
+		true,
+	)
 	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
 	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
 		return nil, fs.handleDefaultRuntimeStartFailure(ctx, currentRuntime, err)
@@ -569,12 +609,16 @@ func (fs *FactoryService) startAPIServerSidecar(runCtx context.Context, sidecars
 }
 
 func (fs *FactoryService) logServiceStartup() {
-	runtimeLogConfig := fs.logSink.Config()
+	bundle := fs.currentRuntimeBundle()
+	if bundle == nil || bundle.logSink == nil {
+		return
+	}
+	runtimeLogConfig := bundle.logSink.Config()
 	fs.logger.Info("factory started",
 		zap.String("dir", fs.cfg.Dir),
-		zap.String("runtime_log_path", fs.logSink.Path()),
-		zap.String("runtime_log_root", fs.logSink.RootDir()),
-		zap.String("runtime_log_start_time_utc", runtimeLogStartTimeString(fs.logSink.StartTimeUTC())),
+		zap.String("runtime_log_path", bundle.logSink.Path()),
+		zap.String("runtime_log_root", bundle.logSink.RootDir()),
+		zap.String("runtime_log_start_time_utc", runtimeLogStartTimeString(bundle.logSink.StartTimeUTC())),
 		zap.String("runtime_log_appender", logging.RuntimeLogAppenderZapRollingFile),
 		zap.Int("runtime_log_max_size_mb", runtimeLogConfig.MaxSize),
 		zap.Int("runtime_log_max_backups", runtimeLogConfig.MaxBackups),
@@ -591,98 +635,25 @@ func (fs *FactoryService) logServiceStartup() {
 	)
 }
 
-func (fs *FactoryService) activateReplacementRuntime(
-	ctx context.Context,
-	rootDir string,
-	name string,
-	replacement *replacementFactoryRuntime,
-) error {
-	runState := fs.currentRunState()
-	if runState == nil || runState.runtime == nil || runState.ctx == nil {
-		return fs.activateReplacementWithoutLiveRuntime(rootDir, name, replacement)
-	}
-
-	restoreCurrentSidecars := false
-	serviceMode := fs.cfg != nil && runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
-	if serviceMode {
-		fs.stopLiveRuntimeSidecars(runState.runtime)
-		restoreCurrentSidecars = true
-		defer func() {
-			if restoreCurrentSidecars {
-				fs.restoreLiveRuntimeSidecars(runState)
-			}
-		}()
-	}
-	if err := fs.requireIdleRuntime(ctx); err != nil {
-		return err
-	}
-
-	replacementHandle, err := fs.startReplacementRuntime(ctx, runState.ctx, replacement, serviceMode)
-	if err != nil {
-		return err
-	}
-	if err := fs.persistReplacementRuntime(rootDir, name, replacementHandle, serviceMode); err != nil {
-		return err
-	}
-	fs.publishFactoryChangeEvent(ctx, runState.runtime, replacement)
-	restoreCurrentSidecars = false
-	fs.registerLiveSession(runState.sessionID, replacementHandle, true)
-	fs.setRunState(runState.ctx, runState.sessionID, replacementHandle)
-	if err := fs.stopLiveRuntime(runState.runtime); err != nil && !errors.Is(err, context.Canceled) {
-		fs.logger.Warn("prior runtime shutdown failed", zap.Error(err))
-	}
-	return nil
-}
-
 func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
 	rootDir string,
 	name string,
-	replacement *replacementFactoryRuntime,
+	replacement *factoryRuntimeBundle,
 ) error {
 	if err := configpersist.WriteCurrentFactoryPointer(rootDir, name); err != nil {
 		return err
 	}
-	fs.swapActiveRuntime(replacement)
-	return nil
-}
-
-func (fs *FactoryService) startReplacementRuntime(
-	ctx context.Context,
-	runCtx context.Context,
-	replacement *replacementFactoryRuntime,
-	serviceMode bool,
-) (*liveRuntimeHandle, error) {
-	replacementHandle := fs.startLiveRuntime(runCtx, replacement)
-	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
-		_ = fs.stopLiveRuntime(replacementHandle)
-		return nil, fmt.Errorf("start replacement runtime: %w", err)
-	}
-	if serviceMode {
-		if err := fs.startLiveRuntimeSidecars(runCtx, replacementHandle); err != nil {
-			_ = fs.stopLiveRuntime(replacementHandle)
-			return nil, fmt.Errorf("start replacement runtime sidecars: %w", err)
-		}
-	}
-	return replacementHandle, nil
-}
-
-func (fs *FactoryService) persistReplacementRuntime(
-	rootDir string,
-	name string,
-	replacementHandle *liveRuntimeHandle,
-	serviceMode bool,
-) error {
-	if err := configpersist.WriteCurrentFactoryPointer(rootDir, name); err != nil {
-		if serviceMode {
-			fs.stopLiveRuntimeSidecars(replacementHandle)
-		}
-		_ = fs.stopLiveRuntime(replacementHandle)
-		return err
-	}
+	fs.setStartupBundle(replacement)
+	fs.syncActiveSessionDir(replacement)
 	return nil
 }
 
 func (fs *FactoryService) requireIdleRuntime(ctx context.Context) error {
+	sessionID := fs.runSessionID()
+	if session := fs.sessionByID(sessionID); session != nil && liveSessionHandle(session) != nil {
+		return fs.requireIdleRuntimeForSession(ctx, sessionID)
+	}
+
 	snapshot, err := fs.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return fmt.Errorf("read current runtime status: %w", err)
@@ -718,42 +689,25 @@ func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.Markin
 	return false
 }
 
-func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
+func (fs *FactoryService) currentRuntimeBundle() *factoryRuntimeBundle {
 	if fs == nil {
 		return nil
 	}
-	if currentSession := fs.currentSession(); currentSession != nil {
-		if handle := liveSessionHandle(currentSession); handle != nil {
+	if runState := fs.currentRunState(); runState != nil && runState.runtime != nil {
+		return runState.runtime.runtime
+	}
+	if session := fs.defaultSession(); session != nil {
+		if handle := liveSessionHandle(session); handle != nil {
 			return handle.runtime
 		}
 	}
-	fs.runtimeMu.RLock()
-	defer fs.runtimeMu.RUnlock()
-	if fs.factory == nil {
-		return nil
-	}
-	return &replacementFactoryRuntime{
-		dir:            fs.cfg.Dir,
-		folderPath:     fs.factoryRootDir,
-		eventHistory:   fs.eventHistory,
-		factory:        fs.factory,
-		listener:       fs.listener,
-		net:            fs.net,
-		runtimeCfg:     fs.runtimeCfg,
-		modelResources: fs.modelResources,
-		modelAssets:    fs.modelAssets,
-		localModels:    fs.localModels,
-		logger:         fs.logger,
-		logSink:        fs.logSink,
-		recording:      fs.recording,
-		recordPath:     fs.cfg.RecordPath,
-	}
+	return fs.startupRuntimeBundle()
 }
 
 func (fs *FactoryService) publishFactoryChangeEvent(
 	ctx context.Context,
 	currentRuntime *liveRuntimeHandle,
-	replacement *replacementFactoryRuntime,
+	replacement *factoryRuntimeBundle,
 ) {
 	if replacement == nil || replacement.eventHistory == nil {
 		return
@@ -797,7 +751,7 @@ func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factorya
 	return factoryapi.FactoryChangeEventPayload{}, false
 }
 
-func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *replacementFactoryRuntime) *liveRuntimeHandle {
+func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *factoryRuntimeBundle) *liveRuntimeHandle {
 	if runtimeBundle == nil {
 		return nil
 	}

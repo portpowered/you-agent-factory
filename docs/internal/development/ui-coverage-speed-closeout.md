@@ -59,6 +59,77 @@ Local runs are useful for iteration and slow-file tuning but are **not** interch
 
 After a successful main covered pass, `make test-ui-coverage` prints a bounded `[ui-coverage] Main covered pass slowest test files (top 15):` block parsed from Vitest default-reporter output. Use that block for file-level targets; the analysis below uses the **2026-05-30 UTC** phase baseline plus representative slow-file snapshots from maintainer runs on the same head.
 
+## CI ten-shard rollout (`ralph/ci-coverage-test-sharding`, 2026-05-30 UTC)
+
+Pull-request UI Coverage no longer runs the full phased lane on one runner. CI fans the **main covered Vitest pass** across ten parallel `ui-coverage-shard` matrix jobs, then runs serial follow-on phases in `ui-coverage-merge` (display name **`UI Coverage`** when the lane runs). Local `make test-ui-coverage` remains the unsharded canonical lane.
+
+### Pre-shard baseline (monolithic `make test-ui-coverage` on one runner)
+
+| Field | Value |
+| --- | --- |
+| Workflow run | [`26654493647`](https://github.com/portpowered/you-agent-factory/actions/runs/26654493647) |
+| Head SHA | `4f63b7fe033f4998cb672adcec01be92c5090453` (`main`, 2026-05-29 UTC) |
+| `Run dashboard coverage lane` step wall | **8m52s** (~532s phased command) |
+| `UI Coverage` job wall | **9m17s** (checkout/setup/install included) |
+| Main covered Vitest pass | **403.37s** (two in-process workers) |
+
+### Post-shard architecture (implemented)
+
+| Piece | Behavior |
+| --- | --- |
+| `ui-coverage-shard` | Matrix `1`–`10`; each cell runs `UI_COVERAGE_SHARD=<i>/10 make ui-test-coverage`, writes `ui/.vitest-reports/main-shard-<i>.json`, logs to `.artifacts/ui-coverage-shard-<i>/command.log` |
+| `ui-coverage-merge` | Downloads all shard blobs, runs `make test-ui-coverage-merge` (isolated React Flow, `vitest --mergeReports .vitest-reports --coverage` with **`ui/vite.config.ts` thresholds**, standalone script-style test, replay check) |
+| In-shard workers | Default **`--maxWorkers=1`** per shard job (ten runners supply parallelism; avoids Vitest v8 coverage `ENOENT` races seen with `--shard` + two workers). Override with `UI_COVERAGE_MAIN_MAX_WORKERS` when comparing. |
+| Runner meta tests | `scripts/ui-coverage-runner.test.mjs` is excluded from the covered corpus (mocked Vitest runs must not share the shard pass). |
+| Local debug | Full lane: `make test-ui-coverage`. One shard: `UI_COVERAGE_SHARD=<i>/10 make ui-test-coverage`. Merge-only: `make test-ui-coverage-merge` after blobs are present. |
+
+### Post-shard CI timing
+
+#### First sharded CI attempt (shard 10 failed — coverage race; fixed on PR head `835ab92b`)
+
+| Field | Value |
+| --- | --- |
+| Pull request | [`#500`](https://github.com/portpowered/you-agent-factory/pull/500) |
+| Workflow run | [`26689364838`](https://github.com/portpowered/you-agent-factory/actions/runs/26689364838) |
+| Head SHA | `ca814198e0de58a7024d158bcbf73e6350de0f12` (pre-stability fix) |
+| Slowest successful `ui-coverage-shard` job wall | **1m36s** (shard `4/10`, 2026-05-30T16:50:01Z → 16:51:37Z) |
+| Failed shard `10/10` job wall | **37s** (Vitest v8 `ENOENT` on `coverage/.tmp-10-10/coverage-6.json` with two in-shard workers) |
+| `ui-coverage-merge` job wall | **37s** (blocked: missing shard `10` blob) |
+| **Parallel shard stage** | **~1m37s** wall (ten jobs; critical path = slowest shard) |
+| vs pre-shard `UI Coverage` job | **9m17s** → shard stage alone **~1m37s** for main pass fan-out (merge + setup not included) |
+
+#### First green proof run (`4ae8e51b`, 2026-05-30 UTC)
+
+| Field | Value |
+| --- | --- |
+| Pull request | [`#500`](https://github.com/portpowered/you-agent-factory/pull/500) |
+| Workflow run | [`26690812595`](https://github.com/portpowered/you-agent-factory/actions/runs/26690812595) |
+| Head SHA | `4ae8e51b26a5c82360ef5dbdd7d05c69288d44c6` (`include-hidden-files` shard uploads, blob normalize, lines threshold **93.04%**) |
+| Slowest `ui-coverage-shard` job wall | **2m58s** (shard `3/10`; main pass **157.14s**) |
+| `UI Coverage` merge job wall | **2m36s** (2026-05-30T17:59:25Z → 18:02:01Z) |
+| **Lane critical path (shard stage + merge)** | **~5m34s** (slowest shard ends ~17:59:23Z, merge starts after; vs **~9m17s** monolithic job) |
+| Merge phase elapsed (`[ui-coverage]`) | Isolated React Flow **127.35s**; blob merge **5.50s**; standalone script **1.27s**; replay **0.00s** |
+| Merged lines threshold | **93.04%** (sharded `mergeReports` on `ubuntu-latest`; statements remain **93.05%**) |
+
+**Four-minute target:** measured sequential lane wall **~5m34s** exceeds the **≤4 minute** goal; ten-way shard fan-out plus merge setup overhead is the main gap (slowest shard **~2m58s** + merge **~2m36s**). The win versus the **~9m17s** monolithic job is still **~42%** on comparable `ubuntu-latest` runs.
+
+Reproduce phase lines from a green merge job:
+
+```bash
+gh run view <run-id> --log | rg '\[ui-coverage\].*elapsed'
+```
+
+### Four-minute lane wall target
+
+Story acceptance compares **post-shard PR lane completion** on `ubuntu-latest` against a **≤4 minute** job-wall goal for the baseline commit class. Interpret the lane as:
+
+1. Ten shard jobs run **in parallel** → shard stage wall ≈ **slowest** shard job (not the sum of ten).
+2. Merge runs **after** all shards → add merge job wall sequentially.
+
+Pre-shard monolithic job wall was **~9m17s**. Green run [`26690812595`](https://github.com/portpowered/you-agent-factory/actions/runs/26690812595) measured **~2m58s** slowest shard + **~2m36s** merge (**~5m34s** lane critical path)—below monolithic but above the **≤4 minute** story target. Treat that table as the authoritative overhead record (ten checkout/setup surfaces plus a **~128s** isolated React Flow merge phase dominate merge job wall).
+
+**Supersedes:** the **Optional CI sharding (US-008)** rejection below — that section documents the pre-implementation decision; this rollout is the adopted design on `ralph/ci-coverage-test-sharding`.
+
 ## Main-pass worker trial (US-004, 2026-05-30 UTC)
 
 **Decision: keep `defaultMainCoveredMaxWorkers` at `2` in `ui/scripts/ui-coverage-runner.mjs`.** Do not raise the default without new green `make test-ui-coverage` evidence on `ubuntu-latest` showing both faster main-pass **and** total lane time without new failures.

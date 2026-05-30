@@ -1,30 +1,31 @@
 {
-  "project": "Session Factory Save Modes (S1 Recovery)",
-  "branchName": "ralph/session-factory-save-modes-recovery",
-  "description": "Recovery implementation of approved S1: unify live factory submission behind PUT /factory-sessions/{session_id}/factory with explicit save modes (REPLACE_CURRENT default, UPSERT_NAMED_AND_ACTIVATE for named create/replace+activate), remove POST /factories, consolidate backend save pipeline, and migrate dashboard editor, import, CLI, and tests.",
+  "project": "CI UI Coverage Test Sharding",
+  "branchName": "ralph/ci-coverage-test-sharding",
+  "description": "Shard the UI Coverage lane's main covered Vitest pass across ten parallel CI jobs, merge shard blob reports with Vitest --mergeReports, and keep make test-ui-coverage as the unsharded local canonical lane—cutting PR UI coverage wall time without weakening merged coverage thresholds.",
   "context": {
-    "customerAsk": "Retry after network outage. Manual fix may apply to legacy token; this is a fresh idea. Full spec: tasks/prd-session-factory-save-modes.md — Session factory save modes (S1 recovery).",
-    "problem": "Two overlapping factory submission APIs (POST /factories vs session PUT) cause inconsistent validation, persistence roots, and activation. The prior autonomous batch did not complete; the codebase still has POST /factories and bare Factory bodies on session PUT with no save-mode enum.",
-    "solution": "Implement the approved S1 spec: one session PUT with { mode, factory }, default REPLACE_CURRENT, UPSERT_NAMED_AND_ACTIVATE for named upsert+activate, unified backend SaveFactoryForSession pipeline with session-scoped activation only, remove POST /factories, and migrate dashboard editor (replace only), import confirm dialog, CLI live save, and functional tests."
+    "customerAsk": "The CI pipeline takes about ten minutes because frontend coverage is slow. Separate UI coverage into its own CI steps, shard UI coverage tests into ten shards, and merge coverage results using Vitest merging.",
+    "problem": "The UI Coverage job runs the entire jsdom covered corpus on one ubuntu-latest runner (~8m52s lane command, ~403s main pass). That dominates PR CI wall time even though browser and backend lanes already run in parallel sibling jobs.",
+    "solution": "Keep UI coverage as a distinct lane but replace the monolithic job with a ten-way Vitest --shard matrix (blob reporter per shard) plus a merge job that downloads blobs, runs the existing serial follow-on phases (isolated React Flow, mergeReports with thresholds, standalone script, replay check), and preserves make test-ui-coverage for local full-lane reruns."
   },
   "acceptanceCriteria": [
-    "PUT /factory-sessions/{session_id}/factory accepts { mode?, factory } with default REPLACE_CURRENT and both enum values operational.",
-    "POST /factories is removed from OpenAPI, generated clients, UI, CLI live paths, and functional tests.",
-    "Backend uses one SaveFactoryForSession pipeline with mode handlers and replaceSessionRuntime-only activation; multi-session tests prove isolation.",
-    "Dashboard editor save uses REPLACE_CURRENT only; import confirm offers replace-current vs create-new-named with suffixed name allocation on conflict, session PUT only.",
-    "Version rules per mode match approved S1 (REPLACE_CURRENT requires version; UPSERT create may omit; UPSERT replace detects stale on-disk version).",
-    "Existing error codes remain mappable for operators (FACTORY_NOT_IDLE, STALE_FACTORY_VERSION, INVALID_FACTORY, etc.).",
-    "Quality gate: typecheck, lint, and targeted tests for all changed behavior pass."
+    "When classification routes UI coverage to run, CI executes ten parallel shard jobs and one merge job instead of a single runner invoking full make test-ui-coverage.",
+    "Each shard runs only its Vitest-assigned subset of the main covered corpus with the same exclusions as today and uploads a distinct blob artifact; no test file runs in more than one shard.",
+    "The merge job combines all shard blobs plus the isolated React Flow blob and enforces the existing ui/vite.config.ts coverage thresholds and replay coverage check.",
+    "Shard or merge failures surface shard index and missing-artifact detail in GitHub Actions summaries; failure artifacts are retained for 14 days.",
+    "make test-ui-coverage locally remains the unsharded canonical lane with stable [ui-coverage] phase timing labels.",
+    "Maintainer docs record before/after CI wall time for the ten-shard rollout on ubuntu-latest.",
+    "Typecheck, lint, and project tests pass."
   ],
   "userStories": [
     {
-      "id": "session-factory-save-modes-recovery-001",
-      "title": "Session factory PUT contract and client regeneration",
-      "description": "As an API consumer, I need OpenAPI and generated clients to describe save modes on session PUT so all callers share one typed contract.",
+      "id": "ci-coverage-test-sharding-001",
+      "title": "Shard-aware main covered pass in the UI coverage runner",
+      "description": "As a maintainer, I want the UI coverage runner to execute one Vitest shard of the main covered pass so CI can fan out work without duplicating files across shards.",
       "acceptanceCriteria": [
-        "PUT /factory-sessions/{session_id}/factory request body includes optional mode enum (REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE) and required factory; omitted mode defaults to REPLACE_CURRENT.",
-        "POST /factories is removed from api/openapi.yaml; contract test forbids paths./factories.post.",
-        "Bundled spec and generated Go and TypeScript clients are regenerated and compile.",
+        "When UI_COVERAGE_SHARD is set to i/n (e.g. 3/10), the runner runs only the main covered Vitest phase with --shard=i/n, today’s exclusions, coverage flags, and default two max workers unless overridden.",
+        "Each shard writes a unique blob under .vitest-reports/ via --outputFile.blob and does not run isolated React Flow, mergeReports, standalone script, or replay phases.",
+        "When UI_COVERAGE_SHARD is unset, make test-ui-coverage behavior is unchanged (full phased lane).",
+        "Shard mode emits [ui-coverage] elapsed timing for the shard main pass only.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,31 +34,29 @@
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-002",
-      "title": "Unified backend save pipeline and mode handlers",
-      "description": "As a maintainer, I need one orchestrated session save pipeline so session-scoped saves never fork through global activation paths.",
+      "id": "ci-coverage-test-sharding-002",
+      "title": "CI shard matrix job for UI coverage",
+      "description": "As a contributor waiting on CI, I want the main covered corpus split across ten parallel jobs so wall time drops below the current single-runner baseline.",
       "acceptanceCriteria": [
-        "FactoryService SaveFactoryForSession implements resolve scope → validate → persist (mode handler) → activate session runtime → readback.",
-        "REPLACE_CURRENT requires factory.name to match session current and overwrites current slot; UPSERT_NAMED_AND_ACTIVATE persists under session root, updates current-factory pointer, activates via replaceSessionRuntime only.",
-        "HTTP session PUT decodes { mode, factory } and calls only the unified entrypoint; POST /factories handler and CreateNamedFactory / unscoped HTTP SaveCurrentFactory parallel trees are removed.",
-        "Service test proves saving session B does not mutate session A for at least one save mode path.",
-        "Typecheck passes",
-        "Tests pass"
+        "ci.yml defines ui-coverage-shard with strategy.matrix.shard 1 through 10, gated by run_ui_coverage like today’s lane.",
+        "Each matrix cell runs make ui-deps then the shard entrypoint with UI_COVERAGE_SHARD=<index>/10, teeing logs to .artifacts/ui-coverage-shard-<index>/command.log.",
+        "Each successful shard uploads an artifact with its .vitest-reports blob(s) and command log.",
+        "Shard matrix jobs execute in parallel when coverage runs.",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-003",
-      "title": "Version rules and error mapping per mode",
-      "description": "As a client author, I need deterministic version requirements and response versioning for each save mode.",
+      "id": "ci-coverage-test-sharding-003",
+      "title": "CI merge job for shard blobs and serial follow-on phases",
+      "description": "As a maintainer, I want one merge job to combine shard coverage and run the remaining lane phases so the regression contract stays identical to the pre-shard lane.",
       "acceptanceCriteria": [
-        "REPLACE_CURRENT rejects missing or stale factory.version relative to session current definition.",
-        "UPSERT_NAMED_AND_ACTIVATE on create allows omitted factory.version and returns server-minted version in response factory object.",
-        "UPSERT_NAMED_AND_ACTIVATE on replace detects stale on-disk version and returns incremented version on success.",
-        "UPSERT_NAMED_AND_ACTIVATE does not return FACTORY_ALREADY_EXISTS when replacing an existing named factory while idle.",
-        "FACTORY_NOT_IDLE and INVALID_FACTORY still surface for unsafe or invalid payloads.",
+        "ui-coverage-merge depends on all ten shard jobs, downloads every shard blob into .vitest-reports/, and fails if any expected shard artifact is missing.",
+        "Merge job runs isolated React Flow covered pass, vitest --mergeReports .vitest-reports --coverage with ui/vite.config.ts thresholds, standalone script-style test, and ui-replay-coverage-check in that order.",
+        "Merge step summary reports passed or failed merged thresholds and names missing shard indices when blocked.",
+        "Merge failures retain .artifacts/ui-coverage-merge/ logs for 14 days.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -66,67 +65,45 @@
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-004",
-      "title": "Dashboard editor save uses REPLACE_CURRENT",
-      "description": "As a factory editor, I want Save to update the factory I am editing in the active tab without renaming or switching named factories.",
+      "id": "ci-coverage-test-sharding-004",
+      "title": "Replace monolithic ui-coverage job wiring",
+      "description": "As a CI operator, I want the workflow’s UI Coverage lane to mean sharded execution plus merge so PR checks reflect the new architecture.",
       "acceptanceCriteria": [
-        "saveCurrentFactoryDocument and editor save hooks send session PUT with REPLACE_CURRENT (or omitted mode) and factory.version from latest GET.",
-        "No editor save path calls UPSERT_NAMED_AND_ACTIVATE or POST /factories.",
-        "Stale-version and not-idle errors preserve existing operator-facing messages.",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser: editor Save succeeds; stale version shows existing error UX"
+        "The old single-runner ui-coverage job that runs full make test-ui-coverage is removed or disabled; required coverage execution uses shard plus merge jobs only.",
+        "Classification outputs still recommend make test-ui-coverage for local reruns; CI summaries reference shard and merge jobs.",
+        "verify-pr documentation remains accurate: local verify uses unsharded test-ui-coverage.",
+        "Typecheck passes"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-005",
-      "title": "Dashboard import confirm dialog and mode selection",
-      "description": "As a dashboard operator, I want import to offer replace-current vs create-new-named with safe naming when a conflict exists.",
+      "id": "ci-coverage-test-sharding-005",
+      "title": "Shard failure observability",
+      "description": "As a contributor debugging a red PR, I want shard failures to identify which slice failed without reading ten full logs blindly.",
       "acceptanceCriteria": [
-        "Import activation uses session-scoped PUT only; confirm dialog defaults to Replace current factory.",
-        "Replace path sends REPLACE_CURRENT with factory.name from session GET and factory.version from GET; PNG embedded name is ignored.",
-        "Create path sends UPSERT_NAMED_AND_ACTIVATE with validated PNG name; allocates first free suffixed name on conflict and shows resolved name before PUT.",
-        "Create path omits factory.version for new names; includes version when upserting an existing chosen name.",
-        "Replace path never changes the session active factory name including UNDEFINED default root.",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser: import on default and non-default session tabs with both dialog choices"
+        "Failed shard jobs upload logs and any partial blob artifacts.",
+        "Failed shard step summaries include shard index i/10, exit code, and the last 40 lines of command.log.",
+        "Merge job summaries list absent shard indices when merge is blocked by missing artifacts.",
+        "Typecheck passes"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-006",
-      "title": "Remove legacy create-factory callers in tests and UI",
-      "description": "As a maintainer, I want no remaining dependencies on POST /factories after migration.",
+      "id": "ci-coverage-test-sharding-006",
+      "title": "Timing evidence and maintainer documentation",
+      "description": "As a maintainer, I want recorded before/after CI timings and rerun instructions so we can verify the sharding investment and operate the lane safely.",
       "acceptanceCriteria": [
-        "ui/src/api/named-factory/api.ts removes createFactory POST usage; named create uses session PUT with UPSERT_NAMED_AND_ACTIVATE.",
-        "Functional tests in tests/functional/runtime_api/factory_transformation and tests/functional/bootstrap_portability use session PUT with explicit mode.",
-        "Generated client no longer exposes CreateFactory for POST /factories.",
-        "Typecheck passes",
-        "Tests pass"
+        "ui-coverage-speed-closeout.md documents a CI ten-shard rollout subsection with pre-shard baseline, post-shard wall time, and a link to the first green proof run.",
+        "development.md or development-guide relevant-files documents UI_COVERAGE_SHARD, shard-only vs full make test-ui-coverage, and mergeReports threshold ownership.",
+        "Post-shard UI Coverage lane completion on ubuntu-latest is at or below four minutes job wall for the baseline commit class, or the doc explains measured wall if overhead prevents the target.",
+        "Typecheck passes"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "session-factory-save-modes-recovery-007",
-      "title": "Live CLI uses session PUT with REPLACE_CURRENT",
-      "description": "As a CLI user, I want live you factory save to use the unified session PUT while offline filesystem save stays unchanged.",
-      "acceptanceCriteria": [
-        "Live you factory save PUTs factory with version from prior GET to sessionpath.CurrentFactoryPath using default REPLACE_CURRENT body shape.",
-        "Offline SaveFromFile and WriteCurrentFactoryPointer behavior unchanged.",
-        "CLI help and examples remain accurate for live vs offline save.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

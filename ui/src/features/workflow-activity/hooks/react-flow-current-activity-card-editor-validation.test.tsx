@@ -182,26 +182,19 @@ vi.mock("../../current-factory-definition/public", () => ({
   useSaveCurrentFactory: () => hookState.saveEditableDefinition,
 }));
 
-vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", async () => {
-  const actual = await vi.importActual<
-    typeof import("../../factory-graph-editor/hooks/use-editable-factory-graph")
-  >("../../factory-graph-editor/hooks/use-editable-factory-graph");
-
-  return {
-    ...actual,
-    useEditableFactoryGraph: () => ({
-      actions: {
-        discard: hookState.draftState.resetDraft,
-        save: vi.fn(async () => false),
-      },
-      draftState: hookState.draftState,
-      saveState: {
-        canSave: hookState.draftState.hasChanges,
-        isStale: false,
-      },
-    }),
-  };
-});
+vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
+  useEditableFactoryGraph: () => ({
+    actions: {
+      discard: hookState.draftState.resetDraft,
+      save: vi.fn(async () => false),
+    },
+    draftState: hookState.draftState,
+    saveState: {
+      canSave: hookState.draftState.hasChanges,
+      isStale: false,
+    },
+  }),
+}));
 
 vi.mock(
   "../../factory-graph-editor/lib/factory-graph-editor-additions",
