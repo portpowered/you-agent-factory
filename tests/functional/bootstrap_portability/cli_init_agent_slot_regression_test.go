@@ -2,75 +2,78 @@ package bootstrap_portability
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
-// TestInitFactory_AgentSlotResourceMismatchRegression documents that a default
-// init directory whose processor worker declares agent-slot without a matching
-// factory.json resources pool cannot start with mock workers.
-//
-// Story factory-new-tab-and-init-fix-002 aligns the embedded canonical scaffold
-// so this mismatch no longer exists on fresh init output.
-func TestInitFactory_AgentSlotResourceMismatchRegression(t *testing.T) {
+// TestInitFactory_AgentSlotResourceAlignmentRunsWithMockWorkers proves the default
+// init scaffold loads and runs when processor worker resources agree with the
+// embedded canonical factory.json agent-slot pool.
+func TestInitFactory_AgentSlotResourceAlignmentRunsWithMockWorkers(t *testing.T) {
 	dir := t.TempDir()
 
 	if err := initcmd.Init(initcmd.InitConfig{Dir: dir}); err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
 
-	if err := writeProcessorAgentSlotResource(dir); err != nil {
-		t.Fatalf("write processor agent-slot resource: %v", err)
-	}
-
 	factoryJSON, err := os.ReadFile(filepath.Join(dir, "factory.json"))
 	if err != nil {
 		t.Fatalf("read factory.json: %v", err)
 	}
-	if strings.Contains(string(factoryJSON), "agent-slot") {
-		t.Fatalf("regression fixture requires factory.json without agent-slot resources pool; got:\n%s", factoryJSON)
+	if !strings.Contains(string(factoryJSON), `"name": "agent-slot"`) {
+		t.Fatalf("expected embedded factory.json to declare agent-slot resources pool; got:\n%s", factoryJSON)
+	}
+	if normalizeFactoryJSON(t, string(factoryJSON)) != normalizeFactoryJSON(t, initcmd.DefaultFactoryJSON()) {
+		t.Fatalf("written factory.json does not match embedded canonical document")
 	}
 
-	err = buildInitFactoryService(dir)
-	if err == nil {
-		t.Fatal("expected factory service startup to fail when processor declares agent-slot without factory resources")
-	}
-	assertAgentSlotResourceMismatchError(t, err)
-}
-
-func writeProcessorAgentSlotResource(dir string) error {
 	workerPath := filepath.Join(dir, "workers", "processor", "AGENTS.md")
-	data, err := os.ReadFile(workerPath)
+	workerBody, err := os.ReadFile(workerPath)
 	if err != nil {
-		return err
+		t.Fatalf("read processor AGENTS.md: %v", err)
 	}
-	body := string(data)
-	if strings.Contains(body, "agent-slot") {
-		return nil
+	if !strings.Contains(string(workerBody), "agent-slot") {
+		t.Fatalf("expected processor worker to declare agent-slot resources; got:\n%s", workerBody)
 	}
 
-	const resourceBlock = `resources:
-  - name: agent-slot
-    capacity: 1
-`
-	needle := "skipPermissions: true\n"
-	if !strings.Contains(body, needle) {
-		return os.WriteFile(workerPath, []byte(`---
-type: MODEL_WORKER
-modelProvider: CODEX
-executorProvider: SCRIPT_WRAP
-timeout: 1h
-skipPermissions: true
-`+resourceBlock+`---
-You are the processor. Complete the task.
-`), 0o644)
+	if err := buildInitFactoryService(dir); err != nil {
+		t.Fatalf("expected aligned default init factory to build service: %v", err)
 	}
-	return os.WriteFile(workerPath, []byte(strings.Replace(body, needle, needle+resourceBlock, 1)), 0o644)
+
+	testutil.WriteSeedFile(t, dir, initcmd.DefaultFactoryInputType, []byte(`{"title": "agent-slot alignment e2e test"}`))
+
+	work := map[string][]testutil.WorkResponse{
+		"processor": {
+			{Content: "Task processed successfully."},
+		},
+	}
+	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
+
+	h := testutil.NewServiceTestHarness(t, dir,
+		testutil.WithProvider(provider),
+		testutil.WithFullWorkerPoolAndScriptWrap(),
+	)
+
+	h.RunUntilComplete(t, 15*time.Second)
+
+	h.Assert().
+		HasTokenInPlace(initcmd.DefaultFactoryInputType + ":complete").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":init").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":failed").
+		PlaceTokenCount(initcmd.DefaultFactoryInputType+":complete", 1).
+		PlaceTokenCount("agent-slot:available", 1)
+
+	if provider.CallCount("processor") != 1 {
+		t.Errorf("expected provider called 1 time, got %d", provider.CallCount("processor"))
+	}
 }
 
 func buildInitFactoryService(dir string) error {
@@ -81,16 +84,16 @@ func buildInitFactoryService(dir string) error {
 	return err
 }
 
-func assertAgentSlotResourceMismatchError(t *testing.T, err error) {
+func normalizeFactoryJSON(t *testing.T, raw string) string {
 	t.Helper()
 
-	msg := err.Error()
-	switch {
-	case strings.Contains(msg, "agent-slot") && strings.Contains(msg, "non-existent resource"):
-		return
-	case strings.Contains(msg, "agent-slot:available"):
-		return
-	default:
-		t.Fatalf("expected agent-slot resource mismatch error, got: %v", err)
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		t.Fatalf("normalizeFactoryJSON: %v", err)
 	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("normalizeFactoryJSON marshal: %v", err)
+	}
+	return string(encoded)
 }
