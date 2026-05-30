@@ -902,6 +902,13 @@ func listWorkResults(items []listWorkItem) []factoryapi.Work {
 }
 
 func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	return workMatchesStateListFilters(work, params) &&
+		workMatchesNameListFilter(work, params) &&
+		workMatchesWorkTypeNameListFilter(work, params) &&
+		workMatchesTraceIDListFilter(work, params)
+}
+
+func workMatchesStateListFilters(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
 	if params.StateName != nil {
 		if work.State == nil || work.State.Name != *params.StateName {
 			return false
@@ -912,23 +919,29 @@ func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkPara
 			return false
 		}
 	}
-	if params.Name != nil && *params.Name != "" {
-		if !strings.Contains(strings.ToLower(work.Name), strings.ToLower(string(*params.Name))) {
-			return false
-		}
-	}
-	if params.WorkTypeName != nil && *params.WorkTypeName != "" {
-		if stringValue(work.WorkTypeName) != string(*params.WorkTypeName) {
-			return false
-		}
-	}
-	if params.TraceId != nil && *params.TraceId != "" {
-		traceID := string(*params.TraceId)
-		if stringValue(work.TraceId) != traceID && stringValue(work.CurrentChainingTraceId) != traceID {
-			return false
-		}
-	}
 	return true
+}
+
+func workMatchesNameListFilter(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	if params.Name == nil || *params.Name == "" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(work.Name), strings.ToLower(string(*params.Name)))
+}
+
+func workMatchesWorkTypeNameListFilter(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	if params.WorkTypeName == nil || *params.WorkTypeName == "" {
+		return true
+	}
+	return stringValue(work.WorkTypeName) == string(*params.WorkTypeName)
+}
+
+func workMatchesTraceIDListFilter(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	if params.TraceId == nil || *params.TraceId == "" {
+		return true
+	}
+	traceID := string(*params.TraceId)
+	return stringValue(work.TraceId) == traceID || stringValue(work.CurrentChainingTraceId) == traceID
 }
 
 func (s *Server) GetWork(w http.ResponseWriter, r *http.Request, id factoryapi.WorkOrTokenID) {
