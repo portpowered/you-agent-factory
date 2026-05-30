@@ -102,6 +102,7 @@ generate-wire:
 
 wire-smoke:
 	$(MAKE) generate-wire
+	$(MAKE) generate-wire
 	node scripts/check-wire-gen-drift.js
 	$(GO) test ./cmd/factory/compose/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 
