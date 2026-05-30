@@ -59,6 +59,20 @@ make ui-storybook
 make ui-test-storybook
 ```
 
+## Dashboard UI test runners
+
+Run dashboard package commands from `ui/` with Bun 1.3.12+ on PATH. Root `make` targets wrap the same lanes for CI and local reruns.
+
+| Goal | Canonical command | Runner |
+| --- | --- | --- |
+| Unit and component tests (jsdom) | `cd ui && bun run test:unit` or `make ui-test` | Bun (`run-bun-unit.mjs`, `bunfig.toml` preload) |
+| Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Bun covered phases via `test:coverage`, then replay check |
+| Playwright integration | `cd ui && bun run test:integration` or `make ui-integration-test` | Vitest + Playwright |
+| Unit then integration | `cd ui && bun run test` | Bun unit lane, then Vitest integration |
+| Storybook browser stories | `cd ui && bun run storybook:test-runner:ci` or `make ui-test-storybook` | Vitest Storybook project (`vitest.storybook.config.ts`) |
+
+Prefer `bun run test:unit` (or `make ui-test`) over ad hoc `bun test <paths>` for dashboard unit work so batching, exclusions, preload, and worker policy stay aligned with CI. Targeted unit proof may still use `cd ui && bun test <paths>` when a story explicitly needs one file or subtree. Storybook browser, Storybook script verifiers, and the coverage standalone dashboard-shell script phase remain Vitest-only; idea and cleanup writeups should cite `bun run test:unit`, `make ui-test`, `make test-ui-coverage`, or the Storybook Vitest commands above instead of legacy `vitest run` unit invocations.
+
 ## GitHub Actions CI Baseline
 
 The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automatically on pull requests and branch pushes and is intentionally limited to validation only. This first-pass workflow does not package or deploy releases.
@@ -147,13 +161,13 @@ Treat those lanes as the stable contributor mental model:
 
 | CI lane | Owned checks | Local rerun command | Why this lane stays separate |
 | --- | --- | --- | --- |
-| `UI Coverage` | jsdom-oriented Vitest coverage run plus the trailing non-covered `ui/scripts/dashboard-shell-storybook-responsive.test.mjs` check and the replay metadata guard | `make test-ui-coverage` | Keeps unit and app-shell regressions, coverage thresholds, and replay fixture coverage in one dashboard-only lane without rerunning browser-backed integration. The root command stays canonical: it delegates covered phases to `ui/package.json`'s `test:coverage` flow and then runs the replay coverage check. |
+| `UI Coverage` | Bun-backed jsdom coverage phases plus a Vitest-only standalone `ui/scripts/dashboard-shell-storybook-responsive.test.mjs` check and the replay metadata guard | `make test-ui-coverage` | Keeps unit and app-shell regressions, coverage thresholds, and replay fixture coverage in one dashboard-only lane without rerunning browser-backed integration. The root command stays canonical: it delegates covered phases to `ui/package.json`'s `test:coverage` flow and then runs the replay coverage check. |
 | `UI Browser Integration` | the canonical browser-backed `ui/integration/*.integration.test.mjs` lane with Playwright provisioning plus build and preview owned by the shared browser harness | `make ui-integration-test` | Keeps real-browser dashboard workflows isolated so failures map cleanly to preview startup, API-origin wiring, or browser-visible behavior instead of the jsdom suite. |
 | `Backend Verification` | `cmd/gocoveragecheck` over `./cmd/factory`, maintained backend `./pkg/...` packages, and the maintained short functional packages under `tests/functional/...` | `make test-backend-verification` | Merges backend coverage with the maintained short functional corpus because the covered command already executes the same supported backend packages and short functional packages in one lane. |
 
-UI Coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind `ui/package.json`'s `test:coverage` script. Keep the main covered Vitest pass as the only parallelized covered phase in this rollout; it defaults to two workers and can be tuned for comparison runs with `UI_COVERAGE_MAIN_MAX_WORKERS`. Keep `src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` in its separate covered React Flow pass with `--maxWorkers=1` unless later CI timing evidence proves that changing that isolation boundary is both faster and stable.
+UI Coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind `ui/package.json`'s `test:coverage` script. Main, isolated React Flow, and merge/threshold covered phases run on Bun; the standalone Storybook script phase remains Vitest-only. Keep the main covered Bun pass as the only parallelized covered phase in this rollout; it defaults to two workers and can be tuned for comparison runs with `UI_COVERAGE_MAIN_MAX_WORKERS`. Keep `src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` in its separate covered React Flow pass with single-worker isolation unless later CI timing evidence proves that changing that boundary is both faster and stable.
 
-The UI Coverage contract also includes the merged blob-report coverage threshold pass and the replay coverage check. Keep browser-backed integration tests under `ui/integration/*.integration.test.mjs` out of the jsdom coverage corpus, keep the standalone script-style dashboard shell responsive test outside the main covered worker pool, and preserve the stable `[ui-coverage]` phase labels so benchmark comparisons can use the same names across runs.
+The UI Coverage contract also includes the Bun lcov merge/threshold pass (`merge-bun-coverage-thresholds.mjs`) and the replay coverage check. Keep browser-backed integration tests under `ui/integration/*.integration.test.mjs` out of the jsdom coverage corpus, keep the standalone script-style dashboard shell responsive test outside the main covered worker pool, and preserve the stable `[ui-coverage]` phase labels (`Main covered Vitest pass`, `Isolated React Flow covered pass`, `Blob report merge pass`, `Standalone script-style test`, replay check) so benchmark comparisons can use the same names across runs. See [UI coverage speed closeout](ui-coverage-speed-closeout.md) for timing history and Bun threshold notes.
 
 The backend lane is intentionally merged. `make test-backend-verification` shells through `cmd/gocoveragecheck`, and that command's default package discovery already executes the maintained short functional packages under `tests/functional/...` in the same covered `go test` invocation as `./cmd/factory` and backend-owned `./pkg/...` packages. Because that coverage lane already includes `tests/functional/bootstrap_portability`, `guards_batch`, `providers`, `replay_contracts`, `runtime_api`, `smoke`, and `workflow` while excluding only the internal support helper package, a separate required `make test-backend-functional` lane would only rerun the same short functional corpus without adding pull-request confidence. Keep `make test-backend-functional` as a compatibility alias for ad hoc local usage, but treat `make test-backend-verification` as the required PR backend lane.
 
@@ -335,7 +349,7 @@ projections, or export-only field aliases.
 4. Run `make script-timeout-companion-smoke-100` after changing script timeout, requeue, command-runner, or companion smoke behavior. The target runs `TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion` 100 consecutive times through the real timeout/requeue/later-completion flow and fails on the first run that misses the direct timeout signal, retry dispatch, requeue mutation, or final completion.
 5. Run `make current-factory-watcher-switch-smoke` after changing current-factory activation, watched-input listener ownership, or service-mode watcher handoff behavior. The target runs the focused named-factory smoke that proves watched input moves to the activated factory, the previous factory stops receiving watched work, and the handoff leaves only one completed dispatch for the new watched file.
 6. Run `make dashboard-verify` after dashboard UI source changes or embedded asset changes.
-7. Run `make ui-test` for focused dashboard UI behavior.
+7. Run `make ui-test` (Bun unit lane) for focused dashboard UI behavior.
 8. Run `make ui-integration-test` when changing browser-backed dashboard workflows, files under `ui/integration/`, shared browser harness seams, or fixture-driven session and graph-editor journeys that must be verified in Chromium.
 9. Run `make ui-storybook` when Storybook fixtures, visual states, or dashboard component stories change.
 10. Run `make ui-test-storybook` after `make ui-storybook` when Storybook play functions, dashboard Storybook runtime mocks, or browser-backed interaction behavior change.

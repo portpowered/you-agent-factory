@@ -136,7 +136,7 @@ Run these checks from `libraries/agent-factory/` when changing the dashboard:
 ```bash
 make dashboard-verify # Rebuild UI assets, then run Go vet and short Go tests
 make ui-deps          # Install dashboard UI dependencies from ui/bun.lock
-make ui-test          # Run Vitest through Bun
+make ui-test          # Run Bun unit tests (make test-ui-coverage for coverage)
 make ui-build         # Build TypeScript and Vite production assets through Bun
 make ui-storybook     # Build Storybook static assets through Bun
 make ui-test-storybook # Serve Storybook static assets and run interaction checks
@@ -151,10 +151,12 @@ When you are working directly inside `libraries/agent-factory/ui`, the supported
 ```bash
 bun install --frozen-lockfile
 bun run tsc
+bun run test:unit
 bun run test
 bun run build
 bun run build-storybook
 bun run test-storybook
+bun run storybook:test-runner:ci
 ```
 
 `bun run build` or `make ui-build` is required whenever shipped UI assets change because the Go dashboard route consumes the generated `ui/dist/` output through a local embed-registration file.

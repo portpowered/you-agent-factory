@@ -34,7 +34,13 @@ test layer.
 When the ask touches frontend, plan for explicit loading, empty, error, and
 success states, accessible semantics, keyboard behavior, responsive behavior,
 typed network/state handling, and direct UI verification when browser-visible
-behavior changes.
+behavior changes. Cite canonical dashboard test commands in acceptance criteria:
+`cd ui && bun run test:unit` or `make ui-test` for jsdom unit work,
+`make test-ui-coverage` for coverage, `cd ui && bun run test:integration` or
+`make ui-integration-test` for Playwright integration, and
+`cd ui && bun run storybook:test-runner:ci` (or targeted
+`bunx vitest run --config vitest.storybook.config.ts --project=storybook <stories>`)
+for Storybook browser proof. Do not plan legacy `vitest run` for the unit corpus.
 
 When the work will require tests or acceptance criteria, prohibit meta-test planning.
 Do not ask implementers to scan source files, validate docs link topology, assert

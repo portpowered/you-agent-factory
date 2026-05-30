@@ -67,3 +67,17 @@ Verified on 2026-04-12 from this worktree after `bun install --frozen-lockfile` 
 | `make test` | Passed |
 
 On Windows, `make ui-build`, `make ui-test`, and `make test` printed intermittent `The process cannot access the file because it is being used by another process.` messages after successful command output while still returning exit code 0. Treat this as a follow-up observation rather than a failed baseline unless the process exits non-zero.
+
+## Post Bun unit/coverage migration (2026-05-31)
+
+After `ralph/ui-bun-test-migration`, treat these as the current dashboard test surfaces (see [development guide](development.md)):
+
+| Workflow | Current package script | Runner |
+| --- | --- | --- |
+| Unit tests | `bun run test:unit` | Bun (`run-bun-unit.mjs`) |
+| Coverage | `bun run test:coverage` | Bun phases in `ui-coverage-runner.mjs` (+ Vitest standalone script phase) |
+| Integration | `bun run test:integration` | Vitest + Playwright |
+| Full package test | `bun run test` | Bun unit, then Vitest integration |
+| Storybook browser | `bun run storybook:test-runner:ci` / `test-storybook` | Vitest Storybook project |
+
+Root `make ui-test` runs `bun run test:unit` only. Root `make test-ui-coverage` remains the canonical coverage lane.

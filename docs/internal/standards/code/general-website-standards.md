@@ -373,10 +373,12 @@ Repository test and check commands:
 
 - `cd ui && bun run check` runs Biome, semantic color checks, Tailwind spacing-token checks, and feature-root file checks.
 - `cd ui && bun run tsc` runs TypeScript project checking.
-- `cd ui && bun run test:unit` runs Vitest unit and component tests outside `ui/integration/`.
-- `cd ui && bun run test:integration` runs integration tests under `ui/integration/`.
-- `cd ui && bun run test` runs the standard frontend unit and integration suites.
-- `cd ui && bun run test-storybook` and `cd ui && bun run storybook:test-runner:ci` cover Storybook-driven UI behavior when a change touches reusable or story-covered components.
+- `cd ui && bun run test:unit` runs the Bun unit and component corpus (`ui/scripts/run-bun-unit.mjs`) outside `ui/integration/` and Storybook script verifiers.
+- `cd ui && bun run test:coverage` runs the Bun-backed multi-phase coverage orchestration owned by `ui/scripts/ui-coverage-runner.mjs`.
+- `make test-ui-coverage` at the repository root is the canonical coverage lane (package `test:coverage` plus replay coverage check).
+- `cd ui && bun run test:integration` runs Playwright integration tests under `ui/integration/` through Vitest.
+- `cd ui && bun run test` runs the Bun unit lane, then the Vitest integration lane.
+- `cd ui && bun run test-storybook`, `cd ui && bun run storybook:test-runner:ci`, and targeted `bunx vitest run --config vitest.storybook.config.ts --project=storybook <story files>` cover Storybook browser behavior when a change touches reusable or story-covered components. Do not use bare `bun test <paths>` for Storybook browser proof; that lane stays on Vitest.
 - `cd ui && bun run generate-api` regenerates `ui/src/api/generated/openapi.ts` from `api/openapi.yaml`; generated output should not be hand-edited.
 
 ### 11. Observability and Diagnostics

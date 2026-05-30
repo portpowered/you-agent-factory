@@ -13,11 +13,11 @@ All timestamps are UTC.
 
 ## Timing Summary
 
-| Phase | Baseline CI | Post-change CI |
-| --- | ---: | ---: |
-| Main covered Vitest pass | 630.57s | 330.89s |
-| Isolated React Flow covered pass | 123.21s | 106.69s |
-| Blob report merge pass | about 1.0s from log boundaries | 1.77s |
+| Phase (`[ui-coverage]` elapsed label) | Baseline CI (Vitest) | Post speedup CI (Vitest) | Bun migration (2026-05-30) |
+| --- | ---: | ---: | ---: |
+| Main covered pass (`Main covered Vitest pass`) | 630.57s | 330.89s | Bun `run-bun-coverage-main.mjs` batches |
+| Isolated React Flow covered pass | 123.21s | 106.69s | `bun test` single-worker on card spec |
+| Blob report merge pass | about 1.0s from log boundaries | 1.77s | `merge-bun-coverage-thresholds.mjs` lcov merge |
 | Standalone script-style test | 0.83s | 1.18s |
 | Replay coverage check | about 0.01s from log boundaries | 0.00s |
 | `Run dashboard coverage lane` step wall time | 12m40s | 7m21s |
@@ -35,11 +35,11 @@ The post-change CI run passed Typecheck, Build/Lint/API, UI Coverage, UI Browser
 
 Keep `make test-ui-coverage` as the canonical root command for local and CI reruns. That target delegates the covered UI phases to `ui/package.json`'s `test:coverage` script, then runs the replay coverage check; do not replace it with a workflow-only shell sequence.
 
-The package-owned `test:coverage` flow should keep its phase definitions in `ui/scripts/ui-coverage-runner.mjs`. The main covered Vitest pass is the phase that is safe to parallelize in this rollout and defaults to two workers through the runner-owned `UI_COVERAGE_MAIN_MAX_WORKERS` seam. Use that environment variable for local or CI comparison runs before changing the default.
+The package-owned `test:coverage` flow should keep its phase definitions in `ui/scripts/ui-coverage-runner.mjs`. The main covered pass (logged as `Main covered Vitest pass` for stable `[ui-coverage]` labels) is the phase that is safe to parallelize in this rollout and defaults to two workers through the runner-owned `UI_COVERAGE_MAIN_MAX_WORKERS` seam on Bun. Use that environment variable for local or CI comparison runs before changing the default.
 
 The isolated `src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` pass remains intentionally separate and conservative with `--maxWorkers=1`. Keep that boundary unless future comparable CI evidence shows that merging or further parallelizing the React Flow-heavy pass improves runtime without adding flake.
 
-The blob report merge remains the owner of coverage threshold enforcement through `ui/scripts/bun-coverage-config.mjs` and `ui/scripts/merge-bun-coverage-thresholds.mjs`. The main covered pass should continue to exclude browser-backed `integration/*.integration.test.mjs`, the standalone script-style `scripts/dashboard-shell-storybook-responsive.test.mjs`, and the isolated React Flow card test so each surface stays in its intended lane.
+The blob report merge pass (logged as `Blob report merge pass`) remains the owner of coverage threshold enforcement through `ui/scripts/bun-coverage-config.mjs` and `ui/scripts/merge-bun-coverage-thresholds.mjs`. The main covered pass should continue to exclude browser-backed `integration/*.integration.test.mjs`, the standalone script-style `scripts/dashboard-shell-storybook-responsive.test.mjs` (Vitest-only `Standalone script-style test` phase), and the isolated React Flow card test so each surface stays in its intended lane.
 
 Replay coverage is part of the preserved verification contract. Changes to UI coverage orchestration should keep the trailing replay coverage check visible through `make test-ui-coverage` and preserve the stable `[ui-coverage]` elapsed labels for the main covered pass, isolated React Flow covered pass, blob report merge pass, standalone script-style test, and replay coverage check.
 

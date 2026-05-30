@@ -20,6 +20,7 @@ run git pull and make the workspace be up to date to remote
    - remove dead code, duplication, redundant legacy handling, and overlapping structures where the public workflow allows it
    - preserve intended public behavior unless the cleanup explicitly aims to change that behavior
    - when cleanup touches tests, prefer behavioral runtime, API, CLI, UI, or emitted-event assertions instead of meta tests about file layout, docs topology, bundle internals, or command/route inventories
+   - when cleanup ideas cite dashboard verification, use `cd ui && bun run test:unit`, `make ui-test`, or `make test-ui-coverage` for unit/coverage work and Vitest Storybook or integration commands only for those deferred lanes (see `docs/internal/development/development.md`)
    - default to one standalone cleanup idea file
    - use a batch only when one submission must create multiple work items together because the follow-up needs dependency ordering, parent-child membership, or mixed work types
 2. read the code under `./`, read recent PRs associated with your previous requests, and inspect the current checked-in workflow inputs under `factory/inputs/` to see any previous cleanup attempts that have already been made

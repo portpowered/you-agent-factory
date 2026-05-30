@@ -66,7 +66,7 @@ Run from `ui/`:
 
 - `bun run tsc`
 - `bun run lint`
-- `bun run test:unit -- --run src/i18n/messages.test.ts src/features/terminal-work/components/terminal-work-card.test.tsx src/features/terminal-work/components/terminal-work-widget.test.tsx src/App.follow-up-trace.test.tsx src/App.replay-workstation-requests.test.tsx src/features/trace-drilldown/components/trace-grid-card.replay.test.tsx src/features/import/lib/factory-png-import.test.ts src/features/import/hooks/use-factory-png-drop.test.tsx src/features/current-factory-definition/lib/workstation-editable-values.test.ts src/features/provider-session-detail/lib/provider-session-ref.test.ts src/features/workflow-activity/components/react-flow-current-activity-card-import.test.tsx src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx src/features/bento/components/dashboard-bento.test.tsx`
+- `cd ui && bun run test:unit` (full Bun unit lane; targeted paths may use `cd ui && bun test <paths>` when a story needs a narrow rerun)
 
 ## Notes
 

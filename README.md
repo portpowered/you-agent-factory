@@ -153,6 +153,21 @@ Drag the images from the examples/factories directory into the web interface's f
   </tr>
 </table>
 
+## Development
+
+Run commands from the repository root unless noted.
+
+| Goal | Command |
+| --- | --- |
+| Dashboard unit tests | `cd ui && bun run test:unit` or `make ui-test` |
+| Dashboard coverage | `make test-ui-coverage` |
+| Dashboard integration (browser) | `make ui-integration-test` |
+| Storybook browser verification | `cd ui && bun run storybook:test-runner:ci` or `make ui-test-storybook` |
+| Fast author check | `make verify-fast` |
+| Pull-request-equivalent check | `make verify-pr` |
+
+Unit and coverage lanes require Bun 1.3.12+. Storybook browser and Playwright integration stay on Vitest. See [Agent Factory development guide](docs/internal/development/development.md) for the full verification matrix.
+
 ### References
 
 - [Analysis on current projects](docs/comparatives/comparing-systems.md)
