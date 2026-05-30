@@ -258,12 +258,105 @@ Prioritized for follow-up stories in this initiative. **Impact** is qualitative 
 | 1 | Tune `UI_COVERAGE_MAIN_MAX_WORKERS` (trial 3 and 4) | **Rejected (US-004):** local w=3 slower and failed; w=4 not run | Medium (flake, OOM, mock races) | `UI_COVERAGE_MAIN_MAX_WORKERS=3 make test-ui-coverage`; default stays **2** | **US-004** ✓ |
 | 2 | Slim `App.test.tsx` / `App.*.test.tsx` (fewer redundant full-app mounts, tighter waits) | **Implemented (US-006):** layout-graph local spot **~66%** faster; aggregate serial variance | Low–medium (behavior regressions if assertions weakened) | `app-shell-test-utils.tsx`, `App.layout-graph.test.tsx`, other `App.*` | **US-006** ✓ |
 | 3 | Isolate `App.test.tsx` / `App.*` in dedicated single-worker covered phase (like React Flow) | **Rejected (US-005):** ~46% local lane regression (A+B vs baseline); main pass unchanged within noise when App files excluded | Medium (merge/threshold, phase ordering) | Trials in closeout **App shell megatest isolation trial**; keep app-shell files in main pass | **US-005** ✓ |
-| 4 | Optional CI matrix shard of main pass (directory splits, blob merge) | High on **job** wall if shards run parallel; workflow complexity | High (flake, merge, threshold gaps) | Design in closeout; implement in `ci.yml` if accepted | **US-008** |
+| 4 | Optional CI matrix shard of main pass (directory splits, blob merge) | **Rejected (US-008):** optimistic PR wall savings **~1–2m** on a **~8m52s** lane; setup/merge overhead and uneven slow-file load | High (flake, merge, threshold gaps) | Design in closeout **Optional CI sharding**; keep single `make test-ui-coverage` job | **US-008** ✓ |
 | 5 | Browser lane: narrow integration glob, shared preview, build cache (see **UI Browser Integration lane**) | None on UI Coverage lane; **~5–60s** CI lane step if B1–B2 adopted | Medium (preview contract, artifact harness) | `make ui-integration-test`; `ui/integration/browser-test-harness.mjs` | **US-007** ✓ (analysis) |
 
 **Suggested execution order:** US-004 (workers) and US-006 (App slimming) first—they touch existing phases without new workflow. US-005 only after US-002 slow-file and trial totals prove benefit. US-008 only if single-job main pass remains >~6–7 minutes after (1)–(3). US-007 stays separate so coverage work is not confused with Playwright timing.
 
-At least one implemented optimization from ranks 1–4 must show **≥15%** total lane improvement versus the baseline table with stable CI or documented local proof before the initiative’s optimization acceptance criterion is satisfied (**US-004** / **US-005** / **US-006** / **US-008**).
+At least one implemented optimization from ranks 1–4 must show **≥15%** total lane improvement versus the baseline table with stable CI or documented local proof before the initiative’s optimization acceptance criterion is satisfied (**US-004** / **US-005** / **US-006** / **US-008**). The **historical two-worker rollout** already exceeded that bar on CI (**~42%** lane step improvement, 12m40s → 7m21s); **US-006** adds further main-pass savings on hot `App.*` files without workflow changes.
+
+## Optional CI sharding for main covered pass (US-008, 2026-05-30 UTC)
+
+**Decision: reject CI matrix sharding of the main covered pass for this initiative.** Keep one `UI Coverage` job running `make test-ui-coverage` in `.github/workflows/ci.yml`. Do not add parallel shard jobs or workflow-only Vitest entrypoints until a future green CI baseline shows the main pass alone above **~6–7 minutes** *after* in-job optimizations (US-006 on CI, any further App/feature slimming) and product owners accept the workflow complexity budget.
+
+### Problem framing
+
+Sharding addresses **job-level** wall time by running disjoint subsets of the main corpus on parallel runners. It does **not** replace in-process parallelism: the runner already runs the main pass with **two** Vitest workers (`UI_COVERAGE_MAIN_MAX_WORKERS` default **2**). **US-004** showed that raising workers within one job regressed; sharding is the remaining lever to use more than two CPUs without sharing one Vitest process pool.
+
+### Single job (current)
+
+| Aspect | Detail |
+| --- | --- |
+| Workflow | One `ui-coverage` job: checkout → Go/Bun/Node setup → `make ui-deps` → `make test-ui-coverage` |
+| Main pass | ~**403s** CI; two workers; blob → `.vitest-reports/main.json` |
+| Follow-on phases (same job, sequential) | Isolated React Flow ~**126s**; blob merge ~**2s**; standalone script ~**1s**; replay check ~**0s** |
+| Lane step wall | **8m52s** (~532s phase sum) on run [`26654493647`](https://github.com/portpowered/you-agent-factory/actions/runs/26654493647) |
+| Job wall | **9m17s** (includes ~**25s** setup before the lane command) |
+| Local canonical command | `make test-ui-coverage` — same phases, labels, thresholds, and replay check as CI |
+
+### Matrix shard alternative (not implemented)
+
+A minimal **two-shard** design would split only the **main covered Vitest pass**; isolated React Flow, blob merge with thresholds, standalone script, and replay check stay **serial** after shards finish (same order as today).
+
+| Shard | Example include globs | Example blob output | File count (indicative) |
+| --- | --- | --- | ---: |
+| A | `src/App*.test.tsx`, `src/features/workflow-activity/**`, `src/features/factory-graph-editor/**`, `src/features/timeline/**` | `.vitest-reports/main-a.json` | ~70 (slow-file hotspots) |
+| B | Remaining `src/**` (components, api, i18n, other features) | `.vitest-reports/main-b.json` | ~159 |
+
+**Three-shard** directory splits (`src/features/current-selection/**` alone is **57** files but not necessarily the slowest wall time) worsen operability without measured per-directory duration tables from a fresh slow-file block.
+
+**Workflow sketch (if ever adopted):**
+
+1. `ui-coverage-shard` matrix job (`shard: [a, b]`) — same setup as today, then `UI_COVERAGE_SHARD=<id> bun run test:coverage --shard-main-only` (would require a new runner seam; **not** added in this story).
+2. Upload `.vitest-reports/main-*.json` (+ logs) per shard.
+3. `ui-coverage-merge` job — download blobs, `vitest --mergeReports .vitest-reports --coverage`, run isolated React Flow pass, standalone script, replay check, fail on threshold gaps.
+
+`make test-ui-coverage` would remain the **local** canonical full lane; CI-only sharding must not become the only documented path.
+
+### Estimated savings (CI, optimistic)
+
+Assume perfect parallel shard runtime and no new flakes:
+
+| Model | Main-pass critical path | Non-main phases | Setup / handoff | Est. lane step |
+| --- | ---: | ---: | ---: | ---: |
+| Single job (baseline) | 403s | ~129s | ~25s (once) | **~532s (8m52s)** |
+| 2 parallel shards | ~202s (403 ÷ 2) | ~129s (serial after merge) | ~50s (2× setup) + ~30–45s (artifact upload/download + merge job setup) | **~410–430s (6m50s–7m10s)** |
+| 3 parallel shards | ~135s | ~129s | ~75s setup + ~45s merge handoff | **~385–420s** (diminishing returns) |
+
+**Interpretation:** Best-case PR wall improvement is on the order of **1.5–2.5 minutes** (~**20–30%** of lane step) before accounting for imbalance. Slow-file hotspots cluster in **`src/App.*.test.tsx`** and **`src/features/workflow-activity/**`** (see US-002 summary and US-006 notes)—a naive “half the files” split puts most megatest time in **shard A**, so realistic savings are **below** the even-split row unless shards are sized by **measured** duration, not file count.
+
+### Blob merge approach (existing vs sharded)
+
+Today (`ui/scripts/ui-coverage-runner.mjs`):
+
+- Main pass writes `--outputFile.blob=.vitest-reports/main.json` with per-phase thresholds zeroed; merge pass runs `vitest --mergeReports .vitest-reports --coverage` and enforces thresholds from `ui/vite.config.ts`.
+- Isolated React Flow writes a second blob before the same merge directory.
+
+A sharded CI design would add **N** main blobs, then either:
+
+- extend `--mergeReports` inputs to all `main-*.json` before the isolated pass adds `react-flow-current-activity-card.json`, or
+- run a CI-only merge script that copies shard blobs into `.vitest-reports/` and invokes the same merge command the runner uses today.
+
+**Risks:** missing shard artifact → false-green merge or threshold gap; duplicate or omitted files across globs → coverage holes; shard env drift (different `bun.lock` cache keys are fine, but different Vitest flags are not).
+
+### Flake and contract risks
+
+| Risk | Why it matters |
+| --- | --- |
+| Uneven shard duration | Critical path follows the **slowest** shard; mis-split megatests negate parallel benefit. |
+| Threshold / merge gaps | Merged thresholds must see the **union** of all covered files; a dropped glob fails the regression contract silently until merge. |
+| Duplicate global mocks | Unlikely across processes, but shard boundaries must not double-run the same file. |
+| Artifact / merge job failures | Extra failure modes (upload, download, partial matrix) not present in single-job `command.log`. |
+| Local/CI divergence | Contributors lose “one command reproduces CI” unless `make test-ui-coverage` mirrors shard+merge or sharding stays CI-only with documented limitation. |
+
+### Rejection rationale (concrete)
+
+1. **Initiative optimization bar already met** without sharding — historical CI rollout (**US-001** / `ralph/ui-coverage-speed`) cut the lane step **~42%**; **US-006** reduces hot `App.*` cost further on comparable machines.
+2. **US-004** — more parallelism inside one job **regressed**; sharding multiplies jobs but does not fix jsdom/V8 contention inside heavy files.
+3. **US-005** — serial isolation of megatests **regressed** total lane time; sharding does not remove serial React Flow (~**126s** CI) or merge/replay phases.
+4. **Overhead vs upside** — duplicated checkout/setup (~**25s** per shard) and artifact merge handoff consume a large fraction of the **~200s** theoretical main-pass half on two shards; optimistic net savings (**~1–2m**) do not justify new workflow surfaces while the lane is already **~9m** job wall.
+5. **Imbalance without duration-based planning** — file counts per directory do not predict wall time (`src/features/current-selection` has many files; **`App.*`** and **workflow-activity** dominate slow-file output).
+6. **Contract preservation** — ranked proposal guardrails require keeping `make test-ui-coverage` canonical; sharding needs runner/CI co-design, not YAML-only splits.
+
+### Re-open criteria
+
+Re-evaluate matrix sharding when **all** are true:
+
+- Green CI `make test-ui-coverage` shows main pass **≥ ~360s** (~6m) **after** US-006-class slimming is on `main`, and
+- Slow-file or per-directory timing tables justify **duration-balanced** shards (not file-count splits), and
+- Maintainers accept a merge job + artifact contract test in `ui/scripts/ui-coverage-runner.test.mjs` (or adjacent CI script tests).
+
+Until then, prefer **US-006**-style per-file slimming and browser-lane proposals (**US-007**) over workflow sharding.
 
 ## Approaches not recommended
 
@@ -275,6 +368,7 @@ At least one implemented optimization from ranks 1–4 must show **≥15%** tota
 | Merge isolated React Flow pass back into main pass without flake evidence | Prior isolation exists because combined runs were unstable; reversing requires CI proof, not assumption. |
 | Disable V8 coverage or run main pass without `--coverage` | Would invalidate the lane’s purpose; use non-coverage `vitest` targets for dev iteration only. |
 | Rely on local arm64 wall time alone for rollout decisions | Local baseline in this doc was ~15m33s vs ~8m52s CI for the same commit—optimize against **CI** tables when estimating PR cost. |
+| CI matrix shard of the main covered pass without runner support | Rejected in **Optional CI sharding (US-008)** — marginal PR wall savings vs duplicated setup/merge cost, uneven megatest load, and local/CI divergence; keep single `make test-ui-coverage` job. |
 
 ## Historical rollout (first speedup, `ralph/ui-coverage-speed`)
 
