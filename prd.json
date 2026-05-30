@@ -1,29 +1,30 @@
 {
-  "project": "Service Runtime State Consolidation (S2)",
-  "branchName": "ralph/service-runtime-state-consolidation",
-  "description": "Make the factory session registry the sole source of truth for live runtimes: register ~default like other sessions, route reads and activation through session handles, share one runtime bundle type, and remove authoritative shadow runtime fields from FactoryService without changing API or session semantics.",
+  "project": "UI API Module Cleanup (Recovery v2)",
+  "branchName": "ralph/ui-api-module-cleanup-recovery-v2",
+  "description": "Consolidate dashboard session factory GET/PUT into ui/src/api/session-factory/, retire legacy createFactory/POST /factories surfaces, thin current-factory-definition wrappers, and document normalization-only and prompt-template boundaries—without changing operator-visible editor, import, or export behavior.",
   "context": {
-    "customerAsk": "Session registry as sole runtime truth; drop duplicate FactoryService fields. Full spec: tasks/prd-service-runtime-state-consolidation.md",
-    "problem": "FactoryService still mirrors the active runtime in top-level fields while multi-session work already lives in factorysessions.Registry handles. That duplication lets work submit, factory save, snapshots, and idle checks target the wrong session or update the service root when a non-default session is active.",
-    "solution": "Incrementally route all runtime access through the session registry and liveRuntimeHandle, unify activation on replaceSessionRuntime, collapse build and live bundle types, then remove authoritative top-level runtime fields while preserving API, CLI, and session open/close behavior."
+    "customerAsk": "Retrigger if ui-session-factory-client-recovery (v1) stalls. Full spec: tasks/prd-ui-api-module-cleanup.md (U7 UI API module cleanup).",
+    "problem": "Session factory HTTP is split across current-factory-definition and named-factory with overlapping GET/PUT, a misleading createFactory export, duplicate getCurrentFactory fetch logic, and unclear ownership for factory-definition normalization versus prompt-template routes.",
+    "solution": "Establish session-factory as the sole HTTP owner for session factory GET/PUT with typed errors and tests; delegate current-factory-definition; migrate import/export activation off createFactory; document factory-definition as normalization-only; group or cross-link prompt-template routes while preserving existing URL shapes and UX."
   },
   "acceptanceCriteria": [
-    "Every live runtime including ~default is registered in factorysessions.Registry with a liveRuntimeHandle; production code does not treat top-level FactoryService runtime fields as authoritative.",
-    "Work submission, engine snapshots, events, and idle checks scoped by session_id observe only that session's factory and artifacts; concurrent multi-session isolation is preserved.",
-    "Runtime replacement after persist uses session-scoped activation and writes the current-factory pointer under the targeted session root.",
-    "Process restart restores only ~default; additional live sessions remain ephemeral with no behavior change from today.",
-    "No OpenAPI request or response shape changes.",
-    "Typecheck, lint, and project tests pass."
+    "All dashboard session factory GET/PUT uses ui/src/api/session-factory/ with { mode, factory } bodies and shared transport helpers.",
+    "Editor save and import confirm (replace current / create new named) behave as before, including stale-version and not-idle errors.",
+    "No production or integration test path issues POST /factories for factory activation.",
+    "factory-definition performs normalization only with no fetch-based network I/O.",
+    "Session-scoped prompt-template HTTP is discoverable under the session-factory family without changing route paths.",
+    "Quality gate: UI typecheck, lint, and targeted tests pass for all touched modules."
   ],
   "userStories": [
     {
-      "id": "service-runtime-state-consolidation-001",
-      "title": "One runtime bundle shape for build and live handles",
-      "description": "As a maintainer, I want a single runtime bundle type so build output and live session handles cannot drift when runtime wiring grows.",
+      "id": "ui-api-module-cleanup-recovery-v2-001",
+      "title": "Session factory HTTP owner",
+      "description": "As a frontend maintainer, I want one module that performs session factory GET and PUT so transport, paths, and error codes are not duplicated.",
       "acceptanceCriteria": [
-        "Building a runtime for service startup or session open returns one shared bundle type carrying factory, net, listener, loaded config, logger, event history, local models, recording, and related sidecars.",
-        "liveRuntimeHandle references that shared type; adding a new runtime sidecar requires updating one struct definition.",
-        "Existing service build and replay tests that start a runtime continue to pass without relaxed assertions.",
+        "getSessionFactory(sessionID) issues GET to /factory-sessions/{session_id}/factory via factoryAPIURL and currentFactorySessionPath",
+        "saveSessionFactory({ sessionID, mode?, factory }) issues PUT with body { mode?: REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE, factory } and version rules matching current editor save behavior",
+        "Typed errors expose STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, INVALID_FACTORY, INVALID_FACTORY_NAME, and NOT_FOUND",
+        "Colocated unit tests assert method, path, and request body for default and non-default session IDs",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -32,79 +33,79 @@
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-002",
-      "title": "Default session lives in the registry at startup",
-      "description": "As an operator running a single factory, I want the default session registered the same way as named sessions so session targeting is uniform from the first request.",
+      "id": "ui-api-module-cleanup-recovery-v2-002",
+      "title": "Editor save and load use the session factory owner",
+      "description": "As a factory editor, I want saving and loading the current factory to behave exactly as today while the API layer delegates to the session factory module.",
       "acceptanceCriteria": [
-        "After BuildFactoryService and service run, ~default is present in the session registry with a live handle pointing at the started factory directory.",
-        "Default session registration uses the same registerLiveSession path as OpenFactorySession, not a parallel service-only runtime slot.",
-        "runState.sessionID matches the registry entry used for ~default while the default runtime is active.",
+        "getCurrentFactoryDocument, saveCurrentFactoryDocument, and saveFactoryForSessionDocument delegate to session-factory without changing wire semantics",
+        "useCurrentFactoryDefinition and useSaveCurrentFactory keep existing React Query keys unless regression tests require a documented change",
+        "Stale-version and not-idle failures surface with the same user-visible messages in covered save-flow tests",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-003",
-      "title": "Runtime operations target the requested session",
-      "description": "As a dashboard user with multiple factory tabs, I want work, snapshots, and idle checks for each session_id to use only that session's runtime so sessions cannot leak into one another.",
+      "id": "ui-api-module-cleanup-recovery-v2-003",
+      "title": "Import activation uses session PUT only",
+      "description": "As a dashboard operator, I want factory PNG import confirm (replace current vs create new named) to keep working without any legacy factory-create endpoint.",
       "acceptanceCriteria": [
-        "Submitting work to session A records artifacts and dispatch identifiers only for session A; session B's replay and log artifacts do not contain session A work.",
-        "Engine snapshot and factory read APIs scoped by session_id return data from that session's factory directory, not another live session's directory.",
-        "Idle checks used before factory activation apply to the session being saved or opened, not whichever session was selected last on the service root.",
-        "pkg/api session-scoped routing tests continue to pass: mutations and reads for session-beta do not invoke default-session factories.",
+        "Replace-current import issues GET then PUT REPLACE_CURRENT with the current session factory name preserved",
+        "Create-new-named import issues PUT UPSERT_NAMED_AND_ACTIVATE with suffixed naming on collision matching today's confirm dialog resolved name",
+        "createFactory is removed from the public API surface (or throws in development builds only until callers migrate—prefer full removal)",
+        "App.import.test.tsx and import hook tests complete without any mocked or real POST /factories activation call",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser: drop a factory PNG, confirm replace-current and create-new-named both activate on default and a non-default session tab"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-004",
-      "title": "Runtime replacement is always session-scoped",
-      "description": "As a maintainer, I want every runtime swap after persist to stop the prior handle for the same session and start the replacement under that session's root.",
+      "id": "ui-api-module-cleanup-recovery-v2-004",
+      "title": "Export and duplicate GET paths use session factory owner",
+      "description": "As a dashboard operator, I want exporting the current factory to keep working while the client stops maintaining a second raw GET implementation.",
       "acceptanceCriteria": [
-        "Factory definition save, OpenFactorySession, and named-factory activation call replaceSessionRuntime with the session idle guard, not the legacy global activation entry point.",
-        "When replacing the factory for a non-default session, the current-factory pointer is written under that session's SessionFactoryRootDir, not only the service host root.",
-        "A successful replacement stops the previous live handle for the same session before registering the successor; other live sessions keep running.",
-        "Service-mode sidecar start and stop behavior is unchanged (poller, cron, and related service tests still pass).",
+        "getCurrentFactory for export reads through session-factory or current-factory-definition delegation with no standalone fetch duplicate in named-factory",
+        "Export error mapping remains consistent for network, not-found, and invalid-response cases covered by export hook tests",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-005",
-      "title": "FactoryService no longer mirrors live runtime state",
-      "description": "As a reviewer, I want FactoryService to hold wiring and session orchestration only, so there is one obvious place to find the live runtime for a session.",
+      "id": "ui-api-module-cleanup-recovery-v2-005",
+      "title": "Normalization-only factory-definition boundary",
+      "description": "As a contributor, I want it obvious that factory-definition shapes data but never performs HTTP.",
       "acceptanceCriteria": [
-        "Top-level factory, net, listener, runtimeCfg, and related runtime fields are removed or reduced to thin delegators that read the selected or requested session handle.",
-        "Runtime swap for a session updates only that session's registry entry and runState for that session; no production path writes the same swap to both top-level fields and the session handle.",
-        "Default and named-session behavior for submit, pause, wait-for-complete, and model catalog APIs remains unchanged from the caller's perspective.",
+        "factory-definition/api.ts contains no fetch calls and no transport.ts imports used for network I/O",
+        "Module-level documentation states normalization lives here and session HTTP lives under session-factory",
+        "Existing normalization tests pass without behavior change",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-006",
-      "title": "Restart behavior documented for operators",
-      "description": "As an operator running multiple UI tabs, I need clear documentation of which sessions survive a process restart so I do not assume ephemeral tabs are restored.",
+      "id": "ui-api-module-cleanup-recovery-v2-006",
+      "title": "Session-scoped prompt template routes are discoverable",
+      "description": "As a maintainer, I want prompt-template HTTP grouped with session factory routes so I do not search unrelated API folders.",
       "acceptanceCriteria": [
-        "Internal maintainer documentation states that only ~default is restored when the service process restarts; additional live sessions opened before restart are ephemeral and must be reopened.",
-        "TestFactoryService_Run_RestartsOnlyDefaultSession continues to pass without changing expected session count or default runtime directory after restart.",
+        "Prompt-template GET/PUT remains on currentFactorySessionPath plus workstation segment with no URL change",
+        "Either current-factory-prompt-template moves under session-factory/prompt-template/ or session-factory/index.ts documents and re-exports the sibling with stable feature import paths",
+        "Prompt-template hook tests pass for success, not-found, and network error cases",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

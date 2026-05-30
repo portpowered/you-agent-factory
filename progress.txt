@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Session factory GET/PUT HTTP belongs in `ui/src/api/session-factory/` (`getSessionFactory`, `saveSessionFactory` with `{ mode, factory }` bodies, `baseVersion`/`includeVersion` for version rules); typed errors in `session-factory/errors.ts` use API codes `STALE_FACTORY_VERSION`, `FACTORY_NOT_IDLE`, `INVALID_FACTORY`, `INVALID_FACTORY_NAME`, and `NOT_FOUND` (not `INVALID_FACTORY_DEFINITION`). Story 002+ should delegate `current-factory-definition` through this module instead of duplicating fetch logic.
 - `buildRuntimeBundle` in `pkg/service/factory_build.go` returns `factoryRuntimeBundle`, the single runtime wiring struct referenced from `liveRuntimeHandle`; add new runtime sidecars on `factoryRuntimeBundle` only—startup (`BuildFactoryService`) and `buildReplacementFactoryRuntime` both create `logSink` and session loggers inside `buildRuntimeBundle`, not after the fact.
 - Register every live session (including `~default` at `Run` startup and `OpenFactorySession` launches) through `registerLiveSession` in `pkg/service/runtime_sessions.go` with explicit `FactorySessionTarget` metadata; use `defaultSessionTargetFromRuntimeBundle` for default startup—do not call `sessions.Upsert` directly except in `replaceSessionRuntime` replacement updates.
 - Route session-scoped work, snapshots, idle guards, and record/replay paths through `SubmitWorkRequestForSession`, `GetEngineStateSnapshotForSession`, and `requireIdleRuntimeForSession` in `pkg/service/runtime_sessions.go`; use `sessionScopedRecordPath` for per-session replay artifacts—do not read `fs.currentFactory()` when `session_id` is explicit.
@@ -593,4 +594,13 @@
   - Patterns discovered: After `main` advances, re-merge can conflict only in `activateReplacementWithoutLiveRuntime` when main still has pre-consolidation replacement helpers—keep branch session-registry paths, not `swapActiveRuntime`.
   - Gotchas encountered: `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING` blocks CI even when local tests pass; push a conflict-free merge before waiting on checks.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories `passes: true`; prior BLOCKING merge-conflict + missing CI items addressed on head `77399175`.
+---
+
+## 2026-05-31T02:53:00Z - ui-api-module-cleanup-recovery-v2-001
+- What was implemented: Added `ui/src/api/session-factory/` as the HTTP owner for session factory GET/PUT with `getSessionFactory`, `saveSessionFactory`, typed `SessionFactoryAPIError` codes, colocated transport and error-mapping tests for default and non-default sessions, and a development-guide inventory row.
+- Files changed: `ui/src/api/session-factory/{api,errors,messages,index}.ts`, `ui/src/api/session-factory/{api,api.errors}.test.ts`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep version increment and normalization in `session-factory/api.ts`; map normalization failures to `INVALID_FACTORY` (not `INVALID_FACTORY_DEFINITION`) on the session-factory error surface; split error-code regressions into `api.errors.test.ts` when `saveSessionFactory` describe approaches Biome's 100-line cap.
+  - Gotchas encountered: `SessionFactoryAPIError` must be imported from `./errors` in tests—`./api` does not re-export the class for `toBeInstanceOf`.
+  - Useful context: Story 002 should thin `current-factory-definition/api.ts` to delegate to `getSessionFactory` / `saveSessionFactory` without changing wire semantics; no PR exists yet on `ralph/ui-api-module-cleanup-recovery-v2`.
 ---
