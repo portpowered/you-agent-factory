@@ -113,7 +113,14 @@ func Submit(cfg SubmitConfig) error {
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d traceId=%s", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody), result.TraceId)
 
 	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(result)
+		return writeJSONSubmitSuccess(
+			cfg.Output,
+			result,
+			endpointPath,
+			name,
+			cfg.WorkTypeName,
+			clidiag.SessionLabel(cfg.SessionID),
+		)
 	}
 	return writeHumanSubmitSuccess(cfg.Output, result, name, cfg.WorkTypeName)
 }

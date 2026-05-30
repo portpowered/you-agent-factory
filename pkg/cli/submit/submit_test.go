@@ -280,11 +280,19 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	}
 }
 
-func TestSubmit_JSONStdoutEmitsSubmitWorkResponse(t *testing.T) {
+func TestSubmit_JSONStdoutEmitsStableSuccessEnvelope(t *testing.T) {
+	workID := "batch-req-1-json-submit"
+	name := "json-submit"
+	workType := "task"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "json-trace-1"}); err != nil {
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{
+			TraceId:      "json-trace-1",
+			WorkId:       &workID,
+			Name:         &name,
+			WorkTypeName: &workType,
+		}); err != nil {
 			t.Errorf("encode submit response: %v", err)
 		}
 	}))
@@ -308,12 +316,91 @@ func TestSubmit_JSONStdoutEmitsSubmitWorkResponse(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	var result factoryapi.SubmitWorkResponse
-	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
-		t.Fatalf("stdout is not valid SubmitWorkResponse JSON: %v\n%s", err, out.String())
+	var envelope SubmitSuccessResult
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatalf("stdout is not valid submit success JSON: %v\n%s", err, out.String())
 	}
-	if result.TraceId != "json-trace-1" {
-		t.Fatalf("traceId = %q, want json-trace-1", result.TraceId)
+	if envelope.WorkID == nil || *envelope.WorkID != workID {
+		t.Fatalf("workId = %v, want %q", envelope.WorkID, workID)
+	}
+	if envelope.Name != name {
+		t.Fatalf("name = %q, want %q", envelope.Name, name)
+	}
+	if envelope.WorkTypeName != workType {
+		t.Fatalf("workTypeName = %q, want %q", envelope.WorkTypeName, workType)
+	}
+	if envelope.TraceID != "json-trace-1" {
+		t.Fatalf("traceId = %q, want json-trace-1", envelope.TraceID)
+	}
+	if envelope.SessionID != "~default" {
+		t.Fatalf("sessionId = %q, want ~default", envelope.SessionID)
+	}
+	if envelope.EndpointPath != "/factory-sessions/~default/work" {
+		t.Fatalf("endpointPath = %q, want /factory-sessions/~default/work", envelope.EndpointPath)
+	}
+	for _, forbidden := range []string{"requestId", "accepted"} {
+		if strings.Contains(out.String(), forbidden) {
+			t.Fatalf("stdout leaked API field %q:\n%s", forbidden, out.String())
+		}
+	}
+}
+
+func TestSubmit_JSONStdoutEmitsSessionScopedEndpointPath(t *testing.T) {
+	sessionID := "session-beta"
+	traceID := "scoped-json-trace"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/session-beta/work" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{
+			TraceId:   traceID,
+			SessionId: &sessionID,
+		}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"scoped json task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Submit(SubmitConfig{
+		Name:         "scoped-json-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		SessionID:    sessionID,
+		JSON:         true,
+		Output:       &out,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	var envelope SubmitSuccessResult
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatalf("stdout is not valid submit success JSON: %v\n%s", err, out.String())
+	}
+	if envelope.TraceID != traceID {
+		t.Fatalf("traceId = %q, want %q", envelope.TraceID, traceID)
+	}
+	if envelope.SessionID != sessionID {
+		t.Fatalf("sessionId = %q, want %q", envelope.SessionID, sessionID)
+	}
+	if envelope.EndpointPath != "/factory-sessions/session-beta/work" {
+		t.Fatalf("endpointPath = %q, want /factory-sessions/session-beta/work", envelope.EndpointPath)
+	}
+	if envelope.Name != "scoped-json-submit" {
+		t.Fatalf("name = %q, want scoped-json-submit", envelope.Name)
+	}
+	if envelope.WorkTypeName != "task" {
+		t.Fatalf("workTypeName = %q, want task", envelope.WorkTypeName)
 	}
 }
 
