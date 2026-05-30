@@ -11,63 +11,64 @@ import (
 
 func TestMinimalFactoryConfig_WriteReadSmoke(t *testing.T) {
 	dir := t.TempDir()
-	cfg := MinimalFactoryConfig()
-	WriteFactoryJSON(t, dir, cfg)
+	WriteFactoryJSON(t, dir, MinimalFactoryConfig())
+	assertWrittenFactoryJSONSmoke(t, dir)
+}
 
+func assertWrittenFactoryJSONSmoke(t *testing.T, dir string) {
+	t.Helper()
+	got := readFactoryJSONMap(t, dir)
+	assertFactoryJSONTopLevelKeys(t, got)
+	assertFactoryJSONName(t, got, "factory")
+	assertFactoryJSONTaskInitState(t, got)
+	assertFactoryJSONProcessInputWiring(t, got)
+}
+
+func readFactoryJSONMap(t *testing.T, dir string) map[string]any {
+	t.Helper()
 	path := filepath.Join(dir, interfaces.FactoryConfigFile)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", path, err)
 	}
-
 	var got map[string]any
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unmarshal factory.json: %v", err)
 	}
+	return got
+}
+
+func assertFactoryJSONTopLevelKeys(t *testing.T, got map[string]any) {
+	t.Helper()
 	for _, key := range []string{"name", "workTypes", "workers", "workstations"} {
 		if _, ok := got[key]; !ok {
 			t.Fatalf("factory.json missing top-level key %q", key)
 		}
 	}
-	if got["name"] != "factory" {
-		t.Fatalf("factory name = %v, want factory", got["name"])
-	}
+}
 
-	workTypes, ok := got["workTypes"].([]any)
-	if !ok || len(workTypes) != 1 {
-		t.Fatalf("workTypes = %#v, want one task work type", got["workTypes"])
+func assertFactoryJSONName(t *testing.T, got map[string]any, want string) {
+	t.Helper()
+	if got["name"] != want {
+		t.Fatalf("factory name = %v, want %s", got["name"], want)
 	}
-	task, ok := workTypes[0].(map[string]any)
-	if !ok || task["name"] != "task" {
-		t.Fatalf("task work type = %#v, want name task", workTypes[0])
-	}
+}
+
+func assertFactoryJSONTaskInitState(t *testing.T, got map[string]any) {
+	t.Helper()
+	task := soleMapEntryNamed(t, got["workTypes"], "workTypes", "task")
 	states, ok := task["states"].([]any)
 	if !ok {
 		t.Fatalf("task states = %#v, want array", task["states"])
 	}
-	foundInit := false
-	for _, state := range states {
-		entry, ok := state.(map[string]any)
-		if !ok {
-			continue
-		}
-		if entry["name"] == "init" && entry["type"] == "INITIAL" {
-			foundInit = true
-			break
-		}
-	}
-	if !foundInit {
+	if !hasStateNamed(states, "init", "INITIAL") {
 		t.Fatalf("task states = %#v, want init INITIAL state", states)
 	}
+}
 
-	workstations, ok := got["workstations"].([]any)
-	if !ok || len(workstations) != 1 {
-		t.Fatalf("workstations = %#v, want one process workstation", got["workstations"])
-	}
-	process, ok := workstations[0].(map[string]any)
-	if !ok || process["name"] != "process" {
-		t.Fatalf("process workstation = %#v, want name process", workstations[0])
-	}
+func assertFactoryJSONProcessInputWiring(t *testing.T, got map[string]any) {
+	t.Helper()
+	process := soleMapEntryNamed(t, got["workstations"], "workstations", "process")
 	inputs, ok := process["inputs"].([]any)
 	if !ok || len(inputs) != 1 {
 		t.Fatalf("process inputs = %#v, want task init wiring", process["inputs"])
@@ -76,4 +77,30 @@ func TestMinimalFactoryConfig_WriteReadSmoke(t *testing.T) {
 	if !ok || input["workType"] != "task" || input["state"] != "init" {
 		t.Fatalf("process input = %#v, want task init", inputs[0])
 	}
+}
+
+func soleMapEntryNamed(t *testing.T, entries any, label, name string) map[string]any {
+	t.Helper()
+	list, ok := entries.([]any)
+	if !ok || len(list) != 1 {
+		t.Fatalf("%s = %#v, want one entry", label, entries)
+	}
+	entry, ok := list[0].(map[string]any)
+	if !ok || entry["name"] != name {
+		t.Fatalf("%s entry = %#v, want name %s", label, list[0], name)
+	}
+	return entry
+}
+
+func hasStateNamed(states []any, name, stateType string) bool {
+	for _, state := range states {
+		entry, ok := state.(map[string]any)
+		if !ok {
+			continue
+		}
+		if entry["name"] == name && entry["type"] == stateType {
+			return true
+		}
+	}
+	return false
 }
