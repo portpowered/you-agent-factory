@@ -135,6 +135,47 @@ describe("replayWorldStateSupport syncCompletedDispatchAttempt", () => {
 });
 
 describe("replayWorldStateSupport syncCompletedDispatchAttempt provider sessions", () => {
+  it("appends provider sessions when syncing a new session id", () => {
+    const state = emptyState();
+    state.completedDispatches.push({
+      consumedTokens: [],
+      dispatchID: "dispatch-new-session",
+      diagnostics: {},
+      durationMillis: 1,
+      endTime: "2026-05-30T12:00:01.000Z",
+      inputItems: [],
+      outcome: "SUCCEEDED",
+      outputItems: [],
+      outputMutations: [],
+      providerSession: {
+        id: "session-new",
+        kind: "session_id",
+        provider: "openai",
+      },
+      resources: [],
+      startedAt: "2026-05-30T12:00:00.000Z",
+      systemOnly: false,
+      traceIDs: [],
+      transitionID: "review",
+      workIDs: [],
+      workItems: [],
+    });
+    syncCompletedDispatchAttempt(state, "dispatch-new-session", {
+      dispatch_id: "dispatch-new-session",
+      inference_request_id: "attempt-1",
+      prompt: "p",
+      provider_session: {
+        id: "session-new",
+        kind: "session_id",
+        provider: "openai",
+      },
+      request_time: "2026-05-30T12:00:00.000Z",
+      transition_id: "review",
+    });
+    expect(state.providerSessions).toHaveLength(1);
+    expect(state.providerSessions[0]?.provider_session?.id).toBe("session-new");
+  });
+
   it("does not duplicate provider sessions already recorded on the state", () => {
     const state = emptyState();
     state.completedDispatches.push({

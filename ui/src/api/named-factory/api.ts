@@ -6,22 +6,16 @@ import {
   saveFactoryForSessionDocument,
   type CurrentFactoryDocument,
 } from "../current-factory-definition";
+import { currentFactoryDefinitionAPIErrorMessages } from "../current-factory-definition/messages";
 import {
   listFactorySessions,
   openFactorySession,
 } from "../factory-sessions";
-import { currentFactorySessionPath } from "../session-routing";
 import {
   extractNamedFactoryNamesFromSessionTargets,
   resolveImportCreateFactoryName,
-  type FactoryImportSaveChoice,
 } from "./import-save-mode";
-import { factoryAPIURL } from "../baseUrl";
-import {
-  extractAPIErrorPayload,
-  isAPIRecord,
-  readAPIResponseBody,
-} from "../transport";
+import { extractAPIErrorPayload } from "../transport";
 
 export type FactoryValue = components["schemas"]["Factory"];
 
@@ -41,11 +35,6 @@ export interface NamedFactoryAPIErrorDetails {
   responseBody?: unknown;
   status?: number;
   statusText?: string;
-}
-
-export interface CreateFactoryOptions {
-  fetch?: typeof globalThis.fetch;
-  sessionID?: string | null;
 }
 
 export interface GetCurrentFactoryOptions {
@@ -92,40 +81,6 @@ export class NamedFactoryAPIError extends Error {
   }
 }
 
-export async function createFactory(
-  value: FactoryValue,
-  options: CreateFactoryOptions = {},
-): Promise<FactoryValue> {
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
-
-  if (typeof fetchImplementation !== "function") {
-    throw new NamedFactoryAPIError("Named factory activation is unavailable in this environment.", {
-      code: "NETWORK_ERROR",
-    });
-  }
-
-  const { version: _version, ...factoryWithoutVersion } = value;
-
-  let savedDocument: CurrentFactoryDocument;
-  try {
-    savedDocument = await saveFactoryForSessionDocument(
-      {
-        factoryDefinition: factoryWithoutVersion,
-        includeVersion: false,
-        mode: "UPSERT_NAMED_AND_ACTIVATE",
-      },
-      {
-        fetch: fetchImplementation,
-        sessionID: options.sessionID,
-      },
-    );
-  } catch (error) {
-    throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
-  }
-
-  return toActivatedFactoryValue(savedDocument);
-}
-
 export async function getCurrentFactory(
   options: GetCurrentFactoryOptions = {},
 ): Promise<FactoryValue> {
@@ -137,45 +92,15 @@ export async function getCurrentFactory(
     });
   }
 
-  let response: Response;
   try {
-    response = await fetchImplementation(
-      factoryAPIURL(currentFactorySessionPath(options.sessionID)),
-      {
-        method: "GET",
-      },
-    );
+    const document = await getCurrentFactoryDocument({
+      fetch: fetchImplementation,
+      sessionID: options.sessionID,
+    });
+    return toActivatedFactoryValue(document);
   } catch (error) {
-    throw new NamedFactoryAPIError("The dashboard could not reach the current factory API.", {
-      code: "NETWORK_ERROR",
-      responseBody: error,
-    });
+    throw toNamedFactoryAPIErrorForExport(error);
   }
-
-  const responseBody = await readAPIResponseBody(response);
-  if (!response.ok) {
-    const errorBody = extractAPIErrorPayload(responseBody);
-    throw new NamedFactoryAPIError(
-      errorBody?.message ?? "The current factory API rejected the request.",
-      {
-        code: normalizeNamedFactoryAPIErrorCode(errorBody?.code),
-        responseBody,
-        status: response.status,
-        statusText: response.statusText,
-      },
-    );
-  }
-
-  if (!isFactoryValue(responseBody)) {
-    throw new NamedFactoryAPIError("The current factory API returned an invalid response.", {
-      code: "INTERNAL_ERROR",
-      responseBody,
-      status: response.status,
-      statusText: response.statusText,
-    });
-  }
-
-  return responseBody;
 }
 
 export async function activateImportedFactoryForSession(
@@ -300,6 +225,14 @@ function normalizeSessionID(sessionID: string | null | undefined): string {
   return trimmed ? trimmed : "~default";
 }
 
+const namedFactoryExportAPIErrorMessages = {
+  invalidResponse: "The current factory API returned an invalid response.",
+  network: "The dashboard could not reach the current factory API.",
+  rejectedRequest: "The current factory API rejected the request.",
+  unavailableInEnvironment:
+    "Current factory export is unavailable in this environment.",
+} as const;
+
 function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFactoryAPIErrorCode {
   switch (code) {
     case "BAD_REQUEST":
@@ -317,14 +250,6 @@ function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFacto
   }
 }
 
-function isFactoryValue(value: unknown): value is FactoryValue {
-  return (
-    isAPIRecord(value) &&
-    typeof value.name === "string" &&
-    value.factory === undefined
-  );
-}
-
 function toImportedFactoryDefinition(
   importedFactory: FactoryValue,
   sessionFactoryName: string,
@@ -339,6 +264,50 @@ function toImportedFactoryDefinition(
 function toActivatedFactoryValue(document: CurrentFactoryDocument): FactoryValue {
   const { version: _version, ...factoryValue } = document;
   return factoryValue;
+}
+
+function toNamedFactoryAPIErrorForExport(error: unknown): NamedFactoryAPIError {
+  if (error instanceof CurrentFactoryDefinitionError) {
+    return new NamedFactoryAPIError(
+      mapCurrentFactoryDefinitionErrorMessageForExport(error),
+      {
+        code: resolveNamedFactoryAPIErrorCode(error),
+        responseBody: error.responseBody,
+        status: error.status,
+        statusText: error.statusText,
+      },
+    );
+  }
+
+  return toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
+}
+
+function mapCurrentFactoryDefinitionErrorMessageForExport(
+  error: CurrentFactoryDefinitionError,
+): string {
+  switch (error.message) {
+    case currentFactoryDefinitionAPIErrorMessages.network:
+      return namedFactoryExportAPIErrorMessages.network;
+    case currentFactoryDefinitionAPIErrorMessages.unavailableInEnvironment:
+      return namedFactoryExportAPIErrorMessages.unavailableInEnvironment;
+    case currentFactoryDefinitionAPIErrorMessages.invalidResponse:
+      return namedFactoryExportAPIErrorMessages.invalidResponse;
+    case currentFactoryDefinitionAPIErrorMessages.rejectedRequest:
+      return namedFactoryExportAPIErrorMessages.rejectedRequest;
+    default:
+      return error.message;
+  }
+}
+
+function resolveNamedFactoryAPIErrorCode(
+  error: CurrentFactoryDefinitionError,
+): NamedFactoryAPIErrorCode {
+  const errorBody = extractAPIErrorPayload(error.responseBody);
+  if (typeof errorBody?.code === "string") {
+    return normalizeNamedFactoryAPIErrorCode(errorBody.code);
+  }
+
+  return normalizeNamedFactoryAPIErrorCodeFromCurrentFactoryDefinition(error.code);
 }
 
 function toNamedFactoryAPIErrorFromCurrentFactoryDefinition(

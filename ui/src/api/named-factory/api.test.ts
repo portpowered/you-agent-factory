@@ -7,115 +7,12 @@ import {
 import {
   activateImportedFactoryAsNewNamedForSession,
   activateImportedFactoryForSession,
-  createFactory,
   discoverSessionNamedFactoryNames,
   getCurrentFactory,
   NamedFactoryAPIError,
 } from "./api";
 
 describe("factory API", () => {
-  it("upserts a named factory through PUT /factory-sessions/~default/factory with UPSERT_NAMED_AND_ACTIVATE", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          name: "Dropped Factory",
-          workTypes: [],
-          workers: [],
-          workstations: [],
-          version: {
-            logical: "1",
-            physical: "2026-05-18T14:41:00Z",
-          },
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          status: 200,
-        },
-      ),
-    );
-
-    await expect(
-      createFactory(
-        {
-          name: "Dropped Factory",
-          workTypes: [],
-          workers: [],
-          workstations: [],
-        },
-        { fetch: fetchMock },
-      ),
-    ).resolves.toEqual({
-      name: "Dropped Factory",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-    });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/factory-sessions/~default/factory",
-      expect.objectContaining({
-        body: JSON.stringify({
-          mode: "UPSERT_NAMED_AND_ACTIVATE",
-          factory: {
-            name: "Dropped Factory",
-            workTypes: [],
-            workers: [],
-            workstations: [],
-          },
-        }),
-        headers: {
-          "content-type": "application/json",
-        },
-        method: "PUT",
-      }),
-    );
-  });
-
-  it("maps structured upsert failures into a typed API error", async () => {
-    await expect(
-      createFactory(
-        {
-          name: "Dropped Factory",
-          workTypes: [],
-          workers: [],
-          workstations: [],
-        },
-        {
-          fetch: vi.fn().mockResolvedValue(
-            new Response(
-              JSON.stringify({
-                code: "FACTORY_NOT_IDLE",
-                message:
-                  "Current factory runtime must be idle before activation.",
-              }),
-              {
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                status: 409,
-                statusText: "Conflict",
-              },
-            ),
-          ),
-        },
-      ),
-    ).rejects.toEqual(
-      new NamedFactoryAPIError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-          status: 409,
-          statusText: "Conflict",
-          responseBody: {
-            code: "FACTORY_NOT_IDLE",
-            message: "Current factory runtime must be idle before activation.",
-          },
-        },
-      ),
-    );
-  });
-
   it("reads the current factory as a direct canonical factory payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -124,6 +21,7 @@ describe("factory API", () => {
           workTypes: [],
           workers: [],
           workstations: [],
+          version: defaultSessionFactoryVersion,
         }),
         {
           headers: {
@@ -160,6 +58,7 @@ describe("factory API", () => {
           workTypes: [],
           workers: [],
           workstations: [],
+          version: defaultSessionFactoryVersion,
         }),
         {
           headers: {
