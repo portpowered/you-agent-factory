@@ -1,10 +1,7 @@
-import type { components } from "../../../api/generated/openapi";
 import {
   getWorkContentInspectMessages,
   type WorkContentPartTypeLabels,
 } from "../messages/work-content";
-
-export type WorkContentPartType = components["schemas"]["WorkContentPartType"];
 
 const PART_TYPE_LABEL_KEYS: Record<string, keyof WorkContentPartTypeLabels> = {
   AUDIO: "audio",
