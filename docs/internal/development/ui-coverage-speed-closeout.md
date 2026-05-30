@@ -84,6 +84,43 @@ UI_COVERAGE_MAIN_MAX_WORKERS=4 make test-ui-coverage 2>&1 | rg '\[ui-coverage\].
 
 Follow-up optimization effort should shift to **US-005** / **US-006** (megatest isolation and App slimming), not default worker increases.
 
+## App shell megatest isolation trial (US-005, 2026-05-30 UTC)
+
+**Decision: do not add a dedicated covered pass for `src/App.test.tsx` or a bundled `src/App.*.test.tsx` isolation phase.** Keep all app-shell regression files in the main covered pass with the default two workers.
+
+### Corpus note
+
+`src/App.test.tsx` no longer exists on this head. App-shell coverage is split across **13** focused files (`App.layout-graph.test.tsx`, `App.follow-up-submit.test.tsx`, replay and export siblings, and others—see `docs/internal/processes/development-guide-relevant-files.md`). US-002 slow-file fixtures still use `src/App.test.tsx` as a representative megatest line; live runs report per-file durations for the split suite.
+
+### Trial commands (local macOS arm64, 10 CPUs, `bun install` in `ui/`, `VITEST_COVERAGE=1`)
+
+```bash
+# Trial A — main covered corpus without app-shell files (mirrors runner exclusions + App glob)
+cd ui && /usr/bin/time -p bunx vitest run --coverage --coverage.clean=false --maxWorkers=2 \
+  --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 \
+  --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 \
+  --exclude 'integration/*.integration.test.mjs' \
+  --exclude 'scripts/dashboard-shell-storybook-responsive.test.mjs' \
+  --exclude 'src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx' \
+  --exclude 'src/App.*.test.tsx'
+
+# Trial B — all app-shell files in a single-worker isolated pass (proposed new phase)
+cd ui && /usr/bin/time -p bunx vitest run --coverage --coverage.clean=false --maxWorkers=1 \
+  --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 \
+  --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 \
+  src/App.*.test.tsx
+```
+
+| Trial | What it measures | `real` wall (s) | Pass/fail | Notes |
+| --- | --- | ---: | --- | --- |
+| **A** | Main pass **without** `src/App.*.test.tsx` (two workers) | **856.42** | pass | US-001 full main pass on same machine was **846.11s**—within run-to-run noise; removing app-shell files did **not** materially shrink the parallel main pass |
+| **B** | All **13** `src/App.*.test.tsx` files isolated (`--maxWorkers=1`) | **500.83** | pass | Serial app-shell cost alone exceeds half the full main pass; a dedicated phase would **add** this on top of Trial A |
+| **Spot** | `src/App.layout-graph.test.tsx` only (`--maxWorkers=1`) | **195.75** | pass | Single-file isolation is insufficient for the split corpus; graph-heavy case is still multi-minute under coverage |
+
+**Estimated lane impact if implemented:** Trial A + Trial B + Vitest startup/merge overhead ≈ **1357s+** versus the US-001 local phase total **~932s** (~46% regression). CI would show the same structural penalty: app-shell files already overlap with other specs on two workers, so pealing them out does not buy back wall time comparable to the React Flow isolation (which exists for **flake**, not speed).
+
+**Rejection rationale:** Unlike the React Flow card suite, there is no single megatest path to isolate, and measured totals show **no** `make test-ui-coverage` improvement—only added sequential work. Follow **US-006** (slim individual `App.*` files) instead of a new runner phase.
+
 ## Root-cause analysis (why ~8–9 minutes on CI)
 
 The UI Coverage lane is slow because several independent costs stack in **one sequential job**: hundreds of jsdom specs under V8 instrumentation, a deliberately split main/isolated pass layout, and conservative timeouts—not because a single misconfigured flag dominates.
@@ -114,7 +151,7 @@ The runner’s slow-file block highlights files whose **reported** Vitest durati
 
 | File (main-pass or isolated) | Role | Representative duration |
 | --- | --- | ---: |
-| `src/App.test.tsx` | Full dashboard shell, Monaco mocks, many integration-style cases in jsdom | ~20–120s depending on machine (CI toward lower band; local arm64 higher) |
+| `src/App.*.test.tsx` (13 files; legacy slow-file label `src/App.test.tsx`) | Split app-shell dashboard regressions (graph, replay, submit, export, selection) | Per-file multi-second to ~100s+ under coverage; aggregate serial isolated pass **~501s** local (US-005 trial) |
 | `src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` | Isolated phase; React Flow + coverage | ~84–126s CI phase total (file share of isolated pass) |
 | Workstation / graph / prompt-editor suites under `src/features/` | Large trees, editors, or graph layout under coverage | Often multi-second to tens of seconds each in slow-file tail |
 
@@ -128,7 +165,7 @@ Prioritized for follow-up stories in this initiative. **Impact** is qualitative 
 | ---: | --- | --- | --- | --- |
 | 1 | Tune `UI_COVERAGE_MAIN_MAX_WORKERS` (trial 3 and 4) | **Rejected (US-004):** local w=3 slower and failed; w=4 not run | Medium (flake, OOM, mock races) | `UI_COVERAGE_MAIN_MAX_WORKERS=3 make test-ui-coverage`; default stays **2** | **US-004** ✓ |
 | 2 | Slim `App.test.tsx` (fewer redundant full-app mounts, tighter waits) | Medium on main pass (~20s+ file at CI) | Low–medium (behavior regressions if assertions weakened) | Edit `src/App.test.tsx`; verify slow-file line | **US-006** |
-| 3 | Isolate `App.test.tsx` in dedicated single-worker covered phase (like React Flow) | Low–negative to medium (extra startup; may help parallelism) | Medium (merge/threshold, phase ordering) | Trial in `ui/scripts/ui-coverage-runner.mjs`; measure total lane | **US-005** |
+| 3 | Isolate `App.test.tsx` / `App.*` in dedicated single-worker covered phase (like React Flow) | **Rejected (US-005):** ~46% local lane regression (A+B vs baseline); main pass unchanged within noise when App files excluded | Medium (merge/threshold, phase ordering) | Trials in closeout **App shell megatest isolation trial**; keep app-shell files in main pass | **US-005** ✓ |
 | 4 | Optional CI matrix shard of main pass (directory splits, blob merge) | High on **job** wall if shards run parallel; workflow complexity | High (flake, merge, threshold gaps) | Design in closeout; implement in `ci.yml` if accepted | **US-008** |
 | 5 | Browser lane: faster preview reuse, slimmer build, parallel integration files | None on UI Coverage lane; reduces total PR UI verify time | Medium (preview contract, artifact harness) | `make ui-integration-test`; `ui/integration/browser-test-harness.mjs` | **US-007** |
 
