@@ -49,7 +49,19 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	}
 	clock := ServiceClockForCompose(cfg, load)
 	collaborators := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
-	return ComposeFactoryService(ctx, cfg, root, collaborators, load, clock)
+	shell, err := ComposeFactoryService(
+		ctx,
+		cfg,
+		root,
+		collaborators,
+		load,
+		clock,
+		NewHostedWorkersConfig(cfg, root.BaseLogger, clock),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg)), nil
 }
 
 func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {

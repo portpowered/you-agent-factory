@@ -442,7 +442,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 	rootDir := t.TempDir()
 	runtimeLogDir := options.runtimeLogDir
 	if runtimeLogDir == "" {
-		runtimeLogDir = filepath.Join(t.TempDir(), "runtime-logs")
+		runtimeLogDir = filepath.Join(rootDir, "runtime-logs")
 	}
 	if options.rootConfig != nil {
 		writeFactoryJSON(t, rootDir, options.rootConfig)
@@ -506,7 +506,7 @@ func (h *runningSessionService) stop(t *testing.T) {
 	h.cancelRun()
 	select {
 	case err := <-h.runErrCh:
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("Run: %v", err)
 		}
 	case <-time.After(time.Second):
