@@ -1,7 +1,11 @@
 ## Codebase Patterns
-- Batch upsert success responses expose per-work identifiers via `UpsertWorkRequestResponse.works` (`name`, `workTypeName`, `workId`); build domain metadata with `requests.SubmitResultFromNormalized` in the engine and mock factory, then map through `upsertWorkRequestResponse` in `pkg/api/handlers.go` for default and session-scoped PUT routes.
+- Batch upsert success responses expose per-work identifiers via `UpsertWorkRequestResponse.works` (`name`, `workTypeName`, `workId`); build domain metadata with `requests.WorkRequestSubmitResultFromNormalized` in the engine and mock factory (primary-work fields plus `Works` slice), then map through `upsertWorkRequestResponse` in `pkg/api/handlers.go` for default and session-scoped PUT routes.
 - Load filesystem-path `FACTORY_REQUEST_BATCH` JSON for CLI ingress through `pkg/cli/batchload.LoadFromFile`, which wraps `pkg/factory/requests.ParseCanonicalWorkRequestJSON`; keep `run.LoadWorkFile` as a thin delegate for existing callers and future `you submit batch` file modes.
 - Register `you submit batch` under `newSubmitCommand` via `pkg/cli/root_submit_batch.go`; unary flags stay on parent `submit` only; batch help documents ingress modes and `you docs batch-inputs`; wire `RunE` through injectable `submitBatch` → `submitcli.SubmitBatch`. File-path HTTP/dry-run lives in `pkg/cli/submit/batch.go` with `resolveBatchInput` in `batch_input.go` (inject `BatchConfig.Stdin` / `BatchConfig.StdinIsTTY` in tests; piped no-arg stdin and explicit `-` use `batchSource=stdin`; file path ignores stdin); inline JSON positionals use `looksLikeInlineJSON` (first non-whitespace `{`) with `batchSource=inline` and no `os.Stat`; `--file <path>` and `--file -` win over positional paths via `resolveBatchFileFlag`. Human `201` stdout belongs in `printBatchSuccessHuman` (`pkg/cli/submit/batch_output.go`): request/trace/work-count lines, optional `relationCount` from parsed request relations, up to ten per-work lines with `you work show` / `you work list --name` hints, truncation summary for longer lists—never print payloads; `--verbose` logs endpoint, batchSource (file, stdin, inline), byte size, requestId, and work count on stderr—never payload content. Structured `--json` success and dry-run payloads belong in `BatchSubmitJSONResult` via `printBatchSuccessJSON` / `printBatchDryRunJSON` in `batch_output.go`: include `requestId`, `traceId`, `workCount`, `relationCount`, `sessionId`, `endpointPath`, `batchSource`, and per-work `works` on HTTP success; dry-run adds `dryRun: true`, `workNames`, and omits `traceId` unless present in parsed input.
+- Human-mode `you submit` success stdout is formatted in `pkg/cli/submit/human_output.go` via `writeHumanSubmitSuccess`: lines for `Submitted: <name> (<workTypeName>)`, `traceId`, optional `workId`, then `Verify: you work show <work-id>` or fallback `workId was not returned; verify with:` + `you work list --name <name>`; use `submitResponseString` for API pointer fields with request fallbacks; httptest proof in `TestSubmit_HumanStdoutIncludesWorkMetadataAndShowHint` and `TestSubmit_HumanStdoutFallsBackToWorkListWithoutWorkId`.
+- `--json` submit success uses `pkg/cli/submit/json_output.go` (`SubmitSuccessResult` / `writeJSONSubmitSuccess`): emit `workId` (pointer, omitted when absent), `name`, `workTypeName`, `traceId`, `sessionId` (API field, else `clidiag.SessionLabel`, else `sessionpath.DefaultFactorySessionID`), and `endpointPath` from `sessionpath.ScopedPath`; proof in `TestSubmit_JSONStdoutEmitsStableSuccessEnvelope` and `TestSubmit_JSONStdoutEmitsSessionScopedEndpointPath`.
+- Submit failure surfaces live in `pkg/cli/submit/error_output.go` (`submitFailureError`): transport errors as `factory not reachable at <url>` with empty stdout; non-201 responses as `submission failed (<status>): <message>` from `ErrorResponse.message` or a bounded raw-body preview (`submitErrorBodyPreviewLimit` = 200 runes/bytes); optional `workId=<id>` suffix from best-effort JSON parse; proof in `TestSubmit_FactoryNotRunning`, `TestSubmit_ServerError`, `TestSubmit_NonJSONErrorBodyUsesBoundedPreview`, `TestSubmit_ErrorIncludesWorkIdWhenPresent`, and `TestSubmit_JSONModeDoesNotEmitSuccessOnFailure`.
+- Extend `SubmitWorkResponse` in `api/components/schemas/api/SubmitWorkResponse.yaml`, regenerate via `make generate-api` (Go + UI), populate `interfaces.WorkRequestSubmitResult` from `requests.WorkRequestSubmitResultFromNormalized` after normalization in engine/mock factory, and map through `submitWorkResponseFromResult` in `pkg/api/submit_work_items.go` (not a separate `submit_response.go`—`pkg/api` has a 15-file cap) in both `SubmitWork` (`factorysessions.DefaultSessionID`) and `SubmitWorkBySessionId` (path param); assert `workId`, `name`, `workTypeName`, `traceId`, `requestId`, `accepted`, and `sessionId` in `server_submit_work_test.go` and session scoping tests.
 - Session-scoped PNG import activation uses `activateImportedFactoryForSession` in `ui/src/api/named-factory/api.ts`: GET current factory via `getCurrentFactoryDocument`, preserve session `name` on the imported payload, PUT via `saveCurrentFactoryDocument` with incremented `version`, and map `CurrentFactoryDefinitionError` (including `STALE_FACTORY_VERSION`) into `NamedFactoryAPIError`; never `POST /factories`.
 - Non-default session import isolation proof lives in `tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go` (`TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles`): `openNamedFactorySession` + `saveCurrentFactoryForSession` with imported-style bundled payload, assert session GET readback, unchanged default session/`alpha` on-disk config, and bundled files materialized only under `rootDir/<session-factory-name>/`.
 - Dashboard import threads `useDashboardSessionStore.selectedSessionID` through `DashboardBento` → `useCurrentActivityImportController` → `useFactoryImportActivation({ sessionID })`, which defaults to `activateImportedFactoryForSession` so tab switches before confirm retarget activation without reload (mirror `useCurrentFactoryExport` session routing).
@@ -404,4 +408,85 @@
   - Patterns discovered: When UI Coverage fails at ~93.08% against a 93.1% gate, check whether `main` already adjusted thresholds before adding tests.
   - Gotchas encountered: Regenerating `ui/src/api/generated/openapi.ts` for batch upsert `works` is required whenever story 002 OpenAPI lands without a prior UI generate commit.
   - Useful context: Required checks on PR #481 all pass after pkg-maint split, OpenAPI drift fix, and main merge.
+---
+
+## 2026-05-30T23:45:00Z - cli-submit-response-contract-001
+- What was implemented: Extended OpenAPI `SubmitWorkResponse` with `workId`, `name`, `workTypeName`, `requestId`, `accepted`, and `sessionId`; populated fields from normalized submit metadata via `WorkRequestSubmitResultFromNormalized` and `submitWorkResponseFromResult`; added default and session-scoped handler/API/contract tests; regenerated Go and UI OpenAPI types.
+- Files changed: `api/components/schemas/api/SubmitWorkResponse.yaml`, `api/openapi.yaml`, `pkg/api/submit_response.go`, `pkg/api/submit_response_test.go`, `pkg/api/handlers.go`, `pkg/api/server_submit_work_test.go`, `pkg/api/server_session_scoping_test.go`, `pkg/api/contracttests/openapi_contract_surface_test.go`, `pkg/api/contracttests/generated_contract_factory_test.go`, `pkg/api/generated/server.gen.go`, `pkg/factory/requests/submit_result.go`, `pkg/factory/engine/engine.go`, `pkg/factory/engine/engine_submit_test.go`, `pkg/interfaces/factory_runtime.go`, `pkg/testutil/mock_factory.go`, `ui/src/api/generated/openapi.ts`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Session id on legacy `POST /work` is `factorysessions.DefaultSessionID` (`~default`); optional response fields stay omitted when empty via pointer assignment in `submitWorkResponseFromResult`.
+  - Gotchas encountered: `make generate-api` needs `ui/node_modules` (`bun install` in `ui/`); Go codegen succeeds even when UI step fails.
+  - Useful context: Story 002 maps the extended API response into human `you submit` stdout; story 003 adds CLI `--json` envelope with `endpointPath`.
+---
+
+## 2026-05-30T09:12:02Z - cli-submit-response-contract-002
+- What was implemented: Human-mode `you submit` success stdout now prints accepted work metadata (`name`, `workTypeName`, `traceId`, optional `workId`) and a verify hint (`you work show <work-id>` or `you work list --name` fallback) without echoing request/response payloads; verbose diagnostics remain stderr-only via `clidiag`.
+- Files changed: `pkg/cli/submit/human_output.go`, `pkg/cli/submit/submit.go`, `pkg/cli/submit/submit_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep human formatting in `human_output.go` and call from `Submit` after unmarshaling `factoryapi.SubmitWorkResponse`; use `submitResponseString` for optional API pointer fields with trimmed CLI flag fallbacks.
+  - Gotchas encountered: Story 003 still encodes raw `SubmitWorkResponse` for `--json` — replace with a stable envelope including `endpointPath` and `sessionId` in the next story.
+  - Useful context: No PR exists yet on this branch; push triggers review once later stories complete or per iteration policy.
+---
+
+## 2026-05-30T10:30:00Z - cli-submit-response-contract-003
+- What was implemented: `--json` success for `you submit` now writes a stable `SubmitSuccessResult` envelope (`workId` omitted when absent, `name`, `workTypeName`, `traceId`, `sessionId`, `endpointPath`) instead of raw `SubmitWorkResponse`; added httptest coverage for default and session-scoped routes.
+- Files changed: `pkg/cli/submit/json_output.go`, `pkg/cli/submit/submit.go`, `pkg/cli/submit/submit_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep JSON envelope shaping in `json_output.go` and pass `endpointPath` plus CLI fallbacks from `Submit` after unmarshaling the API response; reuse `submitResponseString` for optional API pointer fields.
+  - Gotchas encountered: Tests must unmarshal into `SubmitSuccessResult` and compare `workId` via pointer when the API returns it.
+  - Useful context: Story 004 improves error surfaces; story 005 documents human and JSON shapes in `you docs work`.
+---
+
+## 2026-05-30T09:25:00Z - cli-submit-response-contract-003
+- What was implemented: `--json` submit success now writes a stable `SubmitSuccessResult` envelope (`workId` omitted when absent, plus `name`, `workTypeName`, `traceId`, `sessionId`, `endpointPath`) instead of raw `SubmitWorkResponse`; session-scoped routes populate `endpointPath` and prefer API `sessionId` when returned.
+- Files changed: `pkg/cli/submit/json_output.go`, `pkg/cli/submit/submit.go`, `pkg/cli/submit/submit_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep `writeJSONSubmitSuccess` argument order as `(output, result, endpointPath, fallbackName, fallbackWorkType, fallbackSessionID)` matching `submitSuccessResultFromResponse`; reuse `submitResponseString` from `human_output.go`.
+  - Gotchas encountered: `writeJSONSubmitSuccess` call sites must not swap `SessionLabel` with name fallbacks — wrong order maps session into `name`.
+  - Useful context: Story 004 improves error surfaces; story 005 documents `workId` omission rule in `you docs work`.
+---
+
+## 2026-05-30T09:33:10Z - mergeability (PR #477)
+- What was implemented: Addressed BLOCKING PR review (rebase/doc conflicts already on `6f2c1875`); fixed CI `pkg-maint` cyclomatic-complexity failure by extracting batch submit test helpers; consolidated `submitWorkResponseFromResult` into `submit_work_items.go` and moved its test into `server_submit_work_test.go` for `pkg-file-count` (15-file limit); pushed follow-up commits; posted PR conversation reply mapping blocking items.
+- Files changed: `pkg/factory/engine/engine_submit_test.go`, `pkg/api/submit_work_items.go`, `pkg/api/server_submit_work_test.go` (removed `pkg/api/submit_response.go`, `pkg/api/submit_response_test.go`)
+- **Learnings for future iterations:**
+  - Patterns discovered: New `pkg/api` source files count toward the 15-file limit — prefer extending `submit_work_items.go` / existing server tests over adding standalone mapper files.
+  - Gotchas encountered: Story 001 submit-result assertions can push test cyclomatic complexity over pkg-maint limit (15); extract helpers beside `assertSubmittedTokensAndInputs`.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/477 — mergeability-only follow-ups after all PRD stories pass.
+---
+
+## 2026-05-30T10:03:00Z - mergeability (PR #477 CI)
+- What was implemented: Fixed `pkg-file-count` by folding submit response mapper into `submit_work_items.go`; added dashboard `submitWork` test for extended 201 response fields after UI coverage missed global threshold by 0.02%; pushed `7c5b4b13`.
+- Files changed: `pkg/api/submit_work_items.go`, `pkg/api/server_submit_work_test.go`, `ui/src/api/work/api.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: OpenAPI regen can tip global UI coverage at the 93.1% gate — add client tests that assert new response fields rather than lowering thresholds.
+  - Gotchas encountered: `pkg/api` has a 15-file cap; avoid standalone `submit_response*.go` files.
+  - Useful context: Required checks on `9f22b428` passed except UI Coverage (93.08% vs 93.1%).
+---
+
+## 2026-05-30T09:40:00Z - cli-submit-response-contract-004
+- What was implemented: Verified story 004 already landed on `6787ffcf` — `error_output.go` classifies transport vs API failures (`factory not reachable at <url>` vs `submission failed (<status>): …`), bounded non-JSON body previews, stable `workId=` suffix when error JSON includes `workId`, and empty stdout on failure (including `--json`); httptest coverage in `submit_test.go`; `development-guide-relevant-files.md` row already documents the seam.
+- Files changed: none (verification iteration); PRD metadata updated locally for story 004
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep failure formatting in `error_output.go` separate from success paths in `human_output.go` / `json_output.go`; `Submit` returns `submitFailureError` before any success writer runs.
+  - Gotchas encountered: Prior iteration committed story 004 code but left `prd.json` at `passes: false` — flip PRD after verification even when no new code commit is needed.
+  - Useful context: Story 005 docs and code already exist on branch (`6f2c1875`); next iteration should verify and flip PRD 005, then wait for green CI on head `9f22b428` after pkg-file-count fix.
+---
+
+## 2026-05-30T10:15:00Z - cli-submit-response-contract-005
+- What was implemented: Verified packaged `you docs work` submit contract documentation (`## CLI you submit success and verify loop`) covering human stdout, `--json` envelope keys/examples, failure surfaces, stderr-only diagnostics, and verify commands (`you work show` / `you work list --name` / `--work-type-name`); `TestMarkdown_WorkReturnsRawAuthoredMarkdown` passes; mergeability follow-up on `7c5b4b13` adds `ui/src/api/work/api.test.ts` coverage for extended `SubmitWorkResponse` fields from 201 responses.
+- Files changed: none new this iteration (verification); prior commits `6f2c1875`/`aa814c83` (docs), `7c5b4b13` (UI API test for coverage)
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep submit operator docs in `pkg/cli/docs/reference/work.md` under the Submitted Work topic; sync `docs/reference/work.md` with `cp` when both trees stay identical after main merges.
+  - Gotchas encountered: UI Coverage threshold (93.1%) can fail by ~0.02% after OpenAPI field additions — add focused `ui/src/api/work/api.test.ts` assertions on the dashboard client, not only CLI httptest.
+  - Useful context: All PRD stories now pass; await green UI Coverage on head `7c5b4b13` before `<COMPLETE>`.
+---
+
+## 2026-05-30T17:00:00Z - mergeability (PR #481 rebase)
+- What was implemented: Merged `origin/main` into `ralph/cli-submit-batch` to resolve BLOCKING `mergeable: CONFLICTING` review feedback; unified `WorkRequestSubmitResultFromNormalized` to populate primary unary fields and batch `Works`; merged `docs_test.go` batch-inputs markers with main relation markers; kept cli-submit-batch PRD.
+- Files changed: `pkg/factory/requests/submit_result.go`, `pkg/interfaces/factory_runtime.go`, `pkg/factory/engine/engine.go`, `pkg/testutil/mock_factory.go`, `pkg/api/contracttests/generated_contract_factory_test.go`, `pkg/cli/docs/docs_test.go`, `progress.txt` (conflict resolution)
+- **Learnings for future iterations:**
+  - Patterns discovered: After `cli-submit-response-contract` merges to main, batch branches must extend `WorkRequestSubmitResultFromNormalized` rather than keeping a separate `SubmitResultFromNormalized` implementation—delegate the alias for tests.
+  - Gotchas encountered: `prd.json`/`prd.md` conflicts during main merge should resolve to the feature-branch PRD (`git checkout --ours`), not main's unrelated Ralph PRD.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/481 — BLOCKING rebase item from review comment on head `dbe841e5`.
 ---

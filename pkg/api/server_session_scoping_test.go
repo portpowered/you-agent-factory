@@ -91,6 +91,18 @@ func assertScopedSessionSubmit(t *testing.T, serverURL string, betaSession *test
 	response := requireHTTPSuccess(t, http.MethodPost, serverURL+"/factory-sessions/session-beta/work", bytes.NewBufferString(`{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"scoped"}}`), "application/json", http.StatusCreated)
 	defer response.Body.Close()
 
+	var submitBody factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(response.Body).Decode(&submitBody); err != nil {
+		t.Fatalf("decode scoped submit response: %v", err)
+	}
+	assertSubmitWorkResponseIdentifiers(t, submitBody, submitWorkResponseExpectation{
+		traceID:      "trace-scoped-submit",
+		name:         "scoped-submit",
+		workTypeName: "task",
+		sessionID:    "session-beta",
+		workIDSuffix: "-scoped-submit",
+	})
+
 	if len(betaSession.WorkRequests) != 1 {
 		t.Fatalf("beta submitted work requests = %d, want 1", len(betaSession.WorkRequests))
 	}

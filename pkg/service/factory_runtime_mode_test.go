@@ -618,6 +618,102 @@ func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *
 	}
 }
 
+func TestBuildReplacementFactoryRuntime_WiresLocalModelDelegationSeam(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		LocalModelRuntimeOverride: &fakeLocalModelRuntime{
+			response: interfaces.InferenceResponse{Content: "ok"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	replacement, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
+	}
+	if replacement.localModels == nil {
+		t.Fatal("replacement runtime localModels = nil, want managed localmodels.Manager from buildRuntimeBundle seam")
+	}
+	if replacement.modelAssets == nil {
+		t.Fatal("replacement runtime modelAssets = nil, want localmodels.AssetPuller from buildRuntimeBundle seam")
+	}
+	if replacement.modelResources == nil {
+		t.Fatal("replacement runtime modelResources = nil, want localmodels.ResourceLimiter from buildRuntimeBundle seam")
+	}
+}
+
+func TestBuildFactoryService_PreservesSessionsRegistryAcrossRuntimeReplacement(t *testing.T) {
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.sessions == nil {
+		t.Fatal("expected factorysessions.Registry on FactoryService")
+	}
+	registryBefore := svc.sessions
+
+	if _, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID); err != nil {
+		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
+	}
+	if svc.sessions != registryBefore {
+		t.Fatal("buildReplacementFactoryRuntime replaced sessions registry; session ownership should stay on FactoryService")
+	}
+	if svc.cfg.Dir != alphaDir {
+		t.Fatalf("service cfg.Dir = %q, want unchanged %q until activation", svc.cfg.Dir, alphaDir)
+	}
+}
+
+func TestBuildFactoryService_InitializesFactorySessionsRegistry(t *testing.T) {
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.sessions == nil {
+		t.Fatal("expected factorysessions.Registry on FactoryService")
+	}
+	if svc.cfg.Dir != alphaDir {
+		t.Fatalf("service cfg.Dir = %q, want %q", svc.cfg.Dir, alphaDir)
+	}
+	if svc.sessions.Count() != 0 {
+		t.Fatalf("sessions.Count() = %d before Run, want 0 until live sessions register", svc.sessions.Count())
+	}
+}
+
 func createReplacementWatchChannel(t *testing.T, factoryDir, workType, channel string) {
 	t.Helper()
 

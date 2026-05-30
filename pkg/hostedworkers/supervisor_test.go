@@ -6,10 +6,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
@@ -184,6 +186,54 @@ func TestStartLinearPoller_StopsAndLogsLifecycle(t *testing.T) {
 	}
 }
 
+func TestStartLinearPoller_RestartsOnMissingAuthConfig(t *testing.T) {
+	fakeClock := clockwork.NewFakeClock()
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "linear-poller",
+	}
+	worker := &interfaces.WorkerConfig{
+		Name:     "linear-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			PollInterval: "1h",
+			Mapping: interfaces.HostedLinearWorkerMappingConfig{
+				WorkType: "story",
+				State:    "init",
+			},
+		},
+	}
+	runtimeCfg, err := config.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{}, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+
+	pollerCfg := Config{
+		Logger: zap.New(logCore),
+		Clock:  fakeClock,
+	}
+
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var sidecars sync.WaitGroup
+	StartLinearPoller(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+		return nil
+	})
+
+	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
+	restartEntry := observedLogs.FilterMessage("hosted linear poller restarting").All()[0]
+	if got := restartEntry.ContextMap()["error"]; got == nil || !strings.Contains(fieldString(got), "missing auth.secretRef") {
+		t.Fatalf("restart error = %#v, want missing auth.secretRef context", got)
+	}
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	fakeClock.Advance(restartBackoffMin)
+	waitForObservedLogCount(t, observedLogs, "hosted linear poller restarting", 2, time.Second)
+}
+
 func waitForSubmitCalls(t *testing.T, submitCalls *int, want int, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -198,12 +248,37 @@ func waitForSubmitCalls(t *testing.T, submitCalls *int, want int, timeout time.D
 
 func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, message string, timeout time.Duration) {
 	t.Helper()
+	waitForObservedLogCount(t, logs, message, 1, timeout)
+}
+
+func waitForObservedLogCount(t *testing.T, logs *observer.ObservedLogs, message string, want int, timeout time.Duration) {
+	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if logs.FilterMessage(message).Len() > 0 {
+		if logs.FilterMessage(message).Len() >= want {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for log message %q", message)
+	t.Fatalf("timed out waiting for %d log message(s) %q; got %d", want, message, logs.FilterMessage(message).Len())
+}
+
+func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := fakeClock.BlockUntilContext(ctx, waiters); err != nil {
+		t.Fatalf("timed out waiting for %d fake-clock waiter(s): %v", waiters, err)
+	}
+}
+
+func fieldString(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case error:
+		return typed.Error()
+	default:
+		return ""
+	}
 }

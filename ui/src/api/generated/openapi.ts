@@ -531,7 +531,20 @@ export interface components {
             requiredState?: string;
         };
         SubmitWorkResponse: {
+            /** @description Trace identifier for the submitted work request batch. */
             traceId: string;
+            /** @description Stable request identifier assigned during normalization. */
+            requestId: string;
+            /** @description False when the same requestId was already accepted (idempotent replay). */
+            accepted: boolean;
+            /** @description Primary work identifier for single-work submits (batch-<requestId>-<name> when omitted). */
+            workId?: string;
+            /** @description Submitted work display name. */
+            name?: string;
+            /** @description Configured work type name for the submitted work. */
+            workTypeName?: string;
+            /** @description Factory session that accepted the submit (~default for POST /work). */
+            sessionId?: string;
         };
         /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
         SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];

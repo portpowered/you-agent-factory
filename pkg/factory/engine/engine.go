@@ -225,7 +225,7 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 	default:
 	}
 
-	result := requests.SubmitResultFromNormalized(requestID, work)
+	result := requests.WorkRequestSubmitResultFromNormalized(requestID, work, true)
 
 	e.mu.Lock()
 	if !e.acceptingSubmits {
@@ -776,7 +776,7 @@ func (e *FactoryEngine) recordGeneratedSubmissionRequest(
 	batch interfaces.GeneratedSubmissionBatch,
 	normalized []interfaces.SubmitRequest,
 ) {
-	e.workRequests[requestID] = requests.SubmitResultFromNormalized(requestID, normalized)
+	e.workRequests[requestID] = requests.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
 	if e.recordWorkRequest == nil {
 		return
 	}

@@ -70,3 +70,11 @@ For a full maintainer gate aligned with pull-request verification:
 ```text
 make lint
 ```
+
+## Verification Record (UTC)
+
+Validated on `ralph/backend-service-refactor` after extractions 001–004 (2026-05-30):
+
+- `make vet backend-size pkg-maint pkg-file-count` — passed
+- `go test ./pkg/factorysessions/... ./pkg/localmodels/... ./pkg/hostedworkers/...` — passed
+- `go test ./pkg/service/... ./pkg/api/...` — passed

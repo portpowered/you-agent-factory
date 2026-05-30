@@ -21,6 +21,7 @@ import (
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
@@ -96,7 +97,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, factoryapi.SubmitWorkResponse{TraceId: result.TraceID})
+	s.writeJSON(w, http.StatusCreated, submitWorkResponseFromResult(result, factorysessions.DefaultSessionID))
 }
 
 func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
@@ -162,7 +163,7 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, factoryapi.SubmitWorkResponse{TraceId: result.TraceID})
+	s.writeJSON(w, http.StatusCreated, submitWorkResponseFromResult(result, string(sessionID)))
 }
 
 func (s *Server) UpsertWorkRequest(w http.ResponseWriter, r *http.Request, requestID string) {

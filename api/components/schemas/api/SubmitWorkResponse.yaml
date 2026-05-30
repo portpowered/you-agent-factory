@@ -2,6 +2,27 @@ type: object
 additionalProperties: false
 required:
   - traceId
+  - requestId
+  - accepted
 properties:
   traceId:
     type: string
+    description: Trace identifier for the submitted work request batch.
+  requestId:
+    type: string
+    description: Stable request identifier assigned during normalization.
+  accepted:
+    type: boolean
+    description: False when the same requestId was already accepted (idempotent replay).
+  workId:
+    type: string
+    description: Primary work identifier for single-work submits (batch-<requestId>-<name> when omitted).
+  name:
+    type: string
+    description: Submitted work display name.
+  workTypeName:
+    type: string
+    description: Configured work type name for the submitted work.
+  sessionId:
+    type: string
+    description: Factory session that accepted the submit (~default for POST /work).
