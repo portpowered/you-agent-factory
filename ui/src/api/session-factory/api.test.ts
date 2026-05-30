@@ -4,6 +4,7 @@ import {
   saveSessionFactory,
 } from "./api";
 import { sessionFactoryAPIErrorMessages } from "./messages";
+import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
 
 const sessionFactoryFixture = {
   name: "Current Factory",
@@ -252,6 +253,50 @@ describe("saveSessionFactory errors", () => {
       status: 409,
     });
   });
+
+  it.each([
+    ["FACTORY_NOT_IDLE", sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE],
+    ["INVALID_FACTORY", sessionFactoryOperatorErrorMessages.INVALID_FACTORY],
+    [
+      "INVALID_FACTORY_NAME",
+      sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
+    ],
+  ] as const)(
+    "maps %s PUT failures to canonical operator copy",
+    async (code, message) => {
+      await expect(
+        saveSessionFactory(
+          {
+            sessionID: "~default",
+            factory: sessionFactoryFixture,
+          },
+          {
+            fetch: vi.fn().mockResolvedValue(
+              new Response(
+                JSON.stringify({
+                  code,
+                  message: "Ignored API diagnostic.",
+                }),
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  status: 409,
+                  statusText: "Conflict",
+                },
+              ),
+            ),
+          },
+        ),
+      ).rejects.toMatchObject({
+        code,
+        message,
+        status: 409,
+      });
+    },
+  );
+
+
 });
 
 describe("getSessionFactory errors", () => {
@@ -412,4 +457,39 @@ describe("getSessionFactory HTTP error mapping", () => {
       status: 500,
     });
   });
+
+  it.each([
+    ["INVALID_FACTORY", sessionFactoryOperatorErrorMessages.INVALID_FACTORY],
+    [
+      "INVALID_FACTORY_NAME",
+      sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
+    ],
+  ] as const)(
+    "maps %s GET failures to canonical operator copy",
+    async (code, message) => {
+      await expect(
+        getSessionFactory("~default", {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code,
+                message: "Ignored API diagnostic.",
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 400,
+                statusText: "Bad Request",
+              },
+            ),
+          ),
+        }),
+      ).rejects.toMatchObject({
+        code,
+        message,
+        status: 400,
+      });
+    },
+  );
 });
