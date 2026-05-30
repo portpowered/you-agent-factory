@@ -132,6 +132,8 @@ describe("applyWorkStateChange", () => {
     }));
     expect(state.failedWorkItemsByID["work-move"]).toBeUndefined();
     expect(state.terminalWorkByID["work-move"]).toBeDefined();
+  });
+
   it("removes work tokens when fromPlaceId is omitted", () => {
     const state = replayStateWithWork("work-orphan", "task:init", "PROCESSING");
     state.topology.places = [
