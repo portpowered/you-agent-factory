@@ -1,30 +1,32 @@
 {
-  "project": "CLI Batch Work Submission",
-  "branchName": "ralph/cli-submit-batch",
-  "description": "Add `you submit batch` so operators and agents can submit canonical FACTORY_REQUEST_BATCH JSON to a running factory via file path, stdin, or inline JSON—with local validation, dry-run, and submit output aligned with unary submit.",
+  "project": "UI Session Factory Client",
+  "branchName": "ralph/ui-session-factory-client",
+  "description": "Consolidate dashboard factory GET/PUT behind one session-scoped client with save modes (REPLACE_CURRENT and UPSERT_NAMED_AND_ACTIVATE), migrate editor save and import confirm flows off POST /factories, and centralize error mapping—after backend session-factory-save-modes (S1) ships.",
   "context": {
-    "customerAsk": "Implement CLI batch work submission: submit FACTORY_REQUEST_BATCH to a running factory via file, stdin, or inline JSON.",
-    "problem": "Batch ingress to a live factory today requires curl or watched input files. Unary `you submit` handles one work item; `you run --work` only submits at startup. There is no first-class CLI for upserting a canonical batch to an already-running session.",
-    "solution": "Add `you submit batch` under `you submit` that validates the same FACTORY_REQUEST_BATCH JSON as run and watched inputs, supports file/stdin/inline/--file/--dry-run, PUTs to the session work-requests endpoint, and prints human and JSON success output including per-work identifiers when the API returns them."
+    "customerAsk": "One GET/PUT session factory client with mode + factory; import dialog; remove POST /factories. Program dependency: complete backend session-factory-save-modes (S1) before implementation.",
+    "problem": "Factory definition I/O is split across current-factory-definition, named-factory (POST /factories), and factory-definition normalization. Import cannot offer create-new-named without the legacy POST path, save modes are not represented in the UI, and overlapping modules make session-scoped behavior hard to verify.",
+    "solution": "Add a session-factory API client aligned with S1 OpenAPI, delegate current-factory get/save through it, restrict editor saves to REPLACE_CURRENT, add import confirm UX for replace vs create-new-named with correct mode/name/version rules, remove createFactory, and unify API error mapping for save and import."
   },
   "acceptanceCriteria": [
-    "`you submit batch` exists under `you submit` and upserts valid FACTORY_REQUEST_BATCH JSON to a running factory session (default `~default` when `--session` is omitted).",
-    "Batch JSON is accepted from filesystem path (positional or `--file`), piped stdin or positional `-`, and inline `{…}` positional JSON.",
-    "`--dry-run` validates input, prints a summary, performs no HTTP, and exits 0 on valid input even when the factory is unreachable.",
-    "Success output (human and `--json`) includes requestId, traceId, work count, and per-work name, workTypeName, and workId when the API provides them.",
-    "Reference and packaged docs (`you docs batch-inputs`) document CLI batch submit alongside curl and watched-folder ingress.",
-    "Unary `you submit` and `you run --work` batch file behavior are unchanged.",
-    "Typecheck, lint, and project tests pass."
+    "Dashboard factory definition writes use only GET/PUT on /factory-sessions/{session_id}/factory with { mode?, factory } bodies after S1.",
+    "Editor Save uses REPLACE_CURRENT (or omitted default mode) only; no editor path calls UPSERT_NAMED_AND_ACTIVATE.",
+    "Import confirm offers Replace current factory (default) and Create new named factory, driving the correct PUT mode, name, and version rules per choice.",
+    "No dashboard save or import flow calls POST /factories; createFactory is removed from the UI API surface.",
+    "selectedSessionID from the dashboard session store threads to session factory GET/PUT for the active tab.",
+    "Canonical factory normalization remains in factory-definition; session transport does not reshape topology.",
+    "Quality gate: UI typecheck, lint, and affected unit and integration tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "cli-submit-batch-001",
-      "title": "Shared canonical batch loader (file path)",
-      "description": "As a maintainer, I want one canonical batch JSON loader used by `you run --work` and `you submit batch` so parsing rules never diverge.",
+      "id": "ui-session-factory-client-001",
+      "title": "Session factory transport client",
+      "description": "As a frontend maintainer, I want one module that performs session factory GET/PUT against the regenerated OpenAPI contract so all features share one HTTP shape.",
       "acceptanceCriteria": [
-        "Reading batch JSON from an existing filesystem path returns a validated FACTORY_REQUEST_BATCH work request with the same semantics as today's `you run --work` file load.",
-        "Retired field aliases and conflicting trace fields are rejected with the same error guidance as today's run loader tests.",
-        "`you run --work` behavior is unchanged for file-based batches (regression tests pass).",
+        "After S1 lands, regenerate ui/src/api/generated/openapi.ts so PUT accepts mode and factory per backend contract.",
+        "ui/src/api/session-factory/ exports getSessionFactory(sessionID) and saveSessionFactory({ sessionID, mode?, factory }).",
+        "PUT body is { mode?: REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE, factory: Factory } with version inside factory when supplied.",
+        "GET and PUT use currentFactorySessionPath(sessionID) and shared transport.ts helpers.",
+        "Unit tests assert HTTP method, path, and JSON body for default and non-default session IDs for GET and PUT with each save mode.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,13 +35,14 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-002",
-      "title": "Upsert API returns per-work identifiers",
-      "description": "As an agent, I want the batch upsert response to include work identifiers so I can verify submission without listing all work.",
+      "id": "ui-session-factory-client-002",
+      "title": "Current factory document delegates to session client",
+      "description": "As a feature developer, I want existing getCurrentFactoryDocument and saveCurrentFactoryDocument to call the session factory client so hooks do not duplicate fetch logic.",
       "acceptanceCriteria": [
-        "Successful PUT /work-requests/{request_id} (session-scoped variant included) returns 201 with requestId, traceId, and a works array where each item includes name, workTypeName, and workId.",
-        "Multi-work batch upsert populates works for every accepted item in API tests.",
-        "OpenAPI schema and generated types reflect works on upsert response.",
+        "getCurrentFactoryDocument and saveCurrentFactoryDocument delegate to getSessionFactory and saveSessionFactory with unchanged observable behavior.",
+        "SaveCurrentFactoryInput.baseVersion maps to factory.version on the PUT body only.",
+        "React Query keys and useSaveCurrentFactory / useCurrentFactoryDefinition hook signatures are unchanged unless documented as breaking.",
+        "Existing current-factory-definition unit tests pass or are updated to mock the session client.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -48,63 +51,65 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-003",
-      "title": "Command discovery and help",
-      "description": "As an operator, I want to discover batch submit next to unary submit so I know which command to use for multi-work ingress.",
+      "id": "ui-session-factory-client-003",
+      "title": "Editor save always replaces current factory",
+      "description": "As a factory editor, I want Save to update the factory I am editing in the active session without switching named factories or save modes.",
       "acceptanceCriteria": [
-        "`you submit batch --help` documents batch input modes (positional path, optional --file, -/stdin, pipe-with-no-args, inline JSON), --dry-run, --session, and global --server / --json / --verbose.",
-        "Help states the command expects FACTORY_REQUEST_BATCH and points to `you docs batch-inputs`.",
-        "Help does not advertise unary-only flags (--name, --work-type-name, --payload, --work-type-id).",
+        "useSaveCurrentFactory sends mode REPLACE_CURRENT or omits mode on every editor save path.",
+        "No graph editor, activity card, worker, or workstation save path sends UPSERT_NAMED_AND_ACTIVATE.",
+        "STALE_FACTORY_VERSION and FACTORY_NOT_IDLE errors surface in the same UI states as before migration.",
+        "Save on a non-default session tab PUTs to that session factory endpoint when selectedSessionID is set.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 3,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-004",
-      "title": "Submit batch to running factory (HTTP + dry-run)",
-      "description": "As an operator, I want to upsert a canonical batch to a running factory session, or validate locally without sending traffic.",
+      "id": "ui-session-factory-client-004",
+      "title": "Import confirm dialog with replace vs create choice",
+      "description": "As a dashboard operator, I want to choose on import confirm whether to replace the current factory or create a new named factory, with accessible defaults and loading/error states.",
       "acceptanceCriteria": [
-        "With valid batch JSON from a file, the CLI issues PUT to /factory-sessions/{session}/work-requests/{requestId} where requestId in the path matches the body; Content-Type is application/json.",
-        "Body type must be FACTORY_REQUEST_BATCH with at least one works entry; violations fail locally before HTTP.",
-        "HTTP 201 is success; other statuses surface API error message when present; unreachable factory errors match unary submit transport style.",
-        "--session scopes the request like unary submit.",
-        "--dry-run parses and validates only, prints summary (requestId, work count, work names, relationCount, batchSource, dry-run: no request sent), performs zero HTTP calls, exits 0 on valid input even when the server is down.",
+        "Import preview confirm dialog appears on all session tabs and defaults to Replace current factory.",
+        "Operator can select Create new named factory before confirming via keyboard-accessible controls.",
+        "Dialog shows the resolved factory name for the create path once derived, including numeric suffix when applicable.",
+        "Confirm shows submitting state during activation; errors use the existing import error panel pattern.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-005",
-      "title": "Piped stdin and explicit `-`",
-      "description": "As an agent, I want to pipe batch JSON so I can submit without a temp file.",
+      "id": "ui-session-factory-client-005",
+      "title": "Import activation uses session PUT save modes",
+      "description": "As a dashboard operator, I want import confirm to persist via the correct save mode so replace keeps my current name and create adds or upserts a new named factory in this session.",
       "acceptanceCriteria": [
-        "`cat batch.json | you submit batch` submits when stdin is not a TTY.",
-        "`you submit batch -` reads batch JSON from stdin.",
-        "`you submit batch` with no args and interactive TTY stdin fails immediately with usage guidance.",
-        "Empty piped stdin fails with a clear empty-input error.",
-        "When a file path or --file is provided, stdin is ignored.",
+        "Replace path: GET current factory, set factory.name to session current name ignoring PNG name, PUT REPLACE_CURRENT with factory.version from GET.",
+        "Create path: derive factory.name from PNG metadata, allocate suffixed name on conflict, PUT UPSERT_NAMED_AND_ACTIVATE with version omitted for new names and included when upserting an existing name.",
+        "useFactoryImportActivation uses session factory client only; no POST /factories.",
+        "App.import.test.tsx and factory-import-second-session.integration.test.mjs assert PUT mode and body per dialog choice and session.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 5,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-006",
-      "title": "Inline JSON positional",
-      "description": "As a script author, I want to pass a small batch document as one positional argument.",
+      "id": "ui-session-factory-client-006",
+      "title": "Remove legacy named-factory create path",
+      "description": "As a maintainer, I want dead POST /factories client surface removed so the dashboard cannot regress to global create.",
       "acceptanceCriteria": [
-        "Positional whose first non-whitespace byte is `{` is parsed as inline JSON, not as a filesystem path.",
-        "A non-existent path that does not look like JSON errors as missing file/JSON, not as JSON parse of the path string.",
-        "Inline JSON uses the same canonical validation as file and stdin input.",
-        "Help notes shell length limits; large batches should use file or pipe.",
+        "createFactory is removed from ui/src/api/named-factory/api.ts after call-site migration.",
+        "No dashboard import or save code references POST /factories.",
+        "Contract tests for named-factory flows expect session PUT only.",
+        "Storybook fetchMocks for current-factory and import stories use session factory paths and modes.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -113,95 +118,18 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-007",
-      "title": "Optional `--file` flag",
-      "description": "As a script author, I want an explicit file flag when positional arguments are awkward.",
+      "id": "ui-session-factory-client-007",
+      "title": "Unified session factory error mapping",
+      "description": "As a dashboard operator, I want consistent, actionable error messages in save and import dialogs when the session factory API rejects a request.",
       "acceptanceCriteria": [
-        "`--file <path>` reads batch JSON; `--file -` reads stdin.",
-        "When both --file and a positional path are set, --file wins (documented in help).",
-        "Positional path remains the primary documented form.",
+        "Session factory client maps STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, INVALID_FACTORY, INVALID_FACTORY_NAME, and related codes to one error surface for save and import without duplicate switch logic in hooks.",
+        "Import preview shows stale-version guidance when the API returns STALE_FACTORY_VERSION.",
+        "Network and 5xx failures use the same recoverable copy patterns as before migration.",
+        "Unit tests cover stale, not-idle, and invalid-factory mappings from mocked HTTP responses.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-008",
-      "title": "Human success output",
-      "description": "As an operator, I want confirmation that lists what was submitted and what to run next.",
-      "acceptanceCriteria": [
-        "On 201, stdout includes requestId, traceId, work count, and each accepted work's name and workTypeName.",
-        "When the API returns workId, each work line includes it and a hint `you work show <work-id>`; otherwise hints use `you work list --name <name>`.",
-        "Long name lists truncate (at most ten lines); relationCount shown when relations are non-empty.",
-        "Full batch JSON and per-work payloads are not printed on stdout.",
-        "--verbose logs endpoint, batchSource (file, stdin, inline), byte size, requestId, and work count on stderr—never payload content.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-009",
-      "title": "JSON success output",
-      "description": "As a script, I want machine-readable batch submit confirmation.",
-      "acceptanceCriteria": [
-        "Global --json emits one object with at minimum: requestId, traceId, workCount, relationCount, sessionId, endpointPath, batchSource, and works (each with name, workTypeName, workId when returned).",
-        "--json with --dry-run emits dryRun: true and summary fields without traceId unless present in input.",
-        "Exit code 0 on success; non-zero on validation or HTTP errors.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-010",
-      "title": "Error surfaces",
-      "description": "As an agent, I want validation failures before HTTP and API failures after HTTP to be distinguishable.",
-      "acceptanceCriteria": [
-        "Canonical validation errors include retired-field guidance where applicable.",
-        "Missing or empty requestId, empty works, and invalid JSON fail locally.",
-        "HTTP 400/404 (and 409 if applicable) print status and bounded API message; no success JSON on failure.",
-        "Tests cover invalid JSON, empty works, mocked 400, and mocked 404.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-011",
-      "title": "Reference and packaged documentation",
-      "description": "As a new contributor, I want docs to show CLI batch submit alongside curl and watched-folder ingress.",
-      "acceptanceCriteria": [
-        "docs/reference/batch-inputs.md adds a CLI subsection with examples for file, --file, pipe, inline JSON, and --dry-run; keeps existing curl example.",
-        "Ingress comparison covers: you submit (single), you submit batch (running factory), you run --work (startup), watched factory/inputs/BATCH/.",
-        "Packaged `you docs batch-inputs` content matches reference updates.",
-        "Doc tests guard you submit batch and FACTORY_REQUEST_BATCH markers where other CLI examples are guarded.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-012",
-      "title": "End-to-end smoke (optional)",
-      "description": "As a maintainer, I want one functional smoke proving batch CLI reaches a running factory when the harness supports it.",
-      "acceptanceCriteria": [
-        "If the existing smoke harness can start a factory and accept work-request upserts, one smoke runs `you submit batch` with a minimal checked-in batch file and asserts success markers in output.",
-        "If harness cost is prohibitive, implementation notes document deferral and httptest coverage from earlier stories is cited as the verification substitute.",
-        "Typecheck passes",
-        "Tests pass (or smoke story cancelled with documented justification)"
-      ],
-      "priority": 12,
       "passes": true,
       "notes": ""
     }
