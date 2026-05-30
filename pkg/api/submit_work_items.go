@@ -237,3 +237,17 @@ func requiredSubmitWorkItemType(fields map[string]json.RawMessage, prefix string
 		return "", requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, video, audio, or document", prefix)}
 	}
 }
+
+func submitWorkResponseFromResult(result interfaces.WorkRequestSubmitResult) factoryapi.SubmitWorkResponse {
+	response := factoryapi.SubmitWorkResponse{TraceId: result.TraceID}
+	if result.WorkID != "" {
+		response.WorkId = &result.WorkID
+	}
+	if result.Name != "" {
+		response.Name = &result.Name
+	}
+	if result.WorkTypeName != "" {
+		response.WorkTypeName = &result.WorkTypeName
+	}
+	return response
+}
