@@ -48,28 +48,9 @@ func Submit(cfg SubmitConfig) error {
 		return fmt.Errorf("--payload is required")
 	}
 
-	// Read the payload file.
-	data, err := os.ReadFile(cfg.Payload)
+	payload, data, payloadType, err := readSubmitPayload(cfg.Payload)
 	if err != nil {
-		return fmt.Errorf("read payload file: %w", err)
-	}
-
-	// Build the submit request body.
-	var payload json.RawMessage
-	payloadType := clidiag.PayloadType(cfg.Payload)
-	if payloadType == "json" {
-		// JSON files are sent as-is (must be valid JSON).
-		if !json.Valid(data) {
-			return fmt.Errorf("payload file is not valid JSON: %s", cfg.Payload)
-		}
-		payload = data
-	} else {
-		// Non-JSON files (e.g. .md) are JSON-encoded as a string.
-		encoded, err := json.Marshal(string(data))
-		if err != nil {
-			return fmt.Errorf("encode payload: %w", err)
-		}
-		payload = encoded
+		return err
 	}
 
 	reqBody := factoryapi.SubmitWorkRequest{
