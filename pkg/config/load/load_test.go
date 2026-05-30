@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/load"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -144,6 +145,35 @@ func TestLoadFromCanonicalJSON_MatchesLoadFromFactoryDirForInlineFactory(t *test
 	assertEquivalentLoadedFactoryConfigsIgnoreFactoryDir(t, dirLoaded, jsonLoaded)
 	if jsonLoaded.FactoryDir() != "" {
 		t.Fatalf("FactoryDir = %q, want empty for JSON load", jsonLoaded.FactoryDir())
+	}
+}
+
+func TestLoadFromCanonicalJSON_RejectsCrossPathInvalidFixture(t *testing.T) {
+	_, err := load.LoadFromCanonicalJSON([]byte(factoryvalidation.CrossPathInvalidFactoryJSON), load.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected cross-path invalid factory to fail load")
+	}
+	if !load.IsInvalidNamedFactory(err) {
+		t.Fatalf("error = %v, want ErrInvalidNamedFactory", err)
+	}
+}
+
+func TestLoadFromFactoryDir_RejectsCrossPathInvalidFixture(t *testing.T) {
+	factoryDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		[]byte(factoryvalidation.CrossPathInvalidFactoryJSON),
+		0o644,
+	); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	_, err := load.LoadFromFactoryDir(factoryDir, nil)
+	if err == nil {
+		t.Fatal("expected cross-path invalid factory directory to fail load")
+	}
+	if !load.IsInvalidNamedFactory(err) {
+		t.Fatalf("error = %v, want ErrInvalidNamedFactory", err)
 	}
 }
 

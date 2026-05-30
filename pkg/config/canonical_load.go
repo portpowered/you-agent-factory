@@ -12,6 +12,9 @@ func LoadFromCanonicalJSON(payload []byte, workstationLoader WorkstationLoader) 
 	if err := validatePortableBundledFilesForExpandOnPath("", factoryCfg); err != nil {
 		return nil, err
 	}
+	if err := validateBlockingFactoryLoad(factoryCfg); err != nil {
+		return nil, err
+	}
 
 	inlineDefinitionsRequired := hasInlineRuntimeDefinitions(factoryCfg)
 	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig("", factoryCfg, InlineRuntimeDefinitionOptions{

@@ -82,6 +82,9 @@ func LoadFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) 
 	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, false); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
+	if err := validateBlockingFactoryLoad(factoryCfg); err != nil {
+		return nil, err
+	}
 	inlineDefinitionsRequired := hasInlineRuntimeDefinitions(factoryCfg)
 	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(factoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
 		RequireSplitDefinitions: inlineDefinitionsRequired,
