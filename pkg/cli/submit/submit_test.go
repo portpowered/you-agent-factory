@@ -595,17 +595,88 @@ func TestSubmit_ServerError(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var out bytes.Buffer
 	err := Submit(SubmitConfig{
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Server:       server,
+		Output:       &out,
 	})
 	if err == nil {
 		t.Fatal("expected error for server error response")
 	}
 	if got := err.Error(); got != "submission failed (400): workTypeName is required" {
 		t.Errorf("unexpected error: %v", got)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should stay empty on API rejection, got:\n%s", out.String())
+	}
+}
+
+func TestSubmit_ErrorResponseMentionsWorkID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"message":"work already exists","code":"BAD_REQUEST","family":"CLIENT","workId":"batch-req-1-task-submit"}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "task-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	})
+	if err == nil {
+		t.Fatal("expected error for conflict response")
+	}
+	if got := err.Error(); got != "submission failed (409): work already exists (workId: batch-req-1-task-submit)" {
+		t.Fatalf("unexpected error: %v", got)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should stay empty on API rejection, got:\n%s", out.String())
+	}
+}
+
+func TestSubmit_BoundedErrorMessageForLongAPIResponse(t *testing.T) {
+	longMessage := strings.Repeat("x", submitErrorDetailPreviewSize+30)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: longMessage, Code: "BAD_REQUEST"}); err != nil {
+			t.Fatalf("encode error response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Submit(SubmitConfig{
+		Name:         "task-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+	})
+	if err == nil {
+		t.Fatal("expected error for long API message")
+	}
+	wantDetail := longMessage[:submitErrorDetailPreviewSize] + "..."
+	wantErr := "submission failed (400): " + wantDetail
+	if got := err.Error(); got != wantErr {
+		t.Fatalf("error = %q, want %q", got, wantErr)
 	}
 }
 
@@ -616,15 +687,26 @@ func TestSubmit_FactoryNotRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var out bytes.Buffer
 	// Use a port that nothing is listening on.
 	err := Submit(SubmitConfig{
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Server:       "http://127.0.0.1:19999",
+		Output:       &out,
 	})
 	if err == nil {
 		t.Fatal("expected error when factory is not running")
+	}
+	if !strings.Contains(err.Error(), "factory not reachable at http://127.0.0.1:19999") {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	if strings.Contains(err.Error(), "submission failed") {
+		t.Fatalf("transport failure should not look like API rejection: %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should stay empty on transport failure, got:\n%s", out.String())
 	}
 }
 

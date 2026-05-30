@@ -17,6 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
+const submitErrorDetailPreviewSize = 200
+
 // SubmitConfirmation is the CLI JSON object emitted after a successful submit.
 type SubmitConfirmation struct {
 	WorkID       string `json:"workId"`
@@ -109,11 +111,7 @@ func Submit(cfg SubmitConfig) error {
 
 	if resp.StatusCode != http.StatusCreated {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody))
-		var errResp factoryapi.ErrorResponse
-		if json.Unmarshal(respBody, &errResp) == nil && errResp.Message != "" {
-			return fmt.Errorf("submission failed (%d): %s", resp.StatusCode, errResp.Message)
-		}
-		return fmt.Errorf("submission failed (%d): %s", resp.StatusCode, string(respBody))
+		return submitRequestError(resp.StatusCode, respBody)
 	}
 
 	var result factoryapi.SubmitWorkResponse
@@ -199,4 +197,50 @@ func optionalString(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
+}
+
+func submitRequestError(statusCode int, body []byte) error {
+	var errResp factoryapi.ErrorResponse
+	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
+		detail := boundSubmitErrorDetail(errResp.Message)
+		if workID := submitErrorWorkID(body); workID != "" {
+			detail = fmt.Sprintf("%s (workId: %s)", detail, workID)
+		}
+		return fmt.Errorf("submission failed (%d): %s", statusCode, detail)
+	}
+	preview := boundSubmitErrorDetail(strings.TrimSpace(string(body)))
+	if preview == "" {
+		return fmt.Errorf("submission failed (%d)", statusCode)
+	}
+	return fmt.Errorf("submission failed (%d): %s", statusCode, preview)
+}
+
+func boundSubmitErrorDetail(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if len(detail) > submitErrorDetailPreviewSize {
+		return detail[:submitErrorDetailPreviewSize] + "..."
+	}
+	return detail
+}
+
+func submitErrorWorkID(body []byte) string {
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(body, &raw) != nil {
+		return ""
+	}
+	for _, key := range []string{"workId", "work_id"} {
+		value, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var workID string
+		if json.Unmarshal(value, &workID) != nil {
+			continue
+		}
+		workID = strings.TrimSpace(workID)
+		if workID != "" {
+			return workID
+		}
+	}
+	return ""
 }
