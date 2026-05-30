@@ -1,7 +1,10 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -38,6 +41,36 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, factoryapi.FactoryValidationResult{
 		Targets: factoryvalidation.ToValidationTargets(result.Targets),
 	})
+}
+
+func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
+	var req factoryapi.Factory
+	if err := decoder.Decode(&req); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return factoryapi.Factory{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
+		}
+		return factoryapi.Factory{}, err
+	}
+	return req, nil
+}
+
+func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.SessionAPISurface, bool) {
+	if s.sessionRuntime == nil {
+		s.writeError(w, http.StatusInternalServerError, "session-scoped API is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return s.sessionRuntime, true
 }
 
 func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
@@ -295,6 +328,66 @@ func (s *Server) writeCurrentFactoryError(
 		s.writeError(w, http.StatusInternalServerError, "failed to save current factory", "INTERNAL_ERROR")
 		return
 	}
+}
+
+func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySessionJSONRequestBody, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.OpenFactorySessionJSONRequestBody{}, err
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
+	var req factoryapi.OpenFactorySessionJSONRequestBody
+	if err := decoder.Decode(&req); err != nil {
+		return factoryapi.OpenFactorySessionJSONRequestBody{}, err
+	}
+	if err := ensureSingleJSONObject(decoder); err != nil {
+		return factoryapi.OpenFactorySessionJSONRequestBody{}, err
+	}
+	return req, nil
+}
+
+func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
+	var req factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody
+	if err := decoder.Decode(&req); err != nil {
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
+		}
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
+	}
+	return req, nil
+}
+func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody{}, err
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+
+	var req factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody
+	if err := dec.Decode(&req); err != nil {
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody{}, err
+	}
+	if err := ensureSingleJSONObject(dec); err != nil {
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody{}, err
+	}
+
+	return req, nil
 }
 
 func currentFactoryWorkstation(factory factoryapi.Factory, workstationName string) (factoryapi.Workstation, bool) {
