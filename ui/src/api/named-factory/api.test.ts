@@ -21,6 +21,7 @@ describe("factory API", () => {
           workTypes: [],
           workers: [],
           workstations: [],
+          version: defaultSessionFactoryVersion,
         }),
         {
           headers: {
@@ -57,6 +58,7 @@ describe("factory API", () => {
           workTypes: [],
           workers: [],
           workstations: [],
+          version: defaultSessionFactoryVersion,
         }),
         {
           headers: {
