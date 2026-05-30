@@ -92,11 +92,30 @@ type runtimeLogDiagnosticsProvider interface {
 	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
 }
 
-var buildFactoryService = func(
+// FactoryServiceBuilder constructs the factory service used by Run.
+type FactoryServiceBuilder func(
+	context.Context,
+	*service.FactoryServiceConfig,
+) (factoryServiceRunner, error)
+
+func defaultBuildFactoryService(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
 ) (factoryServiceRunner, error) {
 	return service.BuildFactoryService(ctx, cfg)
+}
+
+var buildFactoryService FactoryServiceBuilder = defaultBuildFactoryService
+
+// SetBuildFactoryService registers the factory service builder used by Run.
+// cmd/factory/main should call this before cli.Execute. Tests may assign
+// buildFactoryService directly without calling SetBuildFactoryService.
+func SetBuildFactoryService(builder FactoryServiceBuilder) {
+	if builder == nil {
+		buildFactoryService = defaultBuildFactoryService
+		return
+	}
+	buildFactoryService = builder
 }
 
 const (
