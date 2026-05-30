@@ -1,0 +1,71 @@
+name: UI Coverage Worker Trial
+
+# Maintainer-only timing matrix for US-004 worker comparisons on ubuntu-latest.
+# Trigger: gh workflow run ui-coverage-worker-trial.yml --ref <branch>
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-coverage-worker-trial-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: 1.3.12
+  NODE_VERSION: 22
+
+jobs:
+  trial:
+    name: workers ${{ matrix.workers }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workers: [2, 3, 4]
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Set up Node for dashboard runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
+
+      - name: Install dashboard dependencies
+        timeout-minutes: 10
+        run: make ui-deps
+
+      - name: Run UI Coverage lane
+        env:
+          UI_COVERAGE_MAIN_MAX_WORKERS: ${{ matrix.workers }}
+        run: |
+          set -o pipefail
+          log_path=".artifacts/ui-coverage-worker-${{ matrix.workers }}/command.log"
+          mkdir -p "$(dirname "$log_path")"
+          /usr/bin/time -p make test-ui-coverage 2>&1 | tee "$log_path"
+          rg '\[ui-coverage\].*elapsed' "$log_path" || true
+
+      - name: Upload timing log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage-worker-${{ matrix.workers }}-log
+          path: .artifacts/ui-coverage-worker-${{ matrix.workers }}/command.log
+          if-no-files-found: warn
