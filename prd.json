@@ -1,31 +1,30 @@
 {
-  "project": "CI UI Coverage Test Sharding",
-  "branchName": "ralph/ci-coverage-test-sharding",
-  "description": "Shard the UI Coverage lane's main covered Vitest pass across ten parallel CI jobs, merge shard blob reports with Vitest --mergeReports, and keep make test-ui-coverage as the unsharded local canonical lane—cutting PR UI coverage wall time without weakening merged coverage thresholds.",
+  "project": "API Handlers Decomposition (S5 Recovery)",
+  "branchName": "ralph/api-handlers-decomposition-recovery",
+  "description": "Recovery implementation of approved S5: mechanically split monolithic pkg/api/handlers.go into route-family handlers_*.go files with centralized shared HTTP helpers, preserve all HTTP semantics and pkg/api test coverage after completed S1 factory save modes, satisfy backend size gates, and document handler ownership for maintainers.",
   "context": {
-    "customerAsk": "The CI pipeline takes about ten minutes because frontend coverage is slow. Separate UI coverage into its own CI steps, shard UI coverage tests into ten shards, and merge coverage results using Vitest merging.",
-    "problem": "The UI Coverage job runs the entire jsdom covered corpus on one ubuntu-latest runner (~8m52s lane command, ~403s main pass). That dominates PR CI wall time even though browser and backend lanes already run in parallel sibling jobs.",
-    "solution": "Keep UI coverage as a distinct lane but replace the monolithic job with a ten-way Vitest --shard matrix (blob reporter per shard) plus a merge job that downloads blobs, runs the existing serial follow-on phases (isolated React Flow, mergeReports with thresholds, standalone script, replay check), and preserves make test-ui-coverage for local full-lane reruns."
+    "customerAsk": "Downstream of S1 recovery. Retry after network outage interrupted batch-program-net-recovery-batch-api-handlers-decomposition-recovery. Full spec: tasks/prd-api-handlers-decomposition.md — API handlers decomposition (S5 recovery).",
+    "problem": "pkg/api/handlers.go remains a ~2,100-line monolith with backendsizecheck ignore, mixing work, factory, session, model, and events/status transport. Review cost is high and helper duplication is likely. The prior autonomous batch did not complete the split.",
+    "solution": "Move-only decomposition inside package api: handlers_common.go for shared writers/decoders, handlers_work.go, handlers_factory.go, handlers_factory_sessions.go, handlers_models.go, handlers_events.go for route families, retire or slim handlers.go, keep provider_session_details.go separate, preserve S1 session PUT decode, run full pkg/api tests, and update development-guide-relevant-files.md with a route-family map."
   },
   "acceptanceCriteria": [
-    "When classification routes UI coverage to run, CI executes ten parallel shard jobs and one merge job instead of a single runner invoking full make test-ui-coverage.",
-    "Each shard runs only its Vitest-assigned subset of the main covered corpus with the same exclusions as today and uploads a distinct blob artifact; no test file runs in more than one shard.",
-    "The merge job combines all shard blobs plus the isolated React Flow blob and enforces the existing ui/vite.config.ts coverage thresholds and replay coverage check.",
-    "Shard or merge failures surface shard index and missing-artifact detail in GitHub Actions summaries; failure artifacts are retained for 14 days.",
-    "make test-ui-coverage locally remains the unsharded canonical lane with stable [ui-coverage] phase timing labels.",
-    "Maintainer docs record before/after CI wall time for the ten-shard rollout on ubuntu-latest.",
-    "Typecheck, lint, and project tests pass."
+    "All existing HTTP routes remain registered with unchanged methods, paths, status codes, and response shapes.",
+    "Shared JSON/error writers and decode helpers live in one common handlers file with no duplicates across route-family files.",
+    "Factory session PUT keeps S1 { mode, factory } decoding and SaveFactoryForSession-only delegation in the factory/session handler file.",
+    "Handlers continue to use apisurface interfaces only; no new concrete service coupling.",
+    "Monolithic handlers.go is removed or wiring-only; per-file backend size policy is satisfied without unjustified file-level waivers.",
+    "development-guide-relevant-files.md maps each handlers_*.go file to its route families.",
+    "Quality gate: typecheck, lint, and go test ./pkg/api/... pass for all changed behavior."
   ],
   "userStories": [
     {
-      "id": "ci-coverage-test-sharding-001",
-      "title": "Shard-aware main covered pass in the UI coverage runner",
-      "description": "As a maintainer, I want the UI coverage runner to execute one Vitest shard of the main covered pass so CI can fan out work without duplicating files across shards.",
+      "id": "api-handlers-decomposition-recovery-001",
+      "title": "Centralize shared HTTP helpers",
+      "description": "As a maintainer, I want one shared place for JSON responses, error writing, and common decode utilities so route-family files do not fork transport behavior.",
       "acceptanceCriteria": [
-        "When UI_COVERAGE_SHARD is set to i/n (e.g. 3/10), the runner runs only the main covered Vitest phase with --shard=i/n, today’s exclusions, coverage flags, and default two max workers unless overridden.",
-        "Each shard writes a unique blob under .vitest-reports/ via --outputFile.blob and does not run isolated React Flow, mergeReports, standalone script, or replay phases.",
-        "When UI_COVERAGE_SHARD is unset, make test-ui-coverage behavior is unchanged (full phased lane).",
-        "Shard mode emits [ui-coverage] elapsed timing for the shard main pass only.",
+        "handlers_common.go owns writeJSON, writeError, writeErrorWithTargets, writeSSEDataJSON, errorFamilyForStatus, and shared body-decode helpers used by multiple route families.",
+        "No duplicate writeError or writeJSON implementations remain in other handler files after extraction.",
+        "Existing pkg/api tests that assert error JSON shape for bad requests still pass unchanged.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,29 +33,29 @@
       "notes": ""
     },
     {
-      "id": "ci-coverage-test-sharding-002",
-      "title": "CI shard matrix job for UI coverage",
-      "description": "As a contributor waiting on CI, I want the main covered corpus split across ten parallel jobs so wall time drops below the current single-runner baseline.",
+      "id": "api-handlers-decomposition-recovery-002",
+      "title": "Extract work route handlers",
+      "description": "As a reviewer, I want work submission and query handlers isolated so work-transport changes do not touch factory or model routes.",
       "acceptanceCriteria": [
-        "ci.yml defines ui-coverage-shard with strategy.matrix.shard 1 through 10, gated by run_ui_coverage like today’s lane.",
-        "Each matrix cell runs make ui-deps then the shard entrypoint with UI_COVERAGE_SHARD=<index>/10, teeing logs to .artifacts/ui-coverage-shard-<index>/command.log.",
-        "Each successful shard uploads an artifact with its .vitest-reports blob(s) and command log.",
-        "Shard matrix jobs execute in parallel when coverage runs.",
-        "Typecheck passes"
+        "handlers_work.go owns SubmitWork, SubmitWorkBySessionId, UpsertWorkRequest, UpsertWorkRequestBySessionId, ListWork, ListWorkBySessionId, GetWork, GetWorkBySessionId, and work-list projection helpers.",
+        "POST /work still rejects missing or empty name with BAD_REQUEST before domain normalization; canonical work-request validation still routes through pkg/factory.ValidateCanonicalWorkRequestJSON with API-owned message translation.",
+        "go test ./pkg/api/... -run 'SubmitWork|UpsertWork|ListWork|GetWork' passes with no assertion changes.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ci-coverage-test-sharding-003",
-      "title": "CI merge job for shard blobs and serial follow-on phases",
-      "description": "As a maintainer, I want one merge job to combine shard coverage and run the remaining lane phases so the regression contract stays identical to the pre-shard lane.",
+      "id": "api-handlers-decomposition-recovery-003",
+      "title": "Extract factory and session route handlers",
+      "description": "As a reviewer, I want factory validation, session lifecycle, and current-factory routes in dedicated files with S1 save-mode decode preserved.",
       "acceptanceCriteria": [
-        "ui-coverage-merge depends on all ten shard jobs, downloads every shard blob into .vitest-reports/, and fails if any expected shard artifact is missing.",
-        "Merge job runs isolated React Flow covered pass, vitest --mergeReports .vitest-reports --coverage with ui/vite.config.ts thresholds, standalone script-style test, and ui-replay-coverage-check in that order.",
-        "Merge step summary reports passed or failed merged thresholds and names missing shard indices when blocked.",
-        "Merge failures retain .artifacts/ui-coverage-merge/ logs for 14 days.",
+        "handlers_factory.go owns ValidateFactory and factory-definition validation response helpers.",
+        "handlers_factory_sessions.go owns ListFactorySessions, OpenFactorySession, CloseFactorySession, GetCurrentFactory, GetCurrentFactoryBySessionId, SaveCurrentFactoryBySessionId, workstation prompt-template handlers, and writeCurrentFactoryError / load helpers.",
+        "SaveCurrentFactoryBySessionId decodes { mode?, factory } and calls only SaveFactoryForSession; S1 error codes remain mappable.",
+        "go test ./pkg/api/... -run 'Factory|FactorySession|ValidateFactory|SaveCurrent|PromptTemplate' passes with no assertion changes.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -65,45 +64,75 @@
       "notes": ""
     },
     {
-      "id": "ci-coverage-test-sharding-004",
-      "title": "Replace monolithic ui-coverage job wiring",
-      "description": "As a CI operator, I want the workflow’s UI Coverage lane to mean sharded execution plus merge so PR checks reflect the new architecture.",
+      "id": "api-handlers-decomposition-recovery-004",
+      "title": "Extract model route handlers",
+      "description": "As a reviewer, I want model catalog and invocation handlers isolated from work and factory transport.",
       "acceptanceCriteria": [
-        "The old single-runner ui-coverage job that runs full make test-ui-coverage is removed or disabled; required coverage execution uses shard plus merge jobs only.",
-        "Classification outputs still recommend make test-ui-coverage for local reruns; CI summaries reference shard and merge jobs.",
-        "verify-pr documentation remains accurate: local verify uses unsharded test-ui-coverage.",
-        "Typecheck passes"
+        "handlers_models.go owns ListModels, GetModel, InvokeModel, PullModel, and model-invocation body decode helpers.",
+        "Model routes return the same status codes and response bodies as before the move for existing pkg/api model tests.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ci-coverage-test-sharding-005",
-      "title": "Shard failure observability",
-      "description": "As a contributor debugging a red PR, I want shard failures to identify which slice failed without reading ten full logs blindly.",
+      "id": "api-handlers-decomposition-recovery-005",
+      "title": "Extract events and status route handlers",
+      "description": "As a maintainer, I want status and events handlers and their token projection helpers separated from other route families.",
       "acceptanceCriteria": [
-        "Failed shard jobs upload logs and any partial blob artifacts.",
-        "Failed shard step summaries include shard index i/10, exit code, and the last 40 lines of command.log.",
-        "Merge job summaries list absent shard indices when merge is blocked by missing artifacts.",
-        "Typecheck passes"
+        "handlers_events.go owns GetStatus, GetStatusBySessionId, GetEvents, GetEventsBySessionId, and projection helpers used only by those routes.",
+        "Work readback helpers shared between list and get remain compilable from handlers_work.go without import cycles.",
+        "go test ./pkg/api/... -run 'GetStatus|GetEvents' passes with no assertion changes.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
-      "id": "ci-coverage-test-sharding-006",
-      "title": "Timing evidence and maintainer documentation",
-      "description": "As a maintainer, I want recorded before/after CI timings and rerun instructions so we can verify the sharding investment and operate the lane safely.",
+      "id": "api-handlers-decomposition-recovery-006",
+      "title": "Retire monolithic handlers.go and satisfy size gates",
+      "description": "As a contributor, I want the monolithic handlers file removed so backend size checks apply per route-family file.",
       "acceptanceCriteria": [
-        "ui-coverage-speed-closeout.md documents a CI ten-shard rollout subsection with pre-shard baseline, post-shard wall time, and a link to the first green proof run.",
-        "development.md or development-guide relevant-files documents UI_COVERAGE_SHARD, shard-only vs full make test-ui-coverage, and mergeReports threshold ownership.",
-        "Post-shard UI Coverage lane completion on ubuntu-latest is at or below four minutes job wall for the baseline commit class, or the doc explains measured wall if overhead prevents the target.",
-        "Typecheck passes"
+        "handlers.go is deleted or contains only wiring or ServerInterface compile assertion with no route handler bodies.",
+        "Server still implements factoryapi.ServerInterface; go build ./pkg/api/... succeeds.",
+        "File-level backendsizecheck:ignore-file on the former monolith is removed; each handlers_*.go file passes make backend-size or has justified function-scoped waivers only.",
+        "Full go test ./pkg/api/... passes with no intentional OpenAPI contract test diffs.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "api-handlers-decomposition-recovery-007",
+      "title": "Split oversized server tests when file-count gate requires",
+      "description": "As a maintainer, I want server tests organized by concern if handler splits push pkg/api over package file-count limits.",
+      "acceptanceCriteria": [
+        "If pkgmaintcheck fails on pkg/api file count after handler splits, reorganize tests into server_*_test.go files with shared helpers in server_test_helpers_test.go following existing patterns.",
+        "No test assertions weakened or deleted to greenwash the move.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "api-handlers-decomposition-recovery-008",
+      "title": "Document handler ownership in development guide",
+      "description": "As a contributor, I want a route-family to file map so new endpoints land in the correct handler file during review.",
+      "acceptanceCriteria": [
+        "docs/internal/processes/development-guide-relevant-files.md lists each handlers_*.go file and the route families it owns, noting provider_session_details.go stays separate.",
+        "Doc states work-request JSON compatibility checks continue through pkg/factory/requests and ValidateCanonicalWorkRequestJSON, not reimplemented in handlers.",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
       "notes": ""
     }
   ]

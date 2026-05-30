@@ -1,7 +1,10 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -121,6 +124,34 @@ func (s *Server) PullModel(w http.ResponseWriter, r *http.Request, modelName str
 		Revision:         result.Revision,
 		DownloadedFiles:  files,
 	})
+}
+
+func decodeModelInvocationRequestBody(body io.Reader) (factoryapi.ModelInvocationRequest, error) {
+	var payload []byte
+	var err error
+	if body != nil {
+		payload, err = io.ReadAll(body)
+		if err != nil {
+			return factoryapi.ModelInvocationRequest{}, err
+		}
+	}
+	if len(bytes.TrimSpace(payload)) == 0 {
+		return factoryapi.ModelInvocationRequest{}, requestFieldValidationError{message: "request body is required"}
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return factoryapi.ModelInvocationRequest{}, err
+	}
+	if err := validateWorkContentField(fields, ""); err != nil {
+		return factoryapi.ModelInvocationRequest{}, err
+	}
+
+	var request factoryapi.ModelInvocationRequest
+	if err := json.Unmarshal(payload, &request); err != nil {
+		return factoryapi.ModelInvocationRequest{}, err
+	}
+	return request, nil
 }
 
 func generatedResolvedModelInvocationBindings(values []interfaces.ResolvedModelOperationBinding) []factoryapi.ResolvedModelOperationBinding {
