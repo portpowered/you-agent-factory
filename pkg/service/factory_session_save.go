@@ -191,7 +191,20 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 		return factoryapi.Factory{}, err
 	}
 
-	return fs.GetCurrentFactoryForSession(ctx, sessionID)
+	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	serialized, err := fs.serializeNamedFactoryUpsertResponse(request.Name, runtimeCfg)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	version, err := fs.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	serialized.Version = &version
+	return serialized, nil
 }
 
 func sessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.LiveSession) string {

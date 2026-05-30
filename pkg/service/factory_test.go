@@ -1055,9 +1055,9 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 	}
 	bundledFiles := *created.SupportingFiles.BundledFiles
 	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md")
 	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.BundledFileTypeINPUT, "factory/inputs/task/default/starter.md", "starter work\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[3], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[3], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1")
 
 	importedDir := filepath.Join(rootDir, "beta")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")

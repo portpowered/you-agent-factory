@@ -407,6 +407,40 @@ func (fs *FactoryService) serializeNamedFactory(
 	return generatedFactory, nil
 }
 
+// serializeNamedFactoryUpsertResponse returns the PUT upsert read model with thin
+// portable DOC/SCRIPT bundled files (disk-backed targets without inline content).
+func (fs *FactoryService) serializeNamedFactoryUpsertResponse(
+	name factoryapi.FactoryName,
+	current *factoryconfig.LoadedFactoryConfig,
+) (factoryapi.Factory, error) {
+	factoryCfg := current.FactoryConfig()
+	if factoryCfg != nil {
+		clonedFactoryCfg, err := factoryconfig.CloneFactoryConfig(factoryCfg)
+		if err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("clone named factory config: %w", err)
+		}
+		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, false); err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("merge named factory portable bundled files: %w", err)
+		}
+		if err := factoryconfig.ApplySharedFactoryStarterWork(current.FactoryDir(), clonedFactoryCfg); err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
+		}
+		factoryCfg = clonedFactoryCfg
+	}
+	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+		current.FactoryDir(),
+		factoryCfg,
+		current,
+		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
+		replay.WithGeneratedFactoryWorkflowID(fs.workflowID()),
+	)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("serialize upsert factory: %w", err)
+	}
+	generatedFactory.Name = factoryapi.FactoryName(name)
+	return generatedFactory, nil
+}
+
 func sameFactoryDir(left, right string) bool {
 	return factorysessions.SameFactoryDir(left, right)
 }
