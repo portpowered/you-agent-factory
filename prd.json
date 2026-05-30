@@ -1,47 +1,42 @@
 {
-  "project": "CLI Submit Response Contract",
-  "branchName": "ralph/cli-submit-response-contract",
-  "description": "Make `you submit` success output actionable for humans and scripts by extending the submit API response with work identifiers, shaping human and `--json` CLI output (including verify hints), clarifying error surfaces, and documenting the submit → verify loop in packaged docs.",
+  "project": "Remove Dashboard Session Hook Re-exports From Public",
+  "branchName": "ralph/remove-dashboard-session-hook-reexports-from-public",
+  "description": "Narrow `features/dashboard/public` to a screen-only app composition boundary by removing dead `DashboardSessionProvider` and `useDashboardSession` re-exports, keeping dashboard session behavior unchanged, and proving the boundary with behavioral tests instead of export inventories.",
   "context": {
-    "customerAsk": "After `you submit`, operators and agents need the created work id, name, and work type—not only a trace id—plus a suggested `you work show` or `you work list` command. Scripts need a stable `--json` object. Errors should distinguish unreachable factory vs API rejection.",
-    "problem": "`you submit` prints `Submitted work: <traceId>` on success and the OpenAPI `SubmitWorkResponse` only requires `traceId`, forcing immediate `you work list` and causing duplicate submits during agent-driven docs work.",
-    "solution": "Extend `SubmitWorkResponse` with normalized work metadata from the submit handler, map it in `pkg/cli/submit` to human lines and a stable `--json` envelope (including `endpointPath` and `sessionId`), improve bounded error text, and document the contract and verify loop in `you docs work` aligned with work-inspection commands."
+    "customerAsk": "Remove dead session-provider hook re-exports from `ui/src/features/dashboard/public/index.ts` so the dashboard public barrel exposes only `DashboardScreen`, matching how `App.tsx` and app stories already consume it, without changing dashboard session behavior.",
+    "problem": "After stream/timeline hook splits and session scope context landed, production code imports session symbols from `dashboard/session/dashboard-session-provider` directly, but `dashboard/public` still relays `DashboardSessionProvider` and `useDashboardSession` even though no maintained consumer imports them from the public barrel—widening the surface and inviting incorrect cross-feature coupling.",
+    "solution": "Delete the session hook re-exports from `dashboard/public`, keep screen-only forwarding from `dashboard-screen`, retarget any stragglers to the session module, and add or retain behavioral smoke (public-barrel render of `DashboardScreen`, existing app-shell tests) so session-scoped dashboard composition still works without export-list assertions."
   },
   "acceptanceCriteria": [
-    "HTTP 201 submit responses expose workId, name, and workTypeName (and sessionId for session-scoped routes) via OpenAPI and handlers using existing normalization rules.",
-    "Human-mode `you submit` prints name, workTypeName, traceId, workId when available, and a one-line `you work show` or `you work list --name` hint without dumping full payloads.",
-    "Global `--json` success emits one object with workId, name, workTypeName, traceId, sessionId, and endpointPath; exit code 0.",
-    "Submit failures never print success output; transport errors are distinguishable from HTTP API errors with bounded body summaries.",
-    "Packaged `you docs work` documents human and JSON success shapes plus the submit → verify command loop.",
-    "Targeted CLI and API tests prove success and failure output behavior with mocked HTTP.",
-    "Quality gate: backend typecheck, lint, and relevant tests pass before merge."
+    "`ui/src/features/dashboard/public/index.ts` exports only the intended dashboard screen public surface; `DashboardSessionProvider` and `useDashboardSession` are not re-exported from the barrel.",
+    "Every maintained import from `features/dashboard/public` in `ui/` is screen-related (`DashboardScreen` with current app and Storybook consumers).",
+    "Dashboard session selection, pause, and stream/snapshot behavior remain unchanged in automated regression coverage.",
+    "Behavioral smoke renders `DashboardScreen` from the public barrel and asserts an observable dashboard shell outcome with active session context.",
+    "No export-name inventory test is added as the primary proof of the narrowed public surface.",
+    "Focused dashboard and app-shell tests pass after the boundary change.",
+    "Quality gate: UI typecheck, `bun run lint`, and relevant tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "cli-submit-response-contract-001",
-      "title": "Submit API returns work identifiers on 201",
-      "description": "As an API consumer, I need SubmitWorkResponse to include accepted work identifiers so clients do not guess after a successful submit.",
+      "id": "remove-dashboard-session-hook-reexports-from-public-001",
+      "title": "Screen-only dashboard public barrel",
+      "description": "As an app composer, I want `features/dashboard/public` to expose only `DashboardScreen` so cross-feature imports do not pull session internals through a compatibility barrel.",
       "acceptanceCriteria": [
-        "OpenAPI SubmitWorkResponse includes workId, name, workTypeName, and traceId; session-scoped routes also return sessionId matching the path.",
-        "pkg/api submit handlers populate fields from the same WorkRequest normalization that assigns stable work ids before returning HTTP 201.",
-        "API tests assert the success JSON body for default and session-scoped submit.",
-        "Generated Go and UI OpenAPI types compile after regeneration.",
-        "Typecheck passes",
-        "Tests pass"
+        "`ui/src/features/dashboard/public/index.ts` removes named re-exports of `DashboardSessionProvider` and `useDashboardSession` and keeps screen-only forwarding from `../components/dashboard-screen`.",
+        "`DashboardScreen` remains importable from `features/dashboard/public` with the same props and runtime behavior as before.",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "cli-submit-response-contract-002",
-      "title": "Human success output for you submit",
-      "description": "As an operator, I want submit stdout to show what was accepted and which work command to run next so I can verify without listing the entire factory.",
+      "id": "remove-dashboard-session-hook-reexports-from-public-002",
+      "title": "Dashboard public import boundary",
+      "description": "As a maintainer, I want all consumers of `features/dashboard/public` to import only screen symbols so session scope stays on `dashboard/session/dashboard-session-provider`.",
       "acceptanceCriteria": [
-        "On HTTP 201, stdout includes name, workTypeName, traceId, and workId when the API returns workId.",
-        "Stdout prints you work show <work-id> when workId is present; otherwise you work list --name <name> with explicit fallback wording.",
-        "Stdout does not print the full HTTP response or request payload; verbose diagnostics remain stderr-only.",
-        "CLI httptest covers human stdout and hint selection for responses with and without workId.",
+        "No file under `ui/` imports `DashboardSessionProvider` or `useDashboardSession` from `features/dashboard/public`.",
+        "Imports from `features/dashboard/public` in `App.tsx` and app-level Storybook stories remain `DashboardScreen` only; any straggler is retargeted to `features/dashboard/session/dashboard-session-provider`.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -50,49 +45,19 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-response-contract-003",
-      "title": "JSON success output for you submit --json",
-      "description": "As a script, I want a single parseable JSON confirmation object after submit so I can automate verify steps without scraping text.",
+      "id": "remove-dashboard-session-hook-reexports-from-public-003",
+      "title": "Behavioral smoke for public-barrel dashboard composition",
+      "description": "As a maintainer, I want regression tests that prove `DashboardScreen` from the public barrel still renders a working session-scoped dashboard shell without asserting export inventories.",
       "acceptanceCriteria": [
-        "Global --json success writes one JSON object with keys workId, name, workTypeName, traceId, sessionId, and endpointPath.",
-        "Exit code is 0 on success; stdout contains only that JSON object.",
-        "CLI test asserts JSON field presence and values from a mocked 201 response including a session-scoped endpointPath.",
+        "A focused test imports `DashboardScreen` from `features/dashboard/public`, renders it with existing dashboard test providers/fixtures, and asserts an observable shell outcome (for example loading status, header, or session tab chrome).",
+        "Any pre-existing public-barrel test that only asserted session relay export names is removed or replaced by this behavioral smoke; export-name lists are not the primary acceptance mechanism.",
+        "Existing app-shell and `DashboardScreen` tests continue to pass without session-behavior regressions.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill: an app-level Storybook story importing `DashboardScreen` from `features/dashboard/public` renders the dashboard shell."
       ],
       "priority": 3,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-response-contract-004",
-      "title": "Clear submit error surfaces",
-      "description": "As an agent, I want submit failures to be clearly classified so I do not treat transport or API errors as successful enqueue.",
-      "acceptanceCriteria": [
-        "Connection and transport failures report the factory URL as unreachable and emit no success line.",
-        "Non-201 HTTP responses return an error including status and a bounded API message or body snippet.",
-        "When error JSON includes workId, the CLI error text includes it in a stable workId= form.",
-        "CLI tests cover unreachable server, structured 400 ErrorResponse, and non-JSON error bodies.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-response-contract-005",
-      "title": "Document submit output and verify loop",
-      "description": "As an agent author, I want you docs work to describe submit success output and the verify commands that follow.",
-      "acceptanceCriteria": [
-        "you docs work documents human success fields, --json keys, and example success objects.",
-        "The same section documents verify with you work show and you work list --name / --work-type-name aligned with work-inspection behavior.",
-        "Docs state diagnostics stay on stderr and payloads are not echoed on success.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]
