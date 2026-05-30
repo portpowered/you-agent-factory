@@ -1,0 +1,273 @@
+package submit
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+)
+
+func TestSubmitBatch_DryRunValidFileExitsWithoutHTTP(t *testing.T) {
+	path := writeBatchFile(t, `{
+		"requestId": "batch-dry-run-1",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{"name": "alpha", "workTypeName": "task", "payload": {"title": "A"}}],
+		"relations": [{"type": "DEPENDS_ON", "sourceWorkName": "alpha", "targetWorkName": "beta"}]
+	}`)
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Args:    []string{path},
+		DryRun:  true,
+		Server:  "http://127.0.0.1:1",
+		Output:  &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"requestId: batch-dry-run-1",
+		"work count: 1",
+		"works: alpha",
+		"relationCount: 1",
+		"batchSource: file",
+		"dry-run: no request sent",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestSubmitBatch_DryRunSucceedsWhenFactoryUnreachable(t *testing.T) {
+	path := writeBatchFile(t, validBatchJSON("batch-offline", "task-a"))
+
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		DryRun: true,
+		Server: "http://127.0.0.1:1",
+		Output: io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch dry-run: %v", err)
+	}
+}
+
+func TestSubmitBatch_PUTUsesSessionScopedWorkRequestsPath(t *testing.T) {
+	var gotMethod string
+	var gotPath string
+	var gotContentType string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotContentType = r.Header.Get("Content-Type")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(factoryapi.UpsertWorkRequestResponse{
+			RequestId: "batch-put-1",
+			TraceId:   "trace-put-1",
+			Works: []factoryapi.UpsertWorkRequestSubmittedWork{{
+				Name: "alpha", WorkTypeName: "task", WorkId: "work-1",
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, validBatchJSON("batch-put-1", "alpha"))
+	err := SubmitBatch(BatchConfig{
+		Args:      []string{path},
+		Server:    mustServerBase(t, srv.URL),
+		SessionID: "session-beta",
+		Output:    io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Fatalf("method = %q, want PUT", gotMethod)
+	}
+	if gotPath != "/factory-sessions/session-beta/work-requests/batch-put-1" {
+		t.Fatalf("path = %q, want session-scoped work-requests path", gotPath)
+	}
+	if gotContentType != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", gotContentType)
+	}
+}
+
+func TestSubmitBatch_DefaultSessionUsesCompatibilitySession(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(factoryapi.UpsertWorkRequestResponse{
+			RequestId: "batch-default",
+			TraceId:   "trace-default",
+			Works:     []factoryapi.UpsertWorkRequestSubmittedWork{{Name: "alpha", WorkTypeName: "task", WorkId: "work-1"}},
+		})
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, validBatchJSON("batch-default", "alpha"))
+	if err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	}); err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+	if gotPath != "/factory-sessions/~default/work-requests/batch-default" {
+		t.Fatalf("path = %q, want default session work-requests path", gotPath)
+	}
+}
+
+func TestSubmitBatch_ValidationFailsBeforeHTTP(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, `{"requestId":"batch-empty","type":"FACTORY_REQUEST_BATCH","works":[]}`)
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "at least one") {
+		t.Fatalf("error = %v, want empty works validation", err)
+	}
+	if called {
+		t.Fatal("expected no HTTP call for invalid batch")
+	}
+}
+
+func TestSubmitBatch_HTTPErrorSurfacesAPIMessage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "request_id path and requestId body must match"})
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, validBatchJSON("batch-put-1", "alpha"))
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected HTTP error")
+	}
+	if !strings.Contains(err.Error(), "400") || !strings.Contains(err.Error(), "request_id path and requestId body must match") {
+		t.Fatalf("error = %v, want status and API message", err)
+	}
+}
+
+func TestSubmitBatch_UnreachableFactoryMatchesUnaryStyle(t *testing.T) {
+	path := writeBatchFile(t, validBatchJSON("batch-offline", "alpha"))
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: "http://127.0.0.1:1",
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected unreachable factory error")
+	}
+	if !strings.Contains(err.Error(), "factory not reachable at") {
+		t.Fatalf("error = %v, want unary-style unreachable message", err)
+	}
+}
+
+func TestSubmitBatch_VerboseLogsMetadataWithoutPayload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(factoryapi.UpsertWorkRequestResponse{
+			RequestId: "batch-verbose",
+			TraceId:   "trace-verbose",
+			Works:     []factoryapi.UpsertWorkRequestSubmittedWork{{Name: "alpha", WorkTypeName: "task", WorkId: "work-1"}},
+		})
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, `{
+		"requestId": "batch-verbose",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{"name": "alpha", "workTypeName": "task", "payload": {"secret": "do-not-log"}}]
+	}`)
+
+	var diagnostics bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Args:        []string{path},
+		Server:      mustServerBase(t, srv.URL),
+		Verbose:     true,
+		Diagnostics: &diagnostics,
+		Output:      io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+
+	got := diagnostics.String()
+	for _, want := range []string{
+		"submit batch request",
+		"endpointPath=/factory-sessions/~default/work-requests/batch-verbose",
+		"batchSource=file",
+		"requestId=\"batch-verbose\"",
+		"workCount=1",
+		"submit batch response",
+		"status=201",
+		"traceId=trace-verbose",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "do-not-log") {
+		t.Fatalf("diagnostics leaked payload content:\n%s", got)
+	}
+}
+
+func TestSubmitBatch_UsesDocsExampleStartupWorkFile(t *testing.T) {
+	path := testutil.MustRepoPath(t, "docs/examples/startup-work.json")
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		DryRun: true,
+		Server: "http://127.0.0.1:1",
+		Output: io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch dry-run on docs example: %v", err)
+	}
+}
+
+func writeBatchFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "batch.json")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func validBatchJSON(requestID, workName string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{"name": "` + workName + `", "workTypeName": "task", "payload": {"title": "Task"}}]
+	}`
+}
