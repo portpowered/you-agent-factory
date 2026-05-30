@@ -98,13 +98,20 @@ Pull-request UI Coverage no longer runs the full phased lane on one runner. CI f
 | **Parallel shard stage** | **~1m37s** wall (ten jobs; critical path = slowest shard) |
 | vs pre-shard `UI Coverage` job | **9m17s** → shard stage alone **~1m37s** for main pass fan-out (merge + setup not included) |
 
-#### First green proof run (expected on PR head after CI re-sync)
+#### First green proof run (`4ae8e51b`, 2026-05-30 UTC)
 
 | Field | Value |
 | --- | --- |
-| Head SHA | `835ab92b` or later (`defaultShardMainCoveredMaxWorkers=1`, exclude `scripts/ui-coverage-runner.test.mjs`) |
-| Workflow run | _Link recorded in PR conversation when `UI Coverage` is green on the reviewed head_ |
-| Projected lane critical path | **~1.5–2.5m** slowest shard (one worker per shard) + **~2.5–3.5m** merge job (isolated React Flow + `mergeReports` thresholds + script + replay + setup) ≈ **~4–6m** vs **~9m17s** monolithic job |
+| Pull request | [`#500`](https://github.com/portpowered/you-agent-factory/pull/500) |
+| Workflow run | [`26690812595`](https://github.com/portpowered/you-agent-factory/actions/runs/26690812595) |
+| Head SHA | `4ae8e51b26a5c82360ef5dbdd7d05c69288d44c6` (`include-hidden-files` shard uploads, blob normalize, lines threshold **93.04%**) |
+| Slowest `ui-coverage-shard` job wall | **2m58s** (shard `3/10`; main pass **157.14s**) |
+| `UI Coverage` merge job wall | **2m36s** (2026-05-30T17:59:25Z → 18:02:01Z) |
+| **Lane critical path (shard stage + merge)** | **~5m34s** (slowest shard ends ~17:59:23Z, merge starts after; vs **~9m17s** monolithic job) |
+| Merge phase elapsed (`[ui-coverage]`) | Isolated React Flow **127.35s**; blob merge **5.50s**; standalone script **1.27s**; replay **0.00s** |
+| Merged lines threshold | **93.04%** (sharded `mergeReports` on `ubuntu-latest`; statements remain **93.05%**) |
+
+**Four-minute target:** measured sequential lane wall **~5m34s** exceeds the **≤4 minute** goal; ten-way shard fan-out plus merge setup overhead is the main gap (slowest shard **~2m58s** + merge **~2m36s**). The win versus the **~9m17s** monolithic job is still **~42%** on comparable `ubuntu-latest` runs.
 
 Reproduce phase lines from a green merge job:
 
@@ -119,7 +126,7 @@ Story acceptance compares **post-shard PR lane completion** on `ubuntu-latest` a
 1. Ten shard jobs run **in parallel** → shard stage wall ≈ **slowest** shard job (not the sum of ten).
 2. Merge runs **after** all shards → add merge job wall sequentially.
 
-Pre-shard monolithic job wall was **~9m17s**. Even a conservative **~2m** slowest shard + **~2.5m** merge (~130s follow-on phases + setup) lands near **~4.5m** critical path before shard worker tuning; measure the proof run above before claiming the target. If measured wall exceeds four minutes, treat the table as the authoritative overhead record (duplicate setup across ten shards is the main fixed cost).
+Pre-shard monolithic job wall was **~9m17s**. Green run [`26690812595`](https://github.com/portpowered/you-agent-factory/actions/runs/26690812595) measured **~2m58s** slowest shard + **~2m36s** merge (**~5m34s** lane critical path)—below monolithic but above the **≤4 minute** story target. Treat that table as the authoritative overhead record (ten checkout/setup surfaces plus a **~128s** isolated React Flow merge phase dominate merge job wall).
 
 **Supersedes:** the **Optional CI sharding (US-008)** rejection below — that section documents the pre-implementation decision; this rollout is the adopted design on `ralph/ci-coverage-test-sharding`.
 
