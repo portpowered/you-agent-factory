@@ -8,5 +8,15 @@
     "file": "src/features/factory-graph-editor/lib/factory-graph-react-flow-projection.ts",
     "kind": "export",
     "name": "emptyFactoryGraphReactFlowEditorOverlay"
+  },
+  {
+    "file": "src/testing/graph-editor-harness.ts",
+    "kind": "export",
+    "name": "workerDenseFactoryDefinitionDocument"
+  },
+  {
+    "file": "src/testing/session-factory-mocks.ts",
+    "kind": "export",
+    "name": "parseSessionFactoryPutFactory"
   }
 ]
