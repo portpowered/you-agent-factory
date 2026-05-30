@@ -1,6 +1,52 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import { EditableWorkstationSaveDialog } from "./workstation-save-controls";
+import {
+  EditableWorkstationSaveDialog,
+  EditableWorkstationSaveHeaderAction,
+} from "./workstation-save-controls";
+
+describe("EditableWorkstationSaveHeaderAction", () => {
+  it("uses warning styling when save is available and not submitting", () => {
+    const { rerender } = render(
+      <EditableWorkstationSaveHeaderAction
+        canSave
+        onClick={() => undefined}
+        saveState={{ status: "idle" }}
+      />,
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    expect(saveButton.className).toContain("border-af-warning-border");
+    expect(saveButton.className).toContain("bg-af-warning-surface");
+    expect(saveButton.className).toContain("text-af-warning-text");
+
+    rerender(
+      <EditableWorkstationSaveHeaderAction
+        canSave={false}
+        onClick={() => undefined}
+        saveState={{ status: "idle" }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Save changes" }).className).not.toContain(
+      "border-af-warning-border",
+    );
+  });
+
+  it("does not use warning styling while save is submitting", () => {
+    render(
+      <EditableWorkstationSaveHeaderAction
+        canSave
+        onClick={() => undefined}
+        saveState={{ status: "submitting" }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Saving..." }).className,
+    ).not.toContain("border-af-warning-border");
+  });
+});
 
 describe("EditableWorkstationSaveDialog", () => {
   it("opens the overwrite confirmation and wires cancel and confirm actions", () => {

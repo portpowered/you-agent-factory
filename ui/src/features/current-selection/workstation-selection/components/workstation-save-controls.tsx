@@ -1,6 +1,7 @@
 import { Save } from "lucide-react";
 import { DashboardMutationDialog } from "../../../workflow-activity/public";
 import { Button, DashboardActionButton } from "../../../../components/ui";
+import { cn } from "../../../../lib/cn";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import type {
@@ -20,6 +21,7 @@ export function EditableWorkstationSaveHeaderAction({
   saveState: EditableWorkstationSaveState;
 }) {
   const messages = getWorkstationDetailMessages(locale);
+  const emphasizeSave = canSave && saveState.status !== "submitting";
 
   return (
     <DashboardActionButton
@@ -32,6 +34,14 @@ export function EditableWorkstationSaveHeaderAction({
         saveState.status === "confirming" || saveState.status === "submitting"
       }
       aria-haspopup="dialog"
+      className={
+        emphasizeSave
+          ? cn(
+              "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+              "hover:border-af-warning-border hover:bg-af-warning-surface hover:text-af-warning-text",
+            )
+          : undefined
+      }
       disabled={!canSave}
       executing={saveState.status === "submitting"}
       iconOnly
