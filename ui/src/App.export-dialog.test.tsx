@@ -90,6 +90,10 @@ describe("App shell export dialog flows", () => {
       },
       id: "authored-refetched-factory",
       name: "imported-workflow",
+      version: {
+        logical: "2",
+        physical: "2026-04-16T12:05:00Z",
+      },
     } satisfies FactoryValue;
     const refreshedCurrentFactoryResponse = createDeferredPromise<Response>();
     const writeFactoryExportPngSpy = vi
@@ -200,9 +204,12 @@ describe("App shell export dialog flows", () => {
         within(secondDialog).getByRole("button", { name: "Export PNG" }),
       );
 
+      const { version: _refetchedVersion, ...refreshedExportFactory } =
+        refreshedCurrentFactoryExportResponse;
+
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
-          factory: refreshedCurrentFactoryExportResponse,
+          factory: refreshedExportFactory,
           image: expect.any(File),
         });
       });

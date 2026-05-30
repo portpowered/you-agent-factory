@@ -1,6 +1,7 @@
 import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
 import type { FactoryValue } from "../api/named-factory";
+import { defaultSessionFactoryVersion } from "./session-factory-mocks";
 
 const onePixelPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
@@ -58,6 +59,7 @@ export const currentNamedFactoryExportResponse = {
   },
   id: "authored-current-factory",
   name: "semantic-workflow",
+  version: defaultSessionFactoryVersion,
   workers: [
     {
       executorProvider: "SCRIPT_WRAP",
