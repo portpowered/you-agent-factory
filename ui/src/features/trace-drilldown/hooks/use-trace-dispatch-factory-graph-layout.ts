@@ -13,6 +13,11 @@ const TRACE_DISPATCH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<
   Map<string, TraceFactoryGraphLayoutPosition>
 >();
 
+export function resetTraceDispatchFactoryGraphLayoutCacheForTests() {
+  TRACE_DISPATCH_LAYOUT_CACHE.resolvedByTopologyKey.clear();
+  TRACE_DISPATCH_LAYOUT_CACHE.inFlightByTopologyKey.clear();
+}
+
 export function traceDispatchTopologyLayoutKey(
   topology: FactoryGraphTopology,
 ): string {

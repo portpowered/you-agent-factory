@@ -6,10 +6,16 @@ import type {
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { resetTraceDispatchFactoryGraphLayoutCacheForTests } from "../hooks/use-trace-dispatch-factory-graph-layout";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
+const { mockBuildTraceFactoryGraphLayoutPositions } = vi.hoisted(() => ({
+  mockBuildTraceFactoryGraphLayoutPositions: vi.fn(async () => new Map()),
+}));
+
 vi.mock("../lib/trace-factory-graph-layout", () => ({
-  buildTraceFactoryGraphLayoutPositions: async () => new Map(),
+  buildTraceFactoryGraphLayoutPositions:
+    mockBuildTraceFactoryGraphLayoutPositions,
 }));
 
 vi.mock("@xyflow/react", async () => {
@@ -62,13 +68,24 @@ vi.mock("@xyflow/react", async () => {
         string,
         (props: { data: Record<string, unknown> }) => ReactNode
       >;
-      nodes: Array<{ data: Record<string, unknown>; id: string; type: string }>;
+      nodes: Array<{
+        data: Record<string, unknown>;
+        id: string;
+        position?: { x: number; y: number };
+        type: string;
+      }>;
       onError?: (id: string, message: string) => void;
     }) => (
       <div
         data-edges={JSON.stringify(edges)}
         data-has-on-error={String(Boolean(onError))}
         data-node-ids={JSON.stringify(nodes.map((node) => node.id))}
+        data-node-positions={JSON.stringify(
+          nodes.map((node) => ({
+            id: node.id,
+            position: node.position,
+          })),
+        )}
         data-testid="trace-react-flow"
       >
         {nodes.map((node) => {
@@ -141,9 +158,30 @@ function renderedNodeIDs(): string[] {
   return JSON.parse(nodePayload) as string[];
 }
 
+function renderedNodePositionsById(): Map<string, { x: number; y: number }> {
+  const nodePayload = screen
+    .getByTestId("trace-react-flow")
+    .getAttribute("data-node-positions");
+  if (!nodePayload) {
+    throw new Error("Expected mock React Flow node positions to be captured.");
+  }
+
+  return new Map(
+    (
+      JSON.parse(nodePayload) as Array<{
+        id: string;
+        position?: { x: number; y: number };
+      }>
+    ).map((node) => [node.id, node.position ?? { x: 0, y: 0 }]),
+  );
+}
+
 let restoreBrowserShims: (() => void) | undefined;
 
 beforeEach(() => {
+  resetTraceDispatchFactoryGraphLayoutCacheForTests();
+  mockBuildTraceFactoryGraphLayoutPositions.mockReset();
+  mockBuildTraceFactoryGraphLayoutPositions.mockResolvedValue(new Map());
   restoreBrowserShims = installDashboardBrowserTestShims();
 });
 
@@ -354,6 +392,41 @@ describe("TraceWorkstationPath captured selections", () => {
           "82d4be6a-68c3-4c94-ad3b-53fd53326015",
         ].sort(),
       );
+    });
+  });
+});
+
+describe("TraceWorkstationPath layout", () => {
+  it("applies async factory layout positions after layout resolves", async () => {
+    mockBuildTraceFactoryGraphLayoutPositions.mockResolvedValue(
+      new Map([
+        ["dispatch-plan", { x: 420, y: 80 }],
+        ["dispatch-implement", { x: 860, y: 160 }],
+      ]),
+    );
+
+    render(
+      <TraceWorkstationPath
+        dispatches={[
+          buildDispatch("dispatch-plan", {
+            output_items: [buildWorkItem("work-reviewed")],
+          }),
+          buildDispatch("dispatch-implement", {
+            input_items: [buildWorkItem("work-reviewed")],
+          }),
+        ]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(renderedNodePositionsById().get("dispatch-plan")).toEqual({
+        x: 420,
+        y: 80,
+      });
+      expect(renderedNodePositionsById().get("dispatch-implement")).toEqual({
+        x: 860,
+        y: 160,
+      });
     });
   });
 });

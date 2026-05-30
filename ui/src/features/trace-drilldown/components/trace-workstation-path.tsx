@@ -5,7 +5,7 @@ import {
   type NodeChange,
   ReactFlow,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
 import {
   DashboardGraphBackground,
@@ -62,7 +62,12 @@ export function TraceWorkstationPath({
       position: positionsByTraceNodeId.get(node.id) ?? node.position,
     }));
   }, [graph.nodes, positionsByTraceNodeId]);
-  const [nodes, setNodes] = useState<TraceDispatchFlowNode[]>(baseNodes);
+  const [nodes, setNodes] = useState<TraceDispatchFlowNode[]>([]);
+  const draggedNodeIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    draggedNodeIdsRef.current.clear();
+  }, [topologyKey]);
 
   useEffect(() => {
     setNodes((currentNodes) => {
@@ -70,15 +75,31 @@ export function TraceWorkstationPath({
         currentNodes.map((node) => [node.id, node.position]),
       );
 
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
+      return baseNodes.map((node) => {
+        const draggedPosition = draggedNodeIdsRef.current.has(node.id)
+          ? currentPositions.get(node.id)
+          : undefined;
+
+        return {
+          ...node,
+          position: draggedPosition ?? node.position,
+        };
+      });
     });
   }, [baseNodes]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<TraceDispatchFlowNode>[]) => {
+      for (const change of changes) {
+        if (
+          change.type === "position" &&
+          change.dragging === false &&
+          change.id
+        ) {
+          draggedNodeIdsRef.current.add(change.id);
+        }
+      }
+
       setNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
     },
     [],
