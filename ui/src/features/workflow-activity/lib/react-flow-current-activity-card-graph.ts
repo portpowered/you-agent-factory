@@ -77,11 +77,13 @@ function canonicalResourceAliasNodeId(
 ): string | null {
   const workStateMatch = /^work-state:([^:]+):(.+)$/.exec(nodeId);
   if (workStateMatch && resourceNames.has(workStateMatch[1] ?? "")) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `resource:${workStateMatch[1]}`;
   }
 
   const placeMatch = /^place:([^:]+):(.+)$/.exec(nodeId);
   if (placeMatch && resourceNames.has(placeMatch[1] ?? "")) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `resource:${placeMatch[1]}`;
   }
 
@@ -129,10 +131,12 @@ function activeTokenLabel(
 }
 
 function workstationGraphNodeId(nodeId: string): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `workstation:${nodeId}`;
 }
 
 function placeGraphNodeId(placeId: string): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `place:${placeId}`;
 }
 

@@ -110,6 +110,7 @@ export async function validateFactoryDefinition(
     throw new FactoryValidationAPIError(
       factoryValidationAPIErrorMessages.invalidResponse,
       {
+        // hardcoded-ui-copy-exception: non-product-diagnostic
         code: "INTERNAL_ERROR",
         responseBody,
         status: response.status,
@@ -125,9 +126,11 @@ function resolveFactoryValidationErrorCode(
   status: number,
 ): FactoryValidationAPIErrorCode {
   if (status === 400) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return "BAD_REQUEST";
   }
 
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return "INTERNAL_ERROR";
 }
 
