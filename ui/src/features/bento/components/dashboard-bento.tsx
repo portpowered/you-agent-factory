@@ -1,13 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { useAppLocale } from "../../../i18n";
 import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
+import type { FactoryImportSaveChoice } from "../../../api/named-factory";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { DashboardImportPreviewDialog } from "../../import/public";
+import { useFactoryImportActivationTarget } from "../../import/hooks/use-factory-import-activation-target";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { useWorkOutcomeChart } from "../../work-outcome/hooks/useWorkOutcomeChart";
@@ -106,6 +108,23 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     onFactoryActivated: incrementRefreshToken,
     sessionID: rawSessionID,
   });
+  const [importSaveChoice, setImportSaveChoice] =
+    useState<FactoryImportSaveChoice>("REPLACE_CURRENT");
+  const readyImportPreview =
+    importController.importPreviewState.status === "ready"
+      ? importController.importPreviewState
+      : null;
+  const importActivationTarget = useFactoryImportActivationTarget({
+    enabled: readyImportPreview !== null,
+    preferredFactoryName: readyImportPreview?.value?.factory?.name,
+    sessionID: rawSessionID,
+  });
+
+  useEffect(() => {
+    if (readyImportPreview) {
+      setImportSaveChoice("REPLACE_CURRENT");
+    }
+  }, [readyImportPreview]);
 
   useEffect(() => {
     resetSelectedTraceID();
@@ -169,10 +188,17 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
       />
       <DashboardImportPreviewDialog
         activationState={importController.activationState}
+        createTargetFactoryName={importActivationTarget.createTargetFactoryName}
+        currentFactoryName={importActivationTarget.currentFactoryName}
         importPreviewState={importController.importPreviewState}
+        importSaveChoice={importSaveChoice}
         locale={resolvedLocale}
         onCancel={createDashboardImportPreviewCancelHandler(importController)}
-        onConfirm={createDashboardImportPreviewConfirmHandler(importController)}
+        onConfirm={createDashboardImportPreviewConfirmHandler(
+          importController,
+        )}
+        onImportSaveChoiceChange={setImportSaveChoice}
+        sessionID={rawSessionID}
       />
     </>
   );
@@ -234,7 +260,7 @@ function createDashboardImportPreviewCancelHandler(
 function createDashboardImportPreviewConfirmHandler(
   importController: ReturnType<typeof useCurrentActivityImportController>,
 ) {
-  return (value: FactoryPngImportValue) => {
-    void importController.activateImport(value);
+  return (value: FactoryPngImportValue, choice: FactoryImportSaveChoice) => {
+    void importController.activateImport(value, choice);
   };
 }

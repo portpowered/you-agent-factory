@@ -62,6 +62,13 @@ export interface SaveCurrentFactoryInput {
   factoryDefinition: CanonicalFactoryDefinition;
 }
 
+export interface SaveFactoryForSessionInput {
+  baseVersion?: CurrentFactoryVersion;
+  factoryDefinition: CanonicalFactoryDefinition;
+  includeVersion?: boolean;
+  mode: FactorySaveMode;
+}
+
 interface RequestCurrentFactoryDocumentOptions {
   body?: string;
   fetch?: typeof globalThis.fetch;
@@ -121,12 +128,34 @@ export async function saveCurrentFactoryDocument(
   input: SaveCurrentFactoryInput,
   options: SaveCurrentFactoryOptions = {},
 ): Promise<CurrentFactoryDocument> {
+  return saveFactoryForSessionDocument(
+    {
+      baseVersion: input.baseVersion,
+      factoryDefinition: input.factoryDefinition,
+      mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
+    },
+    options,
+  );
+}
+
+export async function saveFactoryForSessionDocument(
+  input: SaveFactoryForSessionInput,
+  options: SaveCurrentFactoryOptions = {},
+): Promise<CurrentFactoryDocument> {
+  const includeVersion =
+    input.includeVersion ?? input.mode === CURRENT_FACTORY_EDITOR_SAVE_MODE;
+  const factoryPayload: CanonicalFactory = {
+    ...input.factoryDefinition,
+  };
+  if (includeVersion) {
+    factoryPayload.version = incrementCurrentFactoryVersion(input.baseVersion);
+  } else {
+    delete factoryPayload.version;
+  }
+
   const requestBody = {
-    mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
-    factory: {
-      ...input.factoryDefinition,
-      version: incrementCurrentFactoryVersion(input.baseVersion),
-    } satisfies CanonicalFactory,
+    mode: input.mode,
+    factory: factoryPayload,
   };
 
   return requestCurrentFactoryDocument({
