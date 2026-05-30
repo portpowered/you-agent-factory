@@ -11,7 +11,7 @@ import (
 
 // WorkMover is synchronous operator control ingress for relocating work tokens.
 type WorkMover interface {
-	MoveWork(ctx context.Context, workID string, stateName string) (interfaces.OperatorMoveResult, error)
+	MoveWork(ctx context.Context, workID string, stateName string, source interfaces.WorkStateChangeSource) (interfaces.OperatorMoveResult, error)
 }
 
 // APIFactory is the factory boundary required by the HTTP API server.

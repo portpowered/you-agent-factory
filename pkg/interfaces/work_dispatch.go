@@ -279,6 +279,31 @@ func ClearGuardBlockingFields(history *TokenHistory) {
 	history.PlaceVisits = make(map[string]int)
 }
 
+// WorkStateChangeSource identifies who initiated a WORK_STATE_CHANGE event.
+type WorkStateChangeSource string
+
+const (
+	WorkStateChangeSourceAPI              WorkStateChangeSource = "api"
+	WorkStateChangeSourceCLI              WorkStateChangeSource = "cli"
+	WorkStateChangeSourceCascadingFailure WorkStateChangeSource = "cascading-failure"
+)
+
+// WorkStateChangeRecord captures one operator or cascade marking relocation for
+// canonical event history emission.
+type WorkStateChangeRecord struct {
+	WorkID        string
+	WorkTypeID    string
+	WorkTypeName  string
+	FromState     string
+	ToState       string
+	FromPlaceID   string
+	ToPlaceID     string
+	Source        WorkStateChangeSource
+	RequestID     string
+	TriggerWorkID string
+	Reason        string
+}
+
 // OperatorMoveResult is the engine outcome of a successful manual work relocation.
 type OperatorMoveResult struct {
 	WorkID      string

@@ -29,6 +29,7 @@ const (
 	eventIDDispatchCreatedPrefix   = "factory-event/dispatch-created"
 	eventIDDispatchCompletedPrefix = "factory-event/dispatch-completed"
 	eventIDStateChangePrefix       = "factory-event/factory-state-change"
+	eventIDWorkStateChangePrefix   = "factory-event/work-state-change"
 	failureReasonWorkerError       = "worker_error"
 	failureReasonUnknown           = "workstation_failed"
 	failureMessageUnavailable      = "Workstation failed without a reported error message."
@@ -437,6 +438,40 @@ func (h *FactoryEventHistory) RecordRunResponse(tick int, state interfaces.Facto
 	))
 }
 
+// RecordWorkStateChange records a canonical marking relocation for operator or
+// cascade recovery paths.
+func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record interfaces.WorkStateChangeRecord, eventTime time.Time) {
+	if h == nil || record.WorkID == "" || record.Source == "" {
+		return
+	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	workTypeName := strings.TrimSpace(record.WorkTypeName)
+	if workTypeName == "" {
+		workTypeName = record.WorkTypeID
+	}
+	h.appendGenerated(factoryEvent(
+		factoryapi.FactoryEventTypeWorkStateChange,
+		fmt.Sprintf("%s/%s/%d", eventIDWorkStateChangePrefix, record.WorkID, tick),
+		factoryapi.FactoryEventContext{
+			Tick:      tick,
+			EventTime: eventTime,
+			RequestId: stringPtrIfNotEmpty(record.RequestID),
+			WorkIds:   stringSlicePtr([]string{record.WorkID}),
+		},
+		factoryapi.WorkStateChangeEventPayload{
+			WorkId:        record.WorkID,
+			WorkTypeName:  workTypeName,
+			FromState:     record.FromState,
+			ToState:       record.ToState,
+			FromPlaceId:   record.FromPlaceID,
+			ToPlaceId:     record.ToPlaceID,
+			Source:        factoryapi.WorkStateChangeSource(record.Source),
+			TriggerWorkId: stringPtrIfNotEmpty(record.TriggerWorkID),
+			Reason:        stringPtrIfNotEmpty(record.Reason),
+		},
+	))
+}
+
 // RecordFactoryStateChange records a runtime lifecycle transition.
 func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interfaces.FactoryState, next interfaces.FactoryState, reason string, eventTime time.Time) {
 	if h == nil || previous == next {
@@ -514,6 +549,8 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromFactoryStateResponseEventPayload(typed)
 	case factoryapi.RunResponseEventPayload:
 		err = out.FromRunResponseEventPayload(typed)
+	case factoryapi.WorkStateChangeEventPayload:
+		err = out.FromWorkStateChangeEventPayload(typed)
 	default:
 		encoded, marshalErr := json.Marshal(typed)
 		if marshalErr != nil {

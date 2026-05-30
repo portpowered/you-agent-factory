@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -300,8 +301,36 @@ func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request interfaces.
 }
 
 // MoveWork validates and applies a synchronous operator relocation for one work item.
-func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string) (interfaces.OperatorMoveResult, error) {
-	return f.engine.MoveWork(ctx, workID, stateName)
+func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string, source interfaces.WorkStateChangeSource) (interfaces.OperatorMoveResult, error) {
+	result, err := f.engine.MoveWork(ctx, workID, stateName)
+	if err != nil || source == "" {
+		return result, err
+	}
+	f.recordOperatorWorkStateChange(result, source, "", "", "")
+	return result, nil
+}
+
+func (f *factoryImpl) recordOperatorWorkStateChange(result interfaces.OperatorMoveResult, source interfaces.WorkStateChangeSource, requestID, triggerWorkID, reason string) {
+	workTypeName := result.WorkTypeID
+	if workType, ok := f.topology.WorkTypes[result.WorkTypeID]; ok && workType != nil {
+		if name := strings.TrimSpace(workType.Name); name != "" {
+			workTypeName = name
+		}
+	}
+	tick := f.engine.GetRuntimeStateSnapshot().TickCount
+	f.eventHistory.RecordWorkStateChange(tick, interfaces.WorkStateChangeRecord{
+		WorkID:        result.WorkID,
+		WorkTypeID:    result.WorkTypeID,
+		WorkTypeName:  workTypeName,
+		FromState:     result.FromState,
+		ToState:       result.ToState,
+		FromPlaceID:   result.FromPlaceID,
+		ToPlaceID:     result.ToPlaceID,
+		Source:        source,
+		RequestID:     requestID,
+		TriggerWorkID: triggerWorkID,
+		Reason:        reason,
+	}, f.clock.Now())
 }
 
 // SubscribeFactoryEvents returns canonical history followed by live events.
