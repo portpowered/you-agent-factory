@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- `you run` factory construction uses `pkg/cli/run` package-level `buildFactoryService` (`FactoryServiceBuilder`); register production wiring with `run.SetBuildFactoryService` from `cmd/factory/main` before `cli.Execute`, and keep tests overriding `buildFactoryService` directly without calling registration.
 - `buildRuntimeBundle` in `pkg/service/factory_build.go` returns `factoryRuntimeBundle`, the single runtime wiring struct referenced from `liveRuntimeHandle`; add new runtime sidecars on `factoryRuntimeBundle` only—startup (`BuildFactoryService`) and `buildReplacementFactoryRuntime` both create `logSink` and session loggers inside `buildRuntimeBundle`, not after the fact.
 - Register every live session (including `~default` at `Run` startup and `OpenFactorySession` launches) through `registerLiveSession` in `pkg/service/runtime_sessions.go` with explicit `FactorySessionTarget` metadata; use `defaultSessionTargetFromRuntimeBundle` for default startup—do not call `sessions.Upsert` directly except in `replaceSessionRuntime` replacement updates.
 - Route session-scoped work, snapshots, idle guards, and record/replay paths through `SubmitWorkRequestForSession`, `GetEngineStateSnapshotForSession`, and `requireIdleRuntimeForSession` in `pkg/service/runtime_sessions.go`; use `sessionScopedRecordPath` for per-session replay artifacts—do not read `fs.currentFactory()` when `session_id` is explicit.
@@ -593,4 +594,13 @@
   - Patterns discovered: After `main` advances, re-merge can conflict only in `activateReplacementWithoutLiveRuntime` when main still has pre-consolidation replacement helpers—keep branch session-registry paths, not `swapActiveRuntime`.
   - Gotchas encountered: `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING` blocks CI even when local tests pass; push a conflict-free merge before waiting on checks.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories `passes: true`; prior BLOCKING merge-conflict + missing CI items addressed on head `77399175`.
+---
+
+## 2026-05-30T19:48:06Z - cmd-wire-composition-001
+- What was implemented: Added `FactoryServiceBuilder`, `defaultBuildFactoryService`, and `SetBuildFactoryService` in `pkg/cli/run` so `cmd/factory/main` can register compile-time DI without `pkg` importing `cmd`; existing tests continue overriding `buildFactoryService` directly.
+- Files changed: `pkg/cli/run/run.go`, `pkg/cli/run/run_builder_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep the default builder as a named `defaultBuildFactoryService` function so `SetBuildFactoryService(nil)` can restore production behavior; export the builder type for Wire registration in story 003.
+  - Gotchas encountered: `go build ./cmd/factory` can fail when a sibling `factory/` directory exists in cwd—use `go build -o <tmp> ./cmd/factory` for local verification.
+  - Useful context: Branch renamed to `ralph/cmd-wire-composition`; no PR yet—story 002 adds `cmd/factory/composition` Wire bootstrap.
 ---

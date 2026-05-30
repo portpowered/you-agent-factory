@@ -1,317 +1,189 @@
-# PRD: CLI Batch Work Submission (`you submit batch`)
+# PRD: Command Wiring with Wire (S8)
+
+---
+author: Codex
+last modified: 2026-05-31
+status: draft
+---
 
 ## Context
 
 ### Customer ask
 
-Implement CLI batch work submission so operators and agents can submit a
-`FACTORY_REQUEST_BATCH` to a **running** factory via file path, stdin, or inline
-JSON—without hand-written `curl` boilerplate.
+Introduce optional compile-time dependency injection with **`google/wire`** at command entrypoints after service composition stabilizes (S6). Full upstream spec: [`tasks/prd-cmd-wire-composition.md`](../prd-cmd-wire-composition.md). Wave placement: backend simplification **S8** (optional, wave 4).
 
 ### Problem
 
-Today, batch ingress to a live factory is only practical through:
+`FactoryService` construction today flows through `service.BuildFactoryService` and is invoked from `pkg/cli/run` via a package-level `buildFactoryService` hook. As S6 injects collaborators (`factorysave`, `runtimebuild`, `factorysessions`, `localmodels`, `hostedworkers`), manual wiring at the process edge risks duplication, ordering mistakes, and drift between the service build path and what operators actually run via `you run`.
 
-- `curl -X PUT …/factory-sessions/{session}/work-requests/{request_id}` with a
-  JSON body, or
-- Dropping files under `factory/inputs/BATCH/` for the watcher.
+The repository standard places **process wiring in `cmd/`**, but `cmd/factory/main.go` is currently a one-line delegate to `pkg/cli.Execute`. Wire cannot live only in `cmd/` unless the binary registers the generated injector into the CLI run path (Go forbids `pkg/` importing `cmd/`).
 
-Unary `you submit` handles one work item. `you run --work` submits a batch only
-at factory startup. There is no first-class CLI that mirrors the documented HTTP
-upsert path for an already-running session.
+### High-level solution
 
-### Solution
+Add a **`cmd/factory/composition`** package (build tag `wireinject` in `wire.go`, checked-in `wire_gen.go`) that generates the `FactoryService` build function from plain constructors in `pkg/service` and related packages—**no `wire:` struct tags in `pkg/service` production code**.
 
-Add `you submit batch` under `you submit`. It reads the same canonical
-`FACTORY_REQUEST_BATCH` JSON as watched inputs and `you run --work`, validates it
-locally, and upserts via `PUT /factory-sessions/{session}/work-requests/{requestId}`.
-Support file path, piped stdin, explicit `-`, optional `--file`, inline JSON, and
-`--dry-run` for validate-only runs. Success output (human and `--json`) aligns
-with the unary submit response contract, including per-work identifiers when the
-API returns them.
+`cmd/factory/main.go` registers the wire-generated builder with `pkg/cli/run` before `cli.Execute()`. `you run` continues to parse flags, build `FactoryServiceConfig`, start the API server, and run the factory with **unchanged CLI flags, defaults, and HTTP behavior**. Tests keep overriding `buildFactoryService` without invoking Wire.
 
-## Goals
+**Gate:** Land only after [`prd-service-composition-seams.md`](../prd-service-composition-seams.md) (S6) stabilizes collaborator constructors. If `service.BuildFactoryService` already accepts an explicit `Deps` struct that is easy to read, this PRD may be deferred without blocking other work.
 
-- Operators discover batch submit next to unary `you submit`.
-- Scripts and agents submit multi-work batches to a running factory in one command.
-- All ingress modes (file, pipe, inline) produce the same validated HTTP body.
-- Invalid batch JSON fails locally before any network call.
-- `--dry-run` confirms shape and summarizes work without contacting the server.
-- Packaged and reference docs describe CLI batch submit alongside `curl` and
-  watched-folder ingress.
+## Introduction
+
+This PRD is an **optional maintainability** improvement. It does **not** change product APIs, OpenAPI contracts, dashboard UI, or factory execution semantics. Success means contributors can extend the service dependency graph by editing a localized provider set and regenerating code, while operators see the same `you` CLI and local API server behavior as before.
 
 ## Project-level acceptance criteria
 
-- [ ] `you submit batch` is registered under `you submit` (not a separate top-level verb).
-- [ ] Running `you submit batch` with valid `FACTORY_REQUEST_BATCH` JSON results in
-  HTTP `201` and accepted work on a reachable factory (default session `~default`
-  when `--session` is omitted).
-- [ ] Batch JSON is accepted from: filesystem path (positional or `--file`), piped
-  stdin or positional `-`, and inline `{…}` positional when the argument is JSON.
-- [ ] `--dry-run` validates input, prints a summary, performs no HTTP, and exits `0`
-  on valid input even when the factory is unreachable.
-- [ ] Human stdout and `--json` on success include `requestId`, `traceId`, work
-  count, and per-work `name`, `workTypeName`, and `workId` when the API provides them.
-- [ ] Reference and packaged docs (`you docs batch-inputs`) include CLI examples
-  for file, pipe, inline, and dry-run alongside existing `curl` guidance.
-- [ ] Typecheck, lint, and project tests pass.
+- [ ] **AC-1:** Wire usage is confined to `cmd/factory/composition/**`; `pkg/service`, `pkg/api`, and `pkg/cli` contain no `wireinject` build tags and no `wire:` struct tags in production code.
+- [ ] **AC-2:** `you run` (and `go build -o you ./cmd/factory`) preserves existing CLI flags, help text, default port/bind behavior, and startup outcomes covered by `pkg/cli/run` tests.
+- [ ] **AC-3:** The wire-generated factory builder is registered from `cmd/factory/main.go` before `cli.Execute()`; `pkg/cli/run` tests can still replace `buildFactoryService` without running `go generate`.
+- [ ] **AC-4:** Checked-in `wire_gen.go` is produced by `go generate` documented for maintainers; generated files are not hand-edited.
+- [ ] **AC-5:** Post-S6 collaborator wiring (sessions, factory save, runtime build, local models, hosted workers, logger/config inputs) is expressed in one provider set; adding a new injected collaborator does not require parallel manual edits in multiple entrypoints.
+- [ ] **AC-6:** Existing integration and functional tests that exercise `you run` and the local API server pass without assertion weakening.
+- [ ] **AC-7 (quality gate):** `go build ./...`, repository lint/typecheck surfaces, and targeted tests for `cmd/factory/composition`, `pkg/cli/run`, and `pkg/service` pass for all changed behavior.
 
-## User stories
+## Goals
 
-### cli-submit-batch-001: Shared canonical batch loader (file path)
+- Generate `wire_gen.go` for the factory CLI composition root under `cmd/factory/composition`.
+- Keep `pkg/service` constructors plain Go; Wire only calls them from `cmd/`.
+- Register the generated injector at process startup so `you run` uses it by default.
+- Preserve all CLI and local HTTP server observable behavior.
+- Document the regenerate-and-commit workflow for contributors.
 
-**Description:** As a maintainer, I want one canonical batch JSON loader used by
-`you run --work` and `you submit batch` so parsing rules never diverge.
+## User Stories
 
-**Acceptance criteria:**
+### cmd-wire-composition-001: Factory service builder registration seam
 
-- [ ] Reading batch JSON from an existing filesystem path returns a validated
-  `FACTORY_REQUEST_BATCH` work request (same semantics as today’s `you run --work`
-  file load).
-- [ ] Retired field aliases and conflicting trace fields are rejected with the same
-  error guidance as today’s run loader tests.
-- [ ] `you run --work` behavior is unchanged for file-based batches (regression tests pass).
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+**Description:** As a maintainer, I want the CLI run path to accept a factory service builder registered from `cmd/factory/main` so compile-time DI can live under `cmd/` without `pkg` importing `cmd`.
 
-### cli-submit-batch-002: Upsert API returns per-work identifiers
+**Acceptance Criteria:**
 
-**Description:** As an agent, I want the batch upsert response to include work
-identifiers so I can verify submission without listing all work.
+- [ ] `pkg/cli/run` exports a registration function (for example `SetBuildFactoryService`) that assigns the package-level `buildFactoryService` used by `Run`; when unset, behavior matches today's default (`service.BuildFactoryService`).
+- [ ] `pkg/cli/run` tests that override `buildFactoryService` continue to pass without calling the registration function.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-**Acceptance criteria:**
+### cmd-wire-composition-002: Wire toolchain and composition package bootstrap
 
-- [ ] Successful `PUT /work-requests/{request_id}` (session-scoped variant included)
-  returns `201` with `requestId`, `traceId`, and a `works` array where each item
-  includes `name`, `workTypeName`, and `workId`.
-- [ ] Multi-work batch upsert populates `works` for every accepted item in API tests.
-- [ ] OpenAPI schema and generated types reflect optional `works` on upsert response.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+**Description:** As a contributor, I want a checked-in Wire-generated injector in `cmd/factory/composition` so the factory binary has a single generated composition root.
 
-### cli-submit-batch-003: Command discovery and help
+**Acceptance Criteria:**
 
-**Description:** As an operator, I want to discover batch submit next to unary
-submit so I know which command to use for multi-work ingress.
+- [ ] `github.com/google/wire` is available to the repo (module `require` and/or `tool` directive as appropriate); `cmd/factory/composition/wire.go` uses `//go:build wireinject` and `//go:generate` to produce `wire_gen.go`.
+- [ ] `wire_gen.go` is committed and builds without the `wireinject` tag; it exposes a function that builds `*service.FactoryService` from `context.Context` and `*service.FactoryServiceConfig` by delegating to existing `service.BuildFactoryService` (initial bootstrap graph).
+- [ ] `go build -o /dev/null ./cmd/factory` succeeds on a clean checkout after `go generate ./cmd/factory/composition/...`.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-**Acceptance criteria:**
+### cmd-wire-composition-003: Register wire-built builder in factory main
 
-- [ ] `you submit batch --help` documents batch input modes (positional path,
-  optional `--file`, `-`/stdin, pipe-with-no-args, inline JSON), `--dry-run`,
-  `--session`, and global `--server` / `--json` / `--verbose`.
-- [ ] Help states the command expects `FACTORY_REQUEST_BATCH` and points to
-  `you docs batch-inputs`.
-- [ ] Help does not advertise unary-only flags (`--name`, `--work-type-name`,
-  `--payload`, `--work-type-id`).
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+**Description:** As an operator, I want `you run` to use the wire-generated factory builder by default so runtime behavior stays the same while composition moves to `cmd/`.
 
-### cli-submit-batch-004: Submit batch to running factory (HTTP + dry-run)
+**Acceptance Criteria:**
 
-**Description:** As an operator, I want to upsert a canonical batch to a running
-factory session, or validate locally without sending traffic.
+- [ ] `cmd/factory/main.go` registers the composition package's generated builder via `pkg/cli/run` before `cli.Execute()`.
+- [ ] `go test ./pkg/cli/run/...` passes with no intentional changes to flag parsing, auto-port, dashboard URL, or API server startup tests.
+- [ ] A focused composition test (in `cmd/factory/composition` or `pkg/cli/run`) asserts the registered builder returns a non-nil `*service.FactoryService` for a minimal valid `FactoryServiceConfig` fixture (or returns the same error family as the direct `service.BuildFactoryService` call for an invalid fixture).
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-**Acceptance criteria:**
+### cmd-wire-composition-004: Explicit collaborator provider set (post-S6)
 
-- [ ] With valid batch JSON from a file, the CLI issues `PUT` to
-  `/factory-sessions/{session}/work-requests/{requestId}` where `requestId` in
-  the path matches the body; `Content-Type` is `application/json`.
-- [ ] Body `type` must be `FACTORY_REQUEST_BATCH` with at least one `works` entry;
-  violations fail locally with a clear message before HTTP.
-- [ ] HTTP `201` is treated as success; other statuses surface API error message when
-  present; unreachable factory errors match unary submit transport style.
-- [ ] `--session` scopes the request like unary submit.
-- [ ] `--dry-run` parses and validates only, prints summary including `requestId`,
-  work count, work names, `relationCount`, `batchSource`, and
-  `dry-run: no request sent`; performs zero HTTP calls; exits `0` on valid input
-  even when the server is down.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+**Description:** As a maintainer, I want Wire providers for each `FactoryService` collaborator so dependency order is visible in one place after S6 extraction.
 
-### cli-submit-batch-005: Piped stdin and explicit `-`
+**Acceptance Criteria:**
 
-**Description:** As an agent, I want to pipe batch JSON so I can submit without a
-temp file.
+- [ ] `cmd/factory/composition/wire.go` defines providers for the S6 collaborators (at minimum: logger/config inputs, `factorysessions` registry, `factorysave`, `runtimebuild`, `localmodels`, `hostedworkers`) and assembles `*service.FactoryService` without duplicating business logic from `pkg/service`.
+- [ ] The wire-generated build path remains behaviorally equivalent to `service.BuildFactoryService` for the same `FactoryServiceConfig` on fixtures covered by existing `pkg/service` build tests (equivalence asserted in `cmd/factory/composition` or `pkg/service` test, not by file inventory).
+- [ ] `go test ./pkg/service/...` and `go test ./pkg/cli/run/...` pass without weakening assertions.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-**Acceptance criteria:**
+### cmd-wire-composition-005: Document Wire regeneration workflow
 
-- [ ] `cat batch.json | you submit batch` submits when stdin is not a TTY.
-- [ ] `you submit batch -` reads batch JSON from stdin.
-- [ ] `you submit batch` with no args and interactive TTY stdin fails immediately
-  with usage guidance (does not hang waiting for input).
-- [ ] Empty piped stdin fails with a clear empty-input error.
-- [ ] When a file path or `--file` is provided, stdin is ignored.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+**Description:** As a contributor, I want clear instructions for regenerating composition code after changing providers.
 
-### cli-submit-batch-006: Inline JSON positional
+**Acceptance Criteria:**
 
-**Description:** As a script author, I want to pass a small batch document as one
-positional argument.
+- [ ] `docs/internal/development/` (or the development guide) documents: install Wire CLI, run `go generate ./cmd/factory/composition/...`, commit `wire_gen.go`, and never hand-edit generated files.
+- [ ] The doc states Wire is limited to `cmd/factory/composition` and that `pkg/service` stays tag-free.
+- [ ] Typecheck passes
 
-**Acceptance criteria:**
+### cmd-wire-composition-006: Optional CI guard for stale wire_gen
 
-- [ ] Positional whose first non-whitespace byte is `{` is parsed as inline JSON,
-  not as a filesystem path.
-- [ ] A non-existent path that does not look like JSON errors as missing file/JSON,
-  not as JSON parse of the path string.
-- [ ] Inline JSON uses the same canonical validation as file and stdin input.
-- [ ] Help notes shell length limits; large batches should use file or pipe.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+**Description:** As a maintainer, I want CI to fail when `wire_gen.go` is out of date so generated composition does not drift silently.
 
-### cli-submit-batch-007: Optional `--file` flag
+**Acceptance Criteria:**
 
-**Description:** As a script author, I want an explicit file flag when positional
-arguments are awkward.
+- [ ] A CI or `make` target runs `go generate ./cmd/factory/composition/...` and fails if `git diff --exit-code` shows changes to `wire_gen.go` (or documents why this check is intentionally skipped).
+- [ ] When enabled, the check passes on a clean tree after regeneration.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-**Acceptance criteria:**
+## Functional Requirements
 
-- [ ] `--file <path>` reads batch JSON; `--file -` reads stdin.
-- [ ] When both `--file` and a positional path are set, `--file` wins (documented in help).
-- [ ] Positional path remains the primary documented form.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+- **FR-1:** Wire usage is limited to `cmd/factory/composition/**`; no `wire:` struct tags in `pkg/service` production code.
+- **FR-2:** Generated files (`wire_gen.go`) are produced only by `go generate` and must not be hand-edited.
+- **FR-3:** CLI commands, flags, help strings, and default values remain unchanged from pre-Wire behavior.
+- **FR-4:** Local API server startup (`api.NewServer` with `apisurface.APISurface`) continues to receive the same `FactoryService` implementation type as today; HTTP routes, status codes, and JSON shapes are unchanged.
+- **FR-5:** `pkg/cli/run` tests and service tests may construct services manually or via `buildFactoryService` overrides without importing Wire.
+- **FR-6:** Post-S6, new collaborators are added by extending the provider set and regenerating, not by copying constructor blocks into multiple mains.
 
-### cli-submit-batch-008: Human success output
+## Non-Goals
 
-**Description:** As an operator, I want confirmation that lists what was submitted
-and what to run next.
-
-**Acceptance criteria:**
-
-- [ ] On `201`, stdout includes `requestId`, `traceId`, work count, and each accepted
-  work’s `name` and `workTypeName`.
-- [ ] When the API returns `workId`, each work line includes it and a hint
-  `you work show <work-id>`; otherwise hints use `you work list --name <name>`.
-- [ ] Long name lists truncate (at most ten lines); `relationCount` shown when
-  relations are non-empty.
-- [ ] Full batch JSON and per-work payloads are not printed on stdout.
-- [ ] `--verbose` logs endpoint, `batchSource` (`file`, `stdin`, `inline`), byte size,
-  `requestId`, and work count on stderr—never payload content.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-### cli-submit-batch-009: JSON success output
-
-**Description:** As a script, I want machine-readable batch submit confirmation.
-
-**Acceptance criteria:**
-
-- [ ] Global `--json` emits one object with at minimum: `requestId`, `traceId`,
-  `workCount`, `relationCount`, `sessionId`, `endpointPath`, `batchSource`, and
-  `works` (each with `name`, `workTypeName`, `workId` when returned).
-- [ ] `--json` with `--dry-run` emits `dryRun: true` and summary fields without
-  `traceId` unless present in input.
-- [ ] Exit code `0` on success; non-zero on validation or HTTP errors.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-### cli-submit-batch-010: Error surfaces
-
-**Description:** As an agent, I want validation failures before HTTP and API
-failures after HTTP to be distinguishable.
-
-**Acceptance criteria:**
-
-- [x] Canonical validation errors include retired-field guidance where applicable.
-- [x] Missing or empty `requestId`, empty `works`, and invalid JSON fail locally.
-- [x] HTTP `400`/`404` (and `409` if applicable) print status and bounded API message;
-  no success JSON on failure.
-- [x] Tests cover invalid JSON, empty works, mocked `400`, and mocked `404`.
-- [x] Typecheck passes.
-- [x] Tests pass.
-
-### cli-submit-batch-011: Reference and packaged documentation
-
-**Description:** As a new contributor, I want docs to show CLI batch submit
-alongside curl and watched-folder ingress.
-
-**Acceptance criteria:**
-
-- [ ] `docs/reference/batch-inputs.md` adds a CLI subsection with examples for
-  file, `--file`, pipe, inline JSON, and `--dry-run`; keeps existing `curl` example.
-- [ ] Ingress comparison covers: `you submit` (single), `you submit batch` (running
-  factory), `you run --work` (startup), watched `factory/inputs/BATCH/`.
-- [ ] Packaged `you docs batch-inputs` content matches reference updates.
-- [ ] Doc tests guard `you submit batch` and `FACTORY_REQUEST_BATCH` markers where
-  other CLI examples are guarded.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-### cli-submit-batch-012: End-to-end smoke (optional)
-
-**Description:** As a maintainer, I want one functional smoke proving batch CLI
-reaches a running factory when the harness supports it.
-
-**Acceptance criteria:**
-
-- [x] If the existing smoke harness can start a factory and accept work-request
-  upserts, one smoke runs `you submit batch` with a minimal checked-in batch file
-  and asserts success markers in output.
-- [x] If harness cost is prohibitive, implementation notes document deferral and
-  httptest coverage from earlier stories is cited as the verification substitute.
-- [x] Typecheck passes.
-- [x] Tests pass (or smoke story cancelled with documented justification).
-
-## Functional requirements
-
-- FR-1: Register `you submit batch` under `you submit`.
-- FR-2: Input precedence: `--file` (including `-`) → positional `-` → existing file
-  path → inline `{…}` → piped stdin when no positional/`--file` → usage error on TTY
-  with no input.
-- FR-3: Validate with canonical batch parser before HTTP; `--dry-run` skips HTTP.
-- FR-4: Upsert via `PUT` to session-scoped `/work-requests/{requestId}` only (not
-  `POST /work`).
-- FR-5: Preserve unary `you submit` behavior and flag surface on the parent command.
-- FR-6: Success output field names align with unary submit response contract
-  (`workId`, `workTypeName`, `name`, `traceId`, `sessionId`, `endpointPath`).
-- FR-7: Reuse existing CLI HTTP, session path, and diagnostic patterns from unary submit.
-
-## Non-goals
-
-- Extending unary `you submit` with batch flags or multiple payloads.
-- Replacing `you run --work` or watched-folder ingestion.
-- Staging multimodal files from the CLI in v1.
-- Top-level `you batch submit` verb.
-- Pipe or inline input for unary `you submit` in this feature.
+- `uber/fx` or other runtime DI containers.
+- Wiring the React dashboard or any `ui/` code.
+- Refactoring `service.BuildFactoryService` collaborator extraction (S6 scope).
+- Changing OpenAPI, HTTP routes, or CLI command surfaces.
+- Replacing test harnesses (`testutil`, functional tests) with Wire.
+- Mandatory CI wire check if it blocks contributor environments without Wire installed (story 006 may document skip).
 
 ## High-level technical design
 
-1. **Shared loader** — Extract file-path batch loading from the run command into a
-   shared CLI package; run delegates without behavior change. Extend with stdin,
-   inline JSON, and `--file` resolution for batch submit only.
-2. **Command** — New batch subcommand on submit with config mirroring unary HTTP
-   fields (`Server`, `SessionID`, `JSON`, diagnostics). Wire test injection hook
-   like unary submit.
-3. **API** — Extend `UpsertWorkRequestResponse` with `works[]` populated from
-   accepted batch items; regenerate OpenAPI types before CLI success output stories.
-4. **Output** — Human and JSON formatters share identifier vocabulary with unary
-   submit; dry-run uses a distinct JSON shape with `dryRun: true`.
-5. **Docs** — Update reference and embedded packaged topic together; extend doc
-   tests and optional smoke.
+### Composition boundary
 
-**Dependencies:** Coordinate field naming with CLI submit response contract PRD;
-post-submit inspection (`you work show` / `you work list`) is the documented verify loop.
+```text
+cmd/factory/main.go
+  → composition.InitializeRun()  // wire_gen: register buildFactoryService
+  → pkg/cli.Execute()
+       → pkg/cli/run.Run
+            → buildFactoryService(ctx, FactoryServiceConfig)
+            → startAPIServer(apisurface.APISurface, port, logger)
+```
 
-## Supporting considerations
+Go import rule: `pkg/cli/run` cannot import `cmd/factory/composition`. Registration from `main` is required.
 
-- **Idempotency:** `requestId` is the stable upsert key; re-submit behavior follows
-  server rules—no client-side dedupe beyond the document’s id.
-- **Diagnostics:** No payload bodies, tokens, or prompts in verbose stderr lines.
-- **Security:** Same trust model as unary submit (local factory URL, no new auth).
+### Provider layering
+
+1. **Bootstrap (story 002–003):** Single injector calling `service.BuildFactoryService`.
+2. **Post-S6 (story 004):** Providers call exported constructors/`Deps` from `pkg/service`, `pkg/service/factorysave`, `pkg/service/runtimebuild`, `pkg/factorysessions`, `pkg/localmodels`, `pkg/hostedworkers`—mirroring order already enforced inside `BuildFactoryService`.
+
+### Verification surfaces
+
+| Behavior | Evidence |
+|----------|----------|
+| CLI run unchanged | `go test ./pkg/cli/run/...` |
+| Service build unchanged | `go test ./pkg/service/...` (existing build tests) |
+| Composition equivalence | New focused test in `cmd/factory/composition` |
+| End-to-end | Existing functional/smoke paths that start `you run` (no new inventory tests) |
+
+## Supporting technical considerations
+
+- **Upstream:** [`prd-service-composition-seams.md`](../prd-service-composition-seams.md) (hard dependency for story 004).
+- **Existing hook:** `pkg/cli/run` already uses `var buildFactoryService` for test doubles; registration formalizes the production injection point.
+- **Binary layout:** Only `cmd/factory` exists today; other `cmd/*` tools are maint checks and do not need Wire unless a future binary builds `FactoryService`.
+- **Tooling:** Follow repo patterns for `go tool` / `go generate` (see `pkg/api/server.go` codegen).
 
 ## Success metrics
 
-- An agent submits a multi-work batch to a running factory in one command without `curl`.
-- Pipe and file paths produce identical HTTP bodies for the same JSON document.
-- Invalid batch JSON fails locally with zero network calls in automated tests.
-- `you docs batch-inputs` examples match implemented CLI behavior.
+- `cmd/factory/main.go` and `cmd/factory/composition` remain the only places that know the full collaborator graph.
+- Adding a collaborator after S6 is a provider-set change plus `go generate`, not a hunt through CLI and service files.
+- No operator-visible regression in `you run` startup, dashboard URL emission, or local API availability in existing tests.
 
-## Decisions (resolved)
+## Open Questions
 
-| ID | Decision |
-|----|----------|
-| D-1 | `--file` is optional; positional path is primary; `--file` wins when both set. |
-| D-2 | Ship API `works[]` on upsert response together with CLI success output when possible. |
-| D-3 | `--dry-run` is in v1: validate locally, summarize, no HTTP, exit `0` on valid input. |
+- None blocking planning. **Defer entire PRD** if S6 lands with a small, readable `Deps` struct and the team agrees manual wiring is sufficient.
+
+## Related documents
+
+- [`tasks/prd-cmd-wire-composition.md`](../prd-cmd-wire-composition.md) — upstream draft
+- [`tasks/prd-service-composition-seams.md`](../prd-service-composition-seams.md) — S6 prerequisite
+- [`tasks/dependence-graph-for-prds.md`](../dependence-graph-for-prds.md) — S6 → S8 ordering

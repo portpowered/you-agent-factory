@@ -1,29 +1,29 @@
 {
-  "project": "Service Runtime State Consolidation (S2)",
-  "branchName": "ralph/service-runtime-state-consolidation",
-  "description": "Make the factory session registry the sole source of truth for live runtimes: register ~default like other sessions, route reads and activation through session handles, share one runtime bundle type, and remove authoritative shadow runtime fields from FactoryService without changing API or session semantics.",
+  "project": "Command Wiring with Wire (S8)",
+  "branchName": "ralph/cmd-wire-composition",
+  "description": "Optional compile-time dependency injection at the factory CLI entrypoint: add cmd/factory/composition with google/wire, register the generated FactoryService builder before cli.Execute, expand providers after S6 collaborator extraction, and preserve all you run and local API server behavior with documented go generate workflow.",
   "context": {
-    "customerAsk": "Session registry as sole runtime truth; drop duplicate FactoryService fields. Full spec: tasks/prd-service-runtime-state-consolidation.md",
-    "problem": "FactoryService still mirrors the active runtime in top-level fields while multi-session work already lives in factorysessions.Registry handles. That duplication lets work submit, factory save, snapshots, and idle checks target the wrong session or update the service root when a non-default session is active.",
-    "solution": "Incrementally route all runtime access through the session registry and liveRuntimeHandle, unify activation on replaceSessionRuntime, collapse build and live bundle types, then remove authoritative top-level runtime fields while preserving API, CLI, and session open/close behavior."
+    "customerAsk": "Optional wire in cmd/ after composition stabilizes. Full spec: tasks/prd-cmd-wire-composition.md — Command Wiring with Wire (S8).",
+    "problem": "FactoryService construction is invoked from pkg/cli/run while process wiring belongs in cmd/. As S6 injects collaborators (factorysave, runtimebuild, sessions, localmodels, hostedworkers), manual edge wiring risks duplication and ordering drift. cmd/factory/main.go is currently a one-line delegate, and pkg cannot import cmd, so Wire must register into the existing buildFactoryService hook from main.",
+    "solution": "Introduce cmd/factory/composition with wire.go (wireinject) and checked-in wire_gen.go that calls plain pkg/service constructors; register the generated builder from cmd/factory/main.go via pkg/cli/run before cli.Execute. Bootstrap by wrapping service.BuildFactoryService, then expand explicit providers after S6. Document go generate workflow and optional CI stale-gen check. No API, CLI flag, or UI behavior changes."
   },
   "acceptanceCriteria": [
-    "Every live runtime including ~default is registered in factorysessions.Registry with a liveRuntimeHandle; production code does not treat top-level FactoryService runtime fields as authoritative.",
-    "Work submission, engine snapshots, events, and idle checks scoped by session_id observe only that session's factory and artifacts; concurrent multi-session isolation is preserved.",
-    "Runtime replacement after persist uses session-scoped activation and writes the current-factory pointer under the targeted session root.",
-    "Process restart restores only ~default; additional live sessions remain ephemeral with no behavior change from today.",
-    "No OpenAPI request or response shape changes.",
-    "Typecheck, lint, and project tests pass."
+    "Wire usage is confined to cmd/factory/composition; pkg/service, pkg/api, and pkg/cli have no wireinject tags and no wire struct tags in production code.",
+    "you run and go build ./cmd/factory preserve existing CLI flags, help, defaults, and startup behavior covered by pkg/cli/run tests.",
+    "cmd/factory/main.go registers the wire-generated factory builder before cli.Execute; pkg/cli/run tests can still override buildFactoryService without Wire.",
+    "wire_gen.go is generated via go generate, committed, and never hand-edited; maintainer docs describe install and regeneration.",
+    "After S6, collaborator wiring is expressed in one provider set; adding a dependency does not require parallel manual entrypoint edits.",
+    "Existing integration and functional tests for you run and the local API server pass without assertion weakening.",
+    "Quality gate: go build ./..., repository lint/typecheck surfaces, and targeted tests for cmd/factory/composition, pkg/cli/run, and pkg/service pass."
   ],
   "userStories": [
     {
-      "id": "service-runtime-state-consolidation-001",
-      "title": "One runtime bundle shape for build and live handles",
-      "description": "As a maintainer, I want a single runtime bundle type so build output and live session handles cannot drift when runtime wiring grows.",
+      "id": "cmd-wire-composition-001",
+      "title": "Factory service builder registration seam",
+      "description": "As a maintainer, I want the CLI run path to accept a factory service builder registered from cmd/factory/main so compile-time DI can live under cmd/ without pkg importing cmd.",
       "acceptanceCriteria": [
-        "Building a runtime for service startup or session open returns one shared bundle type carrying factory, net, listener, loaded config, logger, event history, local models, recording, and related sidecars.",
-        "liveRuntimeHandle references that shared type; adding a new runtime sidecar requires updating one struct definition.",
-        "Existing service build and replay tests that start a runtime continue to pass without relaxed assertions.",
+        "pkg/cli/run exports a registration function that assigns the package-level buildFactoryService used by Run; when unset, behavior matches today's default service.BuildFactoryService.",
+        "pkg/cli/run tests that override buildFactoryService continue to pass without calling the registration function.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -32,79 +32,75 @@
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-002",
-      "title": "Default session lives in the registry at startup",
-      "description": "As an operator running a single factory, I want the default session registered the same way as named sessions so session targeting is uniform from the first request.",
+      "id": "cmd-wire-composition-002",
+      "title": "Wire toolchain and composition package bootstrap",
+      "description": "As a contributor, I want a checked-in Wire-generated injector in cmd/factory/composition so the factory binary has a single generated composition root.",
       "acceptanceCriteria": [
-        "After BuildFactoryService and service run, ~default is present in the session registry with a live handle pointing at the started factory directory.",
-        "Default session registration uses the same registerLiveSession path as OpenFactorySession, not a parallel service-only runtime slot.",
-        "runState.sessionID matches the registry entry used for ~default while the default runtime is active.",
+        "github.com/google/wire is available to the repo; cmd/factory/composition/wire.go uses wireinject and go generate to produce wire_gen.go.",
+        "wire_gen.go builds without the wireinject tag and exposes a function that builds *service.FactoryService from context.Context and *service.FactoryServiceConfig by delegating to service.BuildFactoryService.",
+        "go build ./cmd/factory succeeds on a clean checkout after go generate ./cmd/factory/composition/...",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-003",
-      "title": "Runtime operations target the requested session",
-      "description": "As a dashboard user with multiple factory tabs, I want work, snapshots, and idle checks for each session_id to use only that session's runtime so sessions cannot leak into one another.",
+      "id": "cmd-wire-composition-003",
+      "title": "Register wire-built builder in factory main",
+      "description": "As an operator, I want you run to use the wire-generated factory builder by default so runtime behavior stays the same while composition moves to cmd/.",
       "acceptanceCriteria": [
-        "Submitting work to session A records artifacts and dispatch identifiers only for session A; session B's replay and log artifacts do not contain session A work.",
-        "Engine snapshot and factory read APIs scoped by session_id return data from that session's factory directory, not another live session's directory.",
-        "Idle checks used before factory activation apply to the session being saved or opened, not whichever session was selected last on the service root.",
-        "pkg/api session-scoped routing tests continue to pass: mutations and reads for session-beta do not invoke default-session factories.",
+        "cmd/factory/main.go registers the composition package generated builder via pkg/cli/run before cli.Execute().",
+        "go test ./pkg/cli/run/... passes with no intentional changes to flag parsing, auto-port, dashboard URL, or API server startup tests.",
+        "A focused composition test asserts the registered builder returns non-nil *service.FactoryService for a minimal valid FactoryServiceConfig fixture, or the same error family as service.BuildFactoryService for an invalid fixture.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-004",
-      "title": "Runtime replacement is always session-scoped",
-      "description": "As a maintainer, I want every runtime swap after persist to stop the prior handle for the same session and start the replacement under that session's root.",
+      "id": "cmd-wire-composition-004",
+      "title": "Explicit collaborator provider set (post-S6)",
+      "description": "As a maintainer, I want Wire providers for each FactoryService collaborator so dependency order is visible in one place after S6 extraction.",
       "acceptanceCriteria": [
-        "Factory definition save, OpenFactorySession, and named-factory activation call replaceSessionRuntime with the session idle guard, not the legacy global activation entry point.",
-        "When replacing the factory for a non-default session, the current-factory pointer is written under that session's SessionFactoryRootDir, not only the service host root.",
-        "A successful replacement stops the previous live handle for the same session before registering the successor; other live sessions keep running.",
-        "Service-mode sidecar start and stop behavior is unchanged (poller, cron, and related service tests still pass).",
+        "cmd/factory/composition/wire.go defines providers for S6 collaborators (logger/config inputs, factorysessions registry, factorysave, runtimebuild, localmodels, hostedworkers) and assembles *service.FactoryService without duplicating pkg/service business logic.",
+        "The wire-generated build path is behaviorally equivalent to service.BuildFactoryService for the same FactoryServiceConfig on fixtures covered by existing pkg/service build tests.",
+        "go test ./pkg/service/... and go test ./pkg/cli/run/... pass without weakening assertions.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-005",
-      "title": "FactoryService no longer mirrors live runtime state",
-      "description": "As a reviewer, I want FactoryService to hold wiring and session orchestration only, so there is one obvious place to find the live runtime for a session.",
+      "id": "cmd-wire-composition-005",
+      "title": "Document Wire regeneration workflow",
+      "description": "As a contributor, I want clear instructions for regenerating composition code after changing providers.",
       "acceptanceCriteria": [
-        "Top-level factory, net, listener, runtimeCfg, and related runtime fields are removed or reduced to thin delegators that read the selected or requested session handle.",
-        "Runtime swap for a session updates only that session's registry entry and runState for that session; no production path writes the same swap to both top-level fields and the session handle.",
-        "Default and named-session behavior for submit, pause, wait-for-complete, and model catalog APIs remains unchanged from the caller's perspective.",
-        "Typecheck passes",
-        "Tests pass"
+        "docs/internal/development/ or the development guide documents installing Wire CLI, running go generate ./cmd/factory/composition/..., committing wire_gen.go, and never hand-editing generated files.",
+        "Documentation states Wire is limited to cmd/factory/composition and pkg/service stays tag-free.",
+        "Typecheck passes"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-006",
-      "title": "Restart behavior documented for operators",
-      "description": "As an operator running multiple UI tabs, I need clear documentation of which sessions survive a process restart so I do not assume ephemeral tabs are restored.",
+      "id": "cmd-wire-composition-006",
+      "title": "Optional CI guard for stale wire_gen",
+      "description": "As a maintainer, I want CI to fail when wire_gen.go is out of date so generated composition does not drift silently.",
       "acceptanceCriteria": [
-        "Internal maintainer documentation states that only ~default is restored when the service process restarts; additional live sessions opened before restart are ephemeral and must be reopened.",
-        "TestFactoryService_Run_RestartsOnlyDefaultSession continues to pass without changing expected session count or default runtime directory after restart.",
+        "A CI or make target runs go generate ./cmd/factory/composition/... and fails if git diff shows changes to wire_gen.go, or documents an intentional skip.",
+        "When enabled, the check passes on a clean tree after regeneration.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]
