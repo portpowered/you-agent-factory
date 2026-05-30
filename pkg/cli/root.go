@@ -58,6 +58,7 @@ const cliBinaryName = "you"
 // NewRootCommand creates the top-level Cobra command for the you-agent-factory CLI.
 type cliGlobalOptions struct {
 	server string
+	json   bool
 }
 
 func NewRootCommand() *cobra.Command {
@@ -93,6 +94,7 @@ func NewRootCommand() *cobra.Command {
 	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
 	root.PersistentFlags().BoolVarP(&diagnostics.debug, "debug", "d", false, "emit lower-level command diagnostics where supported (implies --verbose)")
 	root.PersistentFlags().StringVar(&globals.server, "server", cliserver.DefaultBaseURI, "factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port")
+	root.PersistentFlags().BoolVar(&globals.json, "json", false, "emit structured JSON on stdout for supported commands; diagnostics remain on stderr")
 
 	root.AddCommand(
 		newConfigCommand(diagnostics),
@@ -169,9 +171,9 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 	}
 	factoryCmd.AddCommand(
 		newFactoryQueryCommand(globals, diagnostics),
-		newFactoryListCommand(diagnostics),
+		newFactoryListCommand(globals, diagnostics),
 		newFactorySaveCommand(globals, diagnostics),
-		newFactoryUpdateFromFileCommand(diagnostics),
+		newFactoryUpdateFromFileCommand(globals, diagnostics),
 		newFactoryDeleteCommand(diagnostics),
 	)
 	return factoryCmd
@@ -204,7 +206,7 @@ func newFactoryDeleteCommand(_ *cliDiagnosticsOptions) *cobra.Command {
 	return cmd
 }
 
-func newFactoryUpdateFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
+func newFactoryUpdateFromFileCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
 	cfg := factorycli.UpdateFromFileConfig{Dir: defaultcmd.FactoryDir}
 
 	cmd := &cobra.Command{
@@ -222,6 +224,7 @@ func newFactoryUpdateFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Name = args[0]
+			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			return updateFactoryFromFile(cfg)
 		},
@@ -229,7 +232,6 @@ func newFactoryUpdateFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
 
 	cmd.Flags().StringVar(&cfg.From, "from", "", "path to an existing factory.json payload (required)")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit structured confirmation JSON")
 	_ = cmd.MarkFlagRequired("from")
 	return cmd
 }
@@ -259,13 +261,14 @@ func newFactorySaveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				liveCfg.Server = globals.server
+				liveCfg.JSON = globals.json
 				liveCfg.Output = cmd.OutOrStdout()
 				liveCfg.Diagnostics = diagnostics.writer(cmd)
 				liveCfg.Verbose = diagnostics.verboseEnabled()
-				liveCfg.JSON = fileCfg.JSON // shared --json flag
 				return saveFactoryCurrent(liveCfg)
 			}
 			fileCfg.Name = args[0]
+			fileCfg.JSON = globals.json
 			fileCfg.Output = cmd.OutOrStdout()
 			return saveFactoryFromFile(fileCfg)
 		},
@@ -276,11 +279,10 @@ func newFactorySaveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 	cmd.Flags().BoolVar(&fileCfg.SetCurrent, "set-current", false, "update .current-factory to the saved name")
 	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().StringVar(&liveCfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
-	cmd.Flags().BoolVar(&fileCfg.JSON, "json", false, "emit structured confirmation JSON")
 	return cmd
 }
 
-func newFactoryListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newFactoryListCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
 	cfg := factorycli.ListConfig{Dir: defaultcmd.FactoryDir}
 
 	cmd := &cobra.Command{
@@ -296,13 +298,13 @@ func newFactoryListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"  " + cliBinaryName + " factory list --dir my-factory --json",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			return listFactories(cfg)
 		},
 	}
 
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit persisted factories as a JSON array")
 	return cmd
 }
 
@@ -327,6 +329,7 @@ func newFactoryQueryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
+			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -336,7 +339,6 @@ func newFactoryQueryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 	}
 
 	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API current-factory JSON response")
 	return cmd
 }
 
@@ -489,6 +491,7 @@ func newModelsListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostics
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
+			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -497,7 +500,6 @@ func newModelsListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostics
 		},
 	}
 	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API list-models JSON response")
 	return cmd
 }
 
@@ -511,6 +513,7 @@ func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
 			cfg.ModelName = args[0]
+			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -519,7 +522,6 @@ func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 		},
 	}
 	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API model-detail JSON response")
 	return cmd
 }
 
@@ -533,6 +535,7 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
 			cfg.ModelName = args[0]
+			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -544,7 +547,6 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 	cmd.Flags().StringVar(&cfg.Operation, "operation", cfg.Operation, "uppercase provider-agnostic operation name")
 	cmd.Flags().StringVar(&cfg.Text, "text", "", "text input for direct invocation")
 	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "output file path for streamed audio responses")
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API model-invocation JSON metadata response")
 	return cmd
 }
 
@@ -558,6 +560,7 @@ func newModelsPullCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostics
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
 			cfg.ModelName = args[0]
+			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -566,7 +569,6 @@ func newModelsPullCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostics
 		},
 	}
 	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API model-pull JSON response")
 	return cmd
 }
 
@@ -583,6 +585,7 @@ func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
+			cfg.JSON = globals.json
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -597,7 +600,6 @@ func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 	cmd.Flags().StringVar(&cfg.SortBy, "sort-by", "", "sort returned work by field (state.type)")
 	cmd.Flags().IntVar(&cfg.MaxResults, "max-results", 0, "maximum work items to return")
 	cmd.Flags().StringVar(&cfg.NextToken, "next-token", "", "pagination cursor returned by a previous work list response")
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API list-work JSON response")
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	return cmd
 }

@@ -417,7 +417,7 @@ func TestFactoryQueryCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStde
 	root := NewRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"factory", "query", "--json", "--verbose"})
+	root.SetArgs([]string{"--json", "factory", "query", "--verbose"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute factory query --json --verbose: %v", err)
@@ -577,6 +577,8 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
+		"--json",
+		"--server", "http://127.0.0.1:9090",
 		"work",
 		"list",
 		"--state-name", "review",
@@ -584,8 +586,6 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 		"--sort-by", "state.type",
 		"--max-results", "25",
 		"--next-token", "cursor-1",
-		"--json",
-		"--server", "http://127.0.0.1:9090",
 	})
 
 	if err := root.Execute(); err != nil {

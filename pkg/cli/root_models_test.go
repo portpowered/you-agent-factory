@@ -26,7 +26,7 @@ func TestModelsListCommand_DefaultServerAndJSONFlagMapToConfig(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"models", "list", "--json"})
+	root.SetArgs([]string{"--json", "models", "list"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute models list: %v", err)
@@ -64,7 +64,7 @@ func TestModelsListCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr
 	root := NewRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"models", "list", "--json", "--verbose"})
+	root.SetArgs([]string{"--json", "models", "list", "--verbose"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute models list --json --verbose: %v", err)
@@ -150,7 +150,7 @@ func TestModelsPullCommand_MapsArgumentsAndFlags(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"models", "pull", "OMNIVOICE_Q4_K_M", "--server", "http://127.0.0.1:9090", "--json"})
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "models", "pull", "OMNIVOICE_Q4_K_M"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute models pull: %v", err)
