@@ -24,11 +24,10 @@ interface WorkflowActivityBentoCardProps {
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
   onSelectStateNode: (placeId: string) => void;
+  onSelectWorker: (workerName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   widgetInstanceID?: string;
 }
-
-const GRAPH_PANEL_SHELL_CLASS = "relative h-full min-h-0 min-w-0";
 
 export function WorkflowActivityBentoCard({
   headerAction,
@@ -40,6 +39,7 @@ export function WorkflowActivityBentoCard({
   widgetInstanceID,
   onSelectWorkID,
   onSelectStateNode,
+  onSelectWorker,
   onSelectWorkstation,
 }: WorkflowActivityBentoCardProps) {
   const messages = getWorkflowActivityShellMessages(locale);
@@ -67,7 +67,7 @@ export function WorkflowActivityBentoCard({
       }
       title={messages.widgetTitle}
     >
-      <section className={GRAPH_PANEL_SHELL_CLASS}>
+      <section className="relative h-full min-h-0 min-w-0">
         <ReactFlowCurrentActivityCardView
           editor={editor}
           importController={importController}
@@ -79,6 +79,7 @@ export function WorkflowActivityBentoCard({
           widgetInstanceID={widgetInstanceID}
           onSelectWorkID={onSelectWorkID}
           onSelectStateNode={onSelectStateNode}
+          onSelectWorker={onSelectWorker}
           onSelectWorkstation={onSelectWorkstation}
         />
       </section>
@@ -91,6 +92,10 @@ function toCurrentActivitySelection(
 ): CurrentActivitySelection | null {
   if (selection?.kind === "workstation-request") {
     return { kind: "node", nodeId: selection.nodeId };
+  }
+
+  if (selection?.kind === "worker") {
+    return selection;
   }
 
   if (selection?.kind !== "work-item") {

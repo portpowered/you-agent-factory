@@ -1,13 +1,11 @@
 import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { getCurrentSelectionShellMessages } from "../../current-selection/messages/current-selection-shell";
-import {
-  CurrentSelectionWidget,
-  type useCurrentSelection,
-  type useCurrentSelectionDetails,
-  type useSelectedProviderSessionState,
-} from "../../current-selection/public";
+import { getCurrentSelectionShellMessages } from "../../current-selection/base/public";
+import type { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
+import type { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
+import { CurrentSelectionWidget } from "../../current-selection/public";
+import type { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
@@ -15,23 +13,17 @@ import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
 import { SubmitWorkWidget } from "../../submit-work/public";
 import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
 import { TerminalWorkWidget } from "../../terminal-work/public";
+import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
-import {
-  TraceDrilldownWidget,
-  type useTraceDrilldown,
-} from "../../trace-drilldown/public";
+import { TraceDrilldownWidget } from "../../trace-drilldown/public";
+import type { useWorkOutcomeChart } from "../../work-outcome/hooks/useWorkOutcomeChart";
 import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
-import {
-  type useWorkOutcomeChart,
-  WorkOutcomeWidget,
-} from "../../work-outcome/public";
+import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { getWorkTotalsMessages } from "../../work-totals/messages/work-totals";
 import { WorkTotalsWidget } from "../../work-totals/public";
-import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import type { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
-import {
-  WorkflowActivityWidget,
-} from "../../workflow-activity/public";
+import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import { WorkflowActivityWidget } from "../../workflow-activity/public";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/useDashboardLayout";
 import {
   type DashboardWidgetPickerWidgetType,
@@ -263,6 +255,7 @@ function buildOverviewWidgetCard({
             now={now}
             onSelectStateNode={currentSelection.selectStateNode}
             onSelectWorkID={currentSelection.selectWorkByID}
+            onSelectWorker={currentSelection.selectWorker}
             onSelectWorkstation={currentSelection.selectWorkstation}
             selection={currentSelection.selection}
             snapshot={snapshot}

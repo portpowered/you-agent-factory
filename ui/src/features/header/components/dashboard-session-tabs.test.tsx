@@ -4,9 +4,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
+import { factorySessionFieldTarget } from "../../../testing/factory-validation-target-fixtures";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import { sessionCloseLabel } from "../lib/dashboard-session-tabs-utils";
+import {
+  SESSION_TAB_PATH_MAX_LENGTH,
+  sessionCloseLabel,
+  sessionTabSecondaryPath,
+} from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 
@@ -562,11 +567,7 @@ describe("DashboardSessionTabs", () => {
         new FactorySessionsAPIError("folder validation failed", {
           code: "BAD_REQUEST",
           targets: [
-            {
-              field: "folderPath",
-              id: "missing",
-              kind: "factory-session-validation",
-            },
+            factorySessionFieldTarget("missing", "folderPath", "folder validation failed"),
           ],
         }),
       )
@@ -574,11 +575,11 @@ describe("DashboardSessionTabs", () => {
         new FactorySessionsAPIError("folder validation failed", {
           code: "BAD_REQUEST",
           targets: [
-            {
-              field: "folderPath",
-              id: "not_directory",
-              kind: "factory-session-validation",
-            },
+            factorySessionFieldTarget(
+              "not_directory",
+              "folderPath",
+              "folder validation failed",
+            ),
           ],
         }),
       )
@@ -586,11 +587,11 @@ describe("DashboardSessionTabs", () => {
         new FactorySessionsAPIError("folder validation failed", {
           code: "BAD_REQUEST",
           targets: [
-            {
-              field: "folderPath",
-              id: "unreadable",
-              kind: "factory-session-validation",
-            },
+            factorySessionFieldTarget(
+              "unreadable",
+              "folderPath",
+              "folder validation failed",
+            ),
           ],
         }),
       )
@@ -598,11 +599,11 @@ describe("DashboardSessionTabs", () => {
         new FactorySessionsAPIError("folder validation failed", {
           code: "BAD_REQUEST",
           targets: [
-            {
-              field: "folderPath",
-              id: "not_runnable",
-              kind: "factory-session-validation",
-            },
+            factorySessionFieldTarget(
+              "not_runnable",
+              "folderPath",
+              "folder validation failed",
+            ),
           ],
         }),
       );
@@ -672,6 +673,201 @@ describe("DashboardSessionTabs", () => {
     expect(
       screen.queryByRole("region", { name: messages.targetPickerTitle }),
     ).toBeNull();
+  });
+
+  it("confirms init-new-factory after validateOnly returns initsNewFactory", async () => {
+    const emptyFolderPath = "/workspace/new-factory-root";
+    listFactorySessions
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: emptyFolderPath,
+          folderPath: emptyFolderPath,
+          id: "session-new-factory",
+          isDefault: false,
+          project: "new-factory-root",
+          target: {
+            kind: "default",
+          },
+        },
+      ]);
+    openFactorySession
+      .mockResolvedValueOnce({
+        folderPath: emptyFolderPath,
+        initsNewFactory: true,
+      })
+      .mockResolvedValueOnce({
+        session: {
+          factoryDir: emptyFolderPath,
+          folderPath: emptyFolderPath,
+          id: "session-new-factory",
+          isDefault: false,
+          project: "new-factory-root",
+          target: {
+            kind: "default",
+          },
+        },
+      });
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: emptyFolderPath },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+        folderPath: emptyFolderPath,
+        validateOnly: true,
+      });
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: messages.openSessionCreateFactoryLabel,
+        }),
+      ).toBeTruthy();
+    });
+    expect(screen.getByText(emptyFolderPath)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: messages.openSessionSubmitLabel }),
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: messages.openSessionCreateFactoryLabel,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+        folderPath: emptyFolderPath,
+        initNewFactory: true,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "new-factory-root" })).toBeTruthy();
+    });
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      "session-new-factory",
+    );
+    expect(openFactorySession).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns to folder entry when canceling init-new-factory confirmation", async () => {
+    const emptyFolderPath = "/workspace/cancel-init-root";
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+    openFactorySession.mockResolvedValueOnce({
+      folderPath: emptyFolderPath,
+      initsNewFactory: true,
+    });
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: emptyFolderPath },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: messages.openSessionCreateFactoryLabel,
+        }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: messages.openSessionCancelCreateFactoryLabel,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionSubmitLabel }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.queryByRole("button", {
+        name: messages.openSessionCreateFactoryLabel,
+      }),
+    ).toBeNull();
+    expect(openFactorySession).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: messages.sessionFolderFieldLabel,
+        }) as HTMLInputElement
+      ).value,
+    ).toBe(emptyFolderPath);
   });
 
   it("closes the active session tab and selects the remaining session deterministically", async () => {
@@ -965,6 +1161,45 @@ describe("DashboardSessionTabs", () => {
     expect((pendingCloseButton as HTMLButtonElement).disabled).toBe(true);
     expect(pendingCloseButton.textContent?.trim()).toBe(
       messages.closingSessionButtonLabel,
+    );
+  });
+
+  it("shows the default session tab secondary line from absolute folderPath metadata", async () => {
+    const absoluteFactoryPath =
+      "/Users/operator/infinite-you/agent-factory/examples/catalog/factory";
+
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: absoluteFactoryPath,
+        folderPath: absoluteFactoryPath,
+        id: "~default",
+        isDefault: true,
+        project: "factory",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "factory" })).toBeTruthy();
+    });
+
+    const defaultTab = screen.getByRole("tab", { name: "factory" });
+    const truncatedSecondaryPath = sessionTabSecondaryPath(
+      absoluteFactoryPath,
+      SESSION_TAB_PATH_MAX_LENGTH,
+    );
+
+    expect(defaultTab.getAttribute("aria-label")).toBe("factory");
+    expect(screen.getByText(truncatedSecondaryPath)).toBeTruthy();
+    expect(screen.getByTitle(absoluteFactoryPath).textContent).toBe(
+      truncatedSecondaryPath,
+    );
+    expect(defaultTab.parentElement?.getAttribute("title")).toBe(
+      `${absoluteFactoryPath} (~default)`,
     );
   });
 

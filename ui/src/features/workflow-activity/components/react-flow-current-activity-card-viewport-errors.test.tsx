@@ -200,6 +200,7 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
       now: Date.parse("2026-05-28T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: {

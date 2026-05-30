@@ -23,14 +23,24 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 	got := stdout.String()
 	for _, want := range []string{
 		"# Docs",
+		"`agents` - Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router",
 		"`authoring-factories` - Practical factory authoring workflow",
-		"`config` - Factory configuration",
-		"`work` - Work types",
+		"`config` - factory.json topology, work types, states, workers, workstations, resources, and portability",
+		"`mock-workers` - Mock-worker runs",
+		"`record-replay` - Record and replay run modes",
+		"`guards` - Workstation, input, and factory guards",
+		"`relationships` - Batch DEPENDS_ON",
+		"`work` - Submitted work: POST /work, tags, batch cross-links, and submission contracts",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`batch-inputs` - Batch input files",
+		"`you docs agents`",
 		"`you docs authoring-factories`",
 		"`you docs config`",
+		"`you docs mock-workers`",
+		"`you docs record-replay`",
+		"`you docs guards`",
+		"`you docs relationships`",
 		"`you docs work`",
 		"`you docs workstations`",
 		"`you docs workers`",
@@ -74,6 +84,68 @@ func TestDocsCommand_HelpStillUsesCobraHelp(t *testing.T) {
 	}
 }
 
+func TestDocsCommand_BatchAndRelationshipTopicsUseOpenAPICamelCaseFieldNames(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		topic   string
+		want    []string
+		absent  []string
+	}{
+		{
+			topic: "batch-inputs",
+			want: []string{
+				"# Batch Inputs",
+				"requestId",
+				"workTypeName",
+				"sourceWorkName",
+				"targetWorkName",
+			},
+			absent: []string{"work_type_name", "source_work_name"},
+		},
+		{
+			topic: "relationships",
+			want: []string{
+				"# Relationships",
+				"requestId",
+				"workTypeName",
+				"sourceWorkName",
+				"targetWorkName",
+			},
+			absent: []string{"work_type_name", "source_work_name", "target_work_name"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.topic, func(t *testing.T) {
+			t.Parallel()
+
+			var stdout bytes.Buffer
+			root := NewRootCommand()
+			root.SetOut(&stdout)
+			root.SetErr(io.Discard)
+			root.SetArgs([]string{"docs", tc.topic})
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute docs %s: %v", tc.topic, err)
+			}
+
+			got := stdout.String()
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("docs %s missing %q:\n%s", tc.topic, want, got)
+				}
+			}
+			for _, absent := range tc.absent {
+				if strings.Contains(got, absent) {
+					t.Fatalf("docs %s still contains retired field %q:\n%s", tc.topic, absent, got)
+				}
+			}
+		})
+	}
+}
+
 func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -86,7 +158,7 @@ func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, work, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unexpected docs error %q", got)
 	}
 	if got := stdout.String(); got != "" {

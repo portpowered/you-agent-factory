@@ -10,15 +10,22 @@ import type {
   FactoryWorkstationIO,
 } from "./factory-graph-draft-types";
 import { buildEdge, edgeChangeId } from "./factory-graph-draft-types";
-import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
+import { validateFactoryGraphDraftStructural } from "./factory-graph-draft-validation";
 
 const DEFAULT_RESOURCE_REQUIREMENT_CAPACITY = 1;
 
 export function buildPendingFactoryDefinition(
   baseFactoryDefinition: CanonicalFactoryDefinition,
   draft: FactoryGraphDraft,
+  locale?: string | null,
 ): CanonicalFactoryDefinition | null {
-  if (validateFactoryGraphDraft(baseFactoryDefinition, draft).length > 0) {
+  if (
+    validateFactoryGraphDraftStructural(
+      baseFactoryDefinition,
+      draft,
+      locale,
+    ).length > 0
+  ) {
     return null;
   }
 

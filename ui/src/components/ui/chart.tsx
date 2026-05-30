@@ -49,6 +49,7 @@ export function ChartContainer({
   children,
   className,
   config,
+  footer,
   interactionAttributes,
   overlay,
   rootAttributes,
@@ -58,12 +59,25 @@ export function ChartContainer({
   children: ReactNode;
   className?: string;
   config: ChartConfig;
+  footer?: ReactNode;
   interactionAttributes?: HTMLAttributes<HTMLDivElement>;
   overlay?: ReactNode;
   rootAttributes?: Record<string, string>;
   style?: CSSProperties;
   title: string;
 }) {
+  const chartSurface = (
+    <ResponsiveContainer
+      height="100%"
+      initialDimension={DEFAULT_CHART_INITIAL_DIMENSION}
+      minHeight={0}
+      minWidth={0}
+      width="100%"
+    >
+      {children}
+    </ResponsiveContainer>
+  );
+
   return (
     <ChartContext.Provider value={config}>
       <div
@@ -88,15 +102,14 @@ export function ChartContainer({
         {overlay ? (
           <div className="pointer-events-none absolute inset-0">{overlay}</div>
         ) : null}
-        <ResponsiveContainer
-          height="100%"
-          initialDimension={DEFAULT_CHART_INITIAL_DIMENSION}
-          minHeight={0}
-          minWidth={0}
-          width="100%"
-        >
-          {children}
-        </ResponsiveContainer>
+        {footer ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1">{chartSurface}</div>
+            {footer}
+          </div>
+        ) : (
+          chartSurface
+        )}
       </div>
     </ChartContext.Provider>
   );
@@ -158,13 +171,17 @@ export function ChartLegendContent({
   className,
   getToggleLabel,
   hiddenSeries = new Set<string>(),
+  itemClassName,
   onToggleSeries,
   payload,
+  swatchClassName,
 }: RechartsLegendContentProps & {
   className?: string;
   getToggleLabel?: (label: string, hidden: boolean) => string;
   hiddenSeries?: ReadonlySet<string>;
+  itemClassName?: string;
   onToggleSeries?: (key: string) => void;
+  swatchClassName?: string;
 }) {
   const config = useChartConfig();
 
@@ -193,7 +210,8 @@ export function ChartLegendContent({
             <span
               aria-hidden="true"
               className={cn(
-                "h-2.5 w-2.5 rounded-full",
+                "rounded-full",
+                swatchClassName ?? "h-2.5 w-2.5",
                 hidden ? "border border-af-border bg-af-surface-subtle" : "",
               )}
               style={{
@@ -208,7 +226,10 @@ export function ChartLegendContent({
 
         if (!onToggleSeries) {
           return (
-            <div className="flex items-center gap-2" key={key}>
+            <div
+              className={cn("flex items-center gap-2", itemClassName)}
+              key={key}
+            >
               {content}
             </div>
           );
@@ -221,6 +242,7 @@ export function ChartLegendContent({
             className={cn(
               "min-h-0 rounded-md border-transparent px-0 py-1 text-left font-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-focus",
               hidden ? "text-af-text-disabled" : "",
+              itemClassName,
             )}
             data-chart-legend-series={key}
             data-chart-legend-series-hidden={hidden ? "true" : "false"}

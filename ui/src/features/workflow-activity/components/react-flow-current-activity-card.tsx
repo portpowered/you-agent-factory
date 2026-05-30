@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: primary activity graph card composes editor, import, and observer surfaces together.
 import "@xyflow/react/dist/style.css";
 
 import {
@@ -58,12 +59,12 @@ const CURRENT_ACTIVITY_CARD_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "relative flex h-full min-h-0 min-w-0 flex-col",
 );
-const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
 const CURRENT_ACTIVITY_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 export type CurrentActivitySelection =
   | { kind: "node"; nodeId: string }
   | { kind: "state-node"; placeId: string }
+  | { kind: "worker"; workerName: string }
   | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
 
 function CurrentActivityCardHeading({
@@ -113,6 +114,7 @@ interface ReactFlowCurrentActivityCardProps {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectWorker: (workerName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
   selection: CurrentActivitySelection | null;
@@ -131,6 +133,7 @@ function useCurrentActivityBaseNodes({
   now,
   onSelectStateNode,
   onSelectWorkID,
+  onSelectWorker,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -140,6 +143,7 @@ function useCurrentActivityBaseNodes({
   | "now"
   | "onSelectStateNode"
   | "onSelectWorkID"
+  | "onSelectWorker"
   | "onSelectWorkstation"
   | "selection"
   | "locale"
@@ -168,6 +172,7 @@ function useCurrentActivityBaseNodes({
           editorMode: editor.editorMode,
           onConnectionAnchorClick: editor.handleConnectionAnchorClick,
           pendingConnectionSource: editor.pendingConnectionSource,
+          validationProjection: editor.structuralValidation.projection,
         },
         factoryDefinition,
         graphLayout,
@@ -175,6 +180,7 @@ function useCurrentActivityBaseNodes({
         now,
         onSelectStateNode,
         onSelectWorkID,
+        onSelectWorker,
         onSelectWorkstation,
         selection,
         snapshot,
@@ -191,6 +197,7 @@ function useCurrentActivityBaseNodes({
       now,
       onSelectStateNode,
       onSelectWorkID,
+      onSelectWorker,
       onSelectWorkstation,
       selection,
       snapshot,
@@ -199,12 +206,14 @@ function useCurrentActivityBaseNodes({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates graph layout, editor draft, and selection handler wiring in one hook.
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,
   now,
   onSelectStateNode,
   onSelectWorkID,
+  onSelectWorker,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -213,6 +222,7 @@ export function useCurrentActivityGraphViewModel({
   | "now"
   | "onSelectStateNode"
   | "onSelectWorkID"
+  | "onSelectWorker"
   | "onSelectWorkstation"
   | "selection"
   | "locale"
@@ -271,6 +281,7 @@ export function useCurrentActivityGraphViewModel({
     now,
     onSelectStateNode,
     onSelectWorkID,
+    onSelectWorker,
     onSelectWorkstation,
     selection,
     snapshot,
@@ -428,7 +439,7 @@ export function ReactFlowCurrentActivityCardView(
       className={CURRENT_ACTIVITY_CARD_CLASS}
     >
       {showHeaderActions ? (
-        <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
+        <div className="mb-4">
           <CurrentActivityGraphHeaderActions
             editorMode={editor.editorMode}
             editorUnavailableClassifierWorkstationName={
@@ -462,6 +473,7 @@ export function ReactFlowCurrentActivityCardView(
         headingID={headingID}
         imports={imports}
         locale={props.locale}
+        selection={props.selection}
         snapshot={props.snapshot}
       />
       <CurrentActivityGraphSaveNotifications

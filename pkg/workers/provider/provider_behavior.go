@@ -84,15 +84,15 @@ type openCodeProviderBehavior struct {
 
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
-	case string(ModelProviderCodex):
+	case string(interfaces.ModelProviderCodex):
 		return codexProviderBehavior{logger: logger}
-	case string(ModelProviderGemini):
+	case string(interfaces.ModelProviderGemini):
 		return geminiProviderBehavior{logger: logger}
-	case string(ModelProviderKiro):
+	case string(interfaces.ModelProviderKiro):
 		return kiroProviderBehavior{logger: logger}
-	case string(ModelProviderCursor):
+	case string(interfaces.ModelProviderCursor):
 		return cursorProviderBehavior{logger: logger}
-	case string(ModelProviderOpenCode):
+	case string(interfaces.ModelProviderOpenCode):
 		return openCodeProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
@@ -101,15 +101,15 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 
 func providerBehaviorForErrorClassification(provider string) providerBehavior {
 	switch provider {
-	case string(ModelProviderClaude):
+	case string(interfaces.ModelProviderClaude):
 		return claudeProviderBehavior{}
-	case string(ModelProviderGemini):
+	case string(interfaces.ModelProviderGemini):
 		return geminiProviderBehavior{}
-	case string(ModelProviderKiro):
+	case string(interfaces.ModelProviderKiro):
 		return kiroProviderBehavior{}
-	case string(ModelProviderCursor):
+	case string(interfaces.ModelProviderCursor):
 		return cursorProviderBehavior{}
-	case string(ModelProviderOpenCode):
+	case string(interfaces.ModelProviderOpenCode):
 		return openCodeProviderBehavior{}
 	default:
 		return codexProviderBehavior{}
@@ -364,6 +364,9 @@ func (b openCodeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequ
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
+	if req.OpenCodeAgent != "" {
+		args = append(args, "--agent", req.OpenCodeAgent)
+	}
 	if req.SessionID != "" {
 		args = append(args, "--session", req.SessionID)
 	}
@@ -410,7 +413,7 @@ func validateCodexOptionalCapabilities(req interfaces.ProviderInferenceRequest) 
 			return errors.New("worktree selection is not supported by the codex runner in v1")
 		}
 	}
-	if req.Worktree != "" {
+	if req.Worktree != "" && req.WorkingDirectory == "" {
 		return errors.New("worktree selection is not supported by the codex runner in v1")
 	}
 	return nil

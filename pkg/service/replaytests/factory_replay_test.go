@@ -2,7 +2,6 @@ package replaytests
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	service "github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -25,7 +25,7 @@ import (
 
 func TestBuildFactoryService_ReplayModeLoadsEmbeddedConfigWithoutFactoryFiles(t *testing.T) {
 	sourceDir := t.TempDir()
-	writeFactoryJSON(t, sourceDir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, sourceDir, factoryfixtures.MinimalFactoryConfig())
 	writeScriptWorkerAgentsMD(t, sourceDir, "worker-a")
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
@@ -60,7 +60,7 @@ func TestBuildFactoryService_ReplayModeLoadsEmbeddedConfigWithoutFactoryFiles(t 
 
 func TestBuildFactoryService_ReplayModeDefaultsToDeterministicClock(t *testing.T) {
 	sourceDir := t.TempDir()
-	writeFactoryJSON(t, sourceDir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, sourceDir, factoryfixtures.MinimalFactoryConfig())
 	writeScriptWorkerAgentsMD(t, sourceDir, "worker-a")
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
@@ -94,7 +94,7 @@ func TestBuildFactoryService_ReplayModeDefaultsToDeterministicClock(t *testing.T
 
 func TestBuildFactoryService_ReplayModeUsesRecordedProviderSideEffects(t *testing.T) {
 	sourceDir := t.TempDir()
-	writeFactoryJSON(t, sourceDir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, sourceDir, factoryfixtures.MinimalFactoryConfig())
 	writeWorkerAgentsMD(t, sourceDir, "worker-a")
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
@@ -140,7 +140,7 @@ func TestBuildFactoryService_ReplayModeUsesRecordedProviderSideEffects(t *testin
 // portos:func-length-exception owner=agent-factory reason=legacy-replay-fixture review=2026-07-18 removal=split-replay-fixture-before-next-replay-service-change
 func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t *testing.T) {
 	sourceDir := t.TempDir()
-	writeFactoryJSON(t, sourceDir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, sourceDir, factoryfixtures.MinimalFactoryConfig())
 	writeWorkerAgentsMD(t, sourceDir, "worker-a")
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
@@ -231,7 +231,7 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 
 func TestBuildFactoryService_ReplayModeUsesRecordedCommandRunnerSideEffects(t *testing.T) {
 	sourceDir := t.TempDir()
-	writeFactoryJSON(t, sourceDir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, sourceDir, factoryfixtures.MinimalFactoryConfig())
 	writeScriptWorkerAgentsMDWithCommand(t, sourceDir, "worker-a", "replay-live-command-should-not-run", []string{"ok"})
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
@@ -280,7 +280,7 @@ func TestBuildFactoryService_ReplayModeUsesRecordedCommandRunnerSideEffects(t *t
 
 func TestBuildFactoryService_ReplayModeStopsOnDispatchDivergence(t *testing.T) {
 	sourceDir := t.TempDir()
-	writeFactoryJSON(t, sourceDir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, sourceDir, factoryfixtures.MinimalFactoryConfig())
 	writeScriptWorkerAgentsMD(t, sourceDir, "worker-a")
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
@@ -339,7 +339,7 @@ func TestBuildFactoryService_ReplayModeStopsOnDispatchDivergence(t *testing.T) {
 
 func TestBuildFactoryService_ReplayModeWarnsOnCurrentConfigHashMismatch(t *testing.T) {
 	sourceDir := t.TempDir()
-	writeFactoryJSON(t, sourceDir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, sourceDir, factoryfixtures.MinimalFactoryConfig())
 	writeScriptWorkerAgentsMD(t, sourceDir, "worker-a")
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
@@ -369,9 +369,9 @@ func TestBuildFactoryService_ReplayModeWarnsOnCurrentConfigHashMismatch(t *testi
 		},
 	})
 
-	mismatchedConfig := minimalFactoryConfig()
+	mismatchedConfig := factoryfixtures.MinimalFactoryConfig()
 	mismatchedConfig["workers"] = []map[string]string{{"name": "worker-a"}, {"name": "worker-b"}}
-	writeFactoryJSON(t, sourceDir, mismatchedConfig)
+	factoryfixtures.WriteFactoryJSON(t, sourceDir, mismatchedConfig)
 
 	core, observedLogs := observer.New(zap.WarnLevel)
 	_, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
@@ -714,38 +714,6 @@ func serviceSlicePtr[T any](values []T) *[]T {
 	}
 	out := append([]T(nil), values...)
 	return &out
-}
-
-func minimalFactoryConfig() map[string]any {
-	return map[string]any{
-		"name": "test-factory",
-		"workTypes": []map[string]any{{
-			"name": "task",
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
-		"workers": []map[string]string{{"name": "worker-a"}},
-		"workstations": []map[string]any{{
-			"name":    "process",
-			"worker":  "worker-a",
-			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
-		}},
-	}
-}
-
-func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
-	t.Helper()
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal factory.json: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
-	}
 }
 
 func writeWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {

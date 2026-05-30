@@ -140,8 +140,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get work token
-         * @description Returns one token by token ID from the current marking.
+         * Get work
+         * @description Returns one work item by work or token identifier from the current marking.
          */
         get: operations["getWork"];
         put?: never;
@@ -160,8 +160,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get work token for one session
-         * @description Returns one token by token ID from the current marking owned by the explicitly selected live factory session.
+         * Get work for one session
+         * @description Returns one work item by work or token identifier from the current marking owned by the explicitly selected live factory session.
          */
         get: operations["getWorkBySessionId"];
         put?: never;
@@ -341,7 +341,7 @@ export interface paths {
         };
         /**
          * Get provider session details
-         * @description Loads a known Codex provider-session file by provider-session metadata. The browser supplies provider, kind, and identifier values; the server resolves the matching rollout file under the configured Codex sessions root and never accepts a raw filesystem path.
+         * @description Returns parsed provider-session details using a provider-neutral response schema. The browser supplies provider, kind, and identifier query parameters; the server resolves the matching session file under the configured provider sessions root and never accepts a raw filesystem path. Only Codex (`codex`) sessions are currently loadable for this endpoint.
          */
         get: operations["getProviderSessionDetails"];
         put?: never;
@@ -352,7 +352,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factories": {
+    "/factory-validations": {
         parameters: {
             query?: never;
             header?: never;
@@ -362,10 +362,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create factory
-         * @description Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory-sessions/~default/factory` readback only and cannot be activated as a customer-named factory.
+         * Validate factory definition
+         * @description Validates a submitted complete factory definition and returns canonical validation targets without persisting or activating the factory.
          */
-        post: operations["createFactory"];
+        post: operations["validateFactory"];
         delete?: never;
         options?: never;
         head?: never;
@@ -429,8 +429,8 @@ export interface paths {
          */
         get: operations["getCurrentFactoryBySessionId"];
         /**
-         * Save current factory for one session
-         * @description Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+         * Save factory for one session
+         * @description Submits one complete factory definition to the explicitly selected live session using an explicit save mode. Omitted `mode` defaults to `REPLACE_CURRENT`, which replaces the factory already current in the session. `UPSERT_NAMED_AND_ACTIVATE` persists under the session factory root using `factory.name`, updates the session current-factory pointer, and activates that runtime when idle. Clients should echo the server-managed `factory.version` field from the latest current-factory read for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
         put: operations["saveCurrentFactoryBySessionId"];
         post?: never;
@@ -511,7 +511,20 @@ export interface components {
             requiredState?: string;
         };
         SubmitWorkResponse: {
+            /** @description Trace identifier for the submitted work request batch. */
             traceId: string;
+            /** @description Stable request identifier assigned during normalization. */
+            requestId: string;
+            /** @description False when the same requestId was already accepted (idempotent replay). */
+            accepted: boolean;
+            /** @description Primary work identifier for single-work submits (batch-<requestId>-<name> when omitted). */
+            workId?: string;
+            /** @description Submitted work display name. */
+            name?: string;
+            /** @description Configured work type name for the submitted work. */
+            workTypeName?: string;
+            /** @description Factory session that accepted the submit (~default for POST /work). */
+            sessionId?: string;
         };
         /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
         SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
@@ -575,9 +588,15 @@ export interface components {
             /** @description Browser-authored MIME type preserved for inline identification after staging. */
             mediaType: string;
         };
+        UpsertWorkRequestSubmittedWork: {
+            name: string;
+            workTypeName: string;
+            workId: string;
+        };
         UpsertWorkRequestResponse: {
             requestId: string;
             traceId: string;
+            works: components["schemas"]["UpsertWorkRequestSubmittedWork"][];
         };
         ListWorkResponse: {
             results: components["schemas"]["Work"][];
@@ -786,8 +805,8 @@ export interface components {
              * @enum {string}
              */
             code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "STALE_FACTORY_VERSION" | "NOT_FOUND" | "INTERNAL_ERROR";
-            /** @description Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages. */
-            targets?: components["schemas"]["ErrorTarget"][];
+            /** @description Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields. */
+            targets?: components["schemas"]["FactoryValidationTarget"][];
         };
         ErrorTarget: {
             /** @description Client-visible target category such as form, node, edge, field, or save. */
@@ -812,9 +831,9 @@ export interface components {
         ProviderSessionDetailResponse: {
             providerSession: components["schemas"]["LoadableProviderSessionRef"];
             source: components["schemas"]["ProviderSessionSourceMetadata"];
-            parse: components["schemas"]["CodexSessionParseSummary"];
+            parse: components["schemas"]["ProviderSessionParseSummary"];
             /** @description Ordered transcript entries extracted from the provider-session stream. */
-            transcript: components["schemas"]["CodexSessionTranscriptEntry"][];
+            transcript: components["schemas"]["ProviderSessionTranscriptEntry"][];
         };
         FactorySessionTargetRef: {
             /** @enum {string} */
@@ -844,10 +863,16 @@ export interface components {
             target?: components["schemas"]["FactorySessionTargetRef"];
             /** @description When true, validate the folder and optional target selection without creating a live session. */
             validateOnly?: boolean;
+            /** @description When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly. */
+            initNewFactory?: boolean;
         };
         OpenFactorySessionResponse: {
             session?: components["schemas"]["FactorySessionSummary"];
             targets?: components["schemas"]["FactorySessionTarget"][];
+            /** @description When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath. */
+            initsNewFactory?: boolean;
+            /** @description Absolute resolved session folder path when initsNewFactory is true. */
+            folderPath?: string;
         };
         LoadableProviderSessionRef: {
             provider: components["schemas"]["LoadableProviderSessionProvider"];
@@ -866,7 +891,7 @@ export interface components {
          */
         LoadableProviderSessionKind: "session_id";
         ProviderSessionSourceMetadata: {
-            /** @description Path to the loaded session file relative to the configured Codex sessions root. */
+            /** @description Path to the loaded session file relative to the configured provider sessions root. */
             relativePath: string;
             /**
              * Format: int64
@@ -879,7 +904,7 @@ export interface components {
              */
             modifiedAt?: string;
         };
-        CodexSessionParseSummary: {
+        ProviderSessionParseSummary: {
             /** @description Number of JSON event records parsed from the session stream. */
             eventCount: number;
             /** @description Number of non-empty event-stream lines inspected. */
@@ -889,18 +914,18 @@ export interface components {
             /** @description Number of parsed JSON events without a recognized type field. */
             unknownEventCount: number;
             /** @description Chronological execution turns inferred from turn boundaries and response activity. */
-            turns: components["schemas"]["CodexSessionTurnSummary"][];
+            turns: components["schemas"]["ProviderSessionTurnSummary"][];
             /** @description Function and tool calls observed in chronological order. */
-            functionCalls: components["schemas"]["CodexSessionFunctionCallSummary"][];
+            functionCalls: components["schemas"]["ProviderSessionFunctionCallSummary"][];
             /** @description Reasoning entries or summaries observed in chronological order. */
-            reasoning: components["schemas"]["CodexSessionReasoningSummary"][];
-            tokenUsage?: components["schemas"]["CodexSessionTokenUsage"];
+            reasoning: components["schemas"]["ProviderSessionReasoningSummary"][];
+            tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
             /** @description Line-level parse errors for malformed event-stream records. */
-            parseErrors: components["schemas"]["CodexSessionLineError"][];
+            parseErrors: components["schemas"]["ProviderSessionLineError"][];
             /** @description Compact list of events with unknown or unsupported type fields. */
-            unknownEvents: components["schemas"]["CodexSessionUnknownEvent"][];
+            unknownEvents: components["schemas"]["ProviderSessionUnknownEvent"][];
         };
-        CodexSessionTurnSummary: {
+        ProviderSessionTurnSummary: {
             /** @description One-based chronological execution turn index. */
             index: number;
             /** @description Number of parsed events associated with the turn. */
@@ -917,7 +942,7 @@ export interface components {
              */
             startedAt?: string;
         };
-        CodexSessionFunctionCallSummary: {
+        ProviderSessionFunctionCallSummary: {
             /** @description Chronological order of the function or tool call in the session stream. */
             order: number;
             /** @description One-based execution turn index associated with the call when inferable. */
@@ -935,7 +960,7 @@ export interface components {
             /** @description Result status inferred from the call output or explicit status fields. */
             status?: string;
         };
-        CodexSessionReasoningSummary: {
+        ProviderSessionReasoningSummary: {
             /** @description Chronological order of the reasoning entry in the session stream. */
             order: number;
             /** @description One-based execution turn index associated with the reasoning entry when inferable. */
@@ -951,26 +976,65 @@ export interface components {
             /** @description Compact encrypted reasoning payload when the provider exposes it. */
             encryptedContent?: string;
         };
-        CodexSessionTokenUsage: {
+        ProviderSessionTokenUsage: {
             inputTokens?: number;
             cachedInputTokens?: number;
             outputTokens?: number;
             reasoningOutputTokens?: number;
             totalTokens?: number;
         };
-        CodexSessionLineError: {
+        ProviderSessionLineError: {
             /** @description One-based line number of the malformed event-stream record. */
             lineNumber: number;
             /** @description Client-safe parse error message for the malformed line. */
             message: string;
         };
-        CodexSessionUnknownEvent: {
+        ProviderSessionUnknownEvent: {
             /** @description One-based line number of the unknown event. */
             lineNumber: number;
             /** @description Raw top-level event type when present. */
             type?: string;
             /** @description Raw nested payload type when present. */
             payloadType?: string;
+        };
+        /**
+         * @description Canonical transcript entry type used by the dashboard transcript view.
+         * @enum {string}
+         */
+        ProviderSessionTranscriptEntryType: "user_message" | "assistant_message" | "reasoning" | "tool_call" | "tool_output" | "system_event";
+        ProviderSessionTranscriptEntry: {
+            /** @description Stable chronological order of the transcript entry in the session stream. */
+            order: number;
+            type: components["schemas"]["ProviderSessionTranscriptEntryType"];
+            /** @description One-based inferred turn index when the session parser can associate the entry with a turn. */
+            turnIndex?: number;
+            /**
+             * Format: date-time
+             * @description Provider event timestamp when present in the source session stream.
+             */
+            timestamp?: string;
+            /** @description One-based JSONL line number that produced this transcript entry when applicable. */
+            lineNumber?: number;
+            /** @description Raw provider event or item type that produced this transcript entry. */
+            sourceType?: string;
+            /** @description Provider tool-call identifier when present. */
+            callId?: string;
+            /** @description Tool or function name when present. */
+            name?: string;
+            /** @description Provider or inferred status value when present. */
+            status?: string;
+            /** @description Plaintext transcript body when present. */
+            text?: string;
+            /** @description Compact summary text when the provider emits a separate summary channel. */
+            summary?: string;
+            /** @description Compact tool-call arguments when present. */
+            arguments?: string;
+            /** @description Compact tool output when present. */
+            output?: string;
+            /** @description Whether the entry only exposed encrypted content instead of plaintext. */
+            encrypted?: boolean;
+            /** @description Compact encrypted reasoning payload when the provider exposes it. */
+            encryptedContent?: string;
         };
         StringMap: {
             [key: string]: string;
@@ -1507,6 +1571,74 @@ export interface components {
             finishedAt?: string;
         };
         /**
+         * @description Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+         * @default REPLACE_CURRENT
+         * @enum {string}
+         */
+        FactorySaveMode: "REPLACE_CURRENT" | "UPSERT_NAMED_AND_ACTIVATE";
+        /**
+         * @description Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
+         * @example {
+         *       "mode": "REPLACE_CURRENT",
+         *       "factory": {
+         *         "name": "alpha",
+         *         "version": {
+         *           "logical": "2",
+         *           "physical": "2026-05-30T12:00:00.000000000Z"
+         *         },
+         *         "workTypes": [
+         *           {
+         *             "name": "task",
+         *             "states": [
+         *               {
+         *                 "name": "init",
+         *                 "type": "INITIAL"
+         *               },
+         *               {
+         *                 "name": "done",
+         *                 "type": "TERMINAL"
+         *               }
+         *             ]
+         *           }
+         *         ],
+         *         "workers": [
+         *           {
+         *             "name": "planner",
+         *             "type": "MODEL_WORKER",
+         *             "modelProvider": "CLAUDE",
+         *             "executorProvider": "SCRIPT_WRAP",
+         *             "model": "claude-sonnet-4-20250514"
+         *           }
+         *         ],
+         *         "workstations": [
+         *           {
+         *             "name": "plan-task",
+         *             "behavior": "STANDARD",
+         *             "type": "MODEL_WORKSTATION",
+         *             "worker": "planner",
+         *             "inputs": [
+         *               {
+         *                 "workType": "task",
+         *                 "state": "init"
+         *               }
+         *             ],
+         *             "outputs": [
+         *               {
+         *                 "workType": "task",
+         *                 "state": "done"
+         *               }
+         *             ]
+         *           }
+         *         ]
+         *       }
+         *     }
+         */
+        SaveFactoryForSessionRequest: {
+            /** @default REPLACE_CURRENT */
+            mode: components["schemas"]["FactorySaveMode"];
+            factory: components["schemas"]["Factory"];
+        };
+        /**
          * @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
          * @example {
          *       "name": "customer-support-triage",
@@ -1763,6 +1895,8 @@ export interface components {
             name: string;
             /** @description Lifecycle states available for work items of this type. */
             states: components["schemas"]["WorkState"][];
+            /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
+            handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
         };
         /** @description A lifecycle state that a work item can occupy inside one work type. */
         WorkState: {
@@ -1828,6 +1962,8 @@ export interface components {
             stopToken?: string;
             /** @description When true, bypasses permission checks for providers that support permission gating. */
             skipPermissions?: boolean;
+            /** @description Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
+            openCodeAgent?: string;
             /** @description Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef. */
             auth?: components["schemas"]["HostedWorkerAuth"];
             /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
@@ -1844,7 +1980,7 @@ export interface components {
          * @description Canonical model-provider identifiers supported by model workers in factory config.
          * @enum {string}
          */
-        WorkerModelProvider: "CLAUDE" | "CODEX" | "CURSOR";
+        WorkerModelProvider: "CLAUDE" | "CODEX" | "CURSOR" | "GEMINI" | "KIRO" | "OPENCODE";
         /**
          * @description Provider locality for a model worker capability declaration.
          * @enum {string}
@@ -1905,6 +2041,8 @@ export interface components {
             worker: string;
             /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner. */
             runner?: components["schemas"]["RunnerID"];
+            /** @description Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
+            openCodeAgent?: string;
             /** @description Path to a prompt template file loaded for model-oriented workstation execution. */
             promptFile?: string;
             /** @description JSON schema string used to validate or parse structured model output when configured. */
@@ -2077,6 +2215,65 @@ export interface components {
             /** @description Inclusive 1-based byte offset where the diagnostic source span starts when available. */
             startOffset: number;
         };
+        /**
+         * @description Validation severity for one factory validation target.
+         * @enum {string}
+         */
+        FactoryValidationSeverity: "error" | "warning" | "hint";
+        /**
+         * @description Factory-domain component type referenced by one validation target subject.
+         * @enum {string}
+         */
+        FactoryValidationSubjectType: "FACTORY" | "WORKSTATION" | "WORK_TYPE" | "WORK_STATE" | "WORKER" | "RESOURCE" | "ROUTE";
+        /**
+         * @description Factory-domain location within the subject component referenced by one validation target.
+         * @enum {string}
+         */
+        FactoryValidationSubjectLocation: "ON_REJECTION" | "ON_FAILURE" | "OUTPUTS" | "INPUTS" | "STATES" | "TERMINAL" | "REFERENCE" | "DEFINITION";
+        FactoryValidationSubject: {
+            type: components["schemas"]["FactoryValidationSubjectType"];
+            /** @description Stable component identifier or name for the affected factory component. */
+            id: string;
+            location: components["schemas"]["FactoryValidationSubjectLocation"];
+        };
+        FactoryValidationTarget: {
+            /** @description Stable machine-readable validation rule identifier. */
+            code: string;
+            severity: components["schemas"]["FactoryValidationSeverity"];
+            /** @description Human-readable explanation suitable for dialogs and summaries. */
+            message: string;
+            subject: components["schemas"]["FactoryValidationSubject"];
+        };
+        /**
+         * @example {
+         *       "targets": [
+         *         {
+         *           "code": "factory.workstation.missingRejectionRoute",
+         *           "severity": "error",
+         *           "message": "Workstation repeater must define a reject route.",
+         *           "subject": {
+         *             "type": "WORKSTATION",
+         *             "id": "repeater",
+         *             "location": "ON_REJECTION"
+         *           }
+         *         },
+         *         {
+         *           "code": "factory.workType.missingCompletionState",
+         *           "severity": "error",
+         *           "message": "Work type task must declare a completion state.",
+         *           "subject": {
+         *             "type": "WORK_TYPE",
+         *             "id": "task",
+         *             "location": "STATES"
+         *           }
+         *         }
+         *       ]
+         *     }
+         */
+        FactoryValidationResult: {
+            /** @description Canonical validation targets for the submitted factory definition. */
+            targets: components["schemas"]["FactoryValidationTarget"][];
+        };
         WorkRequest: {
             /** @description Stable client-provided request identifier used for idempotent batch submission. */
             requestId: string;
@@ -2220,44 +2417,10 @@ export interface components {
             defaultContent?: components["schemas"]["WorkContent"];
         };
         /**
-         * @description Canonical transcript entry type used by the dashboard transcript view.
+         * @description Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
          * @enum {string}
          */
-        CodexSessionTranscriptEntryType: "user_message" | "assistant_message" | "reasoning" | "tool_call" | "tool_output" | "system_event";
-        CodexSessionTranscriptEntry: {
-            /** @description Stable chronological order of the transcript entry in the session stream. */
-            order: number;
-            type: components["schemas"]["CodexSessionTranscriptEntryType"];
-            /** @description One-based inferred turn index when the session parser can associate the entry with a turn. */
-            turnIndex?: number;
-            /**
-             * Format: date-time
-             * @description Provider event timestamp when present in the source session stream.
-             */
-            timestamp?: string;
-            /** @description One-based JSONL line number that produced this transcript entry when applicable. */
-            lineNumber?: number;
-            /** @description Raw provider event or item type that produced this transcript entry. */
-            sourceType?: string;
-            /** @description Provider tool-call identifier when present. */
-            callId?: string;
-            /** @description Tool or function name when present. */
-            name?: string;
-            /** @description Provider or inferred status value when present. */
-            status?: string;
-            /** @description Plaintext transcript body when present. */
-            text?: string;
-            /** @description Compact summary text when the provider emits a separate summary channel. */
-            summary?: string;
-            /** @description Compact tool-call arguments when present. */
-            arguments?: string;
-            /** @description Compact tool output when present. */
-            output?: string;
-            /** @description Whether the entry only exposed encrypted content instead of plaintext. */
-            encrypted?: boolean;
-            /** @description Compact encrypted reasoning payload when the provider exposes it. */
-            encryptedContent?: string;
-        };
+        WorkTypeHandlingBehavior: "DEFAULT";
         /**
          * @description Built-in repository-owned hosted worker providers supported by the public factory-config contract.
          * @enum {string}
@@ -2381,6 +2544,12 @@ export interface components {
         StateType: components["schemas"]["WorkStateType"];
         /** @description Optional list-work sort field. Use state.type to order by current work state type. */
         SortBy: "state.type";
+        /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
+        WorkListName: string;
+        /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
+        WorkListWorkTypeName: string;
+        /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
+        WorkListTraceId: string;
         /** @description Work or token identifier, depending on route. */
         WorkOrTokenID: string;
     };
@@ -2403,6 +2572,12 @@ export interface operations {
                 "state.type"?: components["parameters"]["StateType"];
                 /** @description Optional list-work sort field. Use state.type to order by current work state type. */
                 sortBy?: components["parameters"]["SortBy"];
+                /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
+                name?: components["parameters"]["WorkListName"];
+                /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
+                workTypeName?: components["parameters"]["WorkListWorkTypeName"];
+                /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
+                traceId?: components["parameters"]["WorkListTraceId"];
             };
             header?: never;
             path?: never;
@@ -2487,6 +2662,12 @@ export interface operations {
                 "state.type"?: components["parameters"]["StateType"];
                 /** @description Optional list-work sort field. Use state.type to order by current work state type. */
                 sortBy?: components["parameters"]["SortBy"];
+                /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
+                name?: components["parameters"]["WorkListName"];
+                /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
+                workTypeName?: components["parameters"]["WorkListWorkTypeName"];
+                /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
+                traceId?: components["parameters"]["WorkListTraceId"];
             };
             header?: never;
             path: {
@@ -2643,13 +2824,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Work token with history. */
+            /** @description One work item from the current marking. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TokenResponse"];
+                    "application/json": components["schemas"]["Work"];
                 };
             };
             404: components["responses"]["NotFound"];
@@ -2670,13 +2851,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Work token with history for the targeted session. */
+            /** @description One work item for the targeted session. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TokenResponse"];
+                    "application/json": components["schemas"]["Work"];
                 };
             };
             404: components["responses"]["NotFound"];
@@ -2908,7 +3089,7 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    createFactory: {
+    validateFactory: {
         parameters: {
             query?: never;
             header?: never;
@@ -2921,17 +3102,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Factory was stored and activated. */
-            201: {
+            /** @description Validation result for the submitted factory definition. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Factory"];
+                    "application/json": components["schemas"]["FactoryValidationResult"];
                 };
             };
-            400: components["responses"]["CreateFactoryBadRequest"];
-            409: components["responses"]["CreateFactoryConflict"];
+            400: components["responses"]["BadRequest"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -3042,7 +3222,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Factory"];
+                "application/json": components["schemas"]["SaveFactoryForSessionRequest"];
             };
         };
         responses: {

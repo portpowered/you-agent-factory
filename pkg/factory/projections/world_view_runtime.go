@@ -33,7 +33,7 @@ func buildFactoryWorldActiveExecutions(state interfaces.FactoryWorldState, activ
 	executions := make(map[string]interfaces.FactoryWorldActiveExecution, len(activeIDs))
 	for _, dispatchID := range activeIDs {
 		dispatch := state.ActiveDispatches[dispatchID]
-		workItems := workItemRefsForIDs(dispatch.WorkItemIDs, state.WorkItemsByID)
+		workItems := workItemRefsForIDs(state.PayloadLineage, dispatch.WorkItemIDs, state.WorkItemsByID)
 		executions[dispatchID] = interfaces.FactoryWorldActiveExecution{
 			DispatchID:               dispatchID,
 			WorkstationNodeID:        dispatch.TransitionID,
@@ -64,7 +64,7 @@ func buildFactoryWorldActivity(state interfaces.FactoryWorldState, activeIDs []s
 		current.ActiveDispatchIDs = append(current.ActiveDispatchIDs, dispatchID)
 		current.ActiveWorkItems = mergeWorkRefs(
 			current.ActiveWorkItems,
-			workItemRefsForIDs(dispatch.WorkItemIDs, state.WorkItemsByID),
+			workItemRefsForIDs(state.PayloadLineage, dispatch.WorkItemIDs, state.WorkItemsByID),
 		)
 		current.TraceIDs = interfaces.CanonicalChainingTraceIDs(append(current.TraceIDs, dispatch.TraceIDs...))
 		activity[transitionID] = current
@@ -121,7 +121,7 @@ func buildFactoryWorldCurrentWorkItemsByPlaceID(state interfaces.FactoryWorldSta
 		if _, ok := refsByPlace[placeID]; !ok {
 			continue
 		}
-		refsByPlace[placeID] = workRefsForActiveIDs(entry.WorkItemIDs, state.ActiveWorkItemsByID)
+		refsByPlace[placeID] = workRefsForActiveIDs(state.PayloadLineage, entry.WorkItemIDs, state.ActiveWorkItemsByID)
 	}
 	if len(refsByPlace) == 0 {
 		return nil
@@ -152,7 +152,7 @@ func buildFactoryWorldPlaceOccupancyWorkItemsByPlaceID(state interfaces.FactoryW
 		if _, ok := workPlaceIDs[placeID]; !ok {
 			continue
 		}
-		refs := workItemRefsForIDs(entry.WorkItemIDs, state.WorkItemsByID)
+		refs := workItemRefsForIDs(state.PayloadLineage, entry.WorkItemIDs, state.WorkItemsByID)
 		if len(refs) == 0 {
 			continue
 		}
@@ -196,7 +196,9 @@ func buildFactoryWorldProviderSessions(state interfaces.FactoryWorldState) []int
 		if !dispatchHasCustomerWork(session.WorkItemIDs, state.WorkItemsByID) {
 			continue
 		}
-		sessions = append(sessions, interfaces.CloneFactoryWorldProviderSessionRecord(session))
+		clone := interfaces.CloneFactoryWorldProviderSessionRecord(session)
+		clone.WorkItems = providerSessionWorkItemRefs(state.PayloadLineage, session)
+		sessions = append(sessions, clone)
 	}
 	return sessions
 }
@@ -238,12 +240,12 @@ func countFailedWorkItems(failed map[string]interfaces.FactoryWorkItem) int {
 func countDispatchedByWorkType(state interfaces.FactoryWorldState) map[string]int {
 	counts := make(map[string]int)
 	for _, dispatch := range state.ActiveDispatches {
-		for _, ref := range workItemRefsForIDs(dispatch.WorkItemIDs, state.WorkItemsByID) {
+		for _, ref := range workItemRefsForIDs(state.PayloadLineage, dispatch.WorkItemIDs, state.WorkItemsByID) {
 			counts[ref.WorkTypeID]++
 		}
 	}
 	for _, dispatch := range state.CompletedDispatches {
-		for _, ref := range workItemRefsForIDs(dispatch.WorkItemIDs, state.WorkItemsByID) {
+		for _, ref := range workItemRefsForIDs(state.PayloadLineage, dispatch.WorkItemIDs, state.WorkItemsByID) {
 			counts[ref.WorkTypeID]++
 		}
 	}

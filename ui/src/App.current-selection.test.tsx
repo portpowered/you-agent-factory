@@ -12,9 +12,7 @@ import {
 import {
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
 } from "./features/bento/hooks/dashboardLayoutSchema";
-import {
-  useCurrentWorkstationPromptTemplateValidation,
-} from "./features/current-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
+import { useCurrentWorkstationPromptTemplateValidation } from "./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import {
   activeSnapshot,
   baselineSnapshot,
@@ -25,7 +23,7 @@ import {
   terminalSnapshot,
 } from "./testing/app-shell-test-utils";
 
-vi.mock("./features/current-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
+vi.mock("./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
   useCurrentWorkstationPromptTemplateValidation: vi.fn(),
 }));
 
@@ -1257,7 +1255,7 @@ describe("App current selection", () => {
       name: "当前选择",
     });
     expect(within(currentSelection).getByRole("heading", { name: "工作站摘要" })).toBeTruthy();
-    expect(within(currentSelection).getByText("未知种类：future-kind")).toBeTruthy();
+    expect(within(currentSelection).getByText("标准")).toBeTruthy();
 
     const configurationSection = within(currentSelection)
       .getByRole("heading", { name: "配置" })
@@ -1363,11 +1361,8 @@ describe("App current selection", () => {
     expect(workstationSelectionSlot).toBe(stateSelectionSlot);
     expect(within(workstationInfo).getByText("Input work types")).toBeTruthy();
   });
-});
 
-describe("App current selection layout", () => {
-  registerAppDashboardTestLifecycle();
-
+  describe("layout", () => {
   it("keeps selection detail out of the workflow graph inspector layer", async () => {
     renderApp({
       snapshot: activeSnapshot,
@@ -1443,8 +1438,8 @@ describe("App current selection layout", () => {
     const initialStyle = traceGridItem.getAttribute("style");
 
     fireEvent.mouseDown(
-      within(traceWidget).getByRole("button", {
-        name: "Move Trace drill-down",
+      within(traceWidget).getByRole("heading", {
+        name: "Trace drill-down",
       }),
       {
         button: 0,
@@ -1530,7 +1525,9 @@ describe("App current selection layout", () => {
     expect(within(chart).getByText("Completed")).toBeTruthy();
     expect(within(chart).getByText("Failed/retried")).toBeTruthy();
     expect(within(chart).getByText("Ticks")).toBeTruthy();
-    expect(within(chart).getByText("Work count")).toBeTruthy();
+    const chartOverlay = chart.querySelector("[data-work-chart-overlay='true']");
+    expect(chartOverlay).toBeTruthy();
+    expect(within(chartOverlay as HTMLElement).getByText("Work count")).toBeTruthy();
 
     const stream = MockEventSource.instances[0];
     if (!stream) {
@@ -1828,8 +1825,8 @@ describe("App current selection layout", () => {
     const initialOutcomeStyle = outcomeGridItem.getAttribute("style");
 
     fireEvent.mouseDown(
-      within(outcomeWidget).getByRole("button", {
-        name: "Move Work outcome chart",
+      within(outcomeWidget).getByRole("heading", {
+        name: "Work outcome chart",
       }),
       {
         button: 0,
@@ -1891,11 +1888,9 @@ describe("App current selection layout", () => {
       window.innerWidth,
     );
   });
-});
+  });
 
-describe("App current selection terminal states", () => {
-  registerAppDashboardTestLifecycle();
-
+  describe("terminal states", () => {
   it("opens completed and failed work summaries and updates the trace card", async () => {
     renderApp({
       snapshot: terminalSnapshot,
@@ -2094,5 +2089,6 @@ describe("App current selection terminal states", () => {
         "No retained dispatch history is currently available for this work item.",
       ),
     ).toBeTruthy();
+  });
   });
 });

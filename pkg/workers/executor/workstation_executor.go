@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
+	"github.com/portpowered/infinite-you/pkg/workers/worktree"
 )
 
 // AgentContext is the merged execution context assembled from
@@ -50,6 +51,7 @@ type WorkstationExecutor struct {
 	Renderer        workerprompting.PromptRenderer
 	Parser          OutputParser
 	Logger          logging.Logger // optional; nil → noop
+	GitCommander    worktree.GitCommander // optional; nil → ExecGitCommander
 }
 
 const defaultSubprocessExecutionTimeout = 2 * time.Hour
@@ -131,6 +133,9 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	if failed != nil {
 		return *failed, nil
 	}
+	if failed := we.applyCodexFactoryWorktreePreparation(ctx, dispatch, workstationDef, workerDef, &resolvedContext, start); failed != nil {
+		return *failed, nil
+	}
 
 	request, failed := we.buildWorkstationExecutionRequest(dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
 	if failed != nil {
@@ -201,6 +206,56 @@ func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch inter
 		}
 	}
 	return requestContext, nil
+}
+
+func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
+	ctx context.Context,
+	dispatch interfaces.WorkDispatch,
+	workstationDef *interfaces.FactoryWorkstationConfig,
+	workerDef *interfaces.WorkerConfig,
+	requestContext *resolvedWorkstationExecutionContext,
+	start time.Time,
+) *interfaces.WorkResult {
+	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
+	executionProvider := modelProviderForExecution(workerDef.ModelProvider, selection)
+	if !worktree.ShouldPrepareFactoryWorktreeForCodex(executionProvider, workstationDef.WorkingDirectory, requestContext.Worktree) {
+		return nil
+	}
+	if we.RuntimeConfig == nil {
+		failed := worktree.FailedWorkResultFromPreparation(
+			dispatch.DispatchID,
+			dispatch.TransitionID,
+			start,
+			fmt.Errorf("factory directory unavailable"),
+		)
+		return &failed
+	}
+	factoryRoot := strings.TrimSpace(we.RuntimeConfig.FactoryDir())
+	if factoryRoot == "" {
+		failed := worktree.FailedWorkResultFromPreparation(
+			dispatch.DispatchID,
+			dispatch.TransitionID,
+			start,
+			fmt.Errorf("factory directory unavailable"),
+		)
+		return &failed
+	}
+
+	git := we.gitCommander()
+	prepared, err := worktree.PrepareFactoryGitWorktree(ctx, factoryRoot, requestContext.Worktree, git)
+	if err != nil {
+		failed := worktree.FailedWorkResultFromPreparation(dispatch.DispatchID, dispatch.TransitionID, start, err)
+		return &failed
+	}
+	requestContext.WorkingDirectory = prepared.CheckoutPath
+	return nil
+}
+
+func (we *WorkstationExecutor) gitCommander() worktree.GitCommander {
+	if we != nil && we.GitCommander != nil {
+		return we.GitCommander
+	}
+	return worktree.ExecGitCommander{}
 }
 
 func resolveRuntimePath(baseDir, value string) string {

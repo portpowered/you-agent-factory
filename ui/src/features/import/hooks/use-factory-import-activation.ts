@@ -2,7 +2,9 @@ import { useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
 import {
-  createFactory,
+  activateImportedFactoryAsNewNamedForSession,
+  activateImportedFactoryForSession,
+  type FactoryImportSaveChoice,
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
@@ -16,10 +18,14 @@ export type FactoryImportActivationState =
 export interface UseFactoryImportActivationOptions {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   onActivated?: (value: FactoryValue) => void;
+  sessionID?: string | null;
 }
 
 export interface UseFactoryImportActivationResult {
-  activateImport: (value: FactoryPngImportValue) => Promise<void>;
+  activateImport: (
+    value: FactoryPngImportValue,
+    choice?: FactoryImportSaveChoice,
+  ) => Promise<void>;
   activationState: FactoryImportActivationState;
   clearActivationError: () => void;
 }
@@ -27,12 +33,27 @@ export interface UseFactoryImportActivationResult {
 const IDLE_ACTIVATION_STATE: FactoryImportActivationState = { status: "idle" };
 
 export function useFactoryImportActivation({
-  activateFactory = createFactory,
+  activateFactory: activateFactoryOverride,
   onActivated,
+  sessionID,
 }: UseFactoryImportActivationOptions = {}): UseFactoryImportActivationResult {
   const [activationError, setActivationError] = useState<NamedFactoryAPIError | null>(null);
   const mutation = useMutation({
-    mutationFn: (value: FactoryValue) => activateFactory(value),
+    mutationFn: ({
+      choice,
+      factory,
+    }: {
+      choice: FactoryImportSaveChoice;
+      factory: FactoryValue;
+    }) => {
+      if (activateFactoryOverride) {
+        return activateFactoryOverride(factory);
+      }
+      if (choice === "CREATE_NEW_NAMED") {
+        return activateImportedFactoryAsNewNamedForSession(factory, { sessionID });
+      }
+      return activateImportedFactoryForSession(factory, { sessionID });
+    },
     onError: (error) => {
       setActivationError(normalizeActivationError(error));
     },
@@ -42,10 +63,13 @@ export function useFactoryImportActivation({
     },
   });
 
-  const activateImport = useCallback(async (value: FactoryPngImportValue) => {
+  const activateImport = useCallback(async (
+    value: FactoryPngImportValue,
+    choice: FactoryImportSaveChoice = "REPLACE_CURRENT",
+  ) => {
     setActivationError(null);
     try {
-      await mutation.mutateAsync(value.factory);
+      await mutation.mutateAsync({ choice, factory: value.factory });
     } catch {
       return;
     }

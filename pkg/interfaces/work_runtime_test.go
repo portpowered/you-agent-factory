@@ -558,6 +558,7 @@ func TestCloneProviderInferenceRequest_DetachesProviderFields(t *testing.T) {
 		ModelProvider:    "acme",
 		ModelLocality:    ModelLocalityLocal,
 		SessionID:        "session-1",
+		OpenCodeAgent:    "implementer",
 	}
 
 	clone := CloneProviderInferenceRequest(original)
@@ -578,6 +579,12 @@ func TestCloneProviderInferenceRequest_DetachesProviderFields(t *testing.T) {
 	}
 	if original.EnvVars["TASK"] != "dispatch" {
 		t.Fatalf("env vars mutated original: %#v", original.EnvVars)
+	}
+	if clone.OpenCodeAgent != "implementer" {
+		t.Fatalf("OpenCodeAgent = %q, want implementer", clone.OpenCodeAgent)
+	}
+	if original.OpenCodeAgent != "implementer" {
+		t.Fatalf("OpenCodeAgent mutated original: %q", original.OpenCodeAgent)
 	}
 }
 

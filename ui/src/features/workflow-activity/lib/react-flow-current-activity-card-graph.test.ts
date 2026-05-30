@@ -4,9 +4,15 @@ import { resolve } from "node:path";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { resolveDashboardSelection } from "../../current-selection/state/dashboardSelection";
+import { resolveDashboardSelection } from "../../current-selection/base/public";
+import {
+  SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+  SYSTEM_TIME_WORK_TYPE_ID,
+  systemTimeGraphNodeId,
+} from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
@@ -119,6 +125,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: resolvedSelection,
       snapshot,
@@ -235,6 +242,111 @@ describe("current activity graph editor handles", () => {
     );
   });
 
+  it("omits system-time topology from current-activity layout while raw topology still contains it", async () => {
+    const mixedSystemTimeFactory = {
+      name: "mixed-public-system-time",
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" as const },
+            { name: "reviewing", type: "PROCESSING" as const },
+            { name: "done", type: "TERMINAL" as const },
+          ],
+        },
+        {
+          name: SYSTEM_TIME_WORK_TYPE_ID,
+          states: [{ name: "pending", type: "PROCESSING" as const }],
+        },
+      ],
+      workstations: [
+        {
+          behavior: "CLASSIFIER_WORKSTATION",
+          classificationRoutes: [
+            {
+              label: "ready",
+              outputs: [{ state: "reviewing", workType: "story" }],
+            },
+            {
+              label: "tick",
+              outputs: [
+                { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+              ],
+            },
+          ],
+          id: "route-story",
+          inputs: [
+            { state: "new", workType: "story" },
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          name: "Route story",
+          onContinue: [
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          onFailure: [{ state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID }],
+          onRejection: [
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          outputs: [
+            { state: "done", workType: "story" },
+            { state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID },
+          ],
+          worker: "router",
+        },
+        {
+          id: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+          inputs: [{ state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID }],
+          name: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+          outputs: [],
+          worker: "",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const rawTopology = buildFactoryGraphTopologyFromDefinition(
+      mixedSystemTimeFactory,
+    );
+
+    expect(rawTopology.nodes.map((node) => node.id)).toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", SYSTEM_TIME_WORK_TYPE_ID),
+        systemTimeGraphNodeId(
+          "work-state",
+          SYSTEM_TIME_WORK_TYPE_ID,
+          "pending",
+        ),
+        systemTimeGraphNodeId("workstation", SYSTEM_TIME_EXPIRY_TRANSITION_ID),
+      ]),
+    );
+
+    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(
+      mixedSystemTimeFactory,
+    );
+    const renderedNodeIds = graphLayout.nodes.map((node) => node.nodeId);
+
+    expect(renderedNodeIds).not.toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", SYSTEM_TIME_WORK_TYPE_ID),
+        systemTimeGraphNodeId(
+          "work-state",
+          SYSTEM_TIME_WORK_TYPE_ID,
+          "pending",
+        ),
+        systemTimeGraphNodeId("workstation", SYSTEM_TIME_EXPIRY_TRANSITION_ID),
+      ]),
+    );
+    expect(renderedNodeIds).toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", "story"),
+        systemTimeGraphNodeId("workstation", "Route story"),
+      ]),
+    );
+    expect(
+      graphLayout.edges
+        .flatMap((edge) => [edge.fromNodeId, edge.toNodeId])
+        .some((nodeId) => nodeId.includes(SYSTEM_TIME_WORK_TYPE_ID)),
+    ).toBe(false);
+  });
+
   it("renders sample factory work types through the semantic work-type node", async () => {
     const factory = loadSampleFactoryDefinition();
     const snapshot = buildSampleFactorySnapshot(factory);
@@ -253,6 +365,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
@@ -302,6 +415,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -355,6 +469,49 @@ describe("current activity graph editor handles", () => {
         expect.objectContaining({ id: "worker-assignment-source" }),
       ]),
       kind: "worker",
+      onSelectWorker: expect.any(Function),
+      selectedWorker: false,
+    });
+  });
+
+  it("marks the selected worker node while worker selection is active", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workers: [
+        {
+          ...baseFactoryDefinition.workers?.[0],
+          name: "writer",
+          type: "MODEL_WORKER" as const,
+        },
+      ],
+    };
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "worker", workerName: "writer" },
+      snapshot: {
+        factory,
+        runtime: { place_token_counts: {} },
+        topology: { workstation_nodes_by_id: {} },
+      } as never,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(
+      nodes.find((node) => node.id === "worker:writer")?.data,
+    ).toMatchObject({
+      kind: "worker",
+      selectedWorker: true,
     });
   });
 
@@ -406,6 +563,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -443,6 +601,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -531,6 +690,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -613,6 +773,147 @@ describe("current activity graph editor handles", () => {
       sourceHandleId: "workstation-on-failure-source",
       targetHandleId: "work-state-input-target",
     });
+  });
+
+  it("omits continue and reject editor handles for a standard processor without stopWords", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          name: "draft",
+          stopWords: undefined,
+        },
+      ],
+    };
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const workstationNode = nodes.find(
+      (node) => node.id === "workstation:draft",
+    );
+    const handleIds = (workstationNode?.data.handles ?? []).map(
+      (handle) => handle.id,
+    );
+
+    expect(handleIds).toEqual(
+      expect.arrayContaining([
+        "workstation-output-source",
+        "workstation-on-failure-source",
+      ]),
+    );
+    expect(handleIds).not.toContain("workstation-on-continue-source");
+    expect(handleIds).not.toContain("workstation-on-rejection-source");
+  });
+
+  it("keeps hidden continue and reject handles for authored edges without stopWords", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const reviewNode = nodes.find((node) => node.id === "workstation:review");
+    const rejectionHandle = reviewNode?.data.handles?.find(
+      (handle) => handle.id === "workstation-on-rejection-source",
+    );
+
+    expect(
+      visibleGraphEdges.some(
+        (edge) =>
+          edge.fromNodeId === "workstation:review" &&
+          edge.outcomeKind === "rejected",
+      ),
+    ).toBe(true);
+    expect(rejectionHandle).toEqual(
+      expect.objectContaining({
+        connectable: false,
+        hidden: true,
+        id: "workstation-on-rejection-source",
+      }),
+    );
+  });
+
+  it("includes continue and reject editor handles when stopWords are configured", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          name: "draft",
+          stopWords: ["DONE"],
+        },
+      ],
+    };
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const workstationNode = nodes.find(
+      (node) => node.id === "workstation:draft",
+    );
+    const handleIds = (workstationNode?.data.handles ?? []).map(
+      (handle) => handle.id,
+    );
+
+    expect(handleIds).toContain("workstation-on-continue-source");
+    expect(handleIds).toContain("workstation-on-rejection-source");
   });
 
   it("wires shared handle click actions back through the editor anchor callback", () => {
@@ -698,5 +999,164 @@ describe("current activity graph active item labels", () => {
       "work-3",
     ]);
     expect(labelsByPlaceId.get("story:blocked")).toEqual(["token-4"]);
+  });
+
+  it("marks work type and work state nodes with validation error treatment from canonical targets", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workType.missingCompletionState",
+        message: 'work type "task" must declare a completion state.',
+        severity: "error",
+        subject: {
+          id: "task",
+          location: "STATES",
+          type: "WORK_TYPE",
+        },
+      },
+      {
+        code: "factory.workState.missingTerminalCompletionPath",
+        message: 'work state "task:init" has no terminal completion path.',
+        severity: "error",
+        subject: {
+          id: "task:init",
+          location: "TERMINAL",
+          type: "WORK_STATE",
+        },
+      },
+    ]);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], graphLayout.edges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: null,
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+        validationProjection,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: buildSampleFactorySnapshot(factory),
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(
+      nodes.find((node) => node.id === "work-type:task")?.data,
+    ).toMatchObject({
+      validationError: true,
+      validationMessage: 'work type "task" must declare a completion state.',
+    });
+    expect(
+      nodes.find((node) => node.id === "work-state:task:init")?.data,
+    ).toMatchObject({
+      validationError: true,
+      validationMessage:
+        'work state "task:init" has no terminal completion path.',
+    });
+  });
+
+  it("marks workstation handles with validation error treatment from canonical targets", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workstation.missingRejectionRoute",
+        message: "Workstation process must define a reject route.",
+        severity: "error",
+        subject: {
+          id: "process",
+          location: "ON_REJECTION",
+          type: "WORKSTATION",
+        },
+      },
+      {
+        code: "factory.workstation.missingFailureRoute",
+        message: 'Workstation "review" must define a failure route.',
+        severity: "error",
+        subject: {
+          id: "review",
+          location: "ON_FAILURE",
+          type: "WORKSTATION",
+        },
+      },
+      {
+        code: "factory.workstation.conflictingWorkStateOutputs",
+        message:
+          'Workstation "process" routes work type "task" to conflicting output states.',
+        severity: "error",
+        subject: {
+          id: "process",
+          location: "OUTPUTS",
+          type: "WORKSTATION",
+        },
+      },
+    ]);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], graphLayout.edges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: null,
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+        validationProjection,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: buildSampleFactorySnapshot(factory),
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const processNode = nodes.find((node) => node.id === "workstation:process");
+    const reviewNode = nodes.find((node) => node.id === "workstation:review");
+
+    expect(processNode?.data.handles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-on-rejection-source",
+          buttonAriaLabel: "Workstation process must define a reject route.",
+          validationError: true,
+          validationMessage: "Workstation process must define a reject route.",
+          variant: "error",
+        }),
+        expect.objectContaining({
+          id: "workstation-output-source",
+          validationError: true,
+          validationMessage:
+            'Workstation "process" routes work type "task" to conflicting output states.',
+          variant: "error",
+        }),
+      ]),
+    );
+    expect(reviewNode?.data.handles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-on-failure-source",
+          validationError: true,
+          validationMessage:
+            'Workstation "review" must define a failure route.',
+          variant: "error",
+        }),
+      ]),
+    );
   });
 });

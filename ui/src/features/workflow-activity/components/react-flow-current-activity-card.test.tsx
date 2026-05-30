@@ -9,10 +9,6 @@ import {
 } from "@testing-library/react";
 import type { ReactElement } from "react";
 import type {
-  CanonicalFactoryDefinition,
-  CurrentFactoryDocument,
-} from "../../../api/current-factory-definition";
-import type {
   DashboardPlaceRef,
   DashboardSnapshot,
   DashboardWorkItemRef,
@@ -21,8 +17,8 @@ import {
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
   resourceOccupancySnapshotForTick,
   semanticWorkflowDashboardSnapshot,
@@ -40,15 +36,13 @@ import {
   useFactoryGraphDraftStateMock,
 } from "../../../../testing/bun-factory-graph-editor-public-mocks";
 import {
-  addFactoryGraphNode,
-  connectFactoryGraphNodes,
-  disconnectFactoryGraphEdge,
-  removeFactoryGraphNode,
-} from "../../factory-graph-editor/lib/factory-graph-operations";
-import {
-  useEditableFactoryGraph,
-  useFactoryGraphDraftState,
-} from "../../factory-graph-editor/public";
+  SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+  SYSTEM_TIME_WORK_TYPE_ID,
+  systemTimeGraphNodeId,
+} from "../../factory-graph-editor/lib/factory-graph-customer-display";
+import { removeFactoryGraphNode } from "../../factory-graph-editor/lib/factory-graph-operations";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
@@ -56,8 +50,11 @@ import {
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
-import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import {
+  buildCurrentActivityGraphLayoutFromFactory,
+  dashboardWorkstationFromFactory,
+} from "../lib/current-activity-factory-graph-layout";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -102,184 +99,7 @@ const LEGEND_ICON_EXPECTATIONS = [
 ] as const;
 const workflowGraphLocaleFallbackTimeoutMs = 180_000;
 
-const editableFactoryDefinition: CanonicalFactoryDefinition = {
-  name: "Current Factory",
-  workers: [
-    {
-      model: "gpt-5",
-      name: "writer",
-      type: "MODEL_WORKER",
-    },
-  ],
-  workstations: [
-    {
-      body: "Review the work item.",
-      inputs: [
-        {
-          state: "queued",
-          workType: "story",
-        },
-      ],
-      name: "review",
-      outputs: [
-        {
-          state: "done",
-          workType: "story",
-        },
-      ],
-      type: "MODEL_WORKSTATION",
-      worker: "writer",
-    },
-  ],
-  workTypes: [
-    {
-      name: "story",
-      states: [
-        {
-          name: "queued",
-          type: "INITIAL",
-        },
-        {
-          name: "done",
-          type: "TERMINAL",
-        },
-      ],
-    },
-  ],
-};
-
-const editableFactoryDefinitionDocument: CurrentFactoryDocument = {
-  ...editableFactoryDefinition,
-  version: {
-    logical: "8",
-    physical: "2026-05-18T15:32:00Z",
-  },
-};
-
-const workerDenseFactoryDefinitionDocument: CurrentFactoryDocument = {
-  ...editableFactoryDefinition,
-  resources: [
-    {
-      capacity: 2,
-      name: "gpu",
-    },
-  ],
-  workers: [
-    {
-      model: "gpt-5",
-      name: "writer",
-      type: "MODEL_WORKER",
-    },
-    {
-      model: "gpt-5",
-      name: "reviewer",
-      type: "MODEL_WORKER",
-    },
-    {
-      model: "gpt-5",
-      name: "stalled",
-      type: "MODEL_WORKER",
-    },
-  ],
-  workstations: [
-    {
-      body: "Draft the story.",
-      inputs: [
-        {
-          state: "queued",
-          workType: "story",
-        },
-      ],
-      name: "draft",
-      outputs: [
-        {
-          state: "review",
-          workType: "story",
-        },
-      ],
-      resources: [{ capacity: 1, name: "gpu" }],
-      type: "MODEL_WORKSTATION",
-      worker: "writer",
-    },
-    {
-      body: "Review the draft.",
-      inputs: [
-        {
-          state: "review",
-          workType: "story",
-        },
-      ],
-      name: "review",
-      outputs: [
-        {
-          state: "done",
-          workType: "story",
-        },
-      ],
-      type: "MODEL_WORKSTATION",
-      worker: "reviewer",
-    },
-  ],
-  workTypes: [
-    {
-      name: "story",
-      states: [
-        {
-          name: "queued",
-          type: "INITIAL",
-        },
-        {
-          name: "review",
-          type: "PROCESSING",
-        },
-        {
-          name: "done",
-          type: "TERMINAL",
-        },
-      ],
-    },
-  ],
-  version: {
-    logical: "9",
-    physical: "2026-05-19T01:12:00Z",
-  },
-};
-
-const defaultDraftState = {
-  baseDocument: editableFactoryDefinitionDocument,
-  draft: {
-    additions: {
-      resources: [],
-      workers: [],
-      workStates: [],
-      workTypes: [],
-      workstations: [],
-    },
-    edgeChanges: {
-      additions: [],
-      removals: [],
-    },
-    removals: {
-      resources: [],
-      workers: [],
-      workStates: [],
-      workTypes: [],
-      workstations: [],
-    },
-  },
-  graph: {
-    edges: [],
-    nodes: [],
-  },
-  hasChanges: false,
-  latestDocument: editableFactoryDefinitionDocument,
-  pendingFactoryDefinition: editableFactoryDefinition,
-  replaceDraft: vi.fn(),
-  resetDraft: vi.fn(),
-  source: "current-factory" as const,
-  updateDraft: vi.fn(),
-  validationErrors: [],
-};
+const defaultDraftState = createMockGraphEditorDraftState();
 
 function dashboardSnapshotWithStateCounts(
   overrides: Record<string, number>,
@@ -293,14 +113,16 @@ function dashboardSnapshotWithStateCounts(
   return snapshot;
 }
 
-function refreshFactoryFromTopology(snapshot: DashboardSnapshot): DashboardSnapshot {
+function refreshFactoryFromTopology(
+  snapshot: DashboardSnapshot,
+): DashboardSnapshot {
   snapshot.factory = factoryFromDashboardTopology(snapshot.topology);
   return snapshot;
 }
 
 function dashboardSnapshotWithEditableFactory(): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  snapshot.factory = structuredClone(editableFactoryDefinition);
+  snapshot.factory = structuredClone(baseFactoryDefinition);
   return snapshot;
 }
 
@@ -484,6 +306,7 @@ function renderCurrentActivity({
       (workID: string, hint?: { dispatchID?: string; nodeID?: string }) => void
     >();
   const onSelectStateNode = vi.fn<(placeId: string) => void>();
+  const onSelectWorker = vi.fn<(workerName: string) => void>();
   const onSelectWorkstation = vi.fn<(nodeId: string) => void>();
 
   renderWithQueryClient(
@@ -496,6 +319,7 @@ function renderCurrentActivity({
       onFactoryImportReady={onFactoryImportReady}
       onSelectWorkID={onSelectWorkID}
       onSelectStateNode={onSelectStateNode}
+      onSelectWorker={onSelectWorker}
       onSelectWorkstation={onSelectWorkstation}
       readFactoryImportFile={readFactoryImportFile}
       selection={selection}
@@ -504,7 +328,12 @@ function renderCurrentActivity({
     />,
   );
 
-  return { onSelectStateNode, onSelectWorkID, onSelectWorkstation };
+  return {
+    onSelectStateNode,
+    onSelectWorkID,
+    onSelectWorker,
+    onSelectWorkstation,
+  };
 }
 
 function renderWithQueryClient(view: ReactElement) {
@@ -957,6 +786,109 @@ function dashboardSnapshotWithResourceReturnEdge(): DashboardSnapshot {
   return refreshFactoryFromTopology(snapshot);
 }
 
+function cronSystemTimeFactoryDefinition(): CanonicalFactoryDefinition {
+  return {
+    name: "cron-system-time-card",
+    workers: [
+      {
+        command: "./cron.sh",
+        name: "scheduler",
+        type: "SCRIPT_WORKER",
+      },
+      {
+        model: "gpt-5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          { name: "new", type: "INITIAL" },
+          { name: "scheduled", type: "PROCESSING" },
+          { name: "done", type: "TERMINAL" },
+        ],
+      },
+      {
+        name: "schedule",
+        states: [{ name: "tick", type: "INITIAL" }],
+      },
+      {
+        name: SYSTEM_TIME_WORK_TYPE_ID,
+        states: [{ name: "pending", type: "PROCESSING" }],
+      },
+    ],
+    workstations: [
+      {
+        behavior: "CRON",
+        cron: { schedule: "0 0 * * *" },
+        id: "nightly-cron",
+        inputs: [{ state: "tick", workType: "schedule" }],
+        name: "Nightly Cron",
+        outputs: [{ state: "scheduled", workType: "story" }],
+        worker: "scheduler",
+      },
+      {
+        behavior: "STANDARD",
+        id: "review",
+        inputs: [{ state: "scheduled", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "done", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "reviewer",
+      },
+      {
+        id: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+        inputs: [{ state: "pending", workType: SYSTEM_TIME_WORK_TYPE_ID }],
+        name: SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+        outputs: [],
+        worker: "",
+      },
+    ],
+  } satisfies CanonicalFactoryDefinition;
+}
+
+function dashboardSnapshotWithCronSystemTimeFactory(): DashboardSnapshot {
+  const factory = cronSystemTimeFactoryDefinition();
+  const workstations = (factory.workstations ?? []).map(
+    dashboardWorkstationFromFactory,
+  );
+
+  return {
+    factory,
+    factory_state: "IDLE",
+    runtime: {
+      active_executions_by_dispatch_id: {},
+      current_work_items_by_place_id: {},
+      place_occupancy_work_items_by_place_id: {},
+      place_token_counts: {
+        "schedule:tick": 1,
+        "story:scheduled": 1,
+      },
+      session: {
+        completed_count: 0,
+        dispatched_count: 0,
+        failed_count: 0,
+        has_data: true,
+        provider_sessions: [],
+      },
+      workstation_requests_by_dispatch_id: {},
+    },
+    tick_count: 0,
+    topology: {
+      edges: [],
+      workstation_node_ids: workstations.map(
+        (workstation) => workstation.node_id,
+      ),
+      workstation_nodes_by_id: Object.fromEntries(
+        workstations.map((workstation) => [workstation.node_id, workstation]),
+      ),
+    },
+    uptime_seconds: 0,
+  };
+}
+
 function dashboardSnapshotWithExhaustionRuleNode(): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
 
@@ -1096,7 +1028,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     const snapshot = dashboardSnapshotWithActiveWorkItemCount(0);
     snapshot.topology.workstation_nodes_by_id.review.workstation_kind =
       "CLASSIFIER_WORKSTATION";
-    snapshot.factory = structuredClone(editableFactoryDefinition);
+    snapshot.factory = structuredClone(baseFactoryDefinition);
     const reviewWorkstation = snapshot.factory?.workstations?.find(
       (workstation) => workstation.name === "review",
     );
@@ -1512,7 +1444,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("removes a workstation without opening a confirmation", () => {
     const result = removeFactoryGraphNode({
-      baseFactoryDefinition: editableFactoryDefinitionDocument,
+      baseFactoryDefinition: baseFactoryDefinitionDocument,
       draft: defaultDraftState.draft,
       nodeId: "workstation:review",
     });
@@ -1530,16 +1462,26 @@ function registerCurrentActivityCardTestLifecycle(): void {
     });
 
     expect(
-      screen.queryByRole("button", {
+      await screen.findByRole("button", {
         name: "Select writer worker",
       }),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(await screen.findByLabelText("worker:writer")).toBeTruthy();
     expect(
       await screen.findByRole("button", {
         name: /Select .* workstation/,
       }),
     ).toBeTruthy();
+
+    const removeWorker = removeFactoryGraphNode({
+      baseFactoryDefinition: baseFactoryDefinitionDocument,
+      draft: defaultDraftState.draft,
+      nodeId: "worker:writer",
+    });
+    expect(removeWorker).toMatchObject({
+      ok: false,
+      reason: "BLOCKED_REMOVAL",
+    });
   });
 
   it("keeps removed server-backed workstations visible with a pending-removal badge", async () => {
@@ -1766,8 +1708,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({
-        baseVersion: editableFactoryDefinitionDocument.version,
-        factoryDefinition: editableFactoryDefinition,
+        baseVersion: baseFactoryDefinitionDocument.version,
+        factoryDefinition: baseFactoryDefinition,
       });
     });
   });
@@ -1780,7 +1722,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
-      baseDocument: editableFactoryDefinitionDocument,
+      baseDocument: baseFactoryDefinitionDocument,
       draft: {
         ...defaultDraftState.draft,
         additions: {
@@ -1796,7 +1738,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
       },
       hasChanges: true,
       latestDocument: {
-        ...editableFactoryDefinitionDocument,
+        ...baseFactoryDefinitionDocument,
         version: {
           logical: "9",
           physical: "2026-05-19T01:45:00Z",
@@ -1875,7 +1817,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   it("saves the pending editable definition before leaving editor mode", async () => {
     const mutateAsync = vi
       .fn()
-      .mockResolvedValue(editableFactoryDefinitionDocument);
+      .mockResolvedValue(baseFactoryDefinitionDocument);
     const replaceDraft = vi.fn();
     useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
@@ -1913,8 +1855,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({
-        baseVersion: editableFactoryDefinitionDocument.version,
-        factoryDefinition: editableFactoryDefinition,
+        baseVersion: baseFactoryDefinitionDocument.version,
+        factoryDefinition: baseFactoryDefinition,
       });
     });
     expect(replaceDraft).toHaveBeenCalledTimes(1);
@@ -2395,6 +2337,63 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     ).toBe(true);
   });
 
+  it("selects worker nodes from the live activity graph", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: workerDenseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      latestDocument: workerDenseFactoryDefinitionDocument,
+      pendingFactoryDefinition: workerDenseFactoryDefinitionDocument,
+    } as never);
+    const snapshot = workerDenseSnapshot();
+    snapshot.factory = workerDenseFactoryDefinitionDocument;
+
+    const { onSelectWorker } = renderCurrentActivity({
+      snapshot,
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Select writer worker" }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select writer worker" }),
+    );
+
+    expect(onSelectWorker).toHaveBeenCalledWith("writer");
+  });
+
+  it("shows selected styling for the active worker selection", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: workerDenseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      latestDocument: workerDenseFactoryDefinitionDocument,
+      pendingFactoryDefinition: workerDenseFactoryDefinitionDocument,
+    } as never);
+    const snapshot = workerDenseSnapshot();
+    snapshot.factory = workerDenseFactoryDefinitionDocument;
+
+    renderCurrentActivity({
+      selection: { kind: "worker", workerName: "writer" },
+      snapshot,
+    });
+
+    const workerButton = await screen.findByRole("button", {
+      name: "Select writer worker",
+    });
+    expect(workerButton.getAttribute("aria-pressed")).toBe("true");
+    expect(workerButton.getAttribute("data-selected-worker")).toBe("true");
+  });
+
   it("keeps observer selection callbacks stable for canonical factory-backed graph nodes", async () => {
     const { onSelectStateNode, onSelectWorkID, onSelectWorkstation } =
       renderCurrentActivity({
@@ -2695,8 +2694,12 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getByRole("img", { name: "Work type" })
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("work-type");
-    expect(resourceLabelContainer.getAttribute("aria-label")).toBe("agent-slot");
-    expect(workerLabelContainer.getAttribute("aria-label")).toBe("worker:agent");
+    expect(resourceLabelContainer.getAttribute("aria-label")).toBe(
+      "agent-slot",
+    );
+    expect(workerLabelContainer.getAttribute("aria-label")).toBe(
+      "worker:agent",
+    );
     expect(workTypeLabelContainer.getAttribute("aria-label")).toBe(
       "work-type:story",
     );
@@ -2767,7 +2770,9 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
   it("animates active graph flow while muting unrelated graph chrome", async () => {
     renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
 
-    expect(await screen.findByRole("button", { name: /Active Story/ })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: /Active Story/ }),
+    ).toBeTruthy();
     const idleStateArticle = await getStateNodeArticle("story:documented");
     const idleResourceArticle = screen
       .getByLabelText("agent-slot")
@@ -2956,6 +2961,58 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     });
 
     expect(cronButton.getAttribute("title")).toBe("Nightly Cron");
+
+    fireEvent.click(cronButton);
+
+    expect(onSelectWorkstation).toHaveBeenCalledWith("nightly-cron");
+  });
+
+  it("hides system-time graph nodes from cron factories while keeping customer cron workstations selectable", async () => {
+    const factory = cronSystemTimeFactoryDefinition();
+    const layout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const renderedNodeIds = layout.nodes.map((node) => node.nodeId);
+
+    expect(renderedNodeIds).not.toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("work-type", SYSTEM_TIME_WORK_TYPE_ID),
+        systemTimeGraphNodeId(
+          "work-state",
+          SYSTEM_TIME_WORK_TYPE_ID,
+          "pending",
+        ),
+        systemTimeGraphNodeId("workstation", SYSTEM_TIME_EXPIRY_TRANSITION_ID),
+      ]),
+    );
+    expect(renderedNodeIds).toEqual(
+      expect.arrayContaining([
+        systemTimeGraphNodeId("workstation", "Nightly Cron"),
+        systemTimeGraphNodeId("work-type", "story"),
+      ]),
+    );
+
+    const { onSelectWorkstation } = renderCurrentActivity({
+      snapshot: dashboardSnapshotWithCronSystemTimeFactory(),
+    });
+
+    const cronButton = await screen.findByRole("button", {
+      name: "Select Nightly Cron workstation",
+    });
+
+    expect(cronButton.getAttribute("title")).toBe("Nightly Cron");
+    expect(
+      screen.queryByLabelText(`work-type:${SYSTEM_TIME_WORK_TYPE_ID}`),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: `Select ${SYSTEM_TIME_EXPIRY_TRANSITION_ID} workstation`,
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: `Select ${SYSTEM_TIME_WORK_TYPE_ID}:pending state`,
+      }),
+    ).toBeNull();
+    expect(screen.queryByText(SYSTEM_TIME_EXPIRY_TRANSITION_ID)).toBeNull();
 
     fireEvent.click(cronButton);
 
@@ -3263,6 +3320,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
         selection={null}
         snapshot={dashboardSnapshotWithActiveWorkItemCount(0)}
         onSelectStateNode={vi.fn()}
+        onSelectWorker={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />,
     );
@@ -3285,6 +3343,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
             selection={null}
             snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
             onSelectStateNode={vi.fn()}
+            onSelectWorker={vi.fn()}
             onSelectWorkstation={vi.fn()}
           />
         </QueryClientProvider>,
@@ -3319,6 +3378,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     const callbacks = {
       onSelectWorkID: vi.fn(),
       onSelectStateNode: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
     };
     const { rerender } = renderWithQueryClient(
@@ -3814,7 +3874,9 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
 
   it("derives persisted graph node keys from the canonical factory graph", async () => {
     if (!semanticWorkflowDashboardSnapshot.factory) {
-      throw new Error("expected semantic workflow fixture to include a factory");
+      throw new Error(
+        "expected semantic workflow fixture to include a factory",
+      );
     }
     const layout = await buildCurrentActivityGraphLayoutFromFactory(
       semanticWorkflowDashboardSnapshot.factory,

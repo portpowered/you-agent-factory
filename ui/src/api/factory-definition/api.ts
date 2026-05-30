@@ -51,10 +51,12 @@ const WORKER_KEYS = new Set([
   "executorProvider",
   "linear",
   "model",
+  "modelLocality",
   "modelProvider",
   "name",
   "provider",
   "resources",
+  "openCodeAgent",
   "skipPermissions",
   "stopToken",
   "timeout",
@@ -85,6 +87,7 @@ const WORKSTATION_KEYS = new Set([
   "onContinue",
   "onFailure",
   "onRejection",
+  "openCodeAgent",
   "outputSchema",
   "outputs",
   "promptFile",
@@ -130,10 +133,17 @@ const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
 const WORKER_MODEL_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["modelProvider"]>>([
   "CLAUDE",
   "CODEX",
+  "CURSOR",
+  "GEMINI",
+  "KIRO",
+  "OPENCODE",
 ]);
 const WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["executorProvider"]>>([
   "SCRIPT_WRAP",
 ]);
+const WORKER_MODEL_LOCALITY_VALUES = new Set<
+  NonNullable<FactoryWorker["modelLocality"]>
+>(["LOCAL", "CLOUD"]);
 const HOSTED_WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["provider"]>>([
   "LINEAR",
 ]);
@@ -315,6 +325,12 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   const type = readOptionalEnum(record, "type", path, WORKER_TYPE_VALUES);
   const model = readOptionalString(record, "model", path);
   const modelProvider = readOptionalEnum(record, "modelProvider", path, WORKER_MODEL_PROVIDER_VALUES);
+  const modelLocality = readOptionalEnum(
+    record,
+    "modelLocality",
+    path,
+    WORKER_MODEL_LOCALITY_VALUES,
+  );
   const provider = readOptionalEnum(record, "provider", path, HOSTED_WORKER_PROVIDER_VALUES);
   const executorProvider = readOptionalEnum(
     record,
@@ -328,6 +344,7 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   const timeout = readOptionalString(record, "timeout", path);
   const stopToken = readOptionalString(record, "stopToken", path);
   const skipPermissions = readOptionalBoolean(record, "skipPermissions", path);
+  const openCodeAgent = readOptionalNonEmptyString(record, "openCodeAgent", path);
   const auth = readOptionalObject(record, "auth", path, decodeHostedWorkerAuth);
   const linear = readOptionalObject(record, "linear", path, decodeHostedLinearWorkerConfig);
   const body = readOptionalString(record, "body", path);
@@ -340,6 +357,9 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   }
   if (modelProvider !== undefined) {
     worker.modelProvider = modelProvider;
+  }
+  if (modelLocality !== undefined) {
+    worker.modelLocality = modelLocality;
   }
   if (provider !== undefined) {
     worker.provider = provider;
@@ -364,6 +384,9 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   }
   if (skipPermissions !== undefined) {
     worker.skipPermissions = skipPermissions;
+  }
+  if (openCodeAgent !== undefined) {
+    worker.openCodeAgent = openCodeAgent;
   }
   if (auth !== undefined) {
     worker.auth = auth;
@@ -491,6 +514,7 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const worktree = readOptionalString(record, "worktree", path);
   const env = readOptionalStringMap(record, "env", path);
   const runner = readOptionalEnum(record, "runner", path, RUNNER_ID_VALUES);
+  const openCodeAgent = readOptionalNonEmptyString(record, "openCodeAgent", path);
 
   if (id !== undefined) {
     workstation.id = id;
@@ -554,6 +578,9 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   }
   if (runner !== undefined) {
     workstation.runner = runner;
+  }
+  if (openCodeAgent !== undefined) {
+    workstation.openCodeAgent = openCodeAgent;
   }
 
   return workstation;
@@ -757,6 +784,21 @@ function readOptionalString(
   }
   if (typeof item !== "string") {
     throw new FactoryDefinitionAPIError(`${path}.${key} must be a string.`);
+  }
+  return item;
+}
+
+function readOptionalNonEmptyString(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): string | undefined {
+  const item = readOptionalString(value, key, path);
+  if (item === undefined) {
+    return undefined;
+  }
+  if (item.trim() === "") {
+    throw new FactoryDefinitionAPIError(`${path}.${key} must be a non-empty string.`);
   }
   return item;
 }

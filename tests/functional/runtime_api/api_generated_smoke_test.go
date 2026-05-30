@@ -5,12 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,8 +16,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -65,6 +63,49 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	}
 
 	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	req := map[string]any{
+		"name":         "generated-api-header-only",
+		"workTypeName": "task",
+		"items":        []map[string]any{},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal generated submit request: %v", err)
+	}
+	resp, err := http.Post(server.URL()+"/work", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work status = %d, want 201: %s", resp.StatusCode, string(payload))
+	}
+	var submitted factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&submitted); err != nil {
+		t.Fatalf("decode submit response: %v", err)
+	}
+	if submitted.TraceId == "" {
+		t.Fatalf("submit response trace_id is empty, want non-empty trace identifier")
+	}
+
+	workList := waitForGeneratedWorkComplete(t, server.URL(), submitted.TraceId, 10*time.Second)
+	if len(workList.Results) != 1 {
+		t.Fatalf("GET /work result count = %d, want 1", len(workList.Results))
+	}
+	work := workList.Results[0]
+	if work.Name != "generated-api-header-only" || stringPointerValue(work.WorkTypeName) != "task" {
+		t.Fatalf("GET /work = %#v, want header-only name and work type", work)
+	}
+	if work.Content != nil && len(*work.Content) != 0 {
+		t.Fatalf("GET /work content = %#v, want empty structured content", work.Content)
+	}
 }
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission(t *testing.T) {
@@ -146,7 +187,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
 
 	server := startFunctionalServerWithConfig(
 		t,
@@ -199,7 +240,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderGemini, "gemini-1.5-pro"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderGemini, "gemini-1.5-pro"))
 	runner := support.NewRecordingCommandRunner("unused")
 
 	server := startFunctionalServerWithConfig(
@@ -291,7 +332,7 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 		Name:         "  cli-live-api-name  ",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Port:         functionalServerPort(t, server.URL()),
+		Server:       functionalServerBase(t, server.URL()),
 	}); err != nil {
 		t.Fatalf("agent-factory submit --work-type-name: %v", err)
 	}
@@ -328,6 +369,18 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 	resp := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
 	if resp.RequestId != request.RequestId || resp.TraceId == "" {
 		t.Fatalf("PUT /work-requests response = %#v, want request id and trace id", resp)
+	}
+	if len(resp.Works) != 2 {
+		t.Fatalf("PUT /work-requests works = %#v, want 2 accepted items", resp.Works)
+	}
+	wantWorks := []factoryapi.UpsertWorkRequestSubmittedWork{
+		{Name: "first", WorkTypeName: workTypeName, WorkId: firstWorkID},
+		{Name: "second", WorkTypeName: workTypeName, WorkId: secondWorkID},
+	}
+	for i, work := range resp.Works {
+		if work != wantWorks[i] {
+			t.Fatalf("PUT /work-requests works[%d] = %#v, want %#v", i, work, wantWorks[i])
+		}
 	}
 
 	items := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second)
@@ -593,21 +646,16 @@ func mustSubmitWorkImageItem(t *testing.T, stagedFileRef string, fileName string
 	return item
 }
 
-func functionalServerPort(t *testing.T, rawURL string) int {
+func functionalServerBase(t *testing.T, rawURL string) string {
 	t.Helper()
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		t.Fatalf("parse functional server URL %q: %v", rawURL, err)
 	}
-	_, portText, err := net.SplitHostPort(parsed.Host)
-	if err != nil {
-		t.Fatalf("parse functional server host %q: %v", parsed.Host, err)
+	if parsed.Scheme == "" || parsed.Host == "" {
+		t.Fatalf("functional server URL %q missing scheme or host", rawURL)
 	}
-	port, err := strconv.Atoi(portText)
-	if err != nil {
-		t.Fatalf("parse functional server port %q: %v", portText, err)
-	}
-	return port
+	return strings.TrimSuffix(rawURL, "/")
 }
 
 func assertFunctionalEventsUseCanonicalVocabulary(t *testing.T, events []factoryapi.FactoryEvent, required ...factoryapi.FactoryEventType) {

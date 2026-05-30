@@ -3,7 +3,7 @@ import { currentSelectionDetailMessagesByLocale } from "../features/current-sele
 import { currentSelectionDispatchHistoryMessagesByLocale } from "../features/current-selection/messages/current-selection-dispatch-history";
 import { currentSelectionShellMessagesByLocale } from "../features/current-selection/messages/current-selection-shell";
 import { providerSessionDetailMessagesByLocale } from "../features/provider-session-detail/messages/provider-session-detail";
-import { workstationDetailMessagesByLocale } from "../features/current-selection/messages/workstation-detail";
+import { workstationDetailMessagesByLocale } from "../features/current-selection/workstation-selection/public";
 import { exportDialogMessagesByLocale } from "../features/export/messages/export-dialog";
 import { headerControlsMessagesByLocale } from "../features/header/messages/header-controls";
 import { importPreviewDialogMessagesByLocale } from "../features/import/messages/import-preview-dialog";
@@ -72,6 +72,42 @@ describe("validateRequiredLocaleMessages", () => {
       {
         locale: "zh-CN",
         path: "zh-CN.title",
+      },
+    ]);
+  });
+
+  it("reports when a required locale catalog entry is null", () => {
+    const messages = {
+      en: {
+        title: "Dashboard",
+      },
+      "zh-CN": null,
+    };
+
+    expect(validateRequiredLocaleMessages(messages)).toEqual([
+      {
+        locale: "zh-CN",
+        path: "zh-CN",
+      },
+    ]);
+  });
+
+  it("reports when a required locale catalog nests a non-object message group", () => {
+    const messages = {
+      en: {
+        errors: {
+          unavailable: "Unavailable",
+        },
+      },
+      "zh-CN": {
+        errors: "not-a-message-group",
+      },
+    };
+
+    expect(validateRequiredLocaleMessages(messages)).toEqual([
+      {
+        locale: "zh-CN",
+        path: "zh-CN.errors",
       },
     ]);
   });

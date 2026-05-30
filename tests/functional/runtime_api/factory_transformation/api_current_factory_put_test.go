@@ -3,6 +3,7 @@ package factory_transformation
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -292,6 +294,56 @@ func TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsol
 	submitWorkAndExpectStatus(t, server.URL(), "alpha-task", "default-still-alpha", http.StatusCreated)
 }
 
+func TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFactoryTransformationServer(t, rootDir)
+	current := getCurrentFactory(t, server.URL())
+	if current.Version == nil {
+		t.Fatal("current factory version = nil, want version metadata for save")
+	}
+
+	body := `{
+		"name":"alpha",
+		"version":{"physical":"` + current.Version.Physical.UTC().Add(time.Nanosecond).Format(time.RFC3339Nano) + `","logical":"` + strconv.FormatInt(current.Version.Logical.Int64()+1, 10) + `"},
+		"workTypes":[{"name":"story","states":[
+			{"name":"queued","type":"INITIAL"},
+			{"name":"queued-dup","type":"PROCESSING"}
+		]}],
+		"workers":[
+			{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"},
+			{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}
+		],
+		"workstations":[{
+			"name":"process",
+			"behavior":"STANDARD",
+			"type":"MODEL_WORKSTATION",
+			"worker":"missing-worker",
+			"inputs":[{"workType":"story","state":"queued"}],
+			"outputs":[{"workType":"story","state":"missing-state"}]
+		}]
+	}`
+
+	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	var errResp factoryapi.ErrorResponse
+	decodeJSONResponse(t, resp, &errResp, "decode invalid current factory save response")
+	if errResp.Code != factoryapi.INVALIDFACTORY {
+		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
+	}
+	if errResp.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("error family = %q, want BAD_REQUEST", errResp.Family)
+	}
+	if errResp.Targets == nil || len(*errResp.Targets) < 2 {
+		t.Fatalf("error targets = %#v, want multiple blocking validation targets", errResp.Targets)
+	}
+	if !hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDuplicateIdentifier) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingWorkerReference) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingPlaceReference) {
+		t.Fatalf("error targets = %#v, want duplicate worker, dangling worker, and dangling place targets", errResp.Targets)
+	}
+}
+
 func TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
@@ -320,11 +372,14 @@ func TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets(t *testing.
 	if errResp.Targets == nil || len(*errResp.Targets) == 0 {
 		t.Fatalf("error targets = %#v, want canonical topology validation targets", errResp.Targets)
 	}
-	if !hasErrorField(*errResp.Targets, "factory.workstations[0].outputs[0]") {
-		t.Fatalf("error targets = %#v, want canonical factory field target", errResp.Targets)
-	}
-	if hasErrorField(*errResp.Targets, "factoryDefinition.workstations[0].outputs[0]") {
-		t.Fatalf("error targets = %#v, should not expose retired factoryDefinition field targets", errResp.Targets)
+	if !hasValidationTarget(
+		*errResp.Targets,
+		"factory.route.danglingPlaceReference",
+		factoryapi.FactoryValidationSubjectTypeRoute,
+		"process->story:missing-state",
+		factoryapi.FactoryValidationSubjectLocationOutputs,
+	) {
+		t.Fatalf("error targets = %#v, want dangling output workstation target", errResp.Targets)
 	}
 }
 
@@ -388,8 +443,14 @@ func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFacto
 	if errResp.Code != factoryapi.INVALIDFACTORY {
 		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
 	}
-	if errResp.Targets == nil || !hasErrorField(*errResp.Targets, "factory.workstations[0].outputs[1]") {
-		t.Fatalf("error targets = %#v, want second same-type output target", errResp.Targets)
+	if errResp.Targets == nil || !hasValidationTarget(
+		*errResp.Targets,
+		"factory.workstation.conflictingWorkStateOutputs",
+		factoryapi.FactoryValidationSubjectTypeWorkstation,
+		"process",
+		factoryapi.FactoryValidationSubjectLocationOutputs,
+	) {
+		t.Fatalf("error targets = %#v, want conflicting output workstation target", errResp.Targets)
 	}
 
 	reloaded := getCurrentFactory(t, server.URL())
@@ -593,6 +654,37 @@ func saveCurrentFactoryDefinitionExpectStatus(t *testing.T, serverURL, body stri
 	return saveCurrentFactoryDefinitionExpectStatusWithClient(t, http.DefaultClient, serverURL, body, wantStatus)
 }
 
+func saveFactoryForSessionRequestBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
+}
+
+func putFactoryForSessionRequestExpectStatusWithClient(
+	t *testing.T,
+	client *http.Client,
+	serverURL,
+	path string,
+	body string,
+	wantStatus int,
+) *http.Response {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodPut, serverURL+path, bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("new factory session save request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("PUT %s: %v", path, err)
+	}
+	if resp.StatusCode != wantStatus {
+		resp.Body.Close()
+		t.Fatalf("PUT %s status = %d, want %d", path, resp.StatusCode, wantStatus)
+	}
+	return resp
+}
+
 func saveCurrentFactoryDefinitionExpectStatusWithClient(
 	t *testing.T,
 	client *http.Client,
@@ -602,21 +694,14 @@ func saveCurrentFactoryDefinitionExpectStatusWithClient(
 ) *http.Response {
 	t.Helper()
 
-	req, err := http.NewRequest(http.MethodPut, serverURL+"/factory-sessions/~default/factory", bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("new current factory request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("PUT /factory-sessions/~default/factory: %v", err)
-	}
-	if resp.StatusCode != wantStatus {
-		resp.Body.Close()
-		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want %d", resp.StatusCode, wantStatus)
-	}
-	return resp
+	return putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		client,
+		serverURL,
+		"/factory-sessions/~default/factory",
+		saveFactoryForSessionRequestBody(body),
+		wantStatus,
+	)
 }
 
 func openNamedFactorySession(t *testing.T, serverURL, folderPath, name string) string {
@@ -664,19 +749,14 @@ func getCurrentFactoryForSession(t *testing.T, serverURL, sessionID string) fact
 
 func saveCurrentFactoryForSession(t *testing.T, serverURL, sessionID, body string) factoryapi.Factory {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPut, sessionFactoryURL(serverURL, sessionID), bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("new session current factory request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT /factory-sessions/%s/factory: %v", sessionID, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		t.Fatalf("PUT /factory-sessions/%s/factory status = %d, want 200", sessionID, resp.StatusCode)
-	}
+	resp := putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		http.DefaultClient,
+		serverURL,
+		"/factory-sessions/"+sessionID+"/factory",
+		saveFactoryForSessionRequestBody(body),
+		http.StatusOK,
+	)
 	var saved factoryapi.Factory
 	decodeJSONResponse(t, resp, &saved, "decode session current factory save response")
 	return saved
@@ -738,9 +818,18 @@ func requireFactoryChangeAfter(t *testing.T, before []factoryapi.FactoryEvent, a
 	return factoryapi.FactoryEvent{}
 }
 
-func hasErrorField(targets []factoryapi.ErrorTarget, want string) bool {
+func hasValidationTarget(
+	targets []factoryapi.FactoryValidationTarget,
+	code string,
+	subjectType factoryapi.FactoryValidationSubjectType,
+	subjectID string,
+	location factoryapi.FactoryValidationSubjectLocation,
+) bool {
 	for _, target := range targets {
-		if target.Field != nil && *target.Field == want {
+		if target.Code != code {
+			continue
+		}
+		if target.Subject.Type == subjectType && target.Subject.Id == subjectID && target.Subject.Location == location {
 			return true
 		}
 	}

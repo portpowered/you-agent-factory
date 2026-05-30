@@ -89,19 +89,19 @@ describe("formatRelativeTimeFromISO", () => {
 });
 
 describe("formatTimeOfDay", () => {
-  it("formats ISO timestamps as local clock times for detail cards", () => {
-    expect(formatTimeOfDay("2026-04-10T18:16:00.000Z")).toBe(
-      new Intl.DateTimeFormat(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      })
-        .format(Date.parse("2026-04-10T18:16:00.000Z"))
-        .replace(/\s/g, ""),
+  it("delegates valid ISO timestamps to the canonical local date-time formatter", () => {
+    const timestamp = "2026-04-10T18:16:00.000Z";
+    expect(formatTimeOfDay(timestamp)).toBe(
+      formatLocalDateTime(timestamp, "Unavailable"),
+    );
+    expect(formatTimeOfDay(timestamp, "zh-CN", "不可用")).toBe(
+      formatLocalDateTime(timestamp, "不可用", "zh-CN"),
     );
   });
 
-  it("falls back to the raw value for invalid timestamps", () => {
-    expect(formatTimeOfDay("not-a-date")).toBe("not-a-date");
+  it("returns the supplied unavailable label for invalid timestamps", () => {
+    expect(formatTimeOfDay("not-a-date")).toBe("Unavailable");
+    expect(formatTimeOfDay("not-a-date", "zh-CN", "不可用")).toBe("不可用");
   });
 });
 
@@ -130,12 +130,23 @@ describe("formatList", () => {
 });
 
 describe("formatLocalDateTime", () => {
-  it("formats ISO timestamps as local date-time values for customer-visible details", () => {
-    expect(formatLocalDateTime("2026-04-10T18:16:00.000Z", "Unavailable")).toBe(
+  const sampleTimestamp = "2026-04-10T18:16:00.000Z";
+
+  it("formats ISO timestamps as medium date plus short local time for the default locale", () => {
+    expect(formatLocalDateTime(sampleTimestamp, "Unavailable")).toBe(
       new Intl.DateTimeFormat(undefined, {
         dateStyle: "medium",
         timeStyle: "short",
-      }).format(Date.parse("2026-04-10T18:16:00.000Z")),
+      }).format(Date.parse(sampleTimestamp)),
+    );
+  });
+
+  it("formats ISO timestamps as medium date plus short local time for zh-CN", () => {
+    expect(formatLocalDateTime(sampleTimestamp, "不可用", "zh-CN")).toBe(
+      new Intl.DateTimeFormat("zh-CN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(Date.parse(sampleTimestamp)),
     );
   });
 

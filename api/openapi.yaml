@@ -83,6 +83,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens.
@@ -157,6 +160,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens for the targeted session.
@@ -266,17 +272,17 @@ paths:
       tags:
         - Work
       operationId: getWork
-      summary: Get work token
-      description: Returns one token by token ID from the current marking.
+      summary: Get work
+      description: Returns one work item by work or token identifier from the current marking.
       parameters:
         - $ref: '#/components/parameters/WorkOrTokenID'
       responses:
         '200':
-          description: Work token with history.
+          description: One work item from the current marking.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenResponse'
+                $ref: '#/components/schemas/Work'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -286,18 +292,18 @@ paths:
       tags:
         - Work
       operationId: getWorkBySessionId
-      summary: Get work token for one session
-      description: Returns one token by token ID from the current marking owned by the explicitly selected live factory session.
+      summary: Get work for one session
+      description: Returns one work item by work or token identifier from the current marking owned by the explicitly selected live factory session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/WorkOrTokenID'
       responses:
         '200':
-          description: Work token with history for the targeted session.
+          description: One work item for the targeted session.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenResponse'
+                $ref: '#/components/schemas/Work'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -490,7 +496,7 @@ paths:
         - Provider Sessions
       operationId: getProviderSessionDetails
       summary: Get provider session details
-      description: Loads a known Codex provider-session file by provider-session metadata. The browser supplies provider, kind, and identifier values; the server resolves the matching rollout file under the configured Codex sessions root and never accepts a raw filesystem path.
+      description: Returns parsed provider-session details using a provider-neutral response schema. The browser supplies provider, kind, and identifier query parameters; the server resolves the matching session file under the configured provider sessions root and never accepts a raw filesystem path. Only Codex (`codex`) sessions are currently loadable for this endpoint.
       parameters:
         - name: provider
           in: query
@@ -523,13 +529,13 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories:
+  /factory-validations:
     post:
       tags:
         - Factory
-      operationId: createFactory
-      summary: Create factory
-      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory-sessions/~default/factory` readback only and cannot be activated as a customer-named factory.
+      operationId: validateFactory
+      summary: Validate factory definition
+      description: Validates a submitted complete factory definition and returns canonical validation targets without persisting or activating the factory.
       requestBody:
         required: true
         content:
@@ -537,16 +543,14 @@ paths:
             schema:
               $ref: '#/components/schemas/Factory'
       responses:
-        '201':
-          description: Factory was stored and activated.
+        '200':
+          description: Validation result for the submitted factory definition.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Factory'
+                $ref: '#/components/schemas/FactoryValidationResult'
         '400':
-          $ref: '#/components/responses/CreateFactoryBadRequest'
-        '409':
-          $ref: '#/components/responses/CreateFactoryConflict'
+          $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions:
@@ -662,8 +666,8 @@ paths:
       tags:
         - Factory
       operationId: saveCurrentFactoryBySessionId
-      summary: Save current factory for one session
-      description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      summary: Save factory for one session
+      description: Submits one complete factory definition to the explicitly selected live session using an explicit save mode. Omitted `mode` defaults to `REPLACE_CURRENT`, which replaces the factory already current in the session. `UPSERT_NAMED_AND_ACTIVATE` persists under the session factory root using `factory.name`, updates the session current-factory pointer, and activates that runtime when idle. Clients should echo the server-managed `factory.version` field from the latest current-factory read for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -671,7 +675,41 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Factory'
+              $ref: '#/components/schemas/SaveFactoryForSessionRequest'
+            examples:
+              replaceCurrent:
+                summary: Replace the factory already current in the session.
+                value:
+                  mode: REPLACE_CURRENT
+                  factory:
+                    name: alpha
+                    version:
+                      logical: '2'
+                      physical: '2026-05-30T12:00:00.000000000Z'
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers: []
+                    workstations: []
+              upsertNamedAndActivate:
+                summary: Create or replace a named factory and activate it in the session.
+                value:
+                  mode: UPSERT_NAMED_AND_ACTIVATE
+                  factory:
+                    name: beta
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers: []
+                    workstations: []
       responses:
         '200':
           description: Saved current factory definition and new version metadata for the targeted session.
@@ -793,6 +831,27 @@ components:
         type: string
         enum:
           - state.type
+    WorkListName:
+      name: name
+      in: query
+      required: false
+      description: Optional work name filter. Matches when the work name contains this value, case-insensitively.
+      schema:
+        type: string
+    WorkListWorkTypeName:
+      name: workTypeName
+      in: query
+      required: false
+      description: Optional work type name filter. Matches when workTypeName equals this value exactly.
+      schema:
+        type: string
+    WorkListTraceId:
+      name: traceId
+      in: query
+      required: false
+      description: Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
+      schema:
+        type: string
     WorkOrTokenID:
       name: id
       in: path
@@ -826,6 +885,14 @@ components:
                 message: Factory payload is not a valid Agent Factory definition.
                 family: BAD_REQUEST
                 code: INVALID_FACTORY
+                targets:
+                  - code: factory.workstation.missingFailureRoute
+                    severity: error
+                    message: workstation "bob" must define a failure route.
+                    subject:
+                      type: WORKSTATION
+                      id: bob
+                      location: ON_FAILURE
     CreateFactoryConflict:
       description: Named factory could not be activated because the name already exists or the current runtime is not idle.
       content:
@@ -845,6 +912,14 @@ components:
                 message: Current factory runtime must be idle before activation.
                 family: CONFLICT
                 code: FACTORY_NOT_IDLE
+                targets:
+                  - code: factory.runtime.notIdle
+                    severity: error
+                    message: Current factory runtime must be idle before activation.
+                    subject:
+                      type: FACTORY
+                      id: ''
+                      location: DEFINITION
     NotFound:
       description: Requested resource was not found.
       content:
@@ -878,8 +953,13 @@ components:
                 family: BAD_REQUEST
                 code: INVALID_FACTORY
                 targets:
-                  - kind: form
-                    field: factory
+                  - code: factory.workstation.missingFailureRoute
+                    severity: error
+                    message: workstation "bob" must define a failure route.
+                    subject:
+                      type: WORKSTATION
+                      id: bob
+                      location: ON_FAILURE
     SaveCurrentFactoryConflict:
       description: Current factory could not be saved because the runtime or submitted version is not safe to replace.
       content:
@@ -894,8 +974,13 @@ components:
                 family: CONFLICT
                 code: STALE_FACTORY_VERSION
                 targets:
-                  - kind: save
-                    id: stale-version
+                  - code: factory.version.stale
+                    severity: error
+                    message: Current factory definition is stale. Refresh the graph before saving.
+                    subject:
+                      type: FACTORY
+                      id: ''
+                      location: DEFINITION
             factoryNotIdle:
               summary: Runtime is not idle.
               value:
@@ -903,8 +988,13 @@ components:
                 family: CONFLICT
                 code: FACTORY_NOT_IDLE
                 targets:
-                  - kind: save
-                    id: active-work
+                  - code: factory.runtime.notIdle
+                    severity: error
+                    message: Current factory runtime must be idle before activation.
+                    subject:
+                      type: FACTORY
+                      id: ''
+                      location: DEFINITION
     InternalError:
       description: Server failed while reading or building runtime state.
       content:
@@ -966,9 +1056,30 @@ components:
       additionalProperties: false
       required:
         - traceId
+        - requestId
+        - accepted
       properties:
         traceId:
           type: string
+          description: Trace identifier for the submitted work request batch.
+        requestId:
+          type: string
+          description: Stable request identifier assigned during normalization.
+        accepted:
+          type: boolean
+          description: False when the same requestId was already accepted (idempotent replay).
+        workId:
+          type: string
+          description: Primary work identifier for single-work submits (batch-<requestId>-<name> when omitted).
+        name:
+          type: string
+          description: Submitted work display name.
+        workTypeName:
+          type: string
+          description: Configured work type name for the submitted work.
+        sessionId:
+          type: string
+          description: Factory session that accepted the submit (~default for POST /work).
     SubmitWorkItemList:
       type: array
       description: Ordered dashboard-authored submit-work items preserved for one submission.
@@ -1140,17 +1251,36 @@ components:
           type: string
           minLength: 1
           description: Browser-authored MIME type preserved for inline identification after staging.
+    UpsertWorkRequestSubmittedWork:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - workTypeName
+        - workId
+      properties:
+        name:
+          type: string
+        workTypeName:
+          type: string
+        workId:
+          type: string
     UpsertWorkRequestResponse:
       type: object
       additionalProperties: false
       required:
         - requestId
         - traceId
+        - works
       properties:
         requestId:
           type: string
         traceId:
           type: string
+        works:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpsertWorkRequestSubmittedWork'
     ListWorkResponse:
       type: object
       additionalProperties: false
@@ -1639,9 +1769,9 @@ components:
             - The server failed while handling an otherwise valid request.
         targets:
           type: array
-          description: Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
+          description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
           items:
-            $ref: '#/components/schemas/ErrorTarget'
+            $ref: '#/components/schemas/FactoryValidationTarget'
     ErrorTarget:
       type: object
       additionalProperties: false
@@ -1690,12 +1820,12 @@ components:
         source:
           $ref: '#/components/schemas/ProviderSessionSourceMetadata'
         parse:
-          $ref: '#/components/schemas/CodexSessionParseSummary'
+          $ref: '#/components/schemas/ProviderSessionParseSummary'
         transcript:
           type: array
           description: Ordered transcript entries extracted from the provider-session stream.
           items:
-            $ref: '#/components/schemas/CodexSessionTranscriptEntry'
+            $ref: '#/components/schemas/ProviderSessionTranscriptEntry'
     FactorySessionTargetRef:
       type: object
       additionalProperties: false
@@ -1775,6 +1905,9 @@ components:
         validateOnly:
           type: boolean
           description: When true, validate the folder and optional target selection without creating a live session.
+        initNewFactory:
+          type: boolean
+          description: When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly.
     OpenFactorySessionResponse:
       type: object
       additionalProperties: false
@@ -1785,6 +1918,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FactorySessionTarget'
+        initsNewFactory:
+          type: boolean
+          description: When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath.
+        folderPath:
+          type: string
+          description: Absolute resolved session folder path when initsNewFactory is true.
     LoadableProviderSessionRef:
       type: object
       additionalProperties: false
@@ -1823,7 +1962,7 @@ components:
       properties:
         relativePath:
           type: string
-          description: Path to the loaded session file relative to the configured Codex sessions root.
+          description: Path to the loaded session file relative to the configured provider sessions root.
         sizeBytes:
           type: integer
           format: int64
@@ -1833,7 +1972,7 @@ components:
           type: string
           format: date-time
           description: Filesystem modification time when available.
-    CodexSessionParseSummary:
+    ProviderSessionParseSummary:
       type: object
       additionalProperties: false
       required:
@@ -1867,30 +2006,30 @@ components:
           type: array
           description: Chronological execution turns inferred from turn boundaries and response activity.
           items:
-            $ref: '#/components/schemas/CodexSessionTurnSummary'
+            $ref: '#/components/schemas/ProviderSessionTurnSummary'
         functionCalls:
           type: array
           description: Function and tool calls observed in chronological order.
           items:
-            $ref: '#/components/schemas/CodexSessionFunctionCallSummary'
+            $ref: '#/components/schemas/ProviderSessionFunctionCallSummary'
         reasoning:
           type: array
           description: Reasoning entries or summaries observed in chronological order.
           items:
-            $ref: '#/components/schemas/CodexSessionReasoningSummary'
+            $ref: '#/components/schemas/ProviderSessionReasoningSummary'
         tokenUsage:
-          $ref: '#/components/schemas/CodexSessionTokenUsage'
+          $ref: '#/components/schemas/ProviderSessionTokenUsage'
         parseErrors:
           type: array
           description: Line-level parse errors for malformed event-stream records.
           items:
-            $ref: '#/components/schemas/CodexSessionLineError'
+            $ref: '#/components/schemas/ProviderSessionLineError'
         unknownEvents:
           type: array
           description: Compact list of events with unknown or unsupported type fields.
           items:
-            $ref: '#/components/schemas/CodexSessionUnknownEvent'
-    CodexSessionTurnSummary:
+            $ref: '#/components/schemas/ProviderSessionUnknownEvent'
+    ProviderSessionTurnSummary:
       type: object
       additionalProperties: false
       required:
@@ -1924,7 +2063,7 @@ components:
           type: string
           format: date-time
           description: First event timestamp associated with the turn when present.
-    CodexSessionFunctionCallSummary:
+    ProviderSessionFunctionCallSummary:
       type: object
       additionalProperties: false
       required:
@@ -1957,7 +2096,7 @@ components:
         status:
           type: string
           description: Result status inferred from the call output or explicit status fields.
-    CodexSessionReasoningSummary:
+    ProviderSessionReasoningSummary:
       type: object
       additionalProperties: false
       required:
@@ -1987,7 +2126,7 @@ components:
         encryptedContent:
           type: string
           description: Compact encrypted reasoning payload when the provider exposes it.
-    CodexSessionTokenUsage:
+    ProviderSessionTokenUsage:
       type: object
       additionalProperties: false
       properties:
@@ -2006,7 +2145,7 @@ components:
         totalTokens:
           type: integer
           minimum: 0
-    CodexSessionLineError:
+    ProviderSessionLineError:
       type: object
       additionalProperties: false
       required:
@@ -2020,7 +2159,7 @@ components:
         message:
           type: string
           description: Client-safe parse error message for the malformed line.
-    CodexSessionUnknownEvent:
+    ProviderSessionUnknownEvent:
       type: object
       additionalProperties: false
       required:
@@ -2036,6 +2175,71 @@ components:
         payloadType:
           type: string
           description: Raw nested payload type when present.
+    ProviderSessionTranscriptEntryType:
+      type: string
+      description: Canonical transcript entry type used by the dashboard transcript view.
+      enum:
+        - user_message
+        - assistant_message
+        - reasoning
+        - tool_call
+        - tool_output
+        - system_event
+    ProviderSessionTranscriptEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - order
+        - type
+      properties:
+        order:
+          type: integer
+          minimum: 1
+          description: Stable chronological order of the transcript entry in the session stream.
+        type:
+          $ref: '#/components/schemas/ProviderSessionTranscriptEntryType'
+        turnIndex:
+          type: integer
+          minimum: 1
+          description: One-based inferred turn index when the session parser can associate the entry with a turn.
+        timestamp:
+          type: string
+          format: date-time
+          description: Provider event timestamp when present in the source session stream.
+        lineNumber:
+          type: integer
+          minimum: 1
+          description: One-based JSONL line number that produced this transcript entry when applicable.
+        sourceType:
+          type: string
+          description: Raw provider event or item type that produced this transcript entry.
+        callId:
+          type: string
+          description: Provider tool-call identifier when present.
+        name:
+          type: string
+          description: Tool or function name when present.
+        status:
+          type: string
+          description: Provider or inferred status value when present.
+        text:
+          type: string
+          description: Plaintext transcript body when present.
+        summary:
+          type: string
+          description: Compact summary text when the provider emits a separate summary channel.
+        arguments:
+          type: string
+          description: Compact tool-call arguments when present.
+        output:
+          type: string
+          description: Compact tool output when present.
+        encrypted:
+          type: boolean
+          description: Whether the entry only exposed encrypted content instead of plaintext.
+        encryptedContent:
+          type: string
+          description: Compact encrypted reasoning payload when the provider exposes it.
     StringMap:
       type: object
       additionalProperties:
@@ -3253,6 +3457,62 @@ components:
         finishedAt:
           type: string
           format: date-time
+    FactorySaveMode:
+      type: string
+      description: Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+      default: REPLACE_CURRENT
+      x-enum-varnames:
+        - FactorySaveModeReplaceCurrent
+        - FactorySaveModeUpsertNamedAndActivate
+      enum:
+        - REPLACE_CURRENT
+        - UPSERT_NAMED_AND_ACTIVATE
+      x-enum-descriptions:
+        - Replace the factory already current in the selected live session.
+        - Create or replace a named factory under the session root and activate it in that session.
+    SaveFactoryForSessionRequest:
+      type: object
+      description: Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
+      additionalProperties: false
+      required:
+        - factory
+      properties:
+        mode:
+          $ref: '#/components/schemas/FactorySaveMode'
+          default: REPLACE_CURRENT
+        factory:
+          $ref: '#/components/schemas/Factory'
+      example:
+        mode: REPLACE_CURRENT
+        factory:
+          name: alpha
+          version:
+            logical: '2'
+            physical: '2026-05-30T12:00:00.000000000Z'
+          workTypes:
+            - name: task
+              states:
+                - name: init
+                  type: INITIAL
+                - name: done
+                  type: TERMINAL
+          workers:
+            - name: planner
+              type: MODEL_WORKER
+              modelProvider: CLAUDE
+              executorProvider: SCRIPT_WRAP
+              model: claude-sonnet-4-20250514
+          workstations:
+            - name: plan-task
+              behavior: STANDARD
+              type: MODEL_WORKSTATION
+              worker: planner
+              inputs:
+                - workType: task
+                  state: init
+              outputs:
+                - workType: task
+                  state: done
     Factory:
       type: object
       description: Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
@@ -3542,6 +3802,11 @@ components:
           description: Lifecycle states available for work items of this type.
           items:
             $ref: '#/components/schemas/WorkState'
+        handlingBehavior:
+          type: array
+          description: Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
+          items:
+            $ref: '#/components/schemas/WorkTypeHandlingBehavior'
     WorkState:
       type: object
       additionalProperties: false
@@ -3674,6 +3939,9 @@ components:
         skipPermissions:
           type: boolean
           description: When true, bypasses permission checks for providers that support permission gating.
+        openCodeAgent:
+          type: string
+          description: Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
         auth:
           $ref: '#/components/schemas/HostedWorkerAuth'
           description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
@@ -3705,14 +3973,23 @@ components:
         - WorkerModelProviderClaude
         - WorkerModelProviderCodex
         - WorkerModelProviderCursor
+        - WorkerModelProviderGemini
+        - WorkerModelProviderKiro
+        - WorkerModelProviderOpenCode
       enum:
         - CLAUDE
         - CODEX
         - CURSOR
+        - GEMINI
+        - KIRO
+        - OPENCODE
       x-enum-descriptions:
         - Claude model execution routed through the `claude` provider command.
         - Codex model execution routed through the `codex` provider command.
         - Cursor model execution routed through the `agent` provider command.
+        - Gemini model execution routed through the `gemini` provider command.
+        - Kiro model execution routed through the `kiro-cli` provider command.
+        - OpenCode model execution routed through the `opencode` provider command.
     WorkerModelLocality:
       type: string
       description: Provider locality for a model worker capability declaration.
@@ -3863,6 +4140,9 @@ components:
         runner:
           $ref: '#/components/schemas/RunnerID'
           description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner.
+        openCodeAgent:
+          type: string
+          description: Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
         promptFile:
           type: string
           description: Path to a prompt template file loaded for model-oriented workstation execution.
@@ -4241,6 +4521,118 @@ components:
         startOffset:
           type: integer
           description: Inclusive 1-based byte offset where the diagnostic source span starts when available.
+    FactoryValidationSeverity:
+      type: string
+      description: Validation severity for one factory validation target.
+      x-enum-varnames:
+        - FactoryValidationSeverityError
+        - FactoryValidationSeverityWarning
+        - FactoryValidationSeverityHint
+      enum:
+        - error
+        - warning
+        - hint
+    FactoryValidationSubjectType:
+      type: string
+      description: Factory-domain component type referenced by one validation target subject.
+      x-enum-varnames:
+        - FactoryValidationSubjectTypeFactory
+        - FactoryValidationSubjectTypeWorkstation
+        - FactoryValidationSubjectTypeWorkType
+        - FactoryValidationSubjectTypeWorkState
+        - FactoryValidationSubjectTypeWorker
+        - FactoryValidationSubjectTypeResource
+        - FactoryValidationSubjectTypeRoute
+      enum:
+        - FACTORY
+        - WORKSTATION
+        - WORK_TYPE
+        - WORK_STATE
+        - WORKER
+        - RESOURCE
+        - ROUTE
+    FactoryValidationSubjectLocation:
+      type: string
+      description: Factory-domain location within the subject component referenced by one validation target.
+      x-enum-varnames:
+        - FactoryValidationSubjectLocationOnRejection
+        - FactoryValidationSubjectLocationOnFailure
+        - FactoryValidationSubjectLocationOutputs
+        - FactoryValidationSubjectLocationInputs
+        - FactoryValidationSubjectLocationStates
+        - FactoryValidationSubjectLocationTerminal
+        - FactoryValidationSubjectLocationReference
+        - FactoryValidationSubjectLocationDefinition
+      enum:
+        - ON_REJECTION
+        - ON_FAILURE
+        - OUTPUTS
+        - INPUTS
+        - STATES
+        - TERMINAL
+        - REFERENCE
+        - DEFINITION
+    FactoryValidationSubject:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - location
+      properties:
+        type:
+          $ref: '#/components/schemas/FactoryValidationSubjectType'
+        id:
+          type: string
+          description: Stable component identifier or name for the affected factory component.
+        location:
+          $ref: '#/components/schemas/FactoryValidationSubjectLocation'
+    FactoryValidationTarget:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - severity
+        - message
+        - subject
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable validation rule identifier.
+        severity:
+          $ref: '#/components/schemas/FactoryValidationSeverity'
+        message:
+          type: string
+          description: Human-readable explanation suitable for dialogs and summaries.
+        subject:
+          $ref: '#/components/schemas/FactoryValidationSubject'
+    FactoryValidationResult:
+      type: object
+      additionalProperties: false
+      required:
+        - targets
+      properties:
+        targets:
+          type: array
+          description: Canonical validation targets for the submitted factory definition.
+          items:
+            $ref: '#/components/schemas/FactoryValidationTarget'
+      example:
+        targets:
+          - code: factory.workstation.missingRejectionRoute
+            severity: error
+            message: Workstation repeater must define a reject route.
+            subject:
+              type: WORKSTATION
+              id: repeater
+              location: ON_REJECTION
+          - code: factory.workType.missingCompletionState
+            severity: error
+            message: Work type task must declare a completion state.
+            subject:
+              type: WORK_TYPE
+              id: task
+              location: STATES
     WorkRequest:
       type: object
       additionalProperties: false
@@ -4556,71 +4948,15 @@ components:
         defaultContent:
           $ref: '#/components/schemas/WorkContent'
           description: Optional final fallback content when neither runtime input nor config content resolves the slot.
-    CodexSessionTranscriptEntryType:
+    WorkTypeHandlingBehavior:
       type: string
-      description: Canonical transcript entry type used by the dashboard transcript view.
+      description: Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
+      x-enum-varnames:
+        - WorkTypeHandlingBehaviorDefault
       enum:
-        - user_message
-        - assistant_message
-        - reasoning
-        - tool_call
-        - tool_output
-        - system_event
-    CodexSessionTranscriptEntry:
-      type: object
-      additionalProperties: false
-      required:
-        - order
-        - type
-      properties:
-        order:
-          type: integer
-          minimum: 1
-          description: Stable chronological order of the transcript entry in the session stream.
-        type:
-          $ref: '#/components/schemas/CodexSessionTranscriptEntryType'
-        turnIndex:
-          type: integer
-          minimum: 1
-          description: One-based inferred turn index when the session parser can associate the entry with a turn.
-        timestamp:
-          type: string
-          format: date-time
-          description: Provider event timestamp when present in the source session stream.
-        lineNumber:
-          type: integer
-          minimum: 1
-          description: One-based JSONL line number that produced this transcript entry when applicable.
-        sourceType:
-          type: string
-          description: Raw provider event or item type that produced this transcript entry.
-        callId:
-          type: string
-          description: Provider tool-call identifier when present.
-        name:
-          type: string
-          description: Tool or function name when present.
-        status:
-          type: string
-          description: Provider or inferred status value when present.
-        text:
-          type: string
-          description: Plaintext transcript body when present.
-        summary:
-          type: string
-          description: Compact summary text when the provider emits a separate summary channel.
-        arguments:
-          type: string
-          description: Compact tool-call arguments when present.
-        output:
-          type: string
-          description: Compact tool output when present.
-        encrypted:
-          type: boolean
-          description: Whether the entry only exposed encrypted content instead of plaintext.
-        encryptedContent:
-          type: string
-          description: Compact encrypted reasoning payload when the provider exposes it.
+        - DEFAULT
+      x-enum-descriptions:
+        - Receives simplified CLI prompt submissions when exactly one work type in the factory declares this behavior.
     HostedWorkerProvider:
       type: string
       description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.

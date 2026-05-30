@@ -3,6 +3,10 @@ import { expect, fireEvent, userEvent, within } from "storybook/test";
 
 import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
+import {
+  expectWorkChartAxisLabelsVisible,
+  expectWorkChartCompactLegendContract,
+} from "../lib/work-chart-legend-story-contract";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 
 const populatedModel = {
@@ -222,6 +226,8 @@ export const Populated = {
 
     expectWorkChartOverlayContract(chart);
     expectWorkChartPaddingContract(chart);
+    expectWorkChartCompactLegendContract(chart);
+    expectWorkChartAxisLabelsVisible(chart);
   },
 };
 
@@ -301,6 +307,8 @@ export const ConstrainedWidth = {
 
     expectWorkChartOverlayContract(chart);
     expectWorkChartPaddingContract(chart);
+    expectWorkChartCompactLegendContract(chart);
+    expectWorkChartAxisLabelsVisible(chart);
     await dragWorkChart(chart, 0.1, 0.5);
     expect(canvas.queryByText("Zoomed to ticks 10-20")).toBeNull();
     const reset = canvas.getByRole("button", {

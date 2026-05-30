@@ -66,7 +66,8 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.Worksta
 		return missingWorkerWorkResult(request.Dispatch, workerType, time.Since(start)), nil
 	}
 
-	req := inferenceRequestForExecutionRequest(request, workerDef)
+	workstationDef, _ := ae.runtimeConfig.Workstation(inferenceWorkstationType(request))
+	req := inferenceRequestForExecutionRequest(request, workerDef, workstationDef)
 	diagnostics := workDiagnosticsForInferenceRequest(req)
 
 	resp, retryCount, err := ae.inferWithRetry(ctx, req)
@@ -152,7 +153,7 @@ func agentWorkMetrics(start time.Time, retryCount int) interfaces.WorkMetrics {
 	}
 }
 
-func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig) interfaces.ProviderInferenceRequest {
+func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig) interfaces.ProviderInferenceRequest {
 	req := interfaces.ProviderInferenceRequest{
 		Dispatch:                     interfaces.CloneWorkDispatch(request.Dispatch),
 		WorkerType:                   request.WorkerType,
@@ -183,6 +184,17 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, interfaces.RunnerOptionalCapabilitySessionResume)
 		}
 	}
+	if req.ModelProvider == string(interfaces.ModelProviderOpenCode) {
+		workstationAgent := ""
+		workerAgent := ""
+		if workstationDef != nil {
+			workstationAgent = workstationDef.OpenCodeAgent
+		}
+		if workerDef != nil {
+			workerAgent = workerDef.OpenCodeAgent
+		}
+		req.OpenCodeAgent = interfaces.ResolveOpenCodeAgent(workstationAgent, workerAgent)
+	}
 	return req
 }
 
@@ -201,15 +213,15 @@ func modelProviderForExecution(workerModelProvider string, selection interfaces.
 func modelProviderForRunnerID(runnerID string) string {
 	switch interfaces.NormalizeRunnerID(runnerID) {
 	case interfaces.RunnerIDCodex:
-		return string(ModelProviderCodex)
+		return string(interfaces.ModelProviderCodex)
 	case interfaces.RunnerIDGemini:
-		return string(ModelProviderGemini)
+		return string(interfaces.ModelProviderGemini)
 	case interfaces.RunnerIDKiro:
-		return string(ModelProviderKiro)
+		return string(interfaces.ModelProviderKiro)
 	case interfaces.RunnerIDCursorCLI:
-		return string(ModelProviderCursor)
+		return string(interfaces.ModelProviderCursor)
 	case interfaces.RunnerIDOpenCode:
-		return string(ModelProviderOpenCode)
+		return string(interfaces.ModelProviderOpenCode)
 	default:
 		return ""
 	}
@@ -343,7 +355,7 @@ func requiredRunnerOptionalCapabilities(request interfaces.WorkstationExecutionR
 	if request.WorkingDirectory != "" {
 		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityWorkingDirectory)
 	}
-	if request.Worktree != "" {
+	if shouldRequireWorktreeRunnerCapability(request) {
 		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityWorktree)
 	}
 	for _, token := range cloneInputTokens(request.InputTokens) {
@@ -353,6 +365,16 @@ func requiredRunnerOptionalCapabilities(request interfaces.WorkstationExecutionR
 		}
 	}
 	return capabilities
+}
+
+func shouldRequireWorktreeRunnerCapability(request interfaces.WorkstationExecutionRequest) bool {
+	if request.Worktree == "" {
+		return false
+	}
+	if request.WorkingDirectory != "" && interfaces.NormalizeRunnerID(request.RunnerID) == interfaces.RunnerIDCodex {
+		return false
+	}
+	return true
 }
 
 func tokenHasImageContent(token interfaces.Token) bool {

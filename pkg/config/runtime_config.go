@@ -66,9 +66,11 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 	return LoadRuntimeConfigFromFactoryDir(resolvedFactoryDir, workstationLoader)
 }
 
-// LoadRuntimeConfigFromFactoryDir reads one concrete factory directory without
-// following the current-factory pointer indirection used by workspace roots.
-func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error) {
+// LoadFromFactoryDir reads one concrete factory directory without following the
+// current-factory pointer indirection used by workspace roots. Production callers
+// should prefer pkg/config/load.LoadFromFactoryDir; this symbol remains the
+// config-package implementation and backward-compatible alias.
+func LoadFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error) {
 	factoryCfg, err := loadFactoryConfig(factoryDir)
 	if err != nil {
 		return nil, err
@@ -79,6 +81,9 @@ func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader Workst
 	}
 	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, false); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
+	}
+	if err := validateBlockingFactoryLoad(factoryCfg); err != nil {
+		return nil, err
 	}
 	inlineDefinitionsRequired := hasInlineRuntimeDefinitions(factoryCfg)
 	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(factoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
@@ -95,6 +100,11 @@ func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader Workst
 	}
 	loaded.portableBundledReplacements = clonePortableBundledFileReplacements(replacements)
 	return loaded, nil
+}
+
+// LoadRuntimeConfigFromFactoryDir delegates to LoadFromFactoryDir.
+func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error) {
+	return LoadFromFactoryDir(factoryDir, workstationLoader)
 }
 
 // FactoryDir returns the source directory used to load the factory config.
@@ -261,6 +271,7 @@ func hasNonEmptyWorkerRuntimeStrings(worker interfaces.WorkerConfig) bool {
 		worker.Command,
 		worker.Timeout,
 		worker.StopToken,
+		worker.OpenCodeAgent,
 		worker.Body,
 	} {
 		if strings.TrimSpace(value) != "" {
@@ -296,6 +307,7 @@ func workstationRuntimeDefinitionFromInline(workstation interfaces.FactoryWorkst
 func workstationHasRuntimeFields(workstation interfaces.FactoryWorkstationConfig) bool {
 	return strings.TrimSpace(workstation.Type) != "" ||
 		workstation.Runner != "" ||
+		workstation.OpenCodeAgent != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||
@@ -314,6 +326,7 @@ func workstationHasInlineRuntimeDefinitionFields(workstation interfaces.FactoryW
 	}
 	return strings.TrimSpace(workstation.Type) != "" ||
 		workstation.Runner != "" ||
+		workstation.OpenCodeAgent != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||
@@ -329,6 +342,7 @@ func workstationHasInlineRuntimeDefinitionFields(workstation interfaces.FactoryW
 func isTopologyOnlyLogicalMoveLoopBreaker(workstation interfaces.FactoryWorkstationConfig) bool {
 	return strings.TrimSpace(workstation.Type) == interfaces.WorkstationTypeLogical &&
 		workstation.Runner == "" &&
+		workstation.OpenCodeAgent == "" &&
 		workstation.PromptFile == "" &&
 		workstation.OutputSchema == "" &&
 		workstation.Timeout == "" &&
@@ -380,6 +394,9 @@ func applyWorkstationRuntimeIdentity(workstation *interfaces.FactoryWorkstationC
 	}
 	if runtimeDef.Runner != "" {
 		workstation.Runner = runtimeDef.Runner
+	}
+	if runtimeDef.OpenCodeAgent != "" {
+		workstation.OpenCodeAgent = runtimeDef.OpenCodeAgent
 	}
 }
 

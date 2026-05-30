@@ -64,32 +64,7 @@ func defaultScaffoldDefinition() scaffoldDefinition {
 	return scaffoldDefinition{
 		inputWorkType: DefaultFactoryInputType,
 		files: map[string]string{
-			interfaces.FactoryConfigFile: `{
-  "name": "factory",
-  "workTypes": [
-    {
-      "name": "task",
-      "states": [
-        { "name": "init", "type": "INITIAL" },
-        { "name": "complete", "type": "TERMINAL" },
-        { "name": "failed", "type": "FAILED" }
-      ]
-    }
-  ],
-  "workers": [
-    { "name": "processor" }
-  ],
-  "workstations": [
-    {
-      "name": "process",
-      "worker": "processor",
-      "inputs": [{ "workType": "task", "state": "init" }],
-      "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": [{ "workType": "task", "state": "failed" }]
-    }
-  ]
-}
-`,
+			interfaces.FactoryConfigFile: DefaultFactoryJSON(),
 			factoryWorkersDirName + "/README.md": `# Workers
 
 Worker configuration files go here.

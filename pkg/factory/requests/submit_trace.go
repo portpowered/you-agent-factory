@@ -16,6 +16,11 @@ func newRequestID() string {
 	return newRandomID("request")
 }
 
+// NewRequestID returns a unique request identifier for programmatic work submission.
+func NewRequestID() string {
+	return newRequestID()
+}
+
 func newRandomID(prefix string) string {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {

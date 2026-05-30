@@ -110,8 +110,9 @@ type FactoryWorldProviderSessionRecord struct {
 	Outcome                  string                  `json:"outcome"`
 	ProviderSession          ProviderSessionMetadata `json:"provider_session"`
 	Diagnostics              *SafeWorkDiagnostics    `json:"diagnostics,omitempty"`
-	WorkItemIDs              []string                `json:"work_item_ids,omitempty"`
-	ConsumedInputs           []WorkstationInput      `json:"consumed_inputs,omitempty"`
+	WorkItemIDs              []string                  `json:"work_item_ids,omitempty"`
+	WorkItems                []FactoryWorldWorkItemRef `json:"work_items,omitempty"`
+	ConsumedInputs           []WorkstationInput        `json:"consumed_inputs,omitempty"`
 	CurrentChainingTraceID   string                  `json:"current_chaining_trace_id,omitempty"`
 	PreviousChainingTraceIDs []string                `json:"previous_chaining_trace_ids,omitempty"`
 	TraceIDs                 []string                `json:"trace_ids,omitempty"`

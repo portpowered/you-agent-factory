@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -10,10 +11,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -29,8 +32,17 @@ func TestSubmitWork(t *testing.T) {
 	}
 
 	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
-	if resp.TraceId != "test-trace-1" {
-		t.Errorf("expected trace_id test-trace-1, got %s", resp.TraceId)
+	assertSubmitWorkIdentityResponse(t, resp, submitWorkIdentityExpectation{
+		name:         "draft-prd",
+		workTypeName: "prd",
+		traceId:      "test-trace-1",
+		accepted:     true,
+	})
+	if resp.RequestId == "" {
+		t.Fatalf("requestId = %q, want non-empty normalized request id", resp.RequestId)
+	}
+	if stringValue(resp.WorkId) != "batch-"+resp.RequestId+"-draft-prd" {
+		t.Fatalf("workId = %q, want batch-%s-draft-prd", stringValue(resp.WorkId), resp.RequestId)
 	}
 	if len(mf.WorkRequests) != 1 {
 		t.Fatalf("expected 1 work request, got %d", len(mf.WorkRequests))
@@ -46,6 +58,66 @@ func TestSubmitWork(t *testing.T) {
 	}
 	if string(mf.Submitted[0].Payload) != `{"title":"Draft PRD"}` {
 		t.Errorf("payload = %s, want JSON object payload", string(mf.Submitted[0].Payload))
+	}
+}
+
+func TestSubmitWork_ReturnsAcceptedWorkIdentifiers(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{"name":"draft-prd","workTypeName":"prd","traceId":"test-trace-1","payload":{"title":"Draft PRD"}}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
+	assertSubmitWorkResponseIdentifiers(t, resp, submitWorkResponseExpectation{
+		traceID:      "test-trace-1",
+		name:         "draft-prd",
+		workTypeName: "prd",
+		sessionID:    factorysessions.DefaultSessionID,
+		workIDSuffix: "-draft-prd",
+	})
+	if resp.RequestId == "" {
+		t.Fatal("expected non-empty requestId")
+	}
+	if !strings.HasPrefix(stringValue(resp.WorkId), "batch-"+resp.RequestId) {
+		t.Fatalf("workId = %q, want batch-<requestId>-draft-prd prefix", stringValue(resp.WorkId))
+	}
+}
+
+type submitWorkResponseExpectation struct {
+	traceID      string
+	name         string
+	workTypeName string
+	sessionID    string
+	workIDSuffix string
+}
+
+func assertSubmitWorkResponseIdentifiers(t *testing.T, resp factoryapi.SubmitWorkResponse, want submitWorkResponseExpectation) {
+	t.Helper()
+
+	if resp.TraceId != want.traceID {
+		t.Fatalf("traceId = %q, want %q", resp.TraceId, want.traceID)
+	}
+	if !resp.Accepted {
+		t.Fatal("accepted = false, want true")
+	}
+	if stringValue(resp.Name) != want.name {
+		t.Fatalf("name = %q, want %q", stringValue(resp.Name), want.name)
+	}
+	if stringValue(resp.WorkTypeName) != want.workTypeName {
+		t.Fatalf("workTypeName = %q, want %q", stringValue(resp.WorkTypeName), want.workTypeName)
+	}
+	if stringValue(resp.SessionId) != want.sessionID {
+		t.Fatalf("sessionId = %q, want %q", stringValue(resp.SessionId), want.sessionID)
+	}
+	workID := stringValue(resp.WorkId)
+	if workID == "" {
+		t.Fatal("workId is empty, want normalized batch id")
+	}
+	if want.workIDSuffix != "" && !strings.HasSuffix(workID, want.workIDSuffix) {
+		t.Fatalf("workId = %q, want suffix %q", workID, want.workIDSuffix)
 	}
 }
 
@@ -197,10 +269,37 @@ func TestSubmitWork_RejectsStructuredItemsCombinedWithPayload(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with payload")
 }
 
-func TestSubmitWork_RejectsEmptyStructuredItems(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
-	rec := submitWorkRequest(t, srv, `{"name":"empty-items","workTypeName":"prd","items":[]}`)
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items must contain at least one item")
+func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
+	// Dashboard submit-work sends name, workTypeName, and items: [] when optional text
+	// inputs are blank. Header/type-only submissions carry no structured content.
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+	rec := submitWorkRequest(t, srv, `{"name":"header-only-request","workTypeName":"prd","items":[]}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("header-only structured submit-work: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
+	if resp.TraceId == "" {
+		t.Fatalf("expected non-empty trace_id, got %q", resp.TraceId)
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if mf.Submitted[0].Name != "header-only-request" {
+		t.Fatalf("submitted name = %q, want header-only-request", mf.Submitted[0].Name)
+	}
+	if mf.Submitted[0].WorkTypeID != "prd" {
+		t.Fatalf("submitted work type = %q, want prd", mf.Submitted[0].WorkTypeID)
+	}
+	if len(mf.Submitted[0].Content) != 0 {
+		t.Fatalf("submitted content count = %d, want empty structured content", len(mf.Submitted[0].Content))
+	}
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 {
+		t.Fatalf("work requests = %#v, want one submitted work request", mf.WorkRequests)
+	}
+	if len(mf.WorkRequests[0].Works[0].Content) != 0 {
+		t.Fatalf("submitted work request content count = %d, want empty structured content", len(mf.WorkRequests[0].Works[0].Content))
+	}
 }
 
 func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {
@@ -507,6 +606,68 @@ func TestSubmitWorkUnknownWorkTypeReturnsBadRequest(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("unknown-work") references unknown work type name "unknown"`)
 }
 
+func TestSubmitWorkBySessionId_ReturnsWorkIdentityFields(t *testing.T) {
+	sessionFactory := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}, Net: sessionScopedStateNet()}
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"session-alpha": sessionFactory,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-alpha/work", bytes.NewBufferString(`{"name":"scoped-draft","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"Scoped"}}`))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
+	assertSubmitWorkIdentityResponse(t, resp, submitWorkIdentityExpectation{
+		name:         "scoped-draft",
+		workTypeName: "task",
+		traceId:      "trace-scoped-submit",
+		accepted:     true,
+	})
+	if len(sessionFactory.WorkRequests) != 1 {
+		t.Fatalf("session submitted work requests = %d, want 1", len(sessionFactory.WorkRequests))
+	}
+	if resp.RequestId == "" {
+		t.Fatalf("requestId = %q, want non-empty normalized request id", resp.RequestId)
+	}
+	if stringValue(resp.WorkId) != "batch-"+resp.RequestId+"-scoped-draft" {
+		t.Fatalf("workId = %q, want batch-%s-scoped-draft", stringValue(resp.WorkId), resp.RequestId)
+	}
+	if stringValue(resp.SessionId) != "session-alpha" {
+		t.Fatalf("sessionId = %q, want session-alpha", stringValue(resp.SessionId))
+	}
+}
+
+type submitWorkIdentityExpectation struct {
+	name         string
+	workTypeName string
+	traceId      string
+	accepted     bool
+}
+
+func assertSubmitWorkIdentityResponse(t *testing.T, resp factoryapi.SubmitWorkResponse, want submitWorkIdentityExpectation) {
+	t.Helper()
+	if resp.TraceId != want.traceId {
+		t.Fatalf("traceId = %q, want %q", resp.TraceId, want.traceId)
+	}
+	if resp.Accepted != want.accepted {
+		t.Fatalf("accepted = %v, want %v", resp.Accepted, want.accepted)
+	}
+	if stringValue(resp.Name) != want.name {
+		t.Fatalf("name = %q, want %q", stringValue(resp.Name), want.name)
+	}
+	if stringValue(resp.WorkTypeName) != want.workTypeName {
+		t.Fatalf("workTypeName = %q, want %q", stringValue(resp.WorkTypeName), want.workTypeName)
+	}
+	if want.name != "" && stringValue(resp.WorkId) == "" {
+		t.Fatalf("workId = %q, want non-empty work id for named submit", stringValue(resp.WorkId))
+	}
+}
+
 func TestSubmitWorkAutoTraceID(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
@@ -662,5 +823,48 @@ func assertSubmitSurfaceSmokeEvents(t *testing.T, serverURL string) {
 	streamed := readSSEFactoryEvent(t, bufio.NewReader(eventsResp.Body))
 	if streamed.Id != "factory-event/work-request/api-surface-history" {
 		t.Fatalf("streamed event id = %q, want factory-event/work-request/api-surface-history", streamed.Id)
+	}
+}
+
+func TestSubmitWorkResponseFromResult_IdempotentReplayPreservesWorkIdentity(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	request := interfaces.WorkRequest{
+		RequestID: "request-idem-1",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{{
+			Name:       "draft-prd",
+			WorkTypeID: "prd",
+			TraceID:    "trace-idem-1",
+		}},
+	}
+
+	first, err := mf.SubmitWorkRequest(context.Background(), request)
+	if err != nil {
+		t.Fatalf("first submit: %v", err)
+	}
+	second, err := mf.SubmitWorkRequest(context.Background(), request)
+	if err != nil {
+		t.Fatalf("duplicate submit: %v", err)
+	}
+
+	resp1 := submitWorkResponseFromResult(first, "")
+	resp2 := submitWorkResponseFromResult(second, "")
+	if !resp1.Accepted || resp2.Accepted {
+		t.Fatalf("accepted flags = %v/%v, want true then false", resp1.Accepted, resp2.Accepted)
+	}
+	if resp1.RequestId != "request-idem-1" || resp2.RequestId != resp1.RequestId {
+		t.Fatalf("requestId = %q/%q, want request-idem-1", resp1.RequestId, resp2.RequestId)
+	}
+	if resp1.TraceId != "trace-idem-1" || resp2.TraceId != resp1.TraceId {
+		t.Fatalf("traceId = %q/%q, want stable trace-idem-1", resp1.TraceId, resp2.TraceId)
+	}
+	if stringValue(resp1.WorkId) != "batch-request-idem-1-draft-prd" || stringValue(resp2.WorkId) != stringValue(resp1.WorkId) {
+		t.Fatalf("workId = %q/%q, want batch-request-idem-1-draft-prd", stringValue(resp1.WorkId), stringValue(resp2.WorkId))
+	}
+	if stringValue(resp1.Name) != "draft-prd" || stringValue(resp2.Name) != "draft-prd" {
+		t.Fatalf("name = %q/%q, want draft-prd", stringValue(resp1.Name), stringValue(resp2.Name))
+	}
+	if stringValue(resp1.WorkTypeName) != "prd" || stringValue(resp2.WorkTypeName) != "prd" {
+		t.Fatalf("workTypeName = %q/%q, want prd", stringValue(resp1.WorkTypeName), stringValue(resp2.WorkTypeName))
 	}
 }

@@ -4,26 +4,68 @@ import { describe, expect, it, vi } from "bun:test";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
 import {
-  MockEventSource,
-  baselineSnapshot,
-  createFactoryImportValue,
-  createFileDropTransfer,
-  importedFactorySnapshot,
-  jsonResponse,
-  registerAppDashboardTestLifecycle,
-  renderApp,
-} from "./testing/app-shell-test-utils";
-import {
+  createDeferredPromise,
   currentNamedFactoryExportResponse,
   exportImageFile,
   exportTimelineEvents,
   fromBase64,
   installExportDownloadProbe,
 } from "./testing/app-shell-export-test-utils";
+import {
+  baselineSnapshot,
+  createFactoryImportValue,
+  createFileDropTransfer,
+  importedFactorySnapshot,
+  MockEventSource,
+  registerAppDashboardTestLifecycle,
+  renderApp,
+} from "./testing/app-shell-test-utils";
+import {
+  buildSessionFactoryActivationPutBody,
+  incrementedSessionFactoryVersion,
+  isSessionFactoryRequest,
+  mergeImportedFactoryIntoSessionDocument,
+  mockGetSessionFactory,
+  mockPutSessionFactory,
+  parseSessionFactoryPutFactory,
+  sessionFactoryImportActivationDocument,
+  sessionFactoryNamedExportDocument,
+} from "./testing/session-factory-mocks";
 
 function expectNoRetiredDashboardBranding(): void {
   expect(screen.queryByText(/finite you/i)).toBeNull();
   expect(screen.queryByText(/Infinite You/i)).toBeNull();
+}
+
+function resolveFetchPath(input: RequestInfo | URL): string {
+  return typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? `${input.pathname}${input.search}`
+      : input.url;
+}
+
+function resolveFetchMethod(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): string {
+  if (init?.method) {
+    return init.method;
+  }
+  if (input instanceof Request) {
+    return input.method;
+  }
+  return "GET";
+}
+
+function expectNoPostFactoriesActivation(
+  fetchMock: ReturnType<typeof vi.fn>,
+): void {
+  const postFactoriesCall = fetchMock.mock.calls.find(([url, init]) => {
+    const path = resolveFetchPath(url);
+    return path === "/factories" && resolveFetchMethod(url, init) === "POST";
+  });
+  expect(postFactoriesCall).toBeUndefined();
 }
 
 describe("App shell import flows", () => {
@@ -32,9 +74,7 @@ describe("App shell import flows", () => {
   it("renders the operator graph for an empty runtime snapshot", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    expect(
-      await screen.findByRole("heading", { name: "U" }),
-    ).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "U" })).toBeTruthy();
     expectNoRetiredDashboardBranding();
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
@@ -42,13 +82,13 @@ describe("App shell import flows", () => {
       await screen.findByRole("region", { name: "Work graph viewport" }),
     ).toBeTruthy();
     expect(
-      within(screen.getByRole("region", { name: "Work graph viewport" })).getByRole("button", {
+      within(
+        screen.getByRole("region", { name: "Work graph viewport" }),
+      ).getByRole("button", {
         name: "Zoom In",
       }),
     ).toBeTruthy();
-    expect(
-      screen.getByText("Waiting for more ticks"),
-    ).toBeTruthy();
+    expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(screen.queryByText("Idle")).toBeNull();
     expect(screen.queryByText("Live Workstation Dashboard")).toBeNull();
     expect(
@@ -61,9 +101,10 @@ describe("App shell import flows", () => {
     ).toBeNull();
   });
 
-  it("posts the dropped factory import as a direct canonical /factories activation payload", async () => {
+  it("activates the dropped factory import through PUT /factory-sessions/~default/factory", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
+    const activationDeferred = createDeferredPromise<Response>();
     vi.spyOn(factoryPngImportModule, "readFactoryImportPng").mockResolvedValue({
       ok: true,
       value: importValue,
@@ -74,25 +115,22 @@ describe("App shell import flows", () => {
 
     fetchMock.mockImplementation(
       async (input: RequestInfo | URL, init?: RequestInit) => {
-        const path =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? `${input.pathname}${input.search}`
-              : input.url;
+        const path = resolveFetchPath(input);
+        const method = resolveFetchMethod(input, init);
 
-        if (path === "/factories") {
-          return new Response(JSON.stringify(importValue.factory), {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-          });
+        if (isSessionFactoryRequest(path, method)) {
+          if (method === "GET") {
+            return mockGetSessionFactory({
+              document: sessionFactoryImportActivationDocument,
+            });
+          }
+
+          if (method === "PUT") {
+            return activationDeferred.promise;
+          }
         }
 
-        throw new Error(
-          `unexpected fetch for ${path} (${init?.method ?? "GET"})`,
-        );
+        throw new Error(`unexpected fetch for ${path} (${method})`);
       },
     );
 
@@ -113,17 +151,51 @@ describe("App shell import flows", () => {
     );
 
     await waitFor(() => {
+      expect(
+        within(previewDialog).getByRole("button", {
+          name: "Activating factory...",
+        }),
+      ).toBeTruthy();
+    });
+    expect(
+      within(previewDialog).getByRole("button", { name: "Cancel import" }),
+    ).toHaveProperty("disabled", true);
+
+    activationDeferred.resolve(
+      mockPutSessionFactory({
+        responseDocument: mergeImportedFactoryIntoSessionDocument(
+          sessionFactoryImportActivationDocument,
+          importValue.factory,
+        ),
+      }),
+    );
+
+    await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/factories",
+        "/factory-sessions/~default/factory",
+        {
+          method: "GET",
+        },
+      );
+    });
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/factory-sessions/~default/factory",
         expect.objectContaining({
-          body: JSON.stringify(importValue.factory),
+          body: JSON.stringify(
+            buildSessionFactoryActivationPutBody({
+              sessionName: sessionFactoryImportActivationDocument.name,
+              importedFactory: importValue.factory,
+            }),
+          ),
           headers: {
-            "Content-Type": "application/json",
+            "content-type": "application/json",
           },
-          method: "POST",
+          method: "PUT",
         }),
       );
     });
+    expectNoPostFactoriesActivation(fetchMock);
   });
 
   it("smoke tests authored export and dropped import as one dashboard-shell roundtrip", async () => {
@@ -132,9 +204,10 @@ describe("App shell import flows", () => {
       await factoryPngExportModule.writeFactoryExportPng({
         factory: currentNamedFactoryExportResponse,
         image: exportImageFile(),
-        rasterizeImageToPngBytes: async () => fromBase64(
-          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
-        ),
+        rasterizeImageToPngBytes: async () =>
+          fromBase64(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+          ),
       });
     if (!mockedExportResult.ok) {
       throw new Error(
@@ -151,24 +224,29 @@ describe("App shell import flows", () => {
 
     fetchMock.mockImplementation(
       async (input: RequestInfo | URL, init?: RequestInit) => {
-        const path =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? `${input.pathname}${input.search}`
-              : input.url;
+        const path = resolveFetchPath(input);
+        const method = resolveFetchMethod(input, init);
 
-        if (path === "/factory-sessions/~default/factory") {
-          return jsonResponse(currentNamedFactoryExportResponse);
+        if (isSessionFactoryRequest(path, method)) {
+          if (method === "GET") {
+            return mockGetSessionFactory({
+              document: {
+                ...sessionFactoryNamedExportDocument,
+                ...currentNamedFactoryExportResponse,
+              },
+            });
+          }
+
+          if (method === "PUT") {
+            return mockPutSessionFactory({
+              responseDocument: parseSessionFactoryPutFactory(
+                String(init?.body),
+              ),
+            });
+          }
         }
 
-        if (path === "/factories") {
-          return jsonResponse(JSON.parse(String(init?.body)));
-        }
-
-        throw new Error(
-          `unexpected fetch for ${path} (${init?.method ?? "GET"})`,
-        );
+        throw new Error(`unexpected fetch for ${path} (${method})`);
       },
     );
 
@@ -254,23 +332,31 @@ describe("App shell import flows", () => {
       );
 
       await waitFor(() => {
-        const activationCall = fetchMock.mock.calls.find(
-          ([url]) => url === "/factories",
-        );
-        expect(activationCall).toBeDefined();
-        expect(activationCall?.[1]).toEqual(
+        const putActivationCall = fetchMock.mock.calls.find(([url, init]) => {
+          return (
+            resolveFetchPath(url) === "/factory-sessions/~default/factory" &&
+            resolveFetchMethod(url, init) === "PUT"
+          );
+        });
+        expect(putActivationCall).toBeDefined();
+        expect(putActivationCall?.[1]).toEqual(
           expect.objectContaining({
             body: expect.any(String),
             headers: {
-              "Content-Type": "application/json",
+              "content-type": "application/json",
             },
-            method: "POST",
+            method: "PUT",
           }),
         );
-        expect(JSON.parse(String(activationCall?.[1]?.body))).toEqual(
-          currentNamedFactoryExportResponse,
-        );
+        expect(JSON.parse(String(putActivationCall?.[1]?.body))).toEqual({
+          mode: "REPLACE_CURRENT",
+          factory: {
+            ...currentNamedFactoryExportResponse,
+            version: incrementedSessionFactoryVersion,
+          },
+        });
       });
+      expectNoPostFactoriesActivation(fetchMock);
       await waitFor(() => {
         expect(MockEventSource.instances.length).toBeGreaterThan(0);
       });

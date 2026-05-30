@@ -7,11 +7,11 @@ import {
   singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
-import { formatTimeOfDay } from "./components/ui/formatters";
+import { formatLocalDateTime } from "./components/ui/formatters";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
-} from "./features/current-selection/state/selectionHistoryStore";
+} from "./features/current-selection/base/public";
 import { DashboardScreen } from "./features/dashboard/public";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
@@ -893,7 +893,7 @@ export const DashboardImprovementsSmoke = {
     await expect(currentSelection.getByText("Active Story")).toBeVisible();
     await expect(
       currentSelection.getByText(
-        `Started at ${formatTimeOfDay("2026-04-08T12:00:01Z")}`,
+        `Started at ${formatLocalDateTime("2026-04-08T12:00:01Z", "Unavailable")}`,
       ),
     ).toBeVisible();
     expect(summaryDetails).not.toBeNull();

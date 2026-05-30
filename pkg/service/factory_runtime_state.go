@@ -6,20 +6,22 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -322,7 +324,7 @@ func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef
 		if _, ok := seen[resource.Name]; ok {
 			continue
 		}
-		summaries = append(summaries, generatedModelResourceSummary(resource))
+		summaries = append(summaries, localmodels.ResourceSummary(resource))
 		seen[resource.Name] = struct{}{}
 	}
 	if len(summaries) == 0 {
@@ -521,38 +523,50 @@ func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error
 	return nil
 }
 
-func (fs *FactoryService) swapActiveRuntime(runtimeBundle *replacementFactoryRuntime) {
-	if runtimeBundle == nil {
-		fs.clearActiveRuntime()
+func (fs *FactoryService) startupRuntimeBundle() *factoryRuntimeBundle {
+	if fs == nil {
+		return nil
+	}
+	fs.runtimeMu.RLock()
+	defer fs.runtimeMu.RUnlock()
+	return fs.startupBundle
+}
+
+func (fs *FactoryService) setStartupBundle(runtimeBundle *factoryRuntimeBundle) {
+	if fs == nil {
 		return
 	}
 	fs.runtimeMu.Lock()
 	defer fs.runtimeMu.Unlock()
-	fs.eventHistory = runtimeBundle.eventHistory
-	fs.factory = runtimeBundle.factory
-	fs.listener = runtimeBundle.listener
-	fs.net = runtimeBundle.net
-	fs.runtimeCfg = runtimeBundle.runtimeCfg
-	fs.modelResources = runtimeBundle.modelResources
-	fs.modelAssets = runtimeBundle.modelAssets
-	fs.localModels = runtimeBundle.localModels
+	fs.startupBundle = runtimeBundle
+}
+
+func (fs *FactoryService) clearStartupBundle() {
+	if fs == nil {
+		return
+	}
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	fs.startupBundle = nil
+}
+
+func (fs *FactoryService) syncActiveSessionDir(runtimeBundle *factoryRuntimeBundle) {
+	if fs == nil || fs.cfg == nil {
+		return
+	}
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	if runtimeBundle == nil || strings.TrimSpace(runtimeBundle.dir) == "" {
+		if strings.TrimSpace(fs.factoryRootDir) != "" {
+			fs.cfg.Dir = fs.factoryRootDir
+		}
+		return
+	}
 	fs.cfg.Dir = runtimeBundle.dir
 }
 
-func (fs *FactoryService) clearActiveRuntime() {
-	fs.runtimeMu.Lock()
-	defer fs.runtimeMu.Unlock()
-	fs.eventHistory = nil
-	fs.factory = nil
-	fs.listener = nil
-	fs.net = nil
-	fs.runtimeCfg = nil
-	fs.modelResources = nil
-	fs.modelAssets = nil
-	fs.localModels = nil
-	if fs.cfg != nil && strings.TrimSpace(fs.factoryRootDir) != "" {
-		fs.cfg.Dir = fs.factoryRootDir
-	}
+func (fs *FactoryService) resetActiveSessionDir() {
+	fs.syncActiveSessionDir(nil)
 }
 
 func (fs *FactoryService) currentRunState() *serviceRunState {
@@ -725,34 +739,17 @@ func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
 }
 
 func (fs *FactoryService) currentFactory() factory.Factory {
-	if fs == nil {
-		return nil
+	if bundle := fs.currentRuntimeBundle(); bundle != nil {
+		return bundle.factory
 	}
-	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil && compatibilitySession.handle != nil && compatibilitySession.handle.runtime != nil {
-		return compatibilitySession.handle.runtime.factory
-	}
-	fs.runtimeMu.RLock()
-	defer fs.runtimeMu.RUnlock()
-	return fs.factory
+	return nil
 }
 
 func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
-	if fs == nil {
-		return nil
+	if bundle := fs.currentRuntimeBundle(); bundle != nil {
+		return bundle.runtimeCfg
 	}
-	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil && compatibilitySession.handle != nil && compatibilitySession.handle.runtime != nil {
-		return compatibilitySession.handle.runtime.runtimeCfg
-	}
-	fs.runtimeMu.RLock()
-	defer fs.runtimeMu.RUnlock()
-	return fs.runtimeCfg
-}
-
-func (fs *FactoryService) compatibilitySession() *liveFactorySession {
-	if fs == nil {
-		return nil
-	}
-	return fs.defaultSession()
+	return nil
 }
 
 func (fs *FactoryService) workflowID() string {
@@ -776,7 +773,7 @@ func validateReplayModeConfig(cfg *FactoryServiceConfig) error {
 
 func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
 	if cfg.ReplayPath == "" {
-		loaded, err := factoryconfig.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
+		loaded, err := configload.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
 		if loaded != nil {
 			loaded.SetRuntimeBaseDir(cfg.ExecutionBaseDir)
 		}
@@ -802,7 +799,7 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 	if artifact == nil || cfg == nil || cfg.Dir == "" {
 		return
 	}
-	current, err := factoryconfig.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
+	current, err := configload.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
 	if err != nil {
 		return
 	}
@@ -824,21 +821,6 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 			zap.String("current", warning.Current),
 		)
 	}
-}
-
-func warnPortableBundledReplacementReport(
-	logger *zap.Logger,
-	message string,
-	replacements []factoryconfig.PortableBundledFileReplacement,
-) {
-	if logger == nil || len(replacements) == 0 {
-		return
-	}
-	targets := make([]string, 0, len(replacements))
-	for _, replacement := range replacements {
-		targets = append(targets, replacement.TargetPath)
-	}
-	logger.Warn(message, zap.Strings("target_paths", targets))
 }
 
 func runtimeWorkflowContext(cfg *interfaces.FactoryConfig) *factory_context.FactoryContext {
@@ -878,7 +860,7 @@ func newRecordingArtifact(
 	}, interfaces.ReplayDiagnostics{})
 }
 
-func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *replacementFactoryRuntime) error {
+func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntimeBundle) error {
 	if runtimeBundle == nil {
 		return nil
 	}
@@ -900,33 +882,11 @@ func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *replacementFac
 	return errors.Join(errs...)
 }
 
-func newSessionLogger(base *zap.Logger, sessionID string, folderPath string, factoryDir string) *zap.Logger {
-	if base == nil {
-		base = zap.NewNop()
-	}
-	return base.With(
-		zap.String("session_id", sessionID),
-		zap.String("folder_path", folderPath),
-		zap.String("factory_dir", factoryDir),
-	)
-}
-
 func sessionScopedRecordPath(basePath string, sessionID string) string {
-	if strings.TrimSpace(basePath) == "" {
-		return basePath
-	}
-	if strings.Contains(basePath, "__factory_session_id__") {
-		return strings.ReplaceAll(basePath, "__factory_session_id__", sessionID)
-	}
-	if sessionID == defaultFactorySessionID {
-		return basePath
-	}
-	ext := filepath.Ext(basePath)
-	base := strings.TrimSuffix(basePath, ext)
-	return base + "." + sessionID + ext
+	return runtimebuild.SessionScopedRecordPath(basePath, sessionID)
 }
 
-func (r *replacementFactoryRuntime) runtimeLogger() *zap.Logger {
+func (r *factoryRuntimeBundle) runtimeLogger() *zap.Logger {
 	if r == nil || r.logger == nil {
 		return zap.NewNop()
 	}

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDefinitionMock } from "../../../../testing/bun-current-factory-definition-public-mocks";
 import {
@@ -12,6 +13,10 @@ import {
   useSaveEditableWorkstationConfigurationMock,
 } from "../../../../testing/bun-current-selection-widget-chrome-mocks";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import {
+  createCurrentSelectionWidgetQueryClient,
+  wrapCurrentSelectionWidgetView,
+} from "./current-selection-widget-test-utils";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { DashboardSelection } from "../state/selection-types";
@@ -166,23 +171,19 @@ describe("CurrentSelectionWidget localization", () => {
       selectedWorkRequestHistory: fixture.selectedWorkRequestHistory,
       selection: fixture.selection,
     });
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
 
     vi.mocked(globalThis.fetch as ReturnType<typeof vi.fn>).mockReturnValue(
       new Promise<Response>(() => undefined),
     );
 
     const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="en"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={fixture.executionDetails}
-        />
-      </QueryClientProvider>,
+        />),
     );
 
     const englishSelection = screen.getByRole("article", {
@@ -208,14 +209,12 @@ describe("CurrentSelectionWidget localization", () => {
     ).toBeTruthy();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="zh-CN"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={fixture.executionDetails}
-        />
-      </QueryClientProvider>,
+        />),
     );
 
     const localizedSelection = screen.getByRole("article", {
@@ -253,11 +252,33 @@ describe("CurrentSelectionWidget workstation localization", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = {
       ...snapshot.topology.workstation_nodes_by_id.review,
-      workstation_kind: "standard",
+      workstation_kind: "repeater",
     };
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
+    const factoryDocument: CurrentFactoryDocument = {
+      name: "Current Factory",
+      version: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      workers: [
+        { model: "gpt-5.5", name: "reviewer", type: "MODEL_WORKER" },
+        { model: "gpt-5.6", name: "planner", type: "MODEL_WORKER" },
+      ],
+      workstations: [
+        {
+          behavior: "STANDARD",
+          body: "Review the latest story changes before approval.",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          promptFile: "prompts/review.md",
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
 
     useCurrentFactoryDefinitionMock.mockReturnValue({
       data: {
@@ -287,6 +308,14 @@ describe("CurrentSelectionWidget workstation localization", () => {
       isPending: false,
       status: "success",
     } as never);
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: factoryDocument,
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
 
     const currentSelection = buildCurrentSelection({
       selectedNode,
@@ -294,14 +323,12 @@ describe("CurrentSelectionWidget workstation localization", () => {
     });
 
     const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="en"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />),
     );
 
     expect(screen.getByRole("heading", { name: "Workstation summary" })).toBeTruthy();
@@ -309,14 +336,12 @@ describe("CurrentSelectionWidget workstation localization", () => {
     expect(screen.getByText("reviewer")).toBeTruthy();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="zh-CN"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />),
     );
 
     expect(screen.getByRole("heading", { name: "工作站摘要" })).toBeTruthy();

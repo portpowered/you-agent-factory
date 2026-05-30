@@ -31,13 +31,12 @@ type MockFactory struct {
 	FactoryEventStreamCtx    context.Context
 	EngineStateSnapshotCalls int
 	CreatedFactories         []factoryapi.Factory
-	CreateNamedFactoryErr    error
+	SaveFactoryForSessionErr error
 	CurrentFactory           *factoryapi.Factory
 	CurrentFactoryErr        error
 	FactoryVersion           factoryapi.HybridLogicalTimestamp
 	CurrentFactoryReadErr    error
 	SavedCurrentFactories    []factoryapi.Factory
-	SaveCurrentFactoryErr    error
 	Models                   factoryapi.ListModelsResponse
 	ListModelsErr            error
 	ModelDetails             map[string]factoryapi.ModelDetail
@@ -61,6 +60,10 @@ type MockFactory struct {
 
 var _ factory.APIFactory = (*MockFactory)(nil)
 var _ factory.Factory = (*MockFactory)(nil)
+var _ apisurface.ModelAPI = (*MockFactory)(nil)
+var _ apisurface.FactorySaveAPI = (*MockFactory)(nil)
+var _ apisurface.SessionAPI = (*MockFactory)(nil)
+var _ apisurface.WorkAPI = (*MockFactory)(nil)
 var _ apisurface.APISurface = (*MockFactory)(nil)
 var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
 
@@ -90,17 +93,15 @@ func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.Wo
 	if err != nil {
 		return interfaces.WorkRequestSubmitResult{}, err
 	}
-	result := interfaces.WorkRequestSubmitResult{
-		RequestID: request.RequestID,
-		Accepted:  true,
+	requestID := request.RequestID
+	if requestID == "" && len(normalized) > 0 {
+		requestID = normalized[0].RequestID
 	}
-	if len(normalized) > 0 {
-		result.TraceID = normalized[0].TraceID
-	}
+	result := requests.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
 	if m.WorkRequestResults == nil {
 		m.WorkRequestResults = make(map[string]interfaces.WorkRequestSubmitResult)
 	}
-	m.WorkRequestResults[request.RequestID] = result
+	m.WorkRequestResults[requestID] = result
 	m.WorkRequests = append(m.WorkRequests, request)
 	m.Submitted = append(m.Submitted, normalized...)
 	return result, nil
@@ -147,16 +148,6 @@ func (m *MockFactory) GetFactoryEvents(_ context.Context) ([]factoryapi.FactoryE
 	return events, nil
 }
 
-func (m *MockFactory) CreateNamedFactory(_ context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error) {
-	if m.CreateNamedFactoryErr != nil {
-		return factoryapi.Factory{}, m.CreateNamedFactoryErr
-	}
-	m.CreatedFactories = append(m.CreatedFactories, namedFactory)
-	copied := namedFactory
-	m.CurrentFactory = &copied
-	return namedFactory, nil
-}
-
 func (m *MockFactory) GetCurrentFactory(_ context.Context) (factoryapi.Factory, error) {
 	if m.CurrentFactoryErr != nil {
 		return factoryapi.Factory{}, m.CurrentFactoryErr
@@ -177,14 +168,26 @@ func (m *MockFactory) GetCurrentFactory(_ context.Context) (factoryapi.Factory, 
 	return current, nil
 }
 
-func (m *MockFactory) SaveCurrentFactory(_ context.Context, request factoryapi.Factory) (factoryapi.Factory, error) {
-	if m.SaveCurrentFactoryErr != nil {
-		return factoryapi.Factory{}, m.SaveCurrentFactoryErr
+func (m *MockFactory) SaveFactoryForSession(
+	_ context.Context,
+	sessionID string,
+	mode factoryapi.FactorySaveMode,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	if m.SaveFactoryForSessionErr != nil {
+		return factoryapi.Factory{}, m.SaveFactoryForSessionErr
 	}
-	m.SavedCurrentFactories = append(m.SavedCurrentFactories, request)
+	session, err := m.sessionFactory(sessionID)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	if mode == factoryapi.FactorySaveModeUpsertNamedAndActivate {
+		m.CreatedFactories = append(m.CreatedFactories, request)
+	}
+	session.SavedCurrentFactories = append(session.SavedCurrentFactories, request)
 	copied := request
-	m.CurrentFactory = &copied
-	version := m.FactoryVersion
+	session.CurrentFactory = &copied
+	version := session.FactoryVersion
 	if version.Physical.IsZero() {
 		version.Physical = time.Unix(0, 2).UTC()
 		version.Logical = 2
@@ -296,11 +299,7 @@ func (m *MockFactory) SaveCurrentFactoryForSession(
 	sessionID string,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
-	session, err := m.sessionFactory(sessionID)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	return session.SaveCurrentFactory(ctx, request)
+	return m.SaveFactoryForSession(ctx, sessionID, factoryapi.FactorySaveModeReplaceCurrent, request)
 }
 
 func (m *MockFactory) sessionFactory(sessionID string) (*MockFactory, error) {

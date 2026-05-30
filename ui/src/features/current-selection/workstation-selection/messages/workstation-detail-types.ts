@@ -1,0 +1,148 @@
+export interface WorkstationDetailMessages {
+  activeRunsLabel: string;
+  activeWorkEmpty: string;
+  activeWorkHeading: string;
+  collapseAction: string;
+  editableConfigurationEmpty: string;
+  editableConfigurationErrorPrefix: string;
+  editableConfigurationCollapseActionLabel: string;
+  editableConfigurationExpandActionLabel: string;
+  editableConfigurationHeading: string;
+  editableConfigurationLoading: string;
+  editableConfigurationDirtyStatus: string;
+  editableConfigurationDraftNote: string;
+  editableConfigurationModelSharedWorkerHint: string;
+  editableConfigurationResetAction: string;
+  editableConfigurationServerFieldChangedHint: string;
+  editableConfigurationOverwriteWarning: (fields: string) => string;
+  editableConfigurationOverwriteWarningDetail: string;
+  editableConfigurationSaveAction: string;
+  editableConfigurationSaveBusyAction: string;
+  editableConfigurationSaveConfirmationCancelAction: string;
+  editableConfigurationSaveConfirmationConfirmAction: string;
+  editableConfigurationSaveConfirmationDescription: string;
+  editableConfigurationSaveConflictConfirmationDescription: (
+    fields: string,
+  ) => string;
+  editableConfigurationSaveConfirmationTitle: string;
+  editableConfigurationSaveErrorPrefix: string;
+  editableConfigurationSaveStaleVersionDetail: string;
+  editableConfigurationSaveSuccess: string;
+  editableConfigurationValidationStatus: string;
+  editableConfigurationBehaviorPollerWorkerUnsupported: string;
+  editableConfigurationPromptRequired: string;
+  editableConfigurationPromptEditorLoading: string;
+  editableConfigurationPromptEditorError: string;
+  editableConfigurationPromptValidationLoading: string;
+  editableConfigurationPromptValidationFallbackError: string;
+  editableConfigurationPromptValidationErrorPrefix: string;
+  editableConfigurationPromptDiagnosticsSummary: string;
+  editableConfigurationPromptDiagnosticsHeading: string;
+  editableConfigurationPromptSyntaxDiagnosticLabel: string;
+  editableConfigurationPromptVariableDiagnosticLabel: string;
+  editableConfigurationPromptValidationDetail: string;
+  editableConfigurationPromptHelpLoading: string;
+  editableConfigurationPromptHelpEmpty: string;
+  editableConfigurationPromptHelpFallbackError: string;
+  editableConfigurationPromptHelpErrorPrefix: string;
+  editableConfigurationPromptAutocompleteSummary: (
+    variableCount: number,
+    inputCount: number,
+  ) => string;
+  editableConfigurationPromptAutocompleteDetail: string;
+  editableConfigurationPromptHelpCollapseActionLabel: string;
+  editableConfigurationPromptHelpExpandActionLabel: string;
+  editableConfigurationPromptAvailableVariablesHeading: string;
+  editableConfigurationPromptUnavailableAccessHeading: string;
+  editableConfigurationSaveFallbackError: string;
+  editableConfigurationWorkerMissing: string;
+  editableConfigurationWorkerOptionsEmpty: string;
+  editableConfigurationWorkerRequired: string;
+  editableConfigurationSharedWorkerScopeHint: (
+    workerName: string,
+    workstationNames: string,
+  ) => string;
+  editableConfigurationWorkerUnavailable: string;
+  editableConfigurationWorkerUnavailablePrefix: string;
+  modelFieldLabel: string;
+  notConfiguredValue: string;
+  promptFieldLabel: string;
+  templateFieldLabel: string;
+  workerFieldLabel: string;
+  currentDispatchLabel: string;
+  dispatchLabel: string;
+  elapsedLabel: string;
+  totalRuntimeLabel: string;
+  expandAction: string;
+  historyRequestCountLabel: (count: number) => string;
+  historyRunCountLabel: (count: number) => string;
+  historicalRequestsLabel: string;
+  historicalRunsLabel: string;
+  inputWorkTypesLabel: string;
+  kindDefaultValue: string;
+  kindLabel: string;
+  noWorkstationRequests: string;
+  noWorkstationRuns: string;
+  openRequestAction: string;
+  openRequestDetailsAction: string;
+  openNamedWorkItemAction: (workItemLabel: string) => string;
+  openWorkItemAction: string;
+  outputWorkTypesLabel: string;
+  projectedWorkstationRequestSummary: string;
+  providerSummary: (provider: string, model?: string | null) => string;
+  requestDetailsUnavailable: (dispatchId: string) => string;
+  requestHistoryHeading: string;
+  requestSelectedAction: string;
+  requestStatusStartedAgo: (elapsed: string) => string;
+  runnerCapabilityImageInputLabel: string;
+  runnerCapabilitySessionResumeLabel: string;
+  runnerCapabilityStructuredOutputLabel: string;
+  runnerCapabilityWorktreeLabel: string;
+  runnerCapabilityWorkingDirectoryLabel: string;
+  runnerCapabilitySupportHeading: string;
+  runnerCapabilitySupportedLabel: string;
+  runnerCapabilityUnsupportedLabel: string;
+  runnerFieldHelp: (runnerName: string, sourceLabel: string) => string;
+  runnerFieldLabel: string;
+  runnerInheritanceFactoryLabel: (runnerName: string) => string;
+  runnerInheritanceFactoryMissingLabel: string;
+  runnerLoadingValue: string;
+  runHistoryHeading: string;
+  providerSessionLogAction: string;
+  providerSessionLogUnavailable: string;
+  providerSessionSelectedAction: string;
+  providerSessionSelectAction: string;
+  providerSessionSelectionUnavailable: string;
+  scriptCommandSummary: (command: string) => string;
+  selectProviderSessionLabel: (
+    sessionLabel: string,
+    dispatchId: string,
+  ) => string;
+  selectRequestLabel: (requestLabel: string, dispatchId: string) => string;
+  selectWorkItemLabel: (workItemLabel: string) => string;
+  selectWorkstationRequestLabel: (dispatchId: string) => string;
+  selectedRequestLabel: (dispatchId: string) => string;
+  stationLabel: string;
+  summaryHeading: string;
+  traceIdLabel: string;
+  unknownActiveWorkLabel: string;
+  unavailableValue: string;
+  unavailableRunnerValue: string;
+  unavailableWorkstationKindValue: string;
+  unavailableWorkstationTypeValue: string;
+  localizeProviderSessionKind: (value: string) => string;
+  localizeRunnerSelectionSource: (value: string) => string;
+  localizeWorkstationBehavior: (value: string) => string;
+  localizeWorkstationKind: (value: string) => string;
+  localizeWorkstationType: (value: string) => string;
+  unknownWorkerTypeValue: string;
+  unknownWorkLabel: string;
+  workDetailsUnavailable: (dispatchId: string) => string;
+  workIdLabel: string;
+  workSelectedAction: string;
+  workerTypeLabel: string;
+  workstationKindLoadingValue: string;
+  workstationTypeLabel: string;
+  workstationTypeLoadingValue: string;
+  selectedRunnerLabel: string;
+}

@@ -893,3 +893,72 @@ func TestLoadRuntimeConfig_PreservesInlineWorkerOperationsWithoutAgentsFiles(t *
 		t.Fatalf("expected audio output content types [AUDIO], got %#v", operation.Outputs[0].ContentTypes)
 	}
 }
+
+func TestLoadRuntimeConfig_PreservesOpenCodeAgentThroughFactoryBuild(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name": "executor",
+		}},
+		"workstations": []map[string]any{{
+			"name":    "execute-story",
+			"worker":  "executor",
+			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+		}},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "executor", `---
+type: MODEL_WORKER
+model: gpt-5.4
+modelProvider: opencode
+openCodeAgent: reviewer
+---
+Worker body.
+`)
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "execute-story", `---
+type: MODEL_WORKSTATION
+worker: executor
+openCodeAgent: implementer
+---
+Workstation body.
+`)
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	worker, ok := loaded.Worker("executor")
+	if !ok || worker == nil {
+		t.Fatalf("Worker(executor) = %#v ok=%v, want runtime worker", worker, ok)
+	}
+	if worker.OpenCodeAgent != "reviewer" {
+		t.Fatalf("worker OpenCodeAgent = %q, want reviewer", worker.OpenCodeAgent)
+	}
+	if loaded.FactoryConfig().Workers[0].OpenCodeAgent != "reviewer" {
+		t.Fatalf("factory worker OpenCodeAgent = %q, want reviewer", loaded.FactoryConfig().Workers[0].OpenCodeAgent)
+	}
+
+	workstation, ok := loaded.Workstation("execute-story")
+	if !ok || workstation == nil {
+		t.Fatalf("Workstation(execute-story) = %#v ok=%v, want runtime workstation", workstation, ok)
+	}
+	if workstation.OpenCodeAgent != "implementer" {
+		t.Fatalf("workstation OpenCodeAgent = %q, want implementer", workstation.OpenCodeAgent)
+	}
+	if loaded.FactoryConfig().Workstations[0].OpenCodeAgent != "implementer" {
+		t.Fatalf("factory workstation OpenCodeAgent = %q, want implementer", loaded.FactoryConfig().Workstations[0].OpenCodeAgent)
+	}
+	if got := interfaces.ResolveOpenCodeAgent(workstation.OpenCodeAgent, worker.OpenCodeAgent); got != "implementer" {
+		t.Fatalf("ResolveOpenCodeAgent(...) = %q, want workstation override implementer", got)
+	}
+}

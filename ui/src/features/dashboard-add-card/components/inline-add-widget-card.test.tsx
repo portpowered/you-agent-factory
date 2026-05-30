@@ -52,11 +52,12 @@ describe("InlineAddWidgetCard content", () => {
         "Track headline counts for dispatched, completed, and failed work.",
       ),
     ).toBeNull();
+    const header = card.querySelector("header");
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(header?.className).toContain("cursor-grab");
     expect(
-      screen
-        .getByRole("button", { name: "Move Add widget" })
-        .getAttribute("data-bento-drag-handle"),
-    ).toBe("true");
+      within(card).queryByRole("button", { name: "Move Add widget" }),
+    ).toBeNull();
   });
 
   it("renders available and unavailable widgets in the selector", () => {

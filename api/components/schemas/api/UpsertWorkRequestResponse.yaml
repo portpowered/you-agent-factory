@@ -3,9 +3,13 @@ additionalProperties: false
 required:
   - requestId
   - traceId
+  - works
 properties:
   requestId:
     type: string
   traceId:
     type: string
-
+  works:
+    type: array
+    items:
+      $ref: './UpsertWorkRequestSubmittedWork.yaml'

@@ -10,6 +10,7 @@ import {
 } from "../../../stories/dashboardStorySupport";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
+import { SESSION_TAB_PATH_MAX_LENGTH } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 
 const defaultSession = {
@@ -51,6 +52,33 @@ export default {
   title: "you-agent-factory/Dashboard/Session Tabs",
   component: DashboardSessionTabs,
   tags: ["test"],
+};
+
+export const DefaultSessionAbsolutePath = {
+  parameters: defaultSessionAbsolutePathStoryParameters(),
+  render: () => <SessionTabsStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const messages = getHeaderControlsMessages("en");
+    const canvas = within(canvasElement);
+    const absoluteFactoryPath =
+      "/Users/operator/infinite-you/agent-factory/examples/catalog/factory";
+    const truncatedSecondaryPath = `...${absoluteFactoryPath.slice(
+      -(SESSION_TAB_PATH_MAX_LENGTH - 3),
+    )}`;
+
+    await expect(
+      canvas.findByRole("navigation", { name: messages.sessionTabsLabel }),
+    ).resolves.toBeVisible();
+    await expect(canvas.getByRole("tab", { name: "factory" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(canvas.getByText(truncatedSecondaryPath)).toBeVisible();
+    await expect(canvas.getByTitle(absoluteFactoryPath)).toHaveAttribute(
+      "title",
+      absoluteFactoryPath,
+    );
+  },
 };
 
 export const OpenFlowVerification = {
@@ -127,6 +155,42 @@ function SessionTabsStory() {
       <DashboardSessionTabs locale="en" />
     </div>
   );
+}
+
+function defaultSessionAbsolutePathStoryParameters() {
+  const absoluteFactoryPath =
+    "/Users/operator/infinite-you/agent-factory/examples/catalog/factory";
+
+  return {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: () => ({
+            body: {
+              sessions: [
+                {
+                  factoryDir: absoluteFactoryPath,
+                  folderPath: absoluteFactoryPath,
+                  id: "~default",
+                  isDefault: true,
+                  project: "factory",
+                  target: {
+                    kind: "default",
+                  },
+                },
+              ],
+            },
+          }),
+        },
+      ],
+      timelineSnapshots: [
+        historicalWorkOutcomeSnapshot,
+        liveWorkOutcomeSnapshot,
+      ],
+    },
+  };
 }
 
 function sessionTabsStoryParameters() {

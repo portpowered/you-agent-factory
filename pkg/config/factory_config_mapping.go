@@ -164,6 +164,24 @@ func inputTypesAPIFromInternal(inputTypes []interfaces.InputTypeConfig) *[]facto
 	return &result
 }
 
+func workTypeHandlingBehaviorAPIFromInternal(behaviors []string) *[]factoryapi.WorkTypeHandlingBehavior {
+	if len(behaviors) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.WorkTypeHandlingBehavior, 0, len(behaviors))
+	for _, behavior := range behaviors {
+		canonical := interfaces.StrictPublicWorkTypeHandlingBehavior(behavior)
+		if canonical == "" {
+			continue
+		}
+		values = append(values, factoryapi.WorkTypeHandlingBehavior(canonical))
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return &values
+}
+
 func workTypesAPIFromInternal(workTypes []interfaces.WorkTypeConfig) *[]factoryapi.WorkType {
 	if len(workTypes) == 0 {
 		return nil
@@ -178,8 +196,9 @@ func workTypesAPIFromInternal(workTypes []interfaces.WorkTypeConfig) *[]factorya
 			}
 		}
 		result[i] = factoryapi.WorkType{
-			Name:   workType.Name,
-			States: states,
+			Name:             workType.Name,
+			States:           states,
+			HandlingBehavior: workTypeHandlingBehaviorAPIFromInternal(workType.HandlingBehavior),
 		}
 	}
 	return &result
@@ -295,6 +314,9 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 	}
 	if normalized.Worktree != "" {
 		apiWorkstation.Worktree = stringPtr(normalized.Worktree)
+	}
+	if normalized.OpenCodeAgent != "" {
+		apiWorkstation.OpenCodeAgent = stringPtr(normalized.OpenCodeAgent)
 	}
 	return apiWorkstation
 }
@@ -441,6 +463,7 @@ func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.W
 		Operations:       modelOperationsAPIFromInternal(def.Operations),
 		Resources:        resourceRequirementsAPIFromInternal(def.Resources),
 		SkipPermissions:  boolPtrIfTrue(def.SkipPermissions),
+		OpenCodeAgent:    stringPtrIfNotEmpty(def.OpenCodeAgent),
 		StopToken:        stringPtrIfNotEmpty(def.StopToken),
 		Timeout:          stringPtrIfNotEmpty(def.Timeout),
 	}

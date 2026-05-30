@@ -1,17 +1,16 @@
 import { describe, expect, it } from "bun:test";
 
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { updateFactoryGraphNodeField } from "./factory-graph-field-operations";
 import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,
-  buildFactoryGraphSaveInput,
   buildFactoryGraphState,
   connectFactoryGraphNodes,
-  createEmptyFactoryGraphDraft,
   disconnectFactoryGraphEdge,
-  projectFactoryGraphToReactFlow,
   removeFactoryGraphNode,
-  updateFactoryGraphNodeField,
-} from "../public";
+} from "./factory-graph-operations";
+import { projectFactoryGraphToReactFlow } from "./factory-graph-react-flow-projection";
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps the operation contract scenarios co-located.
@@ -154,6 +153,22 @@ describe("factory graph operations", () => {
     expect(protectedDisconnect).toMatchObject({
       ok: false,
       reason: "PROTECTED_EDGE",
+    });
+  });
+
+  it("rejects continue and reject connections for standard processors without stopWords", () => {
+    const continueConnection = connectFactoryGraphNodes({
+      baseFactoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      sourceAnchorId: "workstation-on-continue-source",
+      sourceNodeId: "workstation:draft",
+      targetAnchorId: "work-state-input-target",
+      targetNodeId: "work-state:story:done",
+    });
+
+    expect(continueConnection).toMatchObject({
+      ok: false,
+      reason: "INVALID_CONNECTION",
     });
   });
 
@@ -341,7 +356,15 @@ describe("factory graph operations", () => {
       "resource:gpu",
     );
 
-    const projection = projectFactoryGraphToReactFlow(state.graph);
+    const projection = projectFactoryGraphToReactFlow({
+      topology: state.graph,
+      workstationResolver: {
+        resolveWorkstation: (name) =>
+          state.pendingFactoryDefinition?.workstations?.find(
+            (workstation) => workstation.name === name,
+          ),
+      },
+    });
     expect(
       projection.nodes.find((node) => node.id === "work-state:story:done"),
     ).toEqual(
@@ -361,7 +384,7 @@ describe("factory graph operations", () => {
       baseFactoryDefinition,
       draft,
     });
-    const saveInput = buildFactoryGraphSaveInput({
+    const saveInput = applyFactoryGraphPendingEdits({
       baseFactoryDefinition,
       draft,
     });
@@ -380,7 +403,7 @@ function expectOk<T>(
   result: ReturnType<
     | typeof addFactoryGraphNode
     | typeof applyFactoryGraphPendingEdits
-    | typeof buildFactoryGraphSaveInput
+    | typeof applyFactoryGraphPendingEdits
     | typeof connectFactoryGraphNodes
     | typeof disconnectFactoryGraphEdge
     | typeof removeFactoryGraphNode

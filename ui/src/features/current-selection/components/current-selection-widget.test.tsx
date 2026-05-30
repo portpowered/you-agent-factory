@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
 import type {
   CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
@@ -19,6 +18,7 @@ import {
   useSaveEditableWorkstationConfigurationMock,
 } from "../../../../testing/bun-current-selection-widget-chrome-mocks";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import { renderWithQueryClient } from "./current-selection-widget-test-utils";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
@@ -50,11 +50,15 @@ function buildCurrentSelection(
     selectedWorkWorkstationRequests: [],
     selectedWorkstationRequest: null,
     selectedNodeWorkstationRequests: [],
+    selectedWorker: null,
+    selectedWorkerName: null,
+    selectedWorkerWorkstationNames: [],
     selection: null,
     selectWorkByID: () => undefined,
     selectStateNode: () => undefined,
     selectStateWorkItem: () => undefined,
     selectWorkItem: () => undefined,
+    selectWorker: () => undefined,
     selectWorkstation: () => undefined,
     selectWorkstationRequest: () => undefined,
     terminalWorkDetail: null,
@@ -697,6 +701,87 @@ describe("CurrentSelectionWidget", () => {
     );
   });
 
+  it("renders the worker detail card for worker selections", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildEditableFactoryDefinition(),
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: true,
+      isFetchedAfterMount: true,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: false,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: false,
+      isSuccess: true,
+      promise: Promise.resolve(buildEditableFactoryDefinition()),
+      refetch: vi.fn(),
+      status: "success",
+    } as never);
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedWorkerName: "reviewer",
+          selection: { kind: "worker", workerName: "reviewer" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(screen.getByText("reviewer")).toBeTruthy();
+    expect(screen.getAllByText("Model worker").length).toBeGreaterThan(0);
+    expect(screen.getByText("Review")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Worker configuration" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Configuration" }),
+    ).toBeNull();
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
+  });
+
+  it("initializes editable worker inputs from the canonical factory definition", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedWorkerName: "reviewer",
+          selection: { kind: "worker", workerName: "reviewer" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect((screen.getByLabelText("Model provider") as HTMLSelectElement).value).toBe(
+      "CURSOR",
+    );
+    expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(
+      "gpt-5.5",
+    );
+
+    fireEvent.change(screen.getByLabelText("Model provider"), {
+      target: { value: "CODEX" },
+    });
+
+    expect((screen.getByLabelText("Model provider") as HTMLSelectElement).value).toBe(
+      "CODEX",
+    );
+  });
+
   it("enables editable workstation loading after a workstation becomes selected", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -1047,20 +1132,6 @@ function buildEditableDefinitionResult(
   } as never;
 }
 
-function renderWithQueryClient(view: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-    },
-  });
-
-  return render(view, {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    ),
-  });
-}
-
 function expandEditableConfiguration() {
   const section = screen
     .getAllByRole("heading", { name: "Configuration" })
@@ -1091,6 +1162,7 @@ function buildEditableFactoryDefinition(overrides?: {
     workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(
       (name, index) => ({
         model: `gpt-5.${index + 5}`,
+        modelProvider: index === 0 ? "CURSOR" : "CODEX",
         name,
         type: "MODEL_WORKER",
       }),

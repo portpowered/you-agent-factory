@@ -66,6 +66,24 @@ func inputTypesInternalFromAPI(inputTypes []factoryapi.InputType) []interfaces.I
 	return values
 }
 
+func workTypeHandlingBehaviorInternalFromAPI(behaviors *[]factoryapi.WorkTypeHandlingBehavior) []string {
+	if behaviors == nil || len(*behaviors) == 0 {
+		return nil
+	}
+	values := make([]string, 0, len(*behaviors))
+	for _, behavior := range *behaviors {
+		canonical := interfaces.StrictPublicWorkTypeHandlingBehavior(string(behavior))
+		if canonical == "" {
+			continue
+		}
+		values = append(values, canonical)
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
 func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) []interfaces.WorkTypeConfig {
 	values := make([]interfaces.WorkTypeConfig, len(workTypes))
 	for i, workType := range workTypes {
@@ -76,7 +94,11 @@ func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) []interfaces.Work
 				Type: interfaces.StateType(state.Type),
 			}
 		}
-		values[i] = interfaces.WorkTypeConfig{Name: workType.Name, States: states}
+		values[i] = interfaces.WorkTypeConfig{
+			Name:             workType.Name,
+			States:           states,
+			HandlingBehavior: workTypeHandlingBehaviorInternalFromAPI(workType.HandlingBehavior),
+		}
 	}
 	return values
 }
@@ -224,7 +246,23 @@ func modelOperationContentTypesInternalFromAPI(contentTypes []factoryapi.ModelOp
 // WorkerConfigFromOpenAPI converts a generated OpenAPI worker model into the
 // internal runtime config representation.
 func WorkerConfigFromOpenAPI(worker factoryapi.Worker) (interfaces.WorkerConfig, error) {
-	return workerInternalFromAPI(worker), nil
+	cfg := workerInternalFromAPI(worker)
+	openCodeAgent, err := openCodeAgentInternalFromAPI(worker.OpenCodeAgent, fmt.Sprintf("factory.workers[%q]", worker.Name))
+	if err != nil {
+		return interfaces.WorkerConfig{}, err
+	}
+	cfg.OpenCodeAgent = openCodeAgent
+	return cfg, nil
+}
+
+func openCodeAgentInternalFromAPI(agent *string, fieldPath string) (string, error) {
+	if agent == nil {
+		return "", nil
+	}
+	if err := validateOpenCodeAgentField(fieldPath, *agent); err != nil {
+		return "", err
+	}
+	return *agent, nil
 }
 
 func hostedWorkerAuthInternalFromAPI(auth *factoryapi.HostedWorkerAuth) *interfaces.HostedWorkerAuthConfig {
@@ -305,6 +343,10 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
+	openCodeAgent, err := openCodeAgentInternalFromAPI(workstation.OpenCodeAgent, fieldPath)
+	if err != nil {
+		return interfaces.FactoryWorkstationConfig{}, err
+	}
 	cfg := interfaces.FactoryWorkstationConfig{
 		ID:                    stringValue(workstation.Id),
 		Name:                  workstation.Name,
@@ -330,6 +372,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		WorkingDirectory:      stringValue(workstation.WorkingDirectory),
 		Worktree:              stringValue(workstation.Worktree),
 		Env:                   stringMapValue(workstation.Env),
+		OpenCodeAgent:         openCodeAgent,
 	}
 	if workstation.Type != nil {
 		cfg.Type = internalFactoryWorkstationTypeFromPublic(workstation.Type)
@@ -532,9 +575,6 @@ const (
 	publicFactoryWorkerTypeModel                 = "MODEL_WORKER"
 	publicFactoryWorkerTypeScript                = "SCRIPT_WORKER"
 	publicFactoryWorkerTypeHosted                = "HOSTED_WORKER"
-	publicFactoryWorkerModelProviderClaude       = "CLAUDE"
-	publicFactoryWorkerModelProviderCodex        = "CODEX"
-	publicFactoryWorkerModelProviderCursor       = "CURSOR"
 	publicFactoryWorkerModelLocalityLocal        = "LOCAL"
 	publicFactoryWorkerModelLocalityCloud        = "CLOUD"
 	publicFactoryResourceTypeModel               = "MODEL"
@@ -694,16 +734,10 @@ func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelP
 	if value == nil {
 		return ""
 	}
-	switch interfaces.StrictPublicFactoryWorkerModelProvider(string(*value)) {
-	case publicFactoryWorkerModelProviderClaude:
-		return string(factoryapiToInternalModelProviderClaude())
-	case publicFactoryWorkerModelProviderCodex:
-		return string(factoryapiToInternalModelProviderCodex())
-	case publicFactoryWorkerModelProviderCursor:
-		return string(factoryapiToInternalModelProviderCursor())
-	default:
-		return strings.TrimSpace(string(*value))
+	if internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(*value); ok {
+		return string(internal)
 	}
+	return strings.TrimSpace(string(*value))
 }
 
 func internalFactoryWorkerModelLocalityFromPublic(value *factoryapi.WorkerModelLocality) string {
@@ -845,14 +879,3 @@ func internalFactoryGuardTypeFromPublic(value factoryapi.GuardType) interfaces.G
 	}
 }
 
-func factoryapiToInternalModelProviderClaude() string {
-	return "claude"
-}
-
-func factoryapiToInternalModelProviderCodex() string {
-	return "codex"
-}
-
-func factoryapiToInternalModelProviderCursor() string {
-	return "agent"
-}

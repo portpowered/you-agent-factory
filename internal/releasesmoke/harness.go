@@ -170,7 +170,7 @@ func (s *harnessSession) Start(ctx context.Context) error {
 		"--dir", s.workspacePath,
 		"--continuously",
 		"--with-mock-workers",
-		"--port", fmt.Sprintf("%d", s.port),
+		"--server", s.baseURL,
 		"--quiet",
 	)
 	s.cmd.Stdout = s.stdoutBuf

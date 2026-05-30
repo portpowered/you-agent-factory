@@ -16,9 +16,14 @@ import { currentFactoryDefinitionAPIErrorMessages } from "./messages";
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 
 type CanonicalFactory = components["schemas"]["Factory"];
+type FactorySaveMode = components["schemas"]["FactorySaveMode"];
 export type CurrentFactoryVersion =
   components["schemas"]["HybridLogicalTimestamp"];
-type ErrorTarget = components["schemas"]["ErrorTarget"];
+
+/** Dashboard editor and replace-current import activation use session PUT with this mode only. */
+export const CURRENT_FACTORY_EDITOR_SAVE_MODE =
+  "REPLACE_CURRENT" satisfies FactorySaveMode;
+type FactoryValidationTarget = components["schemas"]["FactoryValidationTarget"];
 
 export type CurrentFactoryDocument = CanonicalFactoryDefinition & {
   version: CurrentFactoryVersion;
@@ -39,7 +44,7 @@ export interface CurrentFactoryDefinitionErrorDetails {
   responseBody?: unknown;
   status?: number;
   statusText?: string;
-  targets?: ErrorTarget[];
+  targets?: FactoryValidationTarget[];
 }
 
 export interface GetCurrentFactoryDefinitionOptions {
@@ -55,6 +60,13 @@ export interface SaveCurrentFactoryOptions {
 export interface SaveCurrentFactoryInput {
   baseVersion?: CurrentFactoryVersion;
   factoryDefinition: CanonicalFactoryDefinition;
+}
+
+export interface SaveFactoryForSessionInput {
+  baseVersion?: CurrentFactoryVersion;
+  factoryDefinition: CanonicalFactoryDefinition;
+  includeVersion?: boolean;
+  mode: FactorySaveMode;
 }
 
 interface RequestCurrentFactoryDocumentOptions {
@@ -77,7 +89,7 @@ export class CurrentFactoryDefinitionError extends Error {
   public readonly responseBody?: unknown;
   public readonly status?: number;
   public readonly statusText?: string;
-  public readonly targets?: ErrorTarget[];
+  public readonly targets?: FactoryValidationTarget[];
 
   public constructor(
     message: string,
@@ -116,9 +128,34 @@ export async function saveCurrentFactoryDocument(
   input: SaveCurrentFactoryInput,
   options: SaveCurrentFactoryOptions = {},
 ): Promise<CurrentFactoryDocument> {
-  const requestBody: CanonicalFactory = {
+  return saveFactoryForSessionDocument(
+    {
+      baseVersion: input.baseVersion,
+      factoryDefinition: input.factoryDefinition,
+      mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
+    },
+    options,
+  );
+}
+
+export async function saveFactoryForSessionDocument(
+  input: SaveFactoryForSessionInput,
+  options: SaveCurrentFactoryOptions = {},
+): Promise<CurrentFactoryDocument> {
+  const includeVersion =
+    input.includeVersion ?? input.mode === CURRENT_FACTORY_EDITOR_SAVE_MODE;
+  const factoryPayload: CanonicalFactory = {
     ...input.factoryDefinition,
-    version: incrementCurrentFactoryVersion(input.baseVersion),
+  };
+  if (includeVersion) {
+    factoryPayload.version = incrementCurrentFactoryVersion(input.baseVersion);
+  } else {
+    delete factoryPayload.version;
+  }
+
+  const requestBody = {
+    mode: input.mode,
+    factory: factoryPayload,
   };
 
   return requestCurrentFactoryDocument({
@@ -326,6 +363,15 @@ function isEditableFactoryDefinitionValue(
   return value.name !== undefined;
 }
 
-function isErrorTarget(value: unknown): value is ErrorTarget {
-  return isAPIRecord(value) && typeof value.kind === "string";
+function isErrorTarget(value: unknown): value is FactoryValidationTarget {
+  return (
+    isAPIRecord(value) &&
+    typeof value.code === "string" &&
+    typeof value.message === "string" &&
+    typeof value.severity === "string" &&
+    isAPIRecord(value.subject) &&
+    typeof value.subject.type === "string" &&
+    typeof value.subject.id === "string" &&
+    typeof value.subject.location === "string"
+  );
 }

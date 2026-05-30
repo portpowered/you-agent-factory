@@ -24,6 +24,20 @@ describe("DashboardWidgetFrame", () => {
     );
 
     const card = screen.getByRole("article", { name: "Submit work" });
+    const title = within(card).getByRole("heading", {
+      level: 3,
+      name: "Submit work",
+    });
+    const header = card.querySelector("header");
+
+    expect(title).toBeTruthy();
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(header?.className).toContain("cursor-grab");
+    expect(
+      within(card).queryByRole("button", { name: "Move Submit work" }),
+    ).toBeNull();
+    expect(card.querySelectorAll("header")).toHaveLength(1);
+
     const subtitle = within(card).getByText("Queue a new request");
     const bodyCopy = within(card).getByText(
       "Submissions stay inside the shared layout frame.",
@@ -42,5 +56,36 @@ describe("DashboardWidgetFrame", () => {
     expect(emptyHeading.parentElement?.className).toContain(EMPTY_STATE_CLASS);
     expect(emptyHeading.parentElement?.className).toContain("border-af-border-strong");
     expect(emptyHeading.parentElement?.className).toContain("bg-af-surface-subtle");
+  });
+
+  it("routes header actions through AgentBentoCard without a custom header slot", () => {
+    render(
+      <DashboardWidgetFrame
+        headerAction={<button type="button">Remove card</button>}
+        title="Provider session"
+        widgetId="provider-session"
+      >
+        <p>Session details</p>
+      </DashboardWidgetFrame>,
+    );
+
+    const card = screen.getByRole("article", { name: "Provider session" });
+    const header = card.querySelector("header");
+    const toolsRegion = header?.lastElementChild;
+
+    expect(
+      within(card).getByRole("heading", { level: 3, name: "Provider session" }),
+    ).toBeTruthy();
+    expect(
+      within(card).getByRole("button", { name: "Remove card" }),
+    ).toBeTruthy();
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(header?.className).toContain("cursor-grab");
+    expect(
+      within(card).queryByRole("button", { name: "Move Provider session" }),
+    ).toBeNull();
+    expect(toolsRegion?.contains(screen.getByRole("button", { name: "Remove card" }))).toBe(
+      true,
+    );
   });
 });

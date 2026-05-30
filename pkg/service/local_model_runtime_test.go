@@ -15,7 +15,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/service/localmodel"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -49,7 +49,7 @@ type fakeLocalModelRuntime struct {
 }
 
 func (r *fakeLocalModelRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
-	return localmodel.CanonicalBackendName(resource.Backend) == "LLAMACPP" && canonicalModelName(worker.Model) == canonicalModelName("OMNIVOICE_Q4_K_M")
+	return localmodels.CanonicalBackendName(resource.Backend) == "LLAMACPP" && localmodels.CanonicalModelName(worker.Model) == localmodels.CanonicalModelName("OMNIVOICE_Q4_K_M")
 }
 
 func (r *fakeLocalModelRuntime) Load(_ context.Context, request localModelLoadRequest) (localModelHandle, error) {
@@ -99,16 +99,16 @@ func TestInvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle(t *testin
 	}
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
 	cache := localModelTestCacheLayout(t)
+	puller := staticModelAssetPuller{cache: cache}
 	svc := &FactoryService{
-		runtimeCfg: runtimeCfg,
-		cfg:        &FactoryServiceConfig{},
-		modelAssets: staticModelAssetPuller{
-			cache: cache,
-		},
-		localModels: newManagedLocalModelManager(staticModelAssetPuller{
-			cache: cache,
-		}, runtime),
+		cfg:         &FactoryServiceConfig{},
+		modelAssets: puller,
 	}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		runtimeCfg:  runtimeCfg,
+		modelAssets: puller,
+		localModels: newManagedLocalModelManager(puller, runtime),
+	})
 
 	mode := factoryapi.AUDIOSTREAM
 	request := factoryapi.ModelInvocationRequest{

@@ -1,6 +1,6 @@
 ---
 type: MODEL_WORKER
-modelProvider: CODEX
+modelProvider: CURSOR
 executorProvider: SCRIPT_WRAP
 skipPermissions: true
 stopToken: "<COMPLETE>"

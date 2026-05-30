@@ -99,8 +99,10 @@ function DashboardSessionTabsView({
     discoveredTargets,
     folderValidation,
     folderPath,
+    handleCancelInitConfirmation,
     handleChangeFolderPath,
     handleCloseSession,
+    handleCreateNewFactory,
     handleInspectFolder,
     handleOpenTarget,
     openSessionMutation,
@@ -171,11 +173,14 @@ function DashboardSessionTabsView({
           discoveredTargets={discoveredTargets}
           folderValidation={folderValidation}
           folderPath={folderPath}
-          isPending={
-            openSessionMutation.isPending || validateFolderMutation.isPending
-          }
+          isPending={openSessionMutation.isPending}
+          isValidatePending={validateFolderMutation.isPending}
           messages={messages}
+          onCancelInitConfirmation={handleCancelInitConfirmation}
           onChangeFolderPath={handleChangeFolderPath}
+          onCreateNewFactory={() => {
+            void handleCreateNewFactory();
+          }}
           onInspectFolder={handleInspectFolder}
           onOpenTarget={handleOpenTarget}
           selectedTargetValue={selectedTargetValue}

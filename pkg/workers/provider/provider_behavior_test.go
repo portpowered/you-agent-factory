@@ -17,7 +17,7 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "BasicPrompt",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				UserMessage:   "hello",
 			},
 			want: []string{"-p", "hello"},
@@ -25,7 +25,7 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "WithSkipPermissions",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				UserMessage:   "hello",
 			},
 			skipPermissions: true,
@@ -34,7 +34,7 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "WithSystemPromptAndModel",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				UserMessage:   "do stuff",
 				SystemPrompt:  "You are helpful",
 				Model:         "claude-sonnet-4-5-20250514",
@@ -44,7 +44,7 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "WithResumeSessionID",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				UserMessage:   "do stuff",
 				SessionID:     "claude-session-123",
 			},
@@ -74,7 +74,7 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "BasicPrompt",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				UserMessage:   "fix the bug",
 			},
 			want: []string{"exec", "-"},
@@ -82,7 +82,7 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "WithSkipPermissionsAndModel",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCodex),
+				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "hello",
 			},
@@ -92,7 +92,7 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "WithWorkingDirectoryRetainsStdinPlaceholderOnly",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider:    string(ModelProviderCodex),
+				ModelProvider:    string(interfaces.ModelProviderCodex),
 				WorkingDirectory: "C:\\worktree",
 				Model:            "gpt-5-codex",
 				UserMessage:      "line 1\nline 2",
@@ -116,7 +116,7 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 func TestCodexProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
 	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderCodex),
+		ModelProvider: string(interfaces.ModelProviderCodex),
 		UserMessage:   "summarize the workspace",
 		Worktree:      "feature-worktree",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
@@ -125,6 +125,30 @@ func TestCodexProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(
 	}, false)
 	if err == nil || err.Error() != "worktree selection is not supported by the codex runner in v1" {
 		t.Fatalf("BuildArgs error = %v, want worktree rejection", err)
+	}
+}
+
+func TestCodexProviderBehavior_BuildArgs_AllowsWorktreeMetadataWithPreparedWorkingDirectory(t *testing.T) {
+	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
+	args, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+		ModelProvider:    string(interfaces.ModelProviderCodex),
+		UserMessage:      "summarize the workspace",
+		Worktree:         "feature-worktree",
+		WorkingDirectory: "/tmp/factory/.worktrees/feature-worktree",
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
+			interfaces.RunnerOptionalCapabilityWorkingDirectory,
+		},
+	}, false)
+	if err != nil {
+		t.Fatalf("BuildArgs() error = %v", err)
+	}
+	if len(args) == 0 || args[len(args)-1] != "-" {
+		t.Fatalf("args = %#v, want stdin placeholder", args)
+	}
+	for _, arg := range args {
+		if arg == "--worktree" {
+			t.Fatalf("args = %#v, want no --worktree passthrough", args)
+		}
 	}
 }
 
@@ -138,7 +162,7 @@ func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "BasicPrompt",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderGemini),
+				ModelProvider: string(interfaces.ModelProviderGemini),
 				UserMessage:   "summarize the workspace",
 			},
 			want: []string{"--prompt", "summarize the workspace"},
@@ -146,7 +170,7 @@ func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "WithModelAndSkipPermissions",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderGemini),
+				ModelProvider: string(interfaces.ModelProviderGemini),
 				Model:         "gemini-2.5-flash",
 				UserMessage:   "run the tests",
 			},
@@ -170,7 +194,7 @@ func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
 func TestGeminiProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := geminiProviderBehavior{logger: logging.NoopLogger{}}
 	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderGemini),
+		ModelProvider: string(interfaces.ModelProviderGemini),
 		UserMessage:   "summarize the workspace",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityStructuredOutput,
@@ -191,7 +215,7 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "BasicPrompt",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderKiro),
+				ModelProvider: string(interfaces.ModelProviderKiro),
 				UserMessage:   "summarize the workspace",
 			},
 			want: []string{"chat", "--no-interactive", "summarize the workspace"},
@@ -199,7 +223,7 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "WithSystemPromptSessionAndTrustedTools",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderKiro),
+				ModelProvider: string(interfaces.ModelProviderKiro),
 				SystemPrompt:  "You are a careful reviewer.",
 				UserMessage:   "run the tests",
 				SessionID:     "kiro-session-123",
@@ -231,7 +255,7 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 func TestKiroProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
 	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderKiro),
+		ModelProvider: string(interfaces.ModelProviderKiro),
 		UserMessage:   "summarize the workspace",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityStructuredOutput,
@@ -252,7 +276,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "BasicPrompt",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCursor),
+				ModelProvider: string(interfaces.ModelProviderCursor),
 				UserMessage:   "summarize the workspace",
 			},
 			want: []string{"-p", "summarize the workspace"},
@@ -260,7 +284,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "WithModelSessionAndForce",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCursor),
+				ModelProvider: string(interfaces.ModelProviderCursor),
 				Model:         "gpt-5",
 				SessionID:     "cursor-session-123",
 				UserMessage:   "run the tests",
@@ -285,7 +309,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 func TestCursorProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := cursorProviderBehavior{logger: logging.NoopLogger{}}
 	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderCursor),
+		ModelProvider: string(interfaces.ModelProviderCursor),
 		UserMessage:   "summarize the workspace",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityStructuredOutput,
@@ -306,7 +330,7 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "BasicPrompt",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderOpenCode),
+				ModelProvider: string(interfaces.ModelProviderOpenCode),
 				UserMessage:   "summarize the workspace",
 			},
 			want: []string{"run", "summarize the workspace"},
@@ -314,7 +338,7 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 		{
 			name: "WithModelSessionWorkingDirectoryAndSkipPermissions",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider:    string(ModelProviderOpenCode),
+				ModelProvider:    string(interfaces.ModelProviderOpenCode),
 				Model:            "openai/gpt-5",
 				SessionID:        "opencode-session-123",
 				WorkingDirectory: "/tmp/project",
@@ -322,6 +346,28 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 			},
 			skipPermissions: true,
 			want:            []string{"run", "--model", "openai/gpt-5", "--session", "opencode-session-123", "--dir", "/tmp/project", "--dangerously-skip-permissions", "run the tests"},
+		},
+		{
+			name: "WithOpenCodeAgent",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderOpenCode),
+				OpenCodeAgent: "implementer",
+				UserMessage:   "summarize the workspace",
+			},
+			want: []string{"run", "--agent", "implementer", "summarize the workspace"},
+		},
+		{
+			name: "WithOpenCodeAgentModelSessionWorkingDirectoryAndSkipPermissions",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider:    string(interfaces.ModelProviderOpenCode),
+				Model:            "openai/gpt-5",
+				OpenCodeAgent:    "implementer",
+				SessionID:        "opencode-session-123",
+				WorkingDirectory: "/tmp/project",
+				UserMessage:      "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"run", "--model", "openai/gpt-5", "--agent", "implementer", "--session", "opencode-session-123", "--dir", "/tmp/project", "--dangerously-skip-permissions", "run the tests"},
 		},
 	}
 
@@ -340,7 +386,7 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 func TestOpenCodeProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
 	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderOpenCode),
+		ModelProvider: string(interfaces.ModelProviderOpenCode),
 		UserMessage:   "summarize the workspace",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityStructuredOutput,
@@ -397,7 +443,7 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 		{
 			name: "Claude",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderClaude),
+				ModelProvider: string(interfaces.ModelProviderClaude),
 				UserMessage:   "review this",
 				EnvVars: map[string]string{
 					"AGENT_FACTORY_PROVIDER": "claude",
@@ -410,7 +456,7 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 		{
 			name: "Gemini",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderGemini),
+				ModelProvider: string(interfaces.ModelProviderGemini),
 				UserMessage:   "review this",
 				EnvVars: map[string]string{
 					"AGENT_FACTORY_PROVIDER": "gemini",
@@ -423,7 +469,7 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 		{
 			name: "Kiro",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderKiro),
+				ModelProvider: string(interfaces.ModelProviderKiro),
 				UserMessage:   "review this",
 				EnvVars: map[string]string{
 					"AGENT_FACTORY_PROVIDER": "kiro",
@@ -436,7 +482,7 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 		{
 			name: "Cursor",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(ModelProviderCursor),
+				ModelProvider: string(interfaces.ModelProviderCursor),
 				UserMessage:   "review this",
 				EnvVars: map[string]string{
 					"AGENT_FACTORY_PROVIDER": "cursor",
@@ -449,7 +495,7 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 		{
 			name: "OpenCode",
 			req: interfaces.ProviderInferenceRequest{
-				ModelProvider:    string(ModelProviderOpenCode),
+				ModelProvider:    string(interfaces.ModelProviderOpenCode),
 				UserMessage:      "review this",
 				WorkingDirectory: "/tmp/project",
 				EnvVars: map[string]string{
@@ -465,11 +511,11 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 
 func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behaviors := map[string]providerBehavior{
-		string(ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
-		string(ModelProviderGemini):   geminiProviderBehavior{logger: logging.NoopLogger{}},
-		string(ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
-		string(ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
-		string(ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
+		string(interfaces.ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
+		string(interfaces.ModelProviderGemini):   geminiProviderBehavior{logger: logging.NoopLogger{}},
+		string(interfaces.ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
+		string(interfaces.ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
+		string(interfaces.ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
 	}
 
 	testCases := []struct {
@@ -553,9 +599,9 @@ func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 
 func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	for _, providerName := range []string{
-		string(ModelProviderGemini),
-		string(ModelProviderKiro),
-		string(ModelProviderOpenCode),
+		string(interfaces.ModelProviderGemini),
+		string(interfaces.ModelProviderKiro),
+		string(interfaces.ModelProviderOpenCode),
 	} {
 		behavior := providerBehaviorForErrorClassification(providerName)
 		t.Run(providerName, func(t *testing.T) {
@@ -566,11 +612,11 @@ func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 }
 
 func TestCursorAndCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
-	cursorBehavior := providerBehaviorForErrorClassification(string(ModelProviderCursor))
-	codexBehavior := providerBehaviorForErrorClassification(string(ModelProviderCodex))
+	cursorBehavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderCursor))
+	codexBehavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderCodex))
 
-	assertCodexDerivedExitFailureFormatting(t, cursorBehavior, string(ModelProviderCursor))
-	assertCodexDerivedExitFailureFormatting(t, codexBehavior, string(ModelProviderCodex))
+	assertCodexDerivedExitFailureFormatting(t, cursorBehavior, string(interfaces.ModelProviderCursor))
+	assertCodexDerivedExitFailureFormatting(t, codexBehavior, string(interfaces.ModelProviderCodex))
 
 	result := CommandResult{
 		ExitCode: 1,
@@ -700,5 +746,48 @@ func assertProviderExitFailureClassification(t *testing.T, behavior providerBeha
 				t.Fatalf("ClassifyExitFailure() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode),
+		Model:         "openai/gpt-5",
+		OpenCodeAgent: "implementer",
+		WorkerType:    interfaces.WorkerTypeModel,
+	})
+
+	if got := diagnostics.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
+		t.Fatalf("opencode_agent = %q, want implementer", got)
+	}
+}
+
+func TestWorkDiagnosticsForInferenceRequest_OmitsOpenCodeAgentWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode),
+		Model:         "openai/gpt-5",
+		WorkerType:    interfaces.WorkerTypeModel,
+	})
+
+	if _, ok := diagnostics.Provider.RequestMetadata["opencode_agent"]; ok {
+		t.Fatalf("request metadata = %#v, want opencode_agent omitted", diagnostics.Provider.RequestMetadata)
+	}
+}
+
+func TestWorkDiagnosticsForInferenceRequest_SafeProjectionPreservesOpenCodeAgent(t *testing.T) {
+	t.Parallel()
+
+	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode),
+		OpenCodeAgent: "implementer",
+	})
+	safe := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+
+	if got := safe.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
+		t.Fatalf("safe opencode_agent = %q, want implementer", got)
 	}
 }

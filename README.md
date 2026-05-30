@@ -38,18 +38,36 @@ you init --executor claude --dir my-factory
 you docs workstation
 ```
 
-## Inspect Runtime State
+## Factory CLI
 
 With the service running, ask the live API which factory is currently active:
 
 ```sh
 you factory query
-you factory query --port 7437 --json
+you --server http://localhost:7437 --json factory query
 ```
 
 `factory query` reads the running service's current-factory API. It does not infer
 the answer from local `factory.json` files, so the output reflects the active
 default-root runtime or the currently activated named factory on that server.
+
+Manage persisted named factories under the factory root (default `factory/`):
+
+```sh
+you factory list
+you --json factory list --dir my-factory
+you factory save staging --from ./factory.json --set-current
+you factory update staging --from ./factory.json
+you factory delete staging
+```
+
+When a factory service is running, persist the live current factory definition
+back to durable storage without a name argument:
+
+```sh
+you factory save
+you --json factory save --session session-beta
+```
 
 ## Submit Work From The CLI
 

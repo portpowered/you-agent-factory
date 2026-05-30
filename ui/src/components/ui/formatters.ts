@@ -6,7 +6,6 @@ import {
   formatDateTime,
   formatDuration,
   formatRelativeTime,
-  formatTime,
 } from "../../i18n/formatters";
 import { getSharedPrimitiveMessages } from "./messages/shared-primitives";
 
@@ -105,13 +104,13 @@ export function formatRelativeTimeFromISO(
   );
 }
 
+/** @deprecated Use formatLocalDateTime for absolute operational timestamps. */
 export function formatTimeOfDay(
   isoTimestamp: string,
   locale?: string | null,
+  unavailableLabel = "Unavailable",
 ): string {
-  return formatTime(isoTimestamp, locale, {
-    fallback: isoTimestamp,
-  }).replace(/\s/g, "");
+  return formatLocalDateTime(isoTimestamp, unavailableLabel, locale);
 }
 
 export function formatLocalDateTime(

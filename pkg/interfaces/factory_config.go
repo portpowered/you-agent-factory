@@ -161,9 +161,13 @@ const (
 	InputKindDefault InputKind = "default"
 )
 
+// WorkTypeHandlingBehaviorDefault marks the work type that receives simplified CLI prompt submissions.
+const WorkTypeHandlingBehaviorDefault = "DEFAULT"
+
 type WorkTypeConfig struct {
-	Name   string        `json:"name"`
-	States []StateConfig `json:"states"`
+	Name              string   `json:"name"`
+	States            []StateConfig `json:"states"`
+	HandlingBehavior  []string `json:"handlingBehavior,omitempty"`
 }
 
 // StateConfig declares a state within a work type.
@@ -267,6 +271,7 @@ type FactoryWorkstationConfig struct {
 	OperationBindings     []ModelOperationBinding     `json:"operationBindings,omitempty" yaml:"operationBindings,omitempty"`
 	WorkerTypeName        string                      `json:"worker" yaml:"worker,omitempty"`
 	Runner                string                      `json:"runner,omitempty" yaml:"runner,omitempty"`
+	OpenCodeAgent         string                      `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
 	PromptFile            string                      `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
 	OutputSchema          string                      `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
 	Timeout               string                      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
@@ -462,6 +467,7 @@ type WorkerConfig struct {
 	Timeout          string                    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	StopToken        string                    `json:"stopToken,omitempty" yaml:"stopToken,omitempty"`
 	SkipPermissions  bool                      `json:"skipPermissions,omitempty" yaml:"skipPermissions,omitempty"`
+	OpenCodeAgent    string                    `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
 	Auth             *HostedWorkerAuthConfig   `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Linear           *HostedLinearWorkerConfig `json:"linear,omitempty" yaml:"linear,omitempty"`
 	Body             string                    `json:"body,omitempty" yaml:"-"`

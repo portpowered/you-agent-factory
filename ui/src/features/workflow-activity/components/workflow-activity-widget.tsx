@@ -15,6 +15,7 @@ export interface WorkflowActivityWidgetProps {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectWorker: (workerName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
@@ -28,6 +29,7 @@ export function WorkflowActivityWidget({
   now,
   onSelectStateNode,
   onSelectWorkID,
+  onSelectWorker,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -44,6 +46,7 @@ export function WorkflowActivityWidget({
       widgetInstanceID={widgetInstanceID}
       onSelectWorkID={onSelectWorkID}
       onSelectStateNode={onSelectStateNode}
+      onSelectWorker={onSelectWorker}
       onSelectWorkstation={onSelectWorkstation}
     />
   );

@@ -304,7 +304,7 @@ func TestProviderErrorCorpus_ContainsSupportedCoverageForEachFailureCategory(t *
 func TestCodexProviderBehavior_ClassifiesUsageLimitAsThrottled(t *testing.T) {
 	result := providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached").CommandResult()
 
-	providerErr := normalizeProviderExitFailure(string(ModelProviderCodex), result, nil, nil)
+	providerErr := normalizeProviderExitFailure(string(interfaces.ModelProviderCodex), result, nil, nil)
 	if providerErr.Type != interfaces.ProviderErrorTypeThrottled {
 		t.Fatalf("expected usage limit to classify as %q, got %q", interfaces.ProviderErrorTypeThrottled, providerErr.Type)
 	}
@@ -319,7 +319,7 @@ func TestCodexProviderBehavior_ClassifiesUsageLimitAsThrottled(t *testing.T) {
 func TestCodexProviderBehavior_StreamsUserMessageOnStdin(t *testing.T) {
 	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
 	req := interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(ModelProviderCodex),
+		ModelProvider:    string(interfaces.ModelProviderCodex),
 		Model:            "gpt-5.3-codex-spark",
 		UserMessage:      "line one\nline two",
 		WorkingDirectory: "workspace",
@@ -342,7 +342,7 @@ func TestCodexProviderBehavior_StreamsUserMessageOnStdin(t *testing.T) {
 func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
 	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
 	req := interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
+		ModelProvider: string(interfaces.ModelProviderClaude),
 		Model:         "claude-sonnet",
 		UserMessage:   "line one\nline two",
 	}

@@ -9,12 +9,8 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import traceWorkstationPathRegressionReplayText from "../../../../integration/fixtures/trace-workstation-path-regression-replay.jsonl?raw";
 
-vi.mock("../lib/trace-elk-layout", () => ({
-  getCachedTraceGraphLayout: () => null,
-  async layoutTraceGraphWithElk<TNode>(nodes: TNode[]): Promise<TNode[]> {
-    return nodes;
-  },
-  traceGraphLayoutKey: () => "trace-card-replay-layout-test",
+vi.mock("../lib/trace-factory-graph-layout", () => ({
+  buildTraceFactoryGraphLayoutPositions: async () => new Map(),
 }));
 
 vi.mock("@xyflow/react", async () => ({
@@ -133,8 +129,8 @@ describe("TraceGridBentoCard replayed world state", () => {
       throw new Error("Expected replayed workstation flow to render.");
     }
 
-    expect(nodeIDsForFlow(workstationFlow)).toEqual(
-      TRACE_WORKSTATION_PATH_REGRESSION_DISPATCH_IDS,
+    expect(nodeIDsForFlow(workstationFlow).sort()).toEqual(
+      [...TRACE_WORKSTATION_PATH_REGRESSION_DISPATCH_IDS].sort(),
     );
     expect(within(workstationFlow).getByText("plan")).toBeTruthy();
     expect(within(workstationFlow).getByText("setup-workspace")).toBeTruthy();

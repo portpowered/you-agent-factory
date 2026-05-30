@@ -45,6 +45,32 @@ func requireOmitsAll(t *testing.T, label, content string, disallowed []string) {
 	}
 }
 
+func TestInit_JSONEmitsStructuredSummary(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "factory")
+
+	var out bytes.Buffer
+	if err := Init(InitConfig{Dir: base, JSON: true, Output: &out}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	var result InitResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("stdout is not valid InitResult JSON: %v\n%s", err, out.String())
+	}
+	if result.ScaffoldType != string(DefaultScaffoldType) {
+		t.Fatalf("scaffoldType = %q, want %q", result.ScaffoldType, DefaultScaffoldType)
+	}
+	if result.TargetDir != base {
+		t.Fatalf("targetDir = %q, want %q", result.TargetDir, base)
+	}
+	if strings.Contains(out.String(), "Initialized ") {
+		t.Fatalf("json stdout should not include human init banner: %s", out.String())
+	}
+
+	assertInitDirectoryTree(t, base)
+}
+
 func TestInit_CreatesDirectoryStructure(t *testing.T) {
 	dir := t.TempDir()
 	base := filepath.Join(dir, "factory")
@@ -257,8 +283,16 @@ func assertDefaultFactoryJSONLayout(t *testing.T, base string) {
 	if _, ok := cfg["workers"]; !ok {
 		t.Error("factory.json missing 'workers' field")
 	}
-	if _, ok := cfg["resources"]; ok {
-		t.Error("default factory.json should not include a starter resource pool")
+	resources, ok := cfg["resources"].([]any)
+	if !ok || len(resources) != 1 {
+		t.Fatalf("default factory.json resources = %#v, want one agent-slot pool", cfg["resources"])
+	}
+	resource, ok := resources[0].(map[string]any)
+	if !ok || resource["name"] != "agent-slot" {
+		t.Fatalf("default factory.json resource = %#v, want agent-slot", resources[0])
+	}
+	if capacity, ok := resource["capacity"].(float64); !ok || capacity != 1 {
+		t.Fatalf("default factory.json agent-slot capacity = %#v, want 1", resource["capacity"])
 	}
 	if _, ok := cfg["work_types"]; ok {
 		t.Error("factory.json should not include retired 'work_types' field")
@@ -298,6 +332,9 @@ func assertDefaultWorkerScaffold(t *testing.T, base string) {
 		"executorProvider: SCRIPT_WRAP",
 		"timeout: 1h",
 		"skipPermissions: true",
+		"resources:",
+		"  - name: agent-slot",
+		"    capacity: 1",
 		defaultProcessorSystemBody,
 	})
 	requireOmitsAll(t, "generated worker AGENTS.md", contents, []string{
@@ -590,6 +627,52 @@ func TestInit_InvalidExecutorFailsBeforeFileGeneration(t *testing.T) {
 		t.Fatalf("expected invalid executor to fail before creating files, stat err = %v", statErr)
 	}
 }
+func TestDefaultFactoryJSON_IsEmbeddedCanonicalDocument(t *testing.T) {
+	t.Helper()
+
+	factoryJSON := DefaultFactoryJSON()
+	if strings.TrimSpace(factoryJSON) == "" {
+		t.Fatal("expected embedded default factory.json content")
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(factoryJSON), &cfg); err != nil {
+		t.Fatalf("embedded factory.json is not valid JSON: %v", err)
+	}
+	if _, ok := cfg["workTypes"]; !ok {
+		t.Fatal("embedded factory.json missing workTypes")
+	}
+	if _, ok := cfg["resources"]; !ok {
+		t.Fatal("embedded factory.json missing resources")
+	}
+	if !strings.Contains(factoryJSON, `"name": "agent-slot"`) {
+		t.Fatalf("embedded factory.json missing agent-slot resource:\n%s", factoryJSON)
+	}
+
+	dir := t.TempDir()
+	if err := Init(InitConfig{Dir: dir}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	written := readFileString(t, filepath.Join(dir, interfaces.FactoryConfigFile))
+	if normalizeJSON(t, written) != normalizeJSON(t, factoryJSON) {
+		t.Fatalf("written factory.json does not match embedded canonical document\nwritten:\n%s\nembedded:\n%s", written, factoryJSON)
+	}
+}
+
+func normalizeJSON(t *testing.T, raw string) string {
+	t.Helper()
+
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		t.Fatalf("normalizeJSON: %v", err)
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("normalizeJSON marshal: %v", err)
+	}
+	return string(encoded)
+}
+
 func TestInit_UnsupportedTypeReturnsDeterministicError(t *testing.T) {
 	err := Init(InitConfig{Dir: t.TempDir(), Type: "unsupported"})
 	if err == nil {
@@ -706,6 +789,9 @@ func assertInitScaffoldFilesCanonical(t *testing.T, base, wantProvider string) {
 		"executorProvider: SCRIPT_WRAP",
 		"timeout: 1h",
 		"skipPermissions: true",
+		"resources:",
+		"  - name: agent-slot",
+		"    capacity: 1",
 		defaultProcessorSystemBody,
 	} {
 		if !strings.Contains(workerAgents, expected) {

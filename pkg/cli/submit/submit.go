@@ -13,6 +13,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
@@ -21,8 +22,10 @@ type SubmitConfig struct {
 	Name         string
 	WorkTypeName string
 	Payload      string
-	Port         int
+	Server       string
 	SessionID    string
+	JSON         bool
+	Output       io.Writer
 	Verbose      bool
 	Debug        bool
 	Diagnostics  io.Writer
@@ -30,6 +33,10 @@ type SubmitConfig struct {
 
 // Submit posts work to a running factory via HTTP.
 func Submit(cfg SubmitConfig) error {
+	if cfg.Output == nil {
+		cfg.Output = os.Stdout
+	}
+
 	name := strings.TrimSpace(cfg.Name)
 	if name == "" {
 		return fmt.Errorf("--name is required")
@@ -41,28 +48,9 @@ func Submit(cfg SubmitConfig) error {
 		return fmt.Errorf("--payload is required")
 	}
 
-	// Read the payload file.
-	data, err := os.ReadFile(cfg.Payload)
+	payload, data, payloadType, err := readSubmitPayload(cfg.Payload)
 	if err != nil {
-		return fmt.Errorf("read payload file: %w", err)
-	}
-
-	// Build the submit request body.
-	var payload json.RawMessage
-	payloadType := clidiag.PayloadType(cfg.Payload)
-	if payloadType == "json" {
-		// JSON files are sent as-is (must be valid JSON).
-		if !json.Valid(data) {
-			return fmt.Errorf("payload file is not valid JSON: %s", cfg.Payload)
-		}
-		payload = data
-	} else {
-		// Non-JSON files (e.g. .md) are JSON-encoded as a string.
-		encoded, err := json.Marshal(string(data))
-		if err != nil {
-			return fmt.Errorf("encode payload: %w", err)
-		}
-		payload = encoded
+		return err
 	}
 
 	reqBody := factoryapi.SubmitWorkRequest{
@@ -77,14 +65,17 @@ func Submit(cfg SubmitConfig) error {
 
 	// POST to running factory.
 	endpointPath := sessionpath.ScopedPath("/work", cfg.SessionID)
-	url := fmt.Sprintf("http://localhost:%d%s", cfg.Port, endpointPath)
+	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
+	if err != nil {
+		return err
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"submit request endpointPath=%s endpoint=%s port=%d session=%s payloadPath=%s payloadType=%s payloadBytes=%d requestName=%q workTypeName=%q requestBytes=%d",
+		"submit request endpointPath=%s endpoint=%s server=%s session=%s payloadPath=%s payloadType=%s payloadBytes=%d requestName=%q workTypeName=%q requestBytes=%d",
 		endpointPath,
-		url,
-		cfg.Port,
+		endpointURL,
+		cfg.Server,
 		clidiag.SessionLabel(cfg.SessionID),
 		cfg.Payload,
 		payloadType,
@@ -94,10 +85,10 @@ func Submit(cfg SubmitConfig) error {
 		len(body),
 	)
 	started := time.Now()
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := http.Post(endpointURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s error=unreachable durationMillis=%d", endpointPath, time.Since(started).Milliseconds())
-		return fmt.Errorf("factory not reachable at %s: %w", url, err)
+		return fmt.Errorf("factory not reachable at %s: %w", endpointURL, err)
 	}
 	defer resp.Body.Close()
 
@@ -108,11 +99,7 @@ func Submit(cfg SubmitConfig) error {
 
 	if resp.StatusCode != http.StatusCreated {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody))
-		var errResp factoryapi.ErrorResponse
-		if json.Unmarshal(respBody, &errResp) == nil && errResp.Message != "" {
-			return fmt.Errorf("submission failed (%d): %s", resp.StatusCode, errResp.Message)
-		}
-		return fmt.Errorf("submission failed (%d): %s", resp.StatusCode, string(respBody))
+		return submitFailureError(resp.StatusCode, respBody)
 	}
 
 	var result factoryapi.SubmitWorkResponse
@@ -121,6 +108,15 @@ func Submit(cfg SubmitConfig) error {
 	}
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d traceId=%s", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody), result.TraceId)
 
-	fmt.Printf("Submitted work: %s\n", result.TraceId)
-	return nil
+	if cfg.JSON {
+		return writeJSONSubmitSuccess(
+			cfg.Output,
+			result,
+			endpointPath,
+			name,
+			cfg.WorkTypeName,
+			clidiag.SessionLabel(cfg.SessionID),
+		)
+	}
+	return writeHumanSubmitSuccess(cfg.Output, result, name, cfg.WorkTypeName)
 }

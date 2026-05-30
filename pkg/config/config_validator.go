@@ -111,8 +111,9 @@ type ConfigValidatorOption func(*ConfigValidator)
 
 // ConfigValidator runs all registered validation rules against a factory config.
 type ConfigValidator struct {
-	requiredToolChecker RequiredToolChecker
-	rules               []validationRule
+	requiredToolChecker              RequiredToolChecker
+	requireDefaultHandlingWorkType   bool
+	rules                            []validationRule
 }
 
 // NewConfigValidator creates a ConfigValidator with all built-in validation rules.
@@ -127,7 +128,8 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 	}
 	cv.rules = []validationRule{
 		ruleInputTypes,
-		rulePlaceReferences,
+		cv.ruleWorkTypeHandlingBehavior,
+		ruleCanonicalStructuralValidation,
 		ruleFactoryGuards,
 		ruleGuards,
 		ruleWorkstationKind,
@@ -137,7 +139,6 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 		ruleHostedWorkers,
 		ruleWorkerModelOperations,
 		ruleModelInvokeWorkstations,
-		ruleWorkerReferences,
 		rulePerInputGuards,
 		ruleResourceDefinitions,
 		ruleResourceUsage,
@@ -680,19 +681,6 @@ func validateBundledFileTargetPath(targetPath string) error {
 		return fmt.Errorf("targetPath %q must point to a file, not a directory", targetPath)
 	}
 	return nil
-}
-
-func buildValidPlaces(cfg *interfaces.FactoryConfig) map[string]bool {
-	places := make(map[string]bool)
-	for _, wt := range cfg.WorkTypes {
-		for _, s := range wt.States {
-			places[fmt.Sprintf("%s:%s", wt.Name, s.Name)] = true
-		}
-	}
-	for _, r := range cfg.Resources {
-		places[fmt.Sprintf("%s:available", r.Name)] = true
-	}
-	return places
 }
 
 func buildValidWorkstations(cfg *interfaces.FactoryConfig) map[string]bool {

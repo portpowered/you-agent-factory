@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -22,7 +23,7 @@ import (
 // pkgmaintcheck:ignore-cyclomatic-complexity this runtime-log smoke test keeps the structured log contract inline across correlated record assertions.
 func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 	dir := t.TempDir()
-	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	writeWorkstationAgentsMD(t, dir, "process")
 	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
 		t.Fatalf("create inputs dir: %v", err)
@@ -150,7 +151,7 @@ func assertRuntimeRecordTimestamp(t *testing.T, record map[string]any) {
 
 func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 	dir := t.TempDir()
-	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	writeWorkstationAgentsMD(t, dir, "process")
 	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
 		t.Fatalf("create inputs dir: %v", err)
@@ -482,7 +483,7 @@ func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) 
 	t.Helper()
 
 	dir := t.TempDir()
-	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	if len(opts.scriptArgs) > 0 {
 		writeScriptWorkerAgentsMDWithCommand(t, dir, "worker-a", "script-tool", opts.scriptArgs)
 	} else {

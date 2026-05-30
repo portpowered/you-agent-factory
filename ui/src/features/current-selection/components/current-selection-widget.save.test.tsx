@@ -9,6 +9,11 @@ import {
   type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { createDeferredPromise } from "../../../testing/app-shell-export-test-utils";
+import {
+  factoryDocumentSaveError,
+  mockFactoryDocumentSave,
+} from "../../../testing/factory-document-save-mocks";
 import {
   useCurrentFactoryDocumentMock,
   useSaveCurrentFactoryMock,
@@ -21,7 +26,9 @@ import { CurrentSelectionWidget } from "./current-selection-widget";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 
-const saveCurrentFactoryMutation = vi.fn();
+let saveCurrentFactoryMutation: ReturnType<
+  typeof mockFactoryDocumentSave
+>["mutateAsync"];
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -224,12 +231,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("preserves edited workstation input when the save request fails", async () => {
     saveCurrentFactoryMutation.mockRejectedValue(
-      new CurrentFactoryDefinitionError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-        },
-      ),
+      factoryDocumentSaveError("factory_not_idle"),
     );
 
     renderWorkstationSelection();
@@ -260,7 +262,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("shows generic save failures without discarding the dirty draft", async () => {
-    saveCurrentFactoryMutation.mockRejectedValue(new Error("Network dropped"));
+    saveCurrentFactoryMutation.mockRejectedValue(
+      factoryDocumentSaveError("generic"),
+    );
 
     renderWorkstationSelection();
     expandEditableConfiguration();
@@ -282,19 +286,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("shows a recoverable stale-write warning without discarding the dirty draft", async () => {
     saveCurrentFactoryMutation.mockRejectedValue(
-      new CurrentFactoryDefinitionError(
-        "Current factory definition is stale. Refresh the graph before saving.",
-        {
-          code: "STALE_FACTORY_VERSION",
-          status: 409,
-          targets: [
-            {
-              id: "stale-version",
-              kind: "save",
-            },
-          ],
-        },
-      ),
+      factoryDocumentSaveError("stale_version"),
     );
 
     renderWorkstationSelection();
@@ -337,8 +329,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
           status: 400,
           targets: [
             {
-              field: "factory.workstations[0].worker",
-              kind: "field",
+              code: "factory.worker.danglingReference",
+              message: "Worker selection must reference a configured worker.",
+              severity: "error",
+              subject: {
+                id: "worker",
+                location: "DEFINITION",
+                type: "WORKSTATION",
+              },
             },
           ],
         },
@@ -476,12 +474,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
@@ -507,16 +500,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode,
             selection: { kind: "node", nodeId: selectedNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -562,17 +553,17 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             workers: [
               expect.objectContaining({
                 model: "gpt-5.5",
-              name: "processor",
-            }),
-          ],
-          workstations: [
-            expect.objectContaining({
-              body: "Updated only the review workstation prompt.",
-              name: "Review",
-            }),
-            expect.objectContaining({
-              body: "Plan the implementation.",
-              name: "Plan",
+                name: "processor",
+              }),
+            ],
+            workstations: [
+              expect.objectContaining({
+                body: "Updated only the review workstation prompt.",
+                name: "Review",
+              }),
+              expect.objectContaining({
+                body: "Plan the implementation.",
+                name: "Plan",
               }),
             ],
           }),
@@ -583,12 +574,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("keeps save feedback scoped to the workstation that started the save after switching selections", async () => {
     const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
@@ -620,19 +606,19 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getAllByRole("button", { name: "Saving..." })[0]).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: "Saving..." })[0],
+    ).toBeTruthy();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: planNode,
             selection: { kind: "node", nodeId: planNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -675,12 +661,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const savedFactory = buildMultiWorkstationEditableFactoryDefinition({
       reviewPrompt: "Review the saved factory before approval.",
     });
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -721,13 +702,11 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection()}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expect(
@@ -737,16 +716,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     ).toBeNull();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: reviewNode,
             selection: { kind: "node", nodeId: reviewNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -794,7 +771,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       within(saveDialog).getByRole("button", { name: "Saving..." }).disabled,
     ).toBe(true);
 
-    fireEvent.click(within(saveDialog).getByRole("button", { name: "Saving..." }));
+    fireEvent.click(
+      within(saveDialog).getByRole("button", { name: "Saving..." }),
+    );
     expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
 
     deferredSave.resolve(
@@ -816,12 +795,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const savedFactory = buildMultiWorkstationEditableFactoryDefinition({
       reviewPrompt: "Review the saved factory before approval.",
     });
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
@@ -863,16 +837,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: planNode,
             selection: { kind: "node", nodeId: planNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -884,16 +856,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     ).toBeNull();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: reviewNode,
             selection: { kind: "node", nodeId: reviewNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -916,12 +886,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("does not leak a failed save message into a different workstation after switching selections", async () => {
     const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
@@ -955,28 +920,19 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: planNode,
             selection: { kind: "node", nodeId: planNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
 
-    deferredSave.reject(
-      new CurrentFactoryDefinitionError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-        },
-      ),
-    );
+    deferredSave.reject(factoryDocumentSaveError("factory_not_idle"));
 
     await waitFor(() => {
       expect(screen.queryByText(/^Saving failed\./)).toBeNull();
@@ -997,12 +953,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("clears failed save feedback after leaving workstation detail and returning to the same workstation", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -1010,12 +961,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
-      new CurrentFactoryDefinitionError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-        },
-      ),
+      factoryDocumentSaveError("factory_not_idle"),
     );
 
     const { rerender } = renderWithExistingQueryClient(
@@ -1046,28 +992,24 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection()}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: reviewNode,
             selection: { kind: "node", nodeId: reviewNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -1089,12 +1031,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("clears failed save feedback after switching to another workstation and returning", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
@@ -1103,12 +1040,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
-      new CurrentFactoryDefinitionError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-        },
-      ),
+      factoryDocumentSaveError("factory_not_idle"),
     );
 
     const { rerender } = renderWithExistingQueryClient(
@@ -1139,16 +1071,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: planNode,
             selection: { kind: "node", nodeId: planNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -1156,16 +1086,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      <CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: reviewNode,
             selection: { kind: "node", nodeId: reviewNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -1374,9 +1302,9 @@ function buildMultiWorkstationEditableFactoryDefinition(overrides?: {
   };
 }
 
-function buildSharedWorkerFactoryDefinition(
-  overrides?: { prompt?: string },
-): CurrentFactoryDocument {
+function buildSharedWorkerFactoryDefinition(overrides?: {
+  prompt?: string;
+}): CurrentFactoryDocument {
   return {
     name: "Current Factory",
     version: {
@@ -1416,33 +1344,3 @@ function buildSharedWorkerFactoryDefinition(
   };
 }
 
-function renderWithQueryClient(view: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      mutations: { retry: false },
-      queries: { retry: false },
-    },
-  });
-
-  return renderWithExistingQueryClient(queryClient, view);
-}
-
-function renderWithExistingQueryClient(
-  queryClient: QueryClient,
-  view: ReactNode,
-) {
-  return render(
-    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
-  );
-}
-
-function createDeferredPromise<T>() {
-  let reject!: (reason?: unknown) => void;
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((innerResolve, innerReject) => {
-    reject = innerReject;
-    resolve = innerResolve;
-  });
-
-  return { promise, reject, resolve };
-}

@@ -126,6 +126,7 @@ func TestOpenAPIAuthoring_APISchemasUseDedicatedFragments(t *testing.T) {
 		"SubmitWorkRequest":                   "./components/schemas/api/SubmitWorkRequest.yaml",
 		"SubmitRelation":                      "./components/schemas/api/SubmitRelation.yaml",
 		"SubmitWorkResponse":                  "./components/schemas/api/SubmitWorkResponse.yaml",
+		"UpsertWorkRequestSubmittedWork":      "./components/schemas/api/UpsertWorkRequestSubmittedWork.yaml",
 		"UpsertWorkRequestResponse":           "./components/schemas/api/UpsertWorkRequestResponse.yaml",
 		"ListWorkResponse":                    "./components/schemas/api/ListWorkResponse.yaml",
 		"PaginationContext":                   "./components/schemas/api/PaginationContext.yaml",

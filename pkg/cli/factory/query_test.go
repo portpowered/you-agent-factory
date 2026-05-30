@@ -23,7 +23,7 @@ func TestQuery_WritesHumanReadableDefaultRootFactory(t *testing.T) {
 	defer srv.Close()
 
 	var out strings.Builder
-	if err := Query(QueryConfig{Port: serverPort(t, srv), Output: &out}); err != nil {
+	if err := Query(QueryConfig{Server: serverBase(t, srv), Output: &out}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 
@@ -43,7 +43,7 @@ func TestQuery_WritesHumanReadableNamedFactory(t *testing.T) {
 	defer srv.Close()
 
 	var out strings.Builder
-	if err := Query(QueryConfig{Port: serverPort(t, srv), Output: &out}); err != nil {
+	if err := Query(QueryConfig{Server: serverBase(t, srv), Output: &out}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 
@@ -63,7 +63,7 @@ func TestQuery_WritesJSONDefaultRootFactory(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	if err := Query(QueryConfig{Port: serverPort(t, srv), JSON: true, Output: &out}); err != nil {
+	if err := Query(QueryConfig{Server: serverBase(t, srv), JSON: true, Output: &out}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 	if bytes.Contains(out.Bytes(), []byte("NAME\tKIND")) {
@@ -93,7 +93,7 @@ func TestQuery_WritesJSONNamedFactory(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	if err := Query(QueryConfig{Port: serverPort(t, srv), JSON: true, Output: &out}); err != nil {
+	if err := Query(QueryConfig{Server: serverBase(t, srv), JSON: true, Output: &out}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 	if bytes.Contains(out.Bytes(), []byte("NAME\tKIND")) {
@@ -124,7 +124,7 @@ func TestQuery_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	if err := Query(QueryConfig{
-		Port:        serverPort(t, srv),
+		Server: serverBase(t, srv),
 		JSON:        true,
 		Verbose:     true,
 		Output:      &out,
@@ -140,7 +140,7 @@ func TestQuery_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.
 	for _, want := range []string{
 		"factory query request",
 		"endpointPath=/factory-sessions/~default/factory",
-		"port=",
+		"server=",
 		"factory query response",
 		"status=200",
 		"factoryKind=named",
@@ -168,7 +168,7 @@ func TestQuery_VerboseLogsFailureStatus(t *testing.T) {
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	err := Query(QueryConfig{
-		Port:        serverPort(t, srv),
+		Server: serverBase(t, srv),
 		JSON:        true,
 		Verbose:     true,
 		Output:      &out,
@@ -203,7 +203,7 @@ func TestQuery_ReturnsActionableCurrentFactoryNotFoundError(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Query(QueryConfig{Port: serverPort(t, srv), JSON: true, Output: &out})
+	err := Query(QueryConfig{Server: serverBase(t, srv), JSON: true, Output: &out})
 	if !errors.Is(err, ErrCurrentFactoryNotFound) {
 		t.Fatalf("Query error = %v, want ErrCurrentFactoryNotFound", err)
 	}
@@ -218,14 +218,14 @@ func TestQuery_ReturnsActionableCurrentFactoryNotFoundError(t *testing.T) {
 
 func TestQuery_ReturnsReachableServerError(t *testing.T) {
 	var out bytes.Buffer
-	err := Query(QueryConfig{Port: 1, Output: &out})
+	err := Query(QueryConfig{Server: "http://127.0.0.1:1", Output: &out})
 	if err == nil {
 		t.Fatal("expected query against unreachable server to fail")
 	}
 	if out.Len() != 0 {
 		t.Fatalf("human mode should not print success output on error: %q", out.String())
 	}
-	if !strings.Contains(err.Error(), "factory not reachable at http://localhost:1/factory-sessions/~default/factory") {
+	if !strings.Contains(err.Error(), "factory not reachable at http://127.0.0.1:1/factory-sessions/~default/factory") {
 		t.Fatalf("error = %q, want reachability context", err.Error())
 	}
 }
@@ -238,7 +238,7 @@ func TestQueryCurrent_ReturnsDefaultRootFactory(t *testing.T) {
 	})
 	defer srv.Close()
 
-	current, err := QueryCurrent(QueryCurrentConfig{Port: serverPort(t, srv)})
+	current, err := QueryCurrent(QueryCurrentConfig{Server: serverBase(t, srv)})
 	if err != nil {
 		t.Fatalf("QueryCurrent: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestQueryCurrent_ReturnsNamedFactory(t *testing.T) {
 	})
 	defer srv.Close()
 
-	current, err := QueryCurrent(QueryCurrentConfig{Port: serverPort(t, srv)})
+	current, err := QueryCurrent(QueryCurrentConfig{Server: serverBase(t, srv)})
 	if err != nil {
 		t.Fatalf("QueryCurrent: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestQueryCurrent_ReturnsInspectableNotFoundError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := QueryCurrent(QueryCurrentConfig{Port: serverPort(t, srv)})
+	_, err := QueryCurrent(QueryCurrentConfig{Server: serverBase(t, srv)})
 	if !errors.Is(err, ErrCurrentFactoryNotFound) {
 		t.Fatalf("QueryCurrent error = %v, want ErrCurrentFactoryNotFound", err)
 	}
@@ -306,7 +306,7 @@ func TestQueryCurrent_PreservesUnexpectedResponseBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := QueryCurrent(QueryCurrentConfig{Port: serverPort(t, srv)})
+	_, err := QueryCurrent(QueryCurrentConfig{Server: serverBase(t, srv)})
 	if err == nil {
 		t.Fatal("expected unexpected server error")
 	}
@@ -329,12 +329,7 @@ func currentFactoryServer(t *testing.T, current factoryapi.Factory) *httptest.Se
 	}))
 }
 
-func serverPort(t *testing.T, srv *httptest.Server) int {
+func serverBase(t *testing.T, srv *httptest.Server) string {
 	t.Helper()
-
-	var port int
-	if _, err := fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port); err != nil {
-		t.Fatalf("parse test server port: %v", err)
-	}
-	return port
+	return strings.TrimSuffix(srv.URL, "/")
 }

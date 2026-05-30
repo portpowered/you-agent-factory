@@ -39,10 +39,49 @@
             "skipBlankLines": true
           }
         }
+      },
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["**/*dashboardSessionStore*"],
+                "message": "Import useDashboardSession() for session identity and API paths. Direct dashboardSessionStore access is limited to session tabs and DashboardSessionProvider. See docs/internal/development/dashboard-session-scope-import-boundaries.md."
+              }
+            ]
+          }
+        }
       }
     }
   },
   "overrides": [
+    {
+      "includes": [
+        "src/features/dashboard/state/dashboardSessionStore.ts",
+        "src/features/dashboard/session/dashboard-session-provider.tsx",
+        "src/features/header/hooks/use-dashboard-session-tabs-state.ts",
+        ".storybook/dashboard-story-runtime.tsx",
+        "src/testing/app-shell-test-utils.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
+    },
     {
       "includes": ["src/api/generated/**"],
       "linter": {
@@ -80,21 +119,23 @@
         "src/features/current-selection/components/current-selection-widget.provider-session-selection.test.tsx",
         "src/features/current-selection/components/current-selection-widget.save.test.tsx",
         "src/features/current-selection/components/current-selection-widget.test.tsx",
-        "src/features/current-selection/components/execution-details.test.tsx",
-        "src/features/current-selection/components/provider-session-attempts.test.tsx",
-        "src/features/current-selection/components/provider-session-detail-panel.test.tsx",
-        "src/features/current-selection/components/state-node-detail.test.tsx",
-        "src/features/current-selection/components/work-item-card.test.tsx",
-        "src/features/current-selection/components/workstation-detail-card.editable-configuration.test.tsx",
-        "src/features/current-selection/components/workstation-detail-card.test.tsx",
-        "src/features/current-selection/components/workstation-prompt-monaco.test.ts",
-        "src/features/current-selection/editable-workstation-prompt-state.test.ts",
-        "src/features/current-selection/hooks/use-editable-workstation-configuration-state.test.tsx",
+        "src/features/current-selection/work-selection/components/execution-details.test.tsx",
+        "src/features/current-selection/workstation-selection/components/provider-session-attempts.test.tsx",
+        "src/features/current-selection/base/components/request-authored-text.test.tsx",
+        "src/features/current-selection/work-state-selection/components/state-node-detail.test.tsx",
+        "src/features/current-selection/work-selection/components/work-item-card.test.tsx",
+        "src/features/current-selection/worker-selection/components/worker-detail-card.test.tsx",
+        "src/features/current-selection/worker-selection/hooks/use-worker-detail-state.test.tsx",
+        "src/features/current-selection/workstation-selection/components/workstation-detail-card.editable-configuration.test.tsx",
+        "src/features/current-selection/workstation-selection/components/workstation-detail-card.test.tsx",
+        "src/features/current-selection/workstation-selection/components/workstation-prompt-monaco.test.ts",
+        "src/features/current-selection/workstation-selection/editing/editable-workstation-prompt-state.test.ts",
+        "src/features/current-selection/workstation-selection/hooks/use-editable-workstation-configuration-state.test.tsx",
         "src/features/current-selection/hooks/useCurrentSelection.actions.test.ts",
         "src/features/current-selection/hooks/useCurrentSelection.test.tsx",
-        "src/features/current-selection/messages/workstation-detail.test.ts",
-        "src/features/current-selection/selected-work-dispatch-history-helpers.test.ts",
-        "src/features/current-selection/state/executionDetails.test.ts",
+        "src/features/current-selection/workstation-selection/messages/workstation-detail.test.ts",
+        "src/features/current-selection/dispatch-selection/dispatch-history/selected-work-dispatch-history-helpers.test.ts",
+        "src/features/current-selection/work-selection/state/executionDetails.test.ts",
         "src/features/current-selection/useCurrentSelection.request-helpers.test.ts",
         "src/features/current-selection/useCurrentSelection.selection-helpers.test.ts",
         "src/features/dashboard/hooks/useDashboardSnapshot.test.tsx",
@@ -225,6 +266,36 @@
               "level": "error",
               "options": {
                 "maxLines": 3500,
+                "skipBlankLines": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/App.layout-graph.test.tsx",
+        "src/App.follow-up-submit.test.tsx",
+        "src/App.current-selection.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": {
+                "maxLines": 1500,
+                "skipBlankLines": true,
+                "skipIifes": true
+              }
+            }
+          },
+          "nursery": {
+            "noExcessiveLinesPerFile": {
+              "level": "error",
+              "options": {
+                "maxLines": 5000,
                 "skipBlankLines": true
               }
             }

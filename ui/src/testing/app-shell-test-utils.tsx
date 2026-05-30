@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, vi, type Mock } from "bun:test";
 import { App } from "../App";
 import type {
@@ -7,9 +7,9 @@ import type {
   DashboardTrace,
   DashboardWorkstationRequest,
 } from "../api/dashboard";
-import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import type { FactoryEvent } from "../api/events";
 import type { FactorySessionSummary } from "../api/factory-sessions/api";
+import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import {
   buildDashboardSnapshotFixture,
   mediumBranchingDashboardTopology,
@@ -19,18 +19,24 @@ import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
 import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
-import { resetSelectionHistoryStore } from "../features/current-selection/state/selectionHistoryStore";
+import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
+import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../features/dashboard/state/dashboardStreamStore";
-import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
 import {
-  type WorldState,
   useFactoryTimelineStore,
+  type WorldState,
 } from "../features/timeline/state/factoryTimelineStore";
+import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
+
+export {
+  renderWithDashboardSessionTest,
+  wrapWithDashboardSessionTest,
+} from "./dashboard-session-test-utils";
 
 const isBunTestRuntime = typeof Bun !== "undefined";
 
@@ -120,6 +126,7 @@ interface RenderAppOptions {
   browserLanguages?: readonly string[] | null;
   initialLocale?: string | null;
   locationSearch?: string | null;
+  sessionID?: string | null;
   snapshot: DashboardSnapshot;
   timelineEvents?: FactoryEvent[];
   timelineSnapshots?: DashboardSnapshot[];
@@ -135,7 +142,9 @@ interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
 }
 
-type CurrentFactoryDocumentResult = ReturnType<typeof useCurrentFactoryDocument>;
+type CurrentFactoryDocumentResult = ReturnType<
+  typeof useCurrentFactoryDocument
+>;
 
 const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
@@ -291,11 +300,16 @@ function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
   });
 }
 
+export async function waitForDashboardShell(): Promise<void> {
+  await screen.findByRole("heading", { name: "U" });
+}
+
 export function renderApp({
   browserLanguage,
   browserLanguages,
   initialLocale,
   locationSearch,
+  sessionID,
   snapshot,
   timelineEvents,
   timelineSnapshots,
@@ -351,16 +365,26 @@ export function renderApp({
 
   const result = render(
     <QueryClientProvider client={queryClient}>
-      <App
-        browserLanguage={browserLanguage}
-        browserLanguages={browserLanguages}
-        initialLocale={initialLocale}
-        locationSearch={locationSearch}
-      />
+      <DashboardSessionTestProvider sessionID={sessionID}>
+        <App
+          browserLanguage={browserLanguage}
+          browserLanguages={browserLanguages}
+          initialLocale={initialLocale}
+          locationSearch={locationSearch}
+        />
+      </DashboardSessionTestProvider>
     </QueryClientProvider>,
   );
 
   return { ...result, fetchMock };
+}
+
+export async function renderAppWithDashboardShell(
+  options: RenderAppOptions,
+): Promise<RenderAppResult> {
+  const result = renderApp(options);
+  await waitForDashboardShell();
+  return result;
 }
 
 function fetchCallPaths(fetchMock: FetchMock) {

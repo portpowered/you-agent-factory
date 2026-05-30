@@ -42,8 +42,11 @@ export function OpenSessionDialog({
   folderValidation,
   folderPath,
   isPending,
+  isValidatePending,
   messages,
+  onCancelInitConfirmation,
   onChangeFolderPath,
+  onCreateNewFactory,
   onInspectFolder,
   onOpenTarget,
   selectedTargetValue,
@@ -53,8 +56,11 @@ export function OpenSessionDialog({
   folderValidation: FolderValidationState;
   folderPath: string;
   isPending: boolean;
+  isValidatePending: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
+  onCancelInitConfirmation: () => void;
   onChangeFolderPath: (value: string) => void;
+  onCreateNewFactory: () => void;
   onInspectFolder: (event: FormEvent<HTMLFormElement>) => void;
   onOpenTarget: (targetValue?: string) => void;
   selectedTargetValue: string;
@@ -63,8 +69,12 @@ export function OpenSessionDialog({
   const folderHelperTextID = useId();
   const dialogDescriptionID = useId();
   const hasFolderCandidate = folderPath.trim().length > 0;
+  const showInspectSubmit =
+    folderValidation.status !== "ready" &&
+    folderValidation.status !== "init_ready";
   const validationStatusMessage =
-    folderValidation.status === "ready"
+    folderValidation.status === "ready" ||
+    folderValidation.status === "init_ready"
       ? null
       : folderValidationStatusMessage(folderValidation, messages);
 
@@ -91,7 +101,7 @@ export function OpenSessionDialog({
             <Input
               autoFocus
               className="flex-1"
-              disabled={isPending}
+              disabled={isPending || isValidatePending}
               id={folderFieldID}
               aria-describedby={folderHelperTextID}
               onChange={(event) => {
@@ -126,19 +136,28 @@ export function OpenSessionDialog({
             {dialogError.message}
           </p>
         ) : null}
-        {folderValidation.status !== "ready" ? (
+        {showInspectSubmit ? (
           <div className="flex justify-end">
             <Button
-              disabled={isPending || !hasFolderCandidate}
+              disabled={isPending || isValidatePending || !hasFolderCandidate}
               type="submit"
             >
-              {isPending
+              {isValidatePending
                 ? messages.openSessionSubmitPendingLabel
                 : messages.openSessionSubmitLabel}
             </Button>
           </div>
         ) : null}
       </form>
+      {folderValidation.status === "init_ready" ? (
+        <InitNewFactoryConfirmation
+          folderPath={folderValidation.folderPath}
+          isPending={isPending}
+          messages={messages}
+          onCancel={onCancelInitConfirmation}
+          onConfirm={onCreateNewFactory}
+        />
+      ) : null}
       {folderValidation.status === "ready" && discoveredTargets.length > 0 ? (
         <SessionTargetPicker
           isPending={isPending}
@@ -148,6 +167,67 @@ export function OpenSessionDialog({
         />
       ) : null}
     </DialogContent>
+  );
+}
+
+function InitNewFactoryConfirmation({
+  folderPath,
+  isPending,
+  messages,
+  onCancel,
+  onConfirm,
+}: {
+  folderPath: string;
+  isPending: boolean;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const description = messages.openSessionInitNewFactoryDescriptionTemplate.replace(
+    "{{folderPath}}",
+    folderPath,
+  );
+
+  return (
+    <section
+      aria-labelledby="init-new-factory-confirmation-title"
+      className={SESSION_TARGET_PICKER_CLASS}
+    >
+      <p
+        className={cn("text-sm leading-6 text-af-text", DASHBOARD_BODY_TEXT_CLASS)}
+        id="init-new-factory-confirmation-title"
+      >
+        {description}
+      </p>
+      <p
+        className={cn(
+          "break-all font-mono text-xs text-af-text-subtle",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
+      >
+        {folderPath}
+      </p>
+      <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
+        <Button
+          disabled={isPending}
+          onClick={onCancel}
+          tone="outline"
+          type="button"
+        >
+          {messages.openSessionCancelCreateFactoryLabel}
+        </Button>
+        <Button
+          aria-busy={isPending}
+          disabled={isPending}
+          onClick={onConfirm}
+          type="button"
+        >
+          {isPending
+            ? messages.openSessionCreateFactoryPendingLabel
+            : messages.openSessionCreateFactoryLabel}
+        </Button>
+      </div>
+    </section>
   );
 }
 

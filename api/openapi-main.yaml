@@ -83,6 +83,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens.
@@ -157,6 +160,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens for the targeted session.
@@ -266,17 +272,17 @@ paths:
       tags:
         - Work
       operationId: getWork
-      summary: Get work token
-      description: Returns one token by token ID from the current marking.
+      summary: Get work
+      description: Returns one work item by work or token identifier from the current marking.
       parameters:
         - $ref: '#/components/parameters/WorkOrTokenID'
       responses:
         '200':
-          description: Work token with history.
+          description: One work item from the current marking.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenResponse'
+                $ref: '#/components/schemas/Work'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -286,18 +292,18 @@ paths:
       tags:
         - Work
       operationId: getWorkBySessionId
-      summary: Get work token for one session
-      description: Returns one token by token ID from the current marking owned by the explicitly selected live factory session.
+      summary: Get work for one session
+      description: Returns one work item by work or token identifier from the current marking owned by the explicitly selected live factory session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/WorkOrTokenID'
       responses:
         '200':
-          description: Work token with history for the targeted session.
+          description: One work item for the targeted session.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenResponse'
+                $ref: '#/components/schemas/Work'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -490,7 +496,7 @@ paths:
         - Provider Sessions
       operationId: getProviderSessionDetails
       summary: Get provider session details
-      description: Loads a known Codex provider-session file by provider-session metadata. The browser supplies provider, kind, and identifier values; the server resolves the matching rollout file under the configured Codex sessions root and never accepts a raw filesystem path.
+      description: Returns parsed provider-session details using a provider-neutral response schema. The browser supplies provider, kind, and identifier query parameters; the server resolves the matching session file under the configured provider sessions root and never accepts a raw filesystem path. Only Codex (`codex`) sessions are currently loadable for this endpoint.
       parameters:
         - name: provider
           in: query
@@ -523,13 +529,13 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories:
+  /factory-validations:
     post:
       tags:
         - Factory
-      operationId: createFactory
-      summary: Create factory
-      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory-sessions/~default/factory` readback only and cannot be activated as a customer-named factory.
+      operationId: validateFactory
+      summary: Validate factory definition
+      description: Validates a submitted complete factory definition and returns canonical validation targets without persisting or activating the factory.
       requestBody:
         required: true
         content:
@@ -537,16 +543,14 @@ paths:
             schema:
               $ref: '#/components/schemas/Factory'
       responses:
-        '201':
-          description: Factory was stored and activated.
+        '200':
+          description: Validation result for the submitted factory definition.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Factory'
+                $ref: '#/components/schemas/FactoryValidationResult'
         '400':
-          $ref: '#/components/responses/CreateFactoryBadRequest'
-        '409':
-          $ref: '#/components/responses/CreateFactoryConflict'
+          $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions:
@@ -662,8 +666,17 @@ paths:
       tags:
         - Factory
       operationId: saveCurrentFactoryBySessionId
-      summary: Save current factory for one session
-      description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      summary: Save factory for one session
+      description: >-
+        Submits one complete factory definition to the explicitly selected live
+        session using an explicit save mode. Omitted `mode` defaults to
+        `REPLACE_CURRENT`, which replaces the factory already current in the
+        session. `UPSERT_NAMED_AND_ACTIVATE` persists under the session factory
+        root using `factory.name`, updates the session current-factory pointer,
+        and activates that runtime when idle. Clients should echo the
+        server-managed `factory.version` field from the latest current-factory
+        read for replacement saves. Unknown session identifiers return
+        NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -671,7 +684,41 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Factory'
+              $ref: '#/components/schemas/SaveFactoryForSessionRequest'
+            examples:
+              replaceCurrent:
+                summary: Replace the factory already current in the session.
+                value:
+                  mode: REPLACE_CURRENT
+                  factory:
+                    name: alpha
+                    version:
+                      logical: '2'
+                      physical: '2026-05-30T12:00:00.000000000Z'
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers: []
+                    workstations: []
+              upsertNamedAndActivate:
+                summary: Create or replace a named factory and activate it in the session.
+                value:
+                  mode: UPSERT_NAMED_AND_ACTIVATE
+                  factory:
+                    name: beta
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers: []
+                    workstations: []
       responses:
         '200':
           description: Saved current factory definition and new version metadata for the targeted session.
@@ -759,6 +806,12 @@ components:
       $ref: './components/parameters/StateType.yaml'
     SortBy:
       $ref: './components/parameters/SortBy.yaml'
+    WorkListName:
+      $ref: './components/parameters/WorkListName.yaml'
+    WorkListWorkTypeName:
+      $ref: './components/parameters/WorkListWorkTypeName.yaml'
+    WorkListTraceId:
+      $ref: './components/parameters/WorkListTraceId.yaml'
     WorkOrTokenID:
       $ref: './components/parameters/WorkOrTokenID.yaml'
   responses:
@@ -807,6 +860,8 @@ components:
       $ref: './components/schemas/api/StageSubmitWorkFileRequest.yaml'
     StageSubmitWorkFileResponse:
       $ref: './components/schemas/api/StageSubmitWorkFileResponse.yaml'
+    UpsertWorkRequestSubmittedWork:
+      $ref: './components/schemas/api/UpsertWorkRequestSubmittedWork.yaml'
     UpsertWorkRequestResponse:
       $ref: './components/schemas/api/UpsertWorkRequestResponse.yaml'
     ListWorkResponse:
@@ -887,20 +942,24 @@ components:
       $ref: './components/schemas/api/LoadableProviderSessionKind.yaml'
     ProviderSessionSourceMetadata:
       $ref: './components/schemas/api/ProviderSessionSourceMetadata.yaml'
-    CodexSessionParseSummary:
-      $ref: './components/schemas/api/CodexSessionParseSummary.yaml'
-    CodexSessionTurnSummary:
-      $ref: './components/schemas/api/CodexSessionTurnSummary.yaml'
-    CodexSessionFunctionCallSummary:
-      $ref: './components/schemas/api/CodexSessionFunctionCallSummary.yaml'
-    CodexSessionReasoningSummary:
-      $ref: './components/schemas/api/CodexSessionReasoningSummary.yaml'
-    CodexSessionTokenUsage:
-      $ref: './components/schemas/api/CodexSessionTokenUsage.yaml'
-    CodexSessionLineError:
-      $ref: './components/schemas/api/CodexSessionLineError.yaml'
-    CodexSessionUnknownEvent:
-      $ref: './components/schemas/api/CodexSessionUnknownEvent.yaml'
+    ProviderSessionParseSummary:
+      $ref: './components/schemas/api/ProviderSessionParseSummary.yaml'
+    ProviderSessionTurnSummary:
+      $ref: './components/schemas/api/ProviderSessionTurnSummary.yaml'
+    ProviderSessionFunctionCallSummary:
+      $ref: './components/schemas/api/ProviderSessionFunctionCallSummary.yaml'
+    ProviderSessionReasoningSummary:
+      $ref: './components/schemas/api/ProviderSessionReasoningSummary.yaml'
+    ProviderSessionTokenUsage:
+      $ref: './components/schemas/api/ProviderSessionTokenUsage.yaml'
+    ProviderSessionLineError:
+      $ref: './components/schemas/api/ProviderSessionLineError.yaml'
+    ProviderSessionUnknownEvent:
+      $ref: './components/schemas/api/ProviderSessionUnknownEvent.yaml'
+    ProviderSessionTranscriptEntryType:
+      $ref: './components/schemas/api/ProviderSessionTranscriptEntryType.yaml'
+    ProviderSessionTranscriptEntry:
+      $ref: './components/schemas/api/ProviderSessionTranscriptEntry.yaml'
     StringMap:
       $ref: './components/schemas/shared/StringMap.yaml'
     IntegerMap:
@@ -1025,6 +1084,10 @@ components:
       $ref: './components/schemas/events/WallClock.yaml'
 
     # ==== Raw data schemas for a factor =======
+    FactorySaveMode:
+      $ref: './components/schemas/api/FactorySaveMode.yaml'
+    SaveFactoryForSessionRequest:
+      $ref: './components/schemas/api/SaveFactoryForSessionRequest.yaml'
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
     FactoryGuard:
@@ -1105,6 +1168,18 @@ components:
       $ref: './components/schemas/api/PromptTemplateValidationResult.yaml'
     PromptTemplateDiagnostic:
       $ref: './components/schemas/api/PromptTemplateDiagnostic.yaml'
+    FactoryValidationSeverity:
+      $ref: './components/schemas/api/FactoryValidationSeverity.yaml'
+    FactoryValidationSubjectType:
+      $ref: './components/schemas/api/FactoryValidationSubjectType.yaml'
+    FactoryValidationSubjectLocation:
+      $ref: './components/schemas/api/FactoryValidationSubjectLocation.yaml'
+    FactoryValidationSubject:
+      $ref: './components/schemas/api/FactoryValidationSubject.yaml'
+    FactoryValidationTarget:
+      $ref: './components/schemas/api/FactoryValidationTarget.yaml'
+    FactoryValidationResult:
+      $ref: './components/schemas/api/FactoryValidationResult.yaml'
     # ==== Raw data types here =======
     WorkRequest:
       $ref: './components/schemas/api/WorkRequest.yaml'

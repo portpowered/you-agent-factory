@@ -2,6 +2,7 @@
 package work
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
@@ -21,13 +24,16 @@ const listRequestTimeout = 10 * time.Second
 
 // ListConfig holds parameters for the work list command.
 type ListConfig struct {
-	Port        int
-	SessionID   string
-	StateName   string
-	StateType   string
-	SortBy      string
-	MaxResults  int
-	NextToken   string
+	Server       string
+	SessionID    string
+	StateName    string
+	StateType    string
+	Name         string
+	WorkTypeName string
+	TraceID      string
+	SortBy       string
+	MaxResults   int
+	NextToken    string
 	JSON        bool
 	Verbose     bool
 	Debug       bool
@@ -44,14 +50,17 @@ func List(cfg ListConfig) error {
 		return err
 	}
 
-	endpoint := listEndpoint(cfg)
+	endpoint, err := listEndpoint(cfg)
+	if err != nil {
+		return err
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"work list request endpointPath=%s endpoint=%s port=%d session=%s filters=%s maxResults=%d nextTokenPresent=%t",
+		"work list request endpointPath=%s endpoint=%s server=%s session=%s filters=%s maxResults=%d nextTokenPresent=%t",
 		endpoint.Path,
 		endpoint.String(),
-		cfg.Port,
+		cfg.Server,
 		clidiag.SessionLabel(cfg.SessionID),
 		listFilterSummary(cfg),
 		cfg.MaxResults,
@@ -60,25 +69,29 @@ func List(cfg ListConfig) error {
 
 	client := &http.Client{Timeout: listRequestTimeout}
 	started := time.Now()
-	resp, err := client.Get(endpoint.String())
+	var result factoryapi.ListWorkResponse
+	resp, err := clihttp.GetJSON(
+		context.Background(),
+		client,
+		endpoint.String(),
+		&result,
+		clihttp.RequestOptions{
+			Diagnostics:  cfg.Diagnostics,
+			Verbose:      cfg.Verbose,
+			EndpointPath: endpoint.Path,
+			LogLabel:     "work list",
+		},
+	)
 	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, time.Since(started).Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds())
-		var errResp factoryapi.ErrorResponse
-		if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
+		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("list work failed (%d): %s", resp.StatusCode, errResp.Message)
 		}
 		return fmt.Errorf("list work failed (%d)", resp.StatusCode)
-	}
-
-	var result factoryapi.ListWorkResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("parse response: %w", err)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
@@ -108,12 +121,21 @@ func validateListConfig(cfg ListConfig) error {
 }
 
 func listFilterSummary(cfg ListConfig) string {
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 6)
 	if cfg.StateName != "" {
 		parts = append(parts, "state.name")
 	}
 	if cfg.StateType != "" {
 		parts = append(parts, "state.type")
+	}
+	if cfg.Name != "" {
+		parts = append(parts, "name")
+	}
+	if cfg.WorkTypeName != "" {
+		parts = append(parts, "workTypeName")
+	}
+	if cfg.TraceID != "" {
+		parts = append(parts, "traceId")
 	}
 	if cfg.SortBy != "" {
 		parts = append(parts, "sortBy")
@@ -124,22 +146,29 @@ func listFilterSummary(cfg ListConfig) string {
 	return strings.Join(parts, ",")
 }
 
-func listEndpoint(cfg ListConfig) url.URL {
-	endpoint := url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   sessionpath.ScopedPath("/work", cfg.SessionID),
+func listEndpoint(cfg ListConfig) (url.URL, error) {
+	endpointPath := sessionpath.ScopedPath("/work", cfg.SessionID)
+	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
+	if err != nil {
+		return url.URL{}, err
+	}
+	endpoint, err := url.Parse(endpointURL)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("parse work list endpoint: %w", err)
 	}
 	query := endpoint.Query()
 	setListQueryParam(query, "state.name", cfg.StateName)
 	setListQueryParam(query, "state.type", cfg.StateType)
+	setListQueryParam(query, "name", cfg.Name)
+	setListQueryParam(query, "workTypeName", cfg.WorkTypeName)
+	setListQueryParam(query, "traceId", cfg.TraceID)
 	setListQueryParam(query, "sortBy", cfg.SortBy)
 	if cfg.MaxResults > 0 {
 		query.Set("maxResults", fmt.Sprintf("%d", cfg.MaxResults))
 	}
 	setListQueryParam(query, "nextToken", cfg.NextToken)
 	endpoint.RawQuery = query.Encode()
-	return endpoint
+	return *endpoint, nil
 }
 
 func setListQueryParam(query url.Values, key, value string) {
@@ -154,16 +183,17 @@ func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) erro
 		return err
 	}
 
-	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
+	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
 		return err
 	}
 	for _, work := range result.Results {
 		stateName, stateType := workStateColumns(work.State)
 		if _, err := fmt.Fprintf(
 			output,
-			"%s\t%s\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\n",
 			stringValue(work.WorkId),
 			work.Name,
+			stringValue(work.WorkTypeName),
 			stateName,
 			stateType,
 			formatWorkRelations(work.Relations),

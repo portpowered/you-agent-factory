@@ -138,7 +138,7 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
 
-`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-integration-test`, and `make test-backend-verification`, prints the owned lane label before each one, and emits the exact lane rerun command if one fails. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun.
+`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-integration-test`, and `make test-backend-verification`, prints the owned lane label before each one, and emits the exact lane rerun command if one fails. The GitHub Actions workflow fans those lanes out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun. **CI vs local for UI Coverage:** pull-request CI runs ten parallel `ui-coverage-shard` matrix jobs plus one `ui-coverage-merge` job (both gated by `run_ui_coverage`); local `make verify-pr` and `make verify-tests` still use the unsharded canonical `make test-ui-coverage` command that `cmd/ciclassify` recommends for lane reruns.
 
 Every pull request still runs the same prerequisite path before any lane-specific skips happen:
 
@@ -161,11 +161,11 @@ Treat those lanes as the stable contributor mental model:
 
 | CI lane | Owned checks | Local rerun command | Why this lane stays separate |
 | --- | --- | --- | --- |
-| `UI Coverage` | Bun-backed jsdom coverage phases plus a Vitest-only standalone `ui/scripts/dashboard-shell-storybook-responsive.test.mjs` check and the replay metadata guard | `make test-ui-coverage` | Keeps unit and app-shell regressions, coverage thresholds, and replay fixture coverage in one dashboard-only lane without rerunning browser-backed integration. The root command stays canonical: it delegates covered phases to `ui/package.json`'s `test:coverage` flow and then runs the replay coverage check. |
+| `UI Coverage` | CI: ten parallel `ui-coverage-shard` jobs (main covered Bun shards via `run-bun-coverage-main.mjs`) plus `ui-coverage-merge` (isolated React Flow pass, Bun lcov merge/thresholds, Vitest-only standalone `ui/scripts/dashboard-shell-storybook-responsive.test.mjs`, replay metadata guard). Local: same contract via unsharded `make test-ui-coverage`. | `make test-ui-coverage` | Keeps unit and app-shell regressions, coverage thresholds, and replay fixture coverage in one dashboard-only lane without rerunning browser-backed integration. CI shards only the main covered pass; local `make test-ui-coverage` remains the canonical full phased lane via `ui/package.json`'s `test:coverage` flow plus replay check. Use `UI_COVERAGE_SHARD=<i>/10 make ui-test-coverage` or `make test-ui-coverage-merge` only when reproducing a CI shard or merge failure. |
 | `UI Browser Integration` | the canonical browser-backed `ui/integration/*.integration.test.mjs` lane with Playwright provisioning plus build and preview owned by the shared browser harness | `make ui-integration-test` | Keeps real-browser dashboard workflows isolated so failures map cleanly to preview startup, API-origin wiring, or browser-visible behavior instead of the jsdom suite. |
 | `Backend Verification` | `cmd/gocoveragecheck` over `./cmd/factory`, maintained backend `./pkg/...` packages, and the maintained short functional packages under `tests/functional/...` | `make test-backend-verification` | Merges backend coverage with the maintained short functional corpus because the covered command already executes the same supported backend packages and short functional packages in one lane. |
 
-UI Coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind `ui/package.json`'s `test:coverage` script. Main, isolated React Flow, and merge/threshold covered phases run on Bun; the standalone Storybook script phase remains Vitest-only. Keep the main covered Bun pass as the only parallelized covered phase in this rollout; it defaults to two workers and can be tuned for comparison runs with `UI_COVERAGE_MAIN_MAX_WORKERS`. Keep `src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` in its separate covered React Flow pass with single-worker isolation unless later CI timing evidence proves that changing that boundary is both faster and stable.
+UI Coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind `ui/package.json`'s `test:coverage` script. Main, isolated React Flow, and merge/threshold covered phases run on Bun; the standalone Storybook script phase remains Vitest-only. Keep the main covered Bun pass as the only parallelized covered phase in this rollout; it defaults to two workers and can be tuned for comparison runs with `UI_COVERAGE_MAIN_MAX_WORKERS`. **US-004 (2026-05-30):** a three-worker trial on a comparable local runner regressed main-pass time and failed a graph suite timeout—keep the default at two unless new green `make test-ui-coverage` timing on `ubuntu-latest` justifies a change (see `docs/internal/development/ui-coverage-speed-closeout.md` **Main-pass worker trial**). Keep `src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` in its separate covered React Flow pass with single-worker isolation unless later CI timing evidence proves that changing that isolation boundary is both faster and stable. **US-005 (2026-05-30):** do not add a parallel isolated pass for `src/App.*.test.tsx`—local trials showed main-pass wall time unchanged within noise when app-shell files are excluded, while a bundled single-worker app-shell phase adds ~500s serial cost (~46% lane regression); see `docs/internal/development/ui-coverage-speed-closeout.md` **App shell megatest isolation trial**. **CI sharding (2026-05-30):** pull-request UI Coverage runs `ui-coverage-shard` (matrix `1`–`10`) plus `ui-coverage-merge` instead of one runner invoking `make test-ui-coverage`. Each shard job defaults to one Bun worker (`UI_COVERAGE_MAIN_MAX_WORKERS` still overrides); merged coverage thresholds are enforced in the merge job via `merge-bun-coverage-thresholds.mjs` and `bun-coverage-config.mjs`. See `docs/internal/development/ui-coverage-speed-closeout.md` **CI ten-shard rollout** for before/after timing and the first green proof run.
 
 The UI Coverage contract also includes the Bun lcov merge/threshold pass (`merge-bun-coverage-thresholds.mjs`) and the replay coverage check. Keep browser-backed integration tests under `ui/integration/*.integration.test.mjs` out of the jsdom coverage corpus, keep the standalone script-style dashboard shell responsive test outside the main covered worker pool, and preserve the stable `[ui-coverage]` phase labels (`Main covered Vitest pass`, `Isolated React Flow covered pass`, `Blob report merge pass`, `Standalone script-style test`, replay check) so benchmark comparisons can use the same names across runs. See [UI coverage speed closeout](ui-coverage-speed-closeout.md) for timing history and Bun threshold notes.
 
@@ -177,7 +177,7 @@ When a required lane fails, GitHub Actions keeps the lane-owned failure evidence
 
 | CI lane | Failure artifact name | Retained evidence |
 | --- | --- | --- |
-| `UI Coverage` | `ui-coverage-failure-artifacts` | lane `command.log` with the failing command output |
+| `UI Coverage` | `ui-coverage-merge-failure-artifacts` (merge lane) and per-shard `ui-coverage-shard-<index>` artifacts when a matrix leg fails | merge `command.log` under `.artifacts/ui-coverage-merge/`; shard `command.log` under `.artifacts/ui-coverage-shard-<index>/` |
 | `UI Browser Integration` | `ui-browser-integration-failure-artifacts` | lane `command.log` plus the shared harness browser evidence: Playwright trace, final screenshot, page HTML snapshot, and diagnostics JSON |
 | `Backend Verification` | `backend-verification-failure-artifacts` | lane `command.log` with the covered Go test and maintained short functional output |
 
@@ -354,6 +354,39 @@ projections, or export-only field aliases.
 9. Run `make ui-storybook` when Storybook fixtures, visual states, or dashboard component stories change.
 10. Run `make ui-test-storybook` after `make ui-storybook` when Storybook play functions, dashboard Storybook runtime mocks, or browser-backed interaction behavior change.
 11. Run replay-focused smoke tests when changing `pkg/replay`, record/replay CLI flags, worker side-effect matching, or artifact promotion behavior.
+
+## Frontend Testing Layers
+
+Place new dashboard UI regressions at the shallowest layer that still observes the customer-visible contract. Prefer behavioral assertions on rendered text, accessible names, network bodies, and emitted events—not source inventories, route lists, or doc-link topology checks.
+
+| Layer | Scope | Example path |
+| --- | --- | --- |
+| Unit | Pure helpers, fixtures, and harness builders without mounting production React trees | `ui/src/testing/session-factory-mocks.test.ts` |
+| Component | One widget or hook under jsdom with Testing Library | `ui/src/features/submit-work/components/submit-work-widget.test.tsx` |
+| App shell (`App.*.test`) | Full `App` mount with shared fetch, stream, and layout seams | `ui/src/App.import.test.tsx` |
+| Browser integration (`ui/integration/`) | Real Chromium flows across session tabs, import/export, or replay fixtures | `ui/integration/factory-import-second-session.integration.test.mjs` |
+| Storybook | Visual states, play functions, and dashboard runtime mocks on built `storybook-static` | `ui/src/features/bento/components/dashboard-bento-metrics-workflow-catalog.stories.tsx` |
+
+### App shell vs card-level harnesses
+
+Use **`renderApp(...)`** from `ui/src/testing/app-shell-test-utils.tsx` when the regression needs the dashboard shell together: session tab bootstrap, event stream wiring, bento layout, cross-card navigation, locale switching, or end-to-end import/export/submit flows that start from the mounted `App`. Pass optional `sessionID` so `DashboardSessionTestProvider` pins `useDashboardSessionStore` without per-file store seeding.
+
+Use **card-level `render(...)`** (or a feature-local test helper) when the behavior is owned by one card, hook, or graph surface and does not depend on shell routing. Combine focused renders with the shared harness modules below instead of duplicating inline `vi.fn()` fetch or mutation stubs.
+
+| Concern | Harness module | Typical consumers |
+| --- | --- | --- |
+| Editable factory graph mocks and fixtures | `ui/src/testing/graph-editor-harness.ts` | `react-flow-current-activity-card.test.tsx`, `use-editable-factory-graph.test.tsx` |
+| Session factory GET/PUT fetch doubles | `ui/src/testing/session-factory-mocks.ts` | `App.import.test.tsx`, `ui/src/api/named-factory/api.test.ts` |
+| Dashboard session store pinning | `ui/src/testing/dashboard-session-test-provider.tsx` | `renderApp({ sessionID })`, `ui/.storybook/dashboard-story-runtime.tsx` |
+| Bento catalog Storybook fixtures | `ui/src/features/bento/components/dashboard-bento-story-shared.tsx` | `dashboard-bento-*-catalog.stories.tsx` |
+| Factory document save mutation states | `ui/src/testing/factory-document-save-mocks.ts` | `current-selection-widget.save.test.tsx`, worker save hook tests |
+| Detail-card selection fixtures and time pins | `ui/src/features/current-selection/base/components/detail-card-test-helpers.tsx` | `work-item-card.test.tsx`, `workstation-detail-card.test.tsx` |
+
+Harness modules under `ui/src/testing/` must import only types, fixtures, and test doubles—no production React components—and must not create import cycles with feature code.
+
+For Storybook-only dashboard API mocking, keep fetch and session install logic in `ui/.storybook/dashboard-story-runtime.tsx` and prove session reset between story installs in `ui/.storybook/dashboard-story-runtime.test.ts`. After changing stories or runtime mocks, run `make ui-storybook` then `make ui-test-storybook` (or the targeted Storybook Vitest lane described under **Local Gotchas** when the full suite is blocked).
+
+For jsdom coverage of app and component tests, use `make ui-test` or the `UI Coverage` lane (`make test-ui-coverage`) as appropriate for the touched surface.
 
 ### Cron Workstation Changes
 

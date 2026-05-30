@@ -50,8 +50,13 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
+		"agents",
 		"authoring-factories",
 		"config",
+		"mock-workers",
+		"record-replay",
+		"guards",
+		"relationships",
 		"work",
 		"workstations",
 		"workers",
@@ -76,8 +81,13 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
+		"agents",
 		"authoring-factories",
 		"config",
+		"mock-workers",
+		"record-replay",
+		"guards",
+		"relationships",
 		"work",
 		"workstations",
 		"workstation",
@@ -139,17 +149,23 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 	got := IndexMarkdown("you")
 	for _, want := range []string{
 		"# Docs",
+		"`agents` - Agent orientation",
 		"`authoring-factories` - Practical factory authoring workflow",
-		"`config` - Factory configuration",
-		"`work` - Work types",
+		"`config` - factory.json topology",
+		"`mock-workers` - Mock-worker runs",
+		"`record-replay` - Record and replay run modes",
+		"`work` - Submitted work",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
 		"`batch-inputs` - Batch input files",
 		"`templates` - Prompt template variables",
+		"`you docs agents`",
 		"`you docs authoring-factories`",
 		"`you docs config`",
+		"`you docs mock-workers`",
+		"`you docs record-replay`",
 		"`you docs work`",
 		"`you docs workstations`",
 		"`you docs batch-inputs`",
@@ -203,12 +219,26 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 
 	for _, want := range []string{
 		"# Authoring Factories",
+		"you run --factory ./factory.json \"Fix the lint issues\"",
+		"handlingBehavior: [\"DEFAULT\"]",
 		"you run --dir ./factory --with-mock-workers",
-		"you run --dir ./factory --record ./docs/examples/sample-run.replay.json",
-		"you run --dir ./factory --replay ./docs/examples/sample-run.replay.json",
+		"you docs mock-workers",
+		"you docs record-replay",
+		"docs/examples/mock-workers.json",
+		"requestId",
+		"workTypeName",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(authoring-factories) missing %q:\n%s", want, got)
+		}
+	}
+	for _, absent := range []string{
+		"work_type_name",
+		"source_work_name",
+		`"request_id"`,
+	} {
+		if strings.Contains(got, absent) {
+			t.Fatalf("Markdown(authoring-factories) still contains retired field %q:\n%s", absent, got)
 		}
 	}
 	for _, wrapper := range []string{
@@ -230,11 +260,25 @@ func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"# Factory JSON And Work Configuration",
-		"work types, states, workers, workstations, resources, and routing",
-		"## Work Types",
-		"## Resources",
-		"supportingFiles",
+		"# Submitted Work",
+		"## Single-Work API Submission",
+		"POST /work",
+		"workTypeName",
+		"## CLI `you submit` success and verify loop",
+		"Submitted: <name> (<workTypeName>)",
+		"Verify: you work show <work-id>",
+		"you work list --name <name>",
+		"--work-type-name <type>",
+		"`workId` is JSON `null`",
+		"/factory-sessions/~default/work",
+		"factory not reachable at <url>",
+		"submission failed (<status>)",
+		"Verbose request and response diagnostics",
+		"stderr",
+		"## Tags And Prompt Templates",
+		"Token.Tags",
+		"[Config](config.md)",
+		"[Batch Inputs](batch-inputs.md)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(work) missing %q:\n%s", want, got)
@@ -267,13 +311,41 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 	}
 	for _, want := range []string{
 		"# Batch Inputs",
+		"## Batch ingress comparison",
+		"`you submit batch`",
+		"`you submit`",
+		"`you run --work <path>`",
+		"factory/inputs/BATCH/default/<request_id>.json",
+		"## CLI batch submit (`you submit batch`)",
+		"you submit batch --dry-run",
+		"you submit batch --file",
+		"cat batch.json | you submit batch",
+		"## Quick reference",
+		"## Before you submit",
+		"factory.json",
+		"factory/docs/overview.md",
+		"factory/docs/README.md",
+		"`you docs batch-work` is a compatibility alias",
 		"FACTORY_REQUEST_BATCH",
 		"DEPENDS_ON",
 		"PARENT_CHILD",
 		"factory/inputs/BATCH/default/<request_id>.json",
+		"requestId",
+		"workTypeName",
+		"sourceWorkName",
+		"targetWorkName",
+		"requiredState",
 	} {
 		if !strings.Contains(canonical, want) {
 			t.Fatalf("Markdown(batch-inputs) missing %q:\n%s", want, canonical)
+		}
+	}
+	for _, absent := range []string{
+		"work_type_name",
+		"source_work_name",
+	} {
+		if strings.Contains(canonical, absent) {
+			t.Fatalf("Markdown(batch-inputs) still contains retired field %q:\n%s", absent, canonical)
 		}
 	}
 	for _, wrapper := range []string{
@@ -322,6 +394,165 @@ func TestMarkdown_WorkstationsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *
 	}
 }
 
+func TestMarkdown_MockWorkersReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("mock-workers")
+	if err != nil {
+		t.Fatalf("Markdown(mock-workers) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Mock Workers",
+		"mockWorkers",
+		"you run --dir <factory> --with-mock-workers",
+		"you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json",
+		"runType",
+		"accept",
+		"reject",
+		"script",
+		"scriptConfig",
+		"rejectConfig",
+		"default accepted",
+		"docs/examples/mock-workers.json",
+		"docs/examples/startup-work.json",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(mock-workers) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs mock-workers`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(mock-workers) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
+func TestMarkdown_GuardsReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("guards")
+	if err != nil {
+		t.Fatalf("Markdown(guards) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Guards",
+		"## Quick Choice",
+		"VISIT_COUNT",
+		"MATCHES_FIELDS",
+		"SAME_NAME",
+		"ALL_CHILDREN_COMPLETE",
+		"ANY_CHILD_FAILED",
+		"INFERENCE_THROTTLE_GUARD",
+		"LOGICAL_MOVE",
+		"maxVisits",
+		"matchInput",
+		"limits.maxExecutionTime",
+		"limits.maxRetries",
+		"[Workstations](workstations.md)",
+		"[Relationships](relationships.md)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(guards) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs guards`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(guards) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
+func TestMarkdown_RelationshipsReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("relationships")
+	if err != nil {
+		t.Fatalf("Markdown(relationships) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Relationships",
+		"## Quick Choice",
+		"DEPENDS_ON",
+		"PARENT_CHILD",
+		"SPAWNED_BY",
+		"requiredState",
+		"sourceWorkName",
+		"targetWorkName",
+		"workTypeName",
+		"requestId",
+		"FACTORY_REQUEST_BATCH",
+		"Whole-Batch Validation",
+		"Parent-Aware Guard Linkage",
+		"ALL_CHILDREN_COMPLETE",
+		"[Guards](guards.md)",
+		"[Batch Inputs](batch-inputs.md)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(relationships) missing %q:\n%s", want, got)
+		}
+	}
+	for _, absent := range []string{
+		"work_type_name",
+		"source_work_name",
+		"target_work_name",
+	} {
+		if strings.Contains(got, absent) {
+			t.Fatalf("Markdown(relationships) still contains retired field %q:\n%s", absent, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs relationships`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(relationships) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
+func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("record-replay")
+	if err != nil {
+		t.Fatalf("Markdown(record-replay) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Record and Replay",
+		"~/.you-agent-factory/recordings/",
+		"factory-session-~default-HHMMSS-<unique-id>.json",
+		"Recording saved:",
+		"you run --dir ./factory --record ./docs/examples/sample-run.replay.json",
+		"you run --dir ./factory --replay ./docs/examples/sample-run.replay.json",
+		"you run --dir ./factory --no-record",
+		"`--record` with `--replay`",
+		"`--no-record` with `--record`",
+		"does not delete old artifacts automatically",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(record-replay) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs record-replay`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(record-replay) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	t.Parallel()
 
@@ -329,7 +560,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, work, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

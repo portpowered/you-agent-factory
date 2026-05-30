@@ -58,6 +58,28 @@ function namedWorkItem(name: string): DashboardWorkItemRef {
   };
 }
 
+export const multimodalActiveWorkPayload = {
+  content: [
+    { text: "Primary selected-work payload text", type: "text" as const },
+    { json: { priority: 1 }, type: "JSON" as const },
+    { file: "screenshot.png", type: "image" as const },
+  ],
+  payload_status: "RESOLVED",
+} satisfies Pick<DashboardWorkItemRef, "content" | "payload_status">;
+
+function workItemWithMultimodalPayload(workItem: DashboardWorkItemRef): DashboardWorkItemRef {
+  return {
+    ...workItem,
+    ...multimodalActiveWorkPayload,
+  };
+}
+
+function mapWorkItemsWithMultimodalPayload(
+  workItems: DashboardWorkItemRef[] | undefined,
+): DashboardWorkItemRef[] {
+  return (workItems ?? []).map(workItemWithMultimodalPayload);
+}
+
 function appendProviderSession(
   runtime: DashboardRuntime,
   attempt: NonNullable<DashboardSessionRuntime["provider_sessions"]>[number],
@@ -305,6 +327,53 @@ export const activeWorkRuntimeOverlay: DashboardRuntimeOverlay = (runtime, topol
     },
     work_items: [workItem],
   });
+};
+
+export const activeWorkWithMultimodalPayloadRuntimeOverlay: DashboardRuntimeOverlay = (
+  runtime,
+  topology,
+) => {
+  const enrichedRuntime = activeWorkRuntimeOverlay(runtime, topology);
+  const enrichedWorkItems = (workItems: DashboardWorkItemRef[] | undefined) =>
+    mapWorkItemsWithMultimodalPayload(workItems);
+
+  return {
+    ...enrichedRuntime,
+    active_executions_by_dispatch_id: Object.fromEntries(
+      Object.entries(enrichedRuntime.active_executions_by_dispatch_id ?? {}).map(
+        ([dispatchID, execution]) => [
+          dispatchID,
+          {
+            ...execution,
+            work_items: enrichedWorkItems(execution.work_items),
+          },
+        ],
+      ),
+    ),
+    current_work_items_by_place_id: Object.fromEntries(
+      Object.entries(enrichedRuntime.current_work_items_by_place_id ?? {}).map(
+        ([placeID, workItems]) => [placeID, enrichedWorkItems(workItems)],
+      ),
+    ),
+    session: {
+      ...enrichedRuntime.session,
+      provider_sessions: enrichedRuntime.session.provider_sessions?.map((attempt) => ({
+        ...attempt,
+        work_items: enrichedWorkItems(attempt.work_items),
+      })),
+    },
+    workstation_activity_by_node_id: Object.fromEntries(
+      Object.entries(enrichedRuntime.workstation_activity_by_node_id ?? {}).map(
+        ([nodeID, activity]) => [
+          nodeID,
+          {
+            ...activity,
+            active_work_items: enrichedWorkItems(activity.active_work_items),
+          },
+        ],
+      ),
+    ),
+  };
 };
 
 export const retryAttemptRuntimeOverlay: DashboardRuntimeOverlay = (runtime, topology) => {

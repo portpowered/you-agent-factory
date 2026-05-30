@@ -36,9 +36,12 @@ export const ResponsiveSelectorFlow = {
       canvas.getByRole("heading", { name: "Add widget" }),
     ).toBeVisible();
     await expect(selector).toHaveValue("work-totals");
-    await expect(
-      canvas.getByRole("button", { name: "Move Add widget" }),
-    ).toBeVisible();
+    const header = card.querySelector("header");
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(header?.className).toContain("cursor-grab");
+    expect(
+      within(card).queryByRole("button", { name: "Move Add widget" }),
+    ).toBeNull();
     await expect(
       canvas.getByRole("button", { name: "Add widget: Work totals" }),
     ).toBeVisible();

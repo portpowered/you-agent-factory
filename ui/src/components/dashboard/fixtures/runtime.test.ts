@@ -2,10 +2,12 @@ import { describe, expect, it } from "bun:test";
 
 import {
   activeWorkRuntimeOverlay,
+  activeWorkWithMultimodalPayloadRuntimeOverlay,
   buildDashboardSnapshotFixture,
   dashboardRuntimeOverlays,
   failedOutcomeRuntimeOverlay,
   mediumBranchingDashboardTopology,
+  multimodalActiveWorkPayload,
   rejectedOutcomeRuntimeOverlay,
   retryAttemptRuntimeOverlay,
 } from ".";
@@ -53,6 +55,17 @@ describe("dashboard runtime fixtures", () => {
       .toContain("FAILED");
     expect(rejectedSnapshot.runtime.session.provider_sessions?.map((attempt) => attempt.outcome))
       .toContain("REJECTED");
+  });
+
+  it("projects multimodal selected-work payload onto active work item refs", () => {
+    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology, [
+      activeWorkWithMultimodalPayloadRuntimeOverlay,
+    ]);
+    const activeWorkItem =
+      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"]
+        ?.work_items?.[0];
+
+    expect(activeWorkItem).toMatchObject(multimodalActiveWorkPayload);
   });
 
   it("composes semantic overlays against one shared topology", () => {

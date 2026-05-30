@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import type { FactoryValue } from "../../../api/named-factory";
+import type { FactoryImportSaveChoice, FactoryValue } from "../../../api/named-factory";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import {
   type FactoryImportActivationState,
@@ -17,7 +17,10 @@ import {
 } from "../../import/hooks/use-factory-png-drop";
 
 export interface CurrentActivityImportController {
-  activateImport: (value: FactoryPngImportValue) => Promise<void>;
+  activateImport: (
+    value: FactoryPngImportValue,
+    choice?: FactoryImportSaveChoice,
+  ) => Promise<void>;
   activationState: FactoryImportActivationState;
   clearActivationError: () => void;
   clearError: () => void;
@@ -36,6 +39,7 @@ export interface UseCurrentActivityImportControllerOptions {
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
+  sessionID?: string | null;
 }
 
 export function useCurrentActivityImportController({
@@ -44,6 +48,7 @@ export function useCurrentActivityImportController({
   onFactoryActivated,
   onFactoryImportReady,
   readFactoryImportFile,
+  sessionID,
 }: UseCurrentActivityImportControllerOptions = {}): CurrentActivityImportController {
   const {
     closePreview: closeImportPreview,
@@ -63,6 +68,7 @@ export function useCurrentActivityImportController({
   } = useFactoryImportActivation({
     activateFactory,
     onActivated: handleFactoryActivated,
+    sessionID,
   });
   const handleImportPreviewReady = useCallback((value: FactoryPngImportValue, file: File) => {
     clearActivationError();

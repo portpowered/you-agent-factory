@@ -114,8 +114,7 @@ vi.mock("../../current-factory-definition/public", () => ({
   useSaveCurrentFactory: () => hookState.saveEditableDefinition,
 }));
 
-vi.mock("../../factory-graph-editor/public", () => ({
-  createEmptyFactoryGraphDraft,
+vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
   useEditableFactoryGraph: () => ({
     actions: {
       discard: hookState.draftState.resetDraft,
@@ -174,6 +173,20 @@ vi.mock("./react-flow-current-activity-card-editor-connections", () => ({
 
 vi.mock("./react-flow-current-activity-card-editor-removals", () => ({
   useFactoryGraphRemovalController: () => hookState.removalController,
+}));
+
+vi.mock("../../factory-graph-editor/hooks/use-factory-validation", () => ({
+  useFactoryValidation: () => ({
+    data: { targets: [] },
+    isError: false,
+    isFetching: false,
+    isLoading: false,
+    projection: {
+      handleErrorsByAnchorId: new Map(),
+      nodeErrorsByNodeId: new Map(),
+    },
+    targets: [],
+  }),
 }));
 
 vi.mock("./react-flow-current-activity-card-editor-value", () => ({

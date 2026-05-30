@@ -1,6 +1,6 @@
 import { expect, within } from "storybook/test";
 
-import { NoSelectionDetailCard } from "../../features/current-selection/components/no-selection-detail-card";
+import { NoSelectionDetailCard } from "../../features/current-selection/base/public";
 import "../../styles.css";
 import { DashboardWidgetFrame } from "./widget-frame";
 

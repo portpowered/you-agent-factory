@@ -14,9 +14,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/service/localmodel"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -132,11 +133,46 @@ func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
 	if svc.modelAssets == nil {
 		t.Fatal("expected BuildFactoryService to initialize modelAssets")
 	}
-	if svc.modelResources == nil {
-		t.Fatal("expected BuildFactoryService to initialize modelResources")
+	bundle := svc.currentRuntimeBundle()
+	if bundle == nil {
+		t.Fatal("expected startup runtime bundle")
 	}
-	if svc.localModels == nil {
-		t.Fatal("expected BuildFactoryService to initialize localModels")
+	if bundle.modelResources == nil {
+		t.Fatal("expected startup bundle to initialize modelResources")
+	}
+	if bundle.localModels == nil {
+		t.Fatal("expected startup bundle to initialize localModels")
+	}
+	if svc.sessions == nil {
+		t.Fatal("expected BuildFactoryService to initialize sessions")
+	}
+	if svc.hostedWorkers.Logger == nil {
+		t.Fatal("expected BuildFactoryService to initialize hostedWorkers logger")
+	}
+}
+
+func TestBuildHostedWorkersConfig_DelegatesServiceConfigFields(t *testing.T) {
+	t.Parallel()
+
+	client := &http.Client{}
+	resolver := hostedworkers.SecretResolver(func(context.Context, interfaces.RuntimeConfigLookup, string) (string, error) {
+		return "token", nil
+	})
+	cfg := &FactoryServiceConfig{
+		HostedPollerHTTPClient:     client,
+		HostedPollerSecretResolver: resolver,
+		HostedLinearEndpoint:       " https://linear.example/graphql ",
+	}
+
+	got := buildHostedWorkersConfig(cfg, zap.NewNop(), nil)
+	if got.HTTPClient != client {
+		t.Fatal("hosted workers HTTP client was not wired from FactoryServiceConfig")
+	}
+	if got.SecretResolver == nil {
+		t.Fatal("hosted workers secret resolver was not wired from FactoryServiceConfig")
+	}
+	if got.LinearEndpoint != "https://linear.example/graphql" {
+		t.Fatalf("LinearEndpoint = %q, want trimmed service config endpoint", got.LinearEndpoint)
 	}
 }
 
@@ -155,8 +191,12 @@ func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalM
 		cancel()
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	svc.modelAssets = staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
-	svc.localModels = newManagedLocalModelManager(svc.modelAssets, runtime)
+	puller := staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
+	svc.modelAssets = puller
+	if bundle := svc.startupRuntimeBundle(); bundle != nil {
+		bundle.modelAssets = puller
+		bundle.localModels = newManagedLocalModelManager(puller, runtime)
+	}
 
 	runErrCh := make(chan error, 1)
 	go func() { runErrCh <- svc.Run(ctx) }()
@@ -260,7 +300,7 @@ func localModelLongTestFactoryConfig() *interfaces.FactoryConfig {
 			Model:         "OMNIVOICE_Q4_K_M",
 			ModelProvider: interfaces.RunnerIDCodex,
 			ModelLocality: interfaces.ModelLocalityLocal,
-			Command:       localmodel.DefaultOmniVoiceCommand,
+			Command:       localmodels.DefaultOmniVoiceCommand,
 			Resources: []interfaces.ResourceConfig{{
 				Name:     "omnivoice-cache",
 				Capacity: 1,
@@ -1853,8 +1893,8 @@ func assertCanonicalProviderCommandRequests(t *testing.T, requests []workers.Com
 	if len(requests) != 1 {
 		t.Fatalf("provider command runner request count = %d, want 1", len(requests))
 	}
-	if requests[0].Command != string(workers.ModelProviderCodex) {
-		t.Fatalf("provider command = %q, want %q", requests[0].Command, workers.ModelProviderCodex)
+	if requests[0].Command != string(interfaces.ModelProviderCodex) {
+		t.Fatalf("provider command = %q, want %q", requests[0].Command, interfaces.ModelProviderCodex)
 	}
 }
 

@@ -6,7 +6,12 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
-import { resolveDashboardSelection } from "../state/dashboardSelection";
+import type { FactoryWorker } from "../../../api/events/types";
+import {
+  findFactoryWorkerInSnapshot,
+  resolveDashboardSelection,
+  workstationNamesReferencingWorkerInSnapshot,
+} from "../state/dashboardSelection";
 import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
 import {
   activeExecutionsForSelectedWorkstation,
@@ -240,6 +245,21 @@ export function useCurrentSelectionDerivedState({
       : selection?.kind === "workstation-request"
         ? selection.request.work_items[0]?.work_id ?? null
         : terminalWorkDetail?.traceWorkID ?? null;
+  const selectedWorkerName = selection?.kind === "worker" ? selection.workerName : null;
+  const selectedWorker = useMemo((): FactoryWorker | null => {
+    if (!snapshot || !selectedWorkerName) {
+      return null;
+    }
+
+    return findFactoryWorkerInSnapshot(snapshot, selectedWorkerName) ?? null;
+  }, [selectedWorkerName, snapshot]);
+  const selectedWorkerWorkstationNames = useMemo(() => {
+    if (!snapshot || !selectedWorkerName) {
+      return [];
+    }
+
+    return workstationNamesReferencingWorkerInSnapshot(snapshot, selectedWorkerName);
+  }, [selectedWorkerName, snapshot]);
   const work = useSelectedWorkData({
     projectedWorkstationRequestsByDispatchID,
     selection,
@@ -286,6 +306,9 @@ export function useCurrentSelectionDerivedState({
     selectedWorkProviderSessions: work.selectedWorkProviderSessions,
     selectedWorkRequestHistory: work.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: work.selectedWorkWorkstationRequests,
+    selectedWorker,
+    selectedWorkerName,
+    selectedWorkerWorkstationNames,
     selectedWorkstationRequest,
   };
 }

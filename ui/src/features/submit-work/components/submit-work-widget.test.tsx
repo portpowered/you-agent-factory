@@ -10,6 +10,11 @@ import {
 } from "@testing-library/react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  DashboardSessionTestProvider,
+  renderWithDashboardSessionTest,
+} from "../../../testing";
+import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { getSubmitWorkMessages } from "../messages/submit-work";
@@ -78,7 +83,7 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(submitButton.className).toContain("justify-center");
   });
 
-  it("orders submit-work header tools before the dashboard move control", () => {
+  it("orders submit-work header tools left of the header drag surface", () => {
     render(
       <SubmitWorkCard
         draft={{
@@ -109,7 +114,8 @@ describe("SubmitWorkWidget form behavior", () => {
     const remove = screen.getByRole("button", {
       name: "Remove Submit work widget from dashboard",
     });
-    const move = screen.getByRole("button", { name: "Move Submit work" });
+    const card = screen.getByRole("article", { name: "Submit work" });
+    const header = card.querySelector("header");
 
     expect(workType.compareDocumentPosition(addInput)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -117,9 +123,13 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(addInput.compareDocumentPosition(remove)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(remove.compareDocumentPosition(move)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(
+      screen.queryByRole("button", { name: "Move Submit work" }),
+    ).toBeNull();
+    expect(
+      header?.contains(screen.getByRole("heading", { name: "Submit work" })),
+    ).toBe(true);
   });
 
   it("enables submission only after a configured work type and non-blank request name are present", () => {
@@ -1158,7 +1168,9 @@ describe("SubmitWorkWidget submission behavior", () => {
 
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "task" }]} />
+        <DashboardSessionTestProvider>
+          <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "task" }]} />
+        </DashboardSessionTestProvider>
       </QueryClientProvider>,
     );
 
@@ -1215,9 +1227,9 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(requestName.getAttribute("aria-invalid")).toBe("true");
   });
 
-  it("submits a request-name-only draft with an empty items payload", async () => {
+  it("completes header-only submission when the default text item is blank", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
+      new Response(JSON.stringify({ traceId: "trace-header-only" }), {
         headers: {
           "Content-Type": "application/json",
         },
@@ -1229,16 +1241,21 @@ describe("SubmitWorkWidget submission behavior", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
+    const card = screen.getByRole("article", { name: "Submit work" });
     const workType = screen.getByRole<HTMLSelectElement>("combobox", {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: "Request name",
     });
+    const defaultTextItem = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Text item 1",
+    });
 
+    expect(defaultTextItem.value).toBe("");
     fireEvent.change(workType, { target: { value: "story" } });
     fireEvent.change(requestName, {
-      target: { value: "Empty payload request" },
+      target: { value: "Header-only request" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
@@ -1247,9 +1264,19 @@ describe("SubmitWorkWidget submission behavior", () => {
     });
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       items: [],
-      name: "Empty payload request",
+      name: "Header-only request",
       workTypeName: "story",
     });
+    expect(
+      await screen.findByText(
+        "Your request was submitted. Trace ID: trace-header-only.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(card).queryByText(
+        "We couldn't submit your request. Try again in a moment.",
+      ),
+    ).toBeNull();
   });
 
   it("preserves authored text-item order in the structured submit request", async () => {
@@ -1357,6 +1384,46 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(requestText.value).toBe("Retry the broken submission.");
   });
 
+  it("submits work to the session-beta route when that tab is selected", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-submit-beta" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+      { sessionID: "session-beta" },
+    );
+
+    fireEvent.change(screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    }), { target: { value: "story" } });
+    fireEvent.change(screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Request name",
+    }), {
+      target: { value: "Beta submission" },
+    });
+    fireEvent.change(screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Text item 1",
+    }), {
+      target: { value: "Submit the beta session request." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/factory-sessions/session-beta/work",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
+    });
+  });
+
   it("clears the draft and switches submit routing when the selected session changes", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
@@ -1367,7 +1434,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
-    renderSubmitWorkWidget(
+    renderSubmitWorkWidgetWithStore(
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
@@ -1468,7 +1535,14 @@ describe("SubmitWorkWidget submission behavior", () => {
   });
 });
 
-function renderSubmitWorkWidget(element: React.ReactElement) {
+function renderSubmitWorkWidget(
+  element: React.ReactElement,
+  sessionOptions: { paused?: boolean; sessionID?: string | null } = {},
+) {
+  return renderWithDashboardSessionTest(element, sessionOptions);
+}
+
+function renderSubmitWorkWidgetWithStore(element: React.ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: {
       mutations: {
@@ -1482,7 +1556,9 @@ function renderSubmitWorkWidget(element: React.ReactElement) {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
+    <QueryClientProvider client={queryClient}>
+      <DashboardSessionProvider>{element}</DashboardSessionProvider>
+    </QueryClientProvider>,
   );
 }
 

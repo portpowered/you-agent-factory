@@ -679,7 +679,7 @@ var builtInRunnerMetadata = map[string]RunnerMetadata{
 			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilitySessionResume, Status: RunnerOptionalCapabilityStatusSupported},
 			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityStructuredOutput, Status: RunnerOptionalCapabilityStatusSupported},
 			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorkingDirectory, Status: RunnerOptionalCapabilityStatusSupported},
-			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusUnsupported, Detail: "codex rejects workstation worktree selection in v1"},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusSupported, Detail: "factory-managed git worktree preparation under the factory root"},
 		),
 	},
 	RunnerIDGemini: {
@@ -741,6 +741,35 @@ func BuiltInRunnerMetadata(id string) (RunnerMetadata, bool) {
 func IsBuiltInRunnerID(id string) bool {
 	_, ok := BuiltInRunnerMetadata(id)
 	return ok
+}
+
+// ResolveOpenCodeAgent returns the configured OpenCode agent profile for one
+// dispatch using workstation override precedence over the worker default.
+func ResolveOpenCodeAgent(workstationAgent, workerAgent string) string {
+	if agent := strings.TrimSpace(workstationAgent); agent != "" {
+		return agent
+	}
+	return strings.TrimSpace(workerAgent)
+}
+
+// ValidateOpenCodeAgentForRunnerSelection reports a configuration error when a
+// non-empty OpenCode agent profile is configured for a dispatch that will not
+// use the OpenCode runner.
+func ValidateOpenCodeAgentForRunnerSelection(workstationAgent, workerAgent string, selection ResolvedRunnerSelection) error {
+	agent := ResolveOpenCodeAgent(workstationAgent, workerAgent)
+	if agent == "" {
+		return nil
+	}
+	runnerID := NormalizeRunnerID(selection.RunnerID)
+	if runnerID == RunnerIDOpenCode {
+		return nil
+	}
+	return fmt.Errorf(
+		"openCodeAgent %q requires runner %q, resolved runner %q",
+		agent,
+		RunnerIDOpenCode,
+		runnerID,
+	)
 }
 
 // ResolveRunnerSelection applies the v1 precedence rules for backend runtime

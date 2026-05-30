@@ -11,7 +11,10 @@ import type {
   FactoryGraphDraftValidationError,
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
-import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
+import {
+  validateFactoryGraphDraft,
+  validateFactoryGraphDraftStructural,
+} from "./factory-graph-draft-validation";
 import {
   applyFactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityDraft,
@@ -23,6 +26,7 @@ import {
   applyFactoryGraphEdgeRemoval,
   buildFactoryGraphConnectionNotice,
   buildFactoryGraphEdgeChangeFromConnection,
+  createFactoryGraphWorkstationResolver,
 } from "./factory-graph-editor-connections";
 import {
   applyFactoryGraphEntityRemoval,
@@ -80,13 +84,13 @@ export function buildFactoryGraphState(options: {
     options.draft,
     options.locale,
   );
-  const pendingFactoryDefinition =
-    validationErrors.length === 0
-      ? buildDraftAppliedFactoryDefinition(
-          options.baseFactoryDefinition,
-          options.draft,
-        )
-      : null;
+  const pendingFactoryDefinition = buildPendingFactoryDefinition(
+    options.baseFactoryDefinition,
+    options.draft,
+    options.locale,
+  );
+  const saveInput =
+    validationErrors.length === 0 ? pendingFactoryDefinition : null;
 
   return {
     draft: structuredClone(options.draft),
@@ -94,7 +98,7 @@ export function buildFactoryGraphState(options: {
       pendingFactoryDefinition ?? options.baseFactoryDefinition,
     ),
     pendingFactoryDefinition,
-    saveInput: pendingFactoryDefinition,
+    saveInput,
     validationErrors,
   };
 }
@@ -168,6 +172,18 @@ export function removeFactoryGraphNode(options: {
   };
 }
 
+function buildEditingFactoryGraphTopology(options: {
+  baseFactoryDefinition: CanonicalFactoryDefinition;
+  draft: FactoryGraphDraft;
+}): FactoryGraphTopology {
+  return buildFactoryGraphTopologyFromDefinition(
+    buildDraftAppliedFactoryDefinition(
+      options.baseFactoryDefinition,
+      options.draft,
+    ),
+  );
+}
+
 export function connectFactoryGraphNodes(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
@@ -178,19 +194,30 @@ export function connectFactoryGraphNodes(options: {
   targetNodeId: string;
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
   const messages = getFactoryGraphEditorMessages(options.locale);
-  const state = buildFactoryGraphState(options);
-  const edgeChange = buildFactoryGraphEdgeChangeFromConnection(state.graph, {
-    sourceAnchorId: options.sourceAnchorId,
-    sourceNodeId: options.sourceNodeId,
-    targetAnchorId: options.targetAnchorId,
-    targetNodeId: options.targetNodeId,
-  });
+  const editingFactoryDefinition = buildDraftAppliedFactoryDefinition(
+    options.baseFactoryDefinition,
+    options.draft,
+  );
+  const graph = buildEditingFactoryGraphTopology(options);
+  const workstationResolver = createFactoryGraphWorkstationResolver(
+    editingFactoryDefinition.workstations,
+  );
+  const edgeChange = buildFactoryGraphEdgeChangeFromConnection(
+    graph,
+    {
+      sourceAnchorId: options.sourceAnchorId,
+      sourceNodeId: options.sourceNodeId,
+      targetAnchorId: options.targetAnchorId,
+      targetNodeId: options.targetNodeId,
+    },
+    workstationResolver,
+  );
 
   if (!edgeChange) {
-    const sourceNode = state.graph.nodes.find(
+    const sourceNode = graph.nodes.find(
       (node) => node.id === options.sourceNodeId,
     );
-    const targetNode = state.graph.nodes.find(
+    const targetNode = graph.nodes.find(
       (node) => node.id === options.targetNodeId,
     );
 
@@ -203,6 +230,7 @@ export function connectFactoryGraphNodes(options: {
               targetAnchorId: options.targetAnchorId,
               targetNode,
               locale: options.locale,
+              resolver: workstationResolver,
             })
           : messages.connectionFallbackNotice,
       ok: false,
@@ -224,13 +252,13 @@ export function connectFactoryGraphEdgeChange(options: {
   edgeChange: FactoryGraphDraftEdgeChange;
   locale?: string | null;
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
-  const state = buildFactoryGraphState(options);
+  const graph = buildEditingFactoryGraphTopology(options);
   const nextDraft = applyFactoryGraphEdgeAddition(
     options.draft,
-    state.graph,
+    graph,
     options.edgeChange,
   );
-  const validationErrors = validateFactoryGraphDraft(
+  const validationErrors = validateFactoryGraphDraftStructural(
     options.baseFactoryDefinition,
     nextDraft,
     options.locale,
@@ -275,14 +303,10 @@ export function disconnectFactoryGraphEdge(options: {
     };
   }
 
-  const state = buildFactoryGraphState(options);
+  const graph = buildEditingFactoryGraphTopology(options);
   return {
     ok: true,
-    value: applyFactoryGraphEdgeRemoval(
-      options.draft,
-      state.graph,
-      intent.edge,
-    ),
+    value: applyFactoryGraphEdgeRemoval(options.draft, graph, intent.edge),
   };
 }
 
@@ -326,12 +350,4 @@ export function applyFactoryGraphPendingEdits(options: {
       options.draft,
     ),
   };
-}
-
-export function buildFactoryGraphSaveInput(options: {
-  baseFactoryDefinition: CanonicalFactoryDefinition;
-  draft: FactoryGraphDraft;
-  locale?: string | null;
-}): FactoryGraphOperationResult<CanonicalFactoryDefinition> {
-  return applyFactoryGraphPendingEdits(options);
 }

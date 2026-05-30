@@ -23,7 +23,9 @@ export interface ActivityGraphNodeHandle {
   onButtonClick?: () => void;
   side: "left" | "right";
   type: "source" | "target";
-  variant?: "default" | "muted" | "selected" | "valid-target";
+  validationError?: boolean;
+  validationMessage?: string;
+  variant?: "default" | "error" | "muted" | "selected" | "valid-target";
 }
 
 interface ActivityGraphNodeShellProps {
@@ -117,14 +119,17 @@ function NodeHandleBadge({
         type={handle.type}
       />
       <GraphNodeButton
+        aria-invalid={handle.validationError ? true : undefined}
         aria-label={handle.buttonAriaLabel}
         aria-pressed={handle.buttonPressed}
         className={cn(
           "pointer-events-auto -m-1 grid h-5 w-5 place-items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-af-focus-ring disabled:cursor-not-allowed disabled:bg-af-surface-subtle disabled:text-af-text-disabled",
+          handle.validationError &&
+            "ring-2 ring-af-danger-border motion-safe:animate-pulse",
         )}
         disabled={handle.buttonDisabled}
         onClick={handle.onButtonClick}
-        title={handle.buttonTitle}
+        title={handle.buttonTitle ?? handle.validationMessage}
       >
         <span
           aria-hidden="true"
@@ -135,6 +140,8 @@ function NodeHandleBadge({
               "scale-125 shadow-[0_0_0_3px_var(--color-af-accent-surface)]",
             handle.variant === "valid-target" &&
               "scale-125 shadow-[0_0_0_3px_var(--color-af-success-surface)]",
+            handle.variant === "error" &&
+              "scale-125 border-af-danger-border bg-af-danger-surface shadow-[0_0_0_3px_var(--color-af-danger-surface)] motion-safe:animate-pulse",
           )}
           style={dotStyle}
         />
@@ -160,6 +167,10 @@ function handleDotStyle(
 }
 
 function handleDotClassName(handle: ActivityGraphNodeHandle): string {
+  if (handle.variant === "error") {
+    return "bg-af-danger";
+  }
+
   if (handle.variant === "muted") {
     return "bg-af-border-strong";
   }

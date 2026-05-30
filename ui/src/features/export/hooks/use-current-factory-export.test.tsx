@@ -83,21 +83,19 @@ describe("useCurrentFactoryExport", () => {
     getCurrentFactoryMock.mockResolvedValue(factory);
 
     renderHook(() => useCurrentFactoryExport(true), {
-      wrapper: createQueryClientWrapper(),
+      wrapper: createQueryClientWrapper("session-beta"),
     });
 
     await waitFor(() => {
       expect(getCurrentFactory).toHaveBeenCalledWith({
-        sessionID: "session-2",
+        sessionID: "session-beta",
       });
     });
   });
 
   it("does not fetch export data when no session is selected", () => {
-    useDashboardSessionStore.setState({ selectedSessionID: null });
-
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
-      wrapper: createQueryClientWrapper(),
+      wrapper: createQueryClientWrapper(null),
     });
 
     expect(getCurrentFactory).not.toHaveBeenCalled();
@@ -153,7 +151,9 @@ describe("useCurrentFactoryExport", () => {
   });
 });
 
-function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => ReactNode {
+function createQueryClientWrapper(
+  sessionID: string | null = "~default",
+): ({ children }: { children: ReactNode }) => ReactNode {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -164,7 +164,11 @@ function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => 
   });
 
   return function QueryClientWrapper({ children }: { children: ReactNode }): ReactNode {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        {wrapWithDashboardSessionTest(children, { sessionID })}
+      </QueryClientProvider>
+    );
   };
 }
 

@@ -1,12 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 
+import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
 import {
-  buildPendingFactoryDefinition,
-  createEmptyFactoryGraphDraft,
   syncFactoryGraphDraftSession,
   useFactoryGraphDraftState,
-  validateFactoryGraphDraft,
-} from "../public";
+} from "../hooks/factory-graph-draft-hook";
 import {
   baseFactoryDefinition,
   currentFactoryDocument,
@@ -70,7 +70,7 @@ it("replaces workstation worker assignments in the pending definition without in
   );
 });
 
-it("returns null for save-building when the final workstation worker assignment is removed without a replacement", () => {
+it("keeps a draft-applied pending definition while save validation blocks missing worker assignments", () => {
   const draft = createEmptyFactoryGraphDraft();
   draft.edgeChanges.removals.push({
     kind: "worker-assignment",
@@ -88,6 +88,10 @@ it("returns null for save-building when the final workstation worker assignment 
     baseFactoryDefinition,
     draft,
   );
+  const pendingFactoryDefinition = buildPendingFactoryDefinition(
+    baseFactoryDefinition,
+    draft,
+  );
 
   expect(validationErrors).toEqual(
     expect.arrayContaining([
@@ -102,8 +106,13 @@ it("returns null for save-building when the final workstation worker assignment 
     ]),
   );
   expect(
-    buildPendingFactoryDefinition(baseFactoryDefinition, draft),
-  ).toBeNull();
+    pendingFactoryDefinition?.workstations?.find(
+      (workstation) => workstation.name === "draft",
+    ),
+  ).toMatchObject({
+    name: "draft",
+    worker: "",
+  });
 });
 
 it("localizes interpolated validation errors for non-default locales", () => {

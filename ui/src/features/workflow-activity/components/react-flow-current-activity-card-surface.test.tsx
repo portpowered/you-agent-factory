@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 vi.mock(
@@ -97,8 +98,19 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     canInteractWithEditor: true,
     canSaveDraft: true,
     connectionNotice: "Only workstation-to-work-state routes are supported.",
-    draftState: { hasChanges: true },
+    currentFactoryDefinition: null,
+    draftState: { hasChanges: true, pendingFactoryDefinition: null },
     editorMode: true,
+    structuralValidation: {
+      projection: {
+        handleErrorsByNodeId: new Map(),
+        nodeErrorsByNodeId: new Map(),
+        workstationMessagesByNodeId: new Map(),
+        workStateMessagesByNodeId: new Map(),
+        workTypeMessagesByNodeId: new Map(),
+      },
+      targets: [],
+    },
     handleAddEntityAction: vi.fn(),
     handleDiscardPendingChanges: vi.fn(),
     handleEditorConnect: vi.fn(),
@@ -142,6 +154,7 @@ describe("CurrentActivityGraphSurface", () => {
         editor={createEditorStub({ editorMode: false }) as never}
         graph={createGraphStub() as never}
         imports={{} as never}
+        selection={null}
         snapshot={snapshot}
       />,
     );
@@ -164,6 +177,7 @@ describe("CurrentActivityGraphSurface", () => {
         editor={editor as never}
         graph={graph as never}
         imports={{} as never}
+        selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
     );
@@ -223,6 +237,134 @@ describe("CurrentActivityGraphSurface", () => {
     expect(editor.setActiveTool).toHaveBeenCalledWith("connect");
   });
 
+  it("renders workstation validation messages in the failure notice when a marked workstation is selected", () => {
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workstation.missingFailureRoute",
+        message: 'Workstation "review" must define a failure route.',
+        severity: "error",
+        subject: {
+          id: "review",
+          location: "ON_FAILURE",
+          type: "WORKSTATION",
+        },
+      },
+    ]);
+
+    render(
+      <CurrentActivityGraphSurface
+        editor={
+          createEditorStub({
+            blockedRemovalReason: null,
+            connectionNotice: null,
+            draftState: { hasChanges: false },
+            hasActiveWork: false,
+            isStaleDraft: false,
+            structuralValidation: {
+              projection: validationProjection,
+              targets: [],
+            },
+          }) as never
+        }
+        graph={createGraphStub() as never}
+        imports={{} as never}
+        selection={{ kind: "node", nodeId: "review" }}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.getByText("Factory validation issue")).toBeTruthy();
+    expect(
+      screen.getByText('Workstation "review" must define a failure route.'),
+    ).toBeTruthy();
+  });
+
+  it("renders work type validation messages in the failure notice when a marked work type is selected", () => {
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workType.missingCompletionState",
+        message: 'work type "story" must declare a completion state.',
+        severity: "error",
+        subject: {
+          id: "story",
+          location: "STATES",
+          type: "WORK_TYPE",
+        },
+      },
+    ]);
+
+    render(
+      <CurrentActivityGraphSurface
+        editor={
+          createEditorStub({
+            blockedRemovalReason: null,
+            connectionNotice: null,
+            draftState: { hasChanges: false },
+            hasActiveWork: false,
+            isStaleDraft: false,
+            structuralValidation: {
+              projection: validationProjection,
+              targets: [],
+            },
+          }) as never
+        }
+        graph={createGraphStub() as never}
+        imports={{} as never}
+        selection={{ kind: "node", nodeId: "work-type:story" }}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.getByText("Factory validation issue")).toBeTruthy();
+    expect(
+      screen.getByText('work type "story" must declare a completion state.'),
+    ).toBeTruthy();
+  });
+
+  it("renders work state validation messages in the failure notice when a marked work state is selected", () => {
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workState.missingTerminalCompletionPath",
+        message: 'work state "story:queued" has no terminal completion path.',
+        severity: "error",
+        subject: {
+          id: "story:queued",
+          location: "TERMINAL",
+          type: "WORK_STATE",
+        },
+      },
+    ]);
+
+    render(
+      <CurrentActivityGraphSurface
+        editor={
+          createEditorStub({
+            blockedRemovalReason: null,
+            connectionNotice: null,
+            draftState: { hasChanges: false },
+            hasActiveWork: false,
+            isStaleDraft: false,
+            structuralValidation: {
+              projection: validationProjection,
+              targets: [],
+            },
+          }) as never
+        }
+        graph={createGraphStub() as never}
+        imports={{} as never}
+        selection={{ kind: "state-node", placeId: "story:queued" }}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.getByText("Factory validation issue")).toBeTruthy();
+    expect(
+      screen.getByText(
+        'work state "story:queued" has no terminal completion path.',
+      ),
+    ).toBeTruthy();
+  });
+
   it("does not render save success inside the graph card", () => {
     render(
       <CurrentActivityGraphSurface
@@ -241,6 +383,7 @@ describe("CurrentActivityGraphSurface", () => {
         }
         graph={createGraphStub() as never}
         imports={{} as never}
+        selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
     );

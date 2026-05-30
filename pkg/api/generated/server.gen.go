@@ -27,16 +27,6 @@ const (
 	Utf8 BundledFileContentEncoding = "utf-8"
 )
 
-// Defines values for CodexSessionTranscriptEntryType.
-const (
-	AssistantMessage CodexSessionTranscriptEntryType = "assistant_message"
-	Reasoning        CodexSessionTranscriptEntryType = "reasoning"
-	SystemEvent      CodexSessionTranscriptEntryType = "system_event"
-	ToolCall         CodexSessionTranscriptEntryType = "tool_call"
-	ToolOutput       CodexSessionTranscriptEntryType = "tool_output"
-	UserMessage      CodexSessionTranscriptEntryType = "user_message"
-)
-
 // Defines values for ErrorFamily.
 const (
 	ErrorFamilyBadRequest          ErrorFamily = "BAD_REQUEST"
@@ -81,6 +71,12 @@ const (
 	FactoryEventTypeWorkRequest               FactoryEventType = "WORK_REQUEST"
 )
 
+// Defines values for FactorySaveMode.
+const (
+	FactorySaveModeReplaceCurrent         FactorySaveMode = "REPLACE_CURRENT"
+	FactorySaveModeUpsertNamedAndActivate FactorySaveMode = "UPSERT_NAMED_AND_ACTIVATE"
+)
+
 // Defines values for FactorySessionTargetRefKind.
 const (
 	FactorySessionTargetRefKindDefault FactorySessionTargetRefKind = "default"
@@ -94,6 +90,36 @@ const (
 	FactoryStateIdle      FactoryState = "IDLE"
 	FactoryStatePaused    FactoryState = "PAUSED"
 	FactoryStateRunning   FactoryState = "RUNNING"
+)
+
+// Defines values for FactoryValidationSeverity.
+const (
+	FactoryValidationSeverityError   FactoryValidationSeverity = "error"
+	FactoryValidationSeverityHint    FactoryValidationSeverity = "hint"
+	FactoryValidationSeverityWarning FactoryValidationSeverity = "warning"
+)
+
+// Defines values for FactoryValidationSubjectLocation.
+const (
+	FactoryValidationSubjectLocationDefinition  FactoryValidationSubjectLocation = "DEFINITION"
+	FactoryValidationSubjectLocationInputs      FactoryValidationSubjectLocation = "INPUTS"
+	FactoryValidationSubjectLocationOnFailure   FactoryValidationSubjectLocation = "ON_FAILURE"
+	FactoryValidationSubjectLocationOnRejection FactoryValidationSubjectLocation = "ON_REJECTION"
+	FactoryValidationSubjectLocationOutputs     FactoryValidationSubjectLocation = "OUTPUTS"
+	FactoryValidationSubjectLocationReference   FactoryValidationSubjectLocation = "REFERENCE"
+	FactoryValidationSubjectLocationStates      FactoryValidationSubjectLocation = "STATES"
+	FactoryValidationSubjectLocationTerminal    FactoryValidationSubjectLocation = "TERMINAL"
+)
+
+// Defines values for FactoryValidationSubjectType.
+const (
+	FactoryValidationSubjectTypeFactory     FactoryValidationSubjectType = "FACTORY"
+	FactoryValidationSubjectTypeResource    FactoryValidationSubjectType = "RESOURCE"
+	FactoryValidationSubjectTypeRoute       FactoryValidationSubjectType = "ROUTE"
+	FactoryValidationSubjectTypeWorkState   FactoryValidationSubjectType = "WORK_STATE"
+	FactoryValidationSubjectTypeWorkType    FactoryValidationSubjectType = "WORK_TYPE"
+	FactoryValidationSubjectTypeWorker      FactoryValidationSubjectType = "WORKER"
+	FactoryValidationSubjectTypeWorkstation FactoryValidationSubjectType = "WORKSTATION"
 )
 
 // Defines values for FactoryWorldRunnerBaselineCapability.
@@ -224,6 +250,16 @@ const (
 	PromptTemplateVariableReferenceCategoryROOT      PromptTemplateVariableReferenceCategory = "ROOT"
 )
 
+// Defines values for ProviderSessionTranscriptEntryType.
+const (
+	AssistantMessage ProviderSessionTranscriptEntryType = "assistant_message"
+	Reasoning        ProviderSessionTranscriptEntryType = "reasoning"
+	SystemEvent      ProviderSessionTranscriptEntryType = "system_event"
+	ToolCall         ProviderSessionTranscriptEntryType = "tool_call"
+	ToolOutput       ProviderSessionTranscriptEntryType = "tool_output"
+	UserMessage      ProviderSessionTranscriptEntryType = "user_message"
+)
+
 // Defines values for RelationType.
 const (
 	RelationTypeDependsOn   RelationType = "DEPENDS_ON"
@@ -336,6 +372,11 @@ const (
 	WorkStateTypeTERMINAL   WorkStateType = "TERMINAL"
 )
 
+// Defines values for WorkTypeHandlingBehavior.
+const (
+	WorkTypeHandlingBehaviorDefault WorkTypeHandlingBehavior = "DEFAULT"
+)
+
 // Defines values for WorkerModelLocality.
 const (
 	WorkerModelLocalityCloud WorkerModelLocality = "CLOUD"
@@ -344,9 +385,12 @@ const (
 
 // Defines values for WorkerModelProvider.
 const (
-	WorkerModelProviderClaude WorkerModelProvider = "CLAUDE"
-	WorkerModelProviderCodex  WorkerModelProvider = "CODEX"
-	WorkerModelProviderCursor WorkerModelProvider = "CURSOR"
+	WorkerModelProviderClaude   WorkerModelProvider = "CLAUDE"
+	WorkerModelProviderCodex    WorkerModelProvider = "CODEX"
+	WorkerModelProviderCursor   WorkerModelProvider = "CURSOR"
+	WorkerModelProviderGemini   WorkerModelProvider = "GEMINI"
+	WorkerModelProviderKiro     WorkerModelProvider = "KIRO"
+	WorkerModelProviderOpenCode WorkerModelProvider = "OPENCODE"
 )
 
 // Defines values for WorkerProvider.
@@ -426,190 +470,6 @@ type ClassificationRoute struct {
 
 	// Outputs One or more authored destinations emitted when this classifier label is selected.
 	Outputs []WorkstationIO `json:"outputs"`
-}
-
-// CodexSessionFunctionCallSummary defines model for CodexSessionFunctionCallSummary.
-type CodexSessionFunctionCallSummary struct {
-	// Arguments Compact argument payload when present.
-	Arguments *string `json:"arguments,omitempty"`
-
-	// CallId Provider call identifier when present in the session stream.
-	CallId *string `json:"callId,omitempty"`
-
-	// Name Function or tool name when present.
-	Name *string `json:"name,omitempty"`
-
-	// Order Chronological order of the function or tool call in the session stream.
-	Order int `json:"order"`
-
-	// Output Compact output payload when present.
-	Output *string `json:"output,omitempty"`
-
-	// Status Result status inferred from the call output or explicit status fields.
-	Status *string `json:"status,omitempty"`
-
-	// TurnIndex One-based execution turn index associated with the call when inferable.
-	TurnIndex *int `json:"turnIndex,omitempty"`
-
-	// Type Raw response item type for the call, such as function_call or custom_tool_call.
-	Type string `json:"type"`
-}
-
-// CodexSessionLineError defines model for CodexSessionLineError.
-type CodexSessionLineError struct {
-	// LineNumber One-based line number of the malformed event-stream record.
-	LineNumber int `json:"lineNumber"`
-
-	// Message Client-safe parse error message for the malformed line.
-	Message string `json:"message"`
-}
-
-// CodexSessionParseSummary defines model for CodexSessionParseSummary.
-type CodexSessionParseSummary struct {
-	// EventCount Number of JSON event records parsed from the session stream.
-	EventCount int `json:"eventCount"`
-
-	// FunctionCalls Function and tool calls observed in chronological order.
-	FunctionCalls []CodexSessionFunctionCallSummary `json:"functionCalls"`
-
-	// LineCount Number of non-empty event-stream lines inspected.
-	LineCount int `json:"lineCount"`
-
-	// MalformedLineCount Number of non-empty lines that could not be parsed as JSON objects.
-	MalformedLineCount int `json:"malformedLineCount"`
-
-	// ParseErrors Line-level parse errors for malformed event-stream records.
-	ParseErrors []CodexSessionLineError `json:"parseErrors"`
-
-	// Reasoning Reasoning entries or summaries observed in chronological order.
-	Reasoning  []CodexSessionReasoningSummary `json:"reasoning"`
-	TokenUsage *CodexSessionTokenUsage        `json:"tokenUsage,omitempty"`
-
-	// Turns Chronological execution turns inferred from turn boundaries and response activity.
-	Turns []CodexSessionTurnSummary `json:"turns"`
-
-	// UnknownEventCount Number of parsed JSON events without a recognized type field.
-	UnknownEventCount int `json:"unknownEventCount"`
-
-	// UnknownEvents Compact list of events with unknown or unsupported type fields.
-	UnknownEvents []CodexSessionUnknownEvent `json:"unknownEvents"`
-}
-
-// CodexSessionReasoningSummary defines model for CodexSessionReasoningSummary.
-type CodexSessionReasoningSummary struct {
-	// Encrypted Whether the reasoning entry only exposed encrypted content.
-	Encrypted *bool `json:"encrypted,omitempty"`
-
-	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
-	EncryptedContent *string `json:"encryptedContent,omitempty"`
-
-	// Order Chronological order of the reasoning entry in the session stream.
-	Order int `json:"order"`
-
-	// SourceType Event or response item type that carried the reasoning entry.
-	SourceType string `json:"sourceType"`
-
-	// Summary Compact reasoning summary when present.
-	Summary *string `json:"summary,omitempty"`
-
-	// Text Reasoning text when plaintext content is present.
-	Text *string `json:"text,omitempty"`
-
-	// TurnIndex One-based execution turn index associated with the reasoning entry when inferable.
-	TurnIndex *int `json:"turnIndex,omitempty"`
-}
-
-// CodexSessionTokenUsage defines model for CodexSessionTokenUsage.
-type CodexSessionTokenUsage struct {
-	CachedInputTokens     *int `json:"cachedInputTokens,omitempty"`
-	InputTokens           *int `json:"inputTokens,omitempty"`
-	OutputTokens          *int `json:"outputTokens,omitempty"`
-	ReasoningOutputTokens *int `json:"reasoningOutputTokens,omitempty"`
-	TotalTokens           *int `json:"totalTokens,omitempty"`
-}
-
-// CodexSessionTranscriptEntry defines model for CodexSessionTranscriptEntry.
-type CodexSessionTranscriptEntry struct {
-	// Arguments Compact tool-call arguments when present.
-	Arguments *string `json:"arguments,omitempty"`
-
-	// CallId Provider tool-call identifier when present.
-	CallId *string `json:"callId,omitempty"`
-
-	// Encrypted Whether the entry only exposed encrypted content instead of plaintext.
-	Encrypted *bool `json:"encrypted,omitempty"`
-
-	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
-	EncryptedContent *string `json:"encryptedContent,omitempty"`
-
-	// LineNumber One-based JSONL line number that produced this transcript entry when applicable.
-	LineNumber *int `json:"lineNumber,omitempty"`
-
-	// Name Tool or function name when present.
-	Name *string `json:"name,omitempty"`
-
-	// Order Stable chronological order of the transcript entry in the session stream.
-	Order int `json:"order"`
-
-	// Output Compact tool output when present.
-	Output *string `json:"output,omitempty"`
-
-	// SourceType Raw provider event or item type that produced this transcript entry.
-	SourceType *string `json:"sourceType,omitempty"`
-
-	// Status Provider or inferred status value when present.
-	Status *string `json:"status,omitempty"`
-
-	// Summary Compact summary text when the provider emits a separate summary channel.
-	Summary *string `json:"summary,omitempty"`
-
-	// Text Plaintext transcript body when present.
-	Text *string `json:"text,omitempty"`
-
-	// Timestamp Provider event timestamp when present in the source session stream.
-	Timestamp *time.Time `json:"timestamp,omitempty"`
-
-	// TurnIndex One-based inferred turn index when the session parser can associate the entry with a turn.
-	TurnIndex *int `json:"turnIndex,omitempty"`
-
-	// Type Canonical transcript entry type used by the dashboard transcript view.
-	Type CodexSessionTranscriptEntryType `json:"type"`
-}
-
-// CodexSessionTranscriptEntryType Canonical transcript entry type used by the dashboard transcript view.
-type CodexSessionTranscriptEntryType string
-
-// CodexSessionTurnSummary defines model for CodexSessionTurnSummary.
-type CodexSessionTurnSummary struct {
-	// EventCount Number of parsed events associated with the turn.
-	EventCount int `json:"eventCount"`
-
-	// FunctionCallCount Number of function or tool calls associated with the turn.
-	FunctionCallCount int `json:"functionCallCount"`
-
-	// Index One-based chronological execution turn index.
-	Index int `json:"index"`
-
-	// ReasoningCount Number of reasoning entries associated with the turn.
-	ReasoningCount int `json:"reasoningCount"`
-
-	// ResponseItemCount Number of response_item records associated with the turn.
-	ResponseItemCount int `json:"responseItemCount"`
-
-	// StartedAt First event timestamp associated with the turn when present.
-	StartedAt *time.Time `json:"startedAt,omitempty"`
-}
-
-// CodexSessionUnknownEvent defines model for CodexSessionUnknownEvent.
-type CodexSessionUnknownEvent struct {
-	// LineNumber One-based line number of the unknown event.
-	LineNumber int `json:"lineNumber"`
-
-	// PayloadType Raw nested payload type when present.
-	PayloadType *string `json:"payloadType,omitempty"`
-
-	// Type Raw top-level event type when present.
-	Type *string `json:"type,omitempty"`
 }
 
 // CommandDiagnostic defines model for CommandDiagnostic.
@@ -708,8 +568,8 @@ type ErrorResponse struct {
 	Family  ErrorFamily `json:"family"`
 	Message string      `json:"message"`
 
-	// Targets Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
-	Targets *[]ErrorTarget `json:"targets,omitempty"`
+	// Targets Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
+	Targets *[]FactoryValidationTarget `json:"targets,omitempty"`
 }
 
 // ErrorResponseCode Stable machine-readable error code.
@@ -853,6 +713,9 @@ type FactoryGuard struct {
 // FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
 
+// FactorySaveMode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+type FactorySaveMode string
+
 // FactorySessionSummary defines model for FactorySessionSummary.
 type FactorySessionSummary struct {
 	FactoryDir string                  `json:"factoryDir"`
@@ -892,6 +755,46 @@ type FactoryStateResponseEventPayload struct {
 
 	// State Lifecycle state of the running factory.
 	State FactoryState `json:"state"`
+}
+
+// FactoryValidationResult defines model for FactoryValidationResult.
+type FactoryValidationResult struct {
+	// Targets Canonical validation targets for the submitted factory definition.
+	Targets []FactoryValidationTarget `json:"targets"`
+}
+
+// FactoryValidationSeverity Validation severity for one factory validation target.
+type FactoryValidationSeverity string
+
+// FactoryValidationSubject defines model for FactoryValidationSubject.
+type FactoryValidationSubject struct {
+	// Id Stable component identifier or name for the affected factory component.
+	Id string `json:"id"`
+
+	// Location Factory-domain location within the subject component referenced by one validation target.
+	Location FactoryValidationSubjectLocation `json:"location"`
+
+	// Type Factory-domain component type referenced by one validation target subject.
+	Type FactoryValidationSubjectType `json:"type"`
+}
+
+// FactoryValidationSubjectLocation Factory-domain location within the subject component referenced by one validation target.
+type FactoryValidationSubjectLocation string
+
+// FactoryValidationSubjectType Factory-domain component type referenced by one validation target subject.
+type FactoryValidationSubjectType string
+
+// FactoryValidationTarget defines model for FactoryValidationTarget.
+type FactoryValidationTarget struct {
+	// Code Stable machine-readable validation rule identifier.
+	Code string `json:"code"`
+
+	// Message Human-readable explanation suitable for dialogs and summaries.
+	Message string `json:"message"`
+
+	// Severity Validation severity for one factory validation target.
+	Severity FactoryValidationSeverity `json:"severity"`
+	Subject  FactoryValidationSubject  `json:"subject"`
 }
 
 // FactoryWorldMutationView defines model for FactoryWorldMutationView.
@@ -1570,8 +1473,11 @@ type ModelSummary struct {
 
 // OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
 type OpenFactorySessionRequest struct {
-	FolderPath string                   `json:"folderPath"`
-	Target     *FactorySessionTargetRef `json:"target,omitempty"`
+	FolderPath string `json:"folderPath"`
+
+	// InitNewFactory When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly.
+	InitNewFactory *bool                    `json:"initNewFactory,omitempty"`
+	Target         *FactorySessionTargetRef `json:"target,omitempty"`
 
 	// ValidateOnly When true, validate the folder and optional target selection without creating a live session.
 	ValidateOnly *bool `json:"validateOnly,omitempty"`
@@ -1579,8 +1485,13 @@ type OpenFactorySessionRequest struct {
 
 // OpenFactorySessionResponse defines model for OpenFactorySessionResponse.
 type OpenFactorySessionResponse struct {
-	Session *FactorySessionSummary  `json:"session,omitempty"`
-	Targets *[]FactorySessionTarget `json:"targets,omitempty"`
+	// FolderPath Absolute resolved session folder path when initsNewFactory is true.
+	FolderPath *string `json:"folderPath,omitempty"`
+
+	// InitsNewFactory When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath.
+	InitsNewFactory *bool                   `json:"initsNewFactory,omitempty"`
+	Session         *FactorySessionSummary  `json:"session,omitempty"`
+	Targets         *[]FactorySessionTarget `json:"targets,omitempty"`
 }
 
 // PaginationContext defines model for PaginationContext.
@@ -1695,12 +1606,48 @@ type ProviderFailureMetadata struct {
 
 // ProviderSessionDetailResponse defines model for ProviderSessionDetailResponse.
 type ProviderSessionDetailResponse struct {
-	Parse           CodexSessionParseSummary      `json:"parse"`
+	Parse           ProviderSessionParseSummary   `json:"parse"`
 	ProviderSession LoadableProviderSessionRef    `json:"providerSession"`
 	Source          ProviderSessionSourceMetadata `json:"source"`
 
 	// Transcript Ordered transcript entries extracted from the provider-session stream.
-	Transcript []CodexSessionTranscriptEntry `json:"transcript"`
+	Transcript []ProviderSessionTranscriptEntry `json:"transcript"`
+}
+
+// ProviderSessionFunctionCallSummary defines model for ProviderSessionFunctionCallSummary.
+type ProviderSessionFunctionCallSummary struct {
+	// Arguments Compact argument payload when present.
+	Arguments *string `json:"arguments,omitempty"`
+
+	// CallId Provider call identifier when present in the session stream.
+	CallId *string `json:"callId,omitempty"`
+
+	// Name Function or tool name when present.
+	Name *string `json:"name,omitempty"`
+
+	// Order Chronological order of the function or tool call in the session stream.
+	Order int `json:"order"`
+
+	// Output Compact output payload when present.
+	Output *string `json:"output,omitempty"`
+
+	// Status Result status inferred from the call output or explicit status fields.
+	Status *string `json:"status,omitempty"`
+
+	// TurnIndex One-based execution turn index associated with the call when inferable.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+
+	// Type Raw response item type for the call, such as function_call or custom_tool_call.
+	Type string `json:"type"`
+}
+
+// ProviderSessionLineError defines model for ProviderSessionLineError.
+type ProviderSessionLineError struct {
+	// LineNumber One-based line number of the malformed event-stream record.
+	LineNumber int `json:"lineNumber"`
+
+	// Message Client-safe parse error message for the malformed line.
+	Message string `json:"message"`
 }
 
 // ProviderSessionMetadata defines model for ProviderSessionMetadata.
@@ -1710,16 +1657,164 @@ type ProviderSessionMetadata struct {
 	Provider *string `json:"provider,omitempty"`
 }
 
+// ProviderSessionParseSummary defines model for ProviderSessionParseSummary.
+type ProviderSessionParseSummary struct {
+	// EventCount Number of JSON event records parsed from the session stream.
+	EventCount int `json:"eventCount"`
+
+	// FunctionCalls Function and tool calls observed in chronological order.
+	FunctionCalls []ProviderSessionFunctionCallSummary `json:"functionCalls"`
+
+	// LineCount Number of non-empty event-stream lines inspected.
+	LineCount int `json:"lineCount"`
+
+	// MalformedLineCount Number of non-empty lines that could not be parsed as JSON objects.
+	MalformedLineCount int `json:"malformedLineCount"`
+
+	// ParseErrors Line-level parse errors for malformed event-stream records.
+	ParseErrors []ProviderSessionLineError `json:"parseErrors"`
+
+	// Reasoning Reasoning entries or summaries observed in chronological order.
+	Reasoning  []ProviderSessionReasoningSummary `json:"reasoning"`
+	TokenUsage *ProviderSessionTokenUsage        `json:"tokenUsage,omitempty"`
+
+	// Turns Chronological execution turns inferred from turn boundaries and response activity.
+	Turns []ProviderSessionTurnSummary `json:"turns"`
+
+	// UnknownEventCount Number of parsed JSON events without a recognized type field.
+	UnknownEventCount int `json:"unknownEventCount"`
+
+	// UnknownEvents Compact list of events with unknown or unsupported type fields.
+	UnknownEvents []ProviderSessionUnknownEvent `json:"unknownEvents"`
+}
+
+// ProviderSessionReasoningSummary defines model for ProviderSessionReasoningSummary.
+type ProviderSessionReasoningSummary struct {
+	// Encrypted Whether the reasoning entry only exposed encrypted content.
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
+	EncryptedContent *string `json:"encryptedContent,omitempty"`
+
+	// Order Chronological order of the reasoning entry in the session stream.
+	Order int `json:"order"`
+
+	// SourceType Event or response item type that carried the reasoning entry.
+	SourceType string `json:"sourceType"`
+
+	// Summary Compact reasoning summary when present.
+	Summary *string `json:"summary,omitempty"`
+
+	// Text Reasoning text when plaintext content is present.
+	Text *string `json:"text,omitempty"`
+
+	// TurnIndex One-based execution turn index associated with the reasoning entry when inferable.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+}
+
 // ProviderSessionSourceMetadata defines model for ProviderSessionSourceMetadata.
 type ProviderSessionSourceMetadata struct {
 	// ModifiedAt Filesystem modification time when available.
 	ModifiedAt *time.Time `json:"modifiedAt,omitempty"`
 
-	// RelativePath Path to the loaded session file relative to the configured Codex sessions root.
+	// RelativePath Path to the loaded session file relative to the configured provider sessions root.
 	RelativePath string `json:"relativePath"`
 
 	// SizeBytes Size of the loaded session file in bytes.
 	SizeBytes int64 `json:"sizeBytes"`
+}
+
+// ProviderSessionTokenUsage defines model for ProviderSessionTokenUsage.
+type ProviderSessionTokenUsage struct {
+	CachedInputTokens     *int `json:"cachedInputTokens,omitempty"`
+	InputTokens           *int `json:"inputTokens,omitempty"`
+	OutputTokens          *int `json:"outputTokens,omitempty"`
+	ReasoningOutputTokens *int `json:"reasoningOutputTokens,omitempty"`
+	TotalTokens           *int `json:"totalTokens,omitempty"`
+}
+
+// ProviderSessionTranscriptEntry defines model for ProviderSessionTranscriptEntry.
+type ProviderSessionTranscriptEntry struct {
+	// Arguments Compact tool-call arguments when present.
+	Arguments *string `json:"arguments,omitempty"`
+
+	// CallId Provider tool-call identifier when present.
+	CallId *string `json:"callId,omitempty"`
+
+	// Encrypted Whether the entry only exposed encrypted content instead of plaintext.
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
+	EncryptedContent *string `json:"encryptedContent,omitempty"`
+
+	// LineNumber One-based JSONL line number that produced this transcript entry when applicable.
+	LineNumber *int `json:"lineNumber,omitempty"`
+
+	// Name Tool or function name when present.
+	Name *string `json:"name,omitempty"`
+
+	// Order Stable chronological order of the transcript entry in the session stream.
+	Order int `json:"order"`
+
+	// Output Compact tool output when present.
+	Output *string `json:"output,omitempty"`
+
+	// SourceType Raw provider event or item type that produced this transcript entry.
+	SourceType *string `json:"sourceType,omitempty"`
+
+	// Status Provider or inferred status value when present.
+	Status *string `json:"status,omitempty"`
+
+	// Summary Compact summary text when the provider emits a separate summary channel.
+	Summary *string `json:"summary,omitempty"`
+
+	// Text Plaintext transcript body when present.
+	Text *string `json:"text,omitempty"`
+
+	// Timestamp Provider event timestamp when present in the source session stream.
+	Timestamp *time.Time `json:"timestamp,omitempty"`
+
+	// TurnIndex One-based inferred turn index when the session parser can associate the entry with a turn.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+
+	// Type Canonical transcript entry type used by the dashboard transcript view.
+	Type ProviderSessionTranscriptEntryType `json:"type"`
+}
+
+// ProviderSessionTranscriptEntryType Canonical transcript entry type used by the dashboard transcript view.
+type ProviderSessionTranscriptEntryType string
+
+// ProviderSessionTurnSummary defines model for ProviderSessionTurnSummary.
+type ProviderSessionTurnSummary struct {
+	// EventCount Number of parsed events associated with the turn.
+	EventCount int `json:"eventCount"`
+
+	// FunctionCallCount Number of function or tool calls associated with the turn.
+	FunctionCallCount int `json:"functionCallCount"`
+
+	// Index One-based chronological execution turn index.
+	Index int `json:"index"`
+
+	// ReasoningCount Number of reasoning entries associated with the turn.
+	ReasoningCount int `json:"reasoningCount"`
+
+	// ResponseItemCount Number of response_item records associated with the turn.
+	ResponseItemCount int `json:"responseItemCount"`
+
+	// StartedAt First event timestamp associated with the turn when present.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+}
+
+// ProviderSessionUnknownEvent defines model for ProviderSessionUnknownEvent.
+type ProviderSessionUnknownEvent struct {
+	// LineNumber One-based line number of the unknown event.
+	LineNumber int `json:"lineNumber"`
+
+	// PayloadType Raw nested payload type when present.
+	PayloadType *string `json:"payloadType,omitempty"`
+
+	// Type Raw top-level event type when present.
+	Type *string `json:"type,omitempty"`
 }
 
 // Relation defines model for Relation.
@@ -1857,6 +1952,15 @@ type RunnerSelectionSource string
 type SafeWorkDiagnostics struct {
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
+}
+
+// SaveFactoryForSessionRequest Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
+type SaveFactoryForSessionRequest struct {
+	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
+	Factory Factory `json:"factory"`
+
+	// Mode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+	Mode *FactorySaveMode `json:"mode,omitempty"`
 }
 
 // ScriptExecutionOutcome Result category returned by one public script execution boundary.
@@ -2062,7 +2166,26 @@ type SubmitWorkRequest struct {
 
 // SubmitWorkResponse defines model for SubmitWorkResponse.
 type SubmitWorkResponse struct {
+	// Accepted False when the same requestId was already accepted (idempotent replay).
+	Accepted bool `json:"accepted"`
+
+	// Name Submitted work display name.
+	Name *string `json:"name,omitempty"`
+
+	// RequestId Stable request identifier assigned during normalization.
+	RequestId string `json:"requestId"`
+
+	// SessionId Factory session that accepted the submit (~default for POST /work).
+	SessionId *string `json:"sessionId,omitempty"`
+
+	// TraceId Trace identifier for the submitted work request batch.
 	TraceId string `json:"traceId"`
+
+	// WorkId Primary work identifier for single-work submits (batch-<requestId>-<name> when omitted).
+	WorkId *string `json:"workId,omitempty"`
+
+	// WorkTypeName Configured work type name for the submitted work.
+	WorkTypeName *string `json:"workTypeName,omitempty"`
 }
 
 // SubmitWorkTextItem Ordered inline text submission item.
@@ -2124,8 +2247,16 @@ type Transition struct {
 
 // UpsertWorkRequestResponse defines model for UpsertWorkRequestResponse.
 type UpsertWorkRequestResponse struct {
-	RequestId string `json:"requestId"`
-	TraceId   string `json:"traceId"`
+	RequestId string                           `json:"requestId"`
+	TraceId   string                           `json:"traceId"`
+	Works     []UpsertWorkRequestSubmittedWork `json:"works"`
+}
+
+// UpsertWorkRequestSubmittedWork defines model for UpsertWorkRequestSubmittedWork.
+type UpsertWorkRequestSubmittedWork struct {
+	Name         string `json:"name"`
+	WorkId       string `json:"workId"`
+	WorkTypeName string `json:"workTypeName"`
 }
 
 // WallClock defines model for WallClock.
@@ -2405,12 +2536,18 @@ type WorkTextContentPart struct {
 
 // WorkType A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.
 type WorkType struct {
+	// HandlingBehavior Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
+	HandlingBehavior *[]WorkTypeHandlingBehavior `json:"handlingBehavior,omitempty"`
+
 	// Name Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.
 	Name string `json:"name"`
 
 	// States Lifecycle states available for work items of this type.
 	States []WorkState `json:"states"`
 }
+
+// WorkTypeHandlingBehavior Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
+type WorkTypeHandlingBehavior string
 
 // Worker A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
 type Worker struct {
@@ -2443,6 +2580,9 @@ type Worker struct {
 
 	// Name Worker name referenced by Workstation.worker.
 	Name string `json:"name"`
+
+	// OpenCodeAgent Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
+	OpenCodeAgent *string `json:"openCodeAgent,omitempty"`
 
 	// Operations Provider-agnostic model operations that this worker can execute, including named input and output slots.
 	Operations *[]ModelOperation `json:"operations,omitempty"`
@@ -2519,6 +2659,9 @@ type Workstation struct {
 
 	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
 	OnRejection *[]WorkstationIO `json:"onRejection,omitempty"`
+
+	// OpenCodeAgent Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
+	OpenCodeAgent *string `json:"openCodeAgent,omitempty"`
 
 	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
 	Operation *ModelOperationName `json:"operation,omitempty"`
@@ -2647,6 +2790,15 @@ type StateName = string
 // StateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
 type StateType = WorkStateType
 
+// WorkListName defines model for WorkListName.
+type WorkListName = string
+
+// WorkListTraceId defines model for WorkListTraceId.
+type WorkListTraceId = string
+
+// WorkListWorkTypeName defines model for WorkListWorkTypeName.
+type WorkListWorkTypeName = string
+
 // WorkOrTokenID defines model for WorkOrTokenID.
 type WorkOrTokenID = string
 
@@ -2690,6 +2842,15 @@ type ListWorkBySessionIdParams struct {
 
 	// SortBy Optional list-work sort field. Use state.type to order by current work state type.
 	SortBy *ListWorkBySessionIdParamsSortBy `form:"sortBy,omitempty" json:"sortBy,omitempty"`
+
+	// Name Optional work name filter. Matches when the work name contains this value, case-insensitively.
+	Name *WorkListName `form:"name,omitempty" json:"name,omitempty"`
+
+	// WorkTypeName Optional work type name filter. Matches when workTypeName equals this value exactly.
+	WorkTypeName *WorkListWorkTypeName `form:"workTypeName,omitempty" json:"workTypeName,omitempty"`
+
+	// TraceId Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
+	TraceId *WorkListTraceId `form:"traceId,omitempty" json:"traceId,omitempty"`
 }
 
 // ListWorkBySessionIdParamsSortBy defines parameters for ListWorkBySessionId.
@@ -2723,19 +2884,25 @@ type ListWorkParams struct {
 
 	// SortBy Optional list-work sort field. Use state.type to order by current work state type.
 	SortBy *ListWorkParamsSortBy `form:"sortBy,omitempty" json:"sortBy,omitempty"`
+
+	// Name Optional work name filter. Matches when the work name contains this value, case-insensitively.
+	Name *WorkListName `form:"name,omitempty" json:"name,omitempty"`
+
+	// WorkTypeName Optional work type name filter. Matches when workTypeName equals this value exactly.
+	WorkTypeName *WorkListWorkTypeName `form:"workTypeName,omitempty" json:"workTypeName,omitempty"`
+
+	// TraceId Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
+	TraceId *WorkListTraceId `form:"traceId,omitempty" json:"traceId,omitempty"`
 }
 
 // ListWorkParamsSortBy defines parameters for ListWork.
 type ListWorkParamsSortBy string
 
-// CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
-type CreateFactoryJSONRequestBody = Factory
-
 // OpenFactorySessionJSONRequestBody defines body for OpenFactorySession for application/json ContentType.
 type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
 
 // SaveCurrentFactoryBySessionIdJSONRequestBody defines body for SaveCurrentFactoryBySessionId for application/json ContentType.
-type SaveCurrentFactoryBySessionIdJSONRequestBody = Factory
+type SaveCurrentFactoryBySessionIdJSONRequestBody = SaveFactoryForSessionRequest
 
 // ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplateBySessionId for application/json ContentType.
 type ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody = PromptTemplateValidationRequest
@@ -2748,6 +2915,9 @@ type UpsertWorkRequestBySessionIdJSONRequestBody = WorkRequest
 
 // StageSubmitWorkFileBySessionIdJSONRequestBody defines body for StageSubmitWorkFileBySessionId for application/json ContentType.
 type StageSubmitWorkFileBySessionIdJSONRequestBody = StageSubmitWorkFileRequest
+
+// ValidateFactoryJSONRequestBody defines body for ValidateFactory for application/json ContentType.
+type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
@@ -3446,9 +3616,6 @@ type ServerInterface interface {
 	// Stream factory events
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
-	// Create factory
-	// (POST /factories)
-	CreateFactory(w http.ResponseWriter, r *http.Request)
 	// List live factory sessions
 	// (GET /factory-sessions)
 	ListFactorySessions(w http.ResponseWriter, r *http.Request)
@@ -3464,7 +3631,7 @@ type ServerInterface interface {
 	// Get current factory for one session
 	// (GET /factory-sessions/{session_id}/factory)
 	GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Save current factory for one session
+	// Save factory for one session
 	// (PUT /factory-sessions/{session_id}/factory)
 	SaveCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get workstation prompt-template contract
@@ -3488,9 +3655,12 @@ type ServerInterface interface {
 	// Stage one submit-work file for one session
 	// (POST /factory-sessions/{session_id}/work/staged-files)
 	StageSubmitWorkFileBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Get work token for one session
+	// Get work for one session
 	// (GET /factory-sessions/{session_id}/work/{id})
 	GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, id WorkOrTokenID)
+	// Validate factory definition
+	// (POST /factory-validations)
+	ValidateFactory(w http.ResponseWriter, r *http.Request)
 	// List discovered models
 	// (GET /models)
 	ListModels(w http.ResponseWriter, r *http.Request)
@@ -3521,7 +3691,7 @@ type ServerInterface interface {
 	// Stage one submit-work file
 	// (POST /work/staged-files)
 	StageSubmitWorkFile(w http.ResponseWriter, r *http.Request)
-	// Get work token
+	// Get work
 	// (GET /work/{id})
 	GetWork(w http.ResponseWriter, r *http.Request, id WorkOrTokenID)
 }
@@ -3540,20 +3710,6 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEvents(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateFactory operation middleware
-func (siw *ServerInterfaceWrapper) CreateFactory(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateFactory(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3841,6 +3997,30 @@ func (siw *ServerInterfaceWrapper) ListWorkBySessionId(w http.ResponseWriter, r 
 		return
 	}
 
+	// ------------- Optional query parameter "name" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "name", r.URL.Query(), &params.Name)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "workTypeName" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "workTypeName", r.URL.Query(), &params.WorkTypeName)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workTypeName", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "traceId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "traceId", r.URL.Query(), &params.TraceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "traceId", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListWorkBySessionId(w, r, sessionId, params)
 	}))
@@ -3961,6 +4141,20 @@ func (siw *ServerInterfaceWrapper) GetWorkBySessionId(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetWorkBySessionId(w, r, sessionId, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ValidateFactory operation middleware
+func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ValidateFactory(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4185,6 +4379,30 @@ func (siw *ServerInterfaceWrapper) ListWork(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// ------------- Optional query parameter "name" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "name", r.URL.Query(), &params.Name)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "workTypeName" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "workTypeName", r.URL.Query(), &params.WorkTypeName)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workTypeName", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "traceId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "traceId", r.URL.Query(), &params.TraceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "traceId", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListWork(w, r, params)
 	}))
@@ -4389,8 +4607,6 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/events", wrapper.GetEvents).Methods("GET")
 
-	r.HandleFunc(options.BaseURL+"/factories", wrapper.CreateFactory).Methods("POST")
-
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.ListFactorySessions).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.OpenFactorySession).Methods("POST")
@@ -4418,6 +4634,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/staged-files", wrapper.StageSubmitWorkFileBySessionId).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/{id}", wrapper.GetWorkBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
 

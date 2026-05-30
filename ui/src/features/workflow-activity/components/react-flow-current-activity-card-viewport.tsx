@@ -20,6 +20,7 @@ import {
   type FactoryGraphEditorMenuAction,
   FactoryGraphEditorToolbar,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
@@ -34,8 +35,6 @@ import {
   GraphDropOverlay,
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
-
-const CURRENT_ACTIVITY_LEGEND_CLASS = "absolute left-4 right-4 top-4 z-10";
 
 function CurrentActivityEditorToolbar(props: {
   activeTool: "add" | "connect" | "delete" | null;
@@ -110,9 +109,16 @@ function buildCurrentActivityIsValidConnection({
       return false;
     }
 
+    const sourceProgressOutcomeWorkstation = (
+      sourceNode.data as {
+        progressOutcomeRouteWorkstation?: WorkstationProgressOutcomeRouteContext;
+      }
+    ).progressOutcomeRouteWorkstation;
+
     return isValidFactoryGraphConnection({
       sourceAnchorId: connection.sourceHandle,
       sourceNodeKind,
+      sourceWorkstation: sourceProgressOutcomeWorkstation,
       targetAnchorId: connection.targetHandle,
       targetNodeKind,
     });
@@ -228,7 +234,7 @@ export function CurrentActivityGraphViewport({
   return (
     <div className="relative min-h-96 flex-1">
       <DashboardFlowAxisLegend
-        className={CURRENT_ACTIVITY_LEGEND_CLASS}
+        className="absolute left-4 right-4 top-4 z-10"
         defaultExpanded={false}
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(locale)}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems(locale)}

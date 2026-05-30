@@ -35,12 +35,6 @@ export async function verifyCurrentSelectionPromptHint({
     ),
     "Prompt autocomplete contract summary",
   );
-  await expectVisible(
-    currentSelection.getByText(
-      "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
-    ),
-    "Prompt autocomplete inline guidance",
-  );
   if (viewport.label === "desktop") {
     await verifyPromptEditorAutocompleteCompletion({
       expectVisible,
@@ -48,12 +42,17 @@ export async function verifyCurrentSelectionPromptHint({
     });
   }
 
-  const removedHelpButtonCount = await currentSelection
-    .getByRole("button", { name: /prompt variable help/i })
-    .count();
-  if (removedHelpButtonCount > 0) {
-    throw new Error("Prompt variable help disclosure should be removed.");
-  }
+  const expandPromptVariableHelpButton = currentSelection.getByRole("button", {
+    name: "Open prompt variable help",
+  });
+  await expandPromptVariableHelpButton.focus();
+  await page.keyboard.press("Enter");
+  await expectVisible(
+    currentSelection.getByText(
+      "Suggestions appear only while typing inside {{ ... }}.",
+    ),
+    "Prompt autocomplete inline guidance",
+  );
 
   await expectVisible(
     currentSelection.getByRole("heading", { name: "Available variables" }),

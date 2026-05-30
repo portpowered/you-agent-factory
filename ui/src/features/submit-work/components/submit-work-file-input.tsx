@@ -1,7 +1,8 @@
-import { useState, type DragEvent } from "react";
+import { type DragEvent, useState } from "react";
 
 import { Button } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
+import { submitWorkItemRowTypeLabel } from "../lib/submit-work-item-type-label";
 import type { SubmitWorkMessages } from "../messages/submit-work";
 import type { SubmitWorkDraftFileItem } from "./submit-work-card";
 
@@ -11,6 +12,7 @@ export function FileSubmissionItemEditor({
   helpTextClassName,
   inputID,
   item,
+  locale,
   messages,
   onStageFileItems,
   validationTextClassName,
@@ -20,14 +22,20 @@ export function FileSubmissionItemEditor({
   helpTextClassName: string;
   inputID: string;
   item: SubmitWorkDraftFileItem;
+  locale?: string;
   messages: SubmitWorkMessages;
   onStageFileItems: (files: File[]) => void;
   validationTextClassName: string;
 }) {
   const [isDragActive, setIsDragActive] = useState(false);
-  const typeLabel = messages.addItemOptionLabel(item.type);
+  const typeLabel = submitWorkItemRowTypeLabel(item.type, locale);
   const inputLabel = messages.fileItemInputLabel(typeLabel);
-  const stateDescription = fileItemDescription(messages, item, typeLabel, isDragActive);
+  const stateDescription = fileItemDescription(
+    messages,
+    item,
+    typeLabel,
+    isDragActive,
+  );
   const canStageFiles = !disabled;
 
   return (
@@ -57,7 +65,9 @@ export function FileSubmissionItemEditor({
           isDragActive
             ? "border-af-accent-border bg-af-accent-surface"
             : "border-af-border bg-af-surface",
-          disabled ? "cursor-not-allowed text-af-text-disabled" : "cursor-pointer",
+          disabled
+            ? "cursor-not-allowed text-af-text-disabled"
+            : "cursor-pointer",
         )}
         htmlFor={inputID}
         onDragEnter={(event) => {
@@ -73,7 +83,10 @@ export function FileSubmissionItemEditor({
           }
           event.preventDefault();
           const nextTarget = event.relatedTarget;
-          if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+          if (
+            nextTarget instanceof Node &&
+            event.currentTarget.contains(nextTarget)
+          ) {
             return;
           }
           setIsDragActive(false);
@@ -118,7 +131,10 @@ export function FileSubmissionItemEditor({
           </Button>
           {(item.fileName ?? "").length > 0 ? (
             <span className={helpTextClassName}>
-              {messages.fileItemMetadata(item.fileName ?? "", item.mediaType ?? "")}
+              {messages.fileItemMetadata(
+                item.fileName ?? "",
+                item.mediaType ?? "",
+              )}
             </span>
           ) : null}
         </div>
@@ -143,7 +159,10 @@ function fileItemDescription(
     case "staging":
       return messages.fileItemStaging(item.fileName ?? typeLabel);
     case "ready":
-      return messages.fileItemReady(item.fileName ?? typeLabel, item.mediaType ?? "");
+      return messages.fileItemReady(
+        item.fileName ?? typeLabel,
+        item.mediaType ?? "",
+      );
     case "failure":
       return messages.fileItemFailure(typeLabel);
     default:

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/timework"
 )
@@ -51,83 +52,6 @@ func ruleInputTypes(cfg *interfaces.FactoryConfig) []Finding {
 				Message: fmt.Sprintf("unknown input type %q (supported: %q)", it.Type, interfaces.InputKindDefault),
 				Rule:    "input-type-type",
 			})
-		}
-	}
-	return findings
-}
-
-// --- Rule: place reference validation ---
-
-func rulePlaceReferences(cfg *interfaces.FactoryConfig) []Finding {
-	var findings []Finding
-	validPlaces := buildValidPlaces(cfg)
-
-	for wi, ws := range cfg.Workstations {
-		for ii, input := range ws.Inputs {
-			if !validPlaces[mapToID(input)] {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     fmt.Sprintf("workstations[%d](%s).inputs[%d]", wi, ws.Name, ii),
-					Message:  fmt.Sprintf("references non-existent state %q of work type %q", input.StateName, input.WorkTypeName),
-					Rule:     "workstation-input-ref",
-				})
-			}
-		}
-		for oi, output := range ws.Outputs {
-			if !validPlaces[mapToID(output)] {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     fmt.Sprintf("workstations[%d](%s).outputs[%d]", wi, ws.Name, oi),
-					Message:  fmt.Sprintf("references non-existent state %q of work type %q", output.StateName, output.WorkTypeName),
-					Rule:     "workstation-output-ref",
-				})
-			}
-		}
-		for oi, route := range ws.OnContinue {
-			if validPlaces[mapToID(route)] {
-				continue
-			}
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     fmt.Sprintf("workstations[%d](%s).on_continue[%d]", wi, ws.Name, oi),
-				Message:  fmt.Sprintf("references non-existent state %q of work type %q", route.StateName, route.WorkTypeName),
-				Rule:     "workstation-on-continue-ref",
-			})
-		}
-		for oi, route := range ws.OnRejection {
-			if validPlaces[mapToID(route)] {
-				continue
-			}
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     fmt.Sprintf("workstations[%d](%s).on_rejection[%d]", wi, ws.Name, oi),
-				Message:  fmt.Sprintf("references non-existent state %q of work type %q", route.StateName, route.WorkTypeName),
-				Rule:     "workstation-on-rejection-ref",
-			})
-		}
-		for oi, route := range ws.OnFailure {
-			if validPlaces[mapToID(route)] {
-				continue
-			}
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     fmt.Sprintf("workstations[%d](%s).on_failure[%d]", wi, ws.Name, oi),
-				Message:  fmt.Sprintf("references non-existent state %q of work type %q", route.StateName, route.WorkTypeName),
-				Rule:     "workstation-on-failure-ref",
-			})
-		}
-		for ri, route := range ws.ClassificationRoutes {
-			for oi, output := range route.Outputs {
-				if validPlaces[mapToID(output)] {
-					continue
-				}
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     fmt.Sprintf("workstations[%d](%s).classification_routes[%d](%s).outputs[%d]", wi, ws.Name, ri, route.Label, oi),
-					Message:  fmt.Sprintf("references non-existent state %q of work type %q", output.StateName, output.WorkTypeName),
-					Rule:     "workstation-classification-route-ref",
-				})
-			}
 		}
 	}
 	return findings
@@ -778,6 +702,123 @@ func validatePeerInputReference(path, fieldName string, guardType interfaces.Gua
 		})
 	}
 	return findings
+}
+
+// WithRequireDefaultHandlingWorkType enables validation that exactly one work type
+// declares handlingBehavior DEFAULT. Use this for simplified you run --factory flows.
+func WithRequireDefaultHandlingWorkType() ConfigValidatorOption {
+	return func(cv *ConfigValidator) {
+		cv.requireDefaultHandlingWorkType = true
+	}
+}
+
+func (cv *ConfigValidator) ruleWorkTypeHandlingBehavior(cfg *interfaces.FactoryConfig) []Finding {
+	if cfg == nil {
+		return nil
+	}
+
+	var findings []Finding
+	defaultHandlingCount := 0
+	for workTypeIndex, workType := range cfg.WorkTypes {
+		basePath := fmt.Sprintf("workTypes[%d](%s)", workTypeIndex, workType.Name)
+		seenBehaviors := make(map[string]bool, len(workType.HandlingBehavior))
+		workTypeDeclaresDefault := false
+		for behaviorIndex, behavior := range workType.HandlingBehavior {
+			behaviorPath := fmt.Sprintf("%s.handlingBehavior[%d]", basePath, behaviorIndex)
+			canonical := interfaces.StrictPublicWorkTypeHandlingBehavior(behavior)
+			if canonical == "" {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     behaviorPath,
+					Message:  fmt.Sprintf("unsupported handlingBehavior value %q", behavior),
+					Rule:     "work-type-handling-behavior-value",
+				})
+				continue
+			}
+			if seenBehaviors[canonical] {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     behaviorPath,
+					Message:  fmt.Sprintf("duplicate handlingBehavior value %q on the same work type", canonical),
+					Rule:     "work-type-handling-behavior-duplicate",
+				})
+				continue
+			}
+			seenBehaviors[canonical] = true
+			if canonical == interfaces.WorkTypeHandlingBehaviorDefault {
+				workTypeDeclaresDefault = true
+			}
+		}
+		if workTypeDeclaresDefault {
+			defaultHandlingCount++
+		}
+	}
+
+	if defaultHandlingCount > 1 {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     "workTypes",
+			Message:  fmt.Sprintf("expected at most one work type with handlingBehavior DEFAULT, found %d", defaultHandlingCount),
+			Rule:     "work-type-handling-behavior-unique-default",
+		})
+	}
+	if cv.requireDefaultHandlingWorkType && defaultHandlingCount == 0 {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     "workTypes",
+			Message:  "expected exactly one work type with handlingBehavior DEFAULT for simplified prompt runs",
+			Rule:     "work-type-handling-behavior-required-default",
+		})
+	}
+	return findings
+}
+
+// CanonicalStructuralFindings returns structural validation findings for a factory
+// definition through the canonical pkg/factory/validation entrypoint.
+func CanonicalStructuralFindings(cfg *interfaces.FactoryConfig) []Finding {
+	if cfg == nil {
+		return nil
+	}
+	return canonicalTargetsToFindings(validation.Validate(cfg).Targets)
+}
+
+func canonicalTargetsToFindings(targets []validation.Target) []Finding {
+	if len(targets) == 0 {
+		return nil
+	}
+	findings := make([]Finding, 0, len(targets))
+	for _, target := range targets {
+		path := target.Path
+		if path == "" {
+			path = target.Subject.ID
+		}
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     path,
+			Message:  target.Message,
+			Rule:     target.Code,
+		})
+	}
+	return findings
+}
+
+func ruleCanonicalStructuralValidation(cfg *interfaces.FactoryConfig) []Finding {
+	return CanonicalStructuralFindings(cfg)
+}
+
+func validateBlockingFactoryLoad(cfg *interfaces.FactoryConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	result := validation.ValidateBlockingLoad(cfg)
+	if len(result.Targets) == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"%w: factory topology contains invalid graph references (%d blocking validation targets)",
+		ErrInvalidNamedFactory,
+		len(result.Targets),
+	)
 }
 
 // --- Rule: resource usage validation ---

@@ -96,6 +96,9 @@ fields:
 | `.TargetWorkID` | WorkID of the related work item |
 | `.RequiredState` | State the target must be in (for example `"complete"`) |
 
+See [Relationships](relationships.md) for batch relation authoring and
+[Guards](guards.md) for parent-aware guard fields on consumed inputs.
+
 ## Tags and Project Resolution
 
 Tags are a `map[string]string`. Use `index` to access them safely:
@@ -239,6 +242,8 @@ Input {{ $i }}: {{ $input.WorkID }} - {{ $input.Payload }}
 
 ## Related
 
+- [Guards](guards.md)
+- [Relationships](relationships.md)
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
 - [Workstations](workstations.md)

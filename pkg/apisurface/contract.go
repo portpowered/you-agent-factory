@@ -11,33 +11,58 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
-// APISurface is the runtime seam consumed by the Agent Factory API server.
-// It resolves requests against the service-owned current runtime so activation
-// can swap the active runtime without leaving API reads pinned to startup
-// state.
-type APISurface interface {
-	factory.APIFactory
-	CreateNamedFactory(ctx context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error)
-	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
-	SaveCurrentFactory(ctx context.Context, request factoryapi.Factory) (factoryapi.Factory, error)
+// ModelAPI is the model catalog and direct-invocation seam for API handlers and
+// bounded test doubles.
+type ModelAPI interface {
 	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
 	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
 	InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (ModelInvocationResult, error)
 	PullModel(ctx context.Context, modelName string) (ModelPullResult, error)
 }
 
+// FactorySaveAPI is the session-scoped factory definition read and persist seam.
+type FactorySaveAPI interface {
+	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
+	SaveFactoryForSession(
+		ctx context.Context,
+		sessionID string,
+		mode factoryapi.FactorySaveMode,
+		request factoryapi.Factory,
+	) (factoryapi.Factory, error)
+	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
+}
+
+// SessionAPI is the factory-session inventory and lifecycle seam.
+type SessionAPI interface {
+	ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error)
+	OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
+	CloseFactorySession(ctx context.Context, sessionID string) error
+}
+
+// WorkAPI is the session-scoped work submission and runtime observability seam.
+type WorkAPI interface {
+	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
+	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
+	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+}
+
+// APISurface is the runtime seam consumed by the Agent Factory API server.
+// It resolves requests against the service-owned current runtime so activation
+// can swap the active runtime without leaving API reads pinned to startup
+// state.
+type APISurface interface {
+	factory.APIFactory
+	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
+	ModelAPI
+}
+
 // SessionAPISurface extends APISurface with explicit per-session routing while
 // preserving the legacy unscoped compatibility behavior through APISurface.
 type SessionAPISurface interface {
 	APISurface
-	ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error)
-	OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
-	CloseFactorySession(ctx context.Context, sessionID string) error
-	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
-	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
-	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
-	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
-	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
+	SessionAPI
+	FactorySaveAPI
+	WorkAPI
 }
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
@@ -120,7 +145,7 @@ type ModelPullResult struct {
 // map back to form fields, nodes, edges, or save-level messages.
 type TopologyValidationError struct {
 	Message string
-	Targets []factoryapi.ErrorTarget
+	Targets []factoryapi.FactoryValidationTarget
 }
 
 func (e *TopologyValidationError) Error() string {
@@ -137,13 +162,13 @@ func (e *TopologyValidationError) Is(target error) bool {
 	return target == ErrInvalidNamedFactory
 }
 
-func NewTopologyValidationError(message string, targets []factoryapi.ErrorTarget) *TopologyValidationError {
+func NewTopologyValidationError(message string, targets []factoryapi.FactoryValidationTarget) *TopologyValidationError {
 	if message == "" {
 		message = "factory topology validation failed"
 	}
 	return &TopologyValidationError{
 		Message: message,
-		Targets: append([]factoryapi.ErrorTarget(nil), targets...),
+		Targets: append([]factoryapi.FactoryValidationTarget(nil), targets...),
 	}
 }
 

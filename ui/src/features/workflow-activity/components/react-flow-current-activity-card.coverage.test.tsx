@@ -229,6 +229,7 @@ interface ReactFlowCurrentActivityCardProps {
   now: number;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (workID: string) => void;
+  onSelectWorker: (workerName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   selection: CurrentActivitySelection | null;
   snapshot: typeof semanticWorkflowDashboardSnapshot;
@@ -241,6 +242,7 @@ function createProps(
     now: Date.parse("2026-04-08T12:00:00Z"),
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
+    onSelectWorker: vi.fn(),
     onSelectWorkstation: vi.fn(),
     selection: null,
     snapshot: semanticWorkflowDashboardSnapshot,
@@ -303,6 +305,13 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       editorMode: false,
       handleConnectionAnchorClick: vi.fn(),
       pendingConnectionSource: null,
+      structuralValidation: {
+        projection: {
+          handleErrorsByAnchorId: new Map(),
+          nodeErrorsByNodeId: new Map(),
+        },
+        targets: [],
+      },
     };
     const { result } = renderHook(() =>
       useCurrentActivityGraphViewModel({

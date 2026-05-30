@@ -208,6 +208,7 @@ export function SubmitWorkCard({
             <SubmissionItemsList
               controlsDisabled={controlsDisabled}
               draft={draft}
+              locale={locale}
               messages={messages}
               onItemTextChange={onItemTextChange}
               onRemoveItem={onRemoveItem}

@@ -172,7 +172,7 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.SetWorkingDirectory(t, dir)
 	configureExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(workers.ModelProviderClaude, "test-claude-model"))
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(interfaces.ModelProviderClaude, "test-claude-model"))
 
 	writeExecutionTemplateSeed(t, dir)
 
@@ -206,7 +206,7 @@ func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *t
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.SetWorkingDirectory(t, dir)
 	configureExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(workers.ModelProviderCodex, "test-codex-model"))
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(interfaces.ModelProviderCodex, "test-codex-model"))
 
 	writeExecutionTemplateSeed(t, dir)
 
@@ -235,7 +235,7 @@ func TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates(t *
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.SetWorkingDirectory(t, dir)
 	configureCursorExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(workers.ModelProviderCursor, "test-cursor-model"))
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(interfaces.ModelProviderCursor, "test-cursor-model"))
 
 	writeExecutionTemplateSeed(t, dir)
 
@@ -253,8 +253,8 @@ func TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates(t *
 		HasNoTokenInPlace("task:failed")
 
 	req := runner.LastRequest()
-	if req.Command != string(workers.ModelProviderCursor) {
-		t.Fatalf("command = %q, want %q", req.Command, workers.ModelProviderCursor)
+	if req.Command != string(interfaces.ModelProviderCursor) {
+		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	wantWorkDir := support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch")
 	assertCommandArgs(t, req, []string{

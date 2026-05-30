@@ -3,6 +3,8 @@ import type {
   DashboardActiveExecution,
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import { validationNodeErrorForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type {
   GraphLayout,
   PositionedEdge,
@@ -19,8 +21,10 @@ import type {
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
 import {
+  authoredProgressOutcomeSourceHandlesByWorkstationNodeId,
   buildSemanticGraphHandles,
   type CurrentActivityEditorState,
+  resolveWorkstationConnectionAnchorContext,
   supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
 
@@ -73,11 +77,13 @@ function canonicalResourceAliasNodeId(
 ): string | null {
   const workStateMatch = /^work-state:([^:]+):(.+)$/.exec(nodeId);
   if (workStateMatch && resourceNames.has(workStateMatch[1] ?? "")) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `resource:${workStateMatch[1]}`;
   }
 
   const placeMatch = /^place:([^:]+):(.+)$/.exec(nodeId);
   if (placeMatch && resourceNames.has(placeMatch[1] ?? "")) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `resource:${placeMatch[1]}`;
   }
 
@@ -125,10 +131,12 @@ function activeTokenLabel(
 }
 
 function workstationGraphNodeId(nodeId: string): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `workstation:${nodeId}`;
 }
 
 function placeGraphNodeId(placeId: string): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `place:${placeId}`;
 }
 
@@ -338,6 +346,7 @@ interface BuildCurrentActivityNodesInput {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectWorker: (workerName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   editor?: CurrentActivityEditorState;
   selection: CurrentActivitySelection | null;
@@ -345,17 +354,11 @@ interface BuildCurrentActivityNodesInput {
   storedNodePositions: GraphNodePositions;
 }
 
-function buildPlaceNode(
+function buildPlaceNodeShell(
   positionedNode: PositionedPlaceNode,
   input: BuildCurrentActivityNodesInput,
-): CurrentActivityNode {
-  const place = positionedNode.place;
-  const position = nodePosition(
-    positionedNode.nodeId,
-    { x: positionedNode.x, y: positionedNode.y },
-    input.storedNodePositions,
-  );
-  const basePlaceNode = {
+) {
+  return {
     className: "border-0 bg-transparent p-0 text-af-text",
     draggable: true,
     height: positionedNode.height,
@@ -363,35 +366,75 @@ function buildPlaceNode(
     initialHeight: positionedNode.height,
     initialWidth: positionedNode.width,
     measured: { height: positionedNode.height, width: positionedNode.width },
-    position,
+    position: nodePosition(
+      positionedNode.nodeId,
+      { x: positionedNode.x, y: positionedNode.y },
+      input.storedNodePositions,
+    ),
     width: positionedNode.width,
   };
-  const factoryGraphNode = resolveFactoryGraphPlaceNode(place);
-  const basePlaceData = {
-    activeFlow: input.activeGraphHighlights.activePlaceNodeIds.has(
-      positionedNode.nodeId,
-    ),
-    activeItemLabels: input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
-    factoryGraphNodeId: factoryGraphNode?.nodeId ?? positionedNode.nodeId,
-    handles: factoryGraphNode
-      ? buildSemanticGraphHandles({
-          editor: input.editor,
-          locale: input.locale,
-          nodeId: factoryGraphNode.nodeId,
-          nodeKind: factoryGraphNode.kind,
-        })
-      : [],
-    locale: input.locale,
-    muted:
-      place.kind !== "resource" &&
-      input.activeGraphHighlights.hasActiveFlow &&
-      !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
-    selectedStateNode:
-      input.selection?.kind === "state-node" &&
-      input.selection.placeId === place.place_id,
-    tokenCount:
-      input.snapshot.runtime.place_token_counts?.[place.place_id] ?? 0,
+}
+
+function buildPlaceNodeData(
+  positionedNode: PositionedPlaceNode,
+  input: BuildCurrentActivityNodesInput,
+  factoryGraphNode: ReturnType<typeof resolveFactoryGraphPlaceNode>,
+) {
+  const place = positionedNode.place;
+  const factoryGraphNodeId = factoryGraphNode?.nodeId ?? positionedNode.nodeId;
+  const validationNodeError = input.editor?.validationProjection
+    ? validationNodeErrorForNode(
+        input.editor.validationProjection,
+        factoryGraphNodeId,
+      )
+    : undefined;
+
+  return {
+    factoryGraphNodeId,
+    basePlaceData: {
+      activeFlow: input.activeGraphHighlights.activePlaceNodeIds.has(
+        positionedNode.nodeId,
+      ),
+      activeItemLabels:
+        input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
+      factoryGraphNodeId,
+      handles: factoryGraphNode
+        ? buildSemanticGraphHandles({
+            editor: input.editor,
+            locale: input.locale,
+            nodeId: factoryGraphNode.nodeId,
+            nodeKind: factoryGraphNode.kind,
+            validationProjection: input.editor?.validationProjection,
+          })
+        : [],
+      locale: input.locale,
+      muted:
+        place.kind !== "resource" &&
+        input.activeGraphHighlights.hasActiveFlow &&
+        !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
+      selectedStateNode:
+        input.selection?.kind === "state-node" &&
+        input.selection.placeId === place.place_id,
+      tokenCount:
+        input.snapshot.runtime.place_token_counts?.[place.place_id] ?? 0,
+      validationError: validationNodeError !== undefined,
+      validationMessage: validationNodeError?.message,
+    },
+    place,
   };
+}
+
+function buildPlaceNode(
+  positionedNode: PositionedPlaceNode,
+  input: BuildCurrentActivityNodesInput,
+): CurrentActivityNode {
+  const factoryGraphNode = resolveFactoryGraphPlaceNode(positionedNode.place);
+  const basePlaceNode = buildPlaceNodeShell(positionedNode, input);
+  const { basePlaceData, factoryGraphNodeId, place } = buildPlaceNodeData(
+    positionedNode,
+    input,
+    factoryGraphNode,
+  );
 
   if (place.kind === "work_state") {
     return {
@@ -417,14 +460,20 @@ function buildPlaceNode(
   }
 
   if (factoryGraphNode?.kind === "worker") {
+    const workerName =
+      place.state_value ?? factoryGraphNode.nodeId.replace(/^worker:/, "");
     return {
       ...basePlaceNode,
       data: {
         ...basePlaceData,
         kind: "worker" as const,
+        onSelectWorker: input.onSelectWorker,
         place,
+        selectedWorker:
+          input.selection?.kind === "worker" &&
+          input.selection.workerName === workerName,
       },
-      selectable: false,
+      selectable: true,
       type: "worker",
     };
   }
@@ -435,7 +484,15 @@ function buildPlaceNode(
       data: {
         ...basePlaceData,
         kind: "work-type" as const,
+        onSelectGraphNode: input.editor?.editorMode
+          ? input.onSelectWorkstation
+          : undefined,
         place,
+        selectedGraphNode:
+          input.editor?.editorMode === true &&
+          input.selection?.kind === "node" &&
+          (input.selection.nodeId === factoryGraphNodeId ||
+            input.selection.nodeId === place.state_value),
       },
       selectable: false,
       type: "workType",
@@ -457,6 +514,7 @@ function buildPlaceNode(
 function buildWorkstationNode(
   positionedNode: PositionedWorkstationNode,
   input: BuildCurrentActivityNodesInput,
+  authoredProgressOutcomeSourceHandleIds?: ReadonlySet<string>,
 ): CurrentActivityNode | null {
   const workstation =
     input.snapshot.topology.workstation_nodes_by_id[
@@ -469,6 +527,15 @@ function buildWorkstationNode(
   if (!workstation) {
     return null;
   }
+
+  const factory = input.factoryDefinition ?? input.snapshot.factory;
+  const connectionAnchorContext = resolveWorkstationConnectionAnchorContext(
+    factory,
+    positionedNode.nodeId,
+  );
+  const progressOutcomeRouteWorkstation:
+    | WorkstationProgressOutcomeRouteContext
+    | undefined = connectionAnchorContext?.workstation;
 
   const executions =
     input.activeExecutionsByWorkstationNodeID[workstation.node_id] ?? [];
@@ -488,12 +555,16 @@ function buildWorkstationNode(
       executions,
       factoryGraphNodeId: positionedNode.nodeId,
       handles: buildSemanticGraphHandles({
+        authoredProgressOutcomeSourceHandleIds,
+        connectionAnchorContext,
         editor: input.editor,
         locale: input.locale,
         nodeId: positionedNode.nodeId,
         nodeKind: "workstation",
+        validationProjection: input.editor?.validationProjection,
       }),
       kind: "workstation",
+      progressOutcomeRouteWorkstation,
       locale: input.locale,
       muted:
         input.activeGraphHighlights.hasActiveFlow &&
@@ -538,6 +609,7 @@ export function buildCurrentActivityNodes({
   now,
   onSelectStateNode,
   onSelectWorkID,
+  onSelectWorker,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -545,6 +617,12 @@ export function buildCurrentActivityNodes({
 }: BuildCurrentActivityNodesInput): CurrentActivityNode[] {
   const nextNodes: CurrentActivityNode[] = [];
   const resourceAliases = resourceAliasNodeIds(graphLayout.nodes);
+  const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+  const authoredProgressOutcomeSourceHandlesByNodeId =
+    authoredProgressOutcomeSourceHandlesByWorkstationNodeId(
+      visibleGraphEdges,
+      graphLayout.nodes,
+    );
   const input = {
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
@@ -556,6 +634,7 @@ export function buildCurrentActivityNodes({
     now,
     onSelectStateNode,
     onSelectWorkID,
+    onSelectWorker,
     onSelectWorkstation,
     selection,
     snapshot,
@@ -577,6 +656,7 @@ export function buildCurrentActivityNodes({
     const workstationNode = buildWorkstationNode(
       positionedNode as PositionedWorkstationNode,
       input,
+      authoredProgressOutcomeSourceHandlesByNodeId.get(positionedNode.nodeId),
     );
     if (workstationNode) {
       nextNodes.push(workstationNode);

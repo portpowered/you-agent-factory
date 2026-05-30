@@ -22,6 +22,7 @@
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
     "src/**/*.stories.tsx",
-    "src/testing/app-shell-test-utils.tsx"
+    "src/testing/app-shell-test-utils.tsx",
+    "src/features/bento/components/dashboard-bento-story-shared.tsx"
   ]
 }

@@ -11,12 +11,14 @@ complete customer-facing contract.
 
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
-| `authoring-factories` | Practical factory authoring workflow, runnable examples, mock workers, and replay | [Author factories](authoring-factories.md) |
-| `config` | Split layout and `factory.json` placement | [Factory JSON and work configuration](work.md) and [Author factories](authoring-factories.md) |
-| `work` | Work types, states, routing, resources, and portability fields | [Factory JSON and work configuration](work.md) |
+| `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
+| `config` | `factory.json` topology, split layout, and portability | [Config](config.md) and [Author factories](authoring-factories.md) |
+| `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
+| `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
+| `work` | Submitted work: `POST /work`, tags, and batch cross-links | [Submitted work](work.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
-| `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Factory JSON and work configuration](work.md) |
+| `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
@@ -52,9 +54,10 @@ around that invocation.
 
 ## Canonical Concept Owners
 
-- [Factory JSON and work configuration](work.md) owns work types, work states,
-  top-level `factory.json`, routing behavior, runtime resources, and
-  portability fields.
+- [Config](config.md) owns work types, work states, top-level `factory.json`,
+  routing behavior, runtime resources, and portability fields.
+- [Submitted work](work.md) owns `POST /work`, submitted-work tags, and batch
+  cross-links.
 - [Workstations](workstations.md) owns workstation kinds, route fields, runtime
   step behavior, prompt/runtime fields, and workstation-scoped execution
   settings.
@@ -76,16 +79,22 @@ Use these canonical concept owners when you need the current contract.
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces, the
   full variable inventory, and the JSON-versus-Markdown quoting rules.
-- [Author factories](authoring-factories.md) keeps factory sequencing,
-  mock-worker checks, replay recording guidance, reusable
-  [`docs/examples/`](../examples/README.md) inputs, and run commands.
+- [Mock workers](mock-workers.md) owns `--with-mock-workers`, the
+  `mockWorkers` JSON contract, selection fields, and `runType` outcomes.
+- [Record and replay](record-replay.md) owns default recording, generated
+  artifact paths, `--record`, `--replay`, `--no-record`, and incompatible flag
+  combinations.
+- [Author factories](authoring-factories.md) keeps factory sequencing, quick-start
+  run commands, reusable [`docs/examples/`](../examples/README.md) inputs, and
+  links to the dedicated mock-worker and record/replay guides.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
   placement, and prompt-authoring examples.
 
 ## Related
 
 - [Package docs index](../README.md)
-- [Factory JSON and work configuration](work.md)
+- [Config](config.md)
+- [Submitted work](work.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Resources](resources.md)

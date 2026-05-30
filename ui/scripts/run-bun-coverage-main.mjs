@@ -9,7 +9,10 @@ import {
   mainCoverageReportsDir,
   reactFlowCoverageTestPath,
 } from "./bun-coverage-config.mjs";
-import { getMainCoveredMaxWorkers } from "./ui-coverage-runner.mjs";
+import {
+  getMainCoveredMaxWorkers,
+  parseUiCoverageShard,
+} from "./ui-coverage-runner.mjs";
 
 const uiRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -86,12 +89,43 @@ function buildBrowserLaneBatches() {
   return batches;
 }
 
+function buildMainCoverageWorkItems() {
+  return [
+    { nodeLane: true, batch: { label: "node-lane", paths: NODE_LANE_PATHS } },
+    ...buildBrowserLaneBatches().map((batch) => ({ nodeLane: false, batch })),
+  ];
+}
+
+function selectShardWorkItems(shard) {
+  const workItems = buildMainCoverageWorkItems();
+  if (!shard) {
+    return workItems;
+  }
+
+  return workItems.filter(
+    (_item, workItemIndex) => workItemIndex % shard.total === shard.index - 1,
+  );
+}
+
+function resolveMainCoverageReportsDir(shard) {
+  if (!shard) {
+    return mainCoverageReportsDir;
+  }
+
+  return `${mainCoverageReportsDir}/main-shard-${shard.index}`;
+}
+
 function runBunCoverageBatch(
   bunCommand,
   batch,
-  { nodeLane = false, parallelWorkers, spawn = spawnSync } = {},
+  {
+    nodeLane = false,
+    parallelWorkers,
+    reportsDir = mainCoverageReportsDir,
+    spawn = spawnSync,
+  } = {},
 ) {
-  const coverageDir = `${mainCoverageReportsDir}/${sanitizeBatchId(batch.label)}`;
+  const coverageDir = `${reportsDir}/${sanitizeBatchId(batch.label)}`;
   const pathIgnorePatterns = nodeLane
     ? mainCoveragePathIgnorePatterns
     : browserCoveragePathIgnorePatterns;
@@ -144,28 +178,34 @@ function resolveBunCommand() {
 
 export function runMainCoveredBunPass(options = {}) {
   const bunCommand = options.bunCommand ?? resolveBunCommand();
+  const env = options.env ?? process.env;
+  const shard = parseUiCoverageShard(env);
   const parallelWorkers =
-    options.mainCoveredMaxWorkers ?? getMainCoveredMaxWorkers(options.env);
+    options.mainCoveredMaxWorkers ??
+    getMainCoveredMaxWorkers(env, { shard: Boolean(shard) });
   const spawn = options.spawn ?? spawnSync;
+  const reportsDir = resolveMainCoverageReportsDir(shard);
+  const workItems = selectShardWorkItems(shard);
 
-  console.log("[ui-coverage] Main covered Bun pass node lane:", NODE_LANE_PATHS.join(", "));
-  const nodeResult = runBunCoverageBatch(
-    bunCommand,
-    { label: "node-lane", paths: NODE_LANE_PATHS },
-    { nodeLane: true, parallelWorkers, spawn },
-  );
-  if (nodeResult.status !== 0) {
-    return nodeResult.status ?? 1;
+  if (shard) {
+    console.log(
+      `[ui-coverage] Main covered Bun shard ${shard.label}: ${workItems.length} work item(s)`,
+    );
   }
 
-  for (const batch of buildBrowserLaneBatches()) {
-    console.log("[ui-coverage] Main covered Bun pass browser lane:", batch.label);
-    const browserResult = runBunCoverageBatch(bunCommand, batch, {
+  for (const { nodeLane, batch } of workItems) {
+    console.log(
+      `[ui-coverage] Main covered Bun pass ${nodeLane ? "node" : "browser"} lane:`,
+      batch.label,
+    );
+    const result = runBunCoverageBatch(bunCommand, batch, {
+      nodeLane,
       parallelWorkers,
+      reportsDir,
       spawn,
     });
-    if (browserResult.status !== 0) {
-      return browserResult.status ?? 1;
+    if (result.status !== 0) {
+      return result.status ?? 1;
     }
   }
 

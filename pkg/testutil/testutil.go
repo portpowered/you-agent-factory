@@ -14,8 +14,8 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // seedFileCounter provides unique filenames across concurrent test invocations.
@@ -130,8 +130,34 @@ func CopyFixtureDir(t *testing.T, srcDir string) string {
 	if err != nil {
 		t.Fatalf("CopyFixtureDir: failed to copy %s: %v", srcDir, err)
 	}
+	normalizeFactoryJSONInDir(t, dst)
 
 	return dst
+}
+
+func normalizeFactoryJSONInDir(t *testing.T, dir string) {
+	t.Helper()
+
+	path := filepath.Join(dir, interfaces.FactoryConfigFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return
+		}
+		t.Fatalf("normalizeFactoryJSONInDir: read %s: %v", path, err)
+	}
+	expanded, err := factoryconfig.NewFactoryConfigMapper().Expand(data)
+	if err != nil {
+		t.Fatalf("normalizeFactoryJSONInDir: expand factory config: %v", err)
+	}
+	factoryvalidation.NormalizeFixtureConfig(expanded)
+	marshaled, err := factoryconfig.MarshalCanonicalFactoryConfig(expanded)
+	if err != nil {
+		t.Fatalf("normalizeFactoryJSONInDir: marshal factory config: %v", err)
+	}
+	if err := os.WriteFile(path, marshaled, 0o644); err != nil {
+		t.Fatalf("normalizeFactoryJSONInDir: write %s: %v", path, err)
+	}
 }
 
 // WriteSeedFile writes a JSON payload as a seed file in the fixture directory's
@@ -267,6 +293,7 @@ func ScaffoldFactoryDir(t *testing.T, cfg *interfaces.FactoryConfig) string {
 	t.Helper()
 	dir := t.TempDir()
 	clone := *cfg
+	factoryvalidation.NormalizeFixtureConfig(&clone)
 	if strings.TrimSpace(clone.Name) == "" {
 		if strings.TrimSpace(clone.Project) != "" {
 			clone.Name = clone.Project
@@ -318,7 +345,7 @@ func UpdateFactoryJSON(t *testing.T, dir string, mutate func(map[string]any)) {
 func AppendFactoryInferenceThrottleGuard(
 	t *testing.T,
 	dir string,
-	provider workers.ModelProvider,
+	provider interfaces.ModelProvider,
 	model string,
 	refreshWindow time.Duration,
 ) {
@@ -363,6 +390,7 @@ func PipelineConfig(stages int, workerName string) *interfaces.FactoryConfig {
 			WorkerTypeName: workerName,
 			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: prev}},
 			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: next}},
+			OnFailure:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		})
 		prev = next
 	}
@@ -371,6 +399,7 @@ func PipelineConfig(stages int, workerName string) *interfaces.FactoryConfig {
 		WorkerTypeName: workerName,
 		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: prev}},
 		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
+		OnFailure:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 	})
 
 	return &interfaces.FactoryConfig{

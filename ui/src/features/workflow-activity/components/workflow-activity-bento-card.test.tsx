@@ -111,6 +111,7 @@ function renderWorkflowActivityBentoCard({
         widgetInstanceID={widgetInstanceID}
         onSelectWorkID={vi.fn()}
         onSelectStateNode={vi.fn()}
+        onSelectWorker={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />
     </QueryClientProvider>,
@@ -138,6 +139,7 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
           widgetInstanceID="work-graph::primary"
           onSelectWorkID={vi.fn()}
           onSelectStateNode={vi.fn()}
+          onSelectWorker={vi.fn()}
           onSelectWorkstation={vi.fn()}
         />
         <WorkflowActivityBentoCard
@@ -149,6 +151,7 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
           widgetInstanceID="work-graph::instance-1"
           onSelectWorkID={vi.fn()}
           onSelectStateNode={vi.fn()}
+          onSelectWorker={vi.fn()}
           onSelectWorkstation={vi.fn()}
         />
       </div>
@@ -183,8 +186,29 @@ function registerWorkflowActivityBentoCardTestSetup() {
   });
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: bento card layout regressions stay grouped for header, graph shell, and editor entry.
 describe("WorkflowActivityBentoCard", () => {
   registerWorkflowActivityBentoCardTestSetup();
+
+  it("keeps flex-safe layout classes on the graph panel shell around the viewport", async () => {
+    const locale = "zh-CN";
+    const messages = getWorkflowActivityShellMessages(locale);
+    renderWorkflowActivityBentoCard({ locale });
+
+    const viewport = await screen.findByRole("region", {
+      name: messages.viewportLabel,
+    });
+    const workflowSection = viewport.closest<HTMLElement>(
+      "section[aria-labelledby]",
+    );
+    const graphPanelShell = workflowSection?.parentElement;
+
+    expect(graphPanelShell?.tagName).toBe("SECTION");
+    expect(graphPanelShell?.className).toContain("relative");
+    expect(graphPanelShell?.className).toContain("h-full");
+    expect(graphPanelShell?.className).toContain("min-h-0");
+    expect(graphPanelShell?.className).toContain("min-w-0");
+  });
 
   it("wraps the React Flow graph without a floating inspector", async () => {
     const locale = "zh-CN";
@@ -201,9 +225,11 @@ describe("WorkflowActivityBentoCard", () => {
     expect(
       within(graphCard).getByRole("button", { name: "进入工厂图编辑器" }),
     ).toBeTruthy();
+    expect(graphHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(graphHeader?.className).toContain("cursor-grab");
     expect(
-      within(graphCard).getByRole("button", { name: "Move 工厂图" }).className,
-    ).toContain("h-10");
+      within(graphCard).queryByRole("button", { name: "Move 工厂图" }),
+    ).toBeNull();
     expect(within(graphCard).getByText("观察模式")).toBeTruthy();
     expect(graphHeader?.textContent).toContain("观察模式");
     expect(

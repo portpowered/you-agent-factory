@@ -4,7 +4,7 @@ import { describe, expect, it } from "bun:test";
 import {
   baselineSnapshot,
   registerAppDashboardTestLifecycle,
-  renderApp,
+  renderAppWithDashboardShell,
   terminalSnapshot,
 } from "./testing/app-shell-test-utils";
 import {
@@ -37,7 +37,7 @@ describe("App timeline reconstruction flows", () => {
   registerAppDashboardTestLifecycle();
 
   it("disables the timeline control until at least two ticks are available", async () => {
-    renderApp({ snapshot: historicalTimelineSnapshot });
+    await renderAppWithDashboardShell({ snapshot: historicalTimelineSnapshot });
 
     const slider = await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
@@ -54,7 +54,7 @@ describe("App timeline reconstruction flows", () => {
   });
 
   it("renders a fixed historical tick from the timeline slider", async () => {
-    renderApp({
+    await renderAppWithDashboardShell({
       snapshot: terminalSnapshot,
       timelineSnapshots: [historicalTimelineSnapshot, terminalSnapshot],
     });
@@ -80,7 +80,7 @@ describe("App timeline reconstruction flows", () => {
   });
 
   it("returns from a fixed timeline tick to the current factory view", async () => {
-    renderApp({
+    await renderAppWithDashboardShell({
       snapshot: terminalSnapshot,
       timelineSnapshots: [historicalTimelineSnapshot, terminalSnapshot],
     });
@@ -108,7 +108,7 @@ describe("App timeline reconstruction flows", () => {
   });
 
   it("renders the updated dashboard header formatting through the app shell", async () => {
-    renderApp({
+    await renderAppWithDashboardShell({
       snapshot: terminalSnapshot,
       timelineSnapshots: [historicalTimelineSnapshot, terminalSnapshot],
     });
@@ -146,7 +146,7 @@ describe("App timeline reconstruction flows", () => {
   });
 
   it("renders totals and selection panels from the selected event tick", async () => {
-    renderApp({
+    await renderAppWithDashboardShell({
       snapshot: baselineSnapshot,
       timelineEvents: selectedTickTimelineEvents,
     });

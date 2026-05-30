@@ -12,13 +12,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
 
 // portos:func-length-exception owner=agent-factory reason=generated-factory-serialization-fixture review=2026-07-18 removal=split-fixture-builder-before-next-factory-serialization-change
 // pkgmaintcheck:ignore-cyclomatic-complexity this generated-factory artifact test keeps split-definition embedding assertions together on the public contract seam.
 func TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory(t *testing.T) {
 	factoryDir := t.TempDir()
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "customer-project",
 		"id":   "customer-project",
 		"workTypes": []map[string]any{{
@@ -26,6 +27,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGenerat
 			"states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
 				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
 			},
 		}},
 		"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
@@ -36,6 +38,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGenerat
 			"worker":    "executor",
 			"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "story", "state": "failed"}},
 			"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
 			"stopWords": []string{"BLOCKED"},
 		}},
@@ -102,7 +105,7 @@ Fallback body.
 
 func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOnlyMaps(t *testing.T) {
 	factoryDir := t.TempDir()
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",

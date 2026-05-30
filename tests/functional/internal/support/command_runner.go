@@ -54,7 +54,7 @@ func (r *RecordingCommandRunner) LastRequest() workers.CommandRequest {
 	return workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(r.requests[len(r.requests)-1]))
 }
 
-func BuildModelWorkerConfig(provider workers.ModelProvider, model string) string {
+func BuildModelWorkerConfig(provider interfaces.ModelProvider, model string) string {
 	return fmt.Sprintf(`---
 type: MODEL_WORKER
 model: %s

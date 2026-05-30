@@ -101,8 +101,18 @@ vi.mock("../../provider-session-detail/public", () => ({
   ),
 }));
 
-vi.mock("../../import", () => ({
+vi.mock("../../import/public", () => ({
   DashboardImportPreviewDialog: () => null,
+}));
+
+vi.mock("../../import/hooks/use-factory-import-activation-target", () => ({
+  useFactoryImportActivationTarget: () => ({
+    createTargetFactoryName: null,
+    currentFactoryName: null,
+    existingNamedFactoryNames: [],
+    isLoading: false,
+    replacesExistingCreateTarget: false,
+  }),
 }));
 
 vi.mock("../../submit-work/public", () => ({
@@ -119,10 +129,16 @@ vi.mock("../../terminal-work/public", () => ({
   }) => <section>{headerAction}Terminal work card</section>,
 }));
 
-vi.mock("../../dashboard/state/dashboardSessionStore", () => ({
-  useDashboardSessionStore: (
-    selector: (state: { selectedSessionID: string }) => unknown,
-  ) => selector({ selectedSessionID: "session-1" }),
+vi.mock("../../dashboard/session/dashboard-session-provider", () => ({
+  useDashboardSession: () => ({
+    eventsPath: "/factory-sessions/session-1/events",
+    factoryPath: "/factory-sessions/session-1/factory",
+    isDefault: false,
+    isPaused: false,
+    rawSessionID: "session-1",
+    sessionID: "session-1",
+    workPath: "/factory-sessions/session-1/work",
+  }),
 }));
 
 vi.mock("../../timeline/state/factoryTimelineStore", () => ({
@@ -163,23 +179,29 @@ vi.mock("../../timeline/state/factoryTimelineStore", () => ({
     }),
 }));
 
-vi.mock("../../trace-drilldown/public", () => ({
-  TraceDrilldownWidget: ({
-    headerAction,
-  }: {
-    headerAction?: React.ReactNode;
-  }) => <section>{headerAction}Trace card</section>,
+vi.mock("../../trace-drilldown/hooks/useTraceDrilldown", () => ({
   useTraceDrilldown: () => ({
     selectedTrace: null,
     traceGridState: { status: "empty" },
   }),
 }));
 
+vi.mock("../../trace-drilldown/public", () => ({
+  TraceDrilldownWidget: ({
+    headerAction,
+  }: {
+    headerAction?: React.ReactNode;
+  }) => <section>{headerAction}Trace card</section>,
+}));
+
+vi.mock("../../work-outcome/hooks/useWorkOutcomeChart", () => ({
+  useWorkOutcomeChart: () => ({ status: "empty" }),
+}));
+
 vi.mock("../../work-outcome/public", () => ({
   WorkOutcomeWidget: ({ headerAction }: { headerAction?: React.ReactNode }) => (
     <section>{headerAction}Work outcome card</section>
   ),
-  useWorkOutcomeChart: () => ({ status: "empty" }),
 }));
 
 vi.mock("../../work-totals/public", () => ({
@@ -204,15 +226,18 @@ vi.mock("../../workflow-activity/public", () => ({
   ),
 }));
 
-vi.mock("../../workflow-activity/hooks/current-activity-import-controller", () => ({
-  useCurrentActivityImportController: () => ({
-    activationState: { status: "idle" },
-    activateImport: vi.fn(),
-    clearActivationError: vi.fn(),
-    closeImportPreview: vi.fn(),
-    importPreviewState: { status: "idle" },
+vi.mock(
+  "../../workflow-activity/hooks/current-activity-import-controller",
+  () => ({
+    useCurrentActivityImportController: () => ({
+      activationState: { status: "idle" },
+      activateImport: vi.fn(),
+      clearActivationError: vi.fn(),
+      closeImportPreview: vi.fn(),
+      importPreviewState: { status: "idle" },
+    }),
   }),
-}));
+);
 
 vi.mock("../state/dashboardBentoStore", () => ({
   useDashboardBentoStore: (

@@ -128,13 +128,33 @@ func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*int
 }
 
 func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *interfaces.Token {
+	return listWorkTokenWithTraces(id, workID, "", placeID, workTypeID, "", "", now)
+}
+
+func listWorkTokenWithTraces(id, workID, name, placeID, workTypeID, traceID, currentChainingTraceID string, now time.Time) *interfaces.Token {
+	color := interfaces.TokenColor{
+		WorkID:                 workID,
+		WorkTypeID:             workTypeID,
+		TraceID:                traceID,
+		CurrentChainingTraceID: currentChainingTraceID,
+	}
+	if name != "" {
+		color.Name = name
+	}
+	return listWorkTokenWithColor(id, workID, placeID, workTypeID, now, color)
+}
+
+func listWorkTokenWithColor(id, workID, placeID, workTypeID string, now time.Time, color interfaces.TokenColor) *interfaces.Token {
+	if color.WorkID == "" {
+		color.WorkID = workID
+	}
+	if color.WorkTypeID == "" {
+		color.WorkTypeID = workTypeID
+	}
 	return &interfaces.Token{
-		ID:      id,
-		PlaceID: placeID,
-		Color: interfaces.TokenColor{
-			WorkID:     workID,
-			WorkTypeID: workTypeID,
-		},
+		ID:        id,
+		PlaceID:   placeID,
+		Color:     color,
 		CreatedAt: now,
 		EnteredAt: now,
 		History: interfaces.TokenHistory{
@@ -318,17 +338,12 @@ func stringPointerForAPITest(value string) *string {
 	return &value
 }
 
-func engineStateWithRuntimeStatus(status interfaces.RuntimeStatus) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		RuntimeStatus: status,
-		Marking: petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
-		},
-	}
-}
-
 func validNamedFactoryBody(name, workType string) string {
 	return fmt.Sprintf(`{"name":%q,%s`, name, strings.TrimPrefix(namedFactoryPayloadJSON(name, workType), "{"))
+}
+
+func saveFactoryForSessionRequestBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
 }
 
 func namedFactoryPayloadJSON(project, workType string) string {
@@ -462,4 +477,57 @@ func decodeJSONResponse[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 
 func encodeNextToken(token string) string {
 	return base64.StdEncoding.EncodeToString([]byte(token))
+}
+
+func decodeListWorkPage(t *testing.T, srv *Server, path string) factoryapi.ListWorkResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s status = %d, want 200: %s", path, rec.Code, rec.Body.String())
+	}
+	return decodeJSONResponse[factoryapi.ListWorkResponse](t, rec)
+}
+
+func assertListedWorkIDs(t *testing.T, works []factoryapi.Work, want []string) {
+	t.Helper()
+	if len(works) != len(want) {
+		t.Fatalf("results = %d, want %d: %#v", len(works), len(want), works)
+	}
+	for i, wantWorkID := range want {
+		if got := stringValue(works[i].WorkId); got != wantWorkID {
+			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, works)
+		}
+	}
+}
+
+type upsertValidationFailureCase struct {
+	name    string
+	path    string
+	body    string
+	factory *testutil.MockFactory
+	wantMsg string
+}
+
+func runUpsertValidationFailureCases(t *testing.T, cases []upsertValidationFailureCase) {
+	t.Helper()
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mf := tc.factory
+			if mf == nil {
+				mf = &testutil.MockFactory{}
+			}
+			mf.Marking = &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}
+			srv := newTestServer(mf)
+
+			rec := upsertWorkRequest(t, srv, tc.path, tc.body)
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", tc.wantMsg)
+			if len(mf.Submitted) != 0 {
+				t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+			}
+		})
+	}
 }

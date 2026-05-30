@@ -9,9 +9,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   buildTimeoutMs,
   browserScenarioTimeoutMs,
+  defaultFactorySessionID,
   exportCoverImagePath,
   expectNoBrowserErrors,
-  initialEditableFactoryDefinitionVersion,
   loadReplayLines,
   openBrowserPage,
   startBrowserPreview,
@@ -278,7 +278,8 @@ describe.sequential("factory graph editor browser integration", () => {
   it(
     "exports the current factory as a downloadable PNG without uncaught browser exceptions",
     async () => {
-      const activationRequests = [];
+      const postFactoryActivations = [];
+      const sessionFactoryPutRequests = [];
       const replayCoverageReport = buildReplayCoverageReport();
       const pngCoverageScenario = replayCoverageReport.scenarios.find(
         (scenario) => scenario.id === "pngRoundTrip",
@@ -288,7 +289,10 @@ describe.sequential("factory graph editor browser integration", () => {
         currentFactory: exportFactoryDefinition,
         eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
         onActivateFactory: async (value) => {
-          activationRequests.push(value);
+          postFactoryActivations.push(value);
+        },
+        onSaveCurrentFactory: async ({ body, sessionID }) => {
+          sessionFactoryPutRequests.push({ body, sessionID });
         },
       });
       const browserPage = await openBrowserPage({ acceptDownloads: true });
@@ -480,23 +484,33 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(await importDialog.textContent()).toContain(exportName);
         expect(await importDialog.textContent()).toContain(download.filename);
         expect(await importDialog.textContent()).toContain(
-          "Activating the import switches the current dashboard factory to the embedded authored definition from this PNG.",
+          "Choose whether to replace the factory already current in this session or create a new named factory from the embedded PNG definition.",
         );
 
         await importDialog
           .getByRole("button", { name: "Activate factory" })
           .click();
+        await expect
+          .poll(async () => sessionFactoryPutRequests.length, {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe(1);
         await importDialog.waitFor({
           state: "hidden",
           timeout: uiInteractionTimeoutMs,
         });
-        expect(activationRequests).toEqual([
-          {
-            ...exportFactoryDefinition,
-            name: exportName,
-            version: initialEditableFactoryDefinitionVersion,
+        expect(postFactoryActivations).toEqual([]);
+        expect(sessionFactoryPutRequests).toHaveLength(1);
+        expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
+          defaultFactorySessionID,
+        );
+        expect(sessionFactoryPutRequests[0]?.body).toMatchObject({
+          ...exportFactoryDefinition,
+          name: exportFactoryDefinition.name,
+          version: {
+            logical: "2",
           },
-        ]);
+        });
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,
@@ -651,6 +665,7 @@ describe.sequential("factory graph editor browser integration", () => {
                 },
               ],
             },
+            mode: "REPLACE_CURRENT",
             sessionID: "~default",
           },
         ]);

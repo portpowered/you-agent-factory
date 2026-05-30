@@ -2,7 +2,6 @@ package maptests
 
 import (
 	"context"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +21,7 @@ func TestConfigMapping_SimplePath(t *testing.T) {
 				States: []interfaces.StateConfig{
 					{Name: "init", Type: interfaces.StateTypeInitial},
 					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 		},
@@ -34,6 +34,7 @@ func TestConfigMapping_SimplePath(t *testing.T) {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
+				OnFailure: []interfaces.IOConfig{{StateName: "failed", WorkTypeName: "task"}},
 			},
 		},
 	}
@@ -42,6 +43,7 @@ func TestConfigMapping_SimplePath(t *testing.T) {
 		Places: map[string]*petri.Place{
 			"task:init":     {ID: "task:init", TypeID: "task", State: "init"},
 			"task:complete": {ID: "task:complete", TypeID: "task", State: "complete"},
+			"task:failed":   {ID: "task:failed", TypeID: "task", State: "failed"},
 		},
 		Transitions: map[string]*petri.Transition{
 			"transformer": {ID: "transformer", Name: "transformer",
@@ -51,11 +53,17 @@ func TestConfigMapping_SimplePath(t *testing.T) {
 				OutputArcs: []petri.Arc{
 					{Name: "task:complete:from:transformer", PlaceID: "task:complete", TransitionID: "transformer"},
 				},
+				FailureArcs: []petri.Arc{
+					{Name: "task:failed:failure:transformer", PlaceID: "task:failed", TransitionID: "transformer"},
+				},
+				RejectionArcs: []petri.Arc{
+					{Name: "transformer:auto-rejection:task:failed", PlaceID: "task:failed", TransitionID: "transformer"},
+				},
 			},
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -91,7 +99,7 @@ func TestConfigMapping_RejectionAndFailure(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -125,7 +133,7 @@ func TestConfigMapping_RejectionAndFailure(t *testing.T) {
 }
 
 func TestConfigMapping_RejectionLoopWithGuardedLoopBreaker(t *testing.T) {
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), rejectionLoopWithGuardedLoopBreakerFactoryConfig())
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -205,7 +213,7 @@ func TestConfigMapping_ValidationRejectsInvalidOnRejection(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for on_rejection pointing to non-existent state")
@@ -238,7 +246,7 @@ func TestConfigMapping_ValidationRejectsInvalidOnFailure(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for on_failure referencing non-existent work type")
@@ -288,7 +296,7 @@ func TestConfigMapping_VisitCountGuardOnWorkstation(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -356,7 +364,7 @@ func TestConfigMapping_GuardedLogicalMoveLoopBreakerRemainsNormalTransition(t *t
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -414,7 +422,7 @@ func TestConfigMapping_ValidationRejectsWorkstationLevelChildFanInGuards(t *test
 				},
 			}
 
-			mapper := ConfigMapper{}
+			mapper := testConfigMapper{}
 			_, err := mapper.Map(context.Background(), input)
 			if err == nil {
 				t.Fatalf("expected validation error for workstation-level %s guard", tt.guardType)
@@ -453,7 +461,7 @@ func TestConfigMapping_ValidationRejectsUnknownGuardType(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for unknown guard type")
@@ -484,7 +492,7 @@ func TestConfigMapping_ValidationRejectsFactoryInferenceThrottleGuardMissingMode
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for factory inference throttle guard missing modelProvider")
@@ -519,7 +527,7 @@ func TestConfigMapping_ValidationRejectsFactoryInferenceThrottleGuardInvalidRefr
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for factory inference throttle guard invalid refreshWindow")
@@ -570,7 +578,7 @@ func TestConfigMapping_LowersFactoryInferenceThrottleGuardOnlyAcrossMatchingWork
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected map error: %v", err)
@@ -625,7 +633,7 @@ func TestConfigMapping_FactoryInferenceThrottleGuardBlocksOnlyMatchingLaneAtRunt
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected map error: %v", err)
@@ -685,7 +693,7 @@ func TestConfigMapping_ValidationRejectsMatchesFieldsMissingInputKey(t *testing.
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for matches_fields guard missing matchConfig.inputKey")
@@ -714,7 +722,7 @@ func TestConfigMapping_ValidationRejectsMatchesFieldsEmptyInputKey(t *testing.T)
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for matches_fields guard empty matchConfig.inputKey")
@@ -754,7 +762,7 @@ func TestConfigMapping_MatchesFieldsGuardBuildsSelectorGuardsAcrossInputs(t *tes
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -795,12 +803,16 @@ func TestConfigMapping_MatchesFieldsGuardBuildsSelectorGuardsAcrossAllInputsByDe
 				Name: "plan",
 				States: []interfaces.StateConfig{
 					{Name: "ready", Type: interfaces.StateTypeProcessing},
+					{Name: "matched", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 			{
 				Name: "task",
 				States: []interfaces.StateConfig{
 					{Name: "ready", Type: interfaces.StateTypeProcessing},
+					{Name: "matched", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 			{
@@ -808,6 +820,7 @@ func TestConfigMapping_MatchesFieldsGuardBuildsSelectorGuardsAcrossAllInputsByDe
 				States: []interfaces.StateConfig{
 					{Name: "ready", Type: interfaces.StateTypeProcessing},
 					{Name: "matched", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 		},
@@ -821,6 +834,7 @@ func TestConfigMapping_MatchesFieldsGuardBuildsSelectorGuardsAcrossAllInputsByDe
 				{StateName: "ready", WorkTypeName: "asset"},
 			},
 			Outputs: []interfaces.IOConfig{{StateName: "matched", WorkTypeName: "asset"}},
+			OnFailure: []interfaces.IOConfig{{StateName: "failed", WorkTypeName: "asset"}},
 			Guards: []interfaces.GuardConfig{{
 				Type:        interfaces.GuardTypeMatchesFields,
 				MatchConfig: &interfaces.GuardMatchConfig{InputKey: ".Name"},
@@ -828,7 +842,7 @@ func TestConfigMapping_MatchesFieldsGuardBuildsSelectorGuardsAcrossAllInputsByDe
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -890,7 +904,7 @@ func TestConfigMapping_ValidationRejectsVisitCountGuardMissingParams(t *testing.
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for visit_count guard missing workstation")
@@ -928,7 +942,7 @@ func TestConfigMapping_ValidationRejectsGuardReferencingNonexistentWorkstation(t
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for guard referencing non-existent workstation")

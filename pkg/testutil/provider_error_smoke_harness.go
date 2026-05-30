@@ -22,7 +22,7 @@ const (
 // requested provider/model pair plus the corresponding service harness.
 type ProviderErrorSmokeHarness struct {
 	Dir        string
-	Provider   workers.ModelProvider
+	Provider   interfaces.ModelProvider
 	Model      string
 	WorkerName string
 
@@ -64,7 +64,7 @@ func WithProviderErrorSmokeServiceOptions(opts ...ServiceTestHarnessOption) Prov
 func NewProviderErrorSmokeHarness(
 	t *testing.T,
 	fixtureDir string,
-	provider workers.ModelProvider,
+	provider interfaces.ModelProvider,
 	model string,
 	opts ...ProviderErrorSmokeHarnessOption,
 ) *ProviderErrorSmokeHarness {
@@ -136,7 +136,7 @@ func writeProviderErrorSmokeWorkerConfig(
 	t *testing.T,
 	dir string,
 	workerName string,
-	provider workers.ModelProvider,
+	provider interfaces.ModelProvider,
 	model string,
 	promptBody string,
 ) {
@@ -182,7 +182,7 @@ func submitRequestFromProviderErrorSmokeWork(work ProviderErrorSmokeWork) interf
 	}
 }
 
-func providerErrorSmokeWorkerConfig(provider workers.ModelProvider, model string, promptBody string) string {
+func providerErrorSmokeWorkerConfig(provider interfaces.ModelProvider, model string, promptBody string) string {
 	return `---
 type: MODEL_WORKER
 model: ` + model + `

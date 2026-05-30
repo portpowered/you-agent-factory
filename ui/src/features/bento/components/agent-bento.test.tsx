@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
-import { NoSelectionDetailCard } from "../../current-selection/components/no-selection-detail-card";
+import { NoSelectionDetailCard } from "../../current-selection/base/public";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { WorkTotalsCard } from "../../work-totals/components/work-totals-card";
 import {
@@ -77,12 +77,10 @@ describe("AgentBentoLayout", () => {
   it("renders card IDs, titles, and body content inside the movable board", () => {
     renderBentoBoard();
 
-    const moveButton = screen.getByRole("button", {
-      name: "Move Current activity",
-    });
     const activityCard = screen.getByRole("article", {
       name: "Current activity",
     });
+    const activityHeader = activityCard.querySelector("header");
     const activityTitle = within(activityCard).getByRole("heading", {
       name: "Current activity",
     });
@@ -107,19 +105,19 @@ describe("AgentBentoLayout", () => {
     expect(getGridItem("Trace grid").dataset.bentoCardId).toBe("trace");
     expect(activityTitle.className).toContain("af-dashboard-section-heading");
     expect(activityBody?.className).toContain("af-dashboard-body-text");
-    expect(moveButton.textContent?.trim()).toBe("");
-    expect(moveButton.querySelector("svg")).toBeTruthy();
-    expect(moveButton.className).toContain("border-af-border");
-    expect(moveButton.className).toContain("bg-af-surface-raised");
-    expect(moveButton.className).toContain("text-af-text-muted");
+    expect(activityHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(activityHeader?.className).toContain("cursor-grab");
+    expect(
+      screen.queryByRole("button", { name: "Move Current activity" }),
+    ).toBeNull();
   });
 
   it("keeps movement enabled and updates grid position during pointer interaction", async () => {
     const { onLayoutChange } = renderBentoBoard();
     const activityItem = getGridItem("Current activity");
     const initialStyle = activityItem.getAttribute("style");
-    const dragHandle = within(activityItem).getByRole("button", {
-      name: "Move Current activity",
+    const dragHandle = within(activityItem).getByRole("heading", {
+      name: "Current activity",
     });
 
     fireEvent.mouseDown(dragHandle, {
@@ -318,8 +316,8 @@ describe("AgentBentoLayout", () => {
 
     const addWidgetItem = getGridItem("Add widget");
     const initialStyle = addWidgetItem.getAttribute("style");
-    const dragHandle = within(addWidgetItem).getByRole("button", {
-      name: "Move Add widget",
+    const dragHandle = within(addWidgetItem).getByRole("heading", {
+      name: "Add widget",
     });
 
     fireEvent.mouseDown(dragHandle, {
@@ -448,6 +446,113 @@ describe("AgentBentoLayout", () => {
       "current-selection",
     );
   });
+});
+
+describe("AgentBentoCard", () => {
+  it("renders the canonical shared header with an h3 title and header drag handle", () => {
+    render(
+      <AgentBentoCard title="Work totals">
+        <p>Totals body</p>
+      </AgentBentoCard>,
+    );
+
+    const card = screen.getByRole("article", { name: "Work totals" });
+    const header = card.querySelector("header");
+
+    expect(header).toBeTruthy();
+    expect(
+      within(card).getByRole("heading", { level: 3, name: "Work totals" }),
+    ).toBeTruthy();
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(header?.className).toContain("cursor-grab");
+    expect(
+      within(card).queryByRole("button", { name: "Move Work totals" }),
+    ).toBeNull();
+    expect(card.querySelectorAll("header")).toHaveLength(1);
+  });
+
+  it("renders optional header actions in the shared tools region without a move control", () => {
+    render(
+      <AgentBentoCard
+        headerAction={<button type="button">Remove card</button>}
+        title="Current selection"
+      >
+        <p>Selection body</p>
+      </AgentBentoCard>,
+    );
+
+    const card = screen.getByRole("article", { name: "Current selection" });
+    const header = card.querySelector("header");
+    const toolsRegion = header?.lastElementChild;
+    const removeButton = within(card).getByRole("button", {
+      name: "Remove card",
+    });
+
+    expect(removeButton).toBeTruthy();
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(
+      within(card).queryByRole("button", { name: "Move Current selection" }),
+    ).toBeNull();
+    expect(toolsRegion?.contains(removeButton)).toBe(true);
+  });
+
+  it("does not start grid drag when a header action button receives pointer down", async () => {
+    const onLayoutChange = vi.fn();
+
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "activity",
+            widgetType: "activity",
+            children: (
+              <AgentBentoCard
+                headerAction={<button type="button">Remove card</button>}
+                title="Current activity"
+              >
+                <p>Active workstation graph goes here.</p>
+              </AgentBentoCard>
+            ),
+          },
+        ]}
+        initialWidth={960}
+        layout={[
+          { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
+        ]}
+        onLayoutChange={onLayoutChange}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Current activity" });
+    const gridItem = card.closest(".react-grid-item");
+    const removeButton = within(card).getByRole("button", {
+      name: "Remove card",
+    });
+
+    fireEvent.mouseDown(removeButton, {
+      button: 0,
+      buttons: 1,
+      clientX: 120,
+      clientY: 40,
+    });
+    fireEvent.mouseMove(document, {
+      buttons: 1,
+      clientX: 340,
+      clientY: 40,
+    });
+    fireEvent.mouseUp(document, {
+      button: 0,
+      clientX: 340,
+      clientY: 40,
+    });
+
+    await waitFor(() => {
+      expect(gridItem?.classList.contains("react-draggable-dragging")).toBe(
+        false,
+      );
+    });
+    expect(onLayoutChange).not.toHaveBeenCalled();
+  });
 
   it("supports compact shared chrome for dense dashboard cards", () => {
     render(
@@ -458,19 +563,17 @@ describe("AgentBentoLayout", () => {
 
     const card = screen.getByRole("article", { name: "Factory graph" });
     const header = card.querySelector("header");
-    const handle = within(card).getByRole("button", {
-      name: "Move Factory graph",
-    });
     const body = screen.getByText("Graph content").parentElement;
 
     expect(header?.className).toContain("min-h-11");
     expect(header?.className).toContain("px-3");
+    expect(header?.className).toContain("cursor-grab");
     expect(body?.className).toContain("px-3");
     expect(body?.className).toContain("pt-3");
     expect(body?.className).toContain("pb-4");
     expect(body?.className).toContain("gap-2");
-    expect(handle.className).toContain("h-10");
-    expect(handle.className).toContain("w-10");
-    expect(handle.className).toContain("bg-af-surface-raised");
+    expect(
+      within(card).queryByRole("button", { name: "Move Factory graph" }),
+    ).toBeNull();
   });
 });

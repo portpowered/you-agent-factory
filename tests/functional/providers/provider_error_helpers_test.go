@@ -51,7 +51,7 @@ func providerErrorSmokeWork(name, payload string) testutil.ProviderErrorSmokeWor
 	}
 }
 
-func assertProviderCommandMatchesLane(t *testing.T, req workers.CommandRequest, provider workers.ModelProvider, workName, model string) {
+func assertProviderCommandMatchesLane(t *testing.T, req workers.CommandRequest, provider interfaces.ModelProvider, workName, model string) {
 	t.Helper()
 
 	if req.Command != string(provider) {
@@ -60,12 +60,12 @@ func assertProviderCommandMatchesLane(t *testing.T, req workers.CommandRequest, 
 	support.AssertArgsContainSequence(t, req.Args, []string{"--model", model})
 
 	switch provider {
-	case workers.ModelProviderClaude:
+	case interfaces.ModelProviderClaude:
 		support.AssertArgsContainSequence(t, req.Args, []string{"--worktree", workName})
 		if len(req.Stdin) != 0 {
 			t.Fatalf("expected claude prompt in args, got stdin %q", string(req.Stdin))
 		}
-	case workers.ModelProviderCodex:
+	case interfaces.ModelProviderCodex:
 		if got := req.Args[len(req.Args)-1]; got != "-" {
 			t.Fatalf("expected codex stdin placeholder '-', got %q", got)
 		}
@@ -236,7 +236,7 @@ func assertRetryableInternalServerRequeueOutcome(
 	if runner.CallCount() < 3 {
 		t.Fatalf("provider command count = %d, want at least 3", runner.CallCount())
 	}
-	assertProviderCommandMatchesLane(t, runner.LastRequest(), workers.ModelProviderCodex, work.Name, "gpt-5-codex")
+	assertProviderCommandMatchesLane(t, runner.LastRequest(), interfaces.ModelProviderCodex, work.Name, "gpt-5-codex")
 
 	if len(outcome.Dispatches) != 1 {
 		t.Fatalf("dispatch count = %d, want 1 failed dispatch before requeue", len(outcome.Dispatches))
