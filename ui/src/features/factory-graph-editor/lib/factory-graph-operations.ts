@@ -84,13 +84,13 @@ export function buildFactoryGraphState(options: {
     options.draft,
     options.locale,
   );
-  const pendingFactoryDefinition =
-    validationErrors.length === 0
-      ? buildDraftAppliedFactoryDefinition(
-          options.baseFactoryDefinition,
-          options.draft,
-        )
-      : null;
+  const pendingFactoryDefinition = buildPendingFactoryDefinition(
+    options.baseFactoryDefinition,
+    options.draft,
+    options.locale,
+  );
+  const saveInput =
+    validationErrors.length === 0 ? pendingFactoryDefinition : null;
 
   return {
     draft: structuredClone(options.draft),
@@ -98,7 +98,7 @@ export function buildFactoryGraphState(options: {
       pendingFactoryDefinition ?? options.baseFactoryDefinition,
     ),
     pendingFactoryDefinition,
-    saveInput: pendingFactoryDefinition,
+    saveInput,
     validationErrors,
   };
 }

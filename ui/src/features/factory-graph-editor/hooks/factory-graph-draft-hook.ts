@@ -159,6 +159,7 @@ function createCurrentFactoryGraphDraftState({
   const pendingFactoryDefinition = buildPendingFactoryDefinition(
     sessionState.latestDocument,
     sessionState.draft,
+    locale,
   );
   const validationErrors = validateFactoryGraphDraft(
     sessionState.latestDocument,
