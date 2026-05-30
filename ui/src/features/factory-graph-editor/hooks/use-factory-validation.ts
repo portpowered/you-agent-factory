@@ -63,8 +63,12 @@ export function useFactoryValidation(
   const query = useQuery<FactoryValidationResult, FactoryValidationAPIError>({
     queryKey: factoryValidationQueryKey(serializedDefinition),
     queryFn: async ({ signal }) => {
+      if (debouncedDefinition == null || serializedDefinition == null) {
+        throw new Error("factory validation requires a draft-applied definition");
+      }
+
       const requestedSerializedDefinition = serializedDefinition;
-      const result = await validateFactoryDefinition(debouncedDefinition!, {
+      const result = await validateFactoryDefinition(debouncedDefinition, {
         signal,
       });
 

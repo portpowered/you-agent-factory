@@ -132,10 +132,7 @@ function NodeHandleBadge({
         title={handle.buttonTitle ?? handle.validationMessage}
       >
         <span
-          aria-hidden={handle.validationError ? undefined : "true"}
-          aria-label={
-            handle.validationError ? handle.validationMessage : undefined
-          }
+          aria-hidden="true"
           className={cn(
             "block h-2.5 w-2.5 rounded-full border border-af-surface shadow-sm transition",
             dotClassName,
@@ -146,7 +143,6 @@ function NodeHandleBadge({
             handle.variant === "error" &&
               "scale-125 border-af-danger-border bg-af-danger-surface shadow-[0_0_0_3px_var(--color-af-danger-surface)] motion-safe:animate-pulse",
           )}
-          role={handle.validationError ? "img" : undefined}
           style={dotStyle}
         />
       </GraphNodeButton>

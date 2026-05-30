@@ -125,7 +125,7 @@ function renderValidationHook(
   );
 }
 
-describe("useFactoryValidation", () => {
+describe("useFactoryValidation stale response handling", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -177,6 +177,12 @@ describe("useFactoryValidation", () => {
     await waitFor(() => {
       expect(result.current.targets).toEqual([]);
     });
+  });
+});
+
+describe("useFactoryValidation draft mutation refresh", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   it("refreshes targets after an add operation changes the draft-applied factory", async () => {

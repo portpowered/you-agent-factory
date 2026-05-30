@@ -38,17 +38,8 @@ export function useCurrentActivityGraphEditor(
     });
   const editableDefinitionQuery = currentFactoryQuery;
   const draftState = editableGraph.draftState;
-  const draftAppliedFactoryDefinition = useMemo(() => {
-    const baseDocument =
-      draftState.latestDocument ?? draftState.baseDocument ?? null;
-    if (!baseDocument) {
-      return null;
-    }
-
-    return buildDraftAppliedFactoryDefinition(baseDocument, draftState.draft);
-  }, [draftState.baseDocument, draftState.draft, draftState.latestDocument]);
-  const structuralValidation = useFactoryValidation(
-    draftAppliedFactoryDefinition,
+  const structuralValidation = useDraftAppliedFactoryValidation(
+    draftState,
     editorMode,
   );
   const {
@@ -76,35 +67,21 @@ export function useCurrentActivityGraphEditor(
     editableGraph,
     setActiveTool,
   });
-  const controllers = useFactoryGraphEditorControllers({
+  const { controllers, ...leaveHandlers } = useFactoryGraphEditorInteraction({
     activeTool,
-    canInteractWithEditor,
-    draftState,
-    editableGraph,
-    locale,
-    saveEditableDefinition,
-  });
-  const {
-    handleDiscardEditorChanges,
-    handleDiscardPendingChanges,
-    handleEditorModeToggle,
-    handleSaveDraft,
-    handleSaveBeforeLeavingEditor,
-  } = useFactoryGraphEditorLeaveHandlers({
     addEntityController,
+    canInteractWithEditor,
     canSaveDraft,
     draftState,
     editableGraph,
-    editorUnavailableClassifierWorkstationName,
     editorMode,
+    editorUnavailableClassifierWorkstationName,
+    locale,
     saveEditableDefinition,
     setActiveTool,
-    setConnectionNotice: controllers.setConnectionNotice,
     setEditorMode,
-    setIsConfirmingSave,
     setIsConfirmingLeaveEditor,
-    setPendingRemovalEdgeId: controllers.setPendingRemovalEdgeId,
-    setPendingRemovalNodeId: controllers.setPendingRemovalNodeId,
+    setIsConfirmingSave,
   });
 
   return buildCurrentActivityGraphEditorValue({
@@ -120,16 +97,16 @@ export function useCurrentActivityGraphEditor(
     editableDefinitionQuery,
     editorUnavailableClassifierWorkstationName,
     editorMode,
-    handleDiscardPendingChanges,
+    handleDiscardPendingChanges: leaveHandlers.handleDiscardPendingChanges,
     handleConfirmRemoval: controllers.handleConfirmRemoval,
     handleConnectionAnchorClick: controllers.handleConnectionAnchorClick,
-    handleDiscardEditorChanges,
+    handleDiscardEditorChanges: leaveHandlers.handleDiscardEditorChanges,
     handleEditorConnect: controllers.handleEditorConnect,
     handleEditorEdgeDelete: controllers.handleEditorEdgeDelete,
-    handleEditorModeToggle,
+    handleEditorModeToggle: leaveHandlers.handleEditorModeToggle,
     handleEditorNodeDelete: controllers.handleEditorNodeDelete,
-    handleSaveDraft,
-    handleSaveBeforeLeavingEditor,
+    handleSaveDraft: leaveHandlers.handleSaveDraft,
+    handleSaveBeforeLeavingEditor: leaveHandlers.handleSaveBeforeLeavingEditor,
     hasActiveWork,
     isConfirmingLeaveEditor,
     isConfirmingSave,
@@ -148,6 +125,82 @@ export function useCurrentActivityGraphEditor(
     setPendingRemovalNodeId: controllers.setPendingRemovalNodeId,
     structuralValidation,
   });
+}
+
+function useDraftAppliedFactoryValidation(
+  draftState: EditableFactoryGraphViewModel["draftState"],
+  editorMode: boolean,
+) {
+  const draftAppliedFactoryDefinition = useMemo(() => {
+    const baseDocument =
+      draftState.latestDocument ?? draftState.baseDocument ?? null;
+    if (!baseDocument) {
+      return null;
+    }
+
+    return buildDraftAppliedFactoryDefinition(baseDocument, draftState.draft);
+  }, [draftState.baseDocument, draftState.draft, draftState.latestDocument]);
+
+  return useFactoryValidation(draftAppliedFactoryDefinition, editorMode);
+}
+
+function useFactoryGraphEditorInteraction({
+  activeTool,
+  addEntityController,
+  canInteractWithEditor,
+  canSaveDraft,
+  draftState,
+  editableGraph,
+  editorMode,
+  editorUnavailableClassifierWorkstationName,
+  locale,
+  saveEditableDefinition,
+  setActiveTool,
+  setEditorMode,
+  setIsConfirmingLeaveEditor,
+  setIsConfirmingSave,
+}: {
+  activeTool: FactoryGraphEditorTool;
+  addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
+  canInteractWithEditor: boolean;
+  canSaveDraft: boolean;
+  draftState: EditableFactoryGraphViewModel["draftState"];
+  editableGraph: EditableFactoryGraphViewModel;
+  editorMode: boolean;
+  editorUnavailableClassifierWorkstationName?: string;
+  locale?: string | null;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
+  setActiveTool: (tool: FactoryGraphEditorTool) => void;
+  setEditorMode: (mode: boolean) => void;
+  setIsConfirmingLeaveEditor: (open: boolean) => void;
+  setIsConfirmingSave: (open: boolean) => void;
+}) {
+  const controllers = useFactoryGraphEditorControllers({
+    activeTool,
+    canInteractWithEditor,
+    draftState,
+    editableGraph,
+    locale,
+    saveEditableDefinition,
+  });
+  const leaveHandlers = useFactoryGraphEditorLeaveHandlers({
+    addEntityController,
+    canSaveDraft,
+    draftState,
+    editableGraph,
+    editorUnavailableClassifierWorkstationName,
+    editorMode,
+    saveEditableDefinition,
+    setActiveTool,
+    setConnectionNotice: controllers.setConnectionNotice,
+    setEditorMode,
+    setIsConfirmingSave,
+    setIsConfirmingLeaveEditor,
+    setPendingRemovalEdgeId: controllers.setPendingRemovalEdgeId,
+    setPendingRemovalNodeId: controllers.setPendingRemovalNodeId,
+  });
+
+  return { controllers, ...leaveHandlers };
 }
 
 function useCurrentActivityEditableGraph({
