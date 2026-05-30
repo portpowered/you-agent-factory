@@ -637,8 +637,8 @@ func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("state = %#v, want JSON object", work["state"])
 	}
-	if work["workId"] != "work-1" || state["name"] != "review" || state["type"] != "PROCESSING" {
-		t.Fatalf("work JSON = %#v, want workId and structured state fields", work)
+	if work["workId"] != "work-1" || work["workTypeName"] != "story" || state["name"] != "review" || state["type"] != "PROCESSING" {
+		t.Fatalf("work JSON = %#v, want workId, workTypeName, and structured state fields", work)
 	}
 	pagination, ok := got["paginationContext"].(map[string]any)
 	if !ok {
