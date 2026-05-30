@@ -6,6 +6,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
 func TestValidate_EquivalentTargetsForInvalidFactoryThroughConfigAndPackageValidation(t *testing.T) {
@@ -36,10 +37,10 @@ func TestValidate_EquivalentTargetsForInvalidFactoryThroughConfigAndPackageValid
 		}
 	}
 
-	assertHasTargetCode(t, explicit.Targets, factoryvalidation.CodeDuplicateIdentifier)
-	assertHasTargetCode(t, explicit.Targets, factoryvalidation.CodeDanglingWorkerReference)
-	assertHasTargetCode(t, explicit.Targets, factoryvalidation.CodeDanglingPlaceReference)
-	assertHasTargetSubject(t, explicit.Targets, factoryvalidation.Subject{
+	validationassert.HasDomainTargetCode(t, explicit.Targets, factoryvalidation.CodeDuplicateIdentifier)
+	validationassert.HasDomainTargetCode(t, explicit.Targets, factoryvalidation.CodeDanglingWorkerReference)
+	validationassert.HasDomainTargetCode(t, explicit.Targets, factoryvalidation.CodeDanglingPlaceReference)
+	validationassert.HasDomainTargetSubject(t, explicit.Targets, factoryvalidation.Subject{
 		Type:     factoryvalidation.SubjectTypeWorkstation,
 		ID:       "process",
 		Location: factoryvalidation.SubjectLocationReference,
@@ -67,12 +68,12 @@ func TestValidate_MissingOutcomeRoutesUseCanonicalWorkstationLocations(t *testin
 	}
 
 	result := factoryvalidation.Validate(cfg)
-	assertHasTargetSubject(t, result.Targets, factoryvalidation.Subject{
+	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
 		Type:     factoryvalidation.SubjectTypeWorkstation,
 		ID:       "repeater",
 		Location: factoryvalidation.SubjectLocationOnFailure,
 	})
-	assertHasTargetSubject(t, result.Targets, factoryvalidation.Subject{
+	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
 		Type:     factoryvalidation.SubjectTypeWorkstation,
 		ID:       "repeater",
 		Location: factoryvalidation.SubjectLocationOnRejection,
@@ -99,12 +100,12 @@ func TestValidate_RepresentativeCanonicalSubjects(t *testing.T) {
 	}
 
 	result := factoryvalidation.Validate(cfg)
-	assertHasTargetSubject(t, result.Targets, factoryvalidation.Subject{
+	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
 		Type:     factoryvalidation.SubjectTypeWorkstation,
 		ID:       "process",
 		Location: factoryvalidation.SubjectLocationOnRejection,
 	})
-	assertHasTargetSubject(t, result.Targets, factoryvalidation.Subject{
+	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
 		Type:     factoryvalidation.SubjectTypeWorkType,
 		ID:       "task",
 		Location: factoryvalidation.SubjectLocationStates,
@@ -131,26 +132,6 @@ func TestValidate_MissingWorkTypeOutcomeStates(t *testing.T) {
 	}
 
 	result := factoryvalidation.Validate(cfg)
-	assertHasTargetCode(t, result.Targets, factoryvalidation.CodeWorkTypeMissingCompletionState)
-	assertHasTargetCode(t, result.Targets, factoryvalidation.CodeWorkTypeMissingFailureState)
-}
-
-func assertHasTargetCode(t *testing.T, targets []factoryvalidation.Target, code string) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code == code {
-			return
-		}
-	}
-	t.Fatalf("targets = %#v, want code %q", targets, code)
-}
-
-func assertHasTargetSubject(t *testing.T, targets []factoryvalidation.Target, want factoryvalidation.Subject) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Subject == want {
-			return
-		}
-	}
-	t.Fatalf("targets = %#v, want subject %#v", targets, want)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkTypeMissingCompletionState)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkTypeMissingFailureState)
 }

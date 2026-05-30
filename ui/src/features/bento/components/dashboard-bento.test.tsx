@@ -116,7 +116,7 @@ vi.mock("../../provider-session-detail/public", () => ({
   ),
 }));
 
-vi.mock("../../import", () => ({
+vi.mock("../../import/public", () => ({
   DashboardImportPreviewDialog: () => null,
 }));
 
