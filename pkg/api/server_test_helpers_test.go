@@ -373,6 +373,17 @@ func validNamedFactoryBody(name, workType string) string {
 	return fmt.Sprintf(`{"name":%q,%s`, name, strings.TrimPrefix(namedFactoryPayloadJSON(name, workType), "{"))
 }
 
+func saveFactoryForSessionBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
+}
+
+func assertPostFactoriesRouteRemoved(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("POST /factories status = %d, want 404 (route removed from published API): %s", rec.Code, rec.Body.String())
+	}
+}
+
 func namedFactoryPayloadJSON(project, workType string) string {
 	return fmt.Sprintf(`{
 		"name": %q,

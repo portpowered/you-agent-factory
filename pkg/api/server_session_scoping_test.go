@@ -458,7 +458,7 @@ func TestSaveCurrentFactoryBySessionId_SubmitsToTargetedSessionOnly(t *testing.T
 		},
 	})
 
-	body := `{"name":"beta","version":{"physical":"1970-01-01T00:00:00.000000002Z","logical":2},"workTypes":[],"workstations":[],"workers":[]}`
+	body := saveFactoryForSessionBody(`{"name":"beta","version":{"physical":"1970-01-01T00:00:00.000000002Z","logical":2},"workTypes":[],"workstations":[],"workers":[]}`)
 	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/session-2/factory", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -491,7 +491,7 @@ func TestCurrentFactoryBySessionId_UnknownSessionReturnsNotFound(t *testing.T) {
 	srv.Handler().ServeHTTP(getRec, getReq)
 	assertJSONError(t, getRec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 
-	putReq := httptest.NewRequest(http.MethodPut, "/factory-sessions/missing-session/factory", bytes.NewBufferString(`{"name":"beta"}`))
+	putReq := httptest.NewRequest(http.MethodPut, "/factory-sessions/missing-session/factory", bytes.NewBufferString(saveFactoryForSessionBody(`{"name":"beta"}`)))
 	putReq.Header.Set("Content-Type", "application/json")
 	putRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(putRec, putReq)
