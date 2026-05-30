@@ -24,6 +24,8 @@ import (
 
 const dashboardUIIndexFile = "index.html"
 
+var _ factoryapi.ServerInterface = (*Server)(nil)
+
 // Server is the REST API server for the agent-factory.
 type Server struct {
 	runtime           apisurface.APISurface

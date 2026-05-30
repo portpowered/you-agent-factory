@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
@@ -316,4 +317,53 @@ func translateCanonicalWorkRequestValidationError(err error) error {
 	default:
 		return requestFieldValidationError{message: message}
 	}
+}
+
+func stringValue(value *string) string {
+	return optional.StringValue(value)
+}
+
+func intValue(value *int) int {
+	return optional.IntValue(value)
+}
+
+func stringSliceValue(values *[]string) []string {
+	return optional.StringsValue(values)
+}
+
+func stringSlicePtrCopy(values []string) *[]string {
+	return optional.CopiedStringsPtr(values)
+}
+
+func stringPtrIfNotEmpty(value string) *string {
+	return optional.NonEmptyStringPtr(value)
+}
+
+func integerMapPtr(values map[string]int) *factoryapi.IntegerMap {
+	if len(values) == 0 {
+		return nil
+	}
+	converted := factoryapi.IntegerMap(values)
+	return &converted
+}
+
+func stringMapPtr(values map[string]string) *factoryapi.StringMap {
+	return optional.CopiedStringMapPtr(values)
+}
+
+func intPtrIfPositive(value int) *int {
+	return optional.PositiveIntPtr(value)
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func generatedStringMap(values *factoryapi.StringMap) map[string]string {
+	return optional.StringMapValue(values)
 }

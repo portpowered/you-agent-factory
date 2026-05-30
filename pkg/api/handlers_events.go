@@ -1,5 +1,3 @@
-// backendsizecheck:ignore-file this legacy API transport surface stays centralized until dedicated handler-splitting work lands.
-// pkgmaintcheck:ignore-file-lines legacy API transport handlers still share generated-surface wiring; split by route family in dedicated follow-up work to avoid transport regressions.
 package api
 
 import (
@@ -10,14 +8,11 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"go.uber.org/zap"
 )
-
-var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // GetStatus handles GET /status as the supported runtime status read model.
 func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +114,6 @@ func (s *Server) getEvents(
 		}
 	}
 }
-// --- Helpers ---
 
 func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenResponse {
 	resp := factoryapi.TokenResponse{
@@ -265,53 +259,4 @@ func resourceUsagePtr(values []factoryapi.ResourceUsage) *[]factoryapi.ResourceU
 		return nil
 	}
 	return &values
-}
-
-func stringValue(value *string) string {
-	return optional.StringValue(value)
-}
-
-func intValue(value *int) int {
-	return optional.IntValue(value)
-}
-
-func stringSliceValue(values *[]string) []string {
-	return optional.StringsValue(values)
-}
-
-func stringSlicePtrCopy(values []string) *[]string {
-	return optional.CopiedStringsPtr(values)
-}
-
-func stringPtrIfNotEmpty(value string) *string {
-	return optional.NonEmptyStringPtr(value)
-}
-
-func integerMapPtr(values map[string]int) *factoryapi.IntegerMap {
-	if len(values) == 0 {
-		return nil
-	}
-	converted := factoryapi.IntegerMap(values)
-	return &converted
-}
-
-func stringMapPtr(values map[string]string) *factoryapi.StringMap {
-	return optional.CopiedStringMapPtr(values)
-}
-
-func intPtrIfPositive(value int) *int {
-	return optional.PositiveIntPtr(value)
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func generatedStringMap(values *factoryapi.StringMap) map[string]string {
-	return optional.StringMapValue(values)
 }
