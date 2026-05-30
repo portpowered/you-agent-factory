@@ -404,6 +404,46 @@ func TestSubmit_JSONStdoutEmitsSessionScopedEndpointPath(t *testing.T) {
 	}
 }
 
+func TestSubmit_JSONStdoutEncodesNullWorkIdWhenAbsent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "json-trace-no-work-id"}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"json stdout task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Submit(SubmitConfig{
+		Name:         "json-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		JSON:         true,
+		Output:       &out,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(out.Bytes(), &raw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if _, ok := raw["workId"]; !ok {
+		t.Fatalf("stdout missing workId key: %s", out.String())
+	}
+	if string(raw["workId"]) != "null" {
+		t.Fatalf("workId = %s, want null", raw["workId"])
+	}
+}
+
 func TestSubmit_HumanStdoutIncludesWorkMetadataAndShowHint(t *testing.T) {
 	workID := "batch-req-1-human-submit"
 	name := "human-submit"
