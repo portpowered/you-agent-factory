@@ -194,6 +194,113 @@ func TestPostJSON_SendsJSONBodyAndDecodesResponse(t *testing.T) {
 	}
 }
 
+func TestPutJSON_SendsJSONBodyAndDecodesResponse(t *testing.T) {
+	var gotMethod string
+	var gotContentType string
+	var gotBody string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotContentType = r.Header.Get("Content-Type")
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]string{"version": "2"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var result map[string]string
+	resp, err := PutJSON(
+		context.Background(),
+		srv.Client(),
+		srv.URL+"/factory-sessions/~default/factory",
+		strings.NewReader(`{"name":"alpha"}`),
+		&result,
+		RequestOptions{EndpointPath: "/factory-sessions/~default/factory", LogLabel: "factory save-current"},
+	)
+	if err != nil {
+		t.Fatalf("PutJSON: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotMethod != http.MethodPut {
+		t.Fatalf("method = %q, want PUT", gotMethod)
+	}
+	if gotContentType != "application/json" {
+		t.Fatalf("content-type = %q, want application/json", gotContentType)
+	}
+	if gotBody != `{"name":"alpha"}` {
+		t.Fatalf("body = %q", gotBody)
+	}
+	if result["version"] != "2" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestPutJSON_ReturnsResponseForNonOKStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Message: "stale factory version",
+			Code:    factoryapi.ErrorResponseCode("STALE_FACTORY_VERSION"),
+			Family:  factoryapi.ErrorFamilyConflict,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var result map[string]string
+	resp, err := PutJSON(
+		context.Background(),
+		srv.Client(),
+		srv.URL,
+		strings.NewReader(`{"name":"alpha"}`),
+		&result,
+		RequestOptions{EndpointPath: "/factory-sessions/~default/factory", LogLabel: "factory save-current"},
+	)
+	if err != nil {
+		t.Fatalf("PutJSON: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", resp.StatusCode)
+	}
+}
+
+func TestPutJSON_PropagatesTransportFailure(t *testing.T) {
+	client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return nil, io.ErrUnexpectedEOF
+	})}
+
+	var diagnostics bytes.Buffer
+	_, err := PutJSON(
+		context.Background(),
+		client,
+		"http://127.0.0.1:1/factory-sessions/~default/factory",
+		strings.NewReader(`{"name":"alpha"}`),
+		nil,
+		RequestOptions{
+			Diagnostics:  &diagnostics,
+			Verbose:      true,
+			EndpointPath: "/factory-sessions/~default/factory",
+			LogLabel:     "factory save-current",
+		},
+	)
+	if err == nil {
+		t.Fatal("PutJSON: want transport error")
+	}
+	if !strings.Contains(diagnostics.String(), "factory save-current response endpointPath=/factory-sessions/~default/factory error=unreachable") {
+		t.Fatalf("diagnostics = %q", diagnostics.String())
+	}
+}
+
 func TestDecodeAPIError_ReturnsFalseWithoutMessage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
