@@ -46,10 +46,8 @@ import {
   disconnectFactoryGraphEdge,
   removeFactoryGraphNode,
 } from "../../factory-graph-editor/lib/factory-graph-operations";
-import {
-  useEditableFactoryGraph,
-  useFactoryGraphDraftState,
-} from "../../factory-graph-editor/public";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
@@ -84,12 +82,24 @@ vi.mock("../../current-factory-definition/public", async () => {
   };
 });
 
-vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual("../../factory-graph-editor/public");
+vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", async () => {
+  const actual = await vi.importActual(
+    "../../factory-graph-editor/hooks/use-editable-factory-graph",
+  );
 
   return {
     ...actual,
     useEditableFactoryGraph: vi.fn(),
+  };
+});
+
+vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () => {
+  const actual = await vi.importActual(
+    "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+  );
+
+  return {
+    ...actual,
     useFactoryGraphDraftState: vi.fn(),
   };
 });
