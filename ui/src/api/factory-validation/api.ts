@@ -29,6 +29,7 @@ export interface FactoryValidationAPIErrorDetails {
 
 export interface ValidateFactoryDefinitionOptions {
   fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
 }
 
 export class FactoryValidationAPIError extends Error {
@@ -79,6 +80,7 @@ export async function validateFactoryDefinition(
           "Content-Type": "application/json",
         },
         method: "POST",
+        signal: options.signal,
       },
     );
   } catch (error) {
