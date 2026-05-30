@@ -17,7 +17,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"go.uber.org/zap"
 )
 
@@ -744,6 +746,9 @@ func TestBuildFactoryService_PreservesSessionsRegistryAcrossRuntimeReplacement(t
 	if svc.sessions == nil {
 		t.Fatal("expected factorysessions.Registry on FactoryService")
 	}
+	if svc.runtimeBuild == nil {
+		t.Fatal("expected runtimebuild.Service on FactoryService")
+	}
 	registryBefore := svc.sessions
 
 	if _, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID); err != nil {
@@ -755,6 +760,182 @@ func TestBuildFactoryService_PreservesSessionsRegistryAcrossRuntimeReplacement(t
 	if svc.cfg.Dir != alphaDir {
 		t.Fatalf("service cfg.Dir = %q, want unchanged %q until activation", svc.cfg.Dir, alphaDir)
 	}
+}
+
+func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.sessions == nil {
+		t.Fatal("expected explicit factorysessions.Registry collaborator")
+	}
+	if svc.runtimeBuild == nil {
+		t.Fatal("expected explicit runtimebuild.Service collaborator")
+	}
+	if svc.factorySave == nil {
+		t.Fatal("expected explicit factorysave collaborator")
+	}
+	if _, ok := svc.factorySave.(*factorysave.Service); !ok {
+		t.Fatalf("factorySave type = %T, want *factorysave.Service for production wiring", svc.factorySave)
+	}
+	if svc.hostedWorkers.Logger == nil {
+		t.Fatal("expected explicit hostedworkers.Config collaborator with logger")
+	}
+	if svc.modelAssets == nil {
+		t.Fatal("expected explicit localmodels asset puller collaborator")
+	}
+	bundle := svc.startupBundle
+	if bundle == nil {
+		t.Fatal("expected startup runtime bundle")
+	}
+	if bundle.modelAssets != svc.modelAssets {
+		t.Fatal("startup bundle modelAssets should reuse BuildFactoryService localmodels collaborator")
+	}
+	if svc.cfg.Dir != alphaDir {
+		t.Fatalf("service cfg.Dir = %q, want %q", svc.cfg.Dir, alphaDir)
+	}
+}
+
+func TestFactoryService_SaveFactoryForSession_DelegatesToInjectedFactorySave(t *testing.T) {
+	t.Parallel()
+
+	stub := &recordingFactorySaveSaver{}
+	svc := &FactoryService{factorySave: stub}
+	request := factoryapi.Factory{
+		Name: factoryapi.FactoryName("story-save"),
+	}
+	mode := factoryapi.FactorySaveModeReplaceCurrent
+	sessionID := "session-collaborator-proof"
+
+	got, err := svc.SaveFactoryForSession(context.Background(), sessionID, mode, request)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession: %v", err)
+	}
+	if got.Name != request.Name {
+		t.Fatalf("saved factory name = %q, want %q", got.Name, request.Name)
+	}
+	if stub.calls != 1 {
+		t.Fatalf("factory save calls = %d, want 1", stub.calls)
+	}
+	if stub.sessionID != sessionID {
+		t.Fatalf("factory save sessionID = %q, want %q", stub.sessionID, sessionID)
+	}
+	if stub.mode != mode {
+		t.Fatalf("factory save mode = %q, want %q", stub.mode, mode)
+	}
+	if stub.request.Name != request.Name {
+		t.Fatalf("factory save request name = %q, want %q", stub.request.Name, request.Name)
+	}
+}
+
+type recordingFactorySaveSaver struct {
+	sessionID string
+	mode      factoryapi.FactorySaveMode
+	request   factoryapi.Factory
+	calls     int
+}
+
+func (s *recordingFactorySaveSaver) Save(
+	_ context.Context,
+	sessionID string,
+	mode factoryapi.FactorySaveMode,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	s.calls++
+	s.sessionID = sessionID
+	s.mode = mode
+	s.request = request
+	return request, nil
+}
+
+func TestFactoryService_ListModels_DelegatesToLocalmodelsCatalog(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
+	svc := &FactoryService{startupBundle: &factoryRuntimeBundle{runtimeCfg: runtimeCfg}}
+
+	got, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	want, err := localmodels.ListModels(runtimeCfg)
+	if err != nil {
+		t.Fatalf("localmodels.ListModels: %v", err)
+	}
+	if len(got.Results) != len(want.Results) {
+		t.Fatalf("ListModels results = %d, want %d from localmodels owner", len(got.Results), len(want.Results))
+	}
+	if len(got.Results) != 1 || got.Results[0].Name != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("ListModels results = %#v, want one OMNIVOICE model", got.Results)
+	}
+}
+
+func TestFactoryService_GetModel_DelegatesToLocalmodelsCatalog(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
+	svc := &FactoryService{startupBundle: &factoryRuntimeBundle{runtimeCfg: runtimeCfg}}
+
+	got, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("GetModel: %v", err)
+	}
+	want, err := localmodels.GetModel(runtimeCfg, "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("localmodels.GetModel: %v", err)
+	}
+	if got.Name != want.Name || got.Status != want.Status {
+		t.Fatalf("GetModel detail = (%s, %s), want (%s, %s) from localmodels owner", got.Name, got.Status, want.Name, want.Status)
+	}
+}
+
+func TestFactoryService_PullModel_DelegatesToInjectedModelAssets(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
+	puller := &recordingServiceModelAssetPuller{}
+	svc := &FactoryService{
+		startupBundle: &factoryRuntimeBundle{runtimeCfg: runtimeCfg},
+		modelAssets:   puller,
+	}
+
+	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
+		t.Fatalf("PullModel: %v", err)
+	}
+	if puller.calls != 1 || puller.modelName != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("model asset puller calls = %d modelName = %q, want 1 and OMNIVOICE_Q4_K_M", puller.calls, puller.modelName)
+	}
+}
+
+type recordingServiceModelAssetPuller struct {
+	calls     int
+	modelName string
+}
+
+func (p *recordingServiceModelAssetPuller) PullModel(_ context.Context, _ *config.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error) {
+	p.calls++
+	p.modelName = modelName
+	return apisurface.ModelPullResult{ModelName: modelName}, nil
+}
+
+func (p *recordingServiceModelAssetPuller) EnsureModelAvailable(context.Context, *config.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+	return nil
+}
+
+func (p *recordingServiceModelAssetPuller) ResolveModelCache(context.Context, *config.LoadedFactoryConfig, *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+	return localModelCacheLayout{}, nil
 }
 
 func TestBuildFactoryService_InitializesFactorySessionsRegistry(t *testing.T) {

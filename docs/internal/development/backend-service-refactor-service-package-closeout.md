@@ -45,6 +45,29 @@ workers out of `pkg/service`.
   `pkg/service` stores `hostedworkers.Config` at build time and delegates
   poll cycles; script/cron pollers stay in `pkg/service/poller_watcher.go`.
 
+### `pkg/service/factorysave`
+
+- Preserved behavior:
+  session-scoped factory save by mode (`REPLACE_CURRENT`,
+  `UPSERT_NAMED_AND_ACTIVATE`), stale-version and not-idle error families,
+  structured validation targets, and post-save activation scoped to the
+  targeted session root.
+- Dependency direction:
+  `pkg/service` composes `factorysave.Service` through `wireFactorySaveCollaborator`
+  and implements `factorysave.Host` for registry, idle checks, activation, and
+  readback; `factorysave` does not import `pkg/api` or `pkg/service`.
+
+### `pkg/service/runtimebuild`
+
+- Preserved behavior:
+  one runtime bundle build path for default startup, session open, and
+  post-save replacement so work submission and model catalog reads behave the
+  same regardless of which flow activated the runtime.
+- Dependency direction:
+  `pkg/service` injects `buildRuntimeBundle` as the `BundleBuilder` from
+  `newRuntimeBuildService`; `runtimebuild` does not import `pkg/api` or
+  `pkg/service`.
+
 ### `pkg/service` (slim orchestration)
 
 - Preserved behavior:
@@ -78,3 +101,9 @@ Validated on `ralph/backend-service-refactor` after extractions 001–004 (2026-
 - `make vet backend-size pkg-maint pkg-file-count` — passed
 - `go test ./pkg/factorysessions/... ./pkg/localmodels/... ./pkg/hostedworkers/...` — passed
 - `go test ./pkg/service/... ./pkg/api/...` — passed
+
+Validated on `ralph/service-composition-seams-recovery` after composition seams 001–006 (2026-05-31):
+
+- `make backend-size pkg-maint pkg-file-count` — passed
+- `go test ./pkg/service/runtimebuild/... ./pkg/service/... ./pkg/api/...` — passed
+- No new `pkg/service` waivers for logic re-inlined after `factorysave` / `runtimebuild` extraction

@@ -696,6 +696,11 @@ func waitForSessionRuntimeStatus(
 
 func submitSessionWork(t *testing.T, session *liveFactorySession, workID, traceID string) {
 	t.Helper()
+	submitSessionWorkWithType(t, session, "task", workID, traceID)
+}
+
+func submitSessionWorkWithType(t *testing.T, session *liveFactorySession, workType, workID, traceID string) {
+	t.Helper()
 
 	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
 		t.Fatal("live session runtime is required")
@@ -703,7 +708,7 @@ func submitSessionWork(t *testing.T, session *liveFactorySession, workID, traceI
 	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
 		WorkID:     workID,
 		Name:       workID,
-		WorkTypeID: "task",
+		WorkTypeID: workType,
 		TraceID:    traceID,
 		Payload:    []byte(`{"title":"` + workID + `"}`),
 	}})
