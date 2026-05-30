@@ -93,7 +93,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	}
 
 	serviceBuilt = true
-	return &FactoryService{
+	fs := &FactoryService{
 		factoryRootDir: factoryRootDir,
 		sessions:       factorysessions.NewRegistry(),
 		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, clock),
@@ -103,7 +103,9 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		baseLogger:     baseLogger,
 		logger:         runtimeBundle.logger,
 		clock:          clock,
-	}, nil
+	}
+	fs.factorySave = newFactorySaveService(fs)
+	return fs, nil
 }
 
 func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {

@@ -25,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -144,6 +145,7 @@ type FactoryService struct {
 	runState      *serviceRunState
 	apiServerExit <-chan error
 	sessions      *factorysessions.Registry
+	factorySave   *factorysave.Service
 	hostedWorkers hostedworkers.Config
 	factoryRootDir string
 	// startupBundle holds the built default runtime before Run registers ~default.
