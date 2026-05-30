@@ -14,6 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -325,7 +327,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 		baseLogger = zap.NewNop()
 	}
 
-	loadedFactoryCfg, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
+	loadedFactoryCfg, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
 	if err != nil {
 		return nil, fmt.Errorf("load factory config: %w", err)
 	}
@@ -637,7 +639,7 @@ func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
 	name string,
 	replacement *replacementFactoryRuntime,
 ) error {
-	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, name); err != nil {
+	if err := configpersist.WriteCurrentFactoryPointer(rootDir, name); err != nil {
 		return err
 	}
 	fs.swapActiveRuntime(replacement)
@@ -670,7 +672,7 @@ func (fs *FactoryService) persistReplacementRuntime(
 	replacementHandle *liveRuntimeHandle,
 	serviceMode bool,
 ) error {
-	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, name); err != nil {
+	if err := configpersist.WriteCurrentFactoryPointer(rootDir, name); err != nil {
 		if serviceMode {
 			fs.stopLiveRuntimeSidecars(replacementHandle)
 		}

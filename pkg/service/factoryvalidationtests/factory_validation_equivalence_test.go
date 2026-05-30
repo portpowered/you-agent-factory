@@ -30,7 +30,7 @@ func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndSaveP
 	}
 
 	explicit := factoryvalidation.Validate(&cfg)
-	packageSignatures := factoryvalidation.CanonicalTargetSignatures(explicit.Targets)
+	blockingLoad := factoryvalidation.ValidateBlockingLoad(&cfg)
 	configFindings := config.CanonicalStructuralFindings(&cfg)
 	if len(configFindings) != len(explicit.Targets) {
 		t.Fatalf("config findings = %d, package targets = %d, want equivalent coverage",
@@ -44,9 +44,10 @@ func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndSaveP
 	}
 
 	saveSignatures := canonicalTargetsFromEditableSaveRejection(t, factory)
-	if !factoryvalidation.EquivalentCanonicalTargetSignatures(packageSignatures, saveSignatures) {
-		t.Fatalf("package signatures = %#v, save signatures = %#v, want equivalent canonical targets",
-			packageSignatures, saveSignatures)
+	blockingSignatures := factoryvalidation.CanonicalTargetSignatures(blockingLoad.Targets)
+	if !factoryvalidation.EquivalentCanonicalTargetSignatures(blockingSignatures, saveSignatures) {
+		t.Fatalf("blocking load signatures = %#v, save signatures = %#v, want equivalent canonical targets",
+			blockingSignatures, saveSignatures)
 	}
 
 	validatorResult := config.NewConfigValidator().Validate(&cfg)

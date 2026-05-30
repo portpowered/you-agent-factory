@@ -8,7 +8,8 @@ import (
 	"os"
 	"strings"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 )
 
 // SaveFromFileConfig holds parameters for persisting a new named factory from disk.
@@ -50,13 +51,17 @@ func SaveFromFile(cfg SaveFromFileConfig) error {
 		return fmt.Errorf("read factory config %s: %w", from, err)
 	}
 
-	factoryDir, err := factoryconfig.PersistNamedFactory(cfg.Dir, name, payload)
+	if _, err := configload.LoadFromCanonicalJSON(payload, configload.LoadOptions{}); err != nil {
+		return renderSaveFromFileError(err)
+	}
+
+	factoryDir, err := configpersist.PersistNamedFactory(cfg.Dir, name, payload)
 	if err != nil {
 		return renderSaveFromFileError(err)
 	}
 
 	if cfg.SetCurrent {
-		if err := factoryconfig.WriteCurrentFactoryPointer(cfg.Dir, name); err != nil {
+		if err := configpersist.WriteCurrentFactoryPointer(cfg.Dir, name); err != nil {
 			return err
 		}
 	}
@@ -77,10 +82,10 @@ func renderSaveFromFileSuccess(result SaveFromFileResult, output io.Writer) erro
 }
 
 func renderSaveFromFileError(err error) error {
-	if errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists) {
+	if errors.Is(err, configpersist.ErrNamedFactoryAlreadyExists) {
 		return fmt.Errorf("factory already exists: %w", err)
 	}
-	if errors.Is(err, factoryconfig.ErrInvalidNamedFactory) {
+	if configload.IsInvalidNamedFactory(err) || configpersist.IsInvalidNamedFactory(err) {
 		return fmt.Errorf("invalid factory config: %w", err)
 	}
 	return err

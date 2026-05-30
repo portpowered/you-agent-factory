@@ -13,6 +13,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -781,7 +782,7 @@ func validateReplayModeConfig(cfg *FactoryServiceConfig) error {
 
 func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
 	if cfg.ReplayPath == "" {
-		loaded, err := factoryconfig.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
+		loaded, err := configload.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
 		if loaded != nil {
 			loaded.SetRuntimeBaseDir(cfg.ExecutionBaseDir)
 		}
@@ -807,7 +808,7 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 	if artifact == nil || cfg == nil || cfg.Dir == "" {
 		return
 	}
-	current, err := factoryconfig.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
+	current, err := configload.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
 	if err != nil {
 		return
 	}
