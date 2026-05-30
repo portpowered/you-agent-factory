@@ -1,3 +1,4 @@
+import { sessionFactoryOperatorErrorMessages } from "../session-factory";
 import {
   activateImportedFactoryForSession,
   createFactory,
@@ -385,7 +386,7 @@ describe("factory API", () => {
         { fetch: fetchMock },
       ),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("Current factory runtime must be idle before activation.", {
+      new NamedFactoryAPIError(sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE, {
         code: "FACTORY_NOT_IDLE",
         status: 409,
         statusText: "Conflict",
@@ -447,7 +448,7 @@ describe("factory API", () => {
         { fetch: fetchMock },
       ),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The editable definition is stale.", {
+      new NamedFactoryAPIError(sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION, {
         code: "STALE_FACTORY_VERSION",
         status: 409,
         statusText: "Conflict",

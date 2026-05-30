@@ -12,6 +12,7 @@ import {
   readAPIResponseBody,
 } from "../transport";
 import { sessionFactoryAPIErrorMessages } from "./messages";
+import { resolveSessionFactoryAPIErrorMessage } from "./operator-errors";
 
 export type SessionFactorySaveMode = components["schemas"]["FactorySaveMode"];
 export type SessionFactory = components["schemas"]["Factory"];
@@ -25,6 +26,7 @@ export type SessionFactoryDocument = CanonicalFactoryDefinition & {
 
 export type SessionFactoryAPIErrorCode =
   | "BAD_REQUEST"
+  | "FACTORY_ALREADY_EXISTS"
   | "FACTORY_NOT_IDLE"
   | "INTERNAL_ERROR"
   | "INVALID_FACTORY"
@@ -162,13 +164,22 @@ async function requestSessionFactoryDocument({
     const errorBody = extractAPIErrorPayload(responseBody, {
       isTarget: isErrorTarget,
     });
-    throw new SessionFactoryAPIError(errorBody?.message ?? rejectedMessage, {
-      code: normalizeSessionFactoryAPIErrorCode(errorBody?.code),
-      responseBody,
-      status: response.status,
-      statusText: response.statusText,
-      targets: errorBody?.targets,
-    });
+    const code = normalizeSessionFactoryAPIErrorCode(errorBody?.code);
+    throw new SessionFactoryAPIError(
+      resolveSessionFactoryAPIErrorMessage({
+        apiMessage: errorBody?.message,
+        code,
+        rejectedMessage,
+        status: response.status,
+      }),
+      {
+        code,
+        responseBody,
+        status: response.status,
+        statusText: response.statusText,
+        targets: errorBody?.targets,
+      },
+    );
   }
 
   return normalizeSessionFactoryDocument(responseBody, {
@@ -253,6 +264,7 @@ function normalizeSessionFactoryAPIErrorCode(
 ): SessionFactoryAPIErrorCode {
   switch (code) {
     case "BAD_REQUEST":
+    case "FACTORY_ALREADY_EXISTS":
     case "NOT_FOUND":
     case "FACTORY_NOT_IDLE":
     case "STALE_FACTORY_VERSION":

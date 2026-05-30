@@ -240,17 +240,22 @@ describe("DashboardImportPreviewDialog", () => {
     [
       "FACTORY_NOT_IDLE",
       "Current factory runtime must be idle before activation.",
-      "The current factory runtime is still active. Wait until it becomes idle before switching factories.",
+      "The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
     ],
     [
       "INVALID_FACTORY",
       "Dropped factory payload was rejected.",
-      "The dropped factory payload was rejected by the activation API.",
+      "The factory definition was rejected by the session factory API.",
     ],
     [
       "INVALID_FACTORY_NAME",
       "Embedded factory name is invalid.",
-      "The embedded factory name is not valid for activation.",
+      "The factory name is not valid for this session.",
+    ],
+    [
+      "STALE_FACTORY_VERSION",
+      "The editable definition is stale.",
+      "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
     ],
     [
       "INTERNAL_ERROR",

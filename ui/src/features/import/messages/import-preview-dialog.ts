@@ -1,4 +1,5 @@
 import type { NamedFactoryAPIErrorCode } from "../../../api/named-factory";
+import { sessionFactoryOperatorErrorMessages } from "../../../api/session-factory";
 import {
   type LocalizedMessages,
   resolveLocalizedMessages,
@@ -11,6 +12,7 @@ type MappedImportPreviewErrorCode = Extract<
   | "INVALID_FACTORY"
   | "INVALID_FACTORY_NAME"
   | "NETWORK_ERROR"
+  | "STALE_FACTORY_VERSION"
 >;
 
 export interface ImportPreviewDialogMessages {
@@ -44,14 +46,14 @@ const importPreviewDialogMessagesByLocale = {
     errorByCode: {
       FACTORY_ALREADY_EXISTS:
         "A factory with this name already exists. Rename or remove the existing factory before importing this PNG.",
-      FACTORY_NOT_IDLE:
-        "The current factory runtime is still active. Wait until it becomes idle before switching factories.",
-      INVALID_FACTORY:
-        "The dropped factory payload was rejected by the activation API.",
+      FACTORY_NOT_IDLE: sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE,
+      INVALID_FACTORY: sessionFactoryOperatorErrorMessages.INVALID_FACTORY,
       INVALID_FACTORY_NAME:
-        "The embedded factory name is not valid for activation.",
+        sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
       NETWORK_ERROR:
         "The dashboard could not reach the activation API. Try again once the connection is available.",
+      STALE_FACTORY_VERSION:
+        sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
     },
     flowLabel: "Mutation flow",
     hint: "Activating the import switches the current dashboard factory to the embedded authored definition from this PNG.",
@@ -78,6 +80,8 @@ const importPreviewDialogMessagesByLocale = {
         "埋め込まれたファクトリー名は有効化に使用できません。",
       NETWORK_ERROR:
         "ダッシュボードが有効化 API に接続できませんでした。接続が復旧したら再試行してください。",
+      STALE_FACTORY_VERSION:
+        "ファクトリー定義が古くなっています。ダッシュボードを更新してから、保存またはインポートを再試行してください。",
     },
     flowLabel: "変更フロー",
     hint: "インポートを有効化すると、現在のダッシュボードファクトリーはこの PNG に埋め込まれた定義へ切り替わります。",
@@ -102,6 +106,8 @@ const importPreviewDialogMessagesByLocale = {
       INVALID_FACTORY_NAME: "내장된 팩토리 이름이 활성화에 유효하지 않습니다.",
       NETWORK_ERROR:
         "대시보드가 활성화 API에 연결할 수 없습니다. 연결이 복구된 뒤 다시 시도하세요.",
+      STALE_FACTORY_VERSION:
+        "팩토리 정의가 오래되었습니다. 대시보드를 새로 고친 뒤 저장하거나 가져오기를 다시 시도하세요.",
     },
     flowLabel: "변경 흐름",
     hint: "가져오기를 활성화하면 현재 대시보드 팩토리가 이 PNG에 포함된 작성된 정의로 전환됩니다.",
@@ -125,6 +131,8 @@ const importPreviewDialogMessagesByLocale = {
       INVALID_FACTORY: "启用 API 拒绝了拖入的工厂负载。",
       INVALID_FACTORY_NAME: "嵌入的工厂名称不符合启用要求。",
       NETWORK_ERROR: "仪表板无法连接到启用 API。请在连接恢复后重试。",
+      STALE_FACTORY_VERSION:
+        "工厂定义已过期。请刷新仪表板后再保存或导入。",
     },
     flowLabel: "变更流程",
     hint: "启用导入会将当前仪表板工厂切换为此 PNG 中嵌入的已编写定义。",

@@ -90,6 +90,8 @@ function factoryImportActivationErrorCopy(
       return messages.errorByCode.INVALID_FACTORY_NAME;
     case "NETWORK_ERROR":
       return messages.errorByCode.NETWORK_ERROR;
+    case "STALE_FACTORY_VERSION":
+      return messages.errorByCode.STALE_FACTORY_VERSION;
     default:
       return error.message;
   }
