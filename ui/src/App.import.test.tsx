@@ -21,10 +21,12 @@ import {
   createFactoryImportValue,
   createFileDropTransfer,
   importedFactorySnapshot,
+  jsonResponse,
   MockEventSource,
   registerAppDashboardTestLifecycle,
   renderApp,
 } from "./testing/app-shell-test-utils";
+import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import {
   buildSessionFactoryActivationPutBody,
   defaultSessionFactoryVersion,
@@ -153,7 +155,7 @@ describe("App shell import flows", () => {
     expect(previewDialog.textContent).toContain("factory-import.png");
 
     fireEvent.click(
-      within(previewDialog).getByRole("button", { name: "Confirm import" }),
+      within(previewDialog).getByRole("button", { name: "Activate factory" }),
     );
 
     await waitFor(() => {
@@ -227,6 +229,32 @@ describe("App shell import flows", () => {
         const path = resolveFetchPath(input);
         const method = resolveFetchMethod(input, init);
 
+        if (path === "/factory-sessions") {
+          if (method === "GET") {
+            return jsonResponse({
+              sessions: [
+                {
+                  factoryDir: "/workspace/default",
+                  folderPath: "/workspace",
+                  id: DEFAULT_FACTORY_SESSION_ID,
+                  isDefault: true,
+                  project: "default",
+                  target: { kind: "default" },
+                },
+              ],
+            });
+          }
+
+          if (method === "POST") {
+            return jsonResponse({
+              targets: [
+                { ref: { kind: "named", name: "dashboard-fixture" } },
+                { ref: { kind: "named", name: "Dropped Factory" } },
+              ],
+            });
+          }
+        }
+
         if (isSessionFactoryRequest(path, method)) {
           if (method === "GET") {
             return mockGetSessionFactory({
@@ -260,17 +288,14 @@ describe("App shell import flows", () => {
     const previewDialog = await screen.findByRole("dialog", {
       name: "Review factory import",
     });
-    const messages = within(previewDialog).getByRole("radiogroup", {
-      name: "Import save choice",
-    });
     fireEvent.click(
-      within(messages).getByRole("radio", {
+      within(previewDialog).getByRole("button", {
         name: /Create new named factory/i,
       }),
     );
 
     fireEvent.click(
-      within(previewDialog).getByRole("button", { name: "Confirm import" }),
+      within(previewDialog).getByRole("button", { name: "Activate factory" }),
     );
 
     await waitFor(() => {
@@ -424,7 +449,7 @@ describe("App shell import flows", () => {
       expect(previewDialog.textContent).toContain("semantic-workflow.png");
 
       fireEvent.click(
-        within(previewDialog).getByRole("button", { name: "Confirm import" }),
+        within(previewDialog).getByRole("button", { name: "Activate factory" }),
       );
 
       await waitFor(() => {

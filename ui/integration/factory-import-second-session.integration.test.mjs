@@ -372,7 +372,7 @@ async function importFactoryPngAndActivate(page, options) {
   expect(await importDialog.textContent()).toContain("Replace current factory");
 
   await page
-    .getByRole("button", { name: "Confirm import" })
+    .getByRole("button", { name: "Activate factory" })
     .click({ timeout: uiInteractionTimeoutMs });
   await expect
     .poll(async () => sessionFactoryPutRequests.length, {

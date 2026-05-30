@@ -484,14 +484,14 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(await importDialog.textContent()).toContain(exportName);
         expect(await importDialog.textContent()).toContain(download.filename);
         expect(await importDialog.textContent()).toContain(
-          "Review the dropped factory before confirming import",
+          "Review the dropped factory before activation",
         );
         expect(await importDialog.textContent()).toContain(
           "Replace current factory",
         );
 
         await importDialog
-          .getByRole("button", { name: "Confirm import" })
+          .getByRole("button", { name: "Activate factory" })
           .click();
         await expect
           .poll(async () => sessionFactoryPutRequests.length, {

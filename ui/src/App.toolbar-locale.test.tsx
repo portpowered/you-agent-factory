@@ -106,7 +106,7 @@ describe("App shell locale and toolbar flows", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(importDialog).getByRole("button", { name: "确认导入" }),
+      within(importDialog).getByRole("button", { name: "启用工厂" }),
     ).toBeTruthy();
     expect(
       within(importDialog).getByRole("button", { name: "取消导入" }),
