@@ -16,6 +16,10 @@ import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../state/dashboardStreamStore";
+import {
+  FACTORY_TIMELINE_DEBUG_GLOBAL,
+  FACTORY_TIMELINE_DEBUG_STORAGE_KEY,
+} from "../../timeline/state/factoryTimelineDebug";
 import { useDashboardSnapshot } from "./useDashboardSnapshot";
 
 const replayHarness = createReplayHarness();
@@ -170,6 +174,8 @@ describe("useDashboardSnapshot composer", () => {
       expect(useFactoryTimelineStore.getState().events).toHaveLength(1);
     });
     expect(useFactoryTimelineStore.getState().latestTick).toBe(1);
+    expect(window[FACTORY_TIMELINE_DEBUG_GLOBAL]).toBeUndefined();
+    expect(window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY)).toBeNull();
   });
 });
 
