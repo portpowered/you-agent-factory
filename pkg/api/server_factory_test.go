@@ -16,6 +16,7 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
 func TestCreateFactory_ReturnsCreatedFactoryShape(t *testing.T) {
@@ -549,9 +550,9 @@ func TestValidateFactory_ReturnsMultipleTargetsForInvalidFactory(t *testing.T) {
 	if len(result.Targets) < 2 {
 		t.Fatalf("targets = %d, want multiple validation targets", len(result.Targets))
 	}
-	assertHasValidationTargetCode(t, result.Targets, factoryvalidation.CodeDuplicateIdentifier)
-	assertHasValidationTargetCode(t, result.Targets, factoryvalidation.CodeDanglingWorkerReference)
-	assertHasValidationTargetCode(t, result.Targets, factoryvalidation.CodeDanglingPlaceReference)
+	validationassert.HasTargetCode(t, result.Targets, factoryvalidation.CodeDuplicateIdentifier)
+	validationassert.HasTargetCode(t, result.Targets, factoryvalidation.CodeDanglingWorkerReference)
+	validationassert.HasTargetCode(t, result.Targets, factoryvalidation.CodeDanglingPlaceReference)
 }
 
 func TestValidateFactory_ReturnsCanonicalWorkstationSubjects(t *testing.T) {
@@ -579,7 +580,7 @@ func TestValidateFactory_ReturnsCanonicalWorkstationSubjects(t *testing.T) {
 	}
 
 	result := decodeJSONResponse[factoryapi.FactoryValidationResult](t, rec)
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		result.Targets,
 		factoryvalidation.CodeWorkstationMissingRejectionRoute,
@@ -588,7 +589,7 @@ func TestValidateFactory_ReturnsCanonicalWorkstationSubjects(t *testing.T) {
 		factoryapi.FactoryValidationSubjectLocationOnRejection,
 		"process ON_REJECTION target",
 	)
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		result.Targets,
 		factoryvalidation.CodeWorkTypeMissingCompletionState,
@@ -610,14 +611,4 @@ func TestValidateFactory_RejectsMalformedPayload(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 	}
-}
-
-func assertHasValidationTargetCode(t *testing.T, targets []factoryapi.FactoryValidationTarget, code string) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code == code {
-			return
-		}
-	}
-	t.Fatalf("targets = %#v, want code %q", targets, code)
 }
