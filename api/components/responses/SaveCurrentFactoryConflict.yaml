@@ -11,8 +11,13 @@ content:
           family: CONFLICT
           code: STALE_FACTORY_VERSION
           targets:
-            - kind: save
-              id: stale-version
+            - code: factory.version.stale
+              severity: error
+              message: Current factory definition is stale. Refresh the graph before saving.
+              subject:
+                type: FACTORY
+                id: ""
+                location: DEFINITION
       factoryNotIdle:
         summary: Runtime is not idle.
         value:
@@ -20,5 +25,10 @@ content:
           family: CONFLICT
           code: FACTORY_NOT_IDLE
           targets:
-            - kind: save
-              id: active-work
+            - code: factory.runtime.notIdle
+              severity: error
+              message: Current factory runtime must be idle before activation.
+              subject:
+                type: FACTORY
+                id: ""
+                location: DEFINITION

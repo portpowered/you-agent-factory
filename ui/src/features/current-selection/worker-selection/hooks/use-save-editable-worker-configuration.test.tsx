@@ -3,6 +3,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import {
+  staleFactoryVersionTarget,
+  workerFieldValidationTarget,
+} from "../../../../testing/factory-validation-target-fixtures";
 import * as currentFactoryFeature from "../../../current-factory-definition/public";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
@@ -179,7 +183,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
         {
           code: "STALE_FACTORY_VERSION",
           status: 409,
-          targets: [{ id: "stale-version", kind: "save" }],
+          targets: [staleFactoryVersionTarget()],
         },
       ),
     );
@@ -266,10 +270,10 @@ describe("useSaveEditableWorkerConfiguration", () => {
         code: "BAD_REQUEST",
         status: 400,
         targets: [
-          {
-            field: "factory.workers[0].modelProvider",
-            kind: "field",
-          },
+          workerFieldValidationTarget(
+            "modelProvider",
+            "Model provider is not supported.",
+          ),
         ],
       }),
     );
@@ -319,7 +323,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
         new CurrentFactoryDefinitionError(message, {
           code: "BAD_REQUEST",
           status: 400,
-          targets: [{ field, kind: "field" }],
+          targets: [workerFieldValidationTarget(expectedField, message)],
         }),
       );
       vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({

@@ -2,11 +2,13 @@ package maptests
 
 import (
 	"context"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/config"
 	"testing"
 	"time"
 
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -39,7 +41,7 @@ func TestConfigMapping_WorkstationTypeDefaultsToStandard(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -83,7 +85,7 @@ func TestConfigMapping_WorkstationTypeExplicitStandard(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -124,7 +126,7 @@ func TestConfigMapping_WorkstationTypeRepeater(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -163,7 +165,7 @@ func TestConfigMapping_WorkstationKindPollerUsesImplicitFailureRouting(t *testin
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -204,7 +206,7 @@ func TestConfigMapping_CronWithoutRequiredInputsUsesOutputWorkTypeForImplicitFai
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -258,7 +260,7 @@ func TestConfigMapping_ModelInvokeWorkstationUsesImplicitFailureRouting(t *testi
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -301,7 +303,7 @@ func TestConfigMapping_ClassifierRoutesBecomeLabeledAcceptedArcs(t *testing.T) {
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -349,7 +351,7 @@ func TestConfigMapping_ClassifierWithoutOnFailureGetsImplicitFailureArc(t *testi
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -387,7 +389,7 @@ func TestConfigMapping_RejectsNonClassifierWithoutOutputs(t *testing.T) {
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected mapper to reject non-classifier workstation without outputs")
@@ -421,7 +423,7 @@ func TestConfigMapping_RejectsNonClassifierClassificationRoutes(t *testing.T) {
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected mapper to reject non-classifier classificationRoutes")
@@ -467,12 +469,12 @@ worker: executor
 Retry work.
 `)
 
-	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	loaded, err := config.LoadRuntimeConfig(factoryDir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), loaded.FactoryConfig())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -526,7 +528,7 @@ func TestConfigMapping_AuthoredWorkstationTransitionsUseMatchingIDAndName(t *tes
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -584,7 +586,7 @@ func TestConfigMapping_DefaultNonRepeaterFanInRejectionUsesFailureDestinations(t
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -613,6 +615,7 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 				States: []interfaces.StateConfig{
 					{Name: "init", Type: interfaces.StateTypeInitial},
 					{Name: "ready", Type: interfaces.StateTypeProcessing},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
 					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
@@ -630,11 +633,14 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
+				OnContinue: []interfaces.IOConfig{
+					{StateName: "complete", WorkTypeName: "task"},
+				},
 			},
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -731,7 +737,7 @@ func assertTransitionArcPlaces(t *testing.T, arcs []petri.Arc, wantPlaces ...str
 func TestConfigMapping_CronTimeArcDoesNotReceiveDependencyGuard(t *testing.T) {
 	input := cronRequiredInputFactoryConfig()
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -761,7 +767,7 @@ func TestConfigMapping_CronTimeEnablementUsesSharedTimePlace(t *testing.T) {
 	now := time.Date(2026, 4, 18, 13, 0, 0, 0, time.UTC)
 	input := cronRequiredInputFactoryConfig()
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -852,7 +858,7 @@ func TestConfigMapping_DefaultExpiryTargetsExpiredTokenCronCannotUse(t *testing.
 	now := time.Date(2026, 4, 18, 13, 0, 0, 0, time.UTC)
 	input := cronRequiredInputFactoryConfig()
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -909,13 +915,13 @@ func TestConfigMapping_ValidationRejectsSingleInputWithTwoSameTypeOutputs(t *tes
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected type-alignment validation error")
 	}
-	if !strings.Contains(err.Error(), "TYPE_COUNT_COLLISION") {
-		t.Fatalf("expected TYPE_COUNT_COLLISION in error, got %v", err)
+	if !strings.Contains(err.Error(), factoryvalidation.CodeWorkstationConflictingOutputs) {
+		t.Fatalf("expected %s in error, got %v", factoryvalidation.CodeWorkstationConflictingOutputs, err)
 	}
 }
 
@@ -946,12 +952,12 @@ func TestConfigMapping_ValidationRejectsMismatchedCountsAcrossMultiInputSameType
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected type-alignment validation error")
 	}
-	if !strings.Contains(err.Error(), "TYPE_COUNT_COLLISION") {
-		t.Fatalf("expected TYPE_COUNT_COLLISION in error, got %v", err)
+	if !strings.Contains(err.Error(), factoryvalidation.CodeWorkstationConflictingOutputs) {
+		t.Fatalf("expected %s in error, got %v", factoryvalidation.CodeWorkstationConflictingOutputs, err)
 	}
 }

@@ -26,6 +26,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGenerat
 			"states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
 				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
 			},
 		}},
 		"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
@@ -36,6 +37,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGenerat
 			"worker":    "executor",
 			"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "story", "state": "failed"}},
 			"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
 			"stopWords": []string{"BLOCKED"},
 		}},

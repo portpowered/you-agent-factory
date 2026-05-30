@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
 
 const validationTargetKind = "factory-session-validation"
@@ -58,11 +59,11 @@ func (e *validationError) Unwrap() error {
 	return e.err
 }
 
-func (e *validationError) ErrorTargets() []factoryapi.ErrorTarget {
+func (e *validationError) ErrorTargets() []factoryapi.FactoryValidationTarget {
 	if e == nil {
 		return nil
 	}
-	return []factoryapi.ErrorTarget{validationErrorTarget(e.reason, e.field)}
+	return []factoryapi.FactoryValidationTarget{validationErrorTarget(e.reason, e.field, e.Error())}
 }
 
 // NewValidationError builds a structured factory-session validation error.
@@ -86,13 +87,9 @@ func ValidationReasonFromError(err error) (reason string, field string, ok bool)
 	return ve.reason, ve.field, true
 }
 
-func validationErrorTarget(reason string, field string) factoryapi.ErrorTarget {
-	target := factoryapi.ErrorTarget{Kind: validationTargetKind}
-	if reason != "" {
-		target.Id = &reason
+func validationErrorTarget(reason string, field string, message string) factoryapi.FactoryValidationTarget {
+	if message == "" {
+		message = "factory session validation failed"
 	}
-	if field != "" {
-		target.Field = &field
-	}
-	return target
+	return factoryvalidation.FactorySessionFieldTarget(reason, field, message)
 }

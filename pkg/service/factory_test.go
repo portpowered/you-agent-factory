@@ -12,6 +12,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -1183,6 +1184,7 @@ func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(
 			"states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
 				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
 			},
 		}},
 		"workers": []map[string]any{{
@@ -1268,6 +1270,54 @@ func TestFactoryService_CreateNamedFactory_RejectsReservedCurrentFactoryName(t *
 		t.Fatalf("CreateNamedFactory(%q) error = %v, want %v", apisurface.DefaultCurrentFactoryName, err, apisurface.ErrInvalidNamedFactoryName)
 	}
 	assertCurrentFactoryPointerMissing(t, rootDir, "after reserved-name rejection")
+}
+
+func TestFactoryService_CreateNamedFactory_RejectsMissingFailureRouteTargets(t *testing.T) {
+	rootDir := t.TempDir()
+	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	invalid := serviceNamedFactoryContractWithWorkType(t, "beta", "task")
+	if invalid.WorkTypes == nil || invalid.Workstations == nil {
+		t.Fatal("expected fixture work types and workstations")
+	}
+	(*invalid.WorkTypes)[0].States = []factoryapi.WorkState{
+		{Name: "in-review", Type: factoryapi.WorkStateTypePROCESSING},
+		{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+	}
+	repeater := factoryapi.WorkstationKindRepeater
+	(*invalid.Workstations)[0].Name = "bob"
+	(*invalid.Workstations)[0].Behavior = &repeater
+	(*invalid.Workstations)[0].Inputs = []factoryapi.WorkstationIO{}
+	(*invalid.Workstations)[0].Outputs = &[]factoryapi.WorkstationIO{{WorkType: "task", State: "in-review"}}
+	(*invalid.Workstations)[0].OnFailure = nil
+	(*invalid.Workstations)[0].OnRejection = &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}}
+
+	_, err = svc.CreateNamedFactory(context.Background(), invalid)
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(err, &topologyErr) {
+		t.Fatalf("CreateNamedFactory error = %v, want topology validation error", err)
+	}
+	assertHasValidationTarget(
+		t,
+		topologyErr.Targets,
+		factoryvalidation.CodeWorkstationMissingFailureRoute,
+		factoryapi.FactoryValidationSubjectTypeWorkstation,
+		"bob",
+		factoryapi.FactoryValidationSubjectLocationOnFailure,
+		"bob ON_FAILURE target",
+	)
 }
 
 func TestFactoryService_CreateNamedFactory_RejectsDuplicatePersistedName(t *testing.T) {
@@ -1643,59 +1693,75 @@ func TestFactoryService_SaveCurrentFactory_RejectsMissingOutcomeRoutes(t *testin
 	if !errors.As(err, &topologyErr) {
 		t.Fatalf("SaveCurrentFactory error = %v, want topology validation error", err)
 	}
-	assertHasServiceErrorField(t, topologyErr.Targets, "factory.workstations[0].onFailure", "missing failure route target")
-	assertHasServiceErrorField(t, topologyErr.Targets, "factory.workstations[0].onRejection", "missing rejection route target")
+	assertHasValidationTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingFailureRoute, "missing failure route target")
+	assertHasValidationTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingRejectionRoute, "missing rejection route target")
 }
 
-func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.ErrorTarget) {
+func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.FactoryValidationTarget) {
 	t.Helper()
 
 	if len(targets) < 3 {
 		t.Fatalf("topology targets = %#v, want duplicate worker, missing worker, and dangling output targets", targets)
 	}
 
-	assertHasServiceErrorTarget(t, targets, "node", "worker-a", "duplicate worker node target")
-	assertHasServiceErrorTarget(t, targets, "field", "process", "missing workstation worker field target")
-	assertHasServiceErrorTarget(t, targets, "edge", "process->story:missing-state", "dangling output edge target")
-	assertHasServiceErrorField(t, targets, "factory.workstations[0].worker", "canonical factory field target")
-
-	if hasServiceErrorField(targets, "factoryDefinition.workstations[0].worker") {
-		t.Fatalf("topology targets = %#v, should not use retired factoryDefinition field prefix", targets)
-	}
+	assertHasValidationTarget(
+		t,
+		targets,
+		factoryvalidation.CodeDuplicateIdentifier,
+		factoryapi.FactoryValidationSubjectTypeWorker,
+		"worker-a",
+		factoryapi.FactoryValidationSubjectLocationDefinition,
+		"duplicate worker target",
+	)
+	assertHasValidationTarget(
+		t,
+		targets,
+		factoryvalidation.CodeDanglingWorkerReference,
+		factoryapi.FactoryValidationSubjectTypeWorkstation,
+		"process",
+		factoryapi.FactoryValidationSubjectLocationReference,
+		"missing workstation worker target",
+	)
+	assertHasValidationTarget(
+		t,
+		targets,
+		factoryvalidation.CodeDanglingPlaceReference,
+		factoryapi.FactoryValidationSubjectTypeRoute,
+		"process->story:missing-state",
+		factoryapi.FactoryValidationSubjectLocationOutputs,
+		"dangling output target",
+	)
 }
 
-func assertHasServiceErrorTarget(t *testing.T, targets []factoryapi.ErrorTarget, kind, id, want string) {
+func assertHasValidationTargetCode(t *testing.T, targets []factoryapi.FactoryValidationTarget, code, want string) {
 	t.Helper()
-	if hasServiceErrorTarget(targets, kind, id) {
-		return
+	for _, target := range targets {
+		if target.Code == code {
+			return
+		}
 	}
 	t.Fatalf("topology targets = %#v, want %s", targets, want)
 }
 
-func assertHasServiceErrorField(t *testing.T, targets []factoryapi.ErrorTarget, field, want string) {
+func assertHasValidationTarget(
+	t *testing.T,
+	targets []factoryapi.FactoryValidationTarget,
+	code string,
+	subjectType factoryapi.FactoryValidationSubjectType,
+	subjectID string,
+	location factoryapi.FactoryValidationSubjectLocation,
+	want string,
+) {
 	t.Helper()
-	if hasServiceErrorField(targets, field) {
-		return
+	for _, target := range targets {
+		if target.Code != code {
+			continue
+		}
+		if target.Subject.Type == subjectType && target.Subject.Id == subjectID && target.Subject.Location == location {
+			return
+		}
 	}
 	t.Fatalf("topology targets = %#v, want %s", targets, want)
-}
-
-func hasServiceErrorTarget(targets []factoryapi.ErrorTarget, kind, id string) bool {
-	for _, target := range targets {
-		if target.Kind == kind && target.Id != nil && *target.Id == id {
-			return true
-		}
-	}
-	return false
-}
-
-func hasServiceErrorField(targets []factoryapi.ErrorTarget, field string) bool {
-	for _, target := range targets {
-		if target.Field != nil && *target.Field == field {
-			return true
-		}
-	}
-	return false
 }
 
 func TestFactoryService_GetCurrentFactory_CollectsSupportedPortableBundledFilesFromDisk(t *testing.T) {

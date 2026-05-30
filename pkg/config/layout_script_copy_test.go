@@ -1,13 +1,15 @@
 package config
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestWriteExpandedFactoryLayout_CopiesReferencedScriptForOptedInScriptWorkstation(t *testing.T) {
@@ -246,6 +248,48 @@ Execute {{ (index .Inputs 0).WorkID }}.
 	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
 	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
 	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
+}
+
+func TestFlattenFactoryConfig_CheckedInFactoryBundlesOverviewDoc(t *testing.T) {
+	factoryConfigPath := testpath.MustRepoPathFromCaller(t, 0, "factory", interfaces.FactoryConfigFile)
+
+	flattened, err := FlattenFactoryConfig(factoryConfigPath)
+	if err != nil {
+		t.Fatalf("FlattenFactoryConfig(%s): %v", factoryConfigPath, err)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(flattened)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.ResourceManifest == nil {
+		t.Fatal("expected checked-in factory flatten to include bundled files")
+	}
+
+	var overview interfaces.BundledFileConfig
+	for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
+		if bundledFile.TargetPath == "factory/docs/overview.md" {
+			overview = bundledFile
+			break
+		}
+	}
+	if overview.TargetPath == "" {
+		t.Fatalf("expected factory/docs/overview.md in bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
+	}
+	if overview.Type != interfaces.BundledFileTypeDoc {
+		t.Fatalf("overview bundled type = %q, want %q", overview.Type, interfaces.BundledFileTypeDoc)
+	}
+	for _, want := range []string{
+		"# Repository Maintainer Factory Overview",
+		"you run --dir ./factory",
+		"thoughts:init",
+		"factory/inputs/BATCH/default/",
+		"you docs agents",
+	} {
+		if !strings.Contains(overview.Content.Inline, want) {
+			t.Fatalf("overview inline missing %q:\n%s", want, overview.Content.Inline)
+		}
+	}
 }
 
 func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.T) {

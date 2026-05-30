@@ -1,4 +1,5 @@
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
+import { factorySessionFieldTarget } from "../../../testing/factory-validation-target-fixtures";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import {
   classifyFactorySessionFolderValidationError,
@@ -113,7 +114,9 @@ describe("dashboard session tabs utils", () => {
       classifyFactorySessionFolderValidationError(
         new FactorySessionsAPIError("ignored", {
           code: "BAD_REQUEST",
-          targets: [{ kind: "factory-session-validation", id: "missing" }],
+          targets: [
+            factorySessionFieldTarget("missing", "folderPath", "ignored"),
+          ],
         }),
       ),
     ).toBe("missing");

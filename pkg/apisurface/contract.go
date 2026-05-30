@@ -120,7 +120,7 @@ type ModelPullResult struct {
 // map back to form fields, nodes, edges, or save-level messages.
 type TopologyValidationError struct {
 	Message string
-	Targets []factoryapi.ErrorTarget
+	Targets []factoryapi.FactoryValidationTarget
 }
 
 func (e *TopologyValidationError) Error() string {
@@ -137,13 +137,13 @@ func (e *TopologyValidationError) Is(target error) bool {
 	return target == ErrInvalidNamedFactory
 }
 
-func NewTopologyValidationError(message string, targets []factoryapi.ErrorTarget) *TopologyValidationError {
+func NewTopologyValidationError(message string, targets []factoryapi.FactoryValidationTarget) *TopologyValidationError {
 	if message == "" {
 		message = "factory topology validation failed"
 	}
 	return &TopologyValidationError{
 		Message: message,
-		Targets: append([]factoryapi.ErrorTarget(nil), targets...),
+		Targets: append([]factoryapi.FactoryValidationTarget(nil), targets...),
 	}
 }
 

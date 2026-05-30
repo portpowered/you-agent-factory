@@ -32,6 +32,8 @@ export interface BasePlaceNodeData extends Record<string, unknown> {
   place: DashboardPlaceRef;
   selectedStateNode: boolean;
   tokenCount: number;
+  validationError?: boolean;
+  validationMessage?: string;
 }
 
 export interface StatePositionNodeData extends BasePlaceNodeData {
@@ -88,9 +90,13 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
     placeNodeClassName(data.place),
     data.activeFlow &&
       !data.selectedStateNode &&
+      !data.validationError &&
       "border-af-success-border shadow-af-success-chip",
     data.selectedStateNode &&
+      !data.validationError &&
       "border-af-accent-border shadow-af-accent-selected",
+    data.validationError &&
+      "ring-2 ring-af-danger-border motion-safe:animate-pulse",
     data.muted && "opacity-[0.45]",
   );
 
@@ -102,10 +108,14 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
     >
       {selectable ? (
         <GraphNodeButton
-          aria-label={messages.selectStateLabel(placeLabel)}
+          aria-invalid={data.validationError ? true : undefined}
+          aria-label={
+            data.validationMessage ?? messages.selectStateLabel(placeLabel)
+          }
           aria-pressed={data.selectedStateNode}
           className={STATE_POSITION_CONTENT_CONTAINER_CLASSNAME}
           data-selected-state={data.selectedStateNode ? "true" : undefined}
+          title={data.validationMessage}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectStateNode?.(data.place.place_id);

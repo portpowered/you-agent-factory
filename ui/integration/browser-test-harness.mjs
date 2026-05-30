@@ -717,6 +717,15 @@ export async function startFactoryApiServer({
       return;
     }
 
+    if (request.url === "/factory-validations" && request.method === "POST") {
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify({ targets: [] }));
+      return;
+    }
+
     if (request.url === "/factories" && request.method === "POST") {
       let requestBody = "";
       request.setEncoding("utf8");

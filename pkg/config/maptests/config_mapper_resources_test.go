@@ -3,7 +3,6 @@ package maptests
 import (
 	"context"
 	"fmt"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -47,7 +46,7 @@ func TestConfigMapping_ResourceUsage(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -106,7 +105,7 @@ func TestConfigMapping_TwoWorkstationsSharingResource(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -168,7 +167,7 @@ func TestConfigMapping_ValidationRejectsNonexistentResource(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for resource_usage referencing non-existent resource")
@@ -258,7 +257,7 @@ func TestConfigMapping_ValidationRejectsInvalidResourceCount(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for resource_usage with zero count")
@@ -287,7 +286,7 @@ func TestConfigMapping_WorkerResourcesBecomeEnforcedTransitionRequirements(t *te
 		}},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -364,7 +363,7 @@ func TestConfigMapping_ValidationAllowsCrossTypeFanout(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	if _, err := mapper.Map(context.Background(), input); err != nil {
 		t.Fatalf("expected cross-type fanout to be allowed, got %v", err)
 	}
@@ -395,7 +394,7 @@ func TestConfigMapping_ValidationRejectsUnknownWorkstationKind(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for unknown workstation kind")
@@ -430,7 +429,7 @@ func TestConfigMapping_ValidationRejectsNonexistentWorker(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for workstation referencing non-existent worker")
@@ -469,7 +468,7 @@ func TestConfigMapping_ValidationAcceptsValidWorkerReference(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected validation error: %v", err)
@@ -484,6 +483,8 @@ func cronRequiredInputFactoryConfig() *interfaces.FactoryConfig {
 				States: []interfaces.StateConfig{
 					{Name: "init", Type: interfaces.StateTypeInitial},
 					{Name: "ready", Type: interfaces.StateTypeProcessing},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 		},
@@ -499,6 +500,9 @@ func cronRequiredInputFactoryConfig() *interfaces.FactoryConfig {
 				},
 				Outputs: []interfaces.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
+				},
+				OnContinue: []interfaces.IOConfig{
+					{StateName: "complete", WorkTypeName: "task"},
 				},
 			},
 		},

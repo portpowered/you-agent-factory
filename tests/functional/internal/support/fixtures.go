@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
@@ -19,9 +21,18 @@ func ScaffoldFactory(t *testing.T, cfg map[string]any) string {
 	if _, ok := cfg["name"]; !ok {
 		cfg["name"] = "factory"
 	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	raw, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatalf("marshal factory config: %v", err)
+	}
+	expanded, err := config.NewFactoryConfigMapper().Expand(raw)
+	if err != nil {
+		t.Fatalf("expand factory config: %v", err)
+	}
+	factoryvalidation.NormalizeFixtureConfig(expanded)
+	data, err := config.MarshalCanonicalFactoryConfig(expanded)
+	if err != nil {
+		t.Fatalf("marshal canonical factory config: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
 		t.Fatalf("write factory.json: %v", err)

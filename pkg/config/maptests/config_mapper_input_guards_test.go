@@ -2,7 +2,6 @@ package maptests
 
 import (
 	"context"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"strings"
 	"testing"
 
@@ -58,7 +57,7 @@ func TestConfigMapping_PerInputGuard_StaticAllChildrenComplete(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -161,7 +160,7 @@ func TestConfigMapping_PerInputGuard_DynamicFanout(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -214,7 +213,7 @@ func TestConfigMapping_PerInputGuard_AnyChildFailed(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	outputNet, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
@@ -283,7 +282,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsMissingParentInput(t *test
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for per-input guard missing parent_input")
@@ -321,7 +320,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsSelfReference(t *testing.T
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for per-input guard referencing its own input")
@@ -366,7 +365,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsInvalidParentInput(t *test
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for per-input guard referencing non-existent parent input")
@@ -412,7 +411,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsInvalidSpawnedBy(t *testin
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for per-input guard referencing non-existent spawned_by workstation")
@@ -457,7 +456,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsUnsupportedType(t *testing
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for unsupported per-input guard type")
@@ -501,7 +500,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsSameNameMissingMatchInput(
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for same-name guard missing match_input")
@@ -553,7 +552,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsSameNameSelfReference(t *t
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for same-name guard referencing its own input")
@@ -598,7 +597,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsSameNameUnknownMatchInput(
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for same-name guard referencing non-existent input")
@@ -642,7 +641,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsSameTraceIDMissingMatchInp
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for same-trace guard missing match_input")
@@ -700,7 +699,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsSameTraceIDSelfReference(t
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for same-trace guard referencing its own input")
@@ -751,7 +750,7 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsSameTraceIDUnknownMatchInp
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for same-trace guard referencing non-existent input")
@@ -802,7 +801,7 @@ func TestConfigMapping_PerInputGuard_SameNameBuildsConsumeGuardAgainstPeerInput(
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("Map: %v", err)
@@ -881,7 +880,7 @@ func TestConfigMapping_PerInputGuard_SameTraceIDBuildsConsumeGuardAgainstPeerInp
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	net, err := mapper.Map(context.Background(), input)
 	if err != nil {
 		t.Fatalf("Map: %v", err)

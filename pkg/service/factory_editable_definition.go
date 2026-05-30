@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -108,84 +109,6 @@ func (fs *FactoryService) buildEditableFactoryReplacement(
 	}
 	return fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
 }
-
-func workTypeNames(workTypes *[]factoryapi.WorkType) []string {
-	if workTypes == nil {
-		return nil
-	}
-	names := make([]string, 0, len(*workTypes))
-	for _, workType := range *workTypes {
-		names = append(names, workType.Name)
-	}
-	return names
-}
-
-func workerNames(workers *[]factoryapi.Worker) []string {
-	if workers == nil {
-		return nil
-	}
-	names := make([]string, 0, len(*workers))
-	for _, worker := range *workers {
-		names = append(names, worker.Name)
-	}
-	return names
-}
-
-func resourceNames(resources *[]factoryapi.Resource) []string {
-	if resources == nil {
-		return nil
-	}
-	names := make([]string, 0, len(*resources))
-	for _, resource := range *resources {
-		names = append(names, resource.Name)
-	}
-	return names
-}
-
-func workstationNames(workstations *[]factoryapi.Workstation) []string {
-	if workstations == nil {
-		return nil
-	}
-	names := make([]string, 0, len(*workstations))
-	for _, workstation := range *workstations {
-		names = append(names, workstation.Name)
-	}
-	return names
-}
-
-func workStateSet(workTypes *[]factoryapi.WorkType) map[string]bool {
-	states := make(map[string]bool)
-	if workTypes == nil {
-		return states
-	}
-	for _, workType := range *workTypes {
-		for _, state := range workType.States {
-			states[workType.Name+":"+state.Name] = true
-		}
-	}
-	return states
-}
-
-func stringSet(values []string) map[string]bool {
-	set := make(map[string]bool, len(values))
-	for _, value := range values {
-		set[value] = true
-	}
-	return set
-}
-
-func editableFactoryErrorTarget(kind, id, field string) factoryapi.ErrorTarget {
-	target := factoryapi.ErrorTarget{Kind: kind}
-	if id != "" {
-		target.Id = &id
-	}
-	if field != "" {
-		target.Field = &field
-	}
-	return target
-}
-
-const canonicalFactoryValidationRoot = "factory"
 
 func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
 	sessionRootDir string,
@@ -475,267 +398,18 @@ func isEditableFactoryVersionAdvanced(candidate, current factoryapi.HybridLogica
 }
 
 func validateEditableFactoryTopology(submitted factoryapi.Factory) error {
-	var targets []factoryapi.ErrorTarget
-	targets = append(targets, duplicateNameTargets("workTypes", workTypeNames(submitted.WorkTypes), "node")...)
-	targets = append(targets, duplicateNameTargets("workers", workerNames(submitted.Workers), "node")...)
-	targets = append(targets, duplicateNameTargets("resources", resourceNames(submitted.Resources), "node")...)
-	targets = append(targets, duplicateNameTargets("workstations", workstationNames(submitted.Workstations), "node")...)
-	targets = append(targets, duplicateWorkStateTargets(submitted.WorkTypes)...)
-	targets = append(targets, danglingFactoryReferenceTargets(submitted)...)
-	targets = append(targets, typeCountCollisionTargets(submitted)...)
-	targets = append(targets, missingOutcomeRouteTargets(submitted)...)
-	if len(targets) == 0 {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPI(submitted)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidNamedFactory, err)
+	}
+	result := factoryvalidation.Validate(&cfg)
+	if len(result.Targets) == 0 {
 		return nil
 	}
-	return apisurface.NewTopologyValidationError("Factory topology contains invalid graph references.", targets)
-}
-
-func duplicateNameTargets(collection string, names []string, kind string) []factoryapi.ErrorTarget {
-	seen := make(map[string]int, len(names))
-	var targets []factoryapi.ErrorTarget
-	for index, name := range names {
-		field := fmt.Sprintf("%s.%s[%d].name", canonicalFactoryValidationRoot, collection, index)
-		if strings.TrimSpace(name) == "" {
-			targets = append(targets, editableFactoryErrorTarget("field", "", field))
-			continue
-		}
-		if firstIndex, ok := seen[name]; ok {
-			targets = append(targets,
-				editableFactoryErrorTarget(kind, name, fmt.Sprintf("%s.%s[%d].name", canonicalFactoryValidationRoot, collection, firstIndex)),
-				editableFactoryErrorTarget(kind, name, field),
-			)
-			continue
-		}
-		seen[name] = index
-	}
-	return targets
-}
-
-func duplicateWorkStateTargets(workTypes *[]factoryapi.WorkType) []factoryapi.ErrorTarget {
-	if workTypes == nil {
-		return nil
-	}
-	var targets []factoryapi.ErrorTarget
-	for workTypeIndex, workType := range *workTypes {
-		seen := make(map[string]int, len(workType.States))
-		for stateIndex, state := range workType.States {
-			field := fmt.Sprintf("%s.workTypes[%d].states[%d].name", canonicalFactoryValidationRoot, workTypeIndex, stateIndex)
-			if strings.TrimSpace(state.Name) == "" {
-				targets = append(targets, editableFactoryErrorTarget("field", workType.Name, field))
-				continue
-			}
-			if firstIndex, ok := seen[state.Name]; ok {
-				id := workType.Name + ":" + state.Name
-				targets = append(targets,
-					editableFactoryErrorTarget("node", id, fmt.Sprintf("%s.workTypes[%d].states[%d].name", canonicalFactoryValidationRoot, workTypeIndex, firstIndex)),
-					editableFactoryErrorTarget("node", id, field),
-				)
-				continue
-			}
-			seen[state.Name] = stateIndex
-		}
-	}
-	return targets
-}
-
-func danglingFactoryReferenceTargets(factory factoryapi.Factory) []factoryapi.ErrorTarget {
-	workStates := workStateSet(factory.WorkTypes)
-	workers := stringSet(workerNames(factory.Workers))
-	resources := stringSet(resourceNames(factory.Resources))
-	var targets []factoryapi.ErrorTarget
-	if factory.Workstations == nil {
-		return targets
-	}
-	for workstationIndex, workstation := range *factory.Workstations {
-		if strings.TrimSpace(workstation.Worker) == "" || !workers[workstation.Worker] {
-			targets = append(targets, editableFactoryErrorTarget("field", workstation.Name, fmt.Sprintf("%s.workstations[%d].worker", canonicalFactoryValidationRoot, workstationIndex)))
-		}
-		targets = append(targets, danglingIOTargets(workstation.Name, workstation.Inputs, workStates, fmt.Sprintf("%s.workstations[%d].inputs", canonicalFactoryValidationRoot, workstationIndex))...)
-		if workstation.Outputs != nil {
-			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.Outputs, workStates, fmt.Sprintf("%s.workstations[%d].outputs", canonicalFactoryValidationRoot, workstationIndex))...)
-		}
-		if workstation.OnContinue != nil {
-			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnContinue, workStates, fmt.Sprintf("%s.workstations[%d].onContinue", canonicalFactoryValidationRoot, workstationIndex))...)
-		}
-		if workstation.OnFailure != nil {
-			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnFailure, workStates, fmt.Sprintf("%s.workstations[%d].onFailure", canonicalFactoryValidationRoot, workstationIndex))...)
-		}
-		if workstation.OnRejection != nil {
-			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnRejection, workStates, fmt.Sprintf("%s.workstations[%d].onRejection", canonicalFactoryValidationRoot, workstationIndex))...)
-		}
-		if workstation.Resources != nil {
-			for resourceIndex, resource := range *workstation.Resources {
-				if strings.TrimSpace(resource.Name) == "" || !resources[resource.Name] {
-					targets = append(targets, editableFactoryErrorTarget("edge", workstation.Name+"->"+resource.Name, fmt.Sprintf("%s.workstations[%d].resources[%d].name", canonicalFactoryValidationRoot, workstationIndex, resourceIndex)))
-				}
-			}
-		}
-	}
-	return targets
-}
-
-func danglingIOTargets(workstation string, ios []factoryapi.WorkstationIO, workStates map[string]bool, fieldPrefix string) []factoryapi.ErrorTarget {
-	var targets []factoryapi.ErrorTarget
-	for index, io := range ios {
-		id := workstation + "->" + io.WorkType + ":" + io.State
-		if !workStates[io.WorkType+":"+io.State] {
-			targets = append(targets, editableFactoryErrorTarget("edge", id, fmt.Sprintf("%s[%d]", fieldPrefix, index)))
-		}
-	}
-	return targets
-}
-
-func typeCountCollisionTargets(factory factoryapi.Factory) []factoryapi.ErrorTarget {
-	if factory.Workstations == nil {
-		return nil
-	}
-	var targets []factoryapi.ErrorTarget
-	for workstationIndex, workstation := range *factory.Workstations {
-		inputCounts := ioWorkTypeCounts(workstation.Inputs)
-		if len(inputCounts) == 0 {
-			continue
-		}
-		if workstation.Outputs != nil {
-			targets = append(targets, typeCountRouteCollisionTargets(workstation.Name, inputCounts, *workstation.Outputs, fmt.Sprintf("%s.workstations[%d].outputs", canonicalFactoryValidationRoot, workstationIndex))...)
-		}
-		if workstation.OnContinue != nil {
-			targets = append(targets, typeCountRouteCollisionTargets(workstation.Name, inputCounts, *workstation.OnContinue, fmt.Sprintf("%s.workstations[%d].onContinue", canonicalFactoryValidationRoot, workstationIndex))...)
-		}
-		if workstation.OnRejection != nil {
-			targets = append(targets, typeCountRouteCollisionTargets(workstation.Name, inputCounts, *workstation.OnRejection, fmt.Sprintf("%s.workstations[%d].onRejection", canonicalFactoryValidationRoot, workstationIndex))...)
-		}
-		if workstation.OnFailure != nil {
-			targets = append(targets, typeCountRouteCollisionTargets(workstation.Name, inputCounts, *workstation.OnFailure, fmt.Sprintf("%s.workstations[%d].onFailure", canonicalFactoryValidationRoot, workstationIndex))...)
-		}
-	}
-	return targets
-}
-
-func missingOutcomeRouteTargets(factory factoryapi.Factory) []factoryapi.ErrorTarget {
-	if factory.Workstations == nil {
-		return nil
-	}
-
-	failedWorkTypes := failedWorkTypeSet(factory.WorkTypes)
-	var targets []factoryapi.ErrorTarget
-	for workstationIndex, workstation := range *factory.Workstations {
-		hasFailureRoute := workstationHasExplicitRoutes(workstation.OnFailure) ||
-			workstationCanDefaultFailureRoute(workstation, failedWorkTypes)
-		if !hasFailureRoute {
-			targets = append(targets, editableFactoryErrorTarget(
-				"field",
-				workstation.Name,
-				fmt.Sprintf("%s.workstations[%d].onFailure", canonicalFactoryValidationRoot, workstationIndex),
-			))
-		}
-
-		if !workstationNeedsExplicitRejectionRoute(workstation) {
-			continue
-		}
-		targets = append(targets, editableFactoryErrorTarget(
-			"field",
-			workstation.Name,
-			fmt.Sprintf("%s.workstations[%d].onRejection", canonicalFactoryValidationRoot, workstationIndex),
-		))
-	}
-	return targets
-}
-
-func workstationNeedsExplicitRejectionRoute(workstation factoryapi.Workstation) bool {
-	if workstationHasExplicitRoutes(workstation.OnRejection) {
-		return false
-	}
-	return workstation.Behavior != nil &&
-		*workstation.Behavior == factoryapi.WorkstationKindRepeater &&
-		len(workstation.Inputs) == 0
-}
-
-func workstationCanDefaultFailureRoute(
-	workstation factoryapi.Workstation,
-	failedWorkTypes map[string]bool,
-) bool {
-	for _, input := range workstation.Inputs {
-		if failedWorkTypes[input.WorkType] {
-			return true
-		}
-	}
-	if workstation.Outputs != nil && workstationIOsContainFailedWorkType(*workstation.Outputs, failedWorkTypes) {
-		return true
-	}
-	if workstation.ClassificationRoutes != nil {
-		for _, route := range *workstation.ClassificationRoutes {
-			if workstationIOsContainFailedWorkType(route.Outputs, failedWorkTypes) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func workstationHasExplicitRoutes(routes *[]factoryapi.WorkstationIO) bool {
-	return routes != nil && len(*routes) > 0
-}
-
-func workstationIOsContainFailedWorkType(
-	ios []factoryapi.WorkstationIO,
-	failedWorkTypes map[string]bool,
-) bool {
-	for _, io := range ios {
-		if failedWorkTypes[io.WorkType] {
-			return true
-		}
-	}
-	return false
-}
-
-func failedWorkTypeSet(workTypes *[]factoryapi.WorkType) map[string]bool {
-	failed := make(map[string]bool)
-	if workTypes == nil {
-		return failed
-	}
-	for _, workType := range *workTypes {
-		for _, state := range workType.States {
-			if state.Type == factoryapi.WorkStateTypeFAILED {
-				failed[workType.Name] = true
-				break
-			}
-		}
-	}
-	return failed
-}
-
-func ioWorkTypeCounts(ios []factoryapi.WorkstationIO) map[string]int {
-	counts := make(map[string]int)
-	for _, io := range ios {
-		if strings.TrimSpace(io.WorkType) == "" {
-			continue
-		}
-		counts[io.WorkType]++
-	}
-	return counts
-}
-
-func typeCountRouteCollisionTargets(
-	workstation string,
-	inputCounts map[string]int,
-	routes []factoryapi.WorkstationIO,
-	fieldPrefix string,
-) []factoryapi.ErrorTarget {
-	routeCounts := ioWorkTypeCounts(routes)
-	var targets []factoryapi.ErrorTarget
-	for workType, inputCount := range inputCounts {
-		routeCount := routeCounts[workType]
-		if routeCount == 0 || routeCount == inputCount {
-			continue
-		}
-		for routeIndex, route := range routes {
-			if route.WorkType != workType {
-				continue
-			}
-			targets = append(targets, editableFactoryErrorTarget("edge", workstation+"->"+route.WorkType+":"+route.State, fmt.Sprintf("%s[%d]", fieldPrefix, routeIndex)))
-		}
-	}
-	return targets
+	return apisurface.NewTopologyValidationError(
+		"Factory topology contains invalid graph references.",
+		factoryvalidation.ToValidationTargets(result.Targets),
+	)
 }
 
 // CreateNamedFactory persists one named-factory payload under the canonical
@@ -749,6 +423,9 @@ func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory f
 		rootDir = fs.cfg.Dir
 	}
 	if err := apisurface.ValidateWritableNamedFactoryName(namedFactory.Name); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	if err := validateEditableFactoryTopology(namedFactory); err != nil {
 		return factoryapi.Factory{}, err
 	}
 

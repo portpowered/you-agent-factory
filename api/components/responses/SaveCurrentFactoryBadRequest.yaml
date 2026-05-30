@@ -11,5 +11,10 @@ content:
           family: BAD_REQUEST
           code: INVALID_FACTORY
           targets:
-            - kind: form
-              field: factory
+            - code: factory.workstation.missingFailureRoute
+              severity: error
+              message: workstation "bob" must define a failure route.
+              subject:
+                type: WORKSTATION
+                id: bob
+                location: ON_FAILURE

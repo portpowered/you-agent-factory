@@ -306,50 +306,37 @@ function resolveSaveFieldErrors(
 function resolveTargetFieldName(
   target: NonNullable<CurrentFactoryDefinitionError["targets"]>[number],
 ): keyof EditableWorkerSaveValidationErrors | null {
-  const field = target.field?.trim().toLowerCase();
-  const id = target.id?.trim().toLowerCase();
+  if (target.subject.type !== "WORKER") {
+    return null;
+  }
 
-  if (field?.endsWith(".type") || field === "type" || id === "type") {
+  const subjectID = target.subject.id.trim().toLowerCase();
+
+  if (subjectID === "type") {
     return "type";
   }
-  if (
-    field?.endsWith(".modelprovider") ||
-    field === "modelprovider" ||
-    id === "modelprovider"
-  ) {
+  if (subjectID === "modelprovider") {
     return "modelProvider";
   }
-  if (field?.endsWith(".model") || field === "model" || id === "model") {
+  if (subjectID === "model") {
     return "model";
   }
-  if (
-    field?.endsWith(".modellocality") ||
-    field === "modellocality" ||
-    id === "modellocality"
-  ) {
+  if (subjectID === "modellocality") {
     return "modelLocality";
   }
-  if (
-    field?.endsWith(".executorprovider") ||
-    field === "executorprovider" ||
-    id === "executorprovider"
-  ) {
+  if (subjectID === "executorprovider") {
     return "executorProvider";
   }
-  if (field?.endsWith(".command") || field === "command" || id === "command") {
+  if (subjectID === "command") {
     return "command";
   }
-  if (field?.endsWith(".args") || field === "args" || id === "args") {
+  if (subjectID === "args") {
     return "args";
   }
-  if (field?.endsWith(".body") || field === "body" || id === "body") {
+  if (subjectID === "body") {
     return "body";
   }
-  if (
-    field?.endsWith(".provider") ||
-    field === "provider" ||
-    id === "provider"
-  ) {
+  if (subjectID === "provider") {
     return "provider";
   }
 

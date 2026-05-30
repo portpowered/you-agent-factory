@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - type
+  - id
+  - location
+properties:
+  type:
+    $ref: './FactoryValidationSubjectType.yaml'
+  id:
+    type: string
+    description: Stable component identifier or name for the affected factory component.
+  location:
+    $ref: './FactoryValidationSubjectLocation.yaml'

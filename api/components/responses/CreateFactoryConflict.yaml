@@ -16,3 +16,11 @@ content:
           message: Current factory runtime must be idle before activation.
           family: CONFLICT
           code: FACTORY_NOT_IDLE
+          targets:
+            - code: factory.runtime.notIdle
+              severity: error
+              message: Current factory runtime must be idle before activation.
+              subject:
+                type: FACTORY
+                id: ""
+                location: DEFINITION

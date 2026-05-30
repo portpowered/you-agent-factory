@@ -14,6 +14,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -317,17 +318,11 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
-	targetID := "missing"
-	field := "folderPath"
 	mf := &testutil.MockFactory{
 		OpenFactorySessionErr: apiTestSessionValidationError{
 			message: "folder validation failed",
-			targets: []factoryapi.ErrorTarget{
-				{
-					Kind:  "factory-session-validation",
-					Id:    &targetID,
-					Field: &field,
-				},
+			targets: []factoryapi.FactoryValidationTarget{
+				factoryvalidation.FactorySessionFieldTarget("missing", "folderPath", "folder validation failed"),
 			},
 		},
 	}
@@ -352,7 +347,10 @@ func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 		t.Fatalf("open factory session error targets = %#v, want one target", response.Targets)
 	}
 	target := (*response.Targets)[0]
-	if target.Kind != "factory-session-validation" || target.Id == nil || *target.Id != "missing" || target.Field == nil || *target.Field != "folderPath" {
+	if target.Code != "factory.session.field.missing" ||
+		target.Subject.Type != factoryapi.FactoryValidationSubjectTypeFactory ||
+		target.Subject.Id != "folderPath" ||
+		target.Subject.Location != factoryapi.FactoryValidationSubjectLocationReference {
 		t.Fatalf("open factory session error target = %#v, want structured folder validation target", target)
 	}
 }
@@ -375,14 +373,14 @@ func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
 
 type apiTestSessionValidationError struct {
 	message string
-	targets []factoryapi.ErrorTarget
+	targets []factoryapi.FactoryValidationTarget
 }
 
 func (e apiTestSessionValidationError) Error() string {
 	return e.message
 }
 
-func (e apiTestSessionValidationError) ErrorTargets() []factoryapi.ErrorTarget {
+func (e apiTestSessionValidationError) ErrorTargets() []factoryapi.FactoryValidationTarget {
 	return e.targets
 }
 

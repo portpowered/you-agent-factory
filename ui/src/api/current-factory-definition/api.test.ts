@@ -1,4 +1,8 @@
 import {
+  factoryRuntimeNotIdleTarget,
+  staleFactoryVersionTarget,
+} from "../../testing/factory-validation-target-fixtures";
+import {
   CurrentFactoryDefinitionError,
   getCurrentFactoryDefinition,
   getCurrentFactoryDocument,
@@ -711,10 +715,9 @@ describe("getCurrentFactoryDefinition", () => {
                 code: "STALE_FACTORY_VERSION",
                 message: "The editable definition is stale.",
                 targets: [
-                  {
-                    id: "base-version",
-                    kind: "save",
-                  },
+                  staleFactoryVersionTarget(
+                    "The editable definition is stale.",
+                  ),
                 ],
               }),
               {
@@ -731,12 +734,7 @@ describe("getCurrentFactoryDefinition", () => {
     ).rejects.toMatchObject({
       code: "STALE_FACTORY_VERSION",
       status: 409,
-      targets: [
-        {
-          id: "base-version",
-          kind: "save",
-        },
-      ],
+      targets: [staleFactoryVersionTarget("The editable definition is stale.")],
     });
   });
 
@@ -762,10 +760,9 @@ describe("getCurrentFactoryDefinition", () => {
                 code: "STALE_FACTORY_VERSION",
                 message: "The editable definition is stale.",
                 targets: [
-                  {
-                    id: "base-version",
-                    kind: "save",
-                  },
+                  staleFactoryVersionTarget(
+                    "The editable definition is stale.",
+                  ),
                   "invalid-target-entry",
                 ],
               }),
@@ -783,12 +780,7 @@ describe("getCurrentFactoryDefinition", () => {
     ).rejects.toMatchObject({
       code: "STALE_FACTORY_VERSION",
       status: 409,
-      targets: [
-        {
-          id: "base-version",
-          kind: "save",
-        },
-      ],
+      targets: [staleFactoryVersionTarget("The editable definition is stale.")],
     });
   });
 
@@ -814,10 +806,9 @@ describe("getCurrentFactoryDefinition", () => {
                 code: "FACTORY_NOT_IDLE",
                 message: "Current factory runtime must be idle before activation.",
                 targets: [
-                  {
-                    id: "active-work",
-                    kind: "save",
-                  },
+                  factoryRuntimeNotIdleTarget(
+                    "Current factory runtime must be idle before activation.",
+                  ),
                 ],
               }),
               {
@@ -835,10 +826,9 @@ describe("getCurrentFactoryDefinition", () => {
       code: "FACTORY_NOT_IDLE",
       status: 409,
       targets: [
-        {
-          id: "active-work",
-          kind: "save",
-        },
+        factoryRuntimeNotIdleTarget(
+          "Current factory runtime must be idle before activation.",
+        ),
       ],
     });
   });

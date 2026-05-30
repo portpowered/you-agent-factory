@@ -86,6 +86,36 @@ const (
 	FactoryStateRunning   FactoryState = "RUNNING"
 )
 
+// Defines values for FactoryValidationSeverity.
+const (
+	FactoryValidationSeverityError   FactoryValidationSeverity = "error"
+	FactoryValidationSeverityHint    FactoryValidationSeverity = "hint"
+	FactoryValidationSeverityWarning FactoryValidationSeverity = "warning"
+)
+
+// Defines values for FactoryValidationSubjectLocation.
+const (
+	FactoryValidationSubjectLocationDefinition  FactoryValidationSubjectLocation = "DEFINITION"
+	FactoryValidationSubjectLocationInputs      FactoryValidationSubjectLocation = "INPUTS"
+	FactoryValidationSubjectLocationOnFailure   FactoryValidationSubjectLocation = "ON_FAILURE"
+	FactoryValidationSubjectLocationOnRejection FactoryValidationSubjectLocation = "ON_REJECTION"
+	FactoryValidationSubjectLocationOutputs     FactoryValidationSubjectLocation = "OUTPUTS"
+	FactoryValidationSubjectLocationReference   FactoryValidationSubjectLocation = "REFERENCE"
+	FactoryValidationSubjectLocationStates      FactoryValidationSubjectLocation = "STATES"
+	FactoryValidationSubjectLocationTerminal    FactoryValidationSubjectLocation = "TERMINAL"
+)
+
+// Defines values for FactoryValidationSubjectType.
+const (
+	FactoryValidationSubjectTypeFactory     FactoryValidationSubjectType = "FACTORY"
+	FactoryValidationSubjectTypeResource    FactoryValidationSubjectType = "RESOURCE"
+	FactoryValidationSubjectTypeRoute       FactoryValidationSubjectType = "ROUTE"
+	FactoryValidationSubjectTypeWorkState   FactoryValidationSubjectType = "WORK_STATE"
+	FactoryValidationSubjectTypeWorkType    FactoryValidationSubjectType = "WORK_TYPE"
+	FactoryValidationSubjectTypeWorker      FactoryValidationSubjectType = "WORKER"
+	FactoryValidationSubjectTypeWorkstation FactoryValidationSubjectType = "WORKSTATION"
+)
+
 // Defines values for FactoryWorldRunnerBaselineCapability.
 const (
 	PromptSubmission FactoryWorldRunnerBaselineCapability = "prompt_submission"
@@ -532,8 +562,8 @@ type ErrorResponse struct {
 	Family  ErrorFamily `json:"family"`
 	Message string      `json:"message"`
 
-	// Targets Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
-	Targets *[]ErrorTarget `json:"targets,omitempty"`
+	// Targets Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
+	Targets *[]FactoryValidationTarget `json:"targets,omitempty"`
 }
 
 // ErrorResponseCode Stable machine-readable error code.
@@ -716,6 +746,46 @@ type FactoryStateResponseEventPayload struct {
 
 	// State Lifecycle state of the running factory.
 	State FactoryState `json:"state"`
+}
+
+// FactoryValidationResult defines model for FactoryValidationResult.
+type FactoryValidationResult struct {
+	// Targets Canonical validation targets for the submitted factory definition.
+	Targets []FactoryValidationTarget `json:"targets"`
+}
+
+// FactoryValidationSeverity Validation severity for one factory validation target.
+type FactoryValidationSeverity string
+
+// FactoryValidationSubject defines model for FactoryValidationSubject.
+type FactoryValidationSubject struct {
+	// Id Stable component identifier or name for the affected factory component.
+	Id string `json:"id"`
+
+	// Location Factory-domain location within the subject component referenced by one validation target.
+	Location FactoryValidationSubjectLocation `json:"location"`
+
+	// Type Factory-domain component type referenced by one validation target subject.
+	Type FactoryValidationSubjectType `json:"type"`
+}
+
+// FactoryValidationSubjectLocation Factory-domain location within the subject component referenced by one validation target.
+type FactoryValidationSubjectLocation string
+
+// FactoryValidationSubjectType Factory-domain component type referenced by one validation target subject.
+type FactoryValidationSubjectType string
+
+// FactoryValidationTarget defines model for FactoryValidationTarget.
+type FactoryValidationTarget struct {
+	// Code Stable machine-readable validation rule identifier.
+	Code string `json:"code"`
+
+	// Message Human-readable explanation suitable for dialogs and summaries.
+	Message string `json:"message"`
+
+	// Severity Validation severity for one factory validation target.
+	Severity FactoryValidationSeverity `json:"severity"`
+	Subject  FactoryValidationSubject  `json:"subject"`
 }
 
 // FactoryWorldMutationView defines model for FactoryWorldMutationView.
@@ -2777,6 +2847,9 @@ type UpsertWorkRequestBySessionIdJSONRequestBody = WorkRequest
 // StageSubmitWorkFileBySessionIdJSONRequestBody defines body for StageSubmitWorkFileBySessionId for application/json ContentType.
 type StageSubmitWorkFileBySessionIdJSONRequestBody = StageSubmitWorkFileRequest
 
+// ValidateFactoryJSONRequestBody defines body for ValidateFactory for application/json ContentType.
+type ValidateFactoryJSONRequestBody = Factory
+
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
 
@@ -3519,6 +3592,9 @@ type ServerInterface interface {
 	// Get work token for one session
 	// (GET /factory-sessions/{session_id}/work/{id})
 	GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, id WorkOrTokenID)
+	// Validate factory definition
+	// (POST /factory-validations)
+	ValidateFactory(w http.ResponseWriter, r *http.Request)
 	// List discovered models
 	// (GET /models)
 	ListModels(w http.ResponseWriter, r *http.Request)
@@ -3998,6 +4074,20 @@ func (siw *ServerInterfaceWrapper) GetWorkBySessionId(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// ValidateFactory operation middleware
+func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ValidateFactory(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListModels operation middleware
 func (siw *ServerInterfaceWrapper) ListModels(w http.ResponseWriter, r *http.Request) {
 
@@ -4446,6 +4536,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/staged-files", wrapper.StageSubmitWorkFileBySessionId).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/{id}", wrapper.GetWorkBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
 

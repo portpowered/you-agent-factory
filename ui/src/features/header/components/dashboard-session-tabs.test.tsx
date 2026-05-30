@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
+import { factorySessionFieldTarget } from "../../../testing/factory-validation-target-fixtures";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
@@ -566,11 +567,7 @@ describe("DashboardSessionTabs", () => {
         new FactorySessionsAPIError("folder validation failed", {
           code: "BAD_REQUEST",
           targets: [
-            {
-              field: "folderPath",
-              id: "missing",
-              kind: "factory-session-validation",
-            },
+            factorySessionFieldTarget("missing", "folderPath", "folder validation failed"),
           ],
         }),
       )
@@ -578,11 +575,11 @@ describe("DashboardSessionTabs", () => {
         new FactorySessionsAPIError("folder validation failed", {
           code: "BAD_REQUEST",
           targets: [
-            {
-              field: "folderPath",
-              id: "not_directory",
-              kind: "factory-session-validation",
-            },
+            factorySessionFieldTarget(
+              "not_directory",
+              "folderPath",
+              "folder validation failed",
+            ),
           ],
         }),
       )
@@ -590,11 +587,11 @@ describe("DashboardSessionTabs", () => {
         new FactorySessionsAPIError("folder validation failed", {
           code: "BAD_REQUEST",
           targets: [
-            {
-              field: "folderPath",
-              id: "unreadable",
-              kind: "factory-session-validation",
-            },
+            factorySessionFieldTarget(
+              "unreadable",
+              "folderPath",
+              "folder validation failed",
+            ),
           ],
         }),
       )
@@ -602,11 +599,11 @@ describe("DashboardSessionTabs", () => {
         new FactorySessionsAPIError("folder validation failed", {
           code: "BAD_REQUEST",
           targets: [
-            {
-              field: "folderPath",
-              id: "not_runnable",
-              kind: "factory-session-validation",
-            },
+            factorySessionFieldTarget(
+              "not_runnable",
+              "folderPath",
+              "folder validation failed",
+            ),
           ],
         }),
       );

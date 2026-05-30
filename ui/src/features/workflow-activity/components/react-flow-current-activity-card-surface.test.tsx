@@ -97,8 +97,16 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     canInteractWithEditor: true,
     canSaveDraft: true,
     connectionNotice: "Only workstation-to-work-state routes are supported.",
-    draftState: { hasChanges: true },
+    currentFactoryDefinition: null,
+    draftState: { hasChanges: true, pendingFactoryDefinition: null },
     editorMode: true,
+    structuralValidation: {
+      projection: {
+        handleErrorsByNodeId: new Map(),
+        workstationMessagesByNodeId: new Map(),
+      },
+      targets: [],
+    },
     handleAddEntityAction: vi.fn(),
     handleDiscardPendingChanges: vi.fn(),
     handleEditorConnect: vi.fn(),
@@ -142,6 +150,7 @@ describe("CurrentActivityGraphSurface", () => {
         editor={createEditorStub({ editorMode: false }) as never}
         graph={createGraphStub() as never}
         imports={{} as never}
+        selection={null}
         snapshot={snapshot}
       />,
     );
@@ -164,6 +173,7 @@ describe("CurrentActivityGraphSurface", () => {
         editor={editor as never}
         graph={graph as never}
         imports={{} as never}
+        selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
     );
@@ -241,6 +251,7 @@ describe("CurrentActivityGraphSurface", () => {
         }
         graph={createGraphStub() as never}
         imports={{} as never}
+        selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
     );

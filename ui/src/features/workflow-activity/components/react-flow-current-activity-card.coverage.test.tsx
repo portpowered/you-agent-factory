@@ -226,6 +226,20 @@ vi.mock("../../factory-graph-editor/public", async () => {
   };
 });
 
+vi.mock("../../factory-graph-editor/hooks/use-factory-validation", () => ({
+  useFactoryValidation: () => ({
+    data: { targets: [] },
+    isError: false,
+    isFetching: false,
+    isLoading: false,
+    projection: {
+      handleErrorsByAnchorId: new Map(),
+      nodeErrorsByNodeId: new Map(),
+    },
+    targets: [],
+  }),
+}));
+
 vi.mock("../../flowchart/lib/layout", async () => {
   const actual = await vi.importActual("../../flowchart/lib/layout");
   actualBuildGraphLayoutRef.current = actual.buildGraphLayout;
@@ -359,6 +373,13 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       editorMode: false,
       handleConnectionAnchorClick: vi.fn(),
       pendingConnectionSource: null,
+      structuralValidation: {
+        projection: {
+          handleErrorsByAnchorId: new Map(),
+          nodeErrorsByNodeId: new Map(),
+        },
+        targets: [],
+      },
     };
     const { result } = renderHook(() =>
       useCurrentActivityGraphViewModel({

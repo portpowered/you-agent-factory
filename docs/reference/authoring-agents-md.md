@@ -14,7 +14,7 @@ topology.
 Use this guide for file shape, placement, prompt bodies, prompt files, and
 authoring patterns. Use [Workers](workers.md) for the worker contract,
 [Workstations](workstations.md) for workstation runtime fields and routing, and
-[Factory JSON and work configuration](work.md) for the `factory.json` topology.
+[Config](config.md) for the `factory.json` topology.
 
 ## Overview
 

@@ -1,0 +1,20 @@
+type: string
+description: Factory-domain location within the subject component referenced by one validation target.
+x-enum-varnames:
+  - FactoryValidationSubjectLocationOnRejection
+  - FactoryValidationSubjectLocationOnFailure
+  - FactoryValidationSubjectLocationOutputs
+  - FactoryValidationSubjectLocationInputs
+  - FactoryValidationSubjectLocationStates
+  - FactoryValidationSubjectLocationTerminal
+  - FactoryValidationSubjectLocationReference
+  - FactoryValidationSubjectLocationDefinition
+enum:
+  - ON_REJECTION
+  - ON_FAILURE
+  - OUTPUTS
+  - INPUTS
+  - STATES
+  - TERMINAL
+  - REFERENCE
+  - DEFINITION
