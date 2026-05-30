@@ -1,31 +1,30 @@
 {
-  "project": "CLI Submit Response Contract",
-  "branchName": "ralph/cli-submit-response-contract",
-  "description": "Make `you submit` success output actionable for humans and scripts by extending the submit API response with work identifiers, shaping human and `--json` CLI output (including verify hints), clarifying error surfaces, and documenting the submit → verify loop in packaged docs.",
+  "project": "Session Factory Save Modes (S1 Recovery)",
+  "branchName": "ralph/session-factory-save-modes-recovery",
+  "description": "Recovery implementation of approved S1: unify live factory submission behind PUT /factory-sessions/{session_id}/factory with explicit save modes (REPLACE_CURRENT default, UPSERT_NAMED_AND_ACTIVATE for named create/replace+activate), remove POST /factories, consolidate backend save pipeline, and migrate dashboard editor, import, CLI, and tests.",
   "context": {
-    "customerAsk": "After `you submit`, operators and agents need the created work id, name, and work type—not only a trace id—plus a suggested `you work show` or `you work list` command. Scripts need a stable `--json` object. Errors should distinguish unreachable factory vs API rejection.",
-    "problem": "`you submit` prints `Submitted work: <traceId>` on success and the OpenAPI `SubmitWorkResponse` only requires `traceId`, forcing immediate `you work list` and causing duplicate submits during agent-driven docs work.",
-    "solution": "Extend `SubmitWorkResponse` with normalized work metadata from the submit handler, map it in `pkg/cli/submit` to human lines and a stable `--json` envelope (including `endpointPath` and `sessionId`), improve bounded error text, and document the contract and verify loop in `you docs work` aligned with work-inspection commands."
+    "customerAsk": "Retry after network outage. Manual fix may apply to legacy token; this is a fresh idea. Full spec: tasks/prd-session-factory-save-modes.md — Session factory save modes (S1 recovery).",
+    "problem": "Two overlapping factory submission APIs (POST /factories vs session PUT) cause inconsistent validation, persistence roots, and activation. The prior autonomous batch did not complete; the codebase still has POST /factories and bare Factory bodies on session PUT with no save-mode enum.",
+    "solution": "Implement the approved S1 spec: one session PUT with { mode, factory }, default REPLACE_CURRENT, UPSERT_NAMED_AND_ACTIVATE for named upsert+activate, unified backend SaveFactoryForSession pipeline with session-scoped activation only, remove POST /factories, and migrate dashboard editor (replace only), import confirm dialog, CLI live save, and functional tests."
   },
   "acceptanceCriteria": [
-    "HTTP 201 submit responses expose workId, name, and workTypeName (and sessionId for session-scoped routes) via OpenAPI and handlers using existing normalization rules.",
-    "Human-mode `you submit` prints name, workTypeName, traceId, workId when available, and a one-line `you work show` or `you work list --name` hint without dumping full payloads.",
-    "Global `--json` success emits one object with workId, name, workTypeName, traceId, sessionId, and endpointPath; exit code 0.",
-    "Submit failures never print success output; transport errors are distinguishable from HTTP API errors with bounded body summaries.",
-    "Packaged `you docs work` documents human and JSON success shapes plus the submit → verify command loop.",
-    "Targeted CLI and API tests prove success and failure output behavior with mocked HTTP.",
-    "Quality gate: backend typecheck, lint, and relevant tests pass before merge."
+    "PUT /factory-sessions/{session_id}/factory accepts { mode?, factory } with default REPLACE_CURRENT and both enum values operational.",
+    "POST /factories is removed from OpenAPI, generated clients, UI, CLI live paths, and functional tests.",
+    "Backend uses one SaveFactoryForSession pipeline with mode handlers and replaceSessionRuntime-only activation; multi-session tests prove isolation.",
+    "Dashboard editor save uses REPLACE_CURRENT only; import confirm offers replace-current vs create-new-named with suffixed name allocation on conflict, session PUT only.",
+    "Version rules per mode match approved S1 (REPLACE_CURRENT requires version; UPSERT create may omit; UPSERT replace detects stale on-disk version).",
+    "Existing error codes remain mappable for operators (FACTORY_NOT_IDLE, STALE_FACTORY_VERSION, INVALID_FACTORY, etc.).",
+    "Quality gate: typecheck, lint, and targeted tests for all changed behavior pass."
   ],
   "userStories": [
     {
-      "id": "cli-submit-response-contract-001",
-      "title": "Submit API returns work identifiers on 201",
-      "description": "As an API consumer, I need SubmitWorkResponse to include accepted work identifiers so clients do not guess after a successful submit.",
+      "id": "session-factory-save-modes-recovery-001",
+      "title": "Session factory PUT contract and client regeneration",
+      "description": "As an API consumer, I need OpenAPI and generated clients to describe save modes on session PUT so all callers share one typed contract.",
       "acceptanceCriteria": [
-        "OpenAPI SubmitWorkResponse includes workId, name, workTypeName, and traceId; session-scoped routes also return sessionId matching the path.",
-        "pkg/api submit handlers populate fields from the same WorkRequest normalization that assigns stable work ids before returning HTTP 201.",
-        "API tests assert the success JSON body for default and session-scoped submit.",
-        "Generated Go and UI OpenAPI types compile after regeneration.",
+        "PUT /factory-sessions/{session_id}/factory request body includes optional mode enum (REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE) and required factory; omitted mode defaults to REPLACE_CURRENT.",
+        "POST /factories is removed from api/openapi.yaml; contract test forbids paths./factories.post.",
+        "Bundled spec and generated Go and TypeScript clients are regenerated and compile.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,14 +33,14 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-response-contract-002",
-      "title": "Human success output for you submit",
-      "description": "As an operator, I want submit stdout to show what was accepted and which work command to run next so I can verify without listing the entire factory.",
+      "id": "session-factory-save-modes-recovery-002",
+      "title": "Unified backend save pipeline and mode handlers",
+      "description": "As a maintainer, I need one orchestrated session save pipeline so session-scoped saves never fork through global activation paths.",
       "acceptanceCriteria": [
-        "On HTTP 201, stdout includes name, workTypeName, traceId, and workId when the API returns workId.",
-        "Stdout prints you work show <work-id> when workId is present; otherwise you work list --name <name> with explicit fallback wording.",
-        "Stdout does not print the full HTTP response or request payload; verbose diagnostics remain stderr-only.",
-        "CLI httptest covers human stdout and hint selection for responses with and without workId.",
+        "FactoryService SaveFactoryForSession implements resolve scope → validate → persist (mode handler) → activate session runtime → readback.",
+        "REPLACE_CURRENT requires factory.name to match session current and overwrites current slot; UPSERT_NAMED_AND_ACTIVATE persists under session root, updates current-factory pointer, activates via replaceSessionRuntime only.",
+        "HTTP session PUT decodes { mode, factory } and calls only the unified entrypoint; POST /factories handler and CreateNamedFactory / unscoped HTTP SaveCurrentFactory parallel trees are removed.",
+        "Service test proves saving session B does not mutate session A for at least one save mode path.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -50,13 +49,15 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-response-contract-003",
-      "title": "JSON success output for you submit --json",
-      "description": "As a script, I want a single parseable JSON confirmation object after submit so I can automate verify steps without scraping text.",
+      "id": "session-factory-save-modes-recovery-003",
+      "title": "Version rules and error mapping per mode",
+      "description": "As a client author, I need deterministic version requirements and response versioning for each save mode.",
       "acceptanceCriteria": [
-        "Global --json success writes one JSON object with keys workId, name, workTypeName, traceId, sessionId, and endpointPath.",
-        "Exit code is 0 on success; stdout contains only that JSON object.",
-        "CLI test asserts JSON field presence and values from a mocked 201 response including a session-scoped endpointPath.",
+        "REPLACE_CURRENT rejects missing or stale factory.version relative to session current definition.",
+        "UPSERT_NAMED_AND_ACTIVATE on create allows omitted factory.version and returns server-minted version in response factory object.",
+        "UPSERT_NAMED_AND_ACTIVATE on replace detects stale on-disk version and returns incremented version on success.",
+        "UPSERT_NAMED_AND_ACTIVATE does not return FACTORY_ALREADY_EXISTS when replacing an existing named factory while idle.",
+        "FACTORY_NOT_IDLE and INVALID_FACTORY still surface for unsafe or invalid payloads.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -65,33 +66,66 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-response-contract-004",
-      "title": "Clear submit error surfaces",
-      "description": "As an agent, I want submit failures to be clearly classified so I do not treat transport or API errors as successful enqueue.",
+      "id": "session-factory-save-modes-recovery-004",
+      "title": "Dashboard editor save uses REPLACE_CURRENT",
+      "description": "As a factory editor, I want Save to update the factory I am editing in the active tab without renaming or switching named factories.",
       "acceptanceCriteria": [
-        "Connection and transport failures report the factory URL as unreachable and emit no success line.",
-        "Non-201 HTTP responses return an error including status and a bounded API message or body snippet.",
-        "When error JSON includes workId, the CLI error text includes it in a stable workId= form.",
-        "CLI tests cover unreachable server, structured 400 ErrorResponse, and non-JSON error bodies.",
+        "saveCurrentFactoryDocument and editor save hooks send session PUT with REPLACE_CURRENT (or omitted mode) and factory.version from latest GET.",
+        "No editor save path calls UPSERT_NAMED_AND_ACTIVATE or POST /factories.",
+        "Stale-version and not-idle errors preserve existing operator-facing messages.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser: editor Save succeeds; stale version shows existing error UX"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "cli-submit-response-contract-005",
-      "title": "Document submit output and verify loop",
-      "description": "As an agent author, I want you docs work to describe submit success output and the verify commands that follow.",
+      "id": "session-factory-save-modes-recovery-005",
+      "title": "Dashboard import confirm dialog and mode selection",
+      "description": "As a dashboard operator, I want import to offer replace-current vs create-new-named with safe naming when a conflict exists.",
       "acceptanceCriteria": [
-        "you docs work documents human success fields, --json keys, and example success objects.",
-        "The same section documents verify with you work show and you work list --name / --work-type-name aligned with work-inspection behavior.",
-        "Docs state diagnostics stay on stderr and payloads are not echoed on success.",
+        "Import activation uses session-scoped PUT only; confirm dialog defaults to Replace current factory.",
+        "Replace path sends REPLACE_CURRENT with factory.name from session GET and factory.version from GET; PNG embedded name is ignored.",
+        "Create path sends UPSERT_NAMED_AND_ACTIVATE with validated PNG name; allocates first free suffixed name on conflict and shows resolved name before PUT.",
+        "Create path omits factory.version for new names; includes version when upserting an existing chosen name.",
+        "Replace path never changes the session active factory name including UNDEFINED default root.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser: import on default and non-default session tabs with both dialog choices"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "session-factory-save-modes-recovery-006",
+      "title": "Remove legacy create-factory callers in tests and UI",
+      "description": "As a maintainer, I want no remaining dependencies on POST /factories after migration.",
+      "acceptanceCriteria": [
+        "ui/src/api/named-factory/api.ts removes createFactory POST usage; named create uses session PUT with UPSERT_NAMED_AND_ACTIVATE.",
+        "Functional tests in tests/functional/runtime_api/factory_transformation and tests/functional/bootstrap_portability use session PUT with explicit mode.",
+        "Generated client no longer exposes CreateFactory for POST /factories.",
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 5,
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "session-factory-save-modes-recovery-007",
+      "title": "Live CLI uses session PUT with REPLACE_CURRENT",
+      "description": "As a CLI user, I want live you factory save to use the unified session PUT while offline filesystem save stays unchanged.",
+      "acceptanceCriteria": [
+        "Live you factory save PUTs factory with version from prior GET to sessionpath.CurrentFactoryPath using default REPLACE_CURRENT body shape.",
+        "Offline SaveFromFile and WriteCurrentFactoryPointer behavior unchanged.",
+        "CLI help and examples remain accurate for live vs offline save.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
       "passes": true,
       "notes": ""
     }

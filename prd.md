@@ -1,180 +1,212 @@
-# PRD: CLI Submit Response Contract (`you submit`)
-
----
-author: Codex
-last modified: 2026-05-30
-status: draft
-work-item: batch-request-b8e7cd2f426dfb741e49b31aef9753d4-cli-submit-response-contract
----
+# PRD: Session Factory Save Modes (S1 Recovery)
 
 ## Introduction
 
-`you submit` posts a single work item to a running factory session and today prints only `Submitted work: <traceId>` on success (or encodes the raw `SubmitWorkResponse` object under `--json`). Operators and autonomous agents cannot tell which **work id**, **name**, or **work type** were accepted without immediately running `you work list`. That gap caused duplicate ingress attempts and missed verification during the docs PRD submission exercise.
+**Customer ask:** Retry implementation of **Session factory save modes (S1 recovery)** after a network outage interrupted the original program batch. Deliver the approved S1 behavior so customers can submit factory definitions through one session-scoped save endpoint with explicit save modes.
 
-This project makes successful submit output **actionable** (human and `--json`), clarifies failure modes (transport vs API rejection), extends the HTTP contract when needed so `workId` is available at `201`, and documents the submit → verify loop alongside [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md) and [`prd-docs-agents-consolidation-wave2.md`](../prd-docs-agents-consolidation-wave2.md).
+**Concrete problem:** The runtime still exposes two overlapping submission paths: `POST /factories` (create named factory + activate under the service root) and `PUT /factory-sessions/{session_id}/factory` (replace the current factory for one live session). They differ in validation, concurrency, persistence roots, and activation. Dashboard import and editor saves cannot express “replace what I am editing” vs “create/upsert a named factory and make it current for this session” through one predictable contract. A prior autonomous batch did not land; this recovery batch starts from the current tree with **no save-mode implementation present**.
 
-## Context
+**High-level solution:** Unify factory submission behind `PUT /factory-sessions/{session_id}/factory` with a capital-cased **`mode`** enum (`REPLACE_CURRENT` default, `UPSERT_NAMED_AND_ACTIVATE` optional). Request body is `{ mode?, factory }` where `factory.version` lives inside `Factory`. Remove `POST /factories`. Backend implements one **scope → validate → persist → activate → readback** pipeline with mode handlers, always activating via session-scoped `replaceSessionRuntime`. Dashboard editor uses `REPLACE_CURRENT` only; import confirm dialog chooses mode per operator intent.
 
-| | |
-|---|---|
-| **Customer ask** | After `you submit`, stdout/`--json` must identify the created work and suggest the next inspection command; errors must distinguish unreachable factory vs API rejection. |
-| **Concrete problem** | Success output exposes only `traceId`; `SubmitWorkResponse` OpenAPI schema requires only `traceId`; agents re-submit or poll blindly. |
-| **High-level solution** | Return stable work identifiers from the submit API where normalization already assigns them; shape CLI human/JSON output around those fields plus session/route context; improve bounded error text; document verify commands in `you docs work`. |
+**Authoritative spec:** [`tasks/prd-session-factory-save-modes.md`](../prd-session-factory-save-modes.md) — when this recovery plan and that document differ, the approved PRD wins.
+
+**Recovery note:** If a legacy Ralph/program token still references the aborted batch, operators may manually retire it; this recovery work item uses fresh story ids and does not assume partial commits from the failed run.
 
 ## Project-level acceptance criteria
 
-- [ ] On HTTP `201`, human-mode stdout includes submitted **name**, **workTypeName**, **traceId**, and **workId** when the API returns it; otherwise it states the list-by-name fallback explicitly.
-- [ ] Human-mode stdout prints a one-line next-step hint: `you work show <work-id>` when `workId` is present, else `you work list --name <name>` (aligned with work-inspection filters).
-- [ ] `--json` on success emits one object with `workId`, `name`, `workTypeName`, `traceId`, `sessionId`, and `endpointPath`; exit code `0`.
-- [ ] Non-success paths never print the success confirmation line; transport failures and API failures are distinguishable by message shape.
-- [ ] OpenAPI `SubmitWorkResponse` and generated Go/TS types include new fields when the API is extended; contract tests updated.
-- [ ] `you docs work` documents the submit success and verify loop; cross-links work-inspection commands.
-- [ ] Quality gate: backend typecheck, lint, and targeted CLI/API tests pass without unrelated refactors.
+- [ ] `PUT /factory-sessions/{session_id}/factory` is the **only** HTTP API for submitting a full factory definition to a live session, with `mode` + `factory` body and default `REPLACE_CURRENT`.
+- [ ] `POST /factories` is removed from OpenAPI, generated Go/TS clients, UI, CLI live-server paths, and functional tests.
+- [ ] Both save modes persist under the correct session root and swap only the targeted session runtime when idle; multi-session tests prove isolation.
+- [ ] Dashboard editor Save and import confirm flows use session PUT with correct mode selection; no `POST /factories` callers remain.
+- [ ] Version rules per mode match the approved PRD (`REPLACE_CURRENT` requires version; UPSERT create may omit version; UPSERT replace detects stale on-disk version).
+- [ ] Existing error families remain mappable (`FACTORY_NOT_IDLE`, `STALE_FACTORY_VERSION`, `INVALID_FACTORY`, etc.).
+- [ ] Quality gate: repository typecheck, lint, and targeted tests for changed behavior pass.
 
 ## Goals
 
-- Human-mode success prints actionable identifiers and a suggested follow-up command.
-- `--json` success is stable for scripts and agents (not only the generated API DTO).
-- Errors distinguish factory unreachable (transport) vs HTTP API rejection with bounded body summary.
-- API `201` body exposes `workId`, `name`, and `workTypeName` using the same normalization rules as ingress (no second id scheme).
-- Documentation tells agents to submit → verify with `you work show` / `you work list --name`.
+- Route all live factory definition submission through session PUT with explicit save modes.
+- Remove `POST /factories` and parallel backend save trees (`CreateNamedFactory`, unscoped `SaveCurrentFactory` on HTTP paths).
+- Consolidate backend saves into one readable `SaveFactoryForSession` pipeline with two mode handlers and one session activation path.
+- Keep graph/editor Save on `REPLACE_CURRENT` only.
+- Give dashboard import a confirm dialog: replace current vs create new named (with suffixed name allocation on conflict).
+- Preserve CLI offline filesystem save behavior; live CLI uses session PUT with default mode and `factory.version` on the body.
 
 ## User Stories
 
-### US-001: Submit API returns work identifiers on 201
+### session-factory-save-modes-recovery-001: Session factory PUT contract and client regeneration
 
-**Description:** As an API consumer, I need `SubmitWorkResponse` to include the accepted work identifiers so CLI and UI do not guess after submit.
+**Description:** As an API consumer, I need OpenAPI and generated clients to describe save modes on session PUT so all callers share one typed contract.
 
 **Acceptance Criteria:**
 
-- [ ] OpenAPI `SubmitWorkResponse` adds `workId`, `name`, and `workTypeName` (required when a single work item is accepted); `traceId` remains required.
-- [ ] Session-scoped submit (`POST /factory-sessions/{sessionId}/work`) includes `sessionId` in the response body matching the path parameter (default label `~default` for the legacy `/work` route).
-- [ ] `pkg/api` submit handlers populate fields using the same `WorkRequest` normalization path that assigns `batch-{requestId}-{name}` (or caller-provided `workId`) before returning `201`.
-- [ ] API unit/contract tests assert the JSON body shape for default and session-scoped submit on success.
-- [ ] Regenerated `pkg/api/generated` and UI OpenAPI types compile; no handwritten duplicate DTOs in handlers.
+- [ ] `PUT /factory-sessions/{session_id}/factory` request body schema includes optional `mode` enum (`REPLACE_CURRENT` | `UPSERT_NAMED_AND_ACTIVATE`) and required `factory` (`Factory` with embedded `version` when applicable); omitted `mode` means `REPLACE_CURRENT`.
+- [ ] `POST /factories` is removed from `api/openapi.yaml`; contract test forbids `paths./factories.post`.
+- [ ] Bundled spec and generated Go (`pkg/api/generated`, `pkg/generatedclient`) and TS (`ui/src/api/generated`) clients are regenerated and compile.
+- [ ] Typecheck passes
+- [ ] Tests pass (OpenAPI contract / regeneration smoke as applicable)
+
+### session-factory-save-modes-recovery-002: Unified backend save pipeline and mode handlers
+
+**Description:** As a maintainer, I need one orchestrated session save pipeline so session-scoped saves never fork through global activation paths.
+
+**Acceptance Criteria:**
+
+- [ ] `FactoryService` exposes a single entrypoint (e.g. `SaveFactoryForSession(ctx, sessionID, mode, factory)`) implementing: resolve scope → validate → persist (mode handler) → activate session runtime → readback.
+- [ ] `REPLACE_CURRENT` requires `factory.name` to match session current name; overwrites current slot (default root or named); stale/missing `factory.version` → `STALE_FACTORY_VERSION` when replacing a versioned definition.
+- [ ] `UPSERT_NAMED_AND_ACTIVATE` persists under session root for `factory.name` (create or replace), updates current-factory pointer, activates via `replaceSessionRuntime` for that session only.
+- [ ] Activation always uses `requireIdleRuntimeForSession` + `replaceSessionRuntime`; session saves do not call `activateReplacementRuntime` or infer session from global run state.
+- [ ] HTTP handler for session PUT decodes `{ mode, factory }` and calls only the unified entrypoint; `POST /factories` handler removed.
+- [ ] `CreateNamedFactory`, unscoped HTTP `SaveCurrentFactory`, and parallel save trees removed or inlined into the pipeline.
+- [ ] Service test demonstrates saving session B does not mutate session A (extend or mirror `SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession` for both modes).
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### US-002: Human success output for `you submit`
+### session-factory-save-modes-recovery-003: Version rules and error mapping per mode
 
-**Description:** As an operator, I want submit to tell me what was accepted and what command to run next so I can verify without listing the whole factory.
-
-**Acceptance Criteria:**
-
-- [x] On `201`, stdout includes at minimum: trimmed submitted **name**, **workTypeName**, **traceId**, and **workId** when the response includes it.
-- [x] When `workId` is present, stdout includes a one-line hint containing `you work show <work-id>`; when absent, the hint uses `you work list --name <name>` and states that work id was not returned.
-- [x] Stdout does not dump the full HTTP response body or request payload.
-- [x] Existing verbose diagnostics remain on stderr only (`clidiag`); payload content is not logged on success paths.
-- [x] CLI tests with `httptest` mock `201` responses assert human stdout lines and hint selection.
-- [x] Typecheck passes
-- [x] Tests pass
-
-### US-003: JSON success output for `you submit --json`
-
-**Description:** As a script, I want a single parseable confirmation object so I can branch on `workId` without scraping text.
+**Description:** As a client author, I need deterministic version requirements and response versioning for each save mode.
 
 **Acceptance Criteria:**
 
-- [ ] Global `--json` success emits one JSON object with keys: `workId`, `name`, `workTypeName`, `traceId`, `sessionId`, `endpointPath` (CLI-scoped path such as `/factory-sessions/~default/work`).
-- [ ] Omitted or empty `workId` is encoded as JSON `null` or omitted consistently (document the chosen rule in `you docs work`).
-- [ ] Exit code `0` on success; stdout contains only the JSON object (no extra prose).
-- [ ] CLI test asserts JSON shape from a mocked `201` response including session-scoped route.
+- [ ] `REPLACE_CURRENT` rejects when `factory.version` is missing or stale relative to the current definition for that session.
+- [ ] `UPSERT_NAMED_AND_ACTIVATE` on create (name absent under session root): `factory.version` may be omitted; response returns server-minted initial version inside `factory`.
+- [ ] `UPSERT_NAMED_AND_ACTIVATE` on replace of existing named factory: stale detection uses on-disk version for that name; success returns incremented `factory.version`.
+- [ ] `UPSERT_NAMED_AND_ACTIVATE` does not return `FACTORY_ALREADY_EXISTS`; it replaces when idle.
+- [ ] `FACTORY_NOT_IDLE` and `INVALID_FACTORY` still surface for unsafe or invalid payloads in either mode.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### US-004: Clear submit error surfaces
+### session-factory-save-modes-recovery-004: Dashboard editor save uses REPLACE_CURRENT
 
-**Description:** As an agent, I want duplicate, invalid, or unreachable submit attempts to fail with messages I can classify without mistaking them for success.
-
-**Acceptance Criteria:**
-
-- [ ] When `http.Post` fails (connection refused, timeout, DNS), the error message states the factory is not reachable at the resolved URL and does not print a success line.
-- [ ] When HTTP status is not `201`, stderr/returned error includes HTTP status and a bounded API summary (`ErrorResponse.message` when JSON parses; otherwise a capped raw snippet).
-- [ ] If the error JSON body includes `workId` (present or added on conflict responses), the CLI error text appends it in a stable `workId=` form.
-- [ ] No `Submitted work:` or JSON success object is written on failure.
-- [ ] CLI tests cover at least: unreachable server, `400` with `ErrorResponse`, and non-JSON error body.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### US-005: Document submit output and verify loop
-
-**Description:** As an agent author, I want packaged docs to describe the submit contract and the verify commands that follow.
+**Description:** As a factory editor, I want Save to update the factory I am editing in the active tab without renaming or switching named factories.
 
 **Acceptance Criteria:**
 
-- [ ] `you docs work` includes a **CLI submit success** subsection listing human fields, `--json` keys, and example success objects.
-- [ ] The same section documents the verify loop: `you work show <work-id>` or `you work list --name <name> --work-type-name <type>` (cross-reference work-inspection PRD behavior).
-- [ ] Docs state that diagnostics and verbose output stay on stderr; payloads are never echoed on success.
-- [ ] `pkg/cli/docs` test coverage updated if topic text assertions exist for `work`.
+- [ ] `saveCurrentFactoryDocument` / editor save hooks send session PUT with `mode: "REPLACE_CURRENT"` (or omitted mode) and include `version` on the `factory` payload from the latest GET.
+- [ ] No editor save path calls `UPSERT_NAMED_AND_ACTIVATE` or `POST /factories`.
+- [ ] Stale-version and not-idle errors present the same operator-facing messages as before (mapped from existing error codes).
+- [ ] Typecheck passes
+- [ ] Tests pass (API module / hook unit tests)
+- [ ] Verify in browser: edit graph, Save succeeds; forced stale version shows existing stale error UX
+
+### session-factory-save-modes-recovery-005: Dashboard import confirm dialog and mode selection
+
+**Description:** As a dashboard operator, I want import to offer replace-current vs create-new-named with safe naming when a conflict exists.
+
+**Acceptance Criteria:**
+
+- [ ] Import activation uses session-scoped PUT only (no `POST /factories`).
+- [ ] Confirm dialog on import for any session tab with default **Replace current factory**:
+  - Replace → `REPLACE_CURRENT` with `factory.name` from session GET (PNG embedded name ignored); includes `factory.version` from GET.
+  - Create new named → `UPSERT_NAMED_AND_ACTIVATE` with name from PNG metadata (validated writable segment).
+- [ ] Create path: if preferred name exists under session root, client picks first free suffixed name (`name`, `name-2`, `name-3`, …) and shows resolved name in dialog before PUT.
+- [ ] Create path: omit `factory.version` when target name is new; include version when upserting an existing name the operator chose.
+- [ ] Replace path never changes the session’s active factory name (including `UNDEFINED` default root overwrite).
+- [ ] Typecheck passes
+- [ ] Tests pass (dialog choice, suffix allocation, PUT body/mode per session; at least one non-default session tab scenario)
+- [ ] Verify in browser: import on default and non-default tabs; both dialog choices reach success or expected error states
+
+### session-factory-save-modes-recovery-006: Remove legacy create-factory callers in tests and UI
+
+**Description:** As a maintainer, I want no remaining dependencies on `POST /factories` after migration.
+
+**Acceptance Criteria:**
+
+- [ ] `ui/src/api/named-factory/api.ts` removes `createFactory` POST usage; named create flows use session PUT with `UPSERT_NAMED_AND_ACTIVATE`.
+- [ ] Functional tests in `tests/functional/runtime_api/factory_transformation/api_named_factory_test.go` and `tests/functional/bootstrap_portability/` use session PUT with explicit `mode`.
+- [ ] Generated client no longer exposes `CreateFactory` for `/factories` POST.
 - [ ] Typecheck passes
 - [ ] Tests pass
+
+### session-factory-save-modes-recovery-007: Live CLI uses session PUT with REPLACE_CURRENT
+
+**Description:** As a CLI user, I want live `you factory save` to use the unified session PUT while offline filesystem save stays unchanged.
+
+**Acceptance Criteria:**
+
+- [ ] Live `you factory save` (no name argument) PUTs `{ factory }` (default `REPLACE_CURRENT`) to `sessionpath.CurrentFactoryPath` with `version` echoed from prior GET inside `factory`.
+- [ ] Offline `SaveFromFile` / `WriteCurrentFactoryPointer` behavior unchanged.
+- [ ] CLI help/examples remain accurate for live vs offline save.
+- [ ] Typecheck passes
+- [ ] Tests pass (`pkg/cli` factory save tests)
 
 ## Functional Requirements
 
-- **FR-1:** Extend `SubmitWorkResponse` in OpenAPI and propagate through codegen to Go (`factoryapi.SubmitWorkResponse`) and UI generated types.
-- **FR-2:** Populate response fields in `pkg/api` submit handlers from normalized submit metadata (`requestId`, work name, work type, trace, session).
-- **FR-3:** `pkg/cli/submit` maps API response + `SubmitConfig` (`SessionID`, scoped path) into human lines and the stable `--json` envelope.
-- **FR-4:** If the API cannot return `workId` for a documented edge case, human and JSON output must use the list-by-name fallback and docs must say so; prefer fixing normalization over leaving the gap.
-- **FR-5:** Error formatting reuses existing `ErrorResponse` parsing; optional `workId` in error JSON is best-effort without requiring schema changes in this lane unless needed for conflict cases.
-- **FR-6:** Align verify hints with [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md) (`--name`, `--work-type-name`, `you work show`).
+- FR-1: Session PUT is the sole HTTP submit path for full factory definitions.
+- FR-2: Body shape `{ mode?, factory }`; enum values SCREAMING_SNAKE; default `REPLACE_CURRENT`.
+- FR-3: `REPLACE_CURRENT` requires name match to session current; does not change active factory name.
+- FR-4: `UPSERT_NAMED_AND_ACTIVATE` persists under `SessionFactoryRootDir`, sets current-factory pointer, activates in-session only.
+- FR-5: All modes require idle targeted session before persist/activate.
+- FR-6: Shared validation runs before disk write (topology + normalization; may delegate to validation consolidation PRD when available).
+- FR-7: `POST /factories` hard-removed (no deprecation shim).
+- FR-8: Editor saves `REPLACE_CURRENT` only.
+- FR-9: Import dialog per approved PRD US-005 decisions (default replace; suffixed names on conflict).
+- FR-10: Error responses remain compatible with existing dashboard mapping where codes overlap.
 
 ## Non-Goals
 
-- Changing submit HTTP routes, session model, or request body schema beyond `SubmitWorkResponse`.
-- Batch submit via `you submit` (batch remains file ingest, API batch, `you run --work`).
-- Returning dispatch history, workstation state, or full work payloads in submit output.
-- Dashboard/UI submit UX changes (CLI and contract only).
-- Converting idempotent duplicate `201` (engine `Accepted=false`) into `409` in this project unless required for a listed acceptance criterion.
+- `ACTIVATE_ONLY` mode (pointer switch without new definition).
+- Changing `POST /factory-sessions` open-session semantics.
+- Offline CLI named-factory create gaining HTTP UPSERT in this recovery batch.
+- Broad handler-file splits (`prd-api-handlers-decomposition`) or service composition refactors unless required for save pipeline extraction.
+- Replacing `REPLACE_CURRENT` to change active factory name (use UPSERT instead).
 
 ## High-level technical design
 
-```mermaid
-sequenceDiagram
-  participant Op as Operator_or_agent
-  participant CLI as you_submit
-  participant API as Factory_HTTP_API
-  participant RT as Runtime_normalize_and_accept
+### Backend pipeline (required shape)
 
-  Op->>CLI: you submit --name --work-type-name --payload
-  CLI->>API: POST /factory-sessions/{session}/work
-  API->>RT: NormalizeWorkRequest + SubmitWorkRequest
-  RT-->>API: traceId + work metadata
-  API-->>CLI: 201 SubmitWorkResponse (extended)
-  CLI-->>Op: human lines or --json envelope + hint
+```text
+SaveFactoryForSession(ctx, sessionID, mode, factory)
+  → resolveSessionFactoryScope
+  → validateFactorySave
+  → persistFactorySave        // mode handler
+  → activatePersistedFactory  // replaceSessionRuntime only
+  → readbackFactory
 ```
 
-**Package ownership**
+**Scope object** (resolve once): `SessionID`, `Session`, `RootDir`, `Current`, `CurrentName`, `IsDefaultRoot`.
 
-| Layer | Owner | Notes |
-|-------|--------|------|
-| OpenAPI + codegen | `api/`, `pkg/api/generated`, `ui/src/api/generated` | Single schema source for `SubmitWorkResponse`. |
-| HTTP handlers | `pkg/api/handlers.go` | Build response after successful submit; session id from route. |
-| Normalization | `pkg/factory/requests` | Existing `batch-{requestId}-{name}` work id assignment. |
-| CLI presentation | `pkg/cli/submit` | Human/JSON mapping, hints, errors; no HTTP in tests beyond httptest. |
-| Docs | `pkg/cli/docs/reference/work.md` | Customer-facing contract; agents topic links when wave-2 lands. |
+**Mode handlers:**
 
-**CLI `--json` envelope vs API DTO:** The API returns `SubmitWorkResponse`; the CLI may add `endpointPath` and normalized `sessionId` that are known at the client. Scripts should treat the CLI envelope as the stable `you submit --json` contract.
+| Mode | Persist |
+|------|---------|
+| `REPLACE_CURRENT` | Overwrite current slot (root `factory.json` or `ReplaceNamedFactory` for current name) |
+| `UPSERT_NAMED_AND_ACTIVATE` | `PersistNamedFactory` or `ReplaceNamedFactory` under session root; set current-factory pointer |
+
+Suggested package: `pkg/service/factorysave/` with `save.go`, `scope.go`, `validate.go`, `persist.go`, `modes.go`, `activate.go`, `readback.go`. `FactoryService` stays thin.
+
+### Incremental refactor order
+
+1. Extract scope + readback (no behavior change).
+2. Route existing session save through shared validate + activate.
+3. Add mode handlers + HTTP body decode; wire PUT.
+4. Delete `CreateNamedFactory`, unscoped save HTTP paths, save-path `activateReplacementRuntime`.
+
+### UI transport
+
+- Extend `saveCurrentFactoryDocument` (or successor) to send `{ mode, factory }`.
+- Import: `activateImportedFactoryForSession` and confirm UI choose mode; remove `/factories` POST constant.
+
+### Dependencies
+
+- **Soft:** [`tasks/prd-factory-validation-consolidation.md`](../prd-factory-validation-consolidation.md) — do not block; interim topology validation acceptable.
+- **Downstream:** S7 UI client PRD may further consolidate transport after S1 lands.
+- **Do not** add new `POST /factories` callers during implementation.
 
 ## Supporting technical and UX considerations
 
-- Global `--json` is registered on the root command; submit must not add a per-subcommand duplicate flag.
-- Use `clidiag.SessionLabel` for empty session display consistency with other CLI commands.
-- Bound error body snippets (for example 512 bytes) to avoid dumping HTML or large payloads.
-- Regenerate OpenAPI artifacts per repository process after schema edits.
-- Pair implementation order with work-inspection PRD so hints reference commands that exist or land in the same release train.
+- Reuse disk helpers: `marshalPersistedFactoryPayload`, `replaceDefaultFactoryDefinition`, `factoryconfig.PersistNamedFactory`, `ReplaceNamedFactory`, `buildSessionEditableFactoryReplacement`, `replaceSessionRuntime`.
+- UI `SaveCurrentFactoryInput.baseVersion` may remain an adapter writing into `factory.version` on the wire.
+- Contract tests: drop `/factories` post; assert save mode on session PUT.
+- Accessible import dialog: radio or equivalent with visible labels, keyboard operable, focus trap in modal.
+- Loading/error states on import confirm should not double-submit PUT.
 
 ## Success metrics
 
-- Agents can copy `workId` or the suggested `you work` command from one successful submit without running list first (when API returns `workId`).
-- Duplicate submit attempts during docs exercises drop because verify commands are visible in stdout.
-- Scripted flows parse `--json` with a single `jq` expression (no trace-only workaround).
+- Zero `POST /factories` references in production UI/CLI paths and functional tests after closeout.
+- Multi-session functional tests pass for both modes without cross-session disk or runtime mutation.
+- Editor save and import share one client shape (`mode` + `factory`).
+- Invalid payloads rejected consistently regardless of mode.
 
-## Open Questions
+## Open questions
 
-- None blocking: `workId` assignment at accept time follows existing `NormalizeWorkRequest` rules; if product later requires caller-supplied ids only, document in `you docs work` without changing this PRD scope.
-
-## Related documents
-
-- [`tasks/prd-cli-submit-response-contract.md`](../prd-cli-submit-response-contract.md) (source ask)
-- [`tasks/prd-cli-work-inspection.md`](../prd-cli-work-inspection.md)
-- [`tasks/prd-docs-agents-consolidation-wave2.md`](../prd-docs-agents-consolidation-wave2.md)
+None — decisions are recorded in the approved S1 PRD (2026-05-30).
