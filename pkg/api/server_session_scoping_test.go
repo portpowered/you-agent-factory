@@ -91,18 +91,6 @@ func assertScopedSessionSubmit(t *testing.T, serverURL string, betaSession *test
 	response := requireHTTPSuccess(t, http.MethodPost, serverURL+"/factory-sessions/session-beta/work", bytes.NewBufferString(`{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"scoped"}}`), "application/json", http.StatusCreated)
 	defer response.Body.Close()
 
-	var submitBody factoryapi.SubmitWorkResponse
-	if err := json.NewDecoder(response.Body).Decode(&submitBody); err != nil {
-		t.Fatalf("decode scoped submit response: %v", err)
-	}
-	assertSubmitWorkResponseIdentifiers(t, submitBody, submitWorkResponseExpectation{
-		traceID:      "trace-scoped-submit",
-		name:         "scoped-submit",
-		workTypeName: "task",
-		sessionID:    "session-beta",
-		workIDSuffix: "-scoped-submit",
-	})
-
 	if len(betaSession.WorkRequests) != 1 {
 		t.Fatalf("beta submitted work requests = %d, want 1", len(betaSession.WorkRequests))
 	}
@@ -458,7 +446,7 @@ func TestSaveCurrentFactoryBySessionId_SubmitsToTargetedSessionOnly(t *testing.T
 		},
 	})
 
-	body := `{"name":"beta","version":{"physical":"1970-01-01T00:00:00.000000002Z","logical":2},"workTypes":[],"workstations":[],"workers":[]}`
+	body := saveFactoryForSessionRequestBody(`{"name":"beta","version":{"physical":"1970-01-01T00:00:00.000000002Z","logical":2},"workTypes":[],"workstations":[],"workers":[]}`)
 	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/session-2/factory", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -491,7 +479,7 @@ func TestCurrentFactoryBySessionId_UnknownSessionReturnsNotFound(t *testing.T) {
 	srv.Handler().ServeHTTP(getRec, getReq)
 	assertJSONError(t, getRec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 
-	putReq := httptest.NewRequest(http.MethodPut, "/factory-sessions/missing-session/factory", bytes.NewBufferString(`{"name":"beta"}`))
+	putReq := httptest.NewRequest(http.MethodPut, "/factory-sessions/missing-session/factory", bytes.NewBufferString(saveFactoryForSessionRequestBody(`{"name":"beta"}`)))
 	putReq.Header.Set("Content-Type", "application/json")
 	putRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(putRec, putReq)

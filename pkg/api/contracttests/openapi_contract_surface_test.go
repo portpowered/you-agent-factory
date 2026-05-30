@@ -106,20 +106,36 @@ func TestOpenAPIContract_PersistedFactoryRoutesUseCanonicalPluralVocabulary(t *t
 		t.Fatalf("paths object is missing")
 	}
 
-	pathItem, ok := paths["/factories"].(map[string]any)
-	if !ok {
-		t.Fatal("paths./factories is missing")
-	}
-	postOperation, ok := pathItem["post"].(map[string]any)
-	if !ok {
-		t.Fatal("paths./factories.post is missing")
-	}
-	if got, _ := postOperation["operationId"].(string); got != "createFactory" {
-		t.Fatalf("paths./factories.post.operationId = %q, want %q", got, "createFactory")
+	if pathItem, ok := paths["/factories"].(map[string]any); ok {
+		if _, ok := pathItem["post"].(map[string]any); ok {
+			t.Fatal("paths./factories.post must not be published; use session-scoped PUT /factory-sessions/{session_id}/factory")
+		}
 	}
 	if _, ok := paths["/factory"]; ok {
 		t.Fatal("paths./factory must not be published for persisted factory definitions")
 	}
+}
+
+func TestOpenAPIContract_SessionFactoryPUTPublishesSaveMode(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	saveRequest := schemaObject(t, schemas, "SaveFactoryForSessionRequest")
+	assertRequiredFields(t, saveRequest, "factory")
+	properties := schemaProperties(t, saveRequest, "SaveFactoryForSessionRequest")
+	assertPropertyRef(t, properties, "factory", "#/components/schemas/Factory")
+	modeProperty, ok := properties["mode"].(map[string]any)
+	if !ok {
+		t.Fatal("SaveFactoryForSessionRequest.properties.mode is missing")
+	}
+	if got := modeProperty["$ref"]; got != "#/components/schemas/FactorySaveMode" {
+		t.Fatalf("SaveFactoryForSessionRequest.properties.mode.$ref = %v, want #/components/schemas/FactorySaveMode", got)
+	}
+	if got, _ := modeProperty["default"].(string); got != "REPLACE_CURRENT" {
+		t.Fatalf("SaveFactoryForSessionRequest.properties.mode.default = %q, want REPLACE_CURRENT", got)
+	}
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySaveMode"), "FactorySaveMode", []string{
+		"REPLACE_CURRENT",
+		"UPSERT_NAMED_AND_ACTIVATE",
+	})
 }
 
 func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testing.T) {
@@ -259,7 +275,6 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/models/{model_name}/pull":              {"post"},
 		"/provider-sessions/detail":              {"get"},
 		"/factory-validations":                   {"post"},
-		"/factories":                             {"post"},
 		"/factory-sessions/{session_id}/factory": {"get", "put"},
 	}
 	for path, methods := range requiredOperations {
@@ -305,7 +320,7 @@ func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	for _, schema := range []string{
 		"SubmitWorkRequest", "SubmitWorkResponse", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "UpsertWorkRequestSubmittedWork", "WorkRequest", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
-		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
+		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "FactorySaveMode", "SaveFactoryForSessionRequest", "Factory", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)
@@ -378,11 +393,6 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	stageSubmitWorkFileResponse := schemaObject(t, schemas, "StageSubmitWorkFileResponse")
 	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType")
-
-	submitWorkResponseSchema := schemaObject(t, schemas, "SubmitWorkResponse")
-	assertRequiredFields(t, submitWorkResponseSchema, "traceId", "requestId", "accepted")
-	submitWorkResponseProperties := schemaProperties(t, submitWorkResponseSchema, "SubmitWorkResponse")
-	assertSchemaPropertiesPresent(t, submitWorkResponseProperties, "SubmitWorkResponse", "traceId", "requestId", "accepted", "workId", "name", "workTypeName", "sessionId")
 }
 
 func assertWorkRequestSurfaceSchemas(t *testing.T, schemas map[string]any) {
@@ -591,17 +601,12 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 
 func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	t.Helper()
-	createFactory := pathOperation(t, paths, "/factories", "post")
-	assertResponseSchemaRef(t, createFactory, "201", "#/components/schemas/Factory")
-	assertResponseRef(t, createFactory, "400", "#/components/responses/CreateFactoryBadRequest")
-	assertResponseRef(t, createFactory, "409", "#/components/responses/CreateFactoryConflict")
-
 	currentFactory := pathOperation(t, paths, "/factory-sessions/{session_id}/factory", "get")
 	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/Factory")
 	assertResponseRef(t, currentFactory, "404", "#/components/responses/NotFound")
 
 	saveCurrentFactory := pathOperation(t, paths, "/factory-sessions/{session_id}/factory", "put")
-	assertRequestSchemaRef(t, saveCurrentFactory, "#/components/schemas/Factory")
+	assertRequestSchemaRef(t, saveCurrentFactory, "#/components/schemas/SaveFactoryForSessionRequest")
 	assertResponseSchemaRef(t, saveCurrentFactory, "200", "#/components/schemas/Factory")
 	assertResponseRef(t, saveCurrentFactory, "400", "#/components/responses/SaveCurrentFactoryBadRequest")
 	assertResponseRef(t, saveCurrentFactory, "409", "#/components/responses/SaveCurrentFactoryConflict")

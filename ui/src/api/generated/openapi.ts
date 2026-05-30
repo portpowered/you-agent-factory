@@ -1583,7 +1583,7 @@ export interface components {
          *       "factory": {
          *         "name": "alpha",
          *         "version": {
-         *           "logical": 2,
+         *           "logical": "2",
          *           "physical": "2026-05-30T12:00:00.000000000Z"
          *         },
          *         "workTypes": [

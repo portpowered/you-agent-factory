@@ -373,6 +373,10 @@ func validNamedFactoryBody(name, workType string) string {
 	return fmt.Sprintf(`{"name":%q,%s`, name, strings.TrimPrefix(namedFactoryPayloadJSON(name, workType), "{"))
 }
 
+func saveFactoryForSessionRequestBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
+}
+
 func namedFactoryPayloadJSON(project, workType string) string {
 	return fmt.Sprintf(`{
 		"name": %q,

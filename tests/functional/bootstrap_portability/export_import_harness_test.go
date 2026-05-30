@@ -172,24 +172,37 @@ func (r exportImportSmokeHarnessResult) AssertDashboardActivationSuccess(
 func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.Factory) factoryapi.Factory {
 	t.Helper()
 
-	body, err := json.Marshal(namedFactory)
+	requestBody, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{
+		Mode:    ptrFactorySaveMode(factoryapi.FactorySaveModeUpsertNamedAndActivate),
+		Factory: namedFactory,
+	})
 	if err != nil {
-		t.Fatalf("marshal create factory request: %v", err)
+		t.Fatalf("marshal save factory for session request: %v", err)
 	}
 
-	resp, err := http.Post(serverURL+"/factories", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPut, serverURL+"/factory-sessions/~default/factory", bytes.NewReader(requestBody))
 	if err != nil {
-		t.Fatalf("POST /factories: %v", err)
+		t.Fatalf("new save factory for session request: %v", err)
 	}
-	if resp.StatusCode != http.StatusCreated {
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT /factory-sessions/~default/factory: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
 		data, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		t.Fatalf("POST /factories status = %d, want 201: %s", resp.StatusCode, string(data))
+		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want 200: %s", resp.StatusCode, string(data))
 	}
 
 	var created factoryapi.Factory
-	decodeJSONResponse(t, resp, &created, "decode create factory response")
+	decodeJSONResponse(t, resp, &created, "decode upsert named factory response")
 	return created
+}
+
+func ptrFactorySaveMode(mode factoryapi.FactorySaveMode) *factoryapi.FactorySaveMode {
+	return &mode
 }
 
 func getCurrentFactory(t *testing.T, serverURL string) factoryapi.Factory {
