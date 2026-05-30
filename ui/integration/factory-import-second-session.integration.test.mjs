@@ -159,8 +159,8 @@ async function startReviewSessionImportServer(preview, tracking) {
     onActivateFactory: async (body) => {
       tracking.postFactoryActivations.push(body);
     },
-    onSaveCurrentFactory: async ({ body, sessionID }) => {
-      tracking.sessionFactoryPutRequests.push({ body, sessionID });
+    onSaveCurrentFactory: async ({ body, mode, sessionID }) => {
+      tracking.sessionFactoryPutRequests.push({ body, mode, sessionID });
     },
     onOpenFactorySession: async (body) => {
       if (!body?.target) {
@@ -369,16 +369,11 @@ async function importFactoryPngAndActivate(page, options) {
     });
   expect(await importDialog.textContent()).toContain(exportName);
   expect(await importDialog.textContent()).toContain(download.filename);
+  expect(await importDialog.textContent()).toContain("Replace current factory");
 
-  const activateButton = importDialog.getByRole("button", {
-    name: "Confirm import",
-  });
-  await expect
-    .poll(async () => await activateButton.isEnabled(), {
-      timeout: uiInteractionTimeoutMs,
-    })
-    .toBe(true);
-  await activateButton.click();
+  await page
+    .getByRole("button", { name: "Confirm import" })
+    .click({ timeout: uiInteractionTimeoutMs });
   await expect
     .poll(async () => sessionFactoryPutRequests.length, {
       timeout: uiInteractionTimeoutMs,

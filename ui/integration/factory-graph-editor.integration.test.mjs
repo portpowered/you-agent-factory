@@ -486,6 +486,9 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(await importDialog.textContent()).toContain(
           "Review the dropped factory before confirming import",
         );
+        expect(await importDialog.textContent()).toContain(
+          "Replace current factory",
+        );
 
         await importDialog
           .getByRole("button", { name: "Confirm import" })
@@ -666,6 +669,7 @@ describe.sequential("factory graph editor browser integration", () => {
                 },
               ],
             },
+            mode: "REPLACE_CURRENT",
             sessionID: "~default",
           },
         ]);
