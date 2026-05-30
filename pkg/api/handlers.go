@@ -314,18 +314,26 @@ func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
 
 	created, err := s.runtime.CreateNamedFactory(r.Context(), req)
 	if err != nil {
+		var topologyErr *apisurface.TopologyValidationError
 		switch {
 		case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
-			s.writeError(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME")
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.FactoryValidationTarget{factoryvalidation.InvalidFactoryNameTarget()})
+			return
+		case errors.As(err, &topologyErr):
+			targets := topologyErr.Targets
+			if len(targets) == 0 {
+				targets = []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()}
+			}
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", targets)
 			return
 		case errors.Is(err, apisurface.ErrInvalidNamedFactory):
-			s.writeError(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY")
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
 			return
 		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
 			s.writeError(w, http.StatusConflict, "Named factory already exists.", "FACTORY_ALREADY_EXISTS")
 			return
 		case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
-			s.writeError(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE")
+			s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.FactoryValidationTarget{factoryvalidation.FactoryRuntimeNotIdleTarget()})
 			return
 		default:
 			s.logger.Error("create factory failed", zap.Error(err))
@@ -477,8 +485,8 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.FolderPath) == "" {
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "folderPath is required", "BAD_REQUEST", []factoryapi.ErrorTarget{
-			errorTarget("factory-session-validation", "required", "folderPath"),
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "folderPath is required", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{
+			factoryvalidation.FactorySessionFieldTarget("required", "folderPath", "folderPath is required"),
 		})
 		return
 	}
@@ -487,7 +495,7 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		s.logger.Debug("open factory session rejected", zap.Error(err))
 		var targetedErr interface {
 			error
-			ErrorTargets() []factoryapi.ErrorTarget
+			ErrorTargets() []factoryapi.FactoryValidationTarget
 		}
 		if errors.As(err, &targetedErr) {
 			s.writeErrorWithTargets(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST", targetedErr.ErrorTargets())
@@ -629,10 +637,10 @@ func (s *Server) SaveCurrentFactory(w http.ResponseWriter, r *http.Request) {
 	req, err := decodeSaveCurrentFactoryBody(r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.ErrorTarget{errorTarget("form", "", "factory")})
+			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
 			return
 		}
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.ErrorTarget{errorTarget("form", "", "factory")})
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
 		return
 	}
 
@@ -657,10 +665,10 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 	req, err := decodeSaveCurrentFactoryBody(r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.ErrorTarget{errorTarget("form", "", "factory")})
+			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
 			return
 		}
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.ErrorTarget{errorTarget("form", "", "factory")})
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
 		return
 	}
 
@@ -687,23 +695,23 @@ func (s *Server) writeCurrentFactoryError(
 		s.writeError(w, http.StatusNotFound, "Current factory not found.", "NOT_FOUND")
 		return
 	case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.ErrorTarget{errorTarget("field", "", "factory.name")})
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.FactoryValidationTarget{factoryvalidation.InvalidFactoryNameTarget()})
 		return
 	case errors.Is(err, apisurface.ErrFactoryVersionStale):
-		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory definition is stale. Refresh the graph before saving.", "STALE_FACTORY_VERSION", []factoryapi.ErrorTarget{errorTarget("save", "stale-version", "")})
+		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory definition is stale. Refresh the graph before saving.", "STALE_FACTORY_VERSION", []factoryapi.FactoryValidationTarget{factoryvalidation.StaleFactoryVersionTarget()})
 		return
 	case errors.As(err, &topologyErr):
 		targets := topologyErr.Targets
 		if len(targets) == 0 {
-			targets = []factoryapi.ErrorTarget{errorTarget("form", "", "factory")}
+			targets = []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()}
 		}
 		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", targets)
 		return
 	case errors.Is(err, apisurface.ErrInvalidNamedFactory):
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.ErrorTarget{errorTarget("form", "", "factory")})
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
 		return
 	case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
-		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.ErrorTarget{errorTarget("save", "active-work", "")})
+		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.FactoryValidationTarget{factoryvalidation.FactoryRuntimeNotIdleTarget()})
 		return
 	default:
 		logFields := append([]zap.Field{zap.String("action", action)}, fields...)
@@ -1323,8 +1331,8 @@ func (s *Server) writeError(w http.ResponseWriter, status int, message, code str
 	s.writeErrorWithTargets(w, status, message, code, nil)
 }
 
-func (s *Server) writeErrorWithTargets(w http.ResponseWriter, status int, message, code string, targets []factoryapi.ErrorTarget) {
-	var targetPtr *[]factoryapi.ErrorTarget
+func (s *Server) writeErrorWithTargets(w http.ResponseWriter, status int, message, code string, targets []factoryapi.FactoryValidationTarget) {
+	var targetPtr *[]factoryapi.FactoryValidationTarget
 	if len(targets) > 0 {
 		targetPtr = &targets
 	}
@@ -1334,17 +1342,6 @@ func (s *Server) writeErrorWithTargets(w http.ResponseWriter, status int, messag
 		Code:    factoryapi.ErrorResponseCode(code),
 		Targets: targetPtr,
 	})
-}
-
-func errorTarget(kind, id, field string) factoryapi.ErrorTarget {
-	target := factoryapi.ErrorTarget{Kind: kind}
-	if id != "" {
-		target.Id = &id
-	}
-	if field != "" {
-		target.Field = &field
-	}
-	return target
 }
 
 func (s *Server) writeSSEDataJSON(w http.ResponseWriter, v any) error {

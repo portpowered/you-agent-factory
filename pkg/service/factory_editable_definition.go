@@ -408,7 +408,7 @@ func validateEditableFactoryTopology(submitted factoryapi.Factory) error {
 	}
 	return apisurface.NewTopologyValidationError(
 		"Factory topology contains invalid graph references.",
-		factoryvalidation.ToErrorTargets(result.Targets),
+		factoryvalidation.ToValidationTargets(result.Targets),
 	)
 }
 
@@ -423,6 +423,9 @@ func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory f
 		rootDir = fs.cfg.Dir
 	}
 	if err := apisurface.ValidateWritableNamedFactoryName(namedFactory.Name); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	if err := validateEditableFactoryTopology(namedFactory); err != nil {
 		return factoryapi.Factory{}, err
 	}
 

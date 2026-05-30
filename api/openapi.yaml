@@ -850,6 +850,14 @@ components:
                 message: Factory payload is not a valid Agent Factory definition.
                 family: BAD_REQUEST
                 code: INVALID_FACTORY
+                targets:
+                  - code: factory.workstation.missingFailureRoute
+                    severity: error
+                    message: workstation "bob" must define a failure route.
+                    subject:
+                      type: WORKSTATION
+                      id: bob
+                      location: ON_FAILURE
     CreateFactoryConflict:
       description: Named factory could not be activated because the name already exists or the current runtime is not idle.
       content:
@@ -869,6 +877,14 @@ components:
                 message: Current factory runtime must be idle before activation.
                 family: CONFLICT
                 code: FACTORY_NOT_IDLE
+                targets:
+                  - code: factory.runtime.notIdle
+                    severity: error
+                    message: Current factory runtime must be idle before activation.
+                    subject:
+                      type: FACTORY
+                      id: ''
+                      location: DEFINITION
     NotFound:
       description: Requested resource was not found.
       content:
@@ -902,8 +918,13 @@ components:
                 family: BAD_REQUEST
                 code: INVALID_FACTORY
                 targets:
-                  - kind: form
-                    field: factory
+                  - code: factory.workstation.missingFailureRoute
+                    severity: error
+                    message: workstation "bob" must define a failure route.
+                    subject:
+                      type: WORKSTATION
+                      id: bob
+                      location: ON_FAILURE
     SaveCurrentFactoryConflict:
       description: Current factory could not be saved because the runtime or submitted version is not safe to replace.
       content:
@@ -918,8 +939,13 @@ components:
                 family: CONFLICT
                 code: STALE_FACTORY_VERSION
                 targets:
-                  - kind: save
-                    id: stale-version
+                  - code: factory.version.stale
+                    severity: error
+                    message: Current factory definition is stale. Refresh the graph before saving.
+                    subject:
+                      type: FACTORY
+                      id: ''
+                      location: DEFINITION
             factoryNotIdle:
               summary: Runtime is not idle.
               value:
@@ -927,8 +953,13 @@ components:
                 family: CONFLICT
                 code: FACTORY_NOT_IDLE
                 targets:
-                  - kind: save
-                    id: active-work
+                  - code: factory.runtime.notIdle
+                    severity: error
+                    message: Current factory runtime must be idle before activation.
+                    subject:
+                      type: FACTORY
+                      id: ''
+                      location: DEFINITION
     InternalError:
       description: Server failed while reading or building runtime state.
       content:
@@ -1663,9 +1694,9 @@ components:
             - The server failed while handling an otherwise valid request.
         targets:
           type: array
-          description: Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
+          description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
           items:
-            $ref: '#/components/schemas/ErrorTarget'
+            $ref: '#/components/schemas/FactoryValidationTarget'
     ErrorTarget:
       type: object
       additionalProperties: false

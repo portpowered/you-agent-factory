@@ -562,8 +562,8 @@ type ErrorResponse struct {
 	Family  ErrorFamily `json:"family"`
 	Message string      `json:"message"`
 
-	// Targets Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
-	Targets *[]ErrorTarget `json:"targets,omitempty"`
+	// Targets Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
+	Targets *[]FactoryValidationTarget `json:"targets,omitempty"`
 }
 
 // ErrorResponseCode Stable machine-readable error code.

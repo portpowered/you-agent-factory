@@ -51,6 +51,36 @@ const (
 	STALEFACTORYVERSION  ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
+// Defines values for FactoryValidationSeverity.
+const (
+	FactoryValidationSeverityError   FactoryValidationSeverity = "error"
+	FactoryValidationSeverityHint    FactoryValidationSeverity = "hint"
+	FactoryValidationSeverityWarning FactoryValidationSeverity = "warning"
+)
+
+// Defines values for FactoryValidationSubjectLocation.
+const (
+	FactoryValidationSubjectLocationDefinition  FactoryValidationSubjectLocation = "DEFINITION"
+	FactoryValidationSubjectLocationInputs      FactoryValidationSubjectLocation = "INPUTS"
+	FactoryValidationSubjectLocationOnFailure   FactoryValidationSubjectLocation = "ON_FAILURE"
+	FactoryValidationSubjectLocationOnRejection FactoryValidationSubjectLocation = "ON_REJECTION"
+	FactoryValidationSubjectLocationOutputs     FactoryValidationSubjectLocation = "OUTPUTS"
+	FactoryValidationSubjectLocationReference   FactoryValidationSubjectLocation = "REFERENCE"
+	FactoryValidationSubjectLocationStates      FactoryValidationSubjectLocation = "STATES"
+	FactoryValidationSubjectLocationTerminal    FactoryValidationSubjectLocation = "TERMINAL"
+)
+
+// Defines values for FactoryValidationSubjectType.
+const (
+	FactoryValidationSubjectTypeFactory     FactoryValidationSubjectType = "FACTORY"
+	FactoryValidationSubjectTypeResource    FactoryValidationSubjectType = "RESOURCE"
+	FactoryValidationSubjectTypeRoute       FactoryValidationSubjectType = "ROUTE"
+	FactoryValidationSubjectTypeWorkState   FactoryValidationSubjectType = "WORK_STATE"
+	FactoryValidationSubjectTypeWorkType    FactoryValidationSubjectType = "WORK_TYPE"
+	FactoryValidationSubjectTypeWorker      FactoryValidationSubjectType = "WORKER"
+	FactoryValidationSubjectTypeWorkstation FactoryValidationSubjectType = "WORKSTATION"
+)
+
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -213,24 +243,12 @@ type ErrorResponse struct {
 	Family  ErrorFamily `json:"family"`
 	Message string      `json:"message"`
 
-	// Targets Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
-	Targets *[]ErrorTarget `json:"targets,omitempty"`
+	// Targets Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
+	Targets *[]FactoryValidationTarget `json:"targets,omitempty"`
 }
 
 // ErrorResponseCode Stable machine-readable error code.
 type ErrorResponseCode string
-
-// ErrorTarget defines model for ErrorTarget.
-type ErrorTarget struct {
-	// Field Optional request or form field path associated with the error.
-	Field *string `json:"field,omitempty"`
-
-	// Id Optional graph entity, relationship, or save condition identifier.
-	Id *string `json:"id,omitempty"`
-
-	// Kind Client-visible target category such as form, node, edge, field, or save.
-	Kind string `json:"kind"`
-}
 
 // Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 type Factory struct {
@@ -290,6 +308,40 @@ type FactoryGuard struct {
 
 // FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
+
+// FactoryValidationSeverity Validation severity for one factory validation target.
+type FactoryValidationSeverity string
+
+// FactoryValidationSubject defines model for FactoryValidationSubject.
+type FactoryValidationSubject struct {
+	// Id Stable component identifier or name for the affected factory component.
+	Id string `json:"id"`
+
+	// Location Factory-domain location within the subject component referenced by one validation target.
+	Location FactoryValidationSubjectLocation `json:"location"`
+
+	// Type Factory-domain component type referenced by one validation target subject.
+	Type FactoryValidationSubjectType `json:"type"`
+}
+
+// FactoryValidationSubjectLocation Factory-domain location within the subject component referenced by one validation target.
+type FactoryValidationSubjectLocation string
+
+// FactoryValidationSubjectType Factory-domain component type referenced by one validation target subject.
+type FactoryValidationSubjectType string
+
+// FactoryValidationTarget defines model for FactoryValidationTarget.
+type FactoryValidationTarget struct {
+	// Code Stable machine-readable validation rule identifier.
+	Code string `json:"code"`
+
+	// Message Human-readable explanation suitable for dialogs and summaries.
+	Message string `json:"message"`
+
+	// Severity Validation severity for one factory validation target.
+	Severity FactoryValidationSeverity `json:"severity"`
+	Subject  FactoryValidationSubject  `json:"subject"`
+}
 
 // Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
 type Guard struct {

@@ -12,7 +12,8 @@ export type FactorySessionTarget =
   components["schemas"]["FactorySessionTarget"];
 export type FactorySessionTargetRef =
   components["schemas"]["FactorySessionTargetRef"];
-export type FactorySessionsAPIErrorTarget = components["schemas"]["ErrorTarget"];
+export type FactorySessionsAPIErrorTarget =
+  components["schemas"]["FactoryValidationTarget"];
 export type OpenFactorySessionResponse =
   components["schemas"]["OpenFactorySessionResponse"];
 
@@ -273,16 +274,19 @@ function readFactorySessionsAPIErrorTargets(
 function isFactorySessionsAPIErrorTarget(
   value: unknown,
 ): value is FactorySessionsAPIErrorTarget {
-  if (!isAPIRecord(value) || typeof value.kind !== "string") {
+  if (!isAPIRecord(value) || typeof value.code !== "string") {
     return false;
   }
-  if ("id" in value && value.id !== undefined && typeof value.id !== "string") {
+  if (typeof value.message !== "string" || typeof value.severity !== "string") {
+    return false;
+  }
+  if (!isAPIRecord(value.subject)) {
     return false;
   }
   if (
-    "field" in value &&
-    value.field !== undefined &&
-    typeof value.field !== "string"
+    typeof value.subject.type !== "string" ||
+    typeof value.subject.id !== "string" ||
+    typeof value.subject.location !== "string"
   ) {
     return false;
   }

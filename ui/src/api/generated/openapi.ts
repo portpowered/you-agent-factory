@@ -352,6 +352,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/factory-validations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate factory definition
+         * @description Validates a submitted complete factory definition and returns canonical validation targets without persisting or activating the factory.
+         */
+        post: operations["validateFactory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factories": {
         parameters: {
             query?: never;
@@ -786,8 +806,8 @@ export interface components {
              * @enum {string}
              */
             code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "STALE_FACTORY_VERSION" | "NOT_FOUND" | "INTERNAL_ERROR";
-            /** @description Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages. */
-            targets?: components["schemas"]["ErrorTarget"][];
+            /** @description Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields. */
+            targets?: components["schemas"]["FactoryValidationTarget"][];
         };
         ErrorTarget: {
             /** @description Client-visible target category such as form, node, edge, field, or save. */
@@ -2128,6 +2148,65 @@ export interface components {
             /** @description Inclusive 1-based byte offset where the diagnostic source span starts when available. */
             startOffset: number;
         };
+        /**
+         * @description Validation severity for one factory validation target.
+         * @enum {string}
+         */
+        FactoryValidationSeverity: "error" | "warning" | "hint";
+        /**
+         * @description Factory-domain component type referenced by one validation target subject.
+         * @enum {string}
+         */
+        FactoryValidationSubjectType: "FACTORY" | "WORKSTATION" | "WORK_TYPE" | "WORK_STATE" | "WORKER" | "RESOURCE" | "ROUTE";
+        /**
+         * @description Factory-domain location within the subject component referenced by one validation target.
+         * @enum {string}
+         */
+        FactoryValidationSubjectLocation: "ON_REJECTION" | "ON_FAILURE" | "OUTPUTS" | "INPUTS" | "STATES" | "TERMINAL" | "REFERENCE" | "DEFINITION";
+        FactoryValidationSubject: {
+            type: components["schemas"]["FactoryValidationSubjectType"];
+            /** @description Stable component identifier or name for the affected factory component. */
+            id: string;
+            location: components["schemas"]["FactoryValidationSubjectLocation"];
+        };
+        FactoryValidationTarget: {
+            /** @description Stable machine-readable validation rule identifier. */
+            code: string;
+            severity: components["schemas"]["FactoryValidationSeverity"];
+            /** @description Human-readable explanation suitable for dialogs and summaries. */
+            message: string;
+            subject: components["schemas"]["FactoryValidationSubject"];
+        };
+        /**
+         * @example {
+         *       "targets": [
+         *         {
+         *           "code": "factory.workstation.missingRejectionRoute",
+         *           "severity": "error",
+         *           "message": "Workstation repeater must define a reject route.",
+         *           "subject": {
+         *             "type": "WORKSTATION",
+         *             "id": "repeater",
+         *             "location": "ON_REJECTION"
+         *           }
+         *         },
+         *         {
+         *           "code": "factory.workType.missingCompletionState",
+         *           "severity": "error",
+         *           "message": "Work type task must declare a completion state.",
+         *           "subject": {
+         *             "type": "WORK_TYPE",
+         *             "id": "task",
+         *             "location": "STATES"
+         *           }
+         *         }
+         *       ]
+         *     }
+         */
+        FactoryValidationResult: {
+            /** @description Canonical validation targets for the submitted factory definition. */
+            targets: components["schemas"]["FactoryValidationTarget"][];
+        };
         WorkRequest: {
             /** @description Stable client-provided request identifier used for idempotent batch submission. */
             requestId: string;
@@ -2922,6 +3001,32 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    validateFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Factory"];
+            };
+        };
+        responses: {
+            /** @description Validation result for the submitted factory definition. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryValidationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             500: components["responses"]["InternalError"];
         };
     };

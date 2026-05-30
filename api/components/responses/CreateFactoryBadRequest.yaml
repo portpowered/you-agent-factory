@@ -16,3 +16,11 @@ content:
           message: Factory payload is not a valid Agent Factory definition.
           family: BAD_REQUEST
           code: INVALID_FACTORY
+          targets:
+            - code: factory.workstation.missingFailureRoute
+              severity: error
+              message: workstation "bob" must define a failure route.
+              subject:
+                type: WORKSTATION
+                id: bob
+                location: ON_FAILURE

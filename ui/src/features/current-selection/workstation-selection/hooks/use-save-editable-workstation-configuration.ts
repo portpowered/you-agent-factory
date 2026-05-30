@@ -335,37 +335,32 @@ function resolveSaveFieldErrors(
 function resolveTargetFieldName(
   target: NonNullable<CurrentFactoryDefinitionError["targets"]>[number],
 ): keyof EditableWorkstationSaveValidationErrors | null {
-  const field = target.field?.trim().toLowerCase();
-  const id = target.id?.trim().toLowerCase();
+  const subjectID = target.subject.id.trim().toLowerCase();
+  const subjectType = target.subject.type;
+  const subjectLocation = target.subject.location;
 
-  if (field?.endsWith(".worker") || field === "worker" || id === "worker") {
+  if (
+    target.code === "factory.worker.danglingReference" &&
+    subjectType === "WORKSTATION"
+  ) {
     return "workerName";
   }
   if (
-    field?.endsWith(".behavior") ||
-    field === "behavior" ||
-    id === "behavior"
+    subjectType === "WORKSTATION" &&
+    (subjectLocation === "REFERENCE" || subjectLocation === "DEFINITION")
   ) {
-    return "behavior";
-  }
-  if (
-    field?.endsWith(".body") ||
-    field?.endsWith(".prompt") ||
-    field === "body" ||
-    field === "prompt" ||
-    id === "body" ||
-    id === "prompt"
-  ) {
-    return "prompt";
-  }
-  if (
-    field?.endsWith(".runner") ||
-    field?.endsWith(".runnername") ||
-    field === "runner" ||
-    field === "runnername" ||
-    id === "runner"
-  ) {
-    return "runnerName";
+    if (subjectID.endsWith("worker") || subjectID === "worker") {
+      return "workerName";
+    }
+    if (subjectID === "behavior") {
+      return "behavior";
+    }
+    if (subjectID === "body" || subjectID === "prompt") {
+      return "prompt";
+    }
+    if (subjectID === "runner" || subjectID === "runnername") {
+      return "runnerName";
+    }
   }
 
   return null;

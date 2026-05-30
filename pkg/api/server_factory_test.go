@@ -13,6 +13,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
@@ -341,16 +342,23 @@ func TestSaveCurrentFactory_MapsValidationErrorsToTargets(t *testing.T) {
 	if rec.Code != http.StatusBadRequest || response.Code != factoryapi.ErrorResponseCode("INVALID_FACTORY") || response.Message != "Factory payload is not a valid Agent Factory definition." {
 		t.Fatalf("validation response = %#v status=%d", response, rec.Code)
 	}
-	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "form" || (*response.Targets)[0].Field == nil || *(*response.Targets)[0].Field != "factory" {
-		t.Fatalf("error targets = %#v, want form factory target", response.Targets)
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Code != factoryvalidation.CodeFactoryPayloadInvalid {
+		t.Fatalf("error targets = %#v, want canonical invalid factory payload target", response.Targets)
 	}
 }
 
 func TestSaveCurrentFactory_MapsTopologyValidationTargets(t *testing.T) {
-	field := "factory.workstations[0].outputs[0]"
-	targetID := "process->story:missing-state"
-	target := factoryapi.ErrorTarget{Kind: "edge", Id: &targetID, Field: &field}
-	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.ErrorTarget{target})})
+	target := factoryapi.FactoryValidationTarget{
+		Code:     factoryvalidation.CodeDanglingPlaceReference,
+		Severity: factoryapi.FactoryValidationSeverityError,
+		Message:  "workstation process routes to unknown place.",
+		Subject: factoryapi.FactoryValidationSubject{
+			Type:     factoryapi.FactoryValidationSubjectTypeWorkstation,
+			Id:       "process",
+			Location: factoryapi.FactoryValidationSubjectLocationOutputs,
+		},
+	}
+	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.FactoryValidationTarget{target})})
 
 	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -362,8 +370,11 @@ func TestSaveCurrentFactory_MapsTopologyValidationTargets(t *testing.T) {
 		t.Fatalf("topology response = %#v status=%d", response, rec.Code)
 	}
 	gotTarget := (*response.Targets)[0]
-	if gotTarget.Kind != "edge" || gotTarget.Id == nil || *gotTarget.Id != "process->story:missing-state" || gotTarget.Field == nil || *gotTarget.Field != field {
-		t.Fatalf("error target = %#v, want dangling output edge target", gotTarget)
+	if gotTarget.Code != factoryvalidation.CodeDanglingPlaceReference ||
+		gotTarget.Subject.Type != factoryapi.FactoryValidationSubjectTypeWorkstation ||
+		gotTarget.Subject.Id != "process" ||
+		gotTarget.Subject.Location != factoryapi.FactoryValidationSubjectLocationOutputs {
+		t.Fatalf("error target = %#v, want dangling output workstation target", gotTarget)
 	}
 }
 
@@ -376,7 +387,7 @@ func TestSaveCurrentFactory_MapsStaleVersion(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 
 	response := decodeJSONResponse[factoryapi.ErrorResponse](t, rec)
-	if rec.Code != http.StatusConflict || response.Code != factoryapi.ErrorResponseCode("STALE_FACTORY_VERSION") || response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "save" {
+	if rec.Code != http.StatusConflict || response.Code != factoryapi.ErrorResponseCode("STALE_FACTORY_VERSION") || response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Code != factoryvalidation.CodeFactoryVersionStale {
 		t.Fatalf("stale-version response = %#v status=%d", response, rec.Code)
 	}
 }
