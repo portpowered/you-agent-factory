@@ -396,3 +396,12 @@
   - Gotchas encountered: Extracting assertion helpers inside the same oversized test file does not reduce file-line count; move tests and helpers together.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/481 — mergeability-only follow-up after story 012 smoke landed.
 ---
+
+## 2026-05-30T16:20:00Z - mergeability (PR #481 coverage)
+- What was implemented: Merged `origin/main` to pick up lowered UI coverage thresholds (`93.05` lines/statements in `ui/vite.config.ts`); CI green on head `dbe841e5`.
+- Files changed: `ui/vite.config.ts` (merge from main)
+- **Learnings for future iterations:**
+  - Patterns discovered: When UI Coverage fails at ~93.08% against a 93.1% gate, check whether `main` already adjusted thresholds before adding tests.
+  - Gotchas encountered: Regenerating `ui/src/api/generated/openapi.ts` for batch upsert `works` is required whenever story 002 OpenAPI lands without a prior UI generate commit.
+  - Useful context: Required checks on PR #481 all pass after pkg-maint split, OpenAPI drift fix, and main merge.
+---
