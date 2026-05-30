@@ -317,8 +317,10 @@ Review any generated diff together with the authored OpenAPI change. Do not hand
 
 `google/wire` is limited to `cmd/factory/compose/`. Production `you run` builds
 `*service.FactoryService` through the generated `InjectFactoryService` entry;
-HTTP serving uses the same wired instance via `compose.ServeAPIServer`. See
-[cmd-factory-wire-composition.md](cmd-factory-wire-composition.md) for the full
+`cmd/factory/main.go` may register that builder through `pkg/cli/run` before
+CLI execution. HTTP serving uses the same wired instance via
+`compose.ServeAPIServer`. See [cmd-factory-wire-composition.md](cmd-factory-wire-composition.md)
+and [factory-cli-wire-composition.md](factory-cli-wire-composition.md) for the full
 workflow.
 
 From a clean checkout, after editing `wire.go` or `providers.go`:

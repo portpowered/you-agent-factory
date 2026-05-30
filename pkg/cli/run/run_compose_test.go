@@ -9,23 +9,23 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 )
 
-func TestWireBuildFactoryService_MatchesInjectFactoryServiceInvalidConfig(t *testing.T) {
+func TestInjectFactoryService_MatchesServiceBuildFactoryServiceInvalidConfig(t *testing.T) {
 	ctx := context.Background()
 	cfg := &service.FactoryServiceConfig{
 		Dir: t.TempDir(),
 	}
 
 	_, errWire := compose.InjectFactoryService(ctx, cfg)
-	_, errRun := wireBuildFactoryService(ctx, cfg)
+	_, errService := service.BuildFactoryService(ctx, cfg)
 
 	if errWire == nil {
 		t.Fatal("expected InjectFactoryService to fail without factory.json")
 	}
-	if errRun == nil {
-		t.Fatal("expected wireBuildFactoryService to fail without factory.json")
+	if errService == nil {
+		t.Fatal("expected service.BuildFactoryService to fail without factory.json")
 	}
-	if errRun.Error() != errWire.Error() {
-		t.Fatalf("wireBuildFactoryService error = %q, want %q", errRun, errWire)
+	if errService.Error() != errWire.Error() {
+		t.Fatalf("service.BuildFactoryService error = %q, want %q", errService, errWire)
 	}
 }
 
