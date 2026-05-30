@@ -1,171 +1,317 @@
-# PRD: Session-Aware Factory PNG Import
-
----
-author: Codex
-last modified: 2026, may, 30
-status: draft
----
+# PRD: CLI Batch Work Submission (`you submit batch`)
 
 ## Context
 
-### Customer Ask
+### Customer ask
 
-Customers want to import factories from a PNG on **any** factory workspace tab. Today import only behaves correctly on the first/default tab because activation submits to `POST /factories`, which creates and activates a named factory under the **service root** instead of updating the factory owned by the **currently selected live session**.
-
-On a second (or later) tab, import still targets the default factory's directory, source directory, and runtime. The import button and drop flow must become **session-context aware**: derive activation context from the active factory session and submit to `PUT /factory-sessions/{session_id}/factory` so the running factory for that session is replaced (including portable bundled files) without mutating unrelated sessions.
-
-Add functional tests that prove the request payload and endpoint are correct when importing from a non-default tab, and add integration tests that exercise the multi-tab import path end to end.
+Implement CLI batch work submission so operators and agents can submit a
+`FACTORY_REQUEST_BATCH` to a **running** factory via file path, stdin, or inline
+JSON—without hand-written `curl` boilerplate.
 
 ### Problem
 
-The dashboard already tracks `selectedSessionID` in `useDashboardSessionStore` and uses it for export, saves, and work submission. Factory PNG import activation is wired through `useFactoryImportActivation`, which defaults to `createFactory` in `ui/src/api/named-factory/api.ts` and always `POST`s `/factories`.
+Today, batch ingress to a live factory is only practical through:
 
-That global named-factory activation path:
+- `curl -X PUT …/factory-sessions/{session}/work-requests/{request_id}` with a
+  JSON body, or
+- Dropping files under `factory/inputs/BATCH/` for the watcher.
 
-- Switches the durable current-factory pointer and materializes a new subdirectory under the service root.
-- Ignores which workspace tab (live factory session) the operator had selected.
-- Leaves other live sessions unchanged while appearing to "import" on the wrong tab from the operator's perspective.
-
-Operators running multiple factory sessions (for example default `~default` plus an opened `session-beta` tab) expect import on the active tab to update **that** session's factory directory and runtime only.
+Unary `you submit` handles one work item. `you run --work` submits a batch only
+at factory startup. There is no first-class CLI that mirrors the documented HTTP
+upsert path for an already-running session.
 
 ### Solution
 
-1. **Frontend activation seam:** Introduce a session-scoped import activation function that reads the current factory document for the selected session (`GET /factory-sessions/{session_id}/factory`), adapts the imported canonical `Factory` payload to the session's current factory name and version rules, and saves via `PUT /factory-sessions/{session_id}/factory` (reusing the existing current-factory-definition transport and error mapping where practical).
-2. **Session wiring:** Thread `selectedSessionID` from the dashboard shell through `useCurrentActivityImportController` / `useFactoryImportActivation` the same way export already threads session into `getCurrentFactory`.
-3. **Verification:** Add focused UI unit tests for endpoint, method, and payload per session; update the default-tab app-shell import test to expect the session route; add a backend functional test that imports on a non-default session and proves isolation from the default session's on-disk factory; add a browser integration test that selects a second tab and confirms import hits the session-scoped route.
-
-## Project Acceptance Criteria
-
-- [ ] Confirming a factory PNG import on the **default** session tab activates via `PUT /factory-sessions/~default/factory` (not `POST /factories`) using the imported canonical payload and the session's current factory version metadata.
-- [ ] Confirming import on a **non-default** session tab activates via `PUT /factory-sessions/{that-session-id}/factory` and does not call `POST /factories`.
-- [ ] After import on a non-default tab, the targeted session's factory definition and on-disk factory directory reflect the imported content; the default session's factory remains unchanged.
-- [ ] Import preview, submitting, error, and success states continue to work with accessible dialog semantics and existing activation error codes where applicable.
-- [ ] Unit tests prove the activation client sends the correct method, path, and body for default and non-default selected sessions.
-- [ ] Backend functional and UI integration tests exercise the second-tab import path with direct behavioral evidence.
-- [ ] Quality gate: backend and frontend typecheck, lint, and relevant tests pass before merge.
+Add `you submit batch` under `you submit`. It reads the same canonical
+`FACTORY_REQUEST_BATCH` JSON as watched inputs and `you run --work`, validates it
+locally, and upserts via `PUT /factory-sessions/{session}/work-requests/{requestId}`.
+Support file path, piped stdin, explicit `-`, optional `--file`, inline JSON, and
+`--dry-run` for validate-only runs. Success output (human and `--json`) aligns
+with the unary submit response contract, including per-work identifiers when the
+API returns them.
 
 ## Goals
 
-- [ ] Make factory PNG import respect the operator's active factory session tab.
-- [ ] Align import activation with the existing session-scoped current-factory API used by export and editable saves.
-- [ ] Prevent cross-session mutation when multiple live factory sessions are open.
-- [ ] Preserve the canonical imported `Factory` payload shape from PNG metadata without dashboard-side reshaping beyond required session save rules (name preservation, version echo/increment).
-- [ ] Add regression tests at the API client, app-shell, service, and browser integration layers.
+- Operators discover batch submit next to unary `you submit`.
+- Scripts and agents submit multi-work batches to a running factory in one command.
+- All ingress modes (file, pipe, inline) produce the same validated HTTP body.
+- Invalid batch JSON fails locally before any network call.
+- `--dry-run` confirms shape and summarizes work without contacting the server.
+- Packaged and reference docs describe CLI batch submit alongside `curl` and
+  watched-folder ingress.
 
-## User Stories
+## Project-level acceptance criteria
 
-### US-001: Session-scoped factory import activation client
+- [ ] `you submit batch` is registered under `you submit` (not a separate top-level verb).
+- [ ] Running `you submit batch` with valid `FACTORY_REQUEST_BATCH` JSON results in
+  HTTP `201` and accepted work on a reachable factory (default session `~default`
+  when `--session` is omitted).
+- [ ] Batch JSON is accepted from: filesystem path (positional or `--file`), piped
+  stdin or positional `-`, and inline `{…}` positional when the argument is JSON.
+- [ ] `--dry-run` validates input, prints a summary, performs no HTTP, and exits `0`
+  on valid input even when the factory is unreachable.
+- [ ] Human stdout and `--json` on success include `requestId`, `traceId`, work
+  count, and per-work `name`, `workTypeName`, and `workId` when the API provides them.
+- [ ] Reference and packaged docs (`you docs batch-inputs`) include CLI examples
+  for file, pipe, inline, and dry-run alongside existing `curl` guidance.
+- [ ] Typecheck, lint, and project tests pass.
 
-**Description:** As a dashboard operator, I want PNG import activation to save through my active session's current-factory endpoint so import updates the factory I am viewing.
+## User stories
 
-**Acceptance Criteria:**
-- [ ] A new session-aware activation function (or extension of the import activation seam) reads the current factory document for a supplied `sessionID`, sets the imported payload's `name` to the session's current factory name, includes incremented `version` metadata consistent with `saveCurrentFactoryDocument`, and `PUT`s to `/factory-sessions/{session_id}/factory`.
-- [ ] Activation for `~default` uses `/factory-sessions/~default/factory`; activation for `session-beta` uses `/factory-sessions/session-beta/factory`.
-- [ ] Activation does not call `POST /factories` for session-scoped import.
-- [ ] Structured API failures (`FACTORY_NOT_IDLE`, `STALE_FACTORY_VERSION`, `INVALID_FACTORY`, etc.) surface through the existing import activation error state.
-- [ ] API client unit tests assert method, path, and JSON body for default and non-default session IDs.
-- [ ] Typecheck passes
-- [ ] Tests pass
+### cli-submit-batch-001: Shared canonical batch loader (file path)
 
-### US-002: Wire selected session into dashboard import controller
+**Description:** As a maintainer, I want one canonical batch JSON loader used by
+`you run --work` and `you submit batch` so parsing rules never diverge.
 
-**Description:** As a dashboard operator, I want the import drop zone and preview confirm action on whichever tab is selected to activate against that tab's session.
+**Acceptance criteria:**
 
-**Acceptance Criteria:**
-- [ ] `useCurrentActivityImportController` (and `DashboardBento`) pass `selectedSessionID` from `useDashboardSessionStore` into import activation, mirroring `useCurrentActivityExport` / `getCurrentFactory({ sessionID })` session threading.
-- [ ] Switching the selected session tab before confirming import activates against the newly selected session without requiring a page reload.
-- [ ] `useFactoryImportActivation` uses the session-scoped activation function by default instead of `createFactory`.
-- [ ] Hook-level tests cover session ID propagation into the activation dependency.
-- [ ] Typecheck passes
-- [ ] Tests pass
+- [ ] Reading batch JSON from an existing filesystem path returns a validated
+  `FACTORY_REQUEST_BATCH` work request (same semantics as today’s `you run --work`
+  file load).
+- [ ] Retired field aliases and conflicting trace fields are rejected with the same
+  error guidance as today’s run loader tests.
+- [ ] `you run --work` behavior is unchanged for file-based batches (regression tests pass).
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### US-003: Update default-tab app-shell import test for session PUT
+### cli-submit-batch-002: Upsert API returns per-work identifiers
 
-**Description:** As a maintainer, I need the primary dashboard import test to reflect the corrected default-session activation route so regressions back to `POST /factories` are caught.
+**Description:** As an agent, I want the batch upsert response to include work
+identifiers so I can verify submission without listing all work.
 
-**Acceptance Criteria:**
-- [ ] `App.import.test.tsx` (and any other app-shell import tests that assert `/factories`) expect `PUT /factory-sessions/~default/factory` with the imported canonical factory payload and version field after a current-factory read (mocked or spied as needed).
-- [ ] The test still covers preview dialog confirm, submitting state, and successful activation refresh behavior.
-- [ ] Typecheck passes
-- [ ] Tests pass
+**Acceptance criteria:**
 
-### US-004: Backend functional test for non-default session import isolation
+- [ ] Successful `PUT /work-requests/{request_id}` (session-scoped variant included)
+  returns `201` with `requestId`, `traceId`, and a `works` array where each item
+  includes `name`, `workTypeName`, and `workId`.
+- [ ] Multi-work batch upsert populates `works` for every accepted item in API tests.
+- [ ] OpenAPI schema and generated types reflect optional `works` on upsert response.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Description:** As a maintainer, I need proof that session-scoped import replacement updates only the targeted session's factory directory and runtime.
+### cli-submit-batch-003: Command discovery and help
 
-**Acceptance Criteria:**
-- [ ] A functional test under `tests/functional/runtime_api/factory_transformation/` (or `tests/functional/bootstrap_portability/` if better aligned) opens a second live factory session, `PUT`s an imported-style factory payload to `/factory-sessions/{session_id}/factory`, and asserts the saved definition is returned from that session's `GET`.
-- [ ] The default session's current factory name, work types, and on-disk factory directory remain unchanged after the non-default session import.
-- [ ] When the payload includes portable `supportingFiles.bundledFiles` with inline content, materialized files are written under the **target session's** factory directory, not the default session root.
-- [ ] Typecheck passes
-- [ ] Tests pass
+**Description:** As an operator, I want to discover batch submit next to unary
+submit so I know which command to use for multi-work ingress.
 
-### US-005: Browser integration test for import on a second session tab
+**Acceptance criteria:**
 
-**Description:** As a dashboard operator, I want confidence that selecting a second factory tab and confirming import exercises the session-scoped network path in the real UI shell.
+- [ ] `you submit batch --help` documents batch input modes (positional path,
+  optional `--file`, `-`/stdin, pipe-with-no-args, inline JSON), `--dry-run`,
+  `--session`, and global `--server` / `--json` / `--verbose`.
+- [ ] Help states the command expects `FACTORY_REQUEST_BATCH` and points to
+  `you docs batch-inputs`.
+- [ ] Help does not advertise unary-only flags (`--name`, `--work-type-name`,
+  `--payload`, `--work-type-id`).
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
-- [ ] A new or extended test under `ui/integration/` starts the dashboard with at least two session tabs, selects the non-default tab, completes the import preview confirm flow (using harness mocks for PNG read and API), and asserts the activation request targets `/factory-sessions/{non-default-session-id}/factory` with `PUT`.
-- [ ] The test asserts no `POST /factories` request occurs during that flow.
-- [ ] Loading, preview, and post-confirm success or refresh behavior remain observable (no silent failure).
-- [ ] Typecheck passes
-- [ ] Verify in browser using dev-browser skill
+### cli-submit-batch-004: Submit batch to running factory (HTTP + dry-run)
 
-## Functional Requirements
+**Description:** As an operator, I want to upsert a canonical batch to a running
+factory session, or validate locally without sending traffic.
 
-- FR-1: Factory PNG import activation must use the active dashboard `selectedSessionID` (defaulting to `~default` when unset) to choose the session-scoped factory endpoint.
-- FR-2: Activation must `GET` the current factory for that session before `PUT` so version metadata and factory name constraints are satisfied.
-- FR-3: The `PUT` body must be the imported canonical `Factory` payload with `name` matching the session's current factory and `version` advanced per existing save rules.
-- FR-4: `POST /factories` must not be used for dashboard PNG import activation after this change.
-- FR-5: Import preview, drag/drop, and error presentation remain unchanged except for activation targeting and any new stale-version messaging mapped from current-factory save errors.
-- FR-6: Non-default session import must not change another session's factory definition, pointer, or on-disk layout.
-- FR-7: Tests must validate endpoint, payload, session isolation, and the second-tab UI path without meta-inventory checks.
+**Acceptance criteria:**
 
-## Non-Goals
+- [ ] With valid batch JSON from a file, the CLI issues `PUT` to
+  `/factory-sessions/{session}/work-requests/{requestId}` where `requestId` in
+  the path matches the body; `Content-Type` is `application/json`.
+- [ ] Body `type` must be `FACTORY_REQUEST_BATCH` with at least one `works` entry;
+  violations fail locally with a clear message before HTTP.
+- [ ] HTTP `201` is treated as success; other statuses surface API error message when
+  present; unreachable factory errors match unary submit transport style.
+- [ ] `--session` scopes the request like unary submit.
+- [ ] `--dry-run` parses and validates only, prints summary including `requestId`,
+  work count, work names, `relationCount`, `batchSource`, and
+  `dry-run: no request sent`; performs zero HTTP calls; exits `0` on valid input
+  even when the server is down.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-- Changing PNG metadata parsing, schema version handling, or preview rendering.
-- Replacing `POST /factories` for non-dashboard clients or CLI flows that intentionally create new named factories.
-- Reworking factory session tab open/close UX or multi-session layout.
-- Allowing import to rename the active session's factory to the embedded PNG name when the session save contract requires name preservation (operators keep the session's current factory name; imported topology replaces content in place).
-- Broad refactors of `named-factory` API ownership beyond what is required for session-scoped import activation.
-- Migrating historical factories on disk.
+### cli-submit-batch-005: Piped stdin and explicit `-`
 
-## High-Level Technical Design
+**Description:** As an agent, I want to pipe batch JSON so I can submit without a
+temp file.
 
-**UI import seam (`ui/src/features/import`, `ui/src/features/workflow-activity/hooks/current-activity-import-controller.ts`, `ui/src/features/bento/components/dashboard-bento.tsx`):**
+**Acceptance criteria:**
 
-- Add `activateImportedFactoryForSession(sessionID, importedFactory)` alongside or instead of default `createFactory`, built on `getCurrentFactoryDocument` + `saveCurrentFactoryDocument` from `ui/src/api/current-factory-definition/api.ts` and `currentFactorySessionPath` from `ui/src/api/session-routing.ts`.
-- Map `CurrentFactoryDefinitionError` codes into `NamedFactoryAPIError` (or extend activation error typing) so the preview dialog keeps working.
-- Pass `useDashboardSessionStore((s) => s.selectedSessionID)` into `useCurrentActivityImportController` the same way `use-current-factory-export.ts` does.
+- [ ] `cat batch.json | you submit batch` submits when stdin is not a TTY.
+- [ ] `you submit batch -` reads batch JSON from stdin.
+- [ ] `you submit batch` with no args and interactive TTY stdin fails immediately
+  with usage guidance (does not hang waiting for input).
+- [ ] Empty piped stdin fails with a clear empty-input error.
+- [ ] When a file path or `--file` is provided, stdin is ignored.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Payload adaptation:**
+### cli-submit-batch-006: Inline JSON positional
 
-- After reading the session's current factory document, set `factory.name` to `current.name` before save so `prepareEditableFactoryDefinitionSave` name-preservation rules succeed.
-- Echo/increment `version` using the same helper path as editable workstation saves.
+**Description:** As a script author, I want to pass a small batch document as one
+positional argument.
 
-**Backend (verification only unless gaps found):**
+**Acceptance criteria:**
 
-- `SaveCurrentFactoryForSession` in `pkg/service/runtime_sessions.go` already replaces only the targeted session runtime and persists via `replaceEditableFactoryDefinition` / `ReplaceNamedFactoryWithReport`, which materializes portable bundled files.
-- Functional tests should use existing helpers such as `openNamedFactorySession`, `getCurrentFactoryForSession`, and `saveCurrentFactoryForSession` from `api_current_factory_put_test.go`.
+- [ ] Positional whose first non-whitespace byte is `{` is parsed as inline JSON,
+  not as a filesystem path.
+- [ ] A non-existent path that does not look like JSON errors as missing file/JSON,
+  not as JSON parse of the path string.
+- [ ] Inline JSON uses the same canonical validation as file and stdin input.
+- [ ] Help notes shell length limits; large batches should use file or pipe.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Integration testing:**
+### cli-submit-batch-007: Optional `--file` flag
 
-- Extend `ui/integration/browser-test-harness.mjs` request recording if needed to assert PUT paths per session, following `dashboard-session-tabs.integration.test.mjs` patterns.
+**Description:** As a script author, I want an explicit file flag when positional
+arguments are awkward.
 
-## Supporting Technical and UX Considerations
+**Acceptance criteria:**
 
-- Normalize null/empty `selectedSessionID` to `~default` via `DEFAULT_FACTORY_SESSION_ID` for routing consistency.
-- If the runtime is not idle, preserve existing `FACTORY_NOT_IDLE` operator messaging.
-- On `STALE_FACTORY_VERSION`, surface a recoverable error (refresh current factory, retry import) using existing dashboard error patterns.
-- After successful activation, keep `onFactoryActivated` / `incrementRefreshToken` behavior so the graph reloads for the active session.
-- Reuse existing import preview copy; only activation targeting changes.
+- [ ] `--file <path>` reads batch JSON; `--file -` reads stdin.
+- [ ] When both `--file` and a positional path are set, `--file` wins (documented in help).
+- [ ] Positional path remains the primary documented form.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-## Success Metrics
+### cli-submit-batch-008: Human success output
 
-- Operators can import on any open factory tab and see the graph refresh for that tab's factory without affecting other tabs.
-- Zero errant `POST /factories` calls from dashboard PNG import in test harnesses.
-- CI functional and integration tests cover default and second-session import paths.
+**Description:** As an operator, I want confirmation that lists what was submitted
+and what to run next.
 
-## Open Questions
+**Acceptance criteria:**
 
-None. Session-scoped `PUT` replacement, name preservation, and verification expectations are specified by the customer ask and existing current-factory save contract.
+- [ ] On `201`, stdout includes `requestId`, `traceId`, work count, and each accepted
+  work’s `name` and `workTypeName`.
+- [ ] When the API returns `workId`, each work line includes it and a hint
+  `you work show <work-id>`; otherwise hints use `you work list --name <name>`.
+- [ ] Long name lists truncate (at most ten lines); `relationCount` shown when
+  relations are non-empty.
+- [ ] Full batch JSON and per-work payloads are not printed on stdout.
+- [ ] `--verbose` logs endpoint, `batchSource` (`file`, `stdin`, `inline`), byte size,
+  `requestId`, and work count on stderr—never payload content.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-009: JSON success output
+
+**Description:** As a script, I want machine-readable batch submit confirmation.
+
+**Acceptance criteria:**
+
+- [ ] Global `--json` emits one object with at minimum: `requestId`, `traceId`,
+  `workCount`, `relationCount`, `sessionId`, `endpointPath`, `batchSource`, and
+  `works` (each with `name`, `workTypeName`, `workId` when returned).
+- [ ] `--json` with `--dry-run` emits `dryRun: true` and summary fields without
+  `traceId` unless present in input.
+- [ ] Exit code `0` on success; non-zero on validation or HTTP errors.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-010: Error surfaces
+
+**Description:** As an agent, I want validation failures before HTTP and API
+failures after HTTP to be distinguishable.
+
+**Acceptance criteria:**
+
+- [x] Canonical validation errors include retired-field guidance where applicable.
+- [x] Missing or empty `requestId`, empty `works`, and invalid JSON fail locally.
+- [x] HTTP `400`/`404` (and `409` if applicable) print status and bounded API message;
+  no success JSON on failure.
+- [x] Tests cover invalid JSON, empty works, mocked `400`, and mocked `404`.
+- [x] Typecheck passes.
+- [x] Tests pass.
+
+### cli-submit-batch-011: Reference and packaged documentation
+
+**Description:** As a new contributor, I want docs to show CLI batch submit
+alongside curl and watched-folder ingress.
+
+**Acceptance criteria:**
+
+- [ ] `docs/reference/batch-inputs.md` adds a CLI subsection with examples for
+  file, `--file`, pipe, inline JSON, and `--dry-run`; keeps existing `curl` example.
+- [ ] Ingress comparison covers: `you submit` (single), `you submit batch` (running
+  factory), `you run --work` (startup), watched `factory/inputs/BATCH/`.
+- [ ] Packaged `you docs batch-inputs` content matches reference updates.
+- [ ] Doc tests guard `you submit batch` and `FACTORY_REQUEST_BATCH` markers where
+  other CLI examples are guarded.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-012: End-to-end smoke (optional)
+
+**Description:** As a maintainer, I want one functional smoke proving batch CLI
+reaches a running factory when the harness supports it.
+
+**Acceptance criteria:**
+
+- [x] If the existing smoke harness can start a factory and accept work-request
+  upserts, one smoke runs `you submit batch` with a minimal checked-in batch file
+  and asserts success markers in output.
+- [x] If harness cost is prohibitive, implementation notes document deferral and
+  httptest coverage from earlier stories is cited as the verification substitute.
+- [x] Typecheck passes.
+- [x] Tests pass (or smoke story cancelled with documented justification).
+
+## Functional requirements
+
+- FR-1: Register `you submit batch` under `you submit`.
+- FR-2: Input precedence: `--file` (including `-`) → positional `-` → existing file
+  path → inline `{…}` → piped stdin when no positional/`--file` → usage error on TTY
+  with no input.
+- FR-3: Validate with canonical batch parser before HTTP; `--dry-run` skips HTTP.
+- FR-4: Upsert via `PUT` to session-scoped `/work-requests/{requestId}` only (not
+  `POST /work`).
+- FR-5: Preserve unary `you submit` behavior and flag surface on the parent command.
+- FR-6: Success output field names align with unary submit response contract
+  (`workId`, `workTypeName`, `name`, `traceId`, `sessionId`, `endpointPath`).
+- FR-7: Reuse existing CLI HTTP, session path, and diagnostic patterns from unary submit.
+
+## Non-goals
+
+- Extending unary `you submit` with batch flags or multiple payloads.
+- Replacing `you run --work` or watched-folder ingestion.
+- Staging multimodal files from the CLI in v1.
+- Top-level `you batch submit` verb.
+- Pipe or inline input for unary `you submit` in this feature.
+
+## High-level technical design
+
+1. **Shared loader** — Extract file-path batch loading from the run command into a
+   shared CLI package; run delegates without behavior change. Extend with stdin,
+   inline JSON, and `--file` resolution for batch submit only.
+2. **Command** — New batch subcommand on submit with config mirroring unary HTTP
+   fields (`Server`, `SessionID`, `JSON`, diagnostics). Wire test injection hook
+   like unary submit.
+3. **API** — Extend `UpsertWorkRequestResponse` with `works[]` populated from
+   accepted batch items; regenerate OpenAPI types before CLI success output stories.
+4. **Output** — Human and JSON formatters share identifier vocabulary with unary
+   submit; dry-run uses a distinct JSON shape with `dryRun: true`.
+5. **Docs** — Update reference and embedded packaged topic together; extend doc
+   tests and optional smoke.
+
+**Dependencies:** Coordinate field naming with CLI submit response contract PRD;
+post-submit inspection (`you work show` / `you work list`) is the documented verify loop.
+
+## Supporting considerations
+
+- **Idempotency:** `requestId` is the stable upsert key; re-submit behavior follows
+  server rules—no client-side dedupe beyond the document’s id.
+- **Diagnostics:** No payload bodies, tokens, or prompts in verbose stderr lines.
+- **Security:** Same trust model as unary submit (local factory URL, no new auth).
+
+## Success metrics
+
+- An agent submits a multi-work batch to a running factory in one command without `curl`.
+- Pipe and file paths produce identical HTTP bodies for the same JSON document.
+- Invalid batch JSON fails locally with zero network calls in automated tests.
+- `you docs batch-inputs` examples match implemented CLI behavior.
+
+## Decisions (resolved)
+
+| ID | Decision |
+|----|----------|
+| D-1 | `--file` is optional; positional path is primary; `--file` wins when both set. |
+| D-2 | Ship API `works[]` on upsert response together with CLI success output when possible. |
+| D-3 | `--dry-run` is in v1: validate locally, summarize, no HTTP, exit `0` on valid input. |
