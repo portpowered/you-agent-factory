@@ -10,6 +10,7 @@ import {
 } from "@testing-library/react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
@@ -1164,9 +1165,9 @@ describe("SubmitWorkWidget submission behavior", () => {
 
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <DashboardSessionProvider>
+        <DashboardSessionTestProvider>
           <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "task" }]} />
-        </DashboardSessionProvider>
+        </DashboardSessionTestProvider>
       </QueryClientProvider>,
     );
 
@@ -1381,7 +1382,6 @@ describe("SubmitWorkWidget submission behavior", () => {
   });
 
   it("submits work to the session-beta route when that tab is selected", async () => {
-    useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ traceId: "trace-submit-beta" }), {
         headers: {
@@ -1393,6 +1393,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderSubmitWorkWidget(
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+      { sessionID: "session-beta" },
     );
 
     fireEvent.change(screen.getByRole<HTMLSelectElement>("combobox", {
@@ -1430,7 +1431,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
-    renderSubmitWorkWidget(
+    renderSubmitWorkWidgetWithStore(
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
@@ -1531,7 +1532,32 @@ describe("SubmitWorkWidget submission behavior", () => {
   });
 });
 
-function renderSubmitWorkWidget(element: React.ReactElement) {
+function renderSubmitWorkWidget(
+  element: React.ReactElement,
+  sessionOptions: { paused?: boolean; sessionID?: string | null } = {},
+) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      mutations: {
+        retry: false,
+      },
+      queries: {
+        gcTime: Infinity,
+        retry: false,
+      },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <DashboardSessionTestProvider {...sessionOptions}>
+        {element}
+      </DashboardSessionTestProvider>
+    </QueryClientProvider>,
+  );
+}
+
+function renderSubmitWorkWidgetWithStore(element: React.ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: {
       mutations: {

@@ -2,8 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { SubmitWorkCard } from "./submit-work-card";
 import { SubmitWorkWidget } from "./submit-work-widget";
+
+function SessionScopeProbe() {
+  const { sessionID } = useDashboardSession();
+
+  return <div data-testid="session-scope-probe">{sessionID}</div>;
+}
 
 const withQueryClient = (Story: () => ReactElement) => (
   <QueryClientProvider
@@ -20,7 +28,9 @@ const withQueryClient = (Story: () => ReactElement) => (
       })
     }
   >
-    <Story />
+    <DashboardSessionTestProvider>
+      <Story />
+    </DashboardSessionTestProvider>
   </QueryClientProvider>
 );
 
@@ -28,6 +38,42 @@ export default {
   title: "Agent Factory/Dashboard/Submit Work Card",
   component: SubmitWorkWidget,
   decorators: [withQueryClient],
+};
+
+export const SessionBetaScoped = {
+  decorators: [
+    (Story: () => ReactElement) => (
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: {
+              mutations: {
+                retry: false,
+              },
+              queries: {
+                retry: false,
+              },
+            },
+          })
+        }
+      >
+        <DashboardSessionTestProvider sessionID="session-beta">
+          <Story />
+          <SessionScopeProbe />
+        </DashboardSessionTestProvider>
+      </QueryClientProvider>
+    ),
+  ],
+  args: {
+    submitWorkTypes: [{ work_type_name: "story" }],
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByTestId("session-scope-probe")).toHaveTextContent(
+      "session-beta",
+    );
+  },
 };
 
 export const Configured = {
@@ -91,7 +137,13 @@ export const FailureRetry = {
   render: () => (
     <SubmitWorkCard
       draft={{
-        items: [{ id: "submission-item-1", text: "Retry the broken submission.", type: "text" }],
+        items: [
+          {
+            id: "submission-item-1",
+            text: "Retry the broken submission.",
+            type: "text",
+          },
+        ],
         requestName: "Retry dashboard request",
         workTypeName: "story",
       }}
@@ -120,9 +172,9 @@ export const FailureRetry = {
     await expect(
       scope.getByRole("textbox", { name: "Request name" }),
     ).toHaveValue("Retry dashboard request");
-    await expect(scope.getByRole("textbox", { name: "Text item 1" })).toHaveValue(
-      "Retry the broken submission.",
-    );
+    await expect(
+      scope.getByRole("textbox", { name: "Text item 1" }),
+    ).toHaveValue("Retry the broken submission.");
     await expect(scope.getByText("work_type_name is required")).toBeVisible();
     await expect(
       scope.getByRole("button", { name: "Submit work" }),
@@ -147,7 +199,9 @@ export const LocalizedZhCN = {
       scope.getByRole("textbox", { name: "请求名称" }),
     ).toBeVisible();
     await expect(scope.getByRole("list", { name: "提交项" })).toBeVisible();
-    await expect(scope.getByRole("textbox", { name: "文本项 1" })).toBeVisible();
+    await expect(
+      scope.getByRole("textbox", { name: "文本项 1" }),
+    ).toBeVisible();
     await expect(
       scope.getByRole("button", { name: "提交工作" }),
     ).toBeDisabled();
@@ -169,7 +223,11 @@ export const SharedWorkContentRowChrome = {
     <SubmitWorkCard
       draft={{
         items: [
-          { id: "submission-item-1", text: "Review the active queue.", type: "text" },
+          {
+            id: "submission-item-1",
+            text: "Review the active queue.",
+            type: "text",
+          },
           { id: "submission-item-2", stagingStatus: "idle", type: "image" },
         ],
         requestName: "Multimodal review",
@@ -194,7 +252,9 @@ export const SharedWorkContentRowChrome = {
     const canvas = within(canvasElement);
     const card = await canvas.findByRole("article", { name: "Submit work" });
     const scope = within(card);
-    const submissionItems = scope.getByRole("list", { name: "Submission items" });
+    const submissionItems = scope.getByRole("list", {
+      name: "Submission items",
+    });
     const rows = within(submissionItems).getAllByRole("listitem");
 
     await expect(rows).toHaveLength(2);
@@ -289,7 +349,13 @@ export const StableActionAlignment = {
       <div className="w-full max-w-xs">
         <SubmitWorkCard
           draft={{
-            items: [{ id: "submission-item-1", text: "Retry the broken submission.", type: "text" }],
+            items: [
+              {
+                id: "submission-item-1",
+                text: "Retry the broken submission.",
+                type: "text",
+              },
+            ],
             requestName: "Retry dashboard request",
             workTypeName: "story",
           }}
@@ -340,7 +406,9 @@ export const StableActionAlignment = {
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const cards = await canvas.findAllByRole("article", { name: "Submit work" });
+    const cards = await canvas.findAllByRole("article", {
+      name: "Submit work",
+    });
     const buttonRights: number[] = [];
 
     for (const card of cards) {

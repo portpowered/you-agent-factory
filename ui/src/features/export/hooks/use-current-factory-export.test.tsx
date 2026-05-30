@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { getCurrentFactory, NamedFactoryAPIError, type FactoryValue } from "../../../api/named-factory";
-import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useCurrentFactoryExport } from "./use-current-factory-export";
 
@@ -83,11 +83,10 @@ describe("useCurrentFactoryExport", () => {
   });
 
   it("loads export data for session-beta through session scope", async () => {
-    useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
     vi.mocked(getCurrentFactory).mockResolvedValue(factory);
 
     renderHook(() => useCurrentFactoryExport(true), {
-      wrapper: createQueryClientWrapper(),
+      wrapper: createQueryClientWrapper("session-beta"),
     });
 
     await waitFor(() => {
@@ -98,10 +97,8 @@ describe("useCurrentFactoryExport", () => {
   });
 
   it("does not fetch export data when no session is selected", () => {
-    useDashboardSessionStore.setState({ selectedSessionID: null });
-
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
-      wrapper: createQueryClientWrapper(),
+      wrapper: createQueryClientWrapper(null),
     });
 
     expect(getCurrentFactory).not.toHaveBeenCalled();
@@ -157,7 +154,9 @@ describe("useCurrentFactoryExport", () => {
   });
 });
 
-function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => ReactNode {
+function createQueryClientWrapper(
+  sessionID: string | null = "~default",
+): ({ children }: { children: ReactNode }) => ReactNode {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -170,7 +169,9 @@ function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => 
   return function QueryClientWrapper({ children }: { children: ReactNode }): ReactNode {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionTestProvider sessionID={sessionID}>
+          {children}
+        </DashboardSessionTestProvider>
       </QueryClientProvider>
     );
   };

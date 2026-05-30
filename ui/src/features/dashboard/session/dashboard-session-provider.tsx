@@ -9,6 +9,22 @@ import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 
 const DashboardSessionContext = createContext<SessionScope | null>(null);
 
+export interface DashboardSessionScopeProviderProps {
+  children: ReactNode;
+  scope: SessionScope;
+}
+
+export function DashboardSessionScopeProvider({
+  children,
+  scope,
+}: DashboardSessionScopeProviderProps) {
+  return (
+    <DashboardSessionContext.Provider value={scope}>
+      {children}
+    </DashboardSessionContext.Provider>
+  );
+}
+
 export interface DashboardSessionProviderProps {
   children: ReactNode;
 }
@@ -28,9 +44,9 @@ export function DashboardSessionProvider({
   );
 
   return (
-    <DashboardSessionContext.Provider value={scope}>
+    <DashboardSessionScopeProvider scope={scope}>
       {children}
-    </DashboardSessionContext.Provider>
+    </DashboardSessionScopeProvider>
   );
 }
 
