@@ -2,13 +2,9 @@ package factory
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-
-	configload "github.com/portpowered/infinite-you/pkg/config/load"
-	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 )
 
 // UpdateFromFileConfig holds parameters for replacing an existing named factory from disk.
@@ -39,7 +35,7 @@ func UpdateFromFile(cfg UpdateFromFileConfig) error {
 		Dir:  cfg.Dir,
 	})
 	if err != nil {
-		return renderUpdateFromFileError(err)
+		return renderPersistFromFileError(persistFromFileModeUpdate, err)
 	}
 
 	updateResult := UpdateFromFileResult{
@@ -54,15 +50,5 @@ func UpdateFromFile(cfg UpdateFromFileConfig) error {
 
 func renderUpdateFromFileSuccess(result UpdateFromFileResult, output io.Writer) error {
 	_, err := fmt.Fprintf(output, "Updated factory %s\nDirectory: %s\n", result.Name, result.FactoryDir)
-	return err
-}
-
-func renderUpdateFromFileError(err error) error {
-	if errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("factory not found: %w", err)
-	}
-	if configload.IsInvalidNamedFactory(err) || configpersist.IsInvalidNamedFactory(err) {
-		return fmt.Errorf("invalid factory config: %w", err)
-	}
 	return err
 }

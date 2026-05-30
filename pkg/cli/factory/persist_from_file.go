@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -77,4 +78,17 @@ func persistFromFileNamedFactory(cfg persistFromFileConfig, name string, payload
 	default:
 		return "", fmt.Errorf("unsupported persist-from-file mode")
 	}
+}
+
+func renderPersistFromFileError(mode persistFromFileMode, err error) error {
+	if mode == persistFromFileModeSave && errors.Is(err, configpersist.ErrNamedFactoryAlreadyExists) {
+		return fmt.Errorf("factory already exists: %w", err)
+	}
+	if mode == persistFromFileModeUpdate && errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("factory not found: %w", err)
+	}
+	if configload.IsInvalidNamedFactory(err) || configpersist.IsInvalidNamedFactory(err) {
+		return fmt.Errorf("invalid factory config: %w", err)
+	}
+	return err
 }

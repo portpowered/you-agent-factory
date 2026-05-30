@@ -2,13 +2,9 @@ package factory
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-
-	configload "github.com/portpowered/infinite-you/pkg/config/load"
-	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 )
 
 // SaveFromFileConfig holds parameters for persisting a new named factory from disk.
@@ -41,7 +37,7 @@ func SaveFromFile(cfg SaveFromFileConfig) error {
 		SetCurrent: cfg.SetCurrent,
 	})
 	if err != nil {
-		return renderSaveFromFileError(err)
+		return renderPersistFromFileError(persistFromFileModeSave, err)
 	}
 
 	saveResult := SaveFromFileResult{
@@ -56,15 +52,5 @@ func SaveFromFile(cfg SaveFromFileConfig) error {
 
 func renderSaveFromFileSuccess(result SaveFromFileResult, output io.Writer) error {
 	_, err := fmt.Fprintf(output, "Saved factory %s\nDirectory: %s\n", result.Name, result.FactoryDir)
-	return err
-}
-
-func renderSaveFromFileError(err error) error {
-	if errors.Is(err, configpersist.ErrNamedFactoryAlreadyExists) {
-		return fmt.Errorf("factory already exists: %w", err)
-	}
-	if configload.IsInvalidNamedFactory(err) || configpersist.IsInvalidNamedFactory(err) {
-		return fmt.Errorf("invalid factory config: %w", err)
-	}
 	return err
 }
