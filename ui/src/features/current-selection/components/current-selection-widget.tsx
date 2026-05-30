@@ -5,11 +5,11 @@ import type {
   DashboardTrace,
 } from "../../../api/dashboard/types";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
+import { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
+import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import {
   EditableWorkstationSaveDialog,
   EditableWorkstationSaveHeaderAction,
-  useEditableWorkstationConfigurationState,
-  useSaveEditableWorkstationConfiguration,
   WorkstationDetailCard,
 } from "../workstation-selection/public";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
