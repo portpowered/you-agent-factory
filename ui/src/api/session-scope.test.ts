@@ -43,4 +43,12 @@ describe("buildSessionScope", () => {
 
     expect(scope.isPaused).toBe(false);
   });
+
+  it("does not mark the default session paused when the default id is listed as paused", () => {
+    const scope = buildSessionScope(DEFAULT_FACTORY_SESSION_ID, [
+      DEFAULT_FACTORY_SESSION_ID,
+    ]);
+
+    expect(scope.isPaused).toBe(false);
+  });
 });

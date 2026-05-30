@@ -1,0 +1,64 @@
+package compose_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/portpowered/infinite-you/cmd/factory/compose"
+	"github.com/portpowered/infinite-you/pkg/service"
+)
+
+func TestInjectFactoryService_RejectsMissingFactoryDir(t *testing.T) {
+	t.Parallel()
+
+	_, err := compose.InjectFactoryService(context.Background(), &service.FactoryServiceConfig{
+		Dir: filepath.Join(t.TempDir(), "missing-factory"),
+	})
+	if err == nil {
+		t.Fatal("expected error for missing factory dir")
+	}
+}
+
+func TestInjectFactoryService_MatchesBuildFactoryServiceCollaborators(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(`{"name":"wire-compose","workTypes":[]}`), 0o600); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	ctx := context.Background()
+	cfg := &service.FactoryServiceConfig{Dir: dir}
+
+	wireBuilt, err := compose.InjectFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("InjectFactoryService: %v", err)
+	}
+	directBuilt, err := service.BuildFactoryService(ctx, &service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	if directBuilt.ComposeCollaboratorSnapshot() != wireBuilt.ComposeCollaboratorSnapshot() {
+		t.Fatalf("compose snapshot mismatch: direct=%+v wire=%+v", directBuilt.ComposeCollaboratorSnapshot(), wireBuilt.ComposeCollaboratorSnapshot())
+	}
+}
+
+func TestInjectFactoryService_BuildsMinimalFactory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(`{"name":"wire-bootstrap","workTypes":[]}`), 0o600); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	svc, err := compose.InjectFactoryService(context.Background(), &service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("InjectFactoryService: %v", err)
+	}
+	if svc == nil {
+		t.Fatal("expected non-nil FactoryService")
+	}
+}

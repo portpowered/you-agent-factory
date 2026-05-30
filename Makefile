@@ -67,7 +67,7 @@ define run_timed_step
 	exit $$status
 endef
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -96,6 +96,14 @@ generate-go-client-api:
 
 generate-ui-api:
 	cd ui && node ./node_modules/openapi-typescript/bin/cli.js ../api/openapi.yaml -o src/api/generated/openapi.ts
+
+generate-wire:
+	$(GO) generate ./cmd/factory/compose/...
+
+wire-smoke:
+	$(MAKE) generate-wire
+	node scripts/check-wire-gen-drift.js
+	$(GO) test ./cmd/factory/compose/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 api-smoke:
 	node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
@@ -216,6 +224,7 @@ verify-build-contracts:
 	$(MAKE) build
 	$(MAKE) lint
 	$(MAKE) api-smoke
+	$(MAKE) wire-smoke
 
 verify-tests:
 	@printf '%s\n' "Running required CI-equivalent test lanes: UI coverage + browser integration + backend verification"
@@ -246,6 +255,7 @@ ci-verify-build-contracts: ci-typecheck
 	$(MAKE) build
 	$(MAKE) lint
 	$(MAKE) api-smoke
+	$(MAKE) wire-smoke
 
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright

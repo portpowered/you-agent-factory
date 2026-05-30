@@ -238,16 +238,20 @@ vi.mock("../../workflow-activity/public", () => ({
   ),
 }));
 
+const mockUseCurrentActivityImportController = vi.fn(() => ({
+  activationState: { status: "idle" },
+  activateImport: vi.fn(),
+  clearActivationError: vi.fn(),
+  closeImportPreview: vi.fn(),
+  importPreviewState: { status: "idle" },
+}));
+
 vi.mock(
   "../../workflow-activity/hooks/current-activity-import-controller",
   () => ({
-    useCurrentActivityImportController: () => ({
-      activationState: { status: "idle" },
-      activateImport: vi.fn(),
-      clearActivationError: vi.fn(),
-      closeImportPreview: vi.fn(),
-      importPreviewState: { status: "idle" },
-    }),
+    useCurrentActivityImportController: (
+      ...args: Parameters<typeof mockUseCurrentActivityImportController>
+    ) => mockUseCurrentActivityImportController(...args),
   }),
 );
 
@@ -347,7 +351,16 @@ describe("DashboardBento", () => {
   beforeEach(() => {
     addDashboardWidget.mockReset();
     removeDashboardWidget.mockReset();
+    mockUseCurrentActivityImportController.mockClear();
     mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
+  });
+
+  it("threads scoped rawSessionID into the import controller from useDashboardSession", () => {
+    render(<DashboardBento />);
+
+    expect(mockUseCurrentActivityImportController).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionID: "session-1" }),
+    );
   });
 
   it("registers the provider-session card alongside current selection", () => {
