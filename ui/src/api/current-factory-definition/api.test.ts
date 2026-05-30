@@ -574,13 +574,15 @@ describe("getCurrentFactoryDefinition", () => {
       "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
-          name: "Current Factory",
-          workers: [],
-          workstations: [],
-          workTypes: [],
-          version: {
-            logical: "10",
-            physical: "2026-05-18T14:25:00.001Z",
+          factory: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
+            },
           },
         }),
         headers: {
@@ -631,6 +633,14 @@ describe("getCurrentFactoryDefinition", () => {
       { fetch },
     );
 
+    expect(fetch).toHaveBeenCalledWith(
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: expect.stringContaining(
+          '"factory":{"name":"Current Factory"',
+        ),
+      }),
+    );
     expect(fetch).toHaveBeenCalledWith(
       "/factory-sessions/~default/factory",
       expect.objectContaining({

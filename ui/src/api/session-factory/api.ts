@@ -260,6 +260,7 @@ function normalizeSessionFactoryAPIErrorCode(
     case "INVALID_FACTORY_NAME":
       return code;
     default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";
   }
 }

@@ -661,8 +661,15 @@ export async function startFactoryApiServer({
         requestBody += chunk;
       });
       request.on("end", async () => {
-        const body = requestBody.length === 0 ? null : JSON.parse(requestBody);
-        if (!body || typeof body !== "object" || body.name == null) {
+        const parsedBody = requestBody.length === 0 ? null : JSON.parse(requestBody);
+        const factory =
+          parsedBody &&
+          typeof parsedBody === "object" &&
+          parsedBody.factory &&
+          typeof parsedBody.factory === "object"
+            ? parsedBody.factory
+            : parsedBody;
+        if (!factory || typeof factory !== "object" || factory.name == null) {
           response.writeHead(400, {
             "Access-Control-Allow-Origin": "*",
             "Content-Type": "application/json",
@@ -678,11 +685,11 @@ export async function startFactoryApiServer({
 
         if (onSaveCurrentFactory) {
           await onSaveCurrentFactory({
-            body,
+            body: factory,
             sessionID,
           });
         }
-        sessionState.currentFactory = body;
+        sessionState.currentFactory = factory;
         bumpEditableFactoryDefinitionVersion(sessionID);
         response.writeHead(200, {
           "Access-Control-Allow-Origin": "*",
