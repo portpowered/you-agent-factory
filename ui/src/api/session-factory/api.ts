@@ -11,47 +11,39 @@ import {
   isAPIRecord,
   readAPIResponseBody,
 } from "../transport";
+import {
+  normalizeSessionFactoryAPIErrorCode,
+  SessionFactoryAPIError,
+  type SessionFactoryAPIErrorDetails,
+} from "./errors";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 import { resolveSessionFactoryAPIErrorMessage } from "./operator-errors";
 
-export type SessionFactorySaveMode = components["schemas"]["FactorySaveMode"];
-export type SessionFactory = components["schemas"]["Factory"];
+export type { CanonicalFactoryDefinition } from "../factory-definition";
+
+type CanonicalFactory = components["schemas"]["Factory"];
+type FactorySaveMode = components["schemas"]["FactorySaveMode"];
 export type SessionFactoryVersion =
   components["schemas"]["HybridLogicalTimestamp"];
-type FactoryValidationTarget = components["schemas"]["FactoryValidationTarget"];
 
 export type SessionFactoryDocument = CanonicalFactoryDefinition & {
   version: SessionFactoryVersion;
 };
 
-export type SessionFactoryAPIErrorCode =
-  | "BAD_REQUEST"
-  | "FACTORY_NOT_IDLE"
-  | "INTERNAL_ERROR"
-  | "INVALID_FACTORY"
-  | "INVALID_FACTORY_DEFINITION"
-  | "INVALID_FACTORY_NAME"
-  | "NETWORK_ERROR"
-  | "NOT_FOUND"
-  | "STALE_FACTORY_VERSION";
-
-export interface SessionFactoryAPIErrorDetails {
-  cause?: unknown;
-  code: SessionFactoryAPIErrorCode;
-  responseBody?: unknown;
-  status?: number;
-  statusText?: string;
-  targets?: FactoryValidationTarget[];
-}
-
-export interface SessionFactoryRequestOptions {
+export interface GetSessionFactoryOptions {
   fetch?: typeof globalThis.fetch;
 }
 
-export interface SaveSessionFactoryInput {
+export interface SaveSessionFactoryParams {
   sessionID: string;
-  mode?: SessionFactorySaveMode;
-  factory: SessionFactory;
+  mode?: FactorySaveMode;
+  factory: CanonicalFactoryDefinition;
+  baseVersion?: SessionFactoryVersion;
+  includeVersion?: boolean;
+}
+
+export interface SaveSessionFactoryOptions {
+  fetch?: typeof globalThis.fetch;
 }
 
 interface RequestSessionFactoryDocumentOptions {
@@ -68,29 +60,9 @@ type FactoryDocumentRecord = Record<string, unknown> & {
   version: unknown;
 };
 
-export class SessionFactoryAPIError extends Error {
-  public readonly cause?: unknown;
-  public readonly code: SessionFactoryAPIErrorCode;
-  public readonly responseBody?: unknown;
-  public readonly status?: number;
-  public readonly statusText?: string;
-  public readonly targets?: FactoryValidationTarget[];
-
-  public constructor(message: string, details: SessionFactoryAPIErrorDetails) {
-    super(message);
-    this.name = "SessionFactoryAPIError";
-    this.cause = details.cause;
-    this.code = details.code;
-    this.responseBody = details.responseBody;
-    this.status = details.status;
-    this.statusText = details.statusText;
-    this.targets = details.targets;
-  }
-}
-
 export async function getSessionFactory(
   sessionID: string,
-  options: SessionFactoryRequestOptions = {},
+  options: GetSessionFactoryOptions = {},
 ): Promise<SessionFactoryDocument> {
   return requestSessionFactoryDocument({
     fetch: options.fetch,
@@ -101,13 +73,24 @@ export async function getSessionFactory(
 }
 
 export async function saveSessionFactory(
-  input: SaveSessionFactoryInput,
-  options: SessionFactoryRequestOptions = {},
+  params: SaveSessionFactoryParams,
+  options: SaveSessionFactoryOptions = {},
 ): Promise<SessionFactoryDocument> {
-  const requestBody =
-    input.mode === undefined
-      ? { factory: input.factory }
-      : { mode: input.mode, factory: input.factory };
+  const mode = params.mode ?? "REPLACE_CURRENT";
+  const includeVersion = params.includeVersion ?? mode === "REPLACE_CURRENT";
+  const factoryPayload: CanonicalFactory = {
+    ...params.factory,
+  };
+  if (includeVersion) {
+    factoryPayload.version = incrementSessionFactoryVersion(params.baseVersion);
+  } else {
+    delete factoryPayload.version;
+  }
+
+  const requestBody = {
+    mode,
+    factory: factoryPayload,
+  };
 
   return requestSessionFactoryDocument({
     body: JSON.stringify(requestBody),
@@ -117,7 +100,7 @@ export async function saveSessionFactory(
     },
     method: "PUT",
     rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
-    sessionID: input.sessionID,
+    sessionID: params.sessionID,
   });
 }
 
@@ -191,7 +174,7 @@ function normalizeSessionFactoryDocument(
   responseBody: unknown,
   responseDetails: Pick<SessionFactoryAPIErrorDetails, "status" | "statusText">,
 ): SessionFactoryDocument {
-  if (!isSessionFactoryDocumentValue(responseBody)) {
+  if (!isEditableFactoryDefinitionValue(responseBody)) {
     throw new SessionFactoryAPIError(
       sessionFactoryAPIErrorMessages.invalidResponse,
       {
@@ -213,10 +196,10 @@ function normalizeSessionFactoryDocument(
   } catch (error) {
     if (error instanceof FactoryDefinitionAPIError) {
       throw new SessionFactoryAPIError(
-        `The session factory API returned a factory definition the dashboard cannot use. ${error.message}`,
+        `The session factory API returned a factory definition the dashboard cannot edit. ${error.message}`,
         {
           cause: error,
-          code: "INVALID_FACTORY_DEFINITION",
+          code: "INVALID_FACTORY",
           responseBody,
           ...responseDetails,
         },
@@ -249,6 +232,27 @@ function normalizeSessionFactoryVersion(value: unknown): SessionFactoryVersion {
   };
 }
 
+function incrementSessionFactoryVersion(
+  version: SessionFactoryVersion | undefined,
+): SessionFactoryVersion | undefined {
+  if (!version) {
+    return undefined;
+  }
+
+  return {
+    logical: (BigInt(version.logical) + 1n).toString(),
+    physical: incrementSessionFactoryVersionPhysical(version.physical),
+  };
+}
+
+function incrementSessionFactoryVersionPhysical(physical: string): string {
+  const parsed = Date.parse(physical);
+  if (!Number.isFinite(parsed)) {
+    return physical;
+  }
+  return new Date(parsed + 1).toISOString();
+}
+
 function isSessionFactoryVersionLogicalValue(
   value: unknown,
 ): value is number | string {
@@ -258,24 +262,7 @@ function isSessionFactoryVersionLogicalValue(
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function normalizeSessionFactoryAPIErrorCode(
-  code: string | undefined,
-): SessionFactoryAPIErrorCode {
-  switch (code) {
-    case "BAD_REQUEST":
-    case "NOT_FOUND":
-    case "FACTORY_NOT_IDLE":
-    case "STALE_FACTORY_VERSION":
-    case "INVALID_FACTORY":
-    case "INVALID_FACTORY_NAME":
-      return code;
-    default:
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "INTERNAL_ERROR";
-  }
-}
-
-function isSessionFactoryDocumentValue(
+function isEditableFactoryDefinitionValue(
   value: unknown,
 ): value is FactoryDocumentRecord {
   if (!isAPIRecord(value) || !isAPIRecord(value.version)) {
@@ -284,7 +271,9 @@ function isSessionFactoryDocumentValue(
   return value.name !== undefined;
 }
 
-function isErrorTarget(value: unknown): value is FactoryValidationTarget {
+function isErrorTarget(
+  value: unknown,
+): value is components["schemas"]["FactoryValidationTarget"] {
   return (
     isAPIRecord(value) &&
     typeof value.code === "string" &&

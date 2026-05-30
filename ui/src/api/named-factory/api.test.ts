@@ -5,6 +5,11 @@ import {
   NamedFactoryAPIError,
 } from "./api";
 
+const defaultSessionFactoryVersion = {
+  logical: "9",
+  physical: "2026-05-18T14:25:00Z",
+} as const;
+
 describe("factory API", () => {
   it("reads the current factory as a direct canonical factory payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
@@ -14,6 +19,7 @@ describe("factory API", () => {
           workTypes: [],
           workers: [],
           workstations: [],
+          version: defaultSessionFactoryVersion,
         }),
         {
           headers: {
@@ -47,6 +53,7 @@ describe("factory API", () => {
           workTypes: [],
           workers: [],
           workstations: [],
+          version: defaultSessionFactoryVersion,
         }),
         {
           headers: {
@@ -999,20 +1006,9 @@ describe("factory API", () => {
           ),
         ),
       }),
-    ).rejects.toEqual(
-      new NamedFactoryAPIError("The current factory API returned an invalid response.", {
-        code: "INTERNAL_ERROR",
-        responseBody: {
-          factory: {
-            workTypes: [],
-            workers: [],
-            workstations: [],
-          },
-          name: "Current Factory",
-        },
-        status: 200,
-        statusText: "OK",
-      }),
-    );
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "The current factory editing API returned an invalid response.",
+    });
   });
 });

@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DASHBOARD_PAGE_HEADING_CLASS } from "./components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStreamStore";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
-import { currentNamedFactoryExportResponse } from "./testing/app-shell-export-test-utils";
+import { currentSessionFactoryExportAPIResponse } from "./testing/app-shell-export-test-utils";
 import {
   createFactoryImportValue,
   createFileDropTransfer,
@@ -43,7 +43,7 @@ describe("App shell locale and toolbar flows", () => {
             : input.url;
 
       if (path === "/factory-sessions/~default/factory") {
-        return jsonResponse(currentNamedFactoryExportResponse);
+        return jsonResponse(currentSessionFactoryExportAPIResponse);
       }
 
       throw new Error(`unexpected fetch for ${path}`);

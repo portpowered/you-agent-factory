@@ -1,6 +1,8 @@
 import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
+import type { CurrentFactoryDocument } from "../api/current-factory-definition";
 import type { FactoryValue } from "../api/named-factory";
+import { defaultSessionFactoryVersion } from "./session-factory-mocks";
 
 const onePixelPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
@@ -87,6 +89,12 @@ export const currentNamedFactoryExportResponse = {
     },
   ],
 } satisfies FactoryValue;
+
+/** Session factory GET mock payload (includes version required by session-factory normalization). */
+export const currentSessionFactoryExportAPIResponse = {
+  ...currentNamedFactoryExportResponse,
+  version: defaultSessionFactoryVersion,
+} satisfies CurrentFactoryDocument;
 
 export function fromBase64(value: string): Uint8Array {
   return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));

@@ -1,11 +1,11 @@
-import { factoryAPIURL } from "../baseUrl";
-import type { components } from "../generated/openapi";
-import { currentFactoryWorkstationPath } from "../session-routing";
+import { factoryAPIURL } from "../../baseUrl";
+import type { components } from "../../generated/openapi";
+import { currentFactoryWorkstationPath } from "../../session-routing";
 import {
   extractAPIErrorPayload,
   isAPIRecord,
   readAPIResponseBody,
-} from "../transport";
+} from "../../transport";
 import { promptTemplateAPIErrorMessages } from "./messages";
 
 export type PromptTemplateContract =

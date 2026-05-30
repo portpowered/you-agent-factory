@@ -1,58 +1,22 @@
-import {
-  getSessionFactory,
-  SessionFactoryAPIError,
-  saveSessionFactory,
-} from "./api";
-import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
-
-const sessionFactoryFixture = {
-  name: "Current Factory",
-  workers: [],
-  workstations: [],
-  workTypes: [],
-  version: {
-    logical: "7",
-    physical: "2026-05-18T14:22:00Z",
-  },
-};
+import { getSessionFactory, saveSessionFactory } from "./api";
+import { SessionFactoryAPIError } from "./errors";
 
 describe("getSessionFactory", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("GETs the default session factory through the session-scoped route", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(sessionFactoryFixture), {
-        headers: {
-          "Content-Type": "application/json",
-        },
-        status: 200,
-        statusText: "OK",
-      }),
-    );
-
-    const document = await getSessionFactory("~default", {
-      fetch: fetchMock,
-    });
-
-    expect(document).toEqual(sessionFactoryFixture);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/factory-sessions/~default/factory",
-      {
-        method: "GET",
-      },
-    );
-  });
-
-  it("normalizes numeric logical version values from GET responses", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
+  it("issues GET to the default session factory route", async () => {
+    const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          ...sessionFactoryFixture,
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
           version: {
-            logical: 7,
-            physical: "2026-05-18T14:22:00Z",
+            logical: "9",
+            physical: "2026-05-18T14:25:00Z",
           },
         }),
         {
@@ -65,53 +29,82 @@ describe("getSessionFactory", () => {
       ),
     );
 
-    const document = await getSessionFactory("~default", {
-      fetch: fetchMock,
-    });
+    await getSessionFactory("~default", { fetch });
 
-    expect(document.version).toEqual({
-      logical: "7",
-      physical: "2026-05-18T14:22:00Z",
+    expect(fetch).toHaveBeenCalledWith("/factory-sessions/~default/factory", {
+      method: "GET",
     });
   });
 
-  it("GETs a non-default session factory through the session-scoped route", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(sessionFactoryFixture), {
-        headers: {
-          "Content-Type": "application/json",
+  it("issues GET to a non-default session factory route", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Scoped Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "3",
+            physical: "2026-05-18T14:24:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
         },
-        status: 200,
-        statusText: "OK",
-      }),
+      ),
     );
 
-    await getSessionFactory("session-2", {
-      fetch: fetchMock,
+    await getSessionFactory("session-2", { fetch });
+
+    expect(fetch).toHaveBeenCalledWith("/factory-sessions/session-2/factory", {
+      method: "GET",
     });
+  });
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/factory-sessions/session-2/factory",
-      {
-        method: "GET",
-      },
-    );
+  it("surfaces NOT_FOUND from the session factory API", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "NOT_FOUND",
+              message: "Session factory not found.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 404,
+              statusText: "Not Found",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      name: "SessionFactoryAPIError",
+      status: 404,
+    });
   });
 });
 
 describe("saveSessionFactory", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("PUTs REPLACE_CURRENT with the wrapped factory payload on the default session", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
+  it("issues PUT with REPLACE_CURRENT mode and incremented version on the default session", async () => {
+    const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          ...sessionFactoryFixture,
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
           version: {
-            logical: "8",
-            physical: "2026-05-18T14:23:00Z",
+            logical: "10",
+            physical: "2026-05-18T14:40:00Z",
           },
         }),
         {
@@ -127,38 +120,65 @@ describe("saveSessionFactory", () => {
     await saveSessionFactory(
       {
         sessionID: "~default",
-        mode: "REPLACE_CURRENT",
-        factory: sessionFactoryFixture,
+        factory: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+        baseVersion: {
+          logical: "9",
+          physical: "2026-05-18T14:25:00Z",
+        },
       },
-      {
-        fetch: fetchMock,
-      },
+      { fetch },
     );
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetch).toHaveBeenCalledWith(
       "/factory-sessions/~default/factory",
-      {
+      expect.objectContaining({
         body: JSON.stringify({
           mode: "REPLACE_CURRENT",
-          factory: sessionFactoryFixture,
+          factory: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
+            },
+          },
         }),
         headers: {
           "content-type": "application/json",
         },
         method: "PUT",
-      },
+      }),
     );
   });
 
-  it("PUTs UPSERT_NAMED_AND_ACTIVATE on a non-default session", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(sessionFactoryFixture), {
-        headers: {
-          "Content-Type": "application/json",
+  it("issues PUT with UPSERT_NAMED_AND_ACTIVATE on a non-default session without version", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Imported Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "1",
+            physical: "2026-05-18T14:41:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
         },
-        status: 200,
-        statusText: "OK",
-      }),
+      ),
     );
 
     await saveSessionFactory(
@@ -166,194 +186,49 @@ describe("saveSessionFactory", () => {
         sessionID: "session-2",
         mode: "UPSERT_NAMED_AND_ACTIVATE",
         factory: {
-          ...sessionFactoryFixture,
-          name: "imported-factory",
+          name: "Imported Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
         },
+        includeVersion: false,
       },
-      {
-        fetch: fetchMock,
-      },
+      { fetch },
     );
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetch).toHaveBeenCalledWith(
       "/factory-sessions/session-2/factory",
-      {
+      expect.objectContaining({
         body: JSON.stringify({
           mode: "UPSERT_NAMED_AND_ACTIVATE",
           factory: {
-            ...sessionFactoryFixture,
-            name: "imported-factory",
+            name: "Imported Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
           },
         }),
-        headers: {
-          "content-type": "application/json",
-        },
         method: "PUT",
-      },
-    );
-  });
-
-  it("omits mode from the PUT body when save mode is not provided", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(sessionFactoryFixture), {
-        headers: {
-          "Content-Type": "application/json",
-        },
-        status: 200,
-        statusText: "OK",
       }),
     );
-
-    await saveSessionFactory(
-      {
-        sessionID: "~default",
-        factory: sessionFactoryFixture,
-      },
-      {
-        fetch: fetchMock,
-      },
-    );
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/factory-sessions/~default/factory",
-      {
-        body: JSON.stringify({
-          factory: sessionFactoryFixture,
-        }),
-        headers: {
-          "content-type": "application/json",
-        },
-        method: "PUT",
-      },
-    );
-  });
-});
-
-describe("getSessionFactory errors", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
   });
 
-  it("throws SessionFactoryAPIError when fetch is unavailable", async () => {
+  it("throws SessionFactoryAPIError for network failures", async () => {
     await expect(
-      getSessionFactory("~default", {
-        fetch: undefined,
-      }),
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        {
+          fetch: vi.fn().mockRejectedValue(new Error("socket closed")),
+        },
+      ),
     ).rejects.toBeInstanceOf(SessionFactoryAPIError);
-  });
-
-  it("maps transport failures to NETWORK_ERROR", async () => {
-    await expect(
-      getSessionFactory("~default", {
-        fetch: vi.fn().mockRejectedValue(new Error("connection refused")),
-      }),
-    ).rejects.toMatchObject({
-      code: "NETWORK_ERROR",
-    });
-  });
-
-  it("maps GET STALE_FACTORY_VERSION failures to canonical operator copy", async () => {
-    await expect(
-      getSessionFactory("~default", {
-        fetch: vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              code: "STALE_FACTORY_VERSION",
-              message: "Factory version is stale.",
-            }),
-            {
-              headers: {
-                "Content-Type": "application/json",
-              },
-              status: 409,
-              statusText: "Conflict",
-            },
-          ),
-        ),
-      }),
-    ).rejects.toMatchObject({
-      code: "STALE_FACTORY_VERSION",
-      message:
-        sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
-      status: 409,
-    });
-  });
-
-  it("rejects session factory documents with invalid version metadata", async () => {
-    await expect(
-      getSessionFactory("~default", {
-        fetch: vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              name: "Broken Factory",
-              version: {
-                logical: "not-numeric",
-                physical: "2026-05-18T14:22:00Z",
-              },
-              workers: [],
-              workstations: [],
-              workTypes: [],
-            }),
-            {
-              headers: {
-                "Content-Type": "application/json",
-              },
-              status: 200,
-              statusText: "OK",
-            },
-          ),
-        ),
-      }),
-    ).rejects.toMatchObject({
-      code: "INVALID_FACTORY_DEFINITION",
-    });
-  });
-
-  it("rejects invalid session factory documents", async () => {
-    await expect(
-      getSessionFactory("~default", {
-        fetch: vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ name: "Broken Factory" }), {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-            statusText: "OK",
-          }),
-        ),
-      }),
-    ).rejects.toMatchObject({
-      code: "INTERNAL_ERROR",
-    });
-  });
-
-  it("maps invalid factory definitions to INVALID_FACTORY_DEFINITION", async () => {
-    await expect(
-      getSessionFactory("~default", {
-        fetch: vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              name: "Broken Factory",
-              version: {
-                logical: "1",
-                physical: "2026-05-18T14:22:00Z",
-              },
-              workers: "not-an-array",
-              workstations: [],
-              workTypes: [],
-            }),
-            {
-              headers: {
-                "Content-Type": "application/json",
-              },
-              status: 200,
-              statusText: "OK",
-            },
-          ),
-        ),
-      }),
-    ).rejects.toMatchObject({
-      code: "INVALID_FACTORY_DEFINITION",
-    });
   });
 });

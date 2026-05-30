@@ -1,34 +1,18 @@
 import type { components } from "../generated/openapi";
-import { factoryAPIURL } from "../baseUrl";
 import {
   CurrentFactoryDefinitionError,
   getCurrentFactoryDocument,
   saveCurrentFactoryDocument,
+  saveFactoryForSessionDocument,
   type CurrentFactoryDocument,
-  type CurrentFactoryVersion,
 } from "../current-factory-definition";
-import {
-  saveSessionFactory,
-  SessionFactoryAPIError,
-} from "../session-factory";
 import {
   listFactorySessions,
   openFactorySession,
 } from "../factory-sessions";
 import {
-  DEFAULT_FACTORY_SESSION_ID,
-  currentFactorySessionPath,
-  isDefaultFactorySessionID,
-} from "../session-routing";
-import {
   extractNamedFactoryNamesFromSessionTargets,
 } from "./import-save-mode";
-import {
-  extractAPIErrorPayload,
-  isAPIRecord,
-  readAPIResponseBody,
-} from "../transport";
-
 export {
   allocateFirstFreeSuffixedFactoryName,
   extractNamedFactoryNamesFromSessionTargets,
@@ -102,45 +86,15 @@ export async function getCurrentFactory(
     });
   }
 
-  let response: Response;
   try {
-    response = await fetchImplementation(
-      factoryAPIURL(currentFactorySessionPath(options.sessionID)),
-      {
-        method: "GET",
-      },
-    );
+    const document = await getCurrentFactoryDocument({
+      fetch: fetchImplementation,
+      sessionID: options.sessionID,
+    });
+    return toActivatedFactoryValue(document);
   } catch (error) {
-    throw new NamedFactoryAPIError("The dashboard could not reach the current factory API.", {
-      code: "NETWORK_ERROR",
-      responseBody: error,
-    });
+    throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
   }
-
-  const responseBody = await readAPIResponseBody(response);
-  if (!response.ok) {
-    const errorBody = extractAPIErrorPayload(responseBody);
-    throw new NamedFactoryAPIError(
-      errorBody?.message ?? "The current factory API rejected the request.",
-      {
-        code: normalizeNamedFactoryAPIErrorCode(errorBody?.code),
-        responseBody,
-        status: response.status,
-        statusText: response.statusText,
-      },
-    );
-  }
-
-  if (!isFactoryValue(responseBody)) {
-    throw new NamedFactoryAPIError("The current factory API returned an invalid response.", {
-      code: "INTERNAL_ERROR",
-      responseBody,
-      status: response.status,
-      statusText: response.statusText,
-    });
-  }
-
-  return responseBody;
 }
 
 export async function discoverSessionNamedFactoryNames(
@@ -222,7 +176,6 @@ async function activateImportedFactoryCreateNamedForSession(
     });
   }
 
-  const sessionID = resolveActivateImportedFactorySessionID(options.sessionID);
   let currentDocument: CurrentFactoryDocument;
   try {
     currentDocument = await getCurrentFactoryDocument({
@@ -233,8 +186,8 @@ async function activateImportedFactoryCreateNamedForSession(
     throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
   }
 
-  const factoryForSave = toCreateNamedImportedFactoryDefinition(
-    importedFactory,
+  const { version: _version, ...importedWithoutVersion } = importedFactory;
+  const includeVersion = shouldIncludeVersionForImportCreateNamed(
     createFactoryName,
     currentDocument,
     options.existingFactoryNames,
@@ -242,16 +195,23 @@ async function activateImportedFactoryCreateNamedForSession(
 
   let savedDocument: CurrentFactoryDocument;
   try {
-    savedDocument = await saveSessionFactory(
+    savedDocument = await saveFactoryForSessionDocument(
       {
-        factory: factoryForSave,
+        baseVersion: includeVersion ? currentDocument.version : undefined,
+        factoryDefinition: {
+          ...importedWithoutVersion,
+          name: createFactoryName,
+        },
+        includeVersion,
         mode: "UPSERT_NAMED_AND_ACTIVATE",
-        sessionID,
       },
-      { fetch: options.fetch },
+      {
+        fetch: options.fetch,
+        sessionID: options.sessionID,
+      },
     );
   } catch (error) {
-    throw toNamedFactoryAPIErrorFromSessionFactory(error);
+    throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
   }
 
   return toActivatedFactoryValue(savedDocument);
@@ -279,22 +239,6 @@ function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFacto
   }
 }
 
-function isFactoryValue(value: unknown): value is FactoryValue {
-  return (
-    isAPIRecord(value) &&
-    typeof value.name === "string" &&
-    value.factory === undefined
-  );
-}
-
-function resolveActivateImportedFactorySessionID(
-  sessionID: string | null | undefined,
-): string {
-  return isDefaultFactorySessionID(sessionID)
-    ? DEFAULT_FACTORY_SESSION_ID
-    : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
-}
-
 function toImportedFactoryDefinition(
   importedFactory: FactoryValue,
   sessionFactoryName: string,
@@ -303,28 +247,6 @@ function toImportedFactoryDefinition(
   return {
     ...importedWithoutVersion,
     name: sessionFactoryName,
-  };
-}
-
-function toCreateNamedImportedFactoryDefinition(
-  importedFactory: FactoryValue,
-  createFactoryName: string,
-  currentDocument: CurrentFactoryDocument,
-  existingFactoryNames: readonly string[] | undefined,
-): FactoryValue {
-  const { version: _version, ...importedWithoutVersion } = importedFactory;
-  const factory: FactoryValue = {
-    ...importedWithoutVersion,
-    name: createFactoryName,
-  };
-
-  if (!shouldIncludeVersionForImportCreateNamed(createFactoryName, currentDocument, existingFactoryNames)) {
-    return factory;
-  }
-
-  return {
-    ...factory,
-    version: incrementImportedFactoryVersion(currentDocument.version),
   };
 }
 
@@ -354,47 +276,9 @@ function shouldIncludeVersionForImportCreateNamed(
   return knownExistingNames.has(normalizedCreateFactoryName);
 }
 
-function incrementImportedFactoryVersion(
-  version: CurrentFactoryVersion,
-): CurrentFactoryVersion {
-  return {
-    logical: (BigInt(version.logical) + 1n).toString(),
-    physical: incrementImportedFactoryVersionPhysical(version.physical),
-  };
-}
-
-function incrementImportedFactoryVersionPhysical(physical: string): string {
-  const parsed = Date.parse(physical);
-  if (!Number.isFinite(parsed)) {
-    return physical;
-  }
-  return new Date(parsed + 1).toISOString();
-}
-
 function toActivatedFactoryValue(document: CurrentFactoryDocument): FactoryValue {
   const { version: _version, ...factoryValue } = document;
   return factoryValue;
-}
-
-function toNamedFactoryAPIErrorFromSessionFactory(error: unknown): NamedFactoryAPIError {
-  if (error instanceof SessionFactoryAPIError) {
-    return new NamedFactoryAPIError(error.message, {
-      code: normalizeNamedFactoryAPIErrorCode(error.code),
-      responseBody: error.responseBody,
-      status: error.status,
-      statusText: error.statusText,
-    });
-  }
-
-  if (error instanceof NamedFactoryAPIError) {
-    return error;
-  }
-
-  if (error instanceof Error) {
-    return new NamedFactoryAPIError(error.message, { code: "INTERNAL_ERROR" });
-  }
-
-  return new NamedFactoryAPIError("Factory activation failed.", { code: "INTERNAL_ERROR" });
 }
 
 function toNamedFactoryAPIErrorFromCurrentFactoryDefinition(

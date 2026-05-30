@@ -1,27 +1,31 @@
 import type { components } from "../generated/openapi";
 import type { CanonicalFactoryDefinition } from "../factory-definition";
 import {
-  getSessionFactory,
-  saveSessionFactory,
-  SessionFactoryAPIError,
-} from "../session-factory";
-import { sessionFactoryAPIErrorMessages } from "../session-factory/messages";
-import {
   DEFAULT_FACTORY_SESSION_ID,
   isDefaultFactorySessionID,
 } from "../session-routing";
+import {
+  getSessionFactory,
+  saveSessionFactory,
+  SessionFactoryAPIError,
+  type SessionFactoryAPIErrorCode,
+  type SessionFactoryDocument,
+} from "../session-factory";
+import { sessionFactoryAPIErrorMessages } from "../session-factory/messages";
 import { currentFactoryDefinitionAPIErrorMessages } from "./messages";
 
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 
-type CanonicalFactory = components["schemas"]["Factory"];
+type FactorySaveMode = components["schemas"]["FactorySaveMode"];
 export type CurrentFactoryVersion =
   components["schemas"]["HybridLogicalTimestamp"];
+
+/** Dashboard editor and replace-current import activation use session PUT with this mode only. */
+export const CURRENT_FACTORY_EDITOR_SAVE_MODE =
+  "REPLACE_CURRENT" satisfies FactorySaveMode;
 type FactoryValidationTarget = components["schemas"]["FactoryValidationTarget"];
 
-export type CurrentFactoryDocument = CanonicalFactoryDefinition & {
-  version: CurrentFactoryVersion;
-};
+export type CurrentFactoryDocument = SessionFactoryDocument;
 
 export type CurrentFactoryDefinitionErrorCode =
   | "BAD_REQUEST"
@@ -54,6 +58,13 @@ export interface SaveCurrentFactoryOptions {
 export interface SaveCurrentFactoryInput {
   baseVersion?: CurrentFactoryVersion;
   factoryDefinition: CanonicalFactoryDefinition;
+}
+
+export interface SaveFactoryForSessionInput {
+  baseVersion?: CurrentFactoryVersion;
+  factoryDefinition: CanonicalFactoryDefinition;
+  includeVersion?: boolean;
+  mode: FactorySaveMode;
 }
 
 export class CurrentFactoryDefinitionError extends Error {
@@ -89,11 +100,11 @@ export async function getCurrentFactoryDocument(
   options: GetCurrentFactoryDefinitionOptions = {},
 ): Promise<CurrentFactoryDocument> {
   try {
-    return await getSessionFactory(resolveCurrentFactorySessionID(options.sessionID), {
+    return await getSessionFactory(resolveSessionID(options.sessionID), {
       fetch: options.fetch,
     });
   } catch (error) {
-    throw mapSessionFactoryError(error);
+    throw toCurrentFactoryDefinitionError(error);
   }
 }
 
@@ -101,53 +112,100 @@ export async function saveCurrentFactoryDocument(
   input: SaveCurrentFactoryInput,
   options: SaveCurrentFactoryOptions = {},
 ): Promise<CurrentFactoryDocument> {
-  const factory: CanonicalFactory = {
-    ...input.factoryDefinition,
-    version: incrementCurrentFactoryVersion(input.baseVersion),
-  };
+  return saveFactoryForSessionDocument(
+    {
+      baseVersion: input.baseVersion,
+      factoryDefinition: input.factoryDefinition,
+      mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
+    },
+    options,
+  );
+}
 
+export async function saveFactoryForSessionDocument(
+  input: SaveFactoryForSessionInput,
+  options: SaveCurrentFactoryOptions = {},
+): Promise<CurrentFactoryDocument> {
   try {
     return await saveSessionFactory(
       {
-        factory,
-        mode: "REPLACE_CURRENT",
-        sessionID: resolveCurrentFactorySessionID(options.sessionID),
+        baseVersion: input.baseVersion,
+        factory: input.factoryDefinition,
+        includeVersion: input.includeVersion,
+        mode: input.mode,
+        sessionID: resolveSessionID(options.sessionID),
       },
-      { fetch: options.fetch },
+      {
+        fetch: options.fetch,
+      },
     );
   } catch (error) {
-    throw mapSessionFactoryError(error);
+    throw toCurrentFactoryDefinitionError(error);
   }
 }
 
-function resolveCurrentFactorySessionID(
-  sessionID: string | null | undefined,
-): string {
+function resolveSessionID(sessionID: string | null | undefined): string {
   return isDefaultFactorySessionID(sessionID)
     ? DEFAULT_FACTORY_SESSION_ID
     : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
 }
 
-function mapSessionFactoryError(error: unknown): CurrentFactoryDefinitionError {
-  if (!(error instanceof SessionFactoryAPIError)) {
-    throw error;
+function toCurrentFactoryDefinitionError(error: unknown): CurrentFactoryDefinitionError {
+  if (error instanceof CurrentFactoryDefinitionError) {
+    return error;
   }
 
-  throw new CurrentFactoryDefinitionError(
-    mapSessionFactoryErrorMessage(error),
-    {
-      cause: error.cause,
-      code: mapSessionFactoryErrorCode(error.code),
-      responseBody: error.responseBody,
-      status: error.status,
-      statusText: error.statusText,
-      targets: error.targets,
-    },
-  );
+  if (error instanceof SessionFactoryAPIError) {
+    return new CurrentFactoryDefinitionError(
+      mapSessionFactoryErrorMessage(error.message),
+      {
+        cause: error.cause,
+        code: mapSessionFactoryErrorCode(error.code),
+        responseBody: error.responseBody,
+        status: error.status,
+        statusText: error.statusText,
+        targets: error.targets,
+      },
+    );
+  }
+
+  throw error;
 }
 
-function mapSessionFactoryErrorMessage(error: SessionFactoryAPIError): string {
-  switch (error.message) {
+function mapSessionFactoryErrorCode(
+  code: SessionFactoryAPIErrorCode,
+): CurrentFactoryDefinitionErrorCode {
+  switch (code) {
+    case "BAD_REQUEST":
+    case "FACTORY_NOT_IDLE":
+    case "INTERNAL_ERROR":
+    case "NETWORK_ERROR":
+    case "NOT_FOUND":
+    case "STALE_FACTORY_VERSION":
+      return code;
+    case "INVALID_FACTORY":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return "INVALID_FACTORY_DEFINITION";
+    default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return "INTERNAL_ERROR";
+  }
+}
+
+function mapSessionFactoryErrorMessage(message: string): string {
+  const sessionFactoryNormalizationPrefix =
+    "The session factory API returned a factory definition the dashboard cannot edit.";
+  const currentFactoryNormalizationPrefix =
+    "The current factory editing API returned a factory definition the dashboard cannot edit.";
+
+  if (message.startsWith(sessionFactoryNormalizationPrefix)) {
+    return (
+      currentFactoryNormalizationPrefix +
+      message.slice(sessionFactoryNormalizationPrefix.length)
+    );
+  }
+
+  switch (message) {
     case sessionFactoryAPIErrorMessages.network:
       return currentFactoryDefinitionAPIErrorMessages.network;
     case sessionFactoryAPIErrorMessages.unavailableInEnvironment:
@@ -159,58 +217,6 @@ function mapSessionFactoryErrorMessage(error: SessionFactoryAPIError): string {
     case sessionFactoryAPIErrorMessages.invalidResponse:
       return currentFactoryDefinitionAPIErrorMessages.invalidResponse;
     default:
-      if (
-        error.code === "INVALID_FACTORY_DEFINITION" &&
-        error.message.startsWith(
-          "The session factory API returned a factory definition the dashboard cannot use.",
-        )
-      ) {
-        return error.message.replace(
-          "The session factory API returned a factory definition the dashboard cannot use.",
-          "The current factory editing API returned a factory definition the dashboard cannot edit.",
-        );
-      }
-      return error.message;
+      return message;
   }
-}
-
-function mapSessionFactoryErrorCode(
-  code: SessionFactoryAPIError["code"],
-): CurrentFactoryDefinitionErrorCode {
-  switch (code) {
-    case "BAD_REQUEST":
-    case "NOT_FOUND":
-    case "FACTORY_NOT_IDLE":
-    case "STALE_FACTORY_VERSION":
-    case "INVALID_FACTORY_DEFINITION":
-    case "NETWORK_ERROR":
-      return code;
-    case "INVALID_FACTORY":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "INVALID_FACTORY_DEFINITION";
-    default:
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "INTERNAL_ERROR";
-  }
-}
-
-function incrementCurrentFactoryVersion(
-  version: CurrentFactoryVersion | undefined,
-): CurrentFactoryVersion | undefined {
-  if (!version) {
-    return undefined;
-  }
-
-  return {
-    logical: (BigInt(version.logical) + 1n).toString(),
-    physical: incrementCurrentFactoryVersionPhysical(version.physical),
-  };
-}
-
-function incrementCurrentFactoryVersionPhysical(physical: string): string {
-  const parsed = Date.parse(physical);
-  if (!Number.isFinite(parsed)) {
-    return physical;
-  }
-  return new Date(parsed + 1).toISOString();
 }
