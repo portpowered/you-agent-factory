@@ -1,4 +1,8 @@
 ## Codebase Patterns
+- Checked-in factory instance walkthrough belongs in `factory/docs/overview.md`; `factory/README.md` should only point to that file and `you docs agents`. Portable export auto-collects every `factory/docs/**` file via `ApplySupportedPortableBundledFiles` in `pkg/config/portable_bundled_files.go`—no manual `supportingFiles` entry while the file stays on disk.
+- Register `you docs agents` at `displayOrder` 5 (before `authoring-factories` at 10) in `pkg/cli/docs/docs.go`; keep `docs/reference/agents.md` and `pkg/cli/docs/reference/agents.md` synchronized as the agent onboarding entry—normative sections avoid factory-specific work type names (instance names belong in `factory/docs/overview.md` or `factory/docs/README.md`).
+- `you docs config` owns packaged `factory.json` topology in `pkg/cli/docs/reference/config.md`; `you docs work` owns submitted-work contracts in `pkg/cli/docs/reference/work.md` — keep both synced to `docs/reference/work.md` for work, but edit layout `docs/reference/config.md` separately (it diverges from the embedded packaged topic).
+- Keep `docs/reference/batch-inputs.md` and `pkg/cli/docs/reference/batch-inputs.md` synchronized as the single maintained batch guide; `you docs batch-work` is alias-only via `TopicBatchWorkAlias` in `docs.go` with no standalone `batch-work.md`.
 - Session-scoped PNG import activation uses `activateImportedFactoryForSession` in `ui/src/api/named-factory/api.ts`: GET current factory via `getCurrentFactoryDocument`, preserve session `name` on the imported payload, PUT via `saveCurrentFactoryDocument` with incremented `version`, and map `CurrentFactoryDefinitionError` (including `STALE_FACTORY_VERSION`) into `NamedFactoryAPIError`; never `POST /factories`.
 - Non-default session import isolation proof lives in `tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go` (`TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles`): `openNamedFactorySession` + `saveCurrentFactoryForSession` with imported-style bundled payload, assert session GET readback, unchanged default session/`alpha` on-disk config, and bundled files materialized only under `rootDir/<session-factory-name>/`.
 - Dashboard import threads `useDashboardSessionStore.selectedSessionID` through `DashboardBento` → `useCurrentActivityImportController` → `useFactoryImportActivation({ sessionID })`, which defaults to `activateImportedFactoryForSession` so tab switches before confirm retarget activation without reload (mirror `useCurrentFactoryExport` session routing).
@@ -272,4 +276,49 @@
   - Patterns discovered: Reuse `dashboard-session-tabs.integration.test.mjs` session-open flow plus `factory-graph-editor.integration.test.mjs` PNG export/import drag-drop; activation preserves the session current factory `name` on PUT, not the PNG export display name.
   - Gotchas encountered: `Activating factory...` submitting copy can finish before Playwright observes it—poll `onSaveCurrentFactory` / `sessionFactoryPutRequests` instead; PUT bodies carry incremented `version.logical` (`"2"` from `"1"`) and `physical` plus one millisecond.
   - Useful context: Dev-browser skill verification was not run this iteration; Playwright integration test is the automated browser proof for story 005.
+---
+
+## 2026-05-30T15:30:00Z - prd-docs-agents-factory-overview-consolidation-v2-001
+- What was implemented: Merged the former `batch-work` quick-reference summary into `batch-inputs.md` (repo and packaged copies), added `## Before You Submit` guidance for `factory.json` and `factory/docs/overview.md`, removed standalone `batch-work.md`, and updated development-guide-relevant-files plus docs tests.
+- Files changed: `docs/reference/batch-inputs.md`, `pkg/cli/docs/reference/batch-inputs.md`, `pkg/cli/docs/reference/batch-work.md` (deleted), `pkg/cli/docs/docs_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: `batch-work` alias already mapped to `referenceBatchInputsPath` in `docs.go`; deleting `batch-work.md` does not require registry changes—only merged markdown and embed sync.
+  - Gotchas encountered: Packaged markdown frontmatter starts with `author:` without a leading `---` line; match the file literally when editing.
+  - Useful context: Smoke `batch-work` topic test expects heading `# Batch Inputs` and absent `# Batch Work` / `docs/reference/batch-work.md` strings after consolidation.
+---
+
+## 2026-05-30T16:30:00Z - prd-docs-agents-factory-overview-consolidation-v2-002
+- What was implemented: Moved `factory.json` topology content from packaged `work.md` into `config.md`, slimmed `work.md` to submitted-work contracts (`# Submitted Work`), updated topic descriptions in `docs.go`, README ownership bullets, inbound cross-links, and config/work smoke plus unit tests.
+- Files changed: `pkg/cli/docs/reference/config.md`, `pkg/cli/docs/reference/work.md`, `docs/reference/work.md`, `docs/reference/README.md`, `docs/README.md`, `docs/reference/config.md`, `docs/reference/{authoring-factories,guards,relationships,batch-inputs,resources,workstations}.md`, `pkg/cli/docs/reference/{authoring-factories,guards,relationships,batch-inputs,resources,workstations}.md`, `pkg/cli/docs/docs.go`, `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: Packaged `config.md` is now the topology owner; layout-tree `docs/reference/config.md` stays a separate layout guide — update both when changing ownership bullets, but only expand embedded `config.md` for CLI topology depth.
+  - Gotchas encountered: Smoke `config` topic `absent` lists cannot block cross-reference mentions of `POST /work` in the When-to-use table; assert absence of submission sections like `## Single-Work API Submission` instead.
+  - Useful context: Index topic descriptions come from `topicDocuments.description` in `docs.go`; update `docs_test.go`, `root_docs_test.go`, and smoke index assertions together when renaming config/work scope.
+---
+
+## 2026-05-30T17:00:00Z - prd-docs-agents-factory-overview-consolidation-v2-003
+- What was implemented: Authored packaged `agents.md` (repo and embedded copies), registered `you docs agents` at display order 5 in `docs.go`, and updated docs unit, root CLI, and smoke tests for index listing, topic output markers, and unsupported-topic error strings.
+- Files changed: `docs/reference/agents.md`, `pkg/cli/docs/reference/agents.md`, `pkg/cli/docs/docs.go`, `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: `agents` is the first packaged topic in index order (`displayOrder` 5); topic router table in `agents.md` should list every registered canonical topic for story 006 cross-link verification.
+  - Gotchas encountered: Unsupported-topic error strings are hardcoded in three test files—update `docs_test.go`, `root_docs_test.go`, and `cli_docs_smoke_test.go` together when adding a topic.
+  - Useful context: Stories 004–006 add `factory/docs/overview.md`, `docs/README.md` agent index, and Related links back to `you docs agents` in other topics.
+---
+
+## 2026-05-30T18:00:00Z - prd-docs-agents-factory-overview-consolidation-v2-004
+- What was implemented: Authored `factory/docs/overview.md` with purpose, quick start, pipeline from live `factory.json`, work types, read-before-submit guidance, input layout, maintainer notes, and related CLI topics; reduced `factory/README.md` to pointers; updated factory-workstation-relevant-files inventory.
+- Files changed: `factory/docs/overview.md`, `factory/README.md`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Portable export collects all `factory/docs/**` markdown via `collectSupportedPortableBundledFiles`—checked-in factories do not need explicit `supportingFiles.bundledFiles` entries for `overview.md` while the file remains on disk.
+  - Gotchas encountered: `FlattenFactoryConfig` returns serialized bytes, not a struct—use portable integration tests or manifest inspection helpers when verifying bundled paths.
+  - Useful context: `you docs agents` already references `factory/docs/overview.md`; stories 005–006 update `docs/README.md` and Related links in packaged topics.
+---
+
+## 2026-05-30T19:30:00Z - prd-docs-agents-factory-overview-consolidation-v2-005
+- What was implemented: Added **For agents** section to `docs/README.md` with `you docs agents`, `factory/docs/overview.md` convention, CLI reference link, and config versus work ownership; listed `agents` in intro and packaged topic bullets; added `agents` row to `docs/reference/README.md` packaged topic table.
+- Files changed: `docs/README.md`, `docs/reference/README.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Repo-level agent index lives in `docs/README.md` **For agents**; instance walkthrough stays in `factory/docs/overview.md`; packaged topic table in `docs/reference/README.md` should list `agents` first in the table to match `displayOrder` 5.
+  - Gotchas encountered: Story 005 is docs-index only—no `pkg/cli/docs/reference/README.md` embed; CLI index comes from `docs.go`, not `docs/reference/README.md`.
+  - Useful context: Story 006 adds Related links to `you docs agents` in batch-inputs, authoring-factories, and config (repo and packaged copies).
 ---
