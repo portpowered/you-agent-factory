@@ -118,6 +118,7 @@ export default defineConfig({
       provider: "v8",
       exclude: [
         ...coverageConfigDefaults.exclude,
+        "src/api/generated/**",
         "**/*.jsonl",
         "scripts/**",
         "src/testing/app-shell-test-graph-layout.ts",
