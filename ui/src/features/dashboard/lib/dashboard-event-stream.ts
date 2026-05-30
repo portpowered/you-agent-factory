@@ -9,7 +9,7 @@ import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import {
   currentFactoryDocumentQueryKey,
   currentFactoryDefinitionQueryKey,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 
 export function clearQueuedFlush(flushHandleRef: RefObject<number | null>): void {
   if (flushHandleRef.current === null) {

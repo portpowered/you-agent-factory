@@ -10,7 +10,7 @@ import {
   CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   useFactoryTimelineStore,
   type WorldState,

@@ -5,7 +5,7 @@ import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import {
   currentFactoryDocumentQueryKey,
   currentFactoryDefinitionQueryKey,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   clearQueuedFlush,
   pausedDashboardStreamState,
