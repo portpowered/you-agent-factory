@@ -299,6 +299,11 @@ func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request interfaces.
 	return f.engine.SubmitWorkRequest(ctx, request)
 }
 
+// MoveWork validates and applies a synchronous operator relocation for one work item.
+func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string) (interfaces.OperatorMoveResult, error) {
+	return f.engine.MoveWork(ctx, workID, stateName)
+}
+
 // SubscribeFactoryEvents returns canonical history followed by live events.
 func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context) (*interfaces.FactoryEventStream, error) {
 	stream := f.eventHistory.Subscribe(ctx)

@@ -268,6 +268,28 @@ type FailureRecord struct {
 	Attempt      int       `json:"attempt"`
 }
 
+// ClearGuardBlockingFields resets visit and failure-count guard counters while
+// preserving customer-visible failure history during operator recovery moves.
+func ClearGuardBlockingFields(history *TokenHistory) {
+	if history == nil {
+		return
+	}
+	history.TotalVisits = make(map[string]int)
+	history.ConsecutiveFailures = make(map[string]int)
+	history.PlaceVisits = make(map[string]int)
+}
+
+// OperatorMoveResult is the engine outcome of a successful manual work relocation.
+type OperatorMoveResult struct {
+	WorkID      string
+	WorkTypeID  string
+	FromState   string
+	ToState     string
+	FromPlaceID string
+	ToPlaceID   string
+	TokenID     string
+}
+
 // Relation defines a typed relationship between work items.
 type Relation struct {
 	Type          RelationType `json:"type"`

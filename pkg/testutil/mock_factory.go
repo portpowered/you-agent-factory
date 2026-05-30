@@ -66,6 +66,10 @@ var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
 func (m *MockFactory) Run(_ context.Context) error   { return nil }
 func (m *MockFactory) Pause(_ context.Context) error { return nil }
 
+func (m *MockFactory) MoveWork(_ context.Context, _ string, _ string) (interfaces.OperatorMoveResult, error) {
+	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in MockFactory")
+}
+
 func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	if m.SubmitWorkRequestErr != nil {
 		return interfaces.WorkRequestSubmitResult{}, m.SubmitWorkRequestErr

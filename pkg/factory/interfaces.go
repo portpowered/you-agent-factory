@@ -9,6 +9,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
+// WorkMover is synchronous operator control ingress for relocating work tokens.
+type WorkMover interface {
+	MoveWork(ctx context.Context, workID string, stateName string) (interfaces.OperatorMoveResult, error)
+}
+
 // APIFactory is the factory boundary required by the HTTP API server.
 type APIFactory interface {
 	// SubmitWorkRequest injects a canonical work request batch idempotently.
@@ -25,6 +30,7 @@ type APIFactory interface {
 
 // Factory is the top-level interface for a CPN-based workflow engine.
 type Factory interface {
+	WorkMover
 	// Run starts the factory loop. Blocks until ctx is cancelled or all
 	// work reaches terminal states.
 	Run(ctx context.Context) error
