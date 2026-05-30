@@ -1,5 +1,25 @@
 [
   {
+    "file": "scripts/bun-coverage-config.mjs",
+    "kind": "export",
+    "name": "browserCoveragePathIgnorePatterns"
+  },
+  {
+    "file": "scripts/bun-coverage-config.mjs",
+    "kind": "export",
+    "name": "mainCoverageReportsDir"
+  },
+  {
+    "file": "scripts/run-bun-coverage-main.mjs",
+    "kind": "file",
+    "name": "scripts/run-bun-coverage-main.mjs"
+  },
+  {
+    "file": "scripts/ui-coverage-runner.mjs",
+    "kind": "export",
+    "name": "buildMainCoveredVitestArgs"
+  },
+  {
     "file": "src/features/factory-graph-editor/lib/factory-graph-operations.ts",
     "kind": "export",
     "name": "validateFactoryGraphState"
@@ -8,5 +28,10 @@
     "file": "src/features/factory-graph-editor/lib/factory-graph-react-flow-projection.ts",
     "kind": "export",
     "name": "emptyFactoryGraphReactFlowEditorOverlay"
+  },
+  {
+    "file": "src/testing/graph-editor-harness.ts",
+    "kind": "export",
+    "name": "workerDenseFactoryDefinitionDocument"
   }
 ]
