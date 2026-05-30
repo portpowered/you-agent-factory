@@ -142,7 +142,11 @@ verify-extended:
 
 test-ui-coverage:
 	$(MAKE) ui-test-coverage
-	@if [ -z "$$UI_COVERAGE_SHARD" ]; then $(MAKE) ui-replay-coverage-check; fi
+	@if [ -z "$$UI_COVERAGE_SHARD" ] && [ -z "$$UI_COVERAGE_MERGE" ]; then $(MAKE) ui-replay-coverage-check; fi
+
+test-ui-coverage-merge:
+	$(MAKE) ui-test-coverage-merge
+	$(MAKE) ui-replay-coverage-check
 
 test-ui-browser-integration:
 	$(MAKE) ui-integration-test
@@ -296,6 +300,9 @@ endif
 
 ui-test-coverage:
 	cd ui && $(UI_SCRIPT) test:coverage
+
+ui-test-coverage-merge:
+	cd ui && UI_COVERAGE_MERGE=1 $(UI_SCRIPT) test:coverage
 
 ui-replay-coverage-check:
 ifeq ($(BUN_BIN),)

@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
 export const phaseLogPrefix = "[ui-coverage]";
 export const mainCoveredPhaseName = "Main covered Vitest pass";
 export const defaultMainCoveredMaxWorkers = "2";
 export const defaultSlowFileSummaryLimit = 15;
+export const defaultUiCoverageShardTotal = 10;
 
 const vitestFileDurationLinePattern =
   /^\s*[✓×]\s+(\S+\.(?:test|spec)\.(?:tsx?|mjs|cjs))\s+\([^)]+\)\s+(\d+(?:\.\d+)?)ms(?:\s+\d+ MB heap used)?/gm;
@@ -47,8 +49,62 @@ export function parseUiCoverageShard(env = process.env) {
   return { index, label: raw, total };
 }
 
-export function mainCoveredShardBlobPath(shardIndex) {
-  return `.vitest-reports/main-shard-${shardIndex}.json`;
+export function mainCoveredShardBlobPath(shardIndex, reportsDir = ".vitest-reports") {
+  return join(reportsDir, `main-shard-${shardIndex}.json`);
+}
+
+export function parseUiCoverageMerge(env = process.env) {
+  const raw = env.UI_COVERAGE_MERGE?.trim().toLowerCase();
+  if (!raw) {
+    return false;
+  }
+  if (raw === "0" || raw === "false" || raw === "no") {
+    return false;
+  }
+  return true;
+}
+
+export function getUiCoverageShardTotal(env = process.env) {
+  const raw = env.UI_COVERAGE_SHARD_TOTAL?.trim();
+  if (!raw) {
+    return defaultUiCoverageShardTotal;
+  }
+
+  const total = Number(raw);
+  if (!Number.isInteger(total) || total < 1) {
+    throw new Error(
+      `Invalid UI_COVERAGE_SHARD_TOTAL "${raw}"; expected a positive integer`,
+    );
+  }
+
+  return total;
+}
+
+export function findMissingShardBlobIndices(
+  shardTotal,
+  { reportsDir = ".vitest-reports" } = {},
+) {
+  const missing = [];
+
+  for (let index = 1; index <= shardTotal; index += 1) {
+    if (!existsSync(mainCoveredShardBlobPath(index, reportsDir))) {
+      missing.push(index);
+    }
+  }
+
+  return missing;
+}
+
+export function formatMissingShardBlobSummary(missingIndices, shardTotal) {
+  const missingList = missingIndices.join(", ");
+  const expectedPaths = missingIndices
+    .map((index) => mainCoveredShardBlobPath(index))
+    .join(", ");
+  return `Missing UI coverage shard blobs (${missingList}/${shardTotal}): expected ${expectedPaths}`;
+}
+
+export function buildUiCoverageMergePhases(options = {}) {
+  return buildUiCoveragePhases(options).slice(1);
 }
 
 export function buildMainCoveredVitestArgs(options = {}) {
@@ -258,13 +314,50 @@ export function runUiCoverageShard(shard, options = {}) {
   logSlowFileSummary(capturedStdout);
 }
 
+export function runUiCoverageMerge(options = {}) {
+  const env = options.env ?? process.env;
+  const spawn = options.spawn ?? spawnSync;
+  const reportsDir = options.reportsDir ?? ".vitest-reports";
+  const shardTotal = getUiCoverageShardTotal(env);
+  const missing = findMissingShardBlobIndices(shardTotal, { reportsDir });
+
+  if (missing.length > 0) {
+    console.error(
+      `${phaseLogPrefix} ${formatMissingShardBlobSummary(missing, shardTotal)}`,
+    );
+    process.exit(1);
+  }
+
+  rmSync("coverage", { force: true, recursive: true });
+
+  for (const phase of buildUiCoverageMergePhases(options)) {
+    const { status } = runTimedPhase(phase, spawn);
+
+    if (status !== 0) {
+      process.exit(status);
+    }
+  }
+}
+
 export function runUiCoverage(phases = uiCoveragePhases, options = {}) {
   const env = options.env ?? process.env;
   const spawn = options.spawn ?? spawnSync;
   const shard = parseUiCoverageShard(env);
+  const merge = parseUiCoverageMerge(env);
+
+  if (shard && merge) {
+    throw new Error(
+      "UI_COVERAGE_SHARD and UI_COVERAGE_MERGE cannot both be set",
+    );
+  }
 
   if (shard) {
     runUiCoverageShard(shard, options);
+    return;
+  }
+
+  if (merge) {
+    runUiCoverageMerge(options);
     return;
   }
 

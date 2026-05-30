@@ -452,6 +452,174 @@ jobs:
         if: steps.run_ui_coverage_shard.outcome == 'failure'
         run: exit 1
 
+  ui-coverage-merge:
+    name: UI Coverage Merge
+    runs-on: ubuntu-latest
+    needs:
+      - classify-pr-impact
+      - verify-build-contracts
+      - ui-coverage-shard
+    if: >-
+      always() &&
+      needs.classify-pr-impact.outputs.run_ui_coverage == 'true' &&
+      needs.classify-pr-impact.result == 'success' &&
+      needs.verify-build-contracts.result == 'success' &&
+      needs.ui-coverage-shard.result != 'skipped'
+    timeout-minutes: 30
+    steps:
+      - name: Report merge routing
+        run: |
+          {
+            echo "## UI Coverage Merge"
+            echo
+            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
+            echo "- Decision: \`run\`"
+            echo "- Shard total: \`10\`"
+            echo "- Local merge rerun: \`make test-ui-coverage-merge\` (after shard blobs are in \`ui/.vitest-reports/\`)"
+            echo "- Full local lane: \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`"
+            echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_coverage_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Set up Node for dashboard runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
+
+      - name: Install dashboard dependencies
+        timeout-minutes: 10
+        run: make ui-deps
+
+      - name: Download UI coverage shard artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ui-coverage-shard-*
+          path: .
+          merge-multiple: true
+
+      - name: Verify downloaded shard blobs
+        id: verify_shard_blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          reports_dir="ui/.vitest-reports"
+          missing=()
+          for index in $(seq 1 10); do
+            if [[ ! -f "$reports_dir/main-shard-${index}.json" ]]; then
+              missing+=("$index")
+            fi
+          done
+          if ((${#missing[@]} > 0)); then
+            echo "missing_shards=${missing[*]}" >> "$GITHUB_OUTPUT"
+            echo "shard_blobs_ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "shard_blobs_ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run dashboard coverage merge lane
+        id: run_ui_coverage_merge
+        if: steps.verify_shard_blobs.outputs.shard_blobs_ready == 'true'
+        continue-on-error: true
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          artifact_root=".artifacts/ui-coverage-merge"
+          mkdir -p "$artifact_root"
+          make test-ui-coverage-merge 2>&1 | tee "$artifact_root/command.log"
+
+      - name: Report merge execution
+        if: always()
+        shell: bash
+        run: |
+          artifact_name="ui-coverage-merge-failure-artifacts"
+          artifact_root=".artifacts/ui-coverage-merge"
+          missing_shards="${{ steps.verify_shard_blobs.outputs.missing_shards }}"
+          if [[ -n "$missing_shards" ]]; then
+            {
+              echo "### Execution result"
+              echo
+              echo "- Verified: UI coverage shard blob merge and follow-on phases through \`make test-ui-coverage-merge\`."
+              echo "- Result: \`blocked\`"
+              echo "- Missing shard indices: \`${missing_shards// /, }\` / 10"
+              echo "- Expected blobs: \`ui/.vitest-reports/main-shard-<index>.json\` for each missing index"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ "${{ steps.run_ui_coverage_merge.outcome }}" == "success" ]]; then
+            {
+              echo "### Execution result"
+              echo
+              echo "- Verified: isolated React Flow pass, \`vitest --mergeReports\` with \`ui/vite.config.ts\` thresholds, standalone script-style test, and replay coverage check through \`make test-ui-coverage-merge\`."
+              echo "- Result: \`passed\`"
+              echo "- Merged coverage thresholds: \`passed\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          threshold_result="failed"
+          if [[ -f "$artifact_root/command.log" ]] && rg -q "ERROR.*Coverage for" "$artifact_root/command.log"; then
+            threshold_result="failed (merged coverage thresholds)"
+          fi
+
+          {
+            echo "### Execution result"
+            echo
+            echo "- Verified: isolated React Flow pass, \`vitest --mergeReports\` with \`ui/vite.config.ts\` thresholds, standalone script-style test, and replay coverage check through \`make test-ui-coverage-merge\`."
+            echo "- Result: \`failed\`"
+            echo "- Merged coverage thresholds: \`$threshold_result\`"
+            echo "- Retained artifact: \`$artifact_name\` for 14 days"
+            echo "- Primary log: \`$artifact_root/command.log\`"
+            echo
+            echo "#### Failing log tail"
+            echo
+            echo '```text'
+            tail -n 40 "$artifact_root/command.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload UI coverage merge failure artifacts
+        if: always() && (steps.run_ui_coverage_merge.outcome == 'failure' || steps.verify_shard_blobs.outputs.shard_blobs_ready != 'true')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage-merge-failure-artifacts
+          path: .artifacts/ui-coverage-merge/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Fail for missing shard blobs
+        if: steps.verify_shard_blobs.outputs.shard_blobs_ready != 'true'
+        run: exit 1
+
+      - name: Fail for UI coverage merge errors
+        if: steps.verify_shard_blobs.outputs.shard_blobs_ready == 'true' && steps.run_ui_coverage_merge.outcome == 'failure'
+        run: exit 1
+
   ui-browser-integration:
     name: UI Browser Integration
     runs-on: ubuntu-latest

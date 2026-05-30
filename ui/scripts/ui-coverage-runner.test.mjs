@@ -1,18 +1,25 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, vi } from "vitest";
 
 import {
   buildMainCoveredShardPhase,
+  buildUiCoverageMergePhases,
   buildUiCoveragePhases,
   defaultMainCoveredMaxWorkers,
+  defaultUiCoverageShardTotal,
+  findMissingShardBlobIndices,
   formatElapsedMs,
+  formatMissingShardBlobSummary,
   formatPhaseElapsed,
   formatSlowFileSummaryLines,
   getMainCoveredMaxWorkers,
+  getUiCoverageShardTotal,
   mainCoveredPhaseName,
   mainCoveredShardBlobPath,
+  parseUiCoverageMerge,
   parseUiCoverageShard,
   parseVitestFileDurationsFromLog,
   phaseLogPrefix,
@@ -188,6 +195,96 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
       "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
     ]),
   );
+});
+
+test("parses UI_COVERAGE_MERGE truthy values", () => {
+  expect(parseUiCoverageMerge({ UI_COVERAGE_MERGE: "1" })).toBe(true);
+  expect(parseUiCoverageMerge({ UI_COVERAGE_MERGE: "true" })).toBe(true);
+  expect(parseUiCoverageMerge({})).toBe(false);
+  expect(parseUiCoverageMerge({ UI_COVERAGE_MERGE: "0" })).toBe(false);
+});
+
+test("defaults and validates UI_COVERAGE_SHARD_TOTAL for merge mode", () => {
+  expect(getUiCoverageShardTotal({})).toBe(defaultUiCoverageShardTotal);
+  expect(getUiCoverageShardTotal({ UI_COVERAGE_SHARD_TOTAL: "3" })).toBe(3);
+  expect(() => getUiCoverageShardTotal({ UI_COVERAGE_SHARD_TOTAL: "0" })).toThrow(
+    /positive integer/,
+  );
+});
+
+test("buildUiCoverageMergePhases runs follow-on phases without the main pass", () => {
+  expect(buildUiCoverageMergePhases().map((phase) => phase.name)).toEqual([
+    "Isolated React Flow covered pass",
+    "Blob report merge pass",
+    "Standalone script-style test",
+  ]);
+});
+
+test("findMissingShardBlobIndices reports absent shard blobs", () => {
+  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
+  writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
+
+  expect(findMissingShardBlobIndices(2, { reportsDir })).toEqual([2]);
+  expect(formatMissingShardBlobSummary([2], 2)).toContain(
+    "main-shard-2.json",
+  );
+});
+
+test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist", () => {
+  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
+  writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
+  const spawn = vi.fn(() => ({ status: 0 }));
+  const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
+
+  runUiCoverage(uiCoveragePhases, {
+    env: { UI_COVERAGE_MERGE: "1", UI_COVERAGE_SHARD_TOTAL: "1" },
+    reportsDir,
+    spawn,
+  });
+
+  expect(spawn).toHaveBeenCalledTimes(3);
+  expect(spawn.mock.calls.map(([, args]) => args)).toEqual(
+    expect.arrayContaining([
+      expect.arrayContaining(["--mergeReports", ".vitest-reports", "--coverage"]),
+    ]),
+  );
+  expect(exit).not.toHaveBeenCalled();
+
+  exit.mockRestore();
+});
+
+test("runUiCoverage in merge mode exits before phases when shard blobs are missing", () => {
+  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
+  const spawn = vi.fn(() => ({ status: 0 }));
+  const exit = vi.spyOn(process, "exit").mockImplementation((code) => {
+    throw new Error(`process.exit:${code}`);
+  });
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  expect(() =>
+    runUiCoverage(uiCoveragePhases, {
+      env: { UI_COVERAGE_MERGE: "1", UI_COVERAGE_SHARD_TOTAL: "2" },
+      reportsDir,
+      spawn,
+    }),
+  ).toThrow(/process.exit:1/);
+
+  expect(spawn).not.toHaveBeenCalled();
+  expect(errorLog).toHaveBeenCalledWith(
+    expect.stringContaining("Missing UI coverage shard blobs"),
+  );
+
+  errorLog.mockRestore();
+  exit.mockRestore();
+});
+
+test("rejects setting UI_COVERAGE_SHARD and UI_COVERAGE_MERGE together", () => {
+  expect(() =>
+    runUiCoverage(uiCoveragePhases, {
+      env: { UI_COVERAGE_SHARD: "1/10", UI_COVERAGE_MERGE: "1" },
+      spawn: vi.fn(() => ({ status: 0 })),
+    }),
+  ).toThrow(/cannot both be set/);
 });
 
 test("runUiCoverage in shard mode runs only the shard main pass", () => {
