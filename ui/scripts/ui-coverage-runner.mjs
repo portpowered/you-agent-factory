@@ -3,7 +3,14 @@ import { rmSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 
 export const phaseLogPrefix = "[ui-coverage]";
+export const mainCoveredPhaseName = "Main covered Vitest pass";
 export const defaultMainCoveredMaxWorkers = "2";
+export const defaultSlowFileSummaryLimit = 15;
+
+const vitestFileDurationLinePattern =
+  /^\s*[✓×]\s+(\S+\.(?:test|spec)\.(?:tsx?|mjs|cjs))\s+\([^)]+\)\s+(\d+(?:\.\d+)?)ms(?:\s+\d+ MB heap used)?/gm;
+
+const ansiEscapePattern = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
 export function getMainCoveredMaxWorkers(env = process.env) {
   return env.UI_COVERAGE_MAIN_MAX_WORKERS || defaultMainCoveredMaxWorkers;
@@ -15,7 +22,7 @@ export function buildUiCoveragePhases(options = {}) {
 
   return [
     {
-      name: "Main covered Vitest pass",
+      name: mainCoveredPhaseName,
       command: "vitest",
       args: [
         "run",
@@ -74,6 +81,54 @@ export function buildUiCoveragePhases(options = {}) {
 
 export const uiCoveragePhases = buildUiCoveragePhases();
 
+export function stripAnsi(text) {
+  return text.replace(ansiEscapePattern, "");
+}
+
+export function parseVitestFileDurationsFromLog(logText) {
+  const strippedLog = stripAnsi(logText);
+  const durationsByPath = new Map();
+
+  for (const match of strippedLog.matchAll(vitestFileDurationLinePattern)) {
+    const [, filePath, durationMsText] = match;
+    const durationMs = Number(durationMsText);
+    durationsByPath.set(
+      filePath,
+      Math.max(durationsByPath.get(filePath) ?? 0, durationMs),
+    );
+  }
+
+  return [...durationsByPath.entries()].map(([path, durationMs]) => ({
+    path,
+    durationMs,
+  }));
+}
+
+export function rankSlowestTestFiles(fileDurations, limit = defaultSlowFileSummaryLimit) {
+  return [...fileDurations]
+    .sort((left, right) => right.durationMs - left.durationMs)
+    .slice(0, limit);
+}
+
+export function formatSlowFileSummaryLines(
+  slowFiles,
+  { limit = defaultSlowFileSummaryLimit } = {},
+) {
+  if (slowFiles.length === 0) {
+    return [`${phaseLogPrefix} Main covered pass slowest test files: none reported`];
+  }
+
+  const lines = [
+    `${phaseLogPrefix} Main covered pass slowest test files (top ${Math.min(slowFiles.length, limit)}):`,
+  ];
+
+  for (const { path, durationMs } of slowFiles) {
+    lines.push(`${phaseLogPrefix}   ${path} ${formatElapsedMs(durationMs)}`);
+  }
+
+  return lines;
+}
+
 export function formatElapsedMs(elapsedMs) {
   return `${(elapsedMs / 1000).toFixed(2)}s`;
 }
@@ -87,13 +142,19 @@ export function cleanCoverageArtifacts() {
   rmSync(".vitest-reports", { force: true, recursive: true });
 }
 
-export function runTimedPhase(phase, spawn = spawnSync) {
+export function runTimedPhase(phase, spawn = spawnSync, options = {}) {
+  const captureStdout = options.captureStdout === true;
   const startedAt = performance.now();
   const result = spawn(phase.command, phase.args, {
     shell: process.platform === "win32",
-    stdio: "inherit",
+    stdio: captureStdout ? ["inherit", "pipe", "inherit"] : "inherit",
+    encoding: captureStdout ? "utf8" : undefined,
   });
   const elapsedMs = performance.now() - startedAt;
+
+  if (captureStdout && result.stdout) {
+    process.stdout.write(result.stdout);
+  }
 
   console.log(formatPhaseElapsed(phase.name, elapsedMs));
 
@@ -101,16 +162,37 @@ export function runTimedPhase(phase, spawn = spawnSync) {
     throw result.error;
   }
 
-  return result.status ?? 1;
+  return {
+    capturedStdout: captureStdout ? (result.stdout ?? "") : "",
+    status: result.status ?? 1,
+  };
+}
+
+export function logSlowFileSummary(capturedStdout) {
+  const slowFiles = rankSlowestTestFiles(
+    parseVitestFileDurationsFromLog(capturedStdout),
+  );
+
+  for (const line of formatSlowFileSummaryLines(slowFiles)) {
+    console.log(line);
+  }
 }
 
 export function runUiCoverage(phases = uiCoveragePhases) {
   cleanCoverageArtifacts();
 
   for (const phase of phases) {
-    const status = runTimedPhase(phase);
+    const captureStdout = phase.name === mainCoveredPhaseName;
+    const { capturedStdout, status } = runTimedPhase(phase, spawnSync, {
+      captureStdout,
+    });
+
     if (status !== 0) {
       process.exit(status);
+    }
+
+    if (captureStdout) {
+      logSlowFileSummary(capturedStdout);
     }
   }
 }

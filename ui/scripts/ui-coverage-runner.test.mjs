@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test, vi } from "vitest";
 
 import {
@@ -5,11 +8,23 @@ import {
   defaultMainCoveredMaxWorkers,
   formatElapsedMs,
   formatPhaseElapsed,
+  formatSlowFileSummaryLines,
   getMainCoveredMaxWorkers,
+  mainCoveredPhaseName,
+  parseVitestFileDurationsFromLog,
   phaseLogPrefix,
+  rankSlowestTestFiles,
   runTimedPhase,
   uiCoveragePhases,
 } from "./ui-coverage-runner.mjs";
+
+const fixtureLogSnippet = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "fixtures/vitest-main-pass-log-snippet.txt",
+  ),
+  "utf8",
+);
 
 test("formats stable elapsed output for comparable coverage phases", () => {
   expect(formatElapsedMs(1234)).toBe("1.23s");
@@ -20,7 +35,7 @@ test("formats stable elapsed output for comparable coverage phases", () => {
 
 test("keeps coverage phase names stable and explicit", () => {
   expect(uiCoveragePhases.map((phase) => phase.name)).toEqual([
-    "Main covered Vitest pass",
+    mainCoveredPhaseName,
     "Isolated React Flow covered pass",
     "Blob report merge pass",
     "Standalone script-style test",
@@ -83,9 +98,44 @@ test("keeps the React Flow coverage file isolated from the main covered pass", (
   expect(isolatedReactFlowPass.args).toContain("--maxWorkers=1");
 });
 
+test("parses vitest default reporter file durations from a fixture log snippet", () => {
+  expect(parseVitestFileDurationsFromLog(fixtureLogSnippet)).toEqual([
+    { durationMs: 3, path: "src/api/baseUrl.test.ts" },
+    { durationMs: 26, path: "src/components/ui/formatters.test.ts" },
+    { durationMs: 120_000, path: "src/App.test.tsx" },
+    {
+      durationMs: 5000,
+      path: "src/features/timeline/state/factoryTimelineStore.test.ts",
+    },
+    { durationMs: 116, path: "src/i18n/formatters.test.ts" },
+  ]);
+});
+
+test("formats a bounded slow-file summary with stable labels", () => {
+  const slowFiles = rankSlowestTestFiles(
+    parseVitestFileDurationsFromLog(fixtureLogSnippet),
+    3,
+  );
+
+  expect(slowFiles).toEqual([
+    { durationMs: 120_000, path: "src/App.test.tsx" },
+    {
+      durationMs: 5000,
+      path: "src/features/timeline/state/factoryTimelineStore.test.ts",
+    },
+    { durationMs: 116, path: "src/i18n/formatters.test.ts" },
+  ]);
+  expect(formatSlowFileSummaryLines(slowFiles, { limit: 3 })).toEqual([
+    `${phaseLogPrefix} Main covered pass slowest test files (top 3):`,
+    `${phaseLogPrefix}   src/App.test.tsx 120.00s`,
+    `${phaseLogPrefix}   src/features/timeline/state/factoryTimelineStore.test.ts 5.00s`,
+    `${phaseLogPrefix}   src/i18n/formatters.test.ts 0.12s`,
+  ]);
+});
+
 test("emits elapsed output before returning a failing phase status", () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  const status = runTimedPhase(
+  const { status } = runTimedPhase(
     {
       args: ["--fails"],
       command: "fake-vitest",

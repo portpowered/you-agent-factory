@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, vi, type Mock } from "vitest";
 import { App } from "../App";
 import type {
@@ -269,6 +269,10 @@ function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
   });
 }
 
+export async function waitForDashboardShell(): Promise<void> {
+  await screen.findByRole("heading", { name: "U" });
+}
+
 export function renderApp({
   browserLanguage,
   browserLanguages,
@@ -336,6 +340,14 @@ export function renderApp({
   );
 
   return { ...result, fetchMock };
+}
+
+export async function renderAppWithDashboardShell(
+  options: RenderAppOptions,
+): Promise<RenderAppResult> {
+  const result = renderApp(options);
+  await waitForDashboardShell();
+  return result;
 }
 
 function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
