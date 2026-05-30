@@ -281,7 +281,7 @@ describe("getCurrentFactoryDefinition", () => {
       }),
     ).rejects.toMatchObject({
       code: "INVALID_FACTORY_DEFINITION",
-      message: "The editable definition payload is invalid.",
+      message: "The factory definition was rejected by the session factory API.",
       name: "CurrentFactoryDefinitionError",
       responseBody: {
         code: "INVALID_FACTORY",

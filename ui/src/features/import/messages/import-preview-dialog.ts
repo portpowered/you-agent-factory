@@ -1,4 +1,5 @@
 import type { NamedFactoryAPIErrorCode } from "../../../api/named-factory";
+import { sessionFactoryOperatorErrorMessages } from "../../../api/session-factory";
 import {
   type LocalizedMessages,
   resolveLocalizedMessages,
@@ -11,6 +12,7 @@ type MappedImportPreviewErrorCode = Extract<
   | "INVALID_FACTORY"
   | "INVALID_FACTORY_NAME"
   | "NETWORK_ERROR"
+  | "STALE_FACTORY_VERSION"
 >;
 
 export interface ImportPreviewDialogMessages {
@@ -55,14 +57,14 @@ const importPreviewDialogMessagesByLocale = {
     errorByCode: {
       FACTORY_ALREADY_EXISTS:
         "A factory with this name already exists. Rename or remove the existing factory before importing this PNG.",
-      FACTORY_NOT_IDLE:
-        "The current factory runtime is still active. Wait until it becomes idle before switching factories.",
-      INVALID_FACTORY:
-        "The dropped factory payload was rejected by the activation API.",
+      FACTORY_NOT_IDLE: sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE,
+      INVALID_FACTORY: sessionFactoryOperatorErrorMessages.INVALID_FACTORY,
       INVALID_FACTORY_NAME:
-        "The embedded factory name is not valid for activation.",
+        sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
       NETWORK_ERROR:
         "The dashboard could not reach the activation API. Try again once the connection is available.",
+      STALE_FACTORY_VERSION:
+        sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
     },
     flowLabel: "Mutation flow",
     hint: "Replace current factory keeps the session factory name and updates its definition. Create new named factory saves under a separate name and activates it in this session.",
@@ -90,13 +92,15 @@ const importPreviewDialogMessagesByLocale = {
       FACTORY_ALREADY_EXISTS:
         "同じ名前のファクトリーがすでに存在します。この PNG をインポートする前に、既存のファクトリーの名前を変更するか削除してください。",
       FACTORY_NOT_IDLE:
-        "現在のファクトリーランタイムはまだ稼働中です。アイドル状態になるまで待ってから切り替えてください。",
+        "現在のファクトリーランタイムはまだ稼働中です。保存または切り替える前にアイドル状態になるまで待ってください。",
       INVALID_FACTORY:
-        "有効化 API がドロップしたファクトリーペイロードを拒否しました。",
+        "セッションファクトリー API がファクトリー定義を拒否しました。",
       INVALID_FACTORY_NAME:
-        "埋め込まれたファクトリー名は有効化に使用できません。",
+        "このセッションでは無効なファクトリー名です。",
       NETWORK_ERROR:
         "ダッシュボードが有効化 API に接続できませんでした。接続が復旧したら再試行してください。",
+      STALE_FACTORY_VERSION:
+        "ファクトリー定義が古くなっています。ダッシュボードを更新してから、保存またはインポートを再試行してください。",
     },
     flowLabel: "変更フロー",
     hint: "現在のファクトリーを置き換えると、セッションのファクトリー名を保ったまま定義を更新します。新しい名前のファクトリーを作成すると、別名で保存してこのセッションで有効化します。",
@@ -124,11 +128,14 @@ const importPreviewDialogMessagesByLocale = {
       FACTORY_ALREADY_EXISTS:
         "같은 이름의 팩토리가 이미 있습니다. 이 PNG를 가져오기 전에 기존 팩토리의 이름을 바꾸거나 제거하세요.",
       FACTORY_NOT_IDLE:
-        "현재 팩토리 런타임이 아직 활성 상태입니다. 유휴 상태가 된 뒤에 팩토리를 전환하세요.",
-      INVALID_FACTORY: "활성화 API가 드롭한 팩토리 페이로드를 거부했습니다.",
-      INVALID_FACTORY_NAME: "내장된 팩토리 이름이 활성화에 유효하지 않습니다.",
+        "현재 팩토리 런타임이 아직 활성 상태입니다. 저장하거나 전환하기 전에 유휴 상태가 될 때까지 기다리세요.",
+      INVALID_FACTORY:
+        "세션 팩토리 API가 팩토리 정의를 거부했습니다.",
+      INVALID_FACTORY_NAME: "이 세션에 유효하지 않은 팩토리 이름입니다.",
       NETWORK_ERROR:
         "대시보드가 활성화 API에 연결할 수 없습니다. 연결이 복구된 뒤 다시 시도하세요.",
+      STALE_FACTORY_VERSION:
+        "팩토리 정의가 오래되었습니다. 대시보드를 새로 고친 뒤 저장하거나 가져오기를 다시 시도하세요.",
     },
     flowLabel: "변경 흐름",
     hint: "현재 팩토리 바꾸기는 세션 팩토리 이름을 유지한 채 정의를 업데이트합니다. 새 이름의 팩토리 만들기는 별도 이름으로 저장한 뒤 이 세션에서 활성화합니다.",
@@ -156,10 +163,12 @@ const importPreviewDialogMessagesByLocale = {
       FACTORY_ALREADY_EXISTS:
         "同名工厂已存在。请先重命名或移除现有工厂，再导入此 PNG。",
       FACTORY_NOT_IDLE:
-        "当前工厂运行时仍处于活动状态。请等待其空闲后再切换工厂。",
-      INVALID_FACTORY: "启用 API 拒绝了拖入的工厂负载。",
-      INVALID_FACTORY_NAME: "嵌入的工厂名称不符合启用要求。",
+        "当前工厂运行时仍处于活动状态。请在保存或切换之前等待其进入空闲状态。",
+      INVALID_FACTORY: "会话工厂 API 拒绝了该工厂定义。",
+      INVALID_FACTORY_NAME: "该工厂名称对当前会话无效。",
       NETWORK_ERROR: "仪表板无法连接到启用 API。请在连接恢复后重试。",
+      STALE_FACTORY_VERSION:
+        "工厂定义已过期。请刷新仪表板后再保存或导入。",
     },
     flowLabel: "变更流程",
     hint: "替换当前工厂会保留会话工厂名称并更新其定义。创建新的命名工厂会以单独名称保存并在本会话中启用。",

@@ -230,6 +230,8 @@ describe("saveSessionFactory errors", () => {
       ),
     ).rejects.toMatchObject({
       code: "STALE_FACTORY_VERSION",
+      message:
+        "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
       status: 409,
     });
   });

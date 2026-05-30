@@ -276,7 +276,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   it("shows a recoverable stale-write warning without discarding the dirty draft", async () => {
     saveCurrentFactoryMutation.mockRejectedValue(
       new CurrentFactoryDefinitionError(
-        "Current factory definition is stale. Refresh the graph before saving.",
+        "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
         {
           code: "STALE_FACTORY_VERSION",
           status: 409,
@@ -297,7 +297,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          "Current factory definition is stale. Refresh the graph before saving.",
+          "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
         ),
       ).toBeTruthy();
     });

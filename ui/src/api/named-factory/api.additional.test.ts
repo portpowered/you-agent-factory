@@ -182,15 +182,18 @@ describe("named factory API error handling", () => {
     await expect(
       activateImportedFactoryForSession(canonicalFactory, { fetch: fetchMock }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("Current factory runtime must be idle before activation.", {
-        code: "FACTORY_NOT_IDLE",
-        status: 409,
-        statusText: "Conflict",
-        responseBody: {
+      new NamedFactoryAPIError(
+        "The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
+        {
           code: "FACTORY_NOT_IDLE",
-          message: "Current factory runtime must be idle before activation.",
+          status: 409,
+          statusText: "Conflict",
+          responseBody: {
+            code: "FACTORY_NOT_IDLE",
+            message: "Current factory runtime must be idle before activation.",
+          },
         },
-      }),
+      ),
     );
   });
 

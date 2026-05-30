@@ -100,6 +100,8 @@ function factoryImportActivationErrorCopy(
       return messages.errorByCode.FACTORY_ALREADY_EXISTS;
     case "FACTORY_NOT_IDLE":
       return messages.errorByCode.FACTORY_NOT_IDLE;
+    case "STALE_FACTORY_VERSION":
+      return messages.errorByCode.STALE_FACTORY_VERSION;
     case "INVALID_FACTORY":
       return messages.errorByCode.INVALID_FACTORY;
     case "INVALID_FACTORY_NAME":

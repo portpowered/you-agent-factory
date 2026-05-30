@@ -179,7 +179,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
   it("keeps stale-version save failures recoverable as warnings", async () => {
     const mutateAsync = vi.fn().mockRejectedValue(
       new CurrentFactoryDefinitionError(
-        "Current factory definition is stale. Refresh the graph before saving.",
+        "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
         {
           code: "STALE_FACTORY_VERSION",
           status: 409,
@@ -208,7 +208,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
     await waitFor(() => {
       expect(result.current.saveState).toEqual({
         message:
-          "Current factory definition is stale. Refresh the graph before saving.",
+          "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
         status: "warning",
       });
     });
