@@ -21,6 +21,8 @@ export interface EditableFactoryGraphSaveInput {
 export interface UseEditableFactoryGraphOptions {
   activeWorkCount?: number;
   currentFactoryDocument?: CurrentFactoryDocument;
+  /** Normalized dashboard session id; graph draft resets when this changes. */
+  factoryDocumentScopeKey?: string | null;
   locale?: string | null;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,

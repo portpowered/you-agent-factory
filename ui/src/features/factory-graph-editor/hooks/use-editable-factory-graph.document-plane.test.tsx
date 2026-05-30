@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
@@ -83,5 +83,60 @@ describe("useEditableFactoryGraph document plane", () => {
       nodes: [],
     });
     expect(result.current.graphState).toBeNull();
+  });
+
+  it("drops a dirty draft when the factory document scope key changes", () => {
+    const { result, rerender } = renderHook(
+      ({
+        currentFactoryDocument,
+        factoryDocumentScopeKey,
+      }: {
+        currentFactoryDocument: CurrentFactoryDocument;
+        factoryDocumentScopeKey: string;
+      }) =>
+        useEditableFactoryGraph({
+          currentFactoryDocument,
+          factoryDocumentScopeKey,
+        }),
+      {
+        initialProps: {
+          currentFactoryDocument: documentFactory,
+          factoryDocumentScopeKey: "session-alpha",
+        },
+      },
+    );
+
+    act(() => {
+      result.current.actions.addNode({
+        kind: "worker",
+        model: "gpt-5",
+        name: "extra",
+      });
+    });
+
+    expect(result.current.pendingState.hasChanges).toBe(true);
+
+    rerender({
+      currentFactoryDocument: {
+        ...documentFactory,
+        name: "Beta Factory",
+        workstations: [
+          {
+            ...documentFactory.workstations[0],
+            name: "beta-only",
+          },
+        ],
+      },
+      factoryDocumentScopeKey: "session-beta",
+    });
+
+    expect(result.current.pendingState.hasChanges).toBe(false);
+    expect(result.current.draftState.latestDocument?.name).toBe("Beta Factory");
+    expect(result.current.projection.nodes.map((node) => node.id)).toContain(
+      "workstation:beta-only",
+    );
+    expect(result.current.projection.nodes.map((node) => node.id)).not.toContain(
+      "workstation:document-only",
+    );
   });
 });

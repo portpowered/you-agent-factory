@@ -23,6 +23,7 @@ import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activ
 export function useCurrentActivityGraphEditor(
   snapshot: DashboardSnapshot,
   locale?: string | null,
+  factoryDocumentScopeKey?: string | null,
 ) {
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
@@ -31,6 +32,7 @@ export function useCurrentActivityGraphEditor(
   const { currentFactoryQuery, editableGraph, saveEditableDefinition } =
     useCurrentActivityEditableGraph({
       editorMode,
+      factoryDocumentScopeKey,
       locale,
       snapshot,
     });
@@ -203,10 +205,12 @@ function useFactoryGraphEditorInteraction({
 
 function useCurrentActivityEditableGraph({
   editorMode,
+  factoryDocumentScopeKey,
   locale,
   snapshot,
 }: {
   editorMode: boolean;
+  factoryDocumentScopeKey?: string | null;
   locale?: string | null;
   snapshot: DashboardSnapshot;
 }) {
@@ -215,6 +219,7 @@ function useCurrentActivityEditableGraph({
   const editableGraph = useEditableFactoryGraph({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     currentFactoryDocument: currentFactoryQuery.data,
+    factoryDocumentScopeKey,
     locale,
     saveFactoryDefinition: saveEditableDefinition.mutateAsync,
   });

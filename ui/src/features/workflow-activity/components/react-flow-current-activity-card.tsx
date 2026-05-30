@@ -13,6 +13,7 @@ import type {
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
 import type { FactoryValue } from "../../../api/named-factory";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
@@ -390,7 +391,12 @@ function editorModeFactoryDefinition(
 export function ReactFlowCurrentActivityCard(
   props: ReactFlowCurrentActivityCardProps,
 ) {
-  const editor = useCurrentActivityGraphEditor(props.snapshot, props.locale);
+  const { sessionID } = useDashboardSession();
+  const editor = useCurrentActivityGraphEditor(
+    props.snapshot,
+    props.locale,
+    sessionID,
+  );
   return (
     <ReactFlowCurrentActivityCardView
       {...props}

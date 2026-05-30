@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   cleanup,
   fireEvent,
@@ -400,7 +401,9 @@ function renderWithQueryClient(view: ReactElement) {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
+    <QueryClientProvider client={queryClient}>
+      <DashboardSessionTestProvider>{view}</DashboardSessionTestProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -3239,15 +3242,17 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
             })
           }
         >
-          <ReactFlowCurrentActivityCard
-            now={Date.parse("2026-04-08T12:00:04Z")}
-            onSelectWorkID={vi.fn()}
-            selection={null}
-            snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
-            onSelectStateNode={vi.fn()}
-            onSelectWorker={vi.fn()}
-            onSelectWorkstation={vi.fn()}
-          />
+          <DashboardSessionTestProvider>
+            <ReactFlowCurrentActivityCard
+              now={Date.parse("2026-04-08T12:00:04Z")}
+              onSelectWorkID={vi.fn()}
+              selection={null}
+              snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
+              onSelectStateNode={vi.fn()}
+              onSelectWorker={vi.fn()}
+              onSelectWorkstation={vi.fn()}
+            />
+          </DashboardSessionTestProvider>
         </QueryClientProvider>,
       );
 
@@ -3306,12 +3311,14 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
           })
         }
       >
-        <ReactFlowCurrentActivityCard
-          now={Date.parse("2026-04-08T12:00:04Z")}
-          selection={null}
-          snapshot={sixActiveSnapshot}
-          {...callbacks}
-        />
+        <DashboardSessionTestProvider>
+          <ReactFlowCurrentActivityCard
+            now={Date.parse("2026-04-08T12:00:04Z")}
+            selection={null}
+            snapshot={sixActiveSnapshot}
+            {...callbacks}
+          />
+        </DashboardSessionTestProvider>
       </QueryClientProvider>,
     );
 

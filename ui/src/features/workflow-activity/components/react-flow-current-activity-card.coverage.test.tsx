@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   act,
   fireEvent,
@@ -722,7 +723,9 @@ function renderWithQueryClient(view: React.ReactElement) {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
+    <QueryClientProvider client={queryClient}>
+      <DashboardSessionTestProvider>{view}</DashboardSessionTestProvider>
+    </QueryClientProvider>,
   );
 }
 

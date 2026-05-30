@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { buildPendingFactoryDefinition } from "../lib/factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "../lib/factory-graph-draft-graph";
@@ -21,6 +21,8 @@ type FactoryGraphDraftCallbacks = Pick<
 
 interface UseFactoryGraphDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
+  /** Normalized dashboard session id; draft state resets when this changes. */
+  factoryDocumentScopeKey?: string | null;
   locale?: string | null;
 }
 
@@ -28,6 +30,8 @@ export function useFactoryGraphDraftState(
   options: UseFactoryGraphDraftStateOptions,
 ): FactoryGraphDraftDerivedState {
   const currentFactoryDocument = options.currentFactoryDocument;
+  const factoryDocumentScopeKey = options.factoryDocumentScopeKey ?? null;
+  const lastFactoryDocumentScopeKeyRef = useRef<string | null>(null);
   const emptyDraft = useMemo(() => createEmptyFactoryGraphDraft(), []);
   const emptyGraph = useMemo(
     () => ({ edges: [], nodes: [] } as FactoryGraphDraftDerivedState["graph"]),
@@ -95,11 +99,20 @@ export function useFactoryGraphDraftState(
   }, [currentFactoryDocument]);
 
   useEffect(() => {
+    const previousScopeKey = lastFactoryDocumentScopeKeyRef.current;
+    const scopeChanged =
+      previousScopeKey !== null &&
+      previousScopeKey !== factoryDocumentScopeKey;
+    lastFactoryDocumentScopeKeyRef.current = factoryDocumentScopeKey;
+
     if (!currentFactoryDocument) {
-      setSessionState((currentState) =>
-        currentState && hasFactoryGraphDraftChanges(currentState.draft)
-          ? currentState
-          : null,
+      setSessionState(null);
+      return;
+    }
+
+    if (scopeChanged) {
+      setSessionState(
+        syncFactoryGraphDraftSession(null, currentFactoryDocument),
       );
       return;
     }
@@ -107,7 +120,7 @@ export function useFactoryGraphDraftState(
     setSessionState((currentState) =>
       syncFactoryGraphDraftSession(currentState, currentFactoryDocument),
     );
-  }, [currentFactoryDocument]);
+  }, [currentFactoryDocument, factoryDocumentScopeKey]);
 
   const currentFactoryState = useMemo<FactoryGraphDraftDerivedState | null>(
     () =>
@@ -207,7 +220,14 @@ export function syncFactoryGraphDraftSession(
   currentState: FactoryGraphDraftSessionState | null,
   currentFactoryDocument: CurrentFactoryDocument,
 ): FactoryGraphDraftSessionState {
-  if (!currentState || !hasFactoryGraphDraftChanges(currentState.draft)) {
+  if (
+    !currentState ||
+    !hasFactoryGraphDraftChanges(currentState.draft) ||
+    !isSameFactoryDocumentIdentity(
+      currentState.latestDocument,
+      currentFactoryDocument,
+    )
+  ) {
     return {
       draft: createEmptyFactoryGraphDraft(),
       latestDocument: currentFactoryDocument,
@@ -228,4 +248,11 @@ export function syncFactoryGraphDraftSession(
     ...currentState,
     latestDocument: currentFactoryDocument,
   };
+}
+
+function isSameFactoryDocumentIdentity(
+  previousDocument: CurrentFactoryDocument,
+  nextDocument: CurrentFactoryDocument,
+): boolean {
+  return previousDocument.name === nextDocument.name;
 }

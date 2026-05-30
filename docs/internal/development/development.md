@@ -589,6 +589,8 @@ Full program spec: [UI Factory Document vs Snapshot Planes](../../../tasks/prd-u
 
 Implementation hooks live under `ui/src/features/current-factory-definition/`, `ui/src/features/dashboard/hooks/useDashboardSnapshot.ts`, and `ui/src/features/timeline/`. Session-scoped query keys must include normalized `sessionID` from `useDashboardSession()`.
 
+**Session switch:** When `sessionID` changes, `useDashboardSessionLifecycle` calls `resetDashboardSessionScopedState`, which resets the timeline and selection stores and `removeQueries` for every `current-factory-definition` cache entry (all sessions). `useCurrentFactoryDocument` then refetches for the active session only. Graph editor draft state resets via `factoryDocumentScopeKey` on `useFactoryGraphDraftState` / `useEditableFactoryGraph` so a dirty draft from the previous tab cannot seed the next session while the new document GET is pending.
+
 ## Related Docs
 
 - [Factory CLI wire composition](cmd-factory-wire-composition.md)
