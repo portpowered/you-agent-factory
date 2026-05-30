@@ -57,6 +57,26 @@ func TestSetBuildFactoryService_NilRestoresDefault(t *testing.T) {
 	}
 }
 
+func TestFactoryServiceBuilderFromService_AdaptsConcreteBuilder(t *testing.T) {
+	original := buildFactoryService
+	t.Cleanup(func() {
+		buildFactoryService = original
+	})
+
+	builderErr := errors.New("adapted builder")
+	SetBuildFactoryService(FactoryServiceBuilderFromService(func(
+		_ context.Context,
+		_ *service.FactoryServiceConfig,
+	) (*service.FactoryService, error) {
+		return nil, builderErr
+	}))
+
+	_, err := buildFactoryService(context.Background(), &service.FactoryServiceConfig{})
+	if !errors.Is(err, builderErr) {
+		t.Fatalf("buildFactoryService err = %v, want %v", err, builderErr)
+	}
+}
+
 func TestBuildFactoryService_DefaultMatchesServiceBuilder(t *testing.T) {
 	original := buildFactoryService
 	t.Cleanup(func() {

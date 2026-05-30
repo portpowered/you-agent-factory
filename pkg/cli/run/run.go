@@ -98,6 +98,21 @@ type FactoryServiceBuilder func(
 	*service.FactoryServiceConfig,
 ) (factoryServiceRunner, error)
 
+// FactoryServiceBuildFunc constructs *service.FactoryService for registration
+// from cmd/ when the builder is defined outside pkg/cli/run.
+type FactoryServiceBuildFunc func(
+	context.Context,
+	*service.FactoryServiceConfig,
+) (*service.FactoryService, error)
+
+// FactoryServiceBuilderFromService adapts a concrete service constructor for
+// SetBuildFactoryService when the builder is defined outside pkg/cli/run.
+func FactoryServiceBuilderFromService(build FactoryServiceBuildFunc) FactoryServiceBuilder {
+	return func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return build(ctx, cfg)
+	}
+}
+
 func defaultBuildFactoryService(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
