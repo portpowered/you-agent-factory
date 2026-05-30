@@ -13,6 +13,7 @@ type persistFromFileMode int
 
 const (
 	persistFromFileModeSave persistFromFileMode = iota
+	persistFromFileModeUpdate
 )
 
 type persistFromFileConfig struct {
@@ -71,6 +72,8 @@ func persistFromFileNamedFactory(cfg persistFromFileConfig, name string, payload
 	switch cfg.Mode {
 	case persistFromFileModeSave:
 		return configpersist.PersistNamedFactory(cfg.Dir, name, payload)
+	case persistFromFileModeUpdate:
+		return configpersist.ReplaceNamedFactory(cfg.Dir, name, payload)
 	default:
 		return "", fmt.Errorf("unsupported persist-from-file mode")
 	}
