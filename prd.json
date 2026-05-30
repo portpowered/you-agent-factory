@@ -1,208 +1,94 @@
 {
-  "project": "CLI Batch Work Submission",
-  "branchName": "ralph/cli-submit-batch",
-  "description": "Add `you submit batch` so operators and agents can submit canonical FACTORY_REQUEST_BATCH JSON to a running factory via file path, stdin, or inline JSON—with local validation, dry-run, and submit output aligned with unary submit.",
+  "project": "Consolidate Validation Target Test Assertions",
+  "branchName": "ralph/consolidate-validation-target-test-asserts",
+  "description": "Consolidate duplicated validation-target test assertion helpers into pkg/testutil/validationassert and retarget API, service, and factory-validation tests with no production or validation-semantics change.",
   "context": {
-    "customerAsk": "Implement CLI batch work submission: submit FACTORY_REQUEST_BATCH to a running factory via file, stdin, or inline JSON.",
-    "problem": "Batch ingress to a live factory today requires curl or watched input files. Unary `you submit` handles one work item; `you run --work` only submits at startup. There is no first-class CLI for upserting a canonical batch to an already-running session.",
-    "solution": "Add `you submit batch` under `you submit` that validates the same FACTORY_REQUEST_BATCH JSON as run and watched inputs, supports file/stdin/inline/--file/--dry-run, PUTs to the session work-requests endpoint, and prints human and JSON success output including per-work identifiers when the API returns them."
+    "customerAsk": "As part of pkg/ duplication cleanup (customer ask 11), move repeated assertHasValidationTarget and assertHasValidationTargetCode helpers into one shared test-only package and retarget API and service test call sites so validation topology tests share the same assertions without changing runtime behavior.",
+    "problem": "The same validation-target presence checks are copy-pasted across pkg/api, pkg/service, and pkg/factory/validation tests with risk of divergent matching rules and harder review of topology validation regressions.",
+    "solution": "Add canonical helpers in pkg/testutil/validationassert for API-shaped (factoryapi.FactoryValidationTarget) and domain-shaped (factoryvalidation.Target) slices, retarget all scoped test call sites, remove duplicate local definitions, and prove behavior neutrality by running existing validation topology test suites unchanged."
   },
   "acceptanceCriteria": [
-    "`you submit batch` exists under `you submit` and upserts valid FACTORY_REQUEST_BATCH JSON to a running factory session (default `~default` when `--session` is omitted).",
-    "Batch JSON is accepted from filesystem path (positional or `--file`), piped stdin or positional `-`, and inline `{…}` positional JSON.",
-    "`--dry-run` validates input, prints a summary, performs no HTTP, and exits 0 on valid input even when the factory is unreachable.",
-    "Success output (human and `--json`) includes requestId, traceId, work count, and per-work name, workTypeName, and workId when the API provides them.",
-    "Reference and packaged docs (`you docs batch-inputs`) document CLI batch submit alongside curl and watched-folder ingress.",
-    "Unary `you submit` and `you run --work` batch file behavior are unchanged.",
-    "Typecheck, lint, and project tests pass."
+    "pkg/testutil/validationassert exports canonical API and domain validation-target assertion helpers with unchanged match semantics",
+    "Duplicate assertHasValidationTarget, assertHasValidationTargetCode, assertHasTargetCode, and assertHasTargetSubject definitions are removed from scoped pkg/api, pkg/service, and pkg/factory/validation test files",
+    "All retargeted tests assert the same validation codes, subject types, subject ids, and locations as before consolidation",
+    "go test ./pkg/api/... ./pkg/service/... ./pkg/factory/validation/... passes with no production package importing validationassert",
+    "No production API, CLI, UI, or OpenAPI schema changes are introduced in this lane",
+    "Typecheck, lint, and the scoped test suites above pass (quality gate)"
   ],
   "userStories": [
     {
-      "id": "cli-submit-batch-001",
-      "title": "Shared canonical batch loader (file path)",
-      "description": "As a maintainer, I want one canonical batch JSON loader used by `you run --work` and `you submit batch` so parsing rules never diverge.",
+      "id": "consolidate-validation-target-test-asserts-001",
+      "title": "Canonical API validation target assertions",
+      "description": "As a maintainer, I want shared helpers for OpenAPI FactoryValidationTarget slices so API and service tests assert targets the same way.",
       "acceptanceCriteria": [
-        "Reading batch JSON from an existing filesystem path returns a validated FACTORY_REQUEST_BATCH work request with the same semantics as today's `you run --work` file load.",
-        "Retired field aliases and conflicting trace fields are rejected with the same error guidance as today's run loader tests.",
-        "`you run --work` behavior is unchanged for file-based batches (regression tests pass).",
+        "pkg/testutil/validationassert provides HasTarget matching code, subject type, subject id, and location on []factoryapi.FactoryValidationTarget",
+        "HasTargetCode matches when any target carries the given validation code with optional failure label for diagnostics",
+        "Helpers use t.Helper() and preserve existing match semantics without production imports of the package",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass for any helper unit coverage added in this story"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-002",
-      "title": "Upsert API returns per-work identifiers",
-      "description": "As an agent, I want the batch upsert response to include work identifiers so I can verify submission without listing all work.",
+      "id": "consolidate-validation-target-test-asserts-002",
+      "title": "API tests use shared validation assertions",
+      "description": "As a maintainer, I want API validation topology tests to import shared assertions so duplicate helpers are not redefined per test file.",
       "acceptanceCriteria": [
-        "Successful PUT /work-requests/{request_id} (session-scoped variant included) returns 201 with requestId, traceId, and a works array where each item includes name, workTypeName, and workId.",
-        "Multi-work batch upsert populates works for every accepted item in API tests.",
-        "OpenAPI schema and generated types reflect works on upsert response.",
+        "pkg/api/server_test_helpers_test.go, pkg/api/server_factory_test.go, and pkg/api/servertests/server_factory_validation_test.go use validationassert instead of local helpers",
+        "Local assertHasValidationTarget and assertHasValidationTargetCode definitions are removed from those API test files",
+        "Existing API validation topology tests still expect the same validation codes and subject coordinates for the same inputs",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass (go test ./pkg/api/...)"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-003",
-      "title": "Command discovery and help",
-      "description": "As an operator, I want to discover batch submit next to unary submit so I know which command to use for multi-work ingress.",
+      "id": "consolidate-validation-target-test-asserts-003",
+      "title": "Service tests use shared validation assertions",
+      "description": "As a maintainer, I want service-layer factory validation tests to share the same target assertions as API tests.",
       "acceptanceCriteria": [
-        "`you submit batch --help` documents batch input modes (positional path, optional --file, -/stdin, pipe-with-no-args, inline JSON), --dry-run, --session, and global --server / --json / --verbose.",
-        "Help states the command expects FACTORY_REQUEST_BATCH and points to `you docs batch-inputs`.",
-        "Help does not advertise unary-only flags (--name, --work-type-name, --payload, --work-type-id).",
+        "pkg/service/factory_test.go imports validationassert for topology and canonical target assertions",
+        "Local assertHasValidationTarget and assertHasValidationTargetCode definitions are removed from factory_test.go",
+        "Service validation target tests including assertCanonicalTopologyTargets call sites expect the same codes and subject fields as before",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass (go test ./pkg/service/...)"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-004",
-      "title": "Submit batch to running factory (HTTP + dry-run)",
-      "description": "As an operator, I want to upsert a canonical batch to a running factory session, or validate locally without sending traffic.",
+      "id": "consolidate-validation-target-test-asserts-004",
+      "title": "Domain validation tests use shared assertions",
+      "description": "As a maintainer, I want pkg/factory/validation unit tests to use the same canonical assertion module for domain Target slices.",
       "acceptanceCriteria": [
-        "With valid batch JSON from a file, the CLI issues PUT to /factory-sessions/{session}/work-requests/{requestId} where requestId in the path matches the body; Content-Type is application/json.",
-        "Body type must be FACTORY_REQUEST_BATCH with at least one works entry; violations fail locally before HTTP.",
-        "HTTP 201 is success; other statuses surface API error message when present; unreachable factory errors match unary submit transport style.",
-        "--session scopes the request like unary submit.",
-        "--dry-run parses and validates only, prints summary (requestId, work count, work names, relationCount, batchSource, dry-run: no request sent), performs zero HTTP calls, exits 0 on valid input even when the server is down.",
+        "validationassert exposes domain helpers equivalent to prior assertHasTargetCode and assertHasTargetSubject on []factoryvalidation.Target",
+        "pkg/factory/validation/validation_test.go retargets to shared helpers and removes local duplicate definitions",
+        "Explicit validation unit tests still fail on the same missing codes and subjects for invalid factory configs",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass (go test ./pkg/factory/validation/...)"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-005",
-      "title": "Piped stdin and explicit `-`",
-      "description": "As an agent, I want to pipe batch JSON so I can submit without a temp file.",
+      "id": "consolidate-validation-target-test-asserts-005",
+      "title": "Duplication cleanup verification",
+      "description": "As a reviewer, I want confidence that consolidation is complete and behavior-neutral across all touched packages.",
       "acceptanceCriteria": [
-        "`cat batch.json | you submit batch` submits when stdin is not a TTY.",
-        "`you submit batch -` reads batch JSON from stdin.",
-        "`you submit batch` with no args and interactive TTY stdin fails immediately with usage guidance.",
-        "Empty piped stdin fails with a clear empty-input error.",
-        "When a file path or --file is provided, stdin is ignored.",
+        "No duplicate validation-target assertion helpers remain in scoped pkg/api, pkg/service, and pkg/factory/validation test files",
+        "go test ./pkg/api/... ./pkg/service/... ./pkg/factory/validation/... passes with unchanged expected validation target shapes in test assertions",
+        "No changes to production validation logic, handlers, or OpenAPI schemas",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass (full scoped suite above)"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-006",
-      "title": "Inline JSON positional",
-      "description": "As a script author, I want to pass a small batch document as one positional argument.",
-      "acceptanceCriteria": [
-        "Positional whose first non-whitespace byte is `{` is parsed as inline JSON, not as a filesystem path.",
-        "A non-existent path that does not look like JSON errors as missing file/JSON, not as JSON parse of the path string.",
-        "Inline JSON uses the same canonical validation as file and stdin input.",
-        "Help notes shell length limits; large batches should use file or pipe.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-007",
-      "title": "Optional `--file` flag",
-      "description": "As a script author, I want an explicit file flag when positional arguments are awkward.",
-      "acceptanceCriteria": [
-        "`--file <path>` reads batch JSON; `--file -` reads stdin.",
-        "When both --file and a positional path are set, --file wins (documented in help).",
-        "Positional path remains the primary documented form.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-008",
-      "title": "Human success output",
-      "description": "As an operator, I want confirmation that lists what was submitted and what to run next.",
-      "acceptanceCriteria": [
-        "On 201, stdout includes requestId, traceId, work count, and each accepted work's name and workTypeName.",
-        "When the API returns workId, each work line includes it and a hint `you work show <work-id>`; otherwise hints use `you work list --name <name>`.",
-        "Long name lists truncate (at most ten lines); relationCount shown when relations are non-empty.",
-        "Full batch JSON and per-work payloads are not printed on stdout.",
-        "--verbose logs endpoint, batchSource (file, stdin, inline), byte size, requestId, and work count on stderr—never payload content.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-009",
-      "title": "JSON success output",
-      "description": "As a script, I want machine-readable batch submit confirmation.",
-      "acceptanceCriteria": [
-        "Global --json emits one object with at minimum: requestId, traceId, workCount, relationCount, sessionId, endpointPath, batchSource, and works (each with name, workTypeName, workId when returned).",
-        "--json with --dry-run emits dryRun: true and summary fields without traceId unless present in input.",
-        "Exit code 0 on success; non-zero on validation or HTTP errors.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-010",
-      "title": "Error surfaces",
-      "description": "As an agent, I want validation failures before HTTP and API failures after HTTP to be distinguishable.",
-      "acceptanceCriteria": [
-        "Canonical validation errors include retired-field guidance where applicable.",
-        "Missing or empty requestId, empty works, and invalid JSON fail locally.",
-        "HTTP 400/404 (and 409 if applicable) print status and bounded API message; no success JSON on failure.",
-        "Tests cover invalid JSON, empty works, mocked 400, and mocked 404.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-011",
-      "title": "Reference and packaged documentation",
-      "description": "As a new contributor, I want docs to show CLI batch submit alongside curl and watched-folder ingress.",
-      "acceptanceCriteria": [
-        "docs/reference/batch-inputs.md adds a CLI subsection with examples for file, --file, pipe, inline JSON, and --dry-run; keeps existing curl example.",
-        "Ingress comparison covers: you submit (single), you submit batch (running factory), you run --work (startup), watched factory/inputs/BATCH/.",
-        "Packaged `you docs batch-inputs` content matches reference updates.",
-        "Doc tests guard you submit batch and FACTORY_REQUEST_BATCH markers where other CLI examples are guarded.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-012",
-      "title": "End-to-end smoke (optional)",
-      "description": "As a maintainer, I want one functional smoke proving batch CLI reaches a running factory when the harness supports it.",
-      "acceptanceCriteria": [
-        "If the existing smoke harness can start a factory and accept work-request upserts, one smoke runs `you submit batch` with a minimal checked-in batch file and asserts success markers in output.",
-        "If harness cost is prohibitive, implementation notes document deferral and httptest coverage from earlier stories is cited as the verification substitute.",
-        "Typecheck passes",
-        "Tests pass (or smoke story cancelled with documented justification)"
-      ],
-      "priority": 12,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]
