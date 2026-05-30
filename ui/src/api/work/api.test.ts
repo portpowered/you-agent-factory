@@ -8,6 +8,43 @@ describe("submitWork", () => {
     vi.unstubAllGlobals();
   });
 
+  it("returns extended submit work identifiers from a 201 response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          accepted: true,
+          name: "Driver review",
+          requestId: "request-1",
+          traceId: "trace-story",
+          workId: "work-driver-review",
+          workTypeName: "story",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 201,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      submitWork({
+        name: "Driver review",
+        payload: "Review the runtime failure.",
+        workTypeName: "story",
+      }),
+    ).resolves.toEqual({
+      accepted: true,
+      name: "Driver review",
+      requestId: "request-1",
+      traceId: "trace-story",
+      workId: "work-driver-review",
+      workTypeName: "story",
+    });
+  });
+
   it("posts to the explicit default-session work route and returns the accepted trace id", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ traceId: "trace-story" }), {
