@@ -65,6 +65,93 @@ func TestList_SendsStateFilters(t *testing.T) {
 	}
 }
 
+func TestList_SendsNameAndWorkTypeNameFilters(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		if r.URL.Query().Get("name") != "prd" {
+			t.Fatalf("name query = %q, want prd", r.URL.Query().Get("name"))
+		}
+		if r.URL.Query().Get("workTypeName") != "story" {
+			t.Fatalf("workTypeName query = %q, want story", r.URL.Query().Get("workTypeName"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Server:       serverBase(t, srv),
+		Name:         "prd",
+		WorkTypeName: "story",
+		Output:       &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if gotQuery == "" {
+		t.Fatal("expected request query")
+	}
+	if got := out.String(); got != "No work found.\n" {
+		t.Fatalf("output = %q, want empty-state output", got)
+	}
+}
+
+func TestList_SendsTraceIdFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("traceId") != "trace-submit-1" {
+			t.Fatalf("traceId query = %q, want trace-submit-1", r.URL.Query().Get("traceId"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Server:  serverBase(t, srv),
+		TraceID: "trace-submit-1",
+		Output:  &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+}
+
+func TestList_VerboseDiagnosticsIncludeActiveFilterKeys(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	var diagnostics bytes.Buffer
+	err := List(ListConfig{
+		Server:       serverBase(t, srv),
+		Name:         "alpha",
+		WorkTypeName: "story",
+		TraceID:      "trace-1",
+		Verbose:      true,
+		Output:       &out,
+		Diagnostics:  &diagnostics,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	diag := diagnostics.String()
+	if !strings.Contains(diag, "filters=name,workTypeName,traceId") {
+		t.Fatalf("diagnostics missing active filter keys:\n%s", diag)
+	}
+}
+
 func TestList_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

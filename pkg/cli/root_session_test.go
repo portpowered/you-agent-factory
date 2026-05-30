@@ -85,6 +85,10 @@ func TestWorkListCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
 	for _, want := range []string{
 		"you session list",
 		"discover live session ids",
+		"--name",
+		"--work-type-name",
+		"--trace-id",
+		"before pagination",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("work list help missing %q:\n%s", want, help)
