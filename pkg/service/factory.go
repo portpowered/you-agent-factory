@@ -9,12 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
@@ -25,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -144,6 +143,7 @@ type FactoryService struct {
 	runState      *serviceRunState
 	apiServerExit <-chan error
 	sessions      *factorysessions.Registry
+	runtimeBuild  *runtimebuild.Service
 	hostedWorkers hostedworkers.Config
 	factoryRootDir string
 	// startupBundle holds the built default runtime before Run registers ~default.
@@ -365,35 +365,14 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	factoryDir string,
 	sessionID string,
 ) (*factoryRuntimeBundle, error) {
-	baseLogger := fs.baseLogger
-	if baseLogger == nil {
-		baseLogger = zap.NewNop()
+	if fs == nil || fs.runtimeBuild == nil {
+		return nil, fmt.Errorf("factory service is required")
 	}
-
-	loadedFactoryCfg, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
+	bundle, err := fs.runtimeBuild.BuildReplacement(ctx, folderPath, factoryDir, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("load factory config: %w", err)
+		return nil, err
 	}
-	logger := newSessionLogger(baseLogger, sessionID, folderPath, loadedFactoryCfg.FactoryDir())
-	warnPortableBundledReplacementReport(logger, "named factory activation replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
-	loadedFactoryCfg.SetRuntimeBaseDir(fs.cfg.ExecutionBaseDir)
-	clock := factory.EnsureClock(fs.clock)
-	recordPath := sessionScopedRecordPath(fs.cfg.RecordPath, sessionID)
-	return buildRuntimeBundle(ctx, runtimeBundleBuildInput{
-		dir:                   factoryDir,
-		folderPath:            folderPath,
-		sessionID:             sessionID,
-		cfg:                   fs.cfg,
-		loadedFactoryCfg:      loadedFactoryCfg,
-		baseLogger:            baseLogger,
-		runtimeInstanceID:     uuid.NewString(),
-		clock:                 clock,
-		recordPath:            recordPath,
-		workflowID:            fs.cfg.WorkflowID,
-		providerOverride:      providerOverrideForMode(fs.cfg, nil),
-		providerCommandRunner: providerCommandRunnerForMode(fs.cfg, loadedFactoryCfg),
-		commandRunnerOverride: commandRunnerOverrideForMode(fs.cfg, loadedFactoryCfg, nil),
-	})
+	return asRuntimeBundle(bundle), nil
 }
 
 // Run starts the file watcher, dashboard, API server, and factory engine.

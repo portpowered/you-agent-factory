@@ -744,6 +744,9 @@ func TestBuildFactoryService_PreservesSessionsRegistryAcrossRuntimeReplacement(t
 	if svc.sessions == nil {
 		t.Fatal("expected factorysessions.Registry on FactoryService")
 	}
+	if svc.runtimeBuild == nil {
+		t.Fatal("expected runtimebuild.Service on FactoryService")
+	}
 	registryBefore := svc.sessions
 
 	if _, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID); err != nil {
