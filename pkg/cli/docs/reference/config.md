@@ -490,6 +490,7 @@ end-to-end authoring walkthrough and reusable files under `docs/examples/`, use
 
 ## Related
 
+- `you docs agents`
 - `you docs work`
 - `you docs mock-workers`
 - `you docs record-replay`

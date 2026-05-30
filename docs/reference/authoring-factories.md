@@ -672,6 +672,7 @@ review-loop workflow.
 
 ## Related
 
+- `you docs agents`
 - [Mock workers](mock-workers.md)
 - [Record and replay](record-replay.md)
 - `you docs config`

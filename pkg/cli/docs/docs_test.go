@@ -254,6 +254,34 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_AgentsTopicRouterListsAllSupportedTopics(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("agents")
+	if err != nil {
+		t.Fatalf("Markdown(agents) error = %v", err)
+	}
+
+	routerStart := strings.Index(got, "## Topic Router")
+	if routerStart < 0 {
+		t.Fatal("Markdown(agents) missing ## Topic Router section")
+	}
+	routerEnd := strings.Index(got[routerStart:], "## Related")
+	if routerEnd < 0 {
+		t.Fatal("Markdown(agents) missing ## Related after Topic Router")
+	}
+	router := got[routerStart : routerStart+routerEnd]
+
+	for _, topic := range SupportedTopics() {
+		if !strings.Contains(router, "| "+topic+" |") {
+			t.Fatalf("Topic Router missing row for %q:\n%s", topic, router)
+		}
+		if !strings.Contains(router, "`you docs "+topic+"`") {
+			t.Fatalf("Topic Router missing `you docs %s` command for %q:\n%s", topic, topic, router)
+		}
+	}
+}
+
 func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -267,6 +295,7 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you run --factory ./factory.json \"Fix the lint issues\"",
 		"handlingBehavior: [\"DEFAULT\"]",
 		"you run --dir ./factory --with-mock-workers",
+		"you docs agents",
 		"you docs mock-workers",
 		"you docs record-replay",
 		"docs/examples/mock-workers.json",
@@ -313,6 +342,7 @@ func TestMarkdown_ConfigReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you run --factory",
 		"## Resources",
 		"Petri-net execution graph",
+		"you docs agents",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(config) missing %q:\n%s", want, got)
@@ -399,6 +429,7 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 		"sourceWorkName",
 		"targetWorkName",
 		"requiredState",
+		"you docs agents",
 	} {
 		if !strings.Contains(canonical, want) {
 			t.Fatalf("Markdown(batch-inputs) missing %q:\n%s", want, canonical)
