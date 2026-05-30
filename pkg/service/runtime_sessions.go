@@ -512,6 +512,16 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 	return nil
 }
 
+func (fs *FactoryService) runSessionID() string {
+	if fs == nil {
+		return defaultFactorySessionID
+	}
+	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
+		return runState.sessionID
+	}
+	return defaultFactorySessionID
+}
+
 func (fs *FactoryService) requireIdleRuntimeForSession(
 	ctx context.Context,
 	sessionID string,

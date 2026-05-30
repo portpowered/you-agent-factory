@@ -684,6 +684,11 @@ func (fs *FactoryService) persistReplacementRuntime(
 }
 
 func (fs *FactoryService) requireIdleRuntime(ctx context.Context) error {
+	sessionID := fs.runSessionID()
+	if session := fs.sessionByID(sessionID); session != nil && liveSessionHandle(session) != nil {
+		return fs.requireIdleRuntimeForSession(ctx, sessionID)
+	}
+
 	snapshot, err := fs.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return fmt.Errorf("read current runtime status: %w", err)
@@ -723,10 +728,20 @@ func (fs *FactoryService) currentRuntimeBundle() *factoryRuntimeBundle {
 	if fs == nil {
 		return nil
 	}
-	if currentSession := fs.currentSession(); currentSession != nil {
-		if handle := liveSessionHandle(currentSession); handle != nil {
+	if runState := fs.currentRunState(); runState != nil && runState.runtime != nil {
+		return runState.runtime.runtime
+	}
+	if session := fs.defaultSession(); session != nil {
+		if handle := liveSessionHandle(session); handle != nil {
 			return handle.runtime
 		}
+	}
+	return fs.shadowRuntimeBundle()
+}
+
+func (fs *FactoryService) shadowRuntimeBundle() *factoryRuntimeBundle {
+	if fs == nil {
+		return nil
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
