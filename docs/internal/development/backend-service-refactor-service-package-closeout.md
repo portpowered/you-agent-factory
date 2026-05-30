@@ -49,9 +49,9 @@ workers out of `pkg/service`.
 
 - Preserved behavior:
   session-scoped factory save by mode (`REPLACE_CURRENT`,
-  `UPSERT_NAMED_AND_ACTIVATE`), stale-version and not-idle error families,
-  structured validation targets, and post-save activation scoped to the
-  targeted session root.
+  `UPSERT_NAMED_AND_ACTIVATE`), `STALE_FACTORY_VERSION` and `FACTORY_NOT_IDLE`
+  error families, structured validation targets, and post-save activation scoped
+  to the targeted session root via `SessionFactoryPersistRoot`.
 - Dependency direction:
   `pkg/service` composes `factorysave.Service` through `wireFactorySaveCollaborator`
   and implements `factorysave.Host` for registry, idle checks, activation, and
@@ -61,8 +61,8 @@ workers out of `pkg/service`.
 
 - Preserved behavior:
   one runtime bundle build path for default startup, session open, and
-  post-save replacement so work submission and model catalog reads behave the
-  same regardless of which flow activated the runtime.
+  post-save replacement so work submission, event subscription, and model
+  catalog reads behave the same regardless of which flow activated the runtime.
 - Dependency direction:
   `pkg/service` injects `buildRuntimeBundle` as the `BundleBuilder` from
   `newRuntimeBuildService`; `runtimebuild` does not import `pkg/api` or
@@ -73,10 +73,14 @@ workers out of `pkg/service`.
 - Preserved behavior:
   factory build/run, runtime replacement, named-factory and editable-definition
   flows, dashboard render seams, and script/cron poller regressions unchanged
-  aside from import-path moves.
+  aside from import-path moves. `BuildFactoryService` constructs sessions,
+  factory save, local models, hosted workers, and runtime build through
+  `newFactoryServiceCollaborators` with explicit constructor arguments (no new
+  global singletons for those concerns).
 - Package-size outcome:
   root `pkg/service` remains within the 15-file `pkg-file-count` cap without
-  new broad waivers for extracted concerns.
+  new broad waivers for re-inlined extracted logic; `make pkg-maint` and
+  `make backend-size` pass on the composition branch.
 
 ## Canonical Regression Bundle
 
@@ -102,8 +106,9 @@ Validated on `ralph/backend-service-refactor` after extractions 001–004 (2026-
 - `go test ./pkg/factorysessions/... ./pkg/localmodels/... ./pkg/hostedworkers/...` — passed
 - `go test ./pkg/service/... ./pkg/api/...` — passed
 
-Validated on `ralph/service-composition-seams-recovery` after composition seams 001–006 (2026-05-31):
+Validated on `ralph/service-composition-seams` after composition seams 001–006 (2026-05-31):
 
-- `make backend-size pkg-maint pkg-file-count` — passed
-- `go test ./pkg/service/runtimebuild/... ./pkg/service/... ./pkg/api/...` — passed
+- `make vet backend-size pkg-maint pkg-file-count deadcode` — passed
+- `go test ./pkg/factorysessions/... ./pkg/localmodels/... ./pkg/hostedworkers/... ./pkg/service/... ./pkg/api/...` — passed
+- `pkg/apisurface` composes `ModelAPI`, `SessionAPI`, `FactorySaveAPI`, and `WorkAPI`; `FactoryService` satisfies `SessionAPISurface`
 - No new `pkg/service` waivers for logic re-inlined after `factorysave` / `runtimebuild` extraction
