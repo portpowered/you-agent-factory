@@ -2,14 +2,12 @@
 package initcmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -124,94 +122,17 @@ func Init(cfg InitConfig) error {
 		return err
 	}
 	dirAlreadyExisted := pathExists(cfg.Dir)
-	clidiag.Printf(
-		cfg.Diagnostics,
-		cfg.Verbose,
-		"init request targetDir=%s scaffoldType=%s executor=%s directoryExisted=%t",
-		cfg.Dir,
-		scaffoldType,
-		effectiveExecutorLabel(cfg.Executor, scaffoldType),
-		dirAlreadyExisted,
-	)
+	logInitRequest(cfg, scaffoldType, dirAlreadyExisted)
 
-	if strings.TrimSpace(cfg.Executor) != "" || scaffoldType == DefaultScaffoldType {
-		executor, err := parseStarterExecutor(cfg.Executor)
-		if err != nil {
-			clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "init failed targetDir=%s phase=validation", cfg.Dir)
-			return err
-		}
-		if scaffoldType == DefaultScaffoldType {
-			scaffold.files[factoryWorkersDirName+"/processor/"+factoryAgentsFileName] = defaultModelWorkerAgentsMD(executor)
-		}
-	}
-
-	for _, d := range initDirs {
-		path := filepath.Join(cfg.Dir, d)
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "init failed targetDir=%s phase=create-directories", cfg.Dir)
-			return fmt.Errorf("create %s: %w", path, err)
-		}
-	}
-
-	writtenByCategory := map[string]int{}
-	for relativePath, contents := range scaffold.files {
-		written, err := writeFileIfAbsent(filepath.Join(cfg.Dir, relativePath), contents)
-		if err != nil {
-			clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "init failed targetDir=%s phase=write-files", cfg.Dir)
-			return err
-		}
-		if written {
-			writtenByCategory[initPathCategory(relativePath)]++
-		}
-		if !cfg.JSON && relativePath == interfaces.FactoryConfigFile && written {
-			_, err := fmt.Fprintf(cfg.Output, "Created %s\n", filepath.Join(cfg.Dir, relativePath))
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	factoryConfigPath := filepath.Join(cfg.Dir, interfaces.FactoryConfigFile)
-	if _, err := os.Stat(factoryConfigPath); err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "init failed targetDir=%s phase=verify-factory-config", cfg.Dir)
-		return fmt.Errorf("stat %s: %w", factoryConfigPath, err)
-	}
-
-	defaultInputDir := filepath.Join(cfg.Dir, interfaces.InputsDir, scaffold.inputWorkType, interfaces.DefaultChannelName)
-	if err := os.MkdirAll(defaultInputDir, 0o755); err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "init failed targetDir=%s phase=create-inputs", cfg.Dir)
-		return fmt.Errorf("create inputs/%s/default: %w", scaffold.inputWorkType, err)
-	}
-
-	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(InitResult{
-			ScaffoldType: string(scaffoldType),
-			TargetDir:    cfg.Dir,
-		})
-	}
-
-	if _, err := fmt.Fprintf(cfg.Output, "Initialized %s factory directory structure at %s/\n", scaffoldType, cfg.Dir); err != nil {
+	if err := applyStarterExecutor(cfg, scaffoldType, &scaffold); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(cfg.Output, "  → Drop work files into %s/ to preseed on startup\n", defaultInputDir); err != nil {
+
+	writtenByCategory, defaultInputDir, err := materializeScaffold(cfg, scaffold)
+	if err != nil {
 		return err
 	}
-	clidiag.Printf(
-		cfg.Diagnostics,
-		cfg.Verbose,
-		"init complete targetDir=%s scaffoldType=%s executor=%s directoryExisted=%t generatedFactoryConfigs=%d generatedWorkerFiles=%d generatedWorkstationFiles=%d generatedInputFiles=%d generatedDocs=%d inputDir=%s",
-		cfg.Dir,
-		scaffoldType,
-		effectiveExecutorLabel(cfg.Executor, scaffoldType),
-		dirAlreadyExisted,
-		writtenByCategory["factory-config"],
-		writtenByCategory["worker"],
-		writtenByCategory["workstation"],
-		writtenByCategory["input"],
-		writtenByCategory["docs"],
-		defaultInputDir,
-	)
-	return nil
+	return emitInitResult(cfg, scaffoldType, scaffold, writtenByCategory, dirAlreadyExisted, defaultInputDir)
 }
 
 func writeFileIfAbsent(path, contents string) (bool, error) {
