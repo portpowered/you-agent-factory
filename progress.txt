@@ -42,6 +42,7 @@
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
 - When trimming `authoring-factories` after new topics land, point readers at `you docs mock-workers` and `you docs record-replay` and update `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` markers away from removed deep-dive strings.
 - U8 dashboard stream/timeline split hooks (`useFactoryEventStream`, `useDashboardSessionLifecycle`, `useDashboardWorldView`, thin `useDashboardSnapshot`) largely landed on `main` from `ralph/ui-dashboard-stream-timeline-split`—recovery v2 is verify targeted hook tests (`useFactoryEventStream.test.tsx`, etc.) and flip PRD unless regression found.
+- `deriveDashboardWorldViewShellState` in `ui/src/features/dashboard/lib/dashboard-world-view.ts` owns shell `isInitialLoading` (session set, tick 0, zero events, stream not `offline`) and `error` (offline-before-first-event only); `useDashboardWorldView` exposes `worldViewCache[selectedTick]` as `snapshot` plus `selectedTick`, `hasEvents`, and `streamState`.
 - Register `relationships` at `displayOrder` 28 immediately after `guards` (27); relationships content adapts `batch-inputs.md` relation sections and `parent-aware-fan-in.md` with `SPAWNED_BY` called out as runtime/template-only, not batch-authored.
 - Story 003 index assertions belong in `root_docs_test.go` and `cli_docs_smoke_test.go` immediately after `record-replay` lines; smoke topic tests can use `absent` for `../internal/development/...` paths when replacing packaged cross-links.
 - Do not `cp` `pkg/cli/docs/reference/config.md` or `templates.md` onto `docs/reference/` — the layout-tree guides diverge from embedded packaged topics; apply cross-link edits to both trees separately.
@@ -710,4 +711,13 @@
   - Patterns discovered: `shouldResetDashboardSessionScopedState` gates the hook effect—first mount with `previousSessionKey === null` and `refreshToken === 0` skips reset; spy `queryClient.removeQueries` after `mockClear()` post-mount to prove duplicate-free invalidation.
   - Gotchas encountered: Biome `noExcessiveLinesPerFunction` caps `describe` at 100 lines—split hook tests into nested describes and shared `seedTimelineAtTick` / `renderLifecycleFromSessionStore` helpers.
   - Useful context: Story 003 next (`useDashboardWorldView` / `deriveDashboardWorldViewShellState`).
+---
+
+## 2026-05-30T20:49:11Z - ui-dashboard-stream-timeline-split-recovery-v2-003
+- What was implemented: Verified `useDashboardWorldView` and `deriveDashboardWorldViewShellState` on branch head: `worldViewCache[selectedTick]` snapshot projection, shell flags from stream status + tick 0 + `eventCount` (not snapshot truthiness), and unit/hook tests for connecting, offline-before-first-event, and post-first-event paths; `bun run tsc` and 6 targeted vitest cases pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: Pure shell derivation stays in `dashboard-world-view.ts`; hook only wires timeline/stream/session stores—prove transitions in `deriveDashboardWorldViewShellState` tests, integration smoke in `useDashboardWorldView.test.tsx`.
+  - Gotchas encountered: Default stream store starts `connecting`, so hook tests with a selected session see `isInitialLoading: true` before any EventSource opens.
+  - Useful context: Story 004 next (thin `useDashboardSnapshot` composer ≤80 LOC and `useDashboardSnapshot.test.tsx`).
 ---
