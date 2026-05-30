@@ -15,7 +15,15 @@ import (
 
 // BuildFactoryService is the Wire injector for the factory CLI composition root.
 func BuildFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig) (*service.FactoryService, error) {
-	factoryService, err := service.BuildFactoryService(ctx, cfg)
+	factoryServiceBuildContext, err := service.ProvideFactoryServiceBuildContext(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	registry := service.ProvideFactorySessionsRegistry()
+	localModelDomain := service.ProvideStartupLocalModelDomainPtr(cfg)
+	runtimebuildService := service.ProvideRuntimeBuildService(cfg, factoryServiceBuildContext, localModelDomain)
+	factoryServiceCollaborators := service.ProvideFactoryServiceCollaborators(registry, localModelDomain, runtimebuildService)
+	factoryService, err := service.BuildFactoryServiceFromCollaborators(ctx, cfg, factoryServiceBuildContext, factoryServiceCollaborators)
 	if err != nil {
 		return nil, err
 	}

@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file owner=cmd-wire-composition reason=S6 wire composition providers share factory_build assembly seam review=2026-08-01 removal=split-wire-providers-when-build-helpers-move-out
+// pkgmaintcheck:ignore-file-lines owner=cmd-wire-composition reason=S6 wire composition providers share factory_build assembly seam review=2026-08-01 removal=split-wire-providers-when-build-helpers-move-out
 package service
 
 import (
@@ -33,84 +35,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// BuildFactoryService loads factory.json from the config directory, constructs
-// the petri net, factory runtime, file watcher, and session metrics.
-// portos:func-length-exception owner=agent-factory reason=legacy-service-wiring review=2026-07-18 removal=split-replay-recording-worker-and-listener-builders-before-next-service-wiring-change
-func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {
-	if err := validateReplayModeConfig(cfg); err != nil {
-		return nil, err
-	}
-	factoryRootDir, baseLogger, err := resolveFactoryServiceRoot(cfg)
-	if err != nil {
-		return nil, err
-	}
-	serviceBuilt := false
-	var runtimeBundle *factoryRuntimeBundle
-	defer func() {
-		if !serviceBuilt && runtimeBundle != nil && runtimeBundle.logSink != nil {
-			_ = runtimeBundle.logSink.Close()
-		}
-	}()
-	if cfg.ReplayPath == "" {
-		resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(cfg.Dir)
-		if err != nil {
-			return nil, fmt.Errorf("resolve factory dir: %w", err)
-		}
-		resolvedDir, err = factorysessions.AbsolutizeFactoryDirectory(resolvedDir)
-		if err != nil {
-			return nil, fmt.Errorf("resolve factory dir: %w", err)
-		}
-		cfg.Dir = resolvedDir
-	}
-
-	logger := runtimebuild.NewSessionLogger(baseLogger, defaultFactorySessionID, factoryRootDir, cfg.Dir)
-	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForService(cfg, logger)
-	if err != nil {
-		return nil, err
-	}
-	clock := serviceClockForMode(cfg.Clock, replayArtifact)
-	replaySideEffects, replayFactoryOpts, err := replayFactoryModeOptions(replayArtifact)
-	if err != nil {
-		return nil, err
-	}
-	collaborators := newFactoryServiceCollaborators(cfg, clock, baseLogger)
-	runtimeBundleAny, err := collaborators.runtimeBuild.BuildFromLoadedConfig(ctx, runtimebuild.BuildInput{
-		Dir:                   cfg.Dir,
-		FolderPath:            factoryRootDir,
-		SessionID:             defaultFactorySessionID,
-		LoadedFactoryCfg:      loadedFactoryCfg,
-		BaseLogger:            baseLogger,
-		RuntimeInstanceID:     cfg.RuntimeInstanceID,
-		Clock:                 clock,
-		RecordPath:            runtimebuild.SessionScopedRecordPath(cfg.RecordPath, defaultFactorySessionID),
-		WorkflowID:            cfg.WorkflowID,
-		ProviderOverride:      providerOverrideForMode(cfg, replaySideEffects),
-		ProviderCommandRunner: providerCommandRunnerForMode(cfg, loadedFactoryCfg),
-		CommandRunnerOverride: commandRunnerOverrideForMode(cfg, loadedFactoryCfg, replaySideEffects),
-		AdditionalFactoryOpts: replayFactoryOpts,
-	})
-	if err != nil {
-		return nil, err
-	}
-	runtimeBundle = asRuntimeBundle(runtimeBundleAny)
-
-	serviceBuilt = true
-	fs := &FactoryService{
-		factoryRootDir: factoryRootDir,
-		sessions:       collaborators.sessions,
-		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, clock),
-		startupBundle:  runtimeBundle,
-		cfg:            cfg,
-		modelAssets:    wireModelAssetPuller(cfg, collaborators.localModels.assets),
-		baseLogger:     baseLogger,
-		logger:         runtimeBundle.logger,
-		clock:          clock,
-		runtimeBuild:   collaborators.runtimeBuild,
-	}
-	fs.factorySave = wireFactorySaveCollaborator(fs, cfg)
-	return fs, nil
-}
-
 type factoryServiceCollaborators struct {
 	sessions     *factorysessions.Registry
 	localModels  localModelDomain
@@ -129,11 +53,12 @@ func newFactoryServiceCollaborators(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 ) factoryServiceCollaborators {
-	startupLocalModels := newRuntimeLocalModelDependencies(cfg)
+	localModels := ProvideStartupLocalModelDomain(cfg)
+	buildCtx := FactoryServiceBuildContext{Clock: clock, BaseLogger: baseLogger}
 	return factoryServiceCollaborators{
-		sessions:     factorysessions.NewRegistry(),
-		localModels:  startupLocalModels,
-		runtimeBuild: newRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels),
+		sessions:     ProvideFactorySessionsRegistry(),
+		localModels:  localModels.toInternal(),
+		runtimeBuild: ProvideRuntimeBuildService(cfg, buildCtx, &localModels),
 	}
 }
 
@@ -917,4 +842,234 @@ func asRuntimeBundle(bundle any) *factoryRuntimeBundle {
 		return nil
 	}
 	return bundle.(*factoryRuntimeBundle)
+}
+
+// LocalModelDomain wires pkg/localmodels runtime dependencies constructed at
+// service build time. It is exported for cmd/factory/composition Wire providers.
+type LocalModelDomain struct {
+	Resources *localModelResourceLimiter
+	Assets    modelAssetPuller
+	Manager   *managedLocalModelManager
+}
+
+func (d LocalModelDomain) toInternal() localModelDomain {
+	return localModelDomain{
+		resources: d.Resources,
+		assets:    d.Assets,
+		manager:   d.Manager,
+	}
+}
+
+func localModelDomainFromInternal(d localModelDomain) LocalModelDomain {
+	return LocalModelDomain{
+		Resources: d.resources,
+		Assets:    d.assets,
+		Manager:   d.manager,
+	}
+}
+
+// FactoryServiceCollaborators groups explicit S6 collaborators composed into
+// FactoryService. Exported for cmd/factory/composition Wire providers.
+type FactoryServiceCollaborators struct {
+	Sessions     *factorysessions.Registry
+	LocalModels  LocalModelDomain
+	RuntimeBuild *runtimebuild.Service
+}
+
+// FactoryServiceBuildContext carries logger/config inputs and loaded factory
+// state produced before runtime bundle construction.
+type FactoryServiceBuildContext struct {
+	FactoryRootDir    string
+	BaseLogger        *zap.Logger
+	LoadedFactoryCfg  *factoryconfig.LoadedFactoryConfig
+	Clock             factory.Clock
+	ReplaySideEffects *replay.SideEffects
+	ReplayFactoryOpts []factory.FactoryOption
+}
+
+// ProvideFactorySessionsRegistry constructs the live factory-session registry.
+func ProvideFactorySessionsRegistry() *factorysessions.Registry {
+	return factorysessions.NewRegistry()
+}
+
+// ProvideStartupLocalModelDomain constructs local-model collaborators for startup.
+func ProvideStartupLocalModelDomain(cfg *FactoryServiceConfig) LocalModelDomain {
+	return localModelDomainFromInternal(newRuntimeLocalModelDependencies(cfg))
+}
+
+// ProvideStartupLocalModelDomainPtr is the Wire-facing pointer provider for
+// startup local-model dependencies that runtime build may consume once.
+func ProvideStartupLocalModelDomainPtr(cfg *FactoryServiceConfig) *LocalModelDomain {
+	domain := ProvideStartupLocalModelDomain(cfg)
+	return &domain
+}
+
+// ProvideFactoryServiceBuildContext resolves the service root, loads factory
+// config, and derives clock and replay wiring inputs.
+func ProvideFactoryServiceBuildContext(
+	ctx context.Context,
+	cfg *FactoryServiceConfig,
+) (FactoryServiceBuildContext, error) {
+	if err := validateReplayModeConfig(cfg); err != nil {
+		return FactoryServiceBuildContext{}, err
+	}
+	factoryRootDir, baseLogger, err := resolveFactoryServiceRoot(cfg)
+	if err != nil {
+		return FactoryServiceBuildContext{}, err
+	}
+	if cfg.ReplayPath == "" {
+		resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(cfg.Dir)
+		if err != nil {
+			return FactoryServiceBuildContext{}, fmt.Errorf("resolve factory dir: %w", err)
+		}
+		resolvedDir, err = factorysessions.AbsolutizeFactoryDirectory(resolvedDir)
+		if err != nil {
+			return FactoryServiceBuildContext{}, fmt.Errorf("resolve factory dir: %w", err)
+		}
+		cfg.Dir = resolvedDir
+	}
+
+	logger := runtimebuild.NewSessionLogger(baseLogger, defaultFactorySessionID, factoryRootDir, cfg.Dir)
+	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForService(cfg, logger)
+	if err != nil {
+		return FactoryServiceBuildContext{}, err
+	}
+	clock := serviceClockForMode(cfg.Clock, replayArtifact)
+	replaySideEffects, replayFactoryOpts, err := replayFactoryModeOptions(replayArtifact)
+	if err != nil {
+		return FactoryServiceBuildContext{}, err
+	}
+	return FactoryServiceBuildContext{
+		FactoryRootDir:    factoryRootDir,
+		BaseLogger:        baseLogger,
+		LoadedFactoryCfg:  loadedFactoryCfg,
+		Clock:             clock,
+		ReplaySideEffects: replaySideEffects,
+		ReplayFactoryOpts: replayFactoryOpts,
+	}, nil
+}
+
+// ProvideRuntimeBuildService constructs the runtime bundle builder using startup
+// local-model dependencies. The domain pointer is cleared after first bundle
+// build, matching BuildFactoryService startup semantics.
+func ProvideRuntimeBuildService(
+	cfg *FactoryServiceConfig,
+	buildCtx FactoryServiceBuildContext,
+	localModels *LocalModelDomain,
+) *runtimebuild.Service {
+	internal := localModels.toInternal()
+	if internal.manager == nil {
+		internal = newRuntimeLocalModelDependencies(cfg)
+	}
+	svc := newRuntimeBuildService(cfg, buildCtx.Clock, buildCtx.BaseLogger, &internal)
+	*localModels = localModelDomainFromInternal(internal)
+	return svc
+}
+
+// ProvideFactoryServiceCollaborators groups explicit S6 collaborators for Wire.
+func ProvideFactoryServiceCollaborators(
+	sessions *factorysessions.Registry,
+	localModels *LocalModelDomain,
+	runtimeBuild *runtimebuild.Service,
+) FactoryServiceCollaborators {
+	models := LocalModelDomain{}
+	if localModels != nil {
+		models = *localModels
+	}
+	return FactoryServiceCollaborators{
+		Sessions:     sessions,
+		LocalModels:  models,
+		RuntimeBuild: runtimeBuild,
+	}
+}
+
+// ProvideHostedWorkersConfig constructs hosted-worker poller configuration.
+func ProvideHostedWorkersConfig(
+	cfg *FactoryServiceConfig,
+	runtimeLogger *zap.Logger,
+	clock factory.Clock,
+) hostedworkers.Config {
+	return buildHostedWorkersConfig(cfg, runtimeLogger, clock)
+}
+
+// BuildFactoryServiceFromCollaborators assembles FactoryService using explicit
+// S6 collaborators and build context. Used by cmd/factory/composition Wire.
+func BuildFactoryServiceFromCollaborators(
+	ctx context.Context,
+	cfg *FactoryServiceConfig,
+	buildCtx FactoryServiceBuildContext,
+	collaborators FactoryServiceCollaborators,
+) (*FactoryService, error) {
+	return assembleFactoryService(ctx, cfg, buildCtx, factoryServiceCollaborators{
+		sessions:     collaborators.Sessions,
+		localModels:  collaborators.LocalModels.toInternal(),
+		runtimeBuild: collaborators.RuntimeBuild,
+	})
+}
+
+// BuildFactoryService loads factory.json from the config directory, constructs
+// the petri net, factory runtime, file watcher, and session metrics.
+func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {
+	buildCtx, err := ProvideFactoryServiceBuildContext(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	localModels := ProvideStartupLocalModelDomain(cfg)
+	collaborators := FactoryServiceCollaborators{
+		Sessions:     ProvideFactorySessionsRegistry(),
+		LocalModels:  localModels,
+		RuntimeBuild: ProvideRuntimeBuildService(cfg, buildCtx, &localModels),
+	}
+	return BuildFactoryServiceFromCollaborators(ctx, cfg, buildCtx, collaborators)
+}
+
+func assembleFactoryService(
+	ctx context.Context,
+	cfg *FactoryServiceConfig,
+	buildCtx FactoryServiceBuildContext,
+	collaborators factoryServiceCollaborators,
+) (*FactoryService, error) {
+	serviceBuilt := false
+	var runtimeBundle *factoryRuntimeBundle
+	defer func() {
+		if !serviceBuilt && runtimeBundle != nil && runtimeBundle.logSink != nil {
+			_ = runtimeBundle.logSink.Close()
+		}
+	}()
+
+	runtimeBundleAny, err := collaborators.runtimeBuild.BuildFromLoadedConfig(ctx, runtimebuild.BuildInput{
+		Dir:                   cfg.Dir,
+		FolderPath:            buildCtx.FactoryRootDir,
+		SessionID:             defaultFactorySessionID,
+		LoadedFactoryCfg:      buildCtx.LoadedFactoryCfg,
+		BaseLogger:            buildCtx.BaseLogger,
+		RuntimeInstanceID:     cfg.RuntimeInstanceID,
+		Clock:                 buildCtx.Clock,
+		RecordPath:            runtimebuild.SessionScopedRecordPath(cfg.RecordPath, defaultFactorySessionID),
+		WorkflowID:            cfg.WorkflowID,
+		ProviderOverride:      providerOverrideForMode(cfg, buildCtx.ReplaySideEffects),
+		ProviderCommandRunner: providerCommandRunnerForMode(cfg, buildCtx.LoadedFactoryCfg),
+		CommandRunnerOverride: commandRunnerOverrideForMode(cfg, buildCtx.LoadedFactoryCfg, buildCtx.ReplaySideEffects),
+		AdditionalFactoryOpts: buildCtx.ReplayFactoryOpts,
+	})
+	if err != nil {
+		return nil, err
+	}
+	runtimeBundle = asRuntimeBundle(runtimeBundleAny)
+
+	serviceBuilt = true
+	fs := &FactoryService{
+		factoryRootDir: buildCtx.FactoryRootDir,
+		sessions:       collaborators.sessions,
+		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, buildCtx.Clock),
+		startupBundle:  runtimeBundle,
+		cfg:            cfg,
+		modelAssets:    wireModelAssetPuller(cfg, collaborators.localModels.assets),
+		baseLogger:     buildCtx.BaseLogger,
+		logger:         runtimeBundle.logger,
+		clock:          buildCtx.Clock,
+		runtimeBuild:   collaborators.runtimeBuild,
+	}
+	fs.factorySave = wireFactorySaveCollaborator(fs, cfg)
+	return fs, nil
 }

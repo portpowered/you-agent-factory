@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
@@ -30,6 +31,42 @@ func TestBuildFactoryService_MatchesServiceBuilder(t *testing.T) {
 			"composition err = %q, service.BuildFactoryService err = %q",
 			err,
 			serviceErr,
+		)
+	}
+}
+
+func TestBuildFactoryService_WirePathConstructsExplicitCollaborators(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	writeMinimalWorkerAgentsMD(t, dir)
+
+	ctx := context.Background()
+	cfg := &service.FactoryServiceConfig{
+		Dir:                                     dir,
+		RuntimeMode:                             interfaces.RuntimeModeService,
+		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
+		Logger:                                  zap.NewNop(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	}
+
+	wireSvc, err := BuildFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("composition.BuildFactoryService: %v", err)
+	}
+	serviceSvc, err := service.BuildFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("service.BuildFactoryService: %v", err)
+	}
+	if wireSvc == nil || serviceSvc == nil {
+		t.Fatal("expected non-nil services from wire and service builders")
+	}
+	if wireSvc.RuntimeLogDiagnostics().RootDir != serviceSvc.RuntimeLogDiagnostics().RootDir {
+		t.Fatalf(
+			"wire root dir = %q, service root dir = %q",
+			wireSvc.RuntimeLogDiagnostics().RootDir,
+			serviceSvc.RuntimeLogDiagnostics().RootDir,
 		)
 	}
 }

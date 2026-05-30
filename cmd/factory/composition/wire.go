@@ -18,7 +18,12 @@ func BuildFactoryService(
 	cfg *service.FactoryServiceConfig,
 ) (*service.FactoryService, error) {
 	wire.Build(
-		service.BuildFactoryService,
+		service.ProvideFactorySessionsRegistry,
+		service.ProvideStartupLocalModelDomainPtr,
+		service.ProvideFactoryServiceBuildContext,
+		service.ProvideRuntimeBuildService,
+		service.ProvideFactoryServiceCollaborators,
+		service.BuildFactoryServiceFromCollaborators,
 	)
 	return nil, nil
 }
