@@ -8,6 +8,7 @@ import {
 } from "../../header/public";
 import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
+import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 
 const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
 
@@ -62,9 +63,11 @@ export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
 
   return (
     <main className={DASHBOARD_SHELL_CLASS}>
-      <DashboardHeader locale={locale} />
-      <DashboardBento locale={locale} />
-      <DashboardExportDialog locale={locale} />
+      <DashboardSessionProvider>
+        <DashboardHeader locale={locale} />
+        <DashboardBento locale={locale} />
+        <DashboardExportDialog locale={locale} />
+      </DashboardSessionProvider>
     </main>
   );
 }
