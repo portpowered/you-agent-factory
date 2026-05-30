@@ -378,26 +378,41 @@ func doModelsPOST(server, path string, payload any, out any, diagnostics request
 	}
 	diagnostics.RequestBytes = len(body)
 	logModelsRequest(diagnostics, endpoint)
+
 	client := &http.Client{Timeout: modelsRequestTimeout}
 	started := time.Now()
-	resp, err := client.Post(endpoint.String(), "application/json", bytes.NewReader(body))
+	resp, err := clihttp.PostJSON(
+		context.Background(),
+		client,
+		endpoint.String(),
+		bytes.NewReader(body),
+		out,
+		clihttp.RequestOptions{
+			Diagnostics:  diagnostics.Output,
+			Verbose:      diagnostics.Enabled,
+			EndpointPath: endpoint.Path,
+			LogLabel:     diagnostics.Command,
+		},
+	)
 	if err != nil {
 		logModelsResponse(diagnostics, endpoint, 0, time.Since(started), "error=unreachable")
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read models response: %w", err)
-	}
+
 	if resp.StatusCode != http.StatusOK {
+		responseBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("read models response: %w", readErr)
+		}
 		logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d", len(responseBody)))
 		return modelsRequestError(resp.StatusCode, responseBody)
 	}
-	if err := json.Unmarshal(responseBody, out); err != nil {
-		return fmt.Errorf("parse models response: %w", err)
+	responseBytes, err := modelsResponseBytes(out)
+	if err != nil {
+		return err
 	}
-	logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d %s", len(responseBody), diagnostics.summary()))
+	logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d %s", responseBytes, diagnostics.summary()))
 	return nil
 }
 
