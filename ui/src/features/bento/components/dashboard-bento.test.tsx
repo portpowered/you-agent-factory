@@ -50,29 +50,40 @@ const SHARED_SELECTED_SESSION: LoadableProviderSessionRef = {
 };
 
 vi.mock("../../current-selection/public", () => ({
-    CurrentSelectionWidget: ({
-      headerAction,
-      onSelectProviderSession,
-    }: {
-      headerAction?: React.ReactNode;
-      onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
-    }) => (
-      <section>
-        {headerAction}
-        <p>Current selection card</p>
-        <button
-          onClick={() => onSelectProviderSession?.(SHARED_SELECTED_SESSION)}
-          type="button"
-        >
-          Select shared provider session
-        </button>
-      </section>
-    ),
-    useCurrentSelection: () => currentSelectionState,
-    useCurrentSelectionDetails: () => ({
-      selectedWorkExecutionDetails: null,
-      selectedWorkRelationshipGraph: { status: "loading" as const },
-    }),
+  CurrentSelectionWidget: ({
+    headerAction,
+    onSelectProviderSession,
+  }: {
+    headerAction?: React.ReactNode;
+    onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
+  }) => (
+    <section>
+      {headerAction}
+      <p>Current selection card</p>
+      <button
+        onClick={() => onSelectProviderSession?.(SHARED_SELECTED_SESSION)}
+        type="button"
+      >
+        Select shared provider session
+      </button>
+    </section>
+  ),
+}));
+
+vi.mock("../../current-selection/hooks/useCurrentSelection", () => ({
+  useCurrentSelection: () => currentSelectionState,
+}));
+
+vi.mock("../../current-selection/hooks/useCurrentSelectionDetails", () => ({
+  useCurrentSelectionDetails: () => ({
+    selectedWorkExecutionDetails: null,
+    selectedWorkRelationshipGraph: { status: "loading" as const },
+  }),
+}));
+
+vi.mock(
+  "../../current-selection/work-selection/hooks/useSelectedProviderSessionState",
+  () => ({
     useSelectedProviderSessionState: () => {
       const [selectedProviderSession, setSelectedProviderSession] =
         React.useState<LoadableProviderSessionRef | null>(null);
@@ -83,7 +94,8 @@ vi.mock("../../current-selection/public", () => ({
         setSelectedProviderSession,
       };
     },
-}));
+  }),
+);
 
 vi.mock("../../provider-session-detail/public", () => ({
   ProviderSessionWidget: ({
