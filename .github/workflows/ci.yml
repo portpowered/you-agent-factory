@@ -333,6 +333,125 @@ jobs:
         if: always() && needs.classify-pr-impact.outputs.run_ui_coverage == 'true' && steps.run_ui_coverage.outcome == 'failure'
         run: exit 1
 
+  ui-coverage-shard:
+    name: UI Coverage Shard (${{ matrix.shard }}/${{ matrix.shard-total }})
+    runs-on: ubuntu-latest
+    needs:
+      - classify-pr-impact
+      - verify-build-contracts
+    if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard-total: [10]
+    steps:
+      - name: Report shard routing
+        run: |
+          {
+            echo "## UI Coverage Shard (${{ matrix.shard }}/${{ matrix.shard-total }})"
+            echo
+            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
+            echo "- Decision: \`run\`"
+            echo "- Shard: \`${{ matrix.shard }}/${{ matrix.shard-total }}\`"
+            echo "- Local shard rerun: \`UI_COVERAGE_SHARD=${{ matrix.shard }}/${{ matrix.shard-total }} make ui-test-coverage\`"
+            echo "- Full local lane: \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`"
+            echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_coverage_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Set up Node for dashboard runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
+
+      - name: Install dashboard dependencies
+        timeout-minutes: 10
+        run: make ui-deps
+
+      - name: Run dashboard coverage shard
+        id: run_ui_coverage_shard
+        continue-on-error: true
+        shell: bash
+        timeout-minutes: 15
+        env:
+          UI_COVERAGE_SHARD: ${{ matrix.shard }}/${{ matrix.shard-total }}
+        run: |
+          set -o pipefail
+          artifact_root=".artifacts/ui-coverage-shard-${{ matrix.shard }}"
+          mkdir -p "$artifact_root"
+          make ui-test-coverage 2>&1 | tee "$artifact_root/command.log"
+
+      - name: Report shard execution
+        if: always()
+        shell: bash
+        run: |
+          artifact_root=".artifacts/ui-coverage-shard-${{ matrix.shard }}"
+          if [[ "${{ steps.run_ui_coverage_shard.outcome }}" == "success" ]]; then
+            {
+              echo "### Execution result"
+              echo
+              echo "- Verified: main covered Vitest shard \`${{ matrix.shard }}/${{ matrix.shard-total }}\` through \`UI_COVERAGE_SHARD=${{ matrix.shard }}/${{ matrix.shard-total }} make ui-test-coverage\`."
+              echo "- Result: \`passed\`"
+              echo "- Blob: \`ui/.vitest-reports/main-shard-${{ matrix.shard }}.json\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "### Execution result"
+            echo
+            echo "- Verified: main covered Vitest shard \`${{ matrix.shard }}/${{ matrix.shard-total }}\` through \`UI_COVERAGE_SHARD=${{ matrix.shard }}/${{ matrix.shard-total }} make ui-test-coverage\`."
+            echo "- Result: \`failed\`"
+            echo "- Primary log: \`$artifact_root/command.log\`"
+            echo
+            echo "#### Failing log tail"
+            echo
+            echo '```text'
+            tail -n 40 "$artifact_root/command.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload UI coverage shard artifacts
+        if: steps.run_ui_coverage_shard.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage-shard-${{ matrix.shard }}
+          path: |
+            ui/.vitest-reports/
+            .artifacts/ui-coverage-shard-${{ matrix.shard }}/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail for UI coverage shard errors
+        if: steps.run_ui_coverage_shard.outcome == 'failure'
+        run: exit 1
+
   ui-browser-integration:
     name: UI Browser Integration
     runs-on: ubuntu-latest
