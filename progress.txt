@@ -2,6 +2,7 @@
 - UI coverage sharding: set `UI_COVERAGE_SHARD=index/total` (for example `3/10`) so `ui/scripts/ui-coverage-runner.mjs` runs only the main covered Vitest pass with `--shard=index/total`, writes `.vitest-reports/main-shard-<index>.json`, and skips merge, isolated React Flow, standalone script, and replay; unset `UI_COVERAGE_SHARD` keeps full `make test-ui-coverage` (Makefile skips `ui-replay-coverage-check` while the env var is set).
 - CI `ui-coverage-shard` matrix: `strategy.matrix.shard` 1–10 with `shard-total: 10`, job-level `if: run_ui_coverage`, `fail-fast: false`, each cell runs `UI_COVERAGE_SHARD=<index>/10 make ui-test-coverage` with logs at `.artifacts/ui-coverage-shard-<index>/command.log`, and on success uploads `ui/.vitest-reports/` plus the command log as artifact `ui-coverage-shard-<index>`; `ui-coverage-merge` (job name `UI Coverage` when the lane runs) downloads shard artifacts, fails with missing shard indices when blobs are absent, and runs `make test-ui-coverage-merge` (`UI_COVERAGE_MERGE=1` merge phases plus `ui-replay-coverage-check`); lightweight `ui-coverage` job (same display name) publishes skip routing only when classification skips coverage—local reruns stay on unsharded `make test-ui-coverage`.
 - Canonical validation-target test assertions for API-shaped targets live in `pkg/testutil/validationassert` (`HasTarget`, `HasTargetCode` on `[]factoryapi.FactoryValidationTarget`); `HasTargetCode` accepts an optional topology failure label to preserve service-test diagnostics—import only from `_test.go` files. API tests in `pkg/api/server_factory_test.go` and `pkg/api/servertests/server_factory_validation_test.go` use `validationassert` directly (no local `assertHasValidationTarget*` in `pkg/api`).
+- After `main` lands `ui/src/testing/session-factory-mocks.ts`, App.import and named-factory tests should route session factory traffic through `isSessionFactoryRequest` plus `mockGetSessionFactory` / `mockPutSessionFactory` instead of ad hoc `jsonResponse` on `/factory-sessions/{id}/factory` paths.
 - Batch upsert success responses expose per-work identifiers via `UpsertWorkRequestResponse.works` (`name`, `workTypeName`, `workId`); build domain metadata with `requests.WorkRequestSubmitResultFromNormalized` in the engine and mock factory (primary-work fields plus `Works` slice), then map through `upsertWorkRequestResponse` in `pkg/api/handlers.go` for default and session-scoped PUT routes.
 - Load filesystem-path `FACTORY_REQUEST_BATCH` JSON for CLI ingress through `pkg/cli/batchload.LoadFromFile`, which wraps `pkg/factory/requests.ParseCanonicalWorkRequestJSON`; keep `run.LoadWorkFile` as a thin delegate for existing callers and future `you submit batch` file modes.
 - Register `you submit batch` under `newSubmitCommand` via `pkg/cli/root_submit_batch.go`; unary flags stay on parent `submit` only; batch help documents ingress modes and `you docs batch-inputs`; wire `RunE` through injectable `submitBatch` → `submitcli.SubmitBatch`. File-path HTTP/dry-run lives in `pkg/cli/submit/batch.go` with `resolveBatchInput` in `batch_input.go` (inject `BatchConfig.Stdin` / `BatchConfig.StdinIsTTY` in tests; piped no-arg stdin and explicit `-` use `batchSource=stdin`; file path ignores stdin); inline JSON positionals use `looksLikeInlineJSON` (first non-whitespace `{`) with `batchSource=inline` and no `os.Stat`; `--file <path>` and `--file -` win over positional paths via `resolveBatchFileFlag`. Human `201` stdout belongs in `printBatchSuccessHuman` (`pkg/cli/submit/batch_output.go`): request/trace/work-count lines, optional `relationCount` from parsed request relations, up to ten per-work lines with `you work show` / `you work list --name` hints, truncation summary for longer lists—never print payloads; `--verbose` logs endpoint, batchSource (file, stdin, inline), byte size, requestId, and work count on stderr—never payload content. Structured `--json` success and dry-run payloads belong in `BatchSubmitJSONResult` via `printBatchSuccessJSON` / `printBatchDryRunJSON` in `batch_output.go`: include `requestId`, `traceId`, `workCount`, `relationCount`, `sessionId`, `endpointPath`, `batchSource`, and per-work `works` on HTTP success; dry-run adds `dryRun: true`, `workNames`, and omits `traceId` unless present in parsed input.
@@ -546,4 +547,58 @@
   - Patterns discovered: Use mutually exclusive `if` on `ui-coverage` (skip routing only) and `ui-coverage-merge` (both named `UI Coverage`) so branch protection keeps one check name; keep `development.md` lane table local rerun column exactly `` `make test-ui-coverage` `` because `TestDevelopmentGuideMatchesObservableCIRoutingContract` asserts it against `cmd/ciclassify` lane plans.
   - Gotchas encountered: Putting CI debug commands in the markdown table's "Local rerun command" column breaks the ciclassify↔guide contract test—document shard/merge debug paths in Owned checks or Why columns instead.
   - Useful context: Story 005 adds richer failed-shard artifact uploads and step summaries; story 006 records timing evidence in `ui-coverage-speed-closeout.md`.
+---
+
+## 2026-05-31T00:08:00Z - mergeability (PR #493)
+- What was implemented: Merged `origin/main` into `ralph/ui-session-factory-client-recovery` to clear `mergeable: CONFLICTING` after dashboard stream/timeline and test-harness merges; resolved `App.import.test.tsx` and `api.test.ts` conflicts; fixed create-new-named App.import test to use session-factory mocks (missing `jsonResponse` / harness alignment).
+- Files changed: merge of main (many files); `ui/src/App.import.test.tsx`, `ui/src/api/named-factory/api.test.ts` (conflict resolution and follow-up fix `a4d13d2a`)
+- **Learnings for future iterations:**
+  - Patterns discovered: `git checkout --ours` for `prd.json` / `progress.txt` during feature-branch merges; drop main's retired `createFactory` tests when resolving `api.test.ts` conflicts.
+  - Gotchas encountered: `App.import.test.tsx` create-new-named test used undefined `jsonResponse` and path-specific mocks—mirror the replace-current test's `isSessionFactoryRequest` + mock helpers after harness merges.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/493 — head `a4d13d2a`; `mergeable: MERGEABLE`; awaiting required CI.
+---
+
+## 2026-05-31T00:55:00Z - mergeability (PR #493 coverage)
+- What was implemented: Fixed CI UI Coverage failure (93.04% vs 93.05% gate) by extending `session-factory/api.test.ts` error-path coverage (invalid version, numeric logical, INVALID_FACTORY_DEFINITION, save transport/targets) and `parseSessionFactoryPutFactory` tests in `session-factory-mocks.test.ts`; restored correct `prd.json` for this branch after accidental cli-submit-batch PRD bleed from main merges.
+- Files changed: `ui/src/api/session-factory/api.test.ts`, `ui/src/testing/session-factory-mocks.test.ts`, `prd.json` (local Ralph metadata only)
+- **Learnings for future iterations:**
+  - Patterns discovered: After main merges into session-factory branches, verify `prd.json` `branchName` matches the feature branch—`git checkout --ours` during conflict resolution can leave the wrong Ralph PRD from a prior merged branch.
+  - Gotchas encountered: Global coverage can miss the 93.05% gate by 0.01% after large main merges; add small session-factory transport or mock-helper tests rather than lowering thresholds.
+  - Useful context: `make test-ui-coverage` is the local proof for the UI Coverage CI job; prior head `a4d13d2a` passed all checks except coverage.
+---
+
+## 2026-05-31T02:07:00Z - mergeability (PR #493 main merge + named-factory tests)
+- What was implemented: Merged `origin/main` API handlers decomposition into `ralph/ui-session-factory-client-recovery`; resolved `server_session_scoping_test.go` delete conflict by keeping `server_factory_sessions_test.go`; fixed `saveFactoryForSessionRequestBody` helper naming and duplicate validation assert in `server_test_helpers_test.go`; updated `named-factory/api.test.ts` to use `activateImportedFactoryAsNewNamedForSession`, API error messages, and suffixed-name allocation without version.
+- Files changed: `pkg/api/*` (main merge), `ui/src/api/named-factory/api.test.ts`, `ui/src/api/named-factory/api.additional.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: After main splits `handlers_decode.go` into `handlers_common.go` + route-family files, drop branch-local `server_session_scoping_test.go` in favor of `server_factory_sessions_test.go`.
+  - Gotchas encountered: `activateImportedFactoryForSession` no longer accepts `choice` — create-path tests must call `activateImportedFactoryAsNewNamedForSession` with `existingNamedFactoryNames`; `resolveImportCreateFactoryName` returns first free suffix, so versioned UPSERT only applies when `replacesExisting` is true (rare with current allocate logic).
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/493 — heads `3059da4f`, `298069ea`; mergeability-only work while all PRD stories already pass.
+---
+
+## 2026-05-31T01:58:00Z - mergeability (PR #493 import tests + lint)
+- What was implemented: Fixed post-main-merge import test drift — restored **Activate factory** button queries (not stale **Confirm import** copy), updated activity-card mocks to expect `FactoryValue` on `activateFactory` override (not `FactoryImportConfirmInput`), aligned description/legend strings, extended `App.import.test.tsx` create-new-named fetch mock with `/factory-sessions` GET+POST for `discoverSessionNamedFactoryNames`; split `getSessionFactory errors` describe in `session-factory/api.test.ts` for Biome line limit.
+- Files changed: `ui/src/App.import.test.tsx`, `ui/src/App.toolbar-locale.test.tsx`, `ui/src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx`, `ui/integration/factory-graph-editor.integration.test.mjs`, `ui/integration/factory-import-second-session.integration.test.mjs`, `ui/src/api/session-factory/api.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: After main merge, import preview copy remains `messages.activateAction` (**Activate factory**); prior mergeability commits that switched tests to **Confirm import** were incorrect.
+  - Gotchas encountered: `activateFactory` test overrides receive `FactoryValue` only — choice/`createFactoryName` flow through real `activateImportedFactoryAsNewNamedForSession`, which needs `/factory-sessions` discovery mocks in App-level tests.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/493 — head `d807e2bd`; maps BLOCKING review item on activity-card vitest failures.
+---
+
+## 2026-05-31T01:10:00Z - mergeability (PR #493 main merge)
+- What was implemented: Merged `origin/main` (dashboard bento snapshot/import hooks, API handler decomposition, UI coverage sharding, validationassert) while keeping `createFactory` removed from `named-factory/api.ts` and aligning import confirm with main's `FactoryImportSaveChoice` flow; typecheck passes after resolving dialog/message and activity-card wiring.
+- Files changed: merge of main (many files); `ui/src/api/named-factory/api.ts` (removed `createFactory`); conflict resolutions across bento, import dialog, current-factory-definition, backend handlers
+- **Learnings for future iterations:**
+  - Patterns discovered: After main lands session-factory-save-modes and dashboard refactors together, prefer main's `use-dashboard-bento-import` / `use-factory-import-activation-target` wiring and only re-apply the `createFactory` removal delta on `named-factory/api.ts`.
+  - Gotchas encountered: Mixed `--ours`/`--theirs` during merge can leave import dialog on main copy with messages from the feature branch—checkout both `dashboard-import-preview-dialog.tsx` and `import-preview-dialog.ts` from the same side.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/493 — push head after merge; UI Coverage may run sharded on CI (`ui-coverage-shard` matrix).
+---
+
+## 2026-05-31T02:15:00Z - mergeability (PR #493 deadcode)
+- What was implemented: Removed unused `ui/src/api/session-factory/index.ts` barrel re-export file that tripped `make ui-deadcode` on head `298069ea` (imports use `./api` directly in tests; no product path imported the barrel).
+- Files changed: `ui/src/api/session-factory/index.ts` (deleted)
+- **Learnings for future iterations:**
+  - Patterns discovered: Session-factory transport tests import from `./api`; add a barrel only when a product module imports `../session-factory` — otherwise deadcode flags the index file immediately.
+  - Gotchas encountered: After main merges, verify committed `prd.json` `branchName` on HEAD — merge conflict resolution can leave the wrong Ralph PRD in the branch tip even when the worktree copy is correct.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/493 — head `23330cdf`; awaiting required CI.
 ---

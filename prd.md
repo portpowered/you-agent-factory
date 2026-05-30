@@ -1,199 +1,317 @@
-# PRD: CI UI Coverage Test Sharding
-
----
-author: factory work item batch-request-141ac04cec0032db974c90c53e2a6998-ci-coverage-test-sharding
-last modified: 2026-05-30
-status: draft
----
-
-## Introduction
-
-Pull-request CI spends roughly **9–10 minutes** on the **UI Coverage** lane because the jsdom coverage suite runs as one long `make test-ui-coverage` invocation (~**8m52s** for the lane command on `ubuntu-latest`, dominated by the main covered Vitest pass at ~**403s**). Backend verification and browser integration already run in parallel sibling jobs, but the coverage lane itself is a single runner executing all covered tests serially (aside from two in-process workers).
-
-The customer asks to **keep UI coverage as its own CI lane**, **shard the covered Vitest corpus across ten parallel runners**, and **merge shard results with Vitest’s blob + `--mergeReports` flow** (the same mechanism `ui/scripts/ui-coverage-runner.mjs` already uses between the main and isolated React Flow passes). The goal is to cut **lane wall-clock time** on the critical path without weakening the merged coverage threshold contract in `ui/vite.config.ts` or the replay metadata check.
-
-`make test-ui-coverage` remains the **local canonical** full lane for contributors; CI adds a shard + merge orchestration layer on top of the existing runner phases.
+# PRD: CLI Batch Work Submission (`you submit batch`)
 
 ## Context
 
-| Item | Detail |
-| --- | --- |
-| **Customer ask** | Separate UI coverage into its own CI steps, run **10 shards** in parallel, merge coverage with Vitest merging. |
-| **Concrete problem** | One `ui-coverage` job runs the entire covered corpus on one machine; PR CI wall time is dominated by frontend coverage even after prior in-job optimizations (worker tuning, App slimming). |
-| **High-level solution** | Replace the monolithic `ui-coverage` job with a **matrix of ten shard jobs** (main covered pass only, using Vitest `--shard=i/10` + blob reporter) and a **merge job** that downloads shard blobs, runs the existing serial follow-on phases (isolated React Flow, standalone script, replay check), and executes `vitest --mergeReports` with the same threshold enforcement as today. |
+### Customer ask
 
-Prior analysis in `docs/internal/development/ui-coverage-speed-closeout.md` (**Optional CI sharding, US-008**) rejected **two–three directory-based shards** because file-count splits were imbalanced and savings were marginal. This initiative **re-opens sharding** with an explicit product decision: **Vitest-native file sharding (`--shard`)**, **ten-way parallelism**, and **runner/CI co-design**—not workflow-only glob splits.
+Implement CLI batch work submission so operators and agents can submit a
+`FACTORY_REQUEST_BATCH` to a **running** factory via file path, stdin, or inline
+JSON—without hand-written `curl` boilerplate.
+
+### Problem
+
+Today, batch ingress to a live factory is only practical through:
+
+- `curl -X PUT …/factory-sessions/{session}/work-requests/{request_id}` with a
+  JSON body, or
+- Dropping files under `factory/inputs/BATCH/` for the watcher.
+
+Unary `you submit` handles one work item. `you run --work` submits a batch only
+at factory startup. There is no first-class CLI that mirrors the documented HTTP
+upsert path for an already-running session.
+
+### Solution
+
+Add `you submit batch` under `you submit`. It reads the same canonical
+`FACTORY_REQUEST_BATCH` JSON as watched inputs and `you run --work`, validates it
+locally, and upserts via `PUT /factory-sessions/{session}/work-requests/{requestId}`.
+Support file path, piped stdin, explicit `-`, optional `--file`, inline JSON, and
+`--dry-run` for validate-only runs. Success output (human and `--json`) aligns
+with the unary submit response contract, including per-work identifiers when the
+API returns them.
 
 ## Goals
 
-- Reduce **UI Coverage job wall time** on `ubuntu-latest` by parallelizing the main covered pass across **10** CI runners.
-- Preserve **merged coverage thresholds** (statements/lines/branches/functions) exactly as enforced today after blob merge.
-- Preserve **lane boundaries**: browser integration stays in `ui-browser-integration`; backend stays in `backend-verification`; integration tests stay excluded from the jsdom coverage corpus.
-- Keep **`make test-ui-coverage`** the documented local rerun for the full lane (unsharded).
-- Surface **actionable CI failure evidence** per shard (logs, blob presence) and on merge (threshold gaps, missing artifacts).
-- Add **direct automated tests** at the runner/script layer for shard argument wiring and merge inputs—no meta-inventory tests.
+- Operators discover batch submit next to unary `you submit`.
+- Scripts and agents submit multi-work batches to a running factory in one command.
+- All ingress modes (file, pipe, inline) produce the same validated HTTP body.
+- Invalid batch JSON fails locally before any network call.
+- `--dry-run` confirms shape and summarizes work without contacting the server.
+- Packaged and reference docs describe CLI batch submit alongside `curl` and
+  watched-folder ingress.
 
 ## Project-level acceptance criteria
 
-- [ ] When classification routes UI coverage to **run**, CI executes **ten parallel shard steps** plus **one merge step** instead of one monolithic `make test-ui-coverage` on a single runner.
-- [ ] Each shard runs only its Vitest-assigned subset of the main covered corpus (same exclusions as today’s main pass) and uploads a distinct blob report artifact.
-- [ ] The merge step produces a **single merged coverage result** that satisfies the existing `ui/vite.config.ts` thresholds and runs the replay coverage check successfully.
-- [ ] A failing shard fails the workflow and names the shard index in the GitHub Actions step summary; a missing shard blob fails merge with a clear error (no silent pass).
-- [ ] `make test-ui-coverage` locally still runs the **full unsharded** lane with stable `[ui-coverage] … elapsed` phase labels.
-- [ ] Documented maintainer rerun commands distinguish **full local lane** vs **CI shard replay** (single shard index).
-- [ ] **Quality gate:** Typecheck, lint, and project tests pass.
+- [ ] `you submit batch` is registered under `you submit` (not a separate top-level verb).
+- [ ] Running `you submit batch` with valid `FACTORY_REQUEST_BATCH` JSON results in
+  HTTP `201` and accepted work on a reachable factory (default session `~default`
+  when `--session` is omitted).
+- [ ] Batch JSON is accepted from: filesystem path (positional or `--file`), piped
+  stdin or positional `-`, and inline `{…}` positional when the argument is JSON.
+- [ ] `--dry-run` validates input, prints a summary, performs no HTTP, and exits `0`
+  on valid input even when the factory is unreachable.
+- [ ] Human stdout and `--json` on success include `requestId`, `traceId`, work
+  count, and per-work `name`, `workTypeName`, and `workId` when the API provides them.
+- [ ] Reference and packaged docs (`you docs batch-inputs`) include CLI examples
+  for file, pipe, inline, and dry-run alongside existing `curl` guidance.
+- [ ] Typecheck, lint, and project tests pass.
 
-## User Stories
+## User stories
 
-### US-001: Shard-aware main covered pass in the UI coverage runner
+### cli-submit-batch-001: Shared canonical batch loader (file path)
 
-**Description:** As a maintainer, I want the UI coverage runner to execute one Vitest shard of the main covered pass so CI can fan out work without duplicating files across shards.
+**Description:** As a maintainer, I want one canonical batch JSON loader used by
+`you run --work` and `you submit batch` so parsing rules never diverge.
 
-**Acceptance Criteria:**
+**Acceptance criteria:**
 
-- [ ] When `UI_COVERAGE_SHARD` is set to `i/n` (e.g. `3/10`), the runner executes **only** the main covered Vitest phase for that shard using Vitest’s `--shard=i/n`, preserving today’s exclusions (`integration/*.integration.test.mjs`, `scripts/dashboard-shell-storybook-responsive.test.mjs`, `react-flow-current-activity-card.test.tsx`) and coverage flags (`--coverage`, thresholds zeroed during shard, `--maxWorkers` default **2** unless overridden).
-- [ ] Each shard writes a **unique** blob file under `.vitest-reports/` (e.g. `main-shard-03-of-10.json`) via `--outputFile.blob=…` and does **not** run isolated React Flow, blob merge, standalone script, or replay phases.
-- [ ] When `UI_COVERAGE_SHARD` is unset, `make test-ui-coverage` behavior is unchanged (full phased lane including merge and replay).
-- [ ] Shard mode prints `[ui-coverage]` timing for the shard main pass only.
-- [ ] Typecheck passes
-- [ ] Tests pass (extend `ui/scripts/ui-coverage-runner.test.mjs` with behavioral assertions on built argv and blob paths)
+- [ ] Reading batch JSON from an existing filesystem path returns a validated
+  `FACTORY_REQUEST_BATCH` work request (same semantics as today’s `you run --work`
+  file load).
+- [ ] Retired field aliases and conflicting trace fields are rejected with the same
+  error guidance as today’s run loader tests.
+- [ ] `you run --work` behavior is unchanged for file-based batches (regression tests pass).
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### US-002: CI shard matrix job for UI coverage
+### cli-submit-batch-002: Upsert API returns per-work identifiers
 
-**Description:** As a contributor waiting on CI, I want the main covered corpus split across ten parallel jobs so wall time drops below the current single-runner baseline.
+**Description:** As an agent, I want the batch upsert response to include work
+identifiers so I can verify submission without listing all work.
 
-**Acceptance Criteria:**
+**Acceptance criteria:**
 
-- [ ] `.github/workflows/ci.yml` defines a `ui-coverage-shard` job with `strategy.matrix.shard: [1,2,3,4,5,6,7,8,9,10]` and `shard-total: 10`, gated by the same `run_ui_coverage` classification output as today’s lane.
-- [ ] Each matrix cell checks out the repo, installs deps (`make ui-deps`), and runs the shard entrypoint with `UI_COVERAGE_SHARD=<index>/10` (or equivalent documented env), teeing logs to `.artifacts/ui-coverage-shard-<index>/command.log`.
-- [ ] Each successful shard uploads an artifact containing its `.vitest-reports/` blob(s) and command log; upload failure fails the shard job.
-- [ ] Shard jobs run **in parallel** with each other (matrix `fail-fast: false` unless product chooses otherwise—document choice in workflow).
-- [ ] Typecheck passes
+- [ ] Successful `PUT /work-requests/{request_id}` (session-scoped variant included)
+  returns `201` with `requestId`, `traceId`, and a `works` array where each item
+  includes `name`, `workTypeName`, and `workId`.
+- [ ] Multi-work batch upsert populates `works` for every accepted item in API tests.
+- [ ] OpenAPI schema and generated types reflect optional `works` on upsert response.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### US-003: CI merge job for shard blobs and serial follow-on phases
+### cli-submit-batch-003: Command discovery and help
 
-**Description:** As a maintainer, I want one merge job to combine shard coverage and run the remaining lane phases so the regression contract stays identical to the pre-shard lane.
+**Description:** As an operator, I want to discover batch submit next to unary
+submit so I know which command to use for multi-work ingress.
 
-**Acceptance Criteria:**
+**Acceptance criteria:**
 
-- [ ] A `ui-coverage-merge` job depends on all ten shard jobs (and `verify-build-contracts` / classification as today), downloads every shard blob into `.vitest-reports/`, and fails fast if any expected shard artifact is missing.
-- [ ] Merge job runs, in order: **isolated React Flow covered pass** (unchanged single-worker semantics), **`vitest --mergeReports .vitest-reports --coverage`** (enforcing `ui/vite.config.ts` thresholds), **standalone script-style test**, **`make ui-replay-coverage-check`** (or equivalent replay step today).
-- [ ] Merge job step summary states merged thresholds result (`passed` / `failed`) and lists missing shards when applicable.
-- [ ] On merge failure, retain `.artifacts/ui-coverage-merge/` logs for 14 days (mirror today’s failure artifact pattern).
-- [ ] Typecheck passes
-- [ ] Tests pass (script-level test or focused workflow fixture that asserts merge invokes the same merge argv the runner uses today)
+- [ ] `you submit batch --help` documents batch input modes (positional path,
+  optional `--file`, `-`/stdin, pipe-with-no-args, inline JSON), `--dry-run`,
+  `--session`, and global `--server` / `--json` / `--verbose`.
+- [ ] Help states the command expects `FACTORY_REQUEST_BATCH` and points to
+  `you docs batch-inputs`.
+- [ ] Help does not advertise unary-only flags (`--name`, `--work-type-name`,
+  `--payload`, `--work-type-id`).
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### US-004: Replace monolithic `ui-coverage` job wiring
+### cli-submit-batch-004: Submit batch to running factory (HTTP + dry-run)
 
-**Description:** As a CI operator, I want the workflow’s public “UI Coverage” lane to mean sharded execution + merge so PR checks reflect the new architecture.
+**Description:** As an operator, I want to upsert a canonical batch to a running
+factory session, or validate locally without sending traffic.
 
-**Acceptance Criteria:**
+**Acceptance criteria:**
 
-- [ ] Remove or disable the old single-job `ui-coverage` path that runs full `make test-ui-coverage` on one runner; required checks route through shard + merge jobs only when coverage runs.
-- [ ] Classification outputs (`ui_coverage_command`, summaries) still tell contributors to run **`make test-ui-coverage`** locally; CI summary links to shard/merge jobs and the canonical local command.
-- [ ] `verify-tests` / `make verify-pr` documentation remains accurate: local verify still uses unsharded `test-ui-coverage`; CI parallelism is an implementation detail called out in dev docs.
-- [ ] Typecheck passes
+- [ ] With valid batch JSON from a file, the CLI issues `PUT` to
+  `/factory-sessions/{session}/work-requests/{requestId}` where `requestId` in
+  the path matches the body; `Content-Type` is `application/json`.
+- [ ] Body `type` must be `FACTORY_REQUEST_BATCH` with at least one `works` entry;
+  violations fail locally with a clear message before HTTP.
+- [ ] HTTP `201` is treated as success; other statuses surface API error message when
+  present; unreachable factory errors match unary submit transport style.
+- [ ] `--session` scopes the request like unary submit.
+- [ ] `--dry-run` parses and validates only, prints summary including `requestId`,
+  work count, work names, `relationCount`, `batchSource`, and
+  `dry-run: no request sent`; performs zero HTTP calls; exits `0` on valid input
+  even when the server is down.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### US-005: Shard failure observability
+### cli-submit-batch-005: Piped stdin and explicit `-`
 
-**Description:** As a contributor debugging a red PR, I want shard failures to identify which slice failed without reading ten full logs blindly.
+**Description:** As an agent, I want to pipe batch JSON so I can submit without a
+temp file.
 
-**Acceptance Criteria:**
+**Acceptance criteria:**
 
-- [ ] Failed shard jobs upload the same artifact bundle as successful shards (logs + partial blobs when present).
-- [ ] Step summary for a failed shard includes shard index `i/10`, exit code, and last ~40 lines of `command.log`.
-- [ ] Merge job summary, when blocked by missing shards, lists which indices were absent.
-- [ ] Typecheck passes
+- [ ] `cat batch.json | you submit batch` submits when stdin is not a TTY.
+- [ ] `you submit batch -` reads batch JSON from stdin.
+- [ ] `you submit batch` with no args and interactive TTY stdin fails immediately
+  with usage guidance (does not hang waiting for input).
+- [ ] Empty piped stdin fails with a clear empty-input error.
+- [ ] When a file path or `--file` is provided, stdin is ignored.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### US-006: Timing evidence and maintainer documentation
+### cli-submit-batch-006: Inline JSON positional
 
-**Description:** As a maintainer, I want recorded before/after CI timings and rerun instructions so we can verify the sharding investment and operate the lane safely.
+**Description:** As a script author, I want to pass a small batch document as one
+positional argument.
 
-**Acceptance Criteria:**
+**Acceptance criteria:**
 
-- [ ] `docs/internal/development/ui-coverage-speed-closeout.md` gains a **CI ten-shard rollout** subsection with: baseline (pre-shard) lane step wall, post-shard critical path (slowest shard + merge job wall), and date/run URL of the first green proof run.
-- [ ] `docs/internal/development/development.md` (or development-guide relevant-files row) documents: `UI_COVERAGE_SHARD`, shard-only vs full `make test-ui-coverage`, and that Vitest `--mergeReports` owns merged thresholds.
-- [ ] Post-shard **UI Coverage lane** job wall (merge job completion) is **≤ 4 minutes** on `ubuntu-latest` for the US-001 CI baseline commit class, or the doc records measured wall with explanation if overhead prevents target (no threshold lowering).
-- [ ] Typecheck passes
+- [ ] Positional whose first non-whitespace byte is `{` is parsed as inline JSON,
+  not as a filesystem path.
+- [ ] A non-existent path that does not look like JSON errors as missing file/JSON,
+  not as JSON parse of the path string.
+- [ ] Inline JSON uses the same canonical validation as file and stdin input.
+- [ ] Help notes shell length limits; large batches should use file or pipe.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-007: Optional `--file` flag
+
+**Description:** As a script author, I want an explicit file flag when positional
+arguments are awkward.
+
+**Acceptance criteria:**
+
+- [ ] `--file <path>` reads batch JSON; `--file -` reads stdin.
+- [ ] When both `--file` and a positional path are set, `--file` wins (documented in help).
+- [ ] Positional path remains the primary documented form.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-008: Human success output
+
+**Description:** As an operator, I want confirmation that lists what was submitted
+and what to run next.
+
+**Acceptance criteria:**
+
+- [ ] On `201`, stdout includes `requestId`, `traceId`, work count, and each accepted
+  work’s `name` and `workTypeName`.
+- [ ] When the API returns `workId`, each work line includes it and a hint
+  `you work show <work-id>`; otherwise hints use `you work list --name <name>`.
+- [ ] Long name lists truncate (at most ten lines); `relationCount` shown when
+  relations are non-empty.
+- [ ] Full batch JSON and per-work payloads are not printed on stdout.
+- [ ] `--verbose` logs endpoint, `batchSource` (`file`, `stdin`, `inline`), byte size,
+  `requestId`, and work count on stderr—never payload content.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-009: JSON success output
+
+**Description:** As a script, I want machine-readable batch submit confirmation.
+
+**Acceptance criteria:**
+
+- [ ] Global `--json` emits one object with at minimum: `requestId`, `traceId`,
+  `workCount`, `relationCount`, `sessionId`, `endpointPath`, `batchSource`, and
+  `works` (each with `name`, `workTypeName`, `workId` when returned).
+- [ ] `--json` with `--dry-run` emits `dryRun: true` and summary fields without
+  `traceId` unless present in input.
+- [ ] Exit code `0` on success; non-zero on validation or HTTP errors.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-010: Error surfaces
+
+**Description:** As an agent, I want validation failures before HTTP and API
+failures after HTTP to be distinguishable.
+
+**Acceptance criteria:**
+
+- [x] Canonical validation errors include retired-field guidance where applicable.
+- [x] Missing or empty `requestId`, empty `works`, and invalid JSON fail locally.
+- [x] HTTP `400`/`404` (and `409` if applicable) print status and bounded API message;
+  no success JSON on failure.
+- [x] Tests cover invalid JSON, empty works, mocked `400`, and mocked `404`.
+- [x] Typecheck passes.
+- [x] Tests pass.
+
+### cli-submit-batch-011: Reference and packaged documentation
+
+**Description:** As a new contributor, I want docs to show CLI batch submit
+alongside curl and watched-folder ingress.
+
+**Acceptance criteria:**
+
+- [ ] `docs/reference/batch-inputs.md` adds a CLI subsection with examples for
+  file, `--file`, pipe, inline JSON, and `--dry-run`; keeps existing `curl` example.
+- [ ] Ingress comparison covers: `you submit` (single), `you submit batch` (running
+  factory), `you run --work` (startup), watched `factory/inputs/BATCH/`.
+- [ ] Packaged `you docs batch-inputs` content matches reference updates.
+- [ ] Doc tests guard `you submit batch` and `FACTORY_REQUEST_BATCH` markers where
+  other CLI examples are guarded.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-012: End-to-end smoke (optional)
+
+**Description:** As a maintainer, I want one functional smoke proving batch CLI
+reaches a running factory when the harness supports it.
+
+**Acceptance criteria:**
+
+- [x] If the existing smoke harness can start a factory and accept work-request
+  upserts, one smoke runs `you submit batch` with a minimal checked-in batch file
+  and asserts success markers in output.
+- [x] If harness cost is prohibitive, implementation notes document deferral and
+  httptest coverage from earlier stories is cited as the verification substitute.
+- [x] Typecheck passes.
+- [x] Tests pass (or smoke story cancelled with documented justification).
 
 ## Functional requirements
 
-- **FR-1:** Shard count is fixed at **10** for CI (`--shard=i/10`); changing count requires updating matrix, merge expectations, and runner validation together.
-- **FR-2:** Shard jobs run **only** the main covered Vitest pass; isolated React Flow, standalone script, and replay check run **once** on the merge job.
-- **FR-3:** All shard jobs use the same Vitest config, dependency install, and exclusion list as the current main pass; no per-shard threshold enforcement (thresholds zero on shard, enforced at merge).
-- **FR-4:** Blob outputs from shards and the isolated React Flow pass must coexist in `.vitest-reports/` before `--mergeReports`.
-- **FR-5:** Browser integration (`make ui-integration-test`) and backend verification are out of scope for sharding.
-- **FR-6:** Do not lower `ui/vite.config.ts` coverage thresholds to make merge pass.
-- **FR-7:** Do not add directory-glob shard maps; use Vitest’s built-in shard partitioner only.
+- FR-1: Register `you submit batch` under `you submit`.
+- FR-2: Input precedence: `--file` (including `-`) → positional `-` → existing file
+  path → inline `{…}` → piped stdin when no positional/`--file` → usage error on TTY
+  with no input.
+- FR-3: Validate with canonical batch parser before HTTP; `--dry-run` skips HTTP.
+- FR-4: Upsert via `PUT` to session-scoped `/work-requests/{requestId}` only (not
+  `POST /work`).
+- FR-5: Preserve unary `you submit` behavior and flag surface on the parent command.
+- FR-6: Success output field names align with unary submit response contract
+  (`workId`, `workTypeName`, `name`, `traceId`, `sessionId`, `endpointPath`).
+- FR-7: Reuse existing CLI HTTP, session path, and diagnostic patterns from unary submit.
 
 ## Non-goals
 
-- Sharding backend Go coverage or functional tests.
-- Sharding Playwright browser integration (`ui-browser-integration` job).
-- Sharding the isolated React Flow pass across ten workers (stays single-worker on merge job unless separate flake evidence says otherwise).
-- Replacing V8 coverage with Istanbul solely to work around merge tooling bugs (if V8 merge fails in CI, fix or document upstream workaround—do not silently weaken the contract).
-- Removing the replay coverage check or standalone script phase.
-- Requiring contributors to run ten local shards for routine development.
+- Extending unary `you submit` with batch flags or multiple payloads.
+- Replacing `you run --work` or watched-folder ingestion.
+- Staging multimodal files from the CLI in v1.
+- Top-level `you batch submit` verb.
+- Pipe or inline input for unary `you submit` in this feature.
 
 ## High-level technical design
 
-```mermaid
-flowchart LR
-  subgraph classify [classify-pr-impact]
-    R[run_ui_coverage]
-  end
-  subgraph shards [ui-coverage-shard matrix x10]
-    S1[shard 1/10]
-    S2[shard 2/10]
-    S10[shard 10/10]
-  end
-  subgraph merge [ui-coverage-merge]
-    DL[download blob artifacts]
-    RF[isolated React Flow pass]
-    MG[vitest --mergeReports --coverage]
-    SC[standalone script test]
-    RP[replay coverage check]
-  end
-  R --> shards
-  shards --> DL
-  DL --> RF --> MG --> SC --> RP
-```
+1. **Shared loader** — Extract file-path batch loading from the run command into a
+   shared CLI package; run delegates without behavior change. Extend with stdin,
+   inline JSON, and `--file` resolution for batch submit only.
+2. **Command** — New batch subcommand on submit with config mirroring unary HTTP
+   fields (`Server`, `SessionID`, `JSON`, diagnostics). Wire test injection hook
+   like unary submit.
+3. **API** — Extend `UpsertWorkRequestResponse` with `works[]` populated from
+   accepted batch items; regenerate OpenAPI types before CLI success output stories.
+4. **Output** — Human and JSON formatters share identifier vocabulary with unary
+   submit; dry-run uses a distinct JSON shape with `dryRun: true`.
+5. **Docs** — Update reference and embedded packaged topic together; extend doc
+   tests and optional smoke.
 
-**Runner (`ui/scripts/ui-coverage-runner.mjs`):**
+**Dependencies:** Coordinate field naming with CLI submit response contract PRD;
+post-submit inspection (`you work show` / `you work list`) is the documented verify loop.
 
-- Add `parseUiCoverageShard(env)` → `{ index, total } | null`.
-- `buildUiCoveragePhases({ shard })` returns shard-only main phase when set; otherwise existing `uiCoveragePhases`.
-- Shard argv adds `--shard=${index}/${total}` and distinct `--outputFile.blob`.
+## Supporting considerations
 
-**CI (`.github/workflows/ci.yml`):**
-
-- `ui-coverage-shard`: `matrix.shard` 1–10; env `UI_COVERAGE_SHARD=${{ matrix.shard }}/10`; artifact `ui-coverage-shard-${{ matrix.shard }}`.
-- `ui-coverage-merge`: `needs: [ui-coverage-shard]` with `if: always()` + explicit failure when any shard failed or artifact missing; download and flatten blobs; invoke runner merge phases or a thin `make test-ui-coverage-merge` target.
-
-**Local:**
-
-- `make test-ui-coverage` → full lane (unchanged).
-- Optional `make test-ui-coverage-shard SHARD=3/10` (name illustrative) for debugging one slice.
-
-**Vitest merge:** Reuse existing pattern from the runner’s “Blob report merge pass” (`vitest --mergeReports .vitest-reports --coverage`). Vitest assigns files to shards; union of blobs must cover the full corpus before thresholds apply.
-
-## Supporting technical considerations
-
-- **Imbalance:** Vitest shards by test file count, not duration; megatest files may dominate one shard. Ten shards reduce but do not eliminate skew; slow-file summary can remain on merge job if merge re-runs main pass logging is impractical—prefer logging per-shard slow files in shard jobs.
-- **Overhead:** Each shard pays checkout + `ui-deps` (~25s). Ten parallel shards trade duplicated setup for parallel CPU; net wall should still beat ~403s main pass when merge + RF (~130s) run once.
-- **v8 + mergeReports:** Project uses `coverage.provider: "v8"`. Watch for CI-only native crashes on merge (Vitest 4.x known issues); if observed, document reproduction and prefer fixing versions over switching providers without approval.
-- **Concurrency group:** Keep existing `ci-${{ github.workflow }}-…` cancel-in-progress behavior compatible with matrix jobs.
-- **Classification:** `cmd/ciclassify` should keep emitting `ui_coverage_command=make test-ui-coverage` for local reruns; CI implements sharding internally.
+- **Idempotency:** `requestId` is the stable upsert key; re-submit behavior follows
+  server rules—no client-side dedupe beyond the document’s id.
+- **Diagnostics:** No payload bodies, tokens, or prompts in verbose stderr lines.
+- **Security:** Same trust model as unary submit (local factory URL, no new auth).
 
 ## Success metrics
 
-| Metric | Target |
-| --- | --- |
-| UI Coverage lane wall (slowest shard ∥ + merge job serial tail) | **≤ 4 minutes** on `ubuntu-latest` vs ~**9m17s** job wall baseline (US-001 CI table) |
-| Main-pass critical path | **≤ ~60–90s** per shard at p50 (theoretical ~403s/10) with measured proof in closeout doc |
-| Merged threshold compliance | Same pass/fail as pre-shard `main` for equivalent commit |
-| Contributor local workflow | Still one command: `make test-ui-coverage` |
+- An agent submits a multi-work batch to a running factory in one command without `curl`.
+- Pipe and file paths produce identical HTTP bodies for the same JSON document.
+- Invalid batch JSON fails locally with zero network calls in automated tests.
+- `you docs batch-inputs` examples match implemented CLI behavior.
 
-## Open questions
+## Decisions (resolved)
 
-None blocking implementation—the shard count (10) and Vitest-native partitioning are specified by the customer ask. If measured CI wall does not meet targets after rollout, follow-up may tune shard count or add duration-aware grouping in a separate initiative (out of scope here).
+| ID | Decision |
+|----|----------|
+| D-1 | `--file` is optional; positional path is primary; `--file` wins when both set. |
+| D-2 | Ship API `works[]` on upsert response together with CLI success output when possible. |
+| D-3 | `--dry-run` is in v1: validate locally, summarize, no HTTP, exit `0` on valid input. |
