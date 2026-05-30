@@ -7,7 +7,7 @@ import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSel
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
+import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import { DashboardImportPreviewDialog } from "../../import/public";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
@@ -172,6 +172,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
       />
       <DashboardImportPreviewDialog
         activationState={importController.activationState}
+        currentSessionFactoryName={snapshot.factory?.name ?? "factory"}
         importPreviewState={importController.importPreviewState}
         locale={resolvedLocale}
         onCancel={createDashboardImportPreviewCancelHandler(importController)}
@@ -237,7 +238,7 @@ function createDashboardImportPreviewCancelHandler(
 function createDashboardImportPreviewConfirmHandler(
   importController: ReturnType<typeof useCurrentActivityImportController>,
 ) {
-  return (value: FactoryPngImportValue) => {
-    void importController.activateImport(value);
+  return (input: FactoryImportConfirmInput) => {
+    void importController.activateImport(input);
   };
 }

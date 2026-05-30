@@ -6,7 +6,7 @@ import {
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
-import type { FactoryPngImportValue } from "../lib/factory-png-import";
+import type { FactoryImportConfirmInput } from "../lib/factory-import-save-choice";
 
 export type FactoryImportActivationState =
   | { status: "idle" }
@@ -14,13 +14,13 @@ export type FactoryImportActivationState =
   | { error: NamedFactoryAPIError; status: "error" };
 
 export interface UseFactoryImportActivationOptions {
-  activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
+  activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
   onActivated?: (value: FactoryValue) => void;
   sessionID?: string | null;
 }
 
 export interface UseFactoryImportActivationResult {
-  activateImport: (value: FactoryPngImportValue) => Promise<void>;
+  activateImport: (input: FactoryImportConfirmInput) => Promise<void>;
   activationState: FactoryImportActivationState;
   clearActivationError: () => void;
 }
@@ -35,13 +35,18 @@ export function useFactoryImportActivation({
   const activateFactory = useMemo(
     () =>
       activateFactoryOverride ??
-      ((value: FactoryValue) =>
-        activateImportedFactoryForSession(value, { sessionID })),
+      ((input: FactoryImportConfirmInput) =>
+        activateImportedFactoryForSession(input.value.factory, {
+          choice: input.choice,
+          createFactoryName: input.createFactoryName,
+          existingFactoryNames: input.existingFactoryNames,
+          sessionID,
+        })),
     [activateFactoryOverride, sessionID],
   );
   const [activationError, setActivationError] = useState<NamedFactoryAPIError | null>(null);
   const mutation = useMutation({
-    mutationFn: (value: FactoryValue) => activateFactory(value),
+    mutationFn: (input: FactoryImportConfirmInput) => activateFactory(input),
     onError: (error) => {
       setActivationError(normalizeActivationError(error));
     },
@@ -51,10 +56,10 @@ export function useFactoryImportActivation({
     },
   });
 
-  const activateImport = useCallback(async (value: FactoryPngImportValue) => {
+  const activateImport = useCallback(async (input: FactoryImportConfirmInput) => {
     setActivationError(null);
     try {
-      await mutation.mutateAsync(value.factory);
+      await mutation.mutateAsync(input);
     } catch {
       return;
     }

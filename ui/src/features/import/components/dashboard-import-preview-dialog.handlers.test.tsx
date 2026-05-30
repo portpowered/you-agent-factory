@@ -103,6 +103,7 @@ describe("FactoryImportPreviewDialog close guards", () => {
     render(
       <FactoryImportPreviewDialog
         activationState={{ status: "idle" }}
+        currentSessionFactoryName="alpha"
         onCancel={onCancel}
         onConfirm={vi.fn()}
         previewState={createReadyPreviewState()}
@@ -126,6 +127,7 @@ describe("FactoryImportPreviewDialog close guards", () => {
     render(
       <FactoryImportPreviewDialog
         activationState={{ status: "submitting" }}
+        currentSessionFactoryName="alpha"
         onCancel={onCancel}
         onConfirm={vi.fn()}
         previewState={createReadyPreviewState()}

@@ -98,14 +98,29 @@ vi.mock("../../import/public", () => ({
     previewState,
   }: {
     onCancel: () => void;
-    onConfirm: () => void;
-    previewState: { status: string };
+    onConfirm: (input: {
+      choice: string;
+      createFactoryName: string;
+      existingFactoryNames: string[];
+      value: { kind: string };
+    }) => void;
+    previewState: { status: string; value: { kind: string } };
   }) => (
     <div data-status={previewState.status} data-testid="import-preview-dialog">
       <button onClick={onCancel} type="button">
         Trigger import cancel
       </button>
-      <button onClick={onConfirm} type="button">
+      <button
+        onClick={() => {
+          onConfirm({
+            choice: "replace_current",
+            createFactoryName: "alpha",
+            existingFactoryNames: ["alpha"],
+            value: previewState.value,
+          });
+        }}
+        type="button"
+      >
         Trigger import confirm
       </button>
     </div>
@@ -175,6 +190,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
 
     render(
       <CurrentActivityGraphEditorDialogs
+        currentSessionFactoryName="alpha"
         editor={editor as never}
         imports={imports as never}
         readyImportPreviewState={imports.importPreviewState}
@@ -191,9 +207,12 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Trigger import confirm" }),
     );
-    expect(imports.activateImport).toHaveBeenCalledWith(
-      imports.importPreviewState.value,
-    );
+    expect(imports.activateImport).toHaveBeenCalledWith({
+      choice: "replace_current",
+      createFactoryName: "alpha",
+      existingFactoryNames: ["alpha"],
+      value: imports.importPreviewState.value,
+    });
 
     fireEvent.click(
       screen.getByRole("button", { name: "Trigger import error dismiss" }),
@@ -252,6 +271,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
 
     render(
       <CurrentActivityGraphEditorDialogs
+        currentSessionFactoryName="alpha"
         editor={editor as never}
         imports={imports as never}
         readyImportPreviewState={imports.importPreviewState}

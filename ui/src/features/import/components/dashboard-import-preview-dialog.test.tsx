@@ -28,6 +28,8 @@ function createReadyImportPreviewState(): DashboardImportPreviewDialogProps["imp
   };
 }
 
+const defaultCurrentSessionFactoryName = "alpha";
+
 function renderDialog(
   overrides: Partial<DashboardImportPreviewDialogProps> = {},
 ) {
@@ -37,6 +39,7 @@ function renderDialog(
   render(
     <DashboardImportPreviewDialog
       activationState={{ status: "idle" }}
+      currentSessionFactoryName={defaultCurrentSessionFactoryName}
       importPreviewState={createReadyImportPreviewState()}
       onCancel={onCancel}
       onConfirm={onConfirm}
@@ -56,6 +59,7 @@ describe("DashboardImportPreviewDialog", () => {
     render(
       <FactoryImportPreviewDialog
         activationState={{ status: "idle" }}
+        currentSessionFactoryName={defaultCurrentSessionFactoryName}
         onCancel={onCancel}
         onConfirm={onConfirm}
         previewState={createReadyImportPreviewState()}
@@ -102,6 +106,7 @@ describe("DashboardImportPreviewDialog", () => {
     const { baseElement } = render(
       <DashboardImportPreviewDialog
         activationState={{ status: "idle" }}
+        currentSessionFactoryName={defaultCurrentSessionFactoryName}
         importPreviewState={createReadyImportPreviewState()}
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
@@ -123,6 +128,7 @@ describe("DashboardImportPreviewDialog", () => {
           error: new NamedFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
           status: "error",
         }}
+        currentSessionFactoryName={defaultCurrentSessionFactoryName}
         importPreviewState={createReadyImportPreviewState()}
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
@@ -183,6 +189,7 @@ describe("DashboardImportPreviewDialog", () => {
       return (
         <DashboardImportPreviewDialog
           activationState={activationState}
+          currentSessionFactoryName={defaultCurrentSessionFactoryName}
           importPreviewState={importPreviewState}
           onCancel={() => {
             setActivationState({ status: "idle" });
@@ -206,6 +213,54 @@ describe("DashboardImportPreviewDialog", () => {
     });
   });
 
+  it("defaults to replace current factory and exposes a keyboard-accessible save choice group", async () => {
+    renderDialog();
+    const messages = getImportPreviewDialogMessages("en");
+
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const saveChoiceGroup = within(previewDialog).getByRole("radiogroup", {
+      name: messages.saveChoiceLegend,
+    });
+    const replaceOption = within(saveChoiceGroup).getByRole("radio", {
+      name: new RegExp(messages.replaceCurrentOption),
+    });
+    const createOption = within(saveChoiceGroup).getByRole("radio", {
+      name: new RegExp(messages.createNewNamedOption),
+    });
+
+    expect((replaceOption as HTMLInputElement).checked).toBe(true);
+    expect((createOption as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(createOption);
+    expect((createOption as HTMLInputElement).checked).toBe(true);
+    expect((replaceOption as HTMLInputElement).checked).toBe(false);
+    expect(within(saveChoiceGroup).getByText("Dropped Factory-2")).toBeTruthy();
+
+    fireEvent.click(replaceOption);
+    expect((replaceOption as HTMLInputElement).checked).toBe(true);
+    expect(within(saveChoiceGroup).getByText(defaultCurrentSessionFactoryName)).toBeTruthy();
+  });
+
+  it("shows a suffixed create path factory name when the embedded name collides", async () => {
+    renderDialog({
+      currentSessionFactoryName: "Dropped Factory",
+    });
+    const messages = getImportPreviewDialogMessages("en");
+
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const saveChoiceGroup = within(previewDialog).getByRole("radiogroup", {
+      name: messages.saveChoiceLegend,
+    });
+
+    fireEvent.click(
+      within(saveChoiceGroup).getByRole("radio", {
+        name: new RegExp(messages.createNewNamedOption),
+      }),
+    );
+
+    expect(within(saveChoiceGroup).getByText("Dropped Factory-2")).toBeTruthy();
+  });
+
   it("shows activation failures and delegates confirmation with the ready preview payload", async () => {
     const { onConfirm } = renderDialog({
       activationState: {
@@ -223,11 +278,14 @@ describe("DashboardImportPreviewDialog", () => {
     fireEvent.click(within(previewDialog).getByRole("button", { name: messages.activateAction }));
 
     await waitFor(() => {
-      expect(onConfirm).toHaveBeenCalledWith(
-        expect.objectContaining({
+      expect(onConfirm).toHaveBeenCalledWith({
+        choice: "replace_current",
+        createFactoryName: "Dropped Factory-2",
+        existingFactoryNames: ["alpha", "Dropped Factory"],
+        value: expect.objectContaining({
           factory: expect.objectContaining({ name: "Dropped Factory" }),
         }),
-      );
+      });
     });
   });
 
@@ -293,12 +351,13 @@ describe("DashboardImportPreviewDialog", () => {
       return (
         <DashboardImportPreviewDialog
           activationState={{ status: "idle" }}
+          currentSessionFactoryName={defaultCurrentSessionFactoryName}
           importPreviewState={importPreviewState}
           onCancel={() => {
             setImportPreviewState({ status: "idle" });
           }}
-          onConfirm={async (value) => {
-            await activateImport(value);
+          onConfirm={async (input) => {
+            await activateImport(input);
             setImportPreviewState({ status: "idle" });
           }}
         />
@@ -314,7 +373,10 @@ describe("DashboardImportPreviewDialog", () => {
     await waitFor(() => {
       expect(activateImport).toHaveBeenCalledWith(
         expect.objectContaining({
-          factory: expect.objectContaining({ name: "Dropped Factory" }),
+          choice: "replace_current",
+          value: expect.objectContaining({
+            factory: expect.objectContaining({ name: "Dropped Factory" }),
+          }),
         }),
       );
     });
@@ -367,6 +429,7 @@ describe("DashboardImportPreviewDialog", () => {
     render(
       <DashboardImportPreviewDialog
         activationState={{ status: "idle" }}
+        currentSessionFactoryName={defaultCurrentSessionFactoryName}
         importPreviewState={{ status: "idle" }}
         onCancel={vi.fn()}
         onConfirm={vi.fn()}

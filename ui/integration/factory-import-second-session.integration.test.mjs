@@ -371,7 +371,7 @@ async function importFactoryPngAndActivate(page, options) {
   expect(await importDialog.textContent()).toContain(download.filename);
 
   const activateButton = importDialog.getByRole("button", {
-    name: "Activate factory",
+    name: "Confirm import",
   });
   await expect
     .poll(async () => await activateButton.isEnabled(), {
@@ -396,6 +396,7 @@ function assertSessionScopedImportActivation(tracking) {
   expect(tracking.sessionFactoryPutRequests[0]?.sessionID).toBe(
     nonDefaultSessionID,
   );
+  expect(tracking.sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
   expect(tracking.sessionFactoryPutRequests[0]?.body).toMatchObject({
     ...reviewSessionFactoryDefinition,
     name: reviewSessionFactoryDefinition.name,
