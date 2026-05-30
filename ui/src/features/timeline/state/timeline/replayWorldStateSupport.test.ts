@@ -7,6 +7,7 @@ import {
   inferenceAttemptsForDispatch,
   resolveDispatchTransitionID,
   scriptRequestsForDispatch,
+  scriptResponsesForDispatch,
   syncCompletedDispatchAttempt,
 } from "./replayWorldStateSupport";
 import { emptyWorldRuntime, type ReplayWorldState } from "./types";
@@ -76,6 +77,108 @@ describe("replayWorldStateSupport inference helpers", () => {
     expect(resolveDispatchTransitionID(state, "missing")).toBeUndefined();
   });
 
+  it("skips non-matching completed dispatches when syncing inference", () => {
+    const state = emptyState();
+    state.completedDispatches.push(
+      {
+        consumedTokens: [],
+        dispatchID: "dispatch-other",
+        diagnostics: {},
+        durationMillis: 1,
+        endTime: "2026-05-30T12:00:01.000Z",
+        inputItems: [],
+        outcome: "SUCCEEDED",
+        outputItems: [],
+        outputMutations: [],
+        resources: [],
+        startedAt: "2026-05-30T12:00:00.000Z",
+        systemOnly: false,
+        traceIDs: [],
+        transitionID: "other",
+        workIDs: [],
+        workItems: [],
+      },
+      {
+        consumedTokens: [],
+        dispatchID: "dispatch-target",
+        diagnostics: { model: "before" },
+        durationMillis: 1,
+        endTime: "2026-05-30T12:00:02.000Z",
+        inputItems: [],
+        outcome: "SUCCEEDED",
+        outputItems: [],
+        outputMutations: [],
+        resources: [],
+        startedAt: "2026-05-30T12:00:01.000Z",
+        systemOnly: false,
+        traceIDs: [],
+        transitionID: "review",
+        workIDs: [],
+        workItems: [],
+      },
+    );
+    syncCompletedDispatchAttempt(state, "dispatch-target", {
+      diagnostics: { model: "after" },
+      dispatch_id: "dispatch-target",
+      inference_request_id: "attempt-1",
+      prompt: "p",
+      request_time: "2026-05-30T12:00:00.000Z",
+      transition_id: "review",
+    });
+    expect(state.completedDispatches[0]?.diagnostics).toEqual({});
+    expect(state.completedDispatches[1]?.diagnostics).toEqual({ model: "after" });
+  });
+
+  it("does not duplicate provider sessions already recorded on the state", () => {
+    const state = emptyState();
+    state.completedDispatches.push({
+      consumedTokens: [],
+      dispatchID: "dispatch-1",
+      diagnostics: {},
+      durationMillis: 1,
+      endTime: "2026-05-30T12:00:01.000Z",
+      inputItems: [],
+      outcome: "SUCCEEDED",
+      outputItems: [],
+      outputMutations: [],
+      providerSession: {
+        id: "session-1",
+        kind: "session_id",
+        provider: "openai",
+      },
+      resources: [],
+      startedAt: "2026-05-30T12:00:00.000Z",
+      systemOnly: false,
+      traceIDs: [],
+      transitionID: "review",
+      workIDs: [],
+      workItems: [],
+    });
+    state.providerSessions = [
+      {
+        dispatch_id: "dispatch-1",
+        provider_session: {
+          id: "session-1",
+          kind: "session_id",
+          provider: "openai",
+        },
+      },
+    ];
+    syncCompletedDispatchAttempt(state, "dispatch-1", {
+      dispatch_id: "dispatch-1",
+      inference_request_id: "attempt-1",
+      prompt: "p",
+      provider_session: {
+        id: "session-1",
+        kind: "session_id",
+        provider: "openai",
+      },
+      request_time: "2026-05-30T12:00:00.000Z",
+      transition_id: "review",
+    });
+    expect(state.providerSessions).toHaveLength(1);
+  });
+
   it("syncs completed dispatch diagnostics and provider sessions from inference", () => {
     const state = emptyState();
     state.completedDispatches.push({
@@ -130,9 +233,47 @@ describe("replayWorldStateSupport inference helpers", () => {
       transition_id: "review",
     });
   });
+
+  it("ignores missing traces when syncing completed dispatch attempts", () => {
+    const state = emptyState();
+    state.completedDispatches.push({
+      consumedTokens: [],
+      dispatchID: "dispatch-1",
+      diagnostics: {},
+      durationMillis: 1,
+      endTime: "2026-05-30T12:00:01.000Z",
+      inputItems: [],
+      outcome: "SUCCEEDED",
+      outputItems: [],
+      outputMutations: [],
+      resources: [],
+      startedAt: "2026-05-30T12:00:00.000Z",
+      systemOnly: false,
+      traceIDs: ["missing-trace"],
+      transitionID: "review",
+      workIDs: [],
+      workItems: [],
+    });
+    syncCompletedDispatchAttempt(state, "dispatch-1", {
+      diagnostics: { tokens: 1 },
+      dispatch_id: "dispatch-1",
+      inference_request_id: "attempt-1",
+      prompt: "p",
+      request_time: "2026-05-30T12:00:00.000Z",
+      transition_id: "review",
+    });
+    expect(state.completedDispatches[0]?.diagnostics).toEqual({ tokens: 1 });
+  });
 });
 
 describe("replayWorldStateSupport script helpers", () => {
+  it("reuses existing script response maps per dispatch", () => {
+    const state = emptyState();
+    const first = scriptResponsesForDispatch(state, "dispatch-script");
+    const second = scriptResponsesForDispatch(state, "dispatch-script");
+    expect(first).toBe(second);
+  });
+
   it("records script requests and responses per dispatch", () => {
     const state = emptyState();
     applyScriptRequest(state, {
