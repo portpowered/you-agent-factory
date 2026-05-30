@@ -54,27 +54,66 @@ func (fs *FactoryService) activeFactoryDirectory() string {
 	return fs.factoryRootDir
 }
 
-func (fs *FactoryService) registerLiveSession(sessionID string, handle *liveRuntimeHandle, selectSession bool) {
+func (fs *FactoryService) registerLiveSession(
+	sessionID string,
+	handle *liveRuntimeHandle,
+	target FactorySessionTarget,
+	selectSession bool,
+) {
 	if fs == nil || fs.sessions == nil || sessionID == "" || handle == nil {
 		return
 	}
-	factoryDir := fs.activeFactoryDirectory()
-	folderPath := fs.factoryRootDir
+	factoryDir := strings.TrimSpace(target.FactoryDir)
+	if factoryDir == "" && handle.runtime != nil {
+		factoryDir = handle.runtime.dir
+	}
+	folderPath := strings.TrimSpace(target.FolderPath)
+	if folderPath == "" {
+		folderPath = fs.factoryRootDir
+	}
 	if folderPath == "" {
 		folderPath = factoryDir
+	}
+	targetRef := target.Ref
+	if targetRef.Kind == "" {
+		targetRef = FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault}
+	}
+	project := strings.TrimSpace(target.Project)
+	if project == "" {
+		project = filepath.Base(folderPath)
 	}
 	fs.sessions.Upsert(factorysessions.NewLiveSession(
 		sessionID,
 		factoryDir,
 		folderPath,
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		targetRef,
 		handle,
 		sessionID == defaultFactorySessionID,
-		filepath.Base(folderPath),
+		project,
 	), selectSession)
 	if selectSession && handle.runtime != nil {
 		fs.swapActiveRuntime(handle.runtime)
 	}
+}
+
+func defaultSessionTargetFromRuntimeBundle(
+	runtimeBundle *factoryRuntimeBundle,
+	factoryRootDir string,
+) FactorySessionTarget {
+	target := FactorySessionTarget{
+		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
+	}
+	if runtimeBundle != nil {
+		target.FactoryDir = runtimeBundle.dir
+		target.FolderPath = runtimeBundle.folderPath
+	}
+	if strings.TrimSpace(target.FolderPath) == "" {
+		target.FolderPath = factoryRootDir
+	}
+	if strings.TrimSpace(target.Project) == "" && target.FolderPath != "" {
+		target.Project = filepath.Base(target.FolderPath)
+	}
+	return target
 }
 
 func (fs *FactoryService) unregisterLiveSession(sessionID string) {
@@ -437,15 +476,7 @@ func (fs *FactoryService) startBackgroundSessionWithMetadata(
 			return fmt.Errorf("start runtime session sidecars: %w", err)
 		}
 	}
-	fs.sessions.Upsert(factorysessions.NewLiveSession(
-		sessionID,
-		target.FactoryDir,
-		target.FolderPath,
-		target.Ref,
-		handle,
-		false,
-		target.Project,
-	), false)
+	fs.registerLiveSession(sessionID, handle, target, false)
 	return nil
 }
 

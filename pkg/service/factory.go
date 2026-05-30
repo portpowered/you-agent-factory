@@ -499,8 +499,14 @@ func (fs *FactoryService) startDefaultRuntime(
 	runCtx context.Context,
 	serviceMode bool,
 ) (*liveRuntimeHandle, error) {
-	currentRuntime := fs.startLiveRuntime(runCtx, fs.currentRuntimeBundle())
-	fs.registerLiveSession(defaultFactorySessionID, currentRuntime, true)
+	runtimeBundle := fs.currentRuntimeBundle()
+	currentRuntime := fs.startLiveRuntime(runCtx, runtimeBundle)
+	fs.registerLiveSession(
+		defaultFactorySessionID,
+		currentRuntime,
+		defaultSessionTargetFromRuntimeBundle(runtimeBundle, fs.factoryRootDir),
+		true,
+	)
 	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
 	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
 		return nil, fs.handleDefaultRuntimeStartFailure(ctx, currentRuntime, err)
@@ -613,7 +619,13 @@ func (fs *FactoryService) activateReplacementRuntime(
 	}
 	fs.publishFactoryChangeEvent(ctx, runState.runtime, replacement)
 	restoreCurrentSidecars = false
-	fs.registerLiveSession(runState.sessionID, replacementHandle, true)
+	replacementTarget := defaultSessionTargetFromRuntimeBundle(replacement, fs.factoryRootDir)
+	if existing := fs.sessionByID(runState.sessionID); existing != nil {
+		replacementTarget.Ref = existing.Target
+		replacementTarget.FolderPath = existing.FolderPath
+		replacementTarget.Project = existing.Project
+	}
+	fs.registerLiveSession(runState.sessionID, replacementHandle, replacementTarget, true)
 	fs.setRunState(runState.ctx, runState.sessionID, replacementHandle)
 	if err := fs.stopLiveRuntime(runState.runtime); err != nil && !errors.Is(err, context.Canceled) {
 		fs.logger.Warn("prior runtime shutdown failed", zap.Error(err))
