@@ -317,7 +317,56 @@ func TestSubmit_JSONStdoutEmitsSubmitWorkResponse(t *testing.T) {
 	}
 }
 
-func TestSubmit_HumanReadableStdoutUnchanged(t *testing.T) {
+func TestSubmit_HumanStdoutIncludesIdentifiersAndShowHint(t *testing.T) {
+	workID := "batch-req-1-human-submit"
+	workTypeName := "code-change"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{
+			TraceId:      "human-trace-1",
+			WorkId:       &workID,
+			Name:         ptr("human-submit"),
+			WorkTypeName: &workTypeName,
+		}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"human stdout task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Submit(SubmitConfig{
+		Name:         "human-submit",
+		WorkTypeName: "code-change",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"Submitted work",
+		"name: human-submit",
+		"workTypeName: code-change",
+		"traceId: human-trace-1",
+		"workId: batch-req-1-human-submit",
+		"Verify with: you work show batch-req-1-human-submit",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestSubmit_HumanStdoutUsesListHintWhenWorkIDMissing(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -343,9 +392,25 @@ func TestSubmit_HumanReadableStdoutUnchanged(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	if got := out.String(); got != "Submitted work: human-trace-1\n" {
-		t.Fatalf("stdout = %q, want human confirmation", got)
+
+	got := out.String()
+	for _, want := range []string{
+		"name: human-submit",
+		"workTypeName: task",
+		"traceId: human-trace-1",
+		"Verify with: you work list --name human-submit",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, got)
+		}
 	}
+	if strings.Contains(got, "workId:") {
+		t.Fatalf("stdout should omit workId when API does not return it:\n%s", got)
+	}
+}
+
+func ptr(value string) *string {
+	return &value
 }
 
 func TestSubmit_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {

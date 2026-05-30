@@ -115,6 +115,59 @@ func Submit(cfg SubmitConfig) error {
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(result)
 	}
-	_, err = fmt.Fprintf(cfg.Output, "Submitted work: %s\n", result.TraceId)
+	return renderHumanSubmitConfirmation(cfg.Output, cfg, result)
+}
+
+func renderHumanSubmitConfirmation(output io.Writer, cfg SubmitConfig, result factoryapi.SubmitWorkResponse) error {
+	name := optionalString(result.Name)
+	if name == "" {
+		name = strings.TrimSpace(cfg.Name)
+	}
+	workTypeName := optionalString(result.WorkTypeName)
+	if workTypeName == "" {
+		workTypeName = cfg.WorkTypeName
+	}
+	workID := optionalString(result.WorkId)
+
+	if _, err := fmt.Fprintln(output, "Submitted work"); err != nil {
+		return err
+	}
+	lines := []struct {
+		label string
+		value string
+	}{
+		{label: "name", value: name},
+		{label: "workTypeName", value: workTypeName},
+		{label: "traceId", value: result.TraceId},
+	}
+	if workID != "" {
+		lines = append(lines, struct {
+			label string
+			value string
+		}{label: "workId", value: workID})
+	}
+	for _, line := range lines {
+		if line.value == "" {
+			continue
+		}
+		if _, err := fmt.Fprintf(output, "%s: %s\n", line.label, line.value); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintf(output, "%s\n", submitVerifyHint(workID, name))
 	return err
+}
+
+func submitVerifyHint(workID, name string) string {
+	if workID != "" {
+		return "Verify with: you work show " + workID
+	}
+	return "Verify with: you work list --name " + name
+}
+
+func optionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
 }
