@@ -1,13 +1,17 @@
-import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
 import {
   formatList,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
+import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
+import {
+  getWorkContentInspectMessages,
+  WorkContentReadOnlyList,
+} from "../../../work-content/public";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
+import { SelectedWorkDispatchHistorySection } from "../../dispatch-selection/public";
 import type { WorkItemDetailCardProps } from "../lib/detail-card-types";
 import { WorkRelationshipsSection } from "./work-item-relationship-graph";
-import { SelectedWorkDispatchHistorySection } from "../../dispatch-selection/public";
 
 export function WorkItemDetailCard({
   activeTraceID,
@@ -26,6 +30,12 @@ export function WorkItemDetailCard({
   widgetId = "current-selection",
 }: WorkItemDetailCardProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
+  const workContentMessages = getWorkContentInspectMessages(locale);
+  const payloadStatus =
+    selection.workItem.payloadStatus ?? selection.workItem.payload_status;
+  const payloadReason =
+    selection.workItem.payloadUnavailableReason ??
+    selection.workItem.payload_unavailable_reason;
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
@@ -67,6 +77,12 @@ export function WorkItemDetailCard({
           <dd>{dispatchAttempts.length}</dd>
         </div>
       </dl>
+      <WorkContentReadOnlyList
+        content={selection.workItem.content ?? []}
+        messages={workContentMessages}
+        payloadStatus={payloadStatus}
+        reason={payloadReason}
+      />
       <WorkRelationshipsSection
         activeTraceID={activeTraceID}
         messages={messages}
