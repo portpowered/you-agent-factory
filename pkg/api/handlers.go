@@ -699,9 +699,12 @@ func (s *Server) ListWorkBySessionId(w http.ResponseWriter, r *http.Request, ses
 		return
 	}
 	legacyParams := factoryapi.ListWorkParams{
-		MaxResults: params.MaxResults,
-		NextToken:  params.NextToken,
-		StateName:  params.StateName,
+		MaxResults:   params.MaxResults,
+		NextToken:    params.NextToken,
+		StateName:    params.StateName,
+		Name:         params.Name,
+		WorkTypeName: params.WorkTypeName,
+		TraceId:      params.TraceId,
 	}
 	if params.StateType != nil {
 		stateType := factoryapi.WorkStateType(*params.StateType)
@@ -906,6 +909,22 @@ func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkPara
 	}
 	if params.StateType != nil {
 		if work.State == nil || work.State.Type != *params.StateType {
+			return false
+		}
+	}
+	if params.Name != nil && *params.Name != "" {
+		if !strings.Contains(strings.ToLower(work.Name), strings.ToLower(string(*params.Name))) {
+			return false
+		}
+	}
+	if params.WorkTypeName != nil && *params.WorkTypeName != "" {
+		if stringValue(work.WorkTypeName) != string(*params.WorkTypeName) {
+			return false
+		}
+	}
+	if params.TraceId != nil && *params.TraceId != "" {
+		traceID := string(*params.TraceId)
+		if stringValue(work.TraceId) != traceID && stringValue(work.CurrentChainingTraceId) != traceID {
 			return false
 		}
 	}

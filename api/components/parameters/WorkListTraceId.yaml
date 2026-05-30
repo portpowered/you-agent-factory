@@ -1,0 +1,6 @@
+name: traceId
+in: query
+required: false
+description: Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
+schema:
+  type: string

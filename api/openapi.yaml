@@ -83,6 +83,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens.
@@ -157,6 +160,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens for the targeted session.
@@ -793,6 +799,27 @@ components:
         type: string
         enum:
           - state.type
+    WorkListName:
+      name: name
+      in: query
+      required: false
+      description: Optional work name filter. Matches when the work name contains this value, case-insensitively.
+      schema:
+        type: string
+    WorkListWorkTypeName:
+      name: workTypeName
+      in: query
+      required: false
+      description: Optional work type name filter. Matches when workTypeName equals this value exactly.
+      schema:
+        type: string
+    WorkListTraceId:
+      name: traceId
+      in: query
+      required: false
+      description: Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
+      schema:
+        type: string
     WorkOrTokenID:
       name: id
       in: path

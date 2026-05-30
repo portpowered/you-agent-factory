@@ -443,6 +443,57 @@ func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.
 	}
 }
 
+func TestListWork_FiltersByWorkTypeNameNameSubstringAndTraceId(t *testing.T) {
+	now := time.Now()
+	tokens := map[string]*interfaces.Token{
+		"tok-1": listWorkTokenWithTraces("tok-1", "work-story", "Review PRD", "task:review", "story", "trace-root", "", now),
+		"tok-2": listWorkTokenWithTraces("tok-2", "work-bug", "Fix bug", "task:init", "bug", "", "trace-chain-1", now),
+		"tok-3": listWorkTokenWithTraces("tok-3", "work-plan", "Plan feature", "task:init", "story", "trace-plan", "", now),
+	}
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: tokens}, Net: listWorkFilterTopology()})
+	for _, tc := range []struct {
+		name        string
+		query       string
+		wantWorkIDs []string
+	}{
+		{name: "work type name", query: "workTypeName=story", wantWorkIDs: []string{"work-plan", "work-story"}},
+		{name: "name substring", query: "name=prd", wantWorkIDs: []string{"work-story"}},
+		{name: "trace id on current chaining trace", query: "traceId=trace-chain-1", wantWorkIDs: []string{"work-bug"}},
+		{name: "trace id on trace id", query: "traceId=trace-plan", wantWorkIDs: []string{"work-plan"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := decodeListWorkPage(t, srv, "/work?"+tc.query)
+			if len(resp.Results) != len(tc.wantWorkIDs) {
+				t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(tc.wantWorkIDs), resp.Results)
+			}
+			gotIDs := make([]string, len(resp.Results))
+			for i, work := range resp.Results {
+				gotIDs[i] = stringValue(work.WorkId)
+			}
+			for i, wantWorkID := range tc.wantWorkIDs {
+				if gotIDs[i] != wantWorkID {
+					t.Fatalf("result[%d] workId = %q, want %q (all=%v)", i, gotIDs[i], wantWorkID, gotIDs)
+				}
+			}
+		})
+	}
+}
+
+func TestListWork_FiltersByNameBeforePagination(t *testing.T) {
+	now := time.Now()
+	tokens := map[string]*interfaces.Token{
+		"tok-1": listWorkTokenWithTraces("tok-1", "work-alpha", "Alpha one", "task:init", "task", "", "", now),
+		"tok-2": listWorkTokenWithTraces("tok-2", "work-beta", "Other item", "task:init", "task", "", "", now),
+		"tok-3": listWorkTokenWithTraces("tok-3", "work-gamma", "Alpha two", "task:init", "task", "", "", now),
+	}
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: tokens}, Net: listWorkFilterTopology()})
+	resp := decodeListWorkPage(t, srv, "/work?name=alpha&maxResults=2")
+	assertListedWorkIDs(t, resp.Results, []string{"work-alpha", "work-gamma"})
+	if resp.PaginationContext == nil || stringValue(resp.PaginationContext.NextToken) != "" {
+		t.Fatalf("pagination = %#v, want terminal page after name filter", resp.PaginationContext)
+	}
+}
+
 func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 	now := time.Now()
 	tokens := map[string]*interfaces.Token{

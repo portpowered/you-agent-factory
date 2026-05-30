@@ -83,6 +83,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens.
@@ -157,6 +160,9 @@ paths:
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
         - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/WorkListName'
+        - $ref: '#/components/parameters/WorkListWorkTypeName'
+        - $ref: '#/components/parameters/WorkListTraceId'
       responses:
         '200':
           description: Current work tokens for the targeted session.
@@ -759,6 +765,12 @@ components:
       $ref: './components/parameters/StateType.yaml'
     SortBy:
       $ref: './components/parameters/SortBy.yaml'
+    WorkListName:
+      $ref: './components/parameters/WorkListName.yaml'
+    WorkListWorkTypeName:
+      $ref: './components/parameters/WorkListWorkTypeName.yaml'
+    WorkListTraceId:
+      $ref: './components/parameters/WorkListTraceId.yaml'
     WorkOrTokenID:
       $ref: './components/parameters/WorkOrTokenID.yaml'
   responses:

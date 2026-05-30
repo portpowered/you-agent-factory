@@ -2675,6 +2675,15 @@ type StateName = string
 // StateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
 type StateType = WorkStateType
 
+// WorkListName defines model for WorkListName.
+type WorkListName = string
+
+// WorkListTraceId defines model for WorkListTraceId.
+type WorkListTraceId = string
+
+// WorkListWorkTypeName defines model for WorkListWorkTypeName.
+type WorkListWorkTypeName = string
+
 // WorkOrTokenID defines model for WorkOrTokenID.
 type WorkOrTokenID = string
 
@@ -2718,6 +2727,15 @@ type ListWorkBySessionIdParams struct {
 
 	// SortBy Optional list-work sort field. Use state.type to order by current work state type.
 	SortBy *ListWorkBySessionIdParamsSortBy `form:"sortBy,omitempty" json:"sortBy,omitempty"`
+
+	// Name Optional work name filter. Matches when the work name contains this value, case-insensitively.
+	Name *WorkListName `form:"name,omitempty" json:"name,omitempty"`
+
+	// WorkTypeName Optional work type name filter. Matches when workTypeName equals this value exactly.
+	WorkTypeName *WorkListWorkTypeName `form:"workTypeName,omitempty" json:"workTypeName,omitempty"`
+
+	// TraceId Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
+	TraceId *WorkListTraceId `form:"traceId,omitempty" json:"traceId,omitempty"`
 }
 
 // ListWorkBySessionIdParamsSortBy defines parameters for ListWorkBySessionId.
@@ -2751,6 +2769,15 @@ type ListWorkParams struct {
 
 	// SortBy Optional list-work sort field. Use state.type to order by current work state type.
 	SortBy *ListWorkParamsSortBy `form:"sortBy,omitempty" json:"sortBy,omitempty"`
+
+	// Name Optional work name filter. Matches when the work name contains this value, case-insensitively.
+	Name *WorkListName `form:"name,omitempty" json:"name,omitempty"`
+
+	// WorkTypeName Optional work type name filter. Matches when workTypeName equals this value exactly.
+	WorkTypeName *WorkListWorkTypeName `form:"workTypeName,omitempty" json:"workTypeName,omitempty"`
+
+	// TraceId Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
+	TraceId *WorkListTraceId `form:"traceId,omitempty" json:"traceId,omitempty"`
 }
 
 // ListWorkParamsSortBy defines parameters for ListWork.
@@ -3869,6 +3896,30 @@ func (siw *ServerInterfaceWrapper) ListWorkBySessionId(w http.ResponseWriter, r 
 		return
 	}
 
+	// ------------- Optional query parameter "name" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "name", r.URL.Query(), &params.Name)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "workTypeName" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "workTypeName", r.URL.Query(), &params.WorkTypeName)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workTypeName", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "traceId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "traceId", r.URL.Query(), &params.TraceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "traceId", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListWorkBySessionId(w, r, sessionId, params)
 	}))
@@ -4210,6 +4261,30 @@ func (siw *ServerInterfaceWrapper) ListWork(w http.ResponseWriter, r *http.Reque
 	err = runtime.BindQueryParameter("form", true, false, "sortBy", r.URL.Query(), &params.SortBy)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sortBy", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "name" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "name", r.URL.Query(), &params.Name)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "workTypeName" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "workTypeName", r.URL.Query(), &params.WorkTypeName)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workTypeName", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "traceId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "traceId", r.URL.Query(), &params.TraceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "traceId", Err: err})
 		return
 	}
 
