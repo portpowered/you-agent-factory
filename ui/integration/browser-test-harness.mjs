@@ -470,13 +470,11 @@ export function expectNoBrowserErrors(pageErrors, consoleErrors, expect) {
 }
 
 export async function startFactoryApiServer({
-  activationResponseFactory = null,
   apiPort,
   currentFactory = null,
   currentFactoryBySessionID = {},
   eventLines = [],
   eventLinesBySessionID = {},
-  onActivateFactory = null,
   onOpenFactorySession = null,
   onSaveCurrentFactory = null,
   pauseBeforeTick = null,
@@ -737,31 +735,6 @@ export async function startFactoryApiServer({
         "Content-Type": "application/json",
       });
       response.end(JSON.stringify({ targets: [] }));
-      return;
-    }
-
-    if (request.url === "/factories" && request.method === "POST") {
-      let requestBody = "";
-      request.setEncoding("utf8");
-      request.on("data", (chunk) => {
-        requestBody += chunk;
-      });
-      request.on("end", async () => {
-        const body = requestBody.length === 0 ? null : JSON.parse(requestBody);
-        if (onActivateFactory) {
-          await onActivateFactory(body);
-        }
-
-        const defaultSession =
-          sessionRegistry.state.get(defaultFactorySessionID);
-        defaultSession.currentFactory = activationResponseFactory ?? body;
-        bumpEditableFactoryDefinitionVersion(defaultFactorySessionID);
-        response.writeHead(200, {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        });
-        response.end(JSON.stringify(defaultSession.currentFactory));
-      });
       return;
     }
 

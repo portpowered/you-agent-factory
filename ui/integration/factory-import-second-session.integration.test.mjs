@@ -136,7 +136,6 @@ async function openReviewSessionTab(page) {
 
 function createImportActivationTracking() {
   return {
-    postFactoryActivations: [],
     sessionFactoryPutRequests: [],
   };
 }
@@ -155,9 +154,6 @@ async function startReviewSessionImportServer(preview, tracking) {
     },
     currentFactoryBySessionID: {
       [nonDefaultSessionID]: reviewSessionFactoryDefinition,
-    },
-    onActivateFactory: async (body) => {
-      tracking.postFactoryActivations.push(body);
     },
     onSaveCurrentFactory: async ({ body, sessionID }) => {
       tracking.sessionFactoryPutRequests.push({ body, sessionID });
@@ -391,7 +387,6 @@ async function importFactoryPngAndActivate(page, options) {
 }
 
 function assertSessionScopedImportActivation(tracking) {
-  expect(tracking.postFactoryActivations).toEqual([]);
   expect(tracking.sessionFactoryPutRequests).toHaveLength(1);
   expect(tracking.sessionFactoryPutRequests[0]?.sessionID).toBe(
     nonDefaultSessionID,

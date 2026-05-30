@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 
 import {
   activateImportedFactoryForSession,
-  createFactory,
   NamedFactoryAPIError,
   type FactoryValue,
 } from "../../../api/named-factory";
@@ -16,7 +15,6 @@ vi.mock("../../../api/named-factory", async () => {
   return {
     ...actual,
     activateImportedFactoryForSession: vi.fn(actual.activateImportedFactoryForSession),
-    createFactory: vi.fn(actual.createFactory),
   };
 });
 import { writeFactoryExportPng } from "../../export/lib/factory-png-export";
@@ -74,15 +72,13 @@ const canonicalFactory: FactoryValue = {
 };
 
 const mockedActivateImportedFactoryForSession = vi.mocked(activateImportedFactoryForSession);
-const mockedCreateFactory = vi.mocked(createFactory);
 
 describe("useFactoryImportActivation", () => {
   beforeEach(() => {
     mockedActivateImportedFactoryForSession.mockClear();
-    mockedCreateFactory.mockClear();
   });
 
-  it("uses session-scoped activation by default instead of createFactory", async () => {
+  it("uses session-scoped activation by default", async () => {
     mockedActivateImportedFactoryForSession.mockResolvedValue(canonicalFactory);
 
     const { result } = renderHook(
@@ -112,7 +108,6 @@ describe("useFactoryImportActivation", () => {
         },
       );
     });
-    expect(mockedCreateFactory).not.toHaveBeenCalled();
   });
 
   it("activates against the current sessionID when the selected session changes before confirm", async () => {

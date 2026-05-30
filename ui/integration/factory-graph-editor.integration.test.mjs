@@ -278,7 +278,6 @@ describe.sequential("factory graph editor browser integration", () => {
   it(
     "exports the current factory as a downloadable PNG without uncaught browser exceptions",
     async () => {
-      const postFactoryActivations = [];
       const sessionFactoryPutRequests = [];
       const replayCoverageReport = buildReplayCoverageReport();
       const pngCoverageScenario = replayCoverageReport.scenarios.find(
@@ -288,9 +287,6 @@ describe.sequential("factory graph editor browser integration", () => {
         apiPort: preview.apiPort,
         currentFactory: exportFactoryDefinition,
         eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
-        onActivateFactory: async (value) => {
-          postFactoryActivations.push(value);
-        },
         onSaveCurrentFactory: async ({ body, sessionID }) => {
           sessionFactoryPutRequests.push({ body, sessionID });
         },
@@ -499,7 +495,6 @@ describe.sequential("factory graph editor browser integration", () => {
           state: "hidden",
           timeout: uiInteractionTimeoutMs,
         });
-        expect(postFactoryActivations).toEqual([]);
         expect(sessionFactoryPutRequests).toHaveLength(1);
         expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
           defaultFactorySessionID,
