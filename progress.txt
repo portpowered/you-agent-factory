@@ -796,3 +796,21 @@
   - Gotchas encountered: Go subtests that call `t.Fatal` still fail the parent test—prove failure paths via migrated maptests/replay tests rather than expect-failure subtests in `pkg/testutil`.
   - Useful context: Stories 002/003 migrate `config_mapper_test.go` and `effective_config_test.go` call sites and delete local helpers in `config_mapper_resources_test.go` / `effective_config_test.go`.
 ---
+
+## 2026-05-31T12:00:00Z - consolidate-petri-net-test-assertions-002
+- What was implemented: Migrated `config_mapper_test.go` to `testutil.AssertNoTransitionExhaustion` (with `ExhaustionContext: "customer-authored mapping"`) and `testutil.AssertGuardedLoopBreakerTransition`; removed duplicate `assertNoTransitionExhaustion` and `assertGuardedLoopBreakerTransition` from `config_mapper_resources_test.go`.
+- Files changed: `pkg/config/maptests/config_mapper_test.go`, `pkg/config/maptests/config_mapper_resources_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: Loop-breaker tests keep package-local pre-checks (e.g. `loopBreaker.WorkerType`) before calling shared arc/guard assertions; exhaustion context string must match prior maptests wording exactly.
+  - Gotchas encountered: Shared exhaustion helper skips nil transitions (safer than the removed local helper); behavior unchanged for non-nil transitions in these tests.
+  - Useful context: Story 003 mirrors this for `pkg/replay/configtests/effective_config_test.go` with context `replay-mapped customer config`.
+---
+
+## 2026-05-30T22:10:03Z - consolidate-petri-net-test-assertions-003
+- What was implemented: Migrated `effective_config_test.go` to `testutil.AssertGuardedLoopBreakerTransition` and `testutil.AssertNoTransitionExhaustion` with `ExhaustionContext: "replay-mapped customer config"`; deleted local `assertReplayGuardedLoopBreakerTransition` and `assertReplayHasNoTransitionExhaustion`.
+- Files changed: `pkg/replay/configtests/effective_config_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: Replay guarded-loop-breaker test keeps package-local generated/runtime guard checks before shared Petri arc assertions, same as maptests story 002.
+  - Gotchas encountered: Shared loop-breaker failure messages differ slightly from removed replay-local helper wording; call-site transition/place/guard IDs unchanged.
+  - Useful context: All three PRD stories complete; open PR `consolidate-petri-net-test-assertions` if none exists after push.
+---
