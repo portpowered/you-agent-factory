@@ -36,7 +36,7 @@ With no matching entries, every dispatch returns the default accepted result.
 ## JSON Contract
 
 The config file is a single JSON object with a top-level `mockWorkers` array.
-Each array entry selects a worker dispatch and declares the outcome to apply
+Each array element selects a worker dispatch and declares the outcome to apply
 when it matches.
 
 | Field | Required | Description |

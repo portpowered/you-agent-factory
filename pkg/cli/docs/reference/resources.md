@@ -54,6 +54,8 @@ workstations while a you-agent-factory dispatch is active.
 
 ## Authoring Rules
 
+- Use camelCase public fields in `factory.json` examples such as `workTypes`,
+  `resources`, and `workstations[].resources`, matching `api/openapi.yaml`.
 - Declare resources at the top level before referencing them from workers or
   workstations.
 - Use positive capacity values.

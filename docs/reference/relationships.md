@@ -24,8 +24,8 @@ the workflow needs both prerequisite ordering and parent membership.
 
 ## Source And Target Semantics
 
-| Relation type | Source means | Target means | `required_state` |
-|---------------|--------------|--------------|------------------|
+| Relation type | Source means | Target means | `requiredState` |
+|---------------|--------------|--------------|-----------------|
 | `DEPENDS_ON` | The blocked work item | The prerequisite work item | Optional. Defaults to `complete`. Names a state on the target work type. |
 | `PARENT_CHILD` | The child work item | The parent work item | Not used. Ignore this field on `PARENT_CHILD`. |
 | `SPAWNED_BY` | The spawned child work item | The spawning context (for example a parent work item or fanout source) | Not used on batch files. Runtime records the spawn lineage. |
@@ -42,39 +42,39 @@ parent-aware input guards.
 ```json
 {
   "type": "DEPENDS_ON",
-  "source_work_name": "publish",
-  "target_work_name": "review",
-  "required_state": "complete"
+  "sourceWorkName": "publish",
+  "targetWorkName": "review",
+  "requiredState": "complete"
 }
 ```
 
 Read that as: `publish` waits until `review` reaches `complete`. When
-`required_state` is omitted, the factory defaults to `complete`.
+`requiredState` is omitted, the factory defaults to `complete`.
 
 `DEPENDS_ON` example inside a batch:
 
 ```json
 {
-  "request_id": "release-gate",
+  "requestId": "release-gate",
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
     {
       "name": "review",
-      "work_type_name": "story",
+      "workTypeName": "story",
       "payload": { "title": "Review release notes" }
     },
     {
       "name": "publish",
-      "work_type_name": "story",
+      "workTypeName": "story",
       "payload": { "title": "Publish release" }
     }
   ],
   "relations": [
     {
       "type": "DEPENDS_ON",
-      "source_work_name": "publish",
-      "target_work_name": "review",
-      "required_state": "complete"
+      "sourceWorkName": "publish",
+      "targetWorkName": "review",
+      "requiredState": "complete"
     }
   ]
 }
@@ -92,8 +92,8 @@ set for parent-aware fan-in. It records parent lineage on the child token.
 ```json
 {
   "type": "PARENT_CHILD",
-  "source_work_name": "story-auth",
-  "target_work_name": "story-set"
+  "sourceWorkName": "story-auth",
+  "targetWorkName": "story-set"
 }
 ```
 
@@ -103,36 +103,36 @@ Parent-child batch example:
 
 ```json
 {
-  "request_id": "release-story-set",
+  "requestId": "release-story-set",
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
     {
       "name": "story-set",
-      "work_type_name": "story-set",
+      "workTypeName": "story-set",
       "state": "waiting",
       "payload": { "title": "April release story set" }
     },
     {
       "name": "story-auth",
-      "work_type_name": "story",
+      "workTypeName": "story",
       "payload": { "title": "Harden auth session handling" }
     },
     {
       "name": "story-billing",
-      "work_type_name": "story",
+      "workTypeName": "story",
       "payload": { "title": "Polish billing retry UX" }
     }
   ],
   "relations": [
     {
       "type": "PARENT_CHILD",
-      "source_work_name": "story-auth",
-      "target_work_name": "story-set"
+      "sourceWorkName": "story-auth",
+      "targetWorkName": "story-set"
     },
     {
       "type": "PARENT_CHILD",
-      "source_work_name": "story-billing",
-      "target_work_name": "story-set"
+      "sourceWorkName": "story-billing",
+      "targetWorkName": "story-set"
     }
   ]
 }
@@ -184,20 +184,20 @@ Common rejection reasons:
 |---------|--------|
 | Invalid JSON or retired field aliases | Whole batch rejected |
 | Duplicate work names in `works[]` | Whole batch rejected |
-| Relation `source_work_name` or `target_work_name` does not match a work name | Whole batch rejected |
+| Relation `sourceWorkName` or `targetWorkName` does not match a work name | Whole batch rejected |
 | Self-relation (`source` equals `target`) | Whole batch rejected |
 | `DEPENDS_ON` cycle between siblings | Whole batch rejected |
-| `required_state` names a state that does not exist on the target work type | Whole batch rejected |
-| Unknown `work_type_name` or invalid batch shape | Whole batch rejected |
+| `requiredState` names a state that does not exist on the target work type | Whole batch rejected |
+| Unknown `workTypeName` or invalid batch shape | Whole batch rejected |
 
-Declare batch relations by work name. Do not use `target_work_id` in submitted
+Declare batch relations by work name. Do not use `targetWorkId` in submitted
 batch relations.
 
 ## Normalization Outcomes
 
 After a batch passes validation, the factory normalizes it:
 
-1. Missing work IDs are generated as `batch-<request_id>-<work-name>`.
+1. Missing work IDs are generated as `batch-<requestId>-<work-name>`.
 2. Work item tags receive `_work_name` and `_work_type` values.
 3. `DEPENDS_ON` relations attach to the blocked source work token.
 4. `PARENT_CHILD` relations attach to the child work token and set parent
@@ -249,10 +249,10 @@ page for relation semantics and scheduling impact.
 
 ## Common Mistakes
 
-- Reversing `PARENT_CHILD` direction — keep `source_work_name` on the child and
-  `target_work_name` on the parent.
+- Reversing `PARENT_CHILD` direction — keep `sourceWorkName` on the child and
+  `targetWorkName` on the parent.
 - Using `DEPENDS_ON` where `PARENT_CHILD` is required for parent-aware guards.
-- Setting `required_state` on `PARENT_CHILD` — that field applies only to
+- Setting `requiredState` on `PARENT_CHILD` — that field applies only to
   `DEPENDS_ON`.
 - Expecting partial work after a validation failure — the whole batch is
   rejected.

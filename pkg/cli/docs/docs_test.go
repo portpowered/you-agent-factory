@@ -221,9 +221,20 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you docs mock-workers",
 		"you docs record-replay",
 		"docs/examples/mock-workers.json",
+		"requestId",
+		"workTypeName",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(authoring-factories) missing %q:\n%s", want, got)
+		}
+	}
+	for _, absent := range []string{
+		"work_type_name",
+		"source_work_name",
+		`"request_id"`,
+	} {
+		if strings.Contains(got, absent) {
+			t.Fatalf("Markdown(authoring-factories) still contains retired field %q:\n%s", absent, got)
 		}
 	}
 	for _, wrapper := range []string{
@@ -288,9 +299,22 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 		"DEPENDS_ON",
 		"PARENT_CHILD",
 		"factory/inputs/BATCH/default/<request_id>.json",
+		"requestId",
+		"workTypeName",
+		"sourceWorkName",
+		"targetWorkName",
+		"requiredState",
 	} {
 		if !strings.Contains(canonical, want) {
 			t.Fatalf("Markdown(batch-inputs) missing %q:\n%s", want, canonical)
+		}
+	}
+	for _, absent := range []string{
+		"work_type_name",
+		"source_work_name",
+	} {
+		if strings.Contains(canonical, absent) {
+			t.Fatalf("Markdown(batch-inputs) still contains retired field %q:\n%s", absent, canonical)
 		}
 	}
 	for _, wrapper := range []string{
@@ -429,9 +453,11 @@ func TestMarkdown_RelationshipsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"DEPENDS_ON",
 		"PARENT_CHILD",
 		"SPAWNED_BY",
-		"required_state",
-		"source_work_name",
-		"target_work_name",
+		"requiredState",
+		"sourceWorkName",
+		"targetWorkName",
+		"workTypeName",
+		"requestId",
 		"FACTORY_REQUEST_BATCH",
 		"Whole-Batch Validation",
 		"Parent-Aware Guard Linkage",
@@ -441,6 +467,15 @@ func TestMarkdown_RelationshipsReturnsRawAuthoredMarkdown(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(relationships) missing %q:\n%s", want, got)
+		}
+	}
+	for _, absent := range []string{
+		"work_type_name",
+		"source_work_name",
+		"target_work_name",
+	} {
+		if strings.Contains(got, absent) {
+			t.Fatalf("Markdown(relationships) still contains retired field %q:\n%s", absent, got)
 		}
 	}
 	for _, wrapper := range []string{

@@ -82,6 +82,68 @@ func TestDocsCommand_HelpStillUsesCobraHelp(t *testing.T) {
 	}
 }
 
+func TestDocsCommand_BatchAndRelationshipTopicsUseOpenAPICamelCaseFieldNames(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		topic   string
+		want    []string
+		absent  []string
+	}{
+		{
+			topic: "batch-inputs",
+			want: []string{
+				"# Batch Inputs",
+				"requestId",
+				"workTypeName",
+				"sourceWorkName",
+				"targetWorkName",
+			},
+			absent: []string{"work_type_name", "source_work_name"},
+		},
+		{
+			topic: "relationships",
+			want: []string{
+				"# Relationships",
+				"requestId",
+				"workTypeName",
+				"sourceWorkName",
+				"targetWorkName",
+			},
+			absent: []string{"work_type_name", "source_work_name", "target_work_name"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.topic, func(t *testing.T) {
+			t.Parallel()
+
+			var stdout bytes.Buffer
+			root := NewRootCommand()
+			root.SetOut(&stdout)
+			root.SetErr(io.Discard)
+			root.SetArgs([]string{"docs", tc.topic})
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute docs %s: %v", tc.topic, err)
+			}
+
+			got := stdout.String()
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("docs %s missing %q:\n%s", tc.topic, want, got)
+				}
+			}
+			for _, absent := range tc.absent {
+				if strings.Contains(got, absent) {
+					t.Fatalf("docs %s still contains retired field %q:\n%s", tc.topic, absent, got)
+				}
+			}
+		})
+	}
+}
+
 func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

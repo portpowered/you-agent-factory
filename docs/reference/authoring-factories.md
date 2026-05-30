@@ -264,12 +264,12 @@ Create a startup or watched-file request:
 
 ```json
 {
-  "request_id": "story-001",
+  "requestId": "story-001",
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
     {
       "name": "story-001",
-      "work_type_name": "story",
+      "workTypeName": "story",
       "payload": {
         "title": "Add review checklist"
       }

@@ -29,12 +29,12 @@ Write one canonical request body:
 
 ```json
 {
-  "request_id": "release-story-set",
+  "requestId": "release-story-set",
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
     {
       "name": "story-set",
-      "work_type_name": "story-set",
+      "workTypeName": "story-set",
       "state": "waiting",
       "payload": {
         "title": "April release story set"
@@ -46,7 +46,7 @@ Write one canonical request body:
     },
     {
       "name": "story-auth",
-      "work_type_name": "story",
+      "workTypeName": "story",
       "payload": {
         "title": "Harden auth session handling"
       },
@@ -57,7 +57,7 @@ Write one canonical request body:
     },
     {
       "name": "story-billing",
-      "work_type_name": "story",
+      "workTypeName": "story",
       "payload": {
         "title": "Polish billing retry UX"
       },
@@ -70,13 +70,13 @@ Write one canonical request body:
   "relations": [
     {
       "type": "PARENT_CHILD",
-      "source_work_name": "story-auth",
-      "target_work_name": "story-set"
+      "sourceWorkName": "story-auth",
+      "targetWorkName": "story-set"
     },
     {
       "type": "PARENT_CHILD",
-      "source_work_name": "story-billing",
-      "target_work_name": "story-set"
+      "sourceWorkName": "story-billing",
+      "targetWorkName": "story-set"
     }
   ]
 }
@@ -98,7 +98,7 @@ curl -X PUT "http://localhost:7437/work-requests/release-story-set" \
   --data @factory/inputs/BATCH/default/release-story-set.json
 ```
 
-The path `request_id` and body `request_id` must match.
+The path `{request_id}` and body `requestId` must match.
 
 ## Poller Stdout Contract
 
@@ -166,7 +166,7 @@ Use these paths:
 | Path | Use |
 |------|-----|
 | `factory/inputs/BATCH/default/<request_id>.json` | Manual mixed-work-type batches and canonical parent-child file input. |
-| `factory/inputs/<work_type>/default/<request_id>.json` | Manual single-work-type batches. The watched folder can infer `work_type_name` when omitted. |
+| `factory/inputs/<work_type>/default/<request_id>.json` | Manual single-work-type batches. The watched folder can infer `workTypeName` when omitted. |
 | `factory/inputs/<work_type>/<execution_id>/<request_id>.json` | Generated work tied to a parent execution. The channel name becomes the execution ID. |
 | Any readable path passed to `you run --work <path>` | Startup work submitted before the run begins. |
 
@@ -176,14 +176,14 @@ Filename rules:
   batch. Markdown files and non-batch JSON files are wrapped as one raw-payload
   work item instead.
 - Prefer `<request_id>.json`, using lowercase words separated by hyphens.
-- Keep the JSON `request_id` stable across retries. The filename does not have
-  to match `request_id`, but matching them makes idempotency and logs easier to
+- Keep the JSON `requestId` stable across retries. The filename does not have
+  to match `requestId`, but matching them makes idempotency and logs easier to
   reason about.
 - Avoid temporary suffixes such as `.tmp`, `.swp`, or `~`; the watcher ignores
   those files.
 
 When a batch file is placed under `factory/inputs/BATCH/default/`, every work
-item must set `work_type_name` explicitly because the folder does not imply one
+item must set `workTypeName` explicitly because the folder does not imply one
 shared work type.
 
 ## How Batches Work
@@ -195,7 +195,7 @@ batch. No partial work is created.
 
 After validation, the factory normalizes the batch:
 
-1. Missing work IDs are generated as `batch-<request_id>-<work-name>`.
+1. Missing work IDs are generated as `batch-<requestId>-<work-name>`.
 2. Missing work item trace IDs inherit the first trace ID in the batch, or a
    generated request trace.
 3. Work item tags receive `_work_name` and `_work_type` values.
@@ -225,9 +225,9 @@ Use the relation that matches the behavior you need:
 ```json
 {
   "type": "DEPENDS_ON",
-  "source_work_name": "publish",
-  "target_work_name": "review",
-  "required_state": "complete"
+  "sourceWorkName": "publish",
+  "targetWorkName": "review",
+  "requiredState": "complete"
 }
 ```
 
@@ -238,8 +238,8 @@ Read that as: `publish` waits for `review`.
 ```json
 {
   "type": "PARENT_CHILD",
-  "source_work_name": "story-auth",
-  "target_work_name": "story-set"
+  "sourceWorkName": "story-auth",
+  "targetWorkName": "story-set"
 }
 ```
 
@@ -256,14 +256,14 @@ The smallest useful parent-child batch needs these fields:
 
 | Field | Required | Why it matters |
 |-------|----------|----------------|
-| `request_id` | Yes | Stable idempotency key for the full submission. |
+| `requestId` | Yes | Stable idempotency key for the full submission. |
 | `type` | Yes | Must be `FACTORY_REQUEST_BATCH`. |
 | `works[].name` | Yes | Relations refer to work items by name. |
-| `works[].work_type_name` | Yes for `inputs/BATCH` | Mixed-work-type parent-child batches cannot rely on folder inference. |
+| `works[].workTypeName` | Yes for `inputs/BATCH` | Mixed-work-type parent-child batches cannot rely on folder inference. |
 | `works[].state` on the parent | Usually | Place the parent directly into the waiting state consumed by the parent-aware fan-in workstation. |
 | `relations[].type` | Yes | Use `PARENT_CHILD` for submitted parent-child membership. |
-| `relations[].source_work_name` | Yes | Name of the child work item. |
-| `relations[].target_work_name` | Yes | Name of the parent work item. |
+| `relations[].sourceWorkName` | Yes | Name of the child work item. |
+| `relations[].targetWorkName` | Yes | Name of the parent work item. |
 
 Children usually omit `state` so they start in their work type's initial
 state. Set a child `state` only when you intentionally need non-initial
@@ -273,24 +273,27 @@ placement.
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `request_id` | Yes | Stable client-provided request identifier. The API requires the path `request_id` and body `request_id` to match. Some lower-level submit paths can fill a missing ID, but public batch files should set it explicitly. |
+| `requestId` | Yes | Stable client-provided request identifier. The API requires the path `{request_id}` and body `requestId` to match. Some lower-level submit paths can fill a missing ID, but public batch files should set it explicitly. |
 | `type` | Yes | Must be `FACTORY_REQUEST_BATCH`. |
 | `works` | Yes | Array of one or more work items. |
 | `relations` | No | Array of relations between named work items in this batch. |
+| `currentChainingTraceId` | No | Optional default chaining-trace identifier applied to submitted work items that omit `currentChainingTraceId` or `traceId`. |
 
-Do not use `work_type_id`. Public batch inputs use `work_type_name`; retired
-`work_type_id` aliases are rejected at submit boundaries.
+Do not use `work_type_id`. Public batch inputs use `workTypeName`; retired
+`work_type_id` aliases are rejected at submit boundaries with guidance to use
+`workTypeName`.
 
 ## Work Item Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Human-readable work name. Names must be unique within the batch because relations refer to work by name. |
-| `work_type_name` | Usually | Configured work type from `factory.json`. Watched input files can infer this from `factory/inputs/<work_type>/...` when omitted, but `inputs/BATCH` requires it on every work item. |
+| `workTypeName` | Usually | Configured work type from `factory.json`. Watched input files can infer this from `factory/inputs/<work_type>/...` when omitted, but `inputs/BATCH` requires it on every work item. |
 | `state` | No | Starting state for this work item. Omit it to use the work type's initial state. Use it on a parent item when fan-in should start from a waiting state. |
-| `work_id` | No | Stable unique work ID. Omit this unless an external system needs a specific ID. |
-| `request_id` | No | Per-work request ID override. Omit this for normal batches so work items inherit the top-level `request_id`. |
-| `trace_id` | No | Trace identifier. Omit this to let the batch share one trace. |
+| `workId` | No | Stable unique work ID. Omit this unless an external system needs a specific ID. |
+| `requestId` | No | Per-work request ID override. Omit this for normal batches so work items inherit the top-level `requestId`. |
+| `currentChainingTraceId` | No | Preferred chaining-trace identifier for this work item. |
+| `traceId` | No | Legacy trace identifier retained for compatibility; prefer `currentChainingTraceId`. Omit either field to let the batch share one trace. |
 | `payload` | No | Opaque work payload. Objects, arrays, strings, numbers, booleans, and `null` are accepted. |
 | `tags` | No | String key-value metadata available to prompt templates and parameterized workstation fields. |
 
@@ -302,11 +305,11 @@ Avoid setting tag names that begin with `_work_`. The factory writes
 | Field | Required | Description |
 |-------|----------|-------------|
 | `type` | Yes | Use `DEPENDS_ON` or `PARENT_CHILD`. |
-| `source_work_name` | Yes | Name of the blocked work item for `DEPENDS_ON`, or the child work item for `PARENT_CHILD`. |
-| `target_work_name` | Yes | Name of the prerequisite work item for `DEPENDS_ON`, or the parent work item for `PARENT_CHILD`. |
-| `required_state` | Only for `DEPENDS_ON` | Target state required before the source can run. Defaults to `complete`. Ignore this field for `PARENT_CHILD`. |
+| `sourceWorkName` | Yes | Name of the blocked work item for `DEPENDS_ON`, or the child work item for `PARENT_CHILD`. |
+| `targetWorkName` | Yes | Name of the prerequisite work item for `DEPENDS_ON`, or the parent work item for `PARENT_CHILD`. |
+| `requiredState` | Only for `DEPENDS_ON` | Target state required before the source can run. Defaults to `complete`. Ignore this field for `PARENT_CHILD`. |
 
-Declare batch relations by name. Do not use `target_work_id` in submitted batch
+Declare batch relations by name. Do not use `targetWorkId` in submitted batch
 relations; target work IDs are resolved during normalization and may appear in
 events after submission.
 
@@ -316,15 +319,15 @@ Before dropping a batch file into `factory/inputs/...`, confirm:
 
 - The filename ends in `.json`.
 - `type` is exactly `FACTORY_REQUEST_BATCH`.
-- `request_id` is stable and unique for the intended submission.
+- `requestId` is stable and unique for the intended submission.
 - Every work item has a unique `name`.
-- Every `inputs/BATCH` work item sets `work_type_name`.
+- Every `inputs/BATCH` work item sets `workTypeName`.
 - Parent work items that feed fan-in use the exact waiting `state` expected by
   the guarded parent input.
-- Every `PARENT_CHILD.source_work_name` names a child.
-- Every `PARENT_CHILD.target_work_name` names a parent.
+- Every `PARENT_CHILD.sourceWorkName` names a child.
+- Every `PARENT_CHILD.targetWorkName` names a parent.
 - Every relation source and target matches a work item name.
-- `required_state`, when used on `DEPENDS_ON`, names an actual state on the
+- `requiredState`, when used on `DEPENDS_ON`, names an actual state on the
   target work type.
 - `DEPENDS_ON` relations do not create cycles.
 
