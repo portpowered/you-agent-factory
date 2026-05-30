@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import { currentFactorySessionPath } from "../api/session-routing";
+import { baseFactoryDefinition } from "./graph-editor-harness";
 import {
   buildSessionFactoryActivationPutBody,
   defaultSessionFactoryVersion,
   incrementedSessionFactoryVersion,
   incrementSessionFactoryVersion,
   isSessionFactoryRequest,
+  mergeImportedFactoryIntoSessionDocument,
   mockGetSessionFactory,
   mockPutSessionFactory,
   sessionFactoryImportActivationDocument,
+  sessionFactoryNamedExportDocument,
 } from "./session-factory-mocks";
 
 describe("session-factory-mocks", () => {
@@ -92,5 +95,77 @@ describe("session-factory-mocks", () => {
         "session-2",
       ),
     ).toBe(false);
+    expect(
+      isSessionFactoryRequest(currentFactorySessionPath("session-2"), "POST"),
+    ).toBe(false);
+  });
+
+  it("mockGetSessionFactory honors custom document and status options", async () => {
+    const response = mockGetSessionFactory({
+      document: sessionFactoryNamedExportDocument,
+      status: 503,
+      statusText: "Service Unavailable",
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.statusText).toBe("Service Unavailable");
+    await expect(response.json()).resolves.toEqual(
+      sessionFactoryNamedExportDocument,
+    );
+  });
+
+  it("mockPutSessionFactory honors custom error copy and success payloads", async () => {
+    const stale = mockPutSessionFactory({
+      mode: "stale_version",
+      staleVersionMessage: "Version mismatch.",
+    });
+    await expect(stale.json()).resolves.toEqual({
+      code: "STALE_FACTORY_VERSION",
+      message: "Version mismatch.",
+    });
+
+    const notIdle = mockPutSessionFactory({
+      factoryNotIdleMessage: "Factory is running.",
+      mode: "factory_not_idle",
+    });
+    await expect(notIdle.json()).resolves.toEqual({
+      code: "FACTORY_NOT_IDLE",
+      message: "Factory is running.",
+    });
+
+    const success = mockPutSessionFactory({
+      responseDocument: sessionFactoryNamedExportDocument,
+      statusText: "OK",
+    });
+    expect(success.statusText).toBe("OK");
+    await expect(success.json()).resolves.toEqual(
+      sessionFactoryNamedExportDocument,
+    );
+  });
+
+  it("mergeImportedFactoryIntoSessionDocument preserves session name and applies version", () => {
+    expect(
+      mergeImportedFactoryIntoSessionDocument(
+        sessionFactoryImportActivationDocument,
+        baseFactoryDefinition,
+        incrementedSessionFactoryVersion,
+      ),
+    ).toEqual({
+      ...baseFactoryDefinition,
+      name: sessionFactoryImportActivationDocument.name,
+      version: incrementedSessionFactoryVersion,
+    });
+  });
+
+  it("incrementSessionFactoryVersion leaves non-ISO physical timestamps unchanged", () => {
+    expect(
+      incrementSessionFactoryVersion({
+        logical: "1",
+        physical: "not-a-timestamp",
+      }),
+    ).toEqual({
+      logical: "2",
+      physical: "not-a-timestamp",
+    });
   });
 });

@@ -62,4 +62,53 @@ describe("graph-editor-harness", () => {
     expect(hooks.useFactoryGraphDraftState).toHaveBeenCalledWith(options);
     expect(graph.draftState).toBe(draftState);
   });
+
+  it("createMockEditableFactoryGraph rejects graph removal without a matching node", () => {
+    const graph = createMockEditableFactoryGraph(
+      {},
+      createMockGraphEditorDraftState(),
+    );
+
+    expect(graph.actions.removeNode("missing-node")).toMatchObject({
+      ok: false,
+      reason: "NODE_NOT_FOUND",
+    });
+  });
+
+  it("createMockEditableFactoryGraph blocks save when active work is in flight", async () => {
+    const draftState = createMockGraphEditorDraftState({
+      hasChanges: true,
+      pendingFactoryDefinition: baseFactoryDefinitionDocument,
+    });
+    const saveFactoryDefinition = vi.fn();
+    const graph = createMockEditableFactoryGraph(
+      { activeWorkCount: 2, saveFactoryDefinition },
+      draftState,
+    );
+
+    await expect(graph.actions.save()).resolves.toBe(false);
+    expect(saveFactoryDefinition).not.toHaveBeenCalled();
+    expect(graph.saveState.canSave).toBe(false);
+  });
+
+  it("createMockEditableFactoryGraph marks save state stale when versions diverge", () => {
+    const draftState = createMockGraphEditorDraftState({
+      baseDocument: baseFactoryDefinitionDocument,
+      hasChanges: true,
+      latestDocument: {
+        ...baseFactoryDefinitionDocument,
+        version: {
+          logical: "9",
+          physical: "2026-05-18T15:32:00.001Z",
+        },
+      },
+    });
+    const graph = createMockEditableFactoryGraph(
+      { saveFactoryDefinition: vi.fn() },
+      draftState,
+    );
+
+    expect(graph.saveState.isStale).toBe(true);
+    expect(graph.saveState.canSave).toBe(false);
+  });
 });

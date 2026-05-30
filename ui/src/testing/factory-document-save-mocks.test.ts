@@ -39,6 +39,27 @@ describe("factory-document-save-mocks", () => {
       CurrentFactoryDefinitionError,
     );
     expect(factoryDocumentSaveError("generic")).toBeInstanceOf(Error);
+    expect(factoryDocumentSaveError("generic", { message: "Save failed." })).toEqual(
+      new Error("Save failed."),
+    );
+  });
+
+  it("mockFactoryDocumentSave resolves custom documents for success mode", async () => {
+    const resolvedDocument = {
+      name: "Custom Factory",
+      version: { logical: "11", physical: "2026-05-30T00:00:00Z" },
+      workers: [],
+      workstations: [],
+      workTypes: [],
+    };
+    const success = mockFactoryDocumentSave({
+      mode: "success",
+      resolvedDocument,
+    });
+
+    await expect(success.mutateAsync({} as never)).resolves.toEqual(
+      resolvedDocument,
+    );
   });
 
   it("mockPendingFactoryDocumentSave keeps mutateAsync pending until resolved", async () => {
