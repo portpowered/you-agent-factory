@@ -67,7 +67,7 @@ export function resolvePromptValidationState(
     return { status: "idle" };
   }
 
-  if (promptValidation.isPending) {
+  if (promptValidation.isPending || promptValidation.isFetching) {
     return { status: "loading" };
   }
 

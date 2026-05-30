@@ -104,6 +104,7 @@ export function WorkstationPromptEditor({
   value,
 }: WorkstationPromptEditorProps) {
   const autocompleteStateRef = useRef(autocompleteState);
+  const onChangeRef = useRef(onChange);
   const editorRef = useRef<MonacoEditorAPI.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
   const startupState = monacoSetupState;
@@ -115,6 +116,10 @@ export function WorkstationPromptEditor({
   useEffect(() => {
     autocompleteStateRef.current = autocompleteState;
   }, [autocompleteState]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     onReadyChange?.(startupState === "ready");
@@ -175,6 +180,7 @@ export function WorkstationPromptEditor({
         autocompleteStateRef,
         editorRef,
         monacoRef,
+        onChangeRef,
         onMount,
         onScrollChange,
       })}
@@ -196,12 +202,14 @@ function createPromptEditorMountHandler({
   autocompleteStateRef,
   editorRef,
   monacoRef,
+  onChangeRef,
   onMount,
   onScrollChange,
 }: {
   autocompleteStateRef: RefObject<EditableWorkstationPromptHelpState>;
   editorRef: RefObject<MonacoEditorAPI.IStandaloneCodeEditor | null>;
   monacoRef: RefObject<typeof import("monaco-editor") | null>;
+  onChangeRef: RefObject<(value: string) => void>;
   onMount?: (editorInstance: MonacoEditorAPI.IStandaloneCodeEditor) => void;
   onScrollChange?: (scrollPosition: { scrollLeft: number; scrollTop: number }) => void;
 }) {
@@ -218,6 +226,9 @@ function createPromptEditorMountHandler({
     );
     editorInstance.addCommand(monacoInstance.KeyCode.Space, () => {
       editorInstance.trigger("workstation-prompt-space", "type", { text: " " });
+    });
+    const contentChangeListener = editorInstance.onDidChangeModelContent(() => {
+      onChangeRef.current(editorInstance.getValue());
     });
     const typeListener = editorInstance.onDidChangeModelContent((event) => {
       const insertedText = event.changes.map((change) => change.text).join("");
@@ -254,6 +265,7 @@ function createPromptEditorMountHandler({
       editorRef.current = null;
       monacoRef.current = null;
       completionProvider.dispose();
+      contentChangeListener.dispose();
       typeListener.dispose();
     });
     onMount?.(editorInstance);
