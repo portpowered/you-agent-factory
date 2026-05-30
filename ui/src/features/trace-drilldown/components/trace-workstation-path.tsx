@@ -14,10 +14,9 @@ import {
 } from "../../../components/dashboard/dashboard-graph";
 import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "../../factory-graph-editor/components/factory-graph-editor-edge";
 import {
-  getCachedTraceGraphLayout,
-  layoutTraceGraphWithElk,
-  traceGraphLayoutKey,
-} from "../lib/trace-elk-layout";
+  traceDispatchTopologyLayoutKey,
+  useTraceDispatchFactoryGraphLayoutPositions,
+} from "../hooks/use-trace-dispatch-factory-graph-layout";
 import { buildTraceDispatchFactoryGraphFlow } from "../lib/trace-dispatch-factory-graph-flow";
 import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-flow";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
@@ -48,49 +47,21 @@ export function TraceWorkstationPath({
     () => buildTraceDispatchFactoryGraphFlow(dispatches, locale),
     [dispatches, locale],
   );
-  const layoutKey = useMemo(
-    () =>
-      traceGraphLayoutKey(graph.nodes, graph.edges, graph.graphDimensions),
-    [graph.edges, graph.graphDimensions, graph.nodes],
+  const topologyKey = useMemo(
+    () => traceDispatchTopologyLayoutKey(graph.topology),
+    [graph.topology],
   );
-  const [layoutedNodes, setLayoutedNodes] = useState<TraceDispatchFlowNode[]>(
-    () => getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes,
+  const positionsByTraceNodeId = useTraceDispatchFactoryGraphLayoutPositions(
+    graph.topology,
+    graph.dispatchIdByNodeId,
+    topologyKey,
   );
-
-  useEffect(() => {
-    setLayoutedNodes(
-      getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes,
-    );
-  }, [graph.nodes, layoutKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void layoutTraceGraphWithElk(
-      graph.nodes,
-      graph.edges,
-      graph.graphDimensions,
-    ).then((nextNodes) => {
-      if (!cancelled) {
-        setLayoutedNodes(nextNodes);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [graph.edges, graph.graphDimensions, graph.nodes]);
-
   const baseNodes = useMemo(() => {
-    const positionsByID = new Map(
-      layoutedNodes.map((node) => [node.id, node.position]),
-    );
-
     return graph.nodes.map((node) => ({
       ...node,
-      position: positionsByID.get(node.id) ?? node.position,
+      position: positionsByTraceNodeId.get(node.id) ?? node.position,
     }));
-  }, [graph.nodes, layoutedNodes]);
+  }, [graph.nodes, positionsByTraceNodeId]);
   const [nodes, setNodes] = useState<TraceDispatchFlowNode[]>(baseNodes);
 
   useEffect(() => {

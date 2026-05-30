@@ -8,12 +8,8 @@ import type {
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
-vi.mock("../lib/trace-elk-layout", () => ({
-  getCachedTraceGraphLayout: () => null,
-  async layoutTraceGraphWithElk<TNode>(nodes: TNode[]): Promise<TNode[]> {
-    return nodes;
-  },
-  traceGraphLayoutKey: () => "trace-layout-test",
+vi.mock("../lib/trace-factory-graph-layout", () => ({
+  buildTraceFactoryGraphLayoutPositions: async () => new Map(),
 }));
 
 vi.mock("@xyflow/react", async () => {

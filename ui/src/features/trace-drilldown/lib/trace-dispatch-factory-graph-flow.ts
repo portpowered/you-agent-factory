@@ -6,6 +6,7 @@ import {
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/factory-graph-react-flow-projection";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   projectTraceDispatchesToFactoryGraph,
   type TraceDispatchNodeOverlay,
@@ -27,9 +28,11 @@ export type TraceDispatchFlowNode = Node<
 >;
 
 export interface TraceDispatchFactoryGraphFlow {
+  dispatchIdByNodeId: ReadonlyMap<string, string>;
   edges: FactoryGraphReactFlowEdge[];
   graphDimensions: Map<string, { height: number; id: string; width: number }>;
   nodes: TraceDispatchFlowNode[];
+  topology: FactoryGraphTopology;
 }
 
 export function buildTraceDispatchFactoryGraphFlow(
@@ -87,8 +90,10 @@ export function buildTraceDispatchFactoryGraphFlow(
   }));
 
   return {
+    dispatchIdByNodeId: traceProjection.dispatchIdByNodeId,
     edges,
     graphDimensions,
     nodes,
+    topology: traceProjection.topology,
   };
 }

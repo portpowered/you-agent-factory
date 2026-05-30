@@ -121,7 +121,9 @@ describe("buildTraceFactoryGraphLayoutPositions", () => {
     expect(positions.get("dispatch-a")).toEqual({ x: 10, y: 20 });
     layoutSpy.mockRestore();
   });
+});
 
+describe("buildTraceFactoryGraphLayoutPositions dispatch projection", () => {
   it("lays out dispatch projection topology with left-to-right workstation ordering", async () => {
     const projection = projectTraceDispatchesToFactoryGraph([
       {
