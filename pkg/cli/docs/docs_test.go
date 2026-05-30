@@ -148,10 +148,10 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 	for _, want := range []string{
 		"# Docs",
 		"`authoring-factories` - Practical factory authoring workflow",
-		"`config` - Factory configuration",
+		"`config` - factory.json topology, work types, states, workers, workstations, resources, and portability",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
-		"`work` - Work types",
+		"`work` - Submitted work: POST /work, tags, batch cross-links, and submission contracts",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
@@ -256,13 +256,14 @@ func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"# Factory JSON And Work Configuration",
-		"work types, states, workers, workstations, resources, and routing",
-		"## Work Types",
-		"handlingBehavior: [\"DEFAULT\"]",
-		"you run --factory",
-		"## Resources",
-		"supportingFiles",
+		"# Submitted Work",
+		"## Single-Work API Submission",
+		"POST /work",
+		"workTypeName",
+		"## Tags And Prompt Templates",
+		"Token.Tags",
+		"[Config](config.md)",
+		"[Batch Inputs](batch-inputs.md)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(work) missing %q:\n%s", want, got)

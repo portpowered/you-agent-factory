@@ -9,7 +9,7 @@ worker-scoped runtime fields, model/script backend fields, and
 `workers/<name>/AGENTS.md` placement here. Keep workstation routing and
 prompt/runtime fields in [Workstations](workstations.md), and keep top-level
 `factory.json` work type and routing context in
-[Factory JSON and work configuration](work.md).
+[Config](config.md).
 
 ## Canonical Placement
 
@@ -281,5 +281,6 @@ for precedence and workstation-level examples.
 - [Package docs index](../README.md)
 - [Models and model operations](models.md)
 - [Workstations reference](workstations.md)
-- [Factory JSON and work configuration](work.md)
+- [Config](config.md)
+- [Submitted work](work.md)
 - [Author AGENTS.md](authoring-agents-md.md)

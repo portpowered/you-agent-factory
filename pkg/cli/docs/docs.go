@@ -60,12 +60,12 @@ type topicDocument struct {
 
 var topicDocuments = []topicDocument{
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath, displayOrder: 10},
-	{topic: TopicConfig, description: "Factory configuration, work types, workers, resources, and local run options.", path: referenceConfigPath, displayOrder: 20},
+	{topic: TopicConfig, description: "factory.json topology, work types, states, workers, workstations, resources, and portability.", path: referenceConfigPath, displayOrder: 20},
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},
 	{topic: TopicRecordReplay, description: "Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.", path: referenceRecordReplayPath, displayOrder: 26},
 	{topic: TopicGuards, description: "Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.", path: referenceGuardsPath, displayOrder: 27},
 	{topic: TopicRelationships, description: "Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.", path: referenceRelationshipsPath, displayOrder: 28},
-	{topic: TopicWork, description: "Work types, states, routing, resources, and portable factory fields.", path: referenceWorkPath, displayOrder: 30},
+	{topic: TopicWork, description: "Submitted work: POST /work, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},

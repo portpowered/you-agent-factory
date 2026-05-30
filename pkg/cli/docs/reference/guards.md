@@ -307,5 +307,6 @@ named failed or terminal state.
 - [Workstations](workstations.md)
 - [Relationships](relationships.md)
 - [Batch Inputs](batch-inputs.md)
-- [Work configuration](work.md)
+- [Config](config.md)
+- [Submitted work](work.md)
 - [Templates](templates.md)
