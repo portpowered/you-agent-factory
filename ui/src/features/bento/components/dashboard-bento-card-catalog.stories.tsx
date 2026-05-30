@@ -53,6 +53,17 @@ import {
 } from "./agent-bento";
 import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
 
+function expectBentoHeaderDragSurface(card: HTMLElement, title: string) {
+  const header = card.querySelector("header");
+  expect(header).toBeTruthy();
+  expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+  expect(header?.className).toContain("cursor-grab");
+  expect(within(card).queryByRole("button", { name: `Move ${title}` })).toBeNull();
+  expect(
+    within(card).getByRole("heading", { level: 3, name: title }),
+  ).toBeVisible();
+}
+
 const STORY_NOW = Date.parse("2026-04-08T12:05:00Z");
 const providerSessionID = "sess-bento-card-catalog";
 const providerSessionLoadingID = "sess-bento-card-loading";
@@ -1504,9 +1515,7 @@ export const WorkTotals = {
     const card = await canvas.findByRole("article", { name: "Work totals" });
 
     await expect(within(card).getByText("Completed")).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: "Move Work totals" }),
-    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Work totals");
   },
 };
 
@@ -1550,9 +1559,7 @@ export const WorkflowGraph = {
         name: "Select Implement workstation",
       }),
     ).toHaveAttribute("aria-pressed", "true");
-    await expect(
-      canvas.getByRole("button", { name: "Move Factory graph" }),
-    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Factory graph");
   },
 };
 
@@ -1565,9 +1572,7 @@ export const CurrentSelection = {
     });
 
     await expect(within(card).getByText("Implement")).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: "Move Current selection" }),
-    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Current selection");
   },
 };
 
@@ -1670,9 +1675,7 @@ export const ProviderSession = {
     });
 
     await expect(await within(card).findByText("Transcript")).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: "Move Provider session" }),
-    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Provider session");
   },
 };
 
@@ -1797,9 +1800,7 @@ export const TerminalWork = {
     await expect(
       within(card).getByRole("button", { name: "Failed Story" }),
     ).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: "Move Completed and failed work" }),
-    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Completed and failed work");
   },
 };
 
@@ -1861,9 +1862,7 @@ export const WorkOutcomeChart = {
     });
 
     await expect(chart).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: "Move Work outcome chart" }),
-    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Work outcome chart");
     expectWorkChartCompactLegendContract(chart);
     expectWorkChartAxisLabelsVisible(chart);
     expectWorkChartLegendClearOfCardTitle(card);
@@ -1987,9 +1986,7 @@ export const SubmitWork = {
     await expect(
       within(card).getByRole("combobox", { name: "Work type" }),
     ).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: "Move Submit work" }),
-    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Submit work");
   },
 };
 
@@ -2116,9 +2113,7 @@ export const TraceDrilldown = {
     });
 
     await expect(within(card).getByText("trace-active-story")).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: "Move Trace drill-down" }),
-    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Trace drill-down");
   },
 };
 
@@ -2236,9 +2231,7 @@ export const InlineAddWidget = {
     await expect(await canvas.findByRole("status")).toHaveTextContent(
       "Selected widget: work-totals",
     );
-    await expect(
-      canvas.getByRole("button", { name: "Move Add widget" }),
-    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Add widget");
   },
 };
 
@@ -2260,14 +2253,7 @@ export const HeaderConsistencyVerification = {
       "Submit work",
     ] as const) {
       const card = await canvas.findByRole("article", { name: cardName });
-      const header = card.querySelector("header");
-      expect(header).toBeTruthy();
-      expect(
-        within(card).getByRole("heading", { level: 3, name: cardName }),
-      ).toBeVisible();
-      await expect(
-        within(card).getByRole("button", { name: `Move ${cardName}` }),
-      ).toBeVisible();
+      expectBentoHeaderDragSurface(card, cardName);
     }
 
     const submitWorkCard = await canvas.findByRole("article", {

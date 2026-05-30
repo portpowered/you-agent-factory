@@ -27,15 +27,21 @@ function rectIsVisible(rect) {
 export async function collectCardHeaderMetrics(article) {
   return article.locator("header").evaluate((header) => {
     const title = header.querySelector("h3");
-    const handle = header.querySelector('[data-bento-drag-handle="true"]');
     const tools = header.lastElementChild;
 
-    if (!(title instanceof HTMLElement) || !(handle instanceof HTMLElement)) {
-      return { error: "Missing bento card title or drag handle." };
+    if (!(title instanceof HTMLElement)) {
+      return { error: "Missing bento card title." };
+    }
+
+    if (header.getAttribute("data-bento-drag-handle") !== "true") {
+      return { error: "Missing header drag handle attribute." };
+    }
+
+    if (!header.className.includes("cursor-grab")) {
+      return { error: "Missing grab cursor affordance on header." };
     }
 
     const titleRect = title.getBoundingClientRect();
-    const handleRect = handle.getBoundingClientRect();
     const headerRect = header.getBoundingClientRect();
     const primaryActions = tools
       ? Array.from(tools.querySelectorAll("button")).filter(
@@ -47,12 +53,8 @@ export async function collectCardHeaderMetrics(article) {
       compactChrome:
         header.className.includes("min-h-11") &&
         header.className.includes("flex-wrap"),
-      handleRect: {
-        height: handleRect.height,
-        width: handleRect.width,
-        x: handleRect.x,
-        y: handleRect.y,
-      },
+      hasGrabCursor: header.className.includes("cursor-grab"),
+      hasHeaderDragHandle: header.getAttribute("data-bento-drag-handle") === "true",
       headerRect: {
         height: headerRect.height,
         width: headerRect.width,
@@ -93,14 +95,16 @@ export function assertCardHeaderMetrics(cardName, metrics, { compactChrome }) {
     throw new Error(`${cardName}: title was not visible.`);
   }
 
-  if (!rectIsVisible(metrics.handleRect)) {
-    throw new Error(`${cardName}: drag handle was not visible.`);
+  if (!rectIsVisible(metrics.headerRect)) {
+    throw new Error(`${cardName}: header drag surface was not visible.`);
   }
 
-  if (rectsOverlap(metrics.titleRect, metrics.handleRect)) {
-    throw new Error(
-      `${cardName}: title overlapped the drag handle at ${compactChrome ? "compact" : "default"} density.`,
-    );
+  if (!metrics.hasHeaderDragHandle) {
+    throw new Error(`${cardName}: header was not marked as the drag handle.`);
+  }
+
+  if (!metrics.hasGrabCursor) {
+    throw new Error(`${cardName}: header was missing the grab cursor affordance.`);
   }
 
   for (const actionRect of metrics.primaryActionRects) {
@@ -110,9 +114,9 @@ export function assertCardHeaderMetrics(cardName, metrics, { compactChrome }) {
       );
     }
 
-    if (rectsOverlap(actionRect, metrics.handleRect)) {
+    if (rectsOverlap(metrics.titleRect, actionRect)) {
       throw new Error(
-        `${cardName}: header action "${actionRect.label}" overlapped the drag handle.`,
+        `${cardName}: title overlapped header action "${actionRect.label}" at ${compactChrome ? "compact" : "default"} density.`,
       );
     }
   }
@@ -139,10 +143,15 @@ export async function verifyBentoCardCatalogHeader({
     const article = page.getByRole("article", { name: card.name });
     await expectVisible(article, `${card.name} bento card`);
 
-    const moveHandle = article.getByRole("button", {
+    const dragHeader = article.locator('header[data-bento-drag-handle="true"]');
+    await expectVisible(dragHeader, `${card.name} header drag handle`);
+
+    const moveButton = article.getByRole("button", {
       name: `Move ${card.name}`,
     });
-    await expectVisible(moveHandle, `${card.name} move handle`);
+    if ((await moveButton.count()) > 0) {
+      throw new Error(`${card.name}: Move button should not be rendered.`);
+    }
 
     if (card.primaryActionName) {
       await expectVisible(
