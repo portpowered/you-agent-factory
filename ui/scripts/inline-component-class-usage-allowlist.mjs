@@ -84,7 +84,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/workflow-activity/components/mutation-dialog.tsx#DIALOG_MAIN_CLASS",
   "src/features/workflow-activity/components/mutation-dialog.tsx#DIALOG_CLOSE_BUTTON_CLASS",
   "src/features/workflow-activity/components/mutation-dialog.tsx#DIALOG_FOOTER_CLASS",
-  "src/features/workflow-activity/components/react-flow-current-activity-card-viewport.tsx#CURRENT_ACTIVITY_LEGEND_CLASS",
   "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_CARD_CLASS",
   "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_HEADER_CLASS",
   "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_TITLE_CLASS",
