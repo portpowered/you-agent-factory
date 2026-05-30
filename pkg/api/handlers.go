@@ -314,54 +314,6 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeNamedFactoryBody(r.Body)
-	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-			return
-		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-	if err := apisurface.ValidateWritableNamedFactoryName(req.Name); err != nil {
-		s.writeError(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME")
-		return
-	}
-
-	created, err := s.runtime.CreateNamedFactory(r.Context(), req)
-	if err != nil {
-		var topologyErr *apisurface.TopologyValidationError
-		switch {
-		case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
-			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.FactoryValidationTarget{factoryvalidation.InvalidFactoryNameTarget()})
-			return
-		case errors.As(err, &topologyErr):
-			targets := topologyErr.Targets
-			if len(targets) == 0 {
-				targets = []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()}
-			}
-			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", targets)
-			return
-		case errors.Is(err, apisurface.ErrInvalidNamedFactory):
-			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
-			return
-		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
-			s.writeError(w, http.StatusConflict, "Named factory already exists.", "FACTORY_ALREADY_EXISTS")
-			return
-		case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
-			s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.FactoryValidationTarget{factoryvalidation.FactoryRuntimeNotIdleTarget()})
-			return
-		default:
-			s.logger.Error("create factory failed", zap.Error(err))
-			s.writeError(w, http.StatusInternalServerError, "failed to store named factory", "INTERNAL_ERROR")
-			return
-		}
-	}
-
-	s.writeJSON(w, http.StatusCreated, created)
-}
-
 func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
@@ -650,26 +602,6 @@ func (s *Server) loadCurrentFactoryBySession(w http.ResponseWriter, r *http.Requ
 	return namedFactory, true
 }
 
-func (s *Server) SaveCurrentFactory(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeSaveCurrentFactoryBody(r.Body)
-	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
-			return
-		}
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
-		return
-	}
-
-	saved, err := s.runtime.SaveCurrentFactory(r.Context(), req.Factory)
-	if err != nil {
-		s.writeCurrentFactoryError(w, err, "save")
-		return
-	}
-
-	s.writeJSON(w, http.StatusOK, saved)
-}
-
 func (s *Server) SaveCurrentFactoryBySessionId(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -689,7 +621,12 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 		return
 	}
 
-	saved, err := sessionRuntime.SaveCurrentFactoryForSession(r.Context(), string(sessionID), req.Factory)
+	mode := factoryapi.FactorySaveModeReplaceCurrent
+	if req.Mode != nil {
+		mode = *req.Mode
+	}
+
+	saved, err := sessionRuntime.SaveFactoryForSession(r.Context(), string(sessionID), mode, req.Factory)
 	if err != nil {
 		s.writeCurrentFactoryError(w, err, "save", zap.String("session_id", string(sessionID)))
 		return

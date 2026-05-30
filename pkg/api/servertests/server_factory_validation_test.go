@@ -191,7 +191,7 @@ func TestSaveCurrentFactory_ReturnsMultipleTopologyValidationTargets(t *testing.
 		},
 	}
 	srv := newAPITestServer(&testutil.MockFactory{
-		SaveCurrentFactoryErr: apisurface.NewTopologyValidationError(
+		SaveFactoryForSessionErr: apisurface.NewTopologyValidationError(
 			"Factory topology contains invalid graph references.",
 			targets,
 		),
@@ -232,7 +232,7 @@ func TestCreateFactory_ReturnsTopologyValidationTargets(t *testing.T) {
 }
 
 func TestCreateFactory_RejectsInvalidFactoryPayloadWithTargets(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{CreateNamedFactoryErr: apisurface.ErrInvalidNamedFactory})
+	srv := newAPITestServer(&testutil.MockFactory{})
 	body := `{"name":"beta","workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"missing-worker","inputs":[{"workType":"beta-task","state":"init"}],"outputs":[{"workType":"beta-task","state":"done"}]}]}`
 	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -253,7 +253,7 @@ func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 		},
 	}
 	srv := newAPITestServer(&testutil.MockFactory{
-		SaveCurrentFactoryErr: apisurface.NewTopologyValidationError(
+		SaveFactoryForSessionErr: apisurface.NewTopologyValidationError(
 			"Factory topology contains invalid graph references.",
 			[]factoryapi.FactoryValidationTarget{target},
 		),
