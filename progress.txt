@@ -6,6 +6,7 @@
 - Pin dashboard session scope in tests with `DashboardSessionTestProvider` / `renderWithDashboardSessionTest` / `renderApp({ sessionID })`; Storybook uses the same provider via `withDashboardStoryRuntime` and `parameters.dashboardApi.sessionID`—re-export from `ui/src/testing/index.ts`.
 - `ui/biome.jsonc` `style/noRestrictedImports` blocks `dashboardSessionStore` imports outside allowlisted production modules (provider, tabs state, store), Storybook runtime reset, app-shell test utils, and `*.test.*` / `*.stories.*`—see `docs/internal/development/dashboard-session-scope-import-boundaries.md`.
 - `App.session-switching.stories.tsx` hides `workGraph` via `hidden: true` on the layout item (not filter-only—`mergeDashboardLayout` re-merges defaults), seeds `DASHBOARD_LAYOUT_STORAGE_KEY`, gates render until `reloadDashboardLayoutFromStorage`, and uses the `App.stories.tsx` height decorator.
+- Offline `you factory save --from` and `you factory update --from` share `persistFromFile` in `pkg/cli/factory/persist_from_file.go` for validation, canonical JSON load, and mode-specific persist; keep `SaveFromFile` / `UpdateFromFile` as thin wrappers for human/JSON output and mode-specific error rendering in `save.go` / `update.go`.
 - `buildRuntimeBundle` in `pkg/service/factory_build.go` returns `factoryRuntimeBundle`, the single runtime wiring struct referenced from `liveRuntimeHandle`; add new runtime sidecars on `factoryRuntimeBundle` only—startup (`BuildFactoryService`) and `buildReplacementFactoryRuntime` both create `logSink` and session loggers inside `buildRuntimeBundle`, not after the fact.
 - Register every live session (including `~default` at `Run` startup and `OpenFactorySession` launches) through `registerLiveSession` in `pkg/service/runtime_sessions.go` with explicit `FactorySessionTarget` metadata; use `defaultSessionTargetFromRuntimeBundle` for default startup—do not call `sessions.Upsert` directly except in `replaceSessionRuntime` replacement updates.
 - Route session-scoped work, snapshots, idle guards, and record/replay paths through `SubmitWorkRequestForSession`, `GetEngineStateSnapshotForSession`, and `requireIdleRuntimeForSession` in `pkg/service/runtime_sessions.go`; use `sessionScopedRecordPath` for per-session replay artifacts—do not read `fs.currentFactory()` when `session_id` is explicit.
@@ -672,3 +673,22 @@
   - Patterns discovered: Mark `DASHBOARD_WIDGET_IDS.workGraph` as `hidden: true` in persisted layout—filtering it out of storage is insufficient because `mergeDashboardLayout` re-merges from `DEFAULT_DASHBOARD_LAYOUT`.
   - Gotchas encountered: `render: () => <App />` without `SessionSwitchingStory` leaves work-graph mounted and fails vitest with React Flow error 004.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/514 — await full CI shard completion before `<COMPLETE>`.
+---
+
+## 2026-05-31T00:00:00Z - consolidate-cli-factory-save-update-from-file-001
+- What was implemented: Added `persistFromFile` shared core in save mode (validation, payload read, `LoadFromCanonicalJSON`, `PersistNamedFactory`, optional `WriteCurrentFactoryPointer`); refactored `SaveFromFile` into a thin delegator preserving human/JSON output and save-specific error mapping.
+- Files changed: `pkg/cli/factory/persist_from_file.go`, `pkg/cli/factory/save.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep mode enum and `persistFromFileNamedFactory` switch in `persist_from_file.go`; leave success formatters and `renderSaveFromFileError` / `renderUpdateFromFileError` on the public wrappers until story 003 unifies errors.
+  - Gotchas encountered: PRD `branchName` is `ralph/consolidate-cli-factory-save-update-from-file` — create/switch from the worktree branch name if they differ.
+  - Useful context: Story 002 adds `persistFromFileModeUpdate` and delegates `UpdateFromFile`; `update.go` still duplicates the flow until then.
+---
+
+## 2026-05-30T20:26:00Z - mergeability (PR #514 main re-merge)
+- What was implemented: Merged `origin/main` into `ralph/ui-session-scope-context-recovery-v2` to clear `mergeStateStatus: DIRTY`; resolved `prd.json`/`progress.txt` conflicts keeping recovery v2 PRD and combined codebase patterns; prior CI on `14dc8a66` was green (all required checks success).
+- Files changed: merge brought main updates (wire-smoke, `persistFromFile`, compose package); conflict resolution in `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Patterns discovered: `mergeStateStatus: DIRTY` on an otherwise green PR usually means main advanced—re-merge before `<COMPLETE>` even when all stories pass.
+  - Gotchas encountered: Main may land unrelated Ralph `prd.json`/`progress.txt` edits; always keep branch PRD (`--ours`) during merge conflict resolution.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/514 — push merge commit and await CI before `<COMPLETE>`.
+---

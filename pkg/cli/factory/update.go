@@ -2,14 +2,9 @@ package factory
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strings"
-
-	configload "github.com/portpowered/infinite-you/pkg/config/load"
-	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 )
 
 // UpdateFromFileConfig holds parameters for replacing an existing named factory from disk.
@@ -33,53 +28,27 @@ func UpdateFromFile(cfg UpdateFromFileConfig) error {
 		cfg.Output = os.Stdout
 	}
 
-	name := strings.TrimSpace(cfg.Name)
-	if name == "" {
-		return fmt.Errorf("factory name is required")
-	}
-	from := strings.TrimSpace(cfg.From)
-	if from == "" {
-		return fmt.Errorf("--from is required")
-	}
-	if strings.TrimSpace(cfg.Dir) == "" {
-		return fmt.Errorf("factory root is required")
-	}
-
-	payload, err := os.ReadFile(from)
+	result, err := persistFromFile(persistFromFileConfig{
+		Mode: persistFromFileModeUpdate,
+		Name: cfg.Name,
+		From: cfg.From,
+		Dir:  cfg.Dir,
+	})
 	if err != nil {
-		return fmt.Errorf("read factory config %s: %w", from, err)
+		return renderPersistFromFileError(persistFromFileModeUpdate, err)
 	}
 
-	if _, err := configload.LoadFromCanonicalJSON(payload, configload.LoadOptions{}); err != nil {
-		return renderUpdateFromFileError(err)
-	}
-
-	factoryDir, err := configpersist.ReplaceNamedFactory(cfg.Dir, name, payload)
-	if err != nil {
-		return renderUpdateFromFileError(err)
-	}
-
-	result := UpdateFromFileResult{
-		Name:       name,
-		FactoryDir: factoryDir,
+	updateResult := UpdateFromFileResult{
+		Name:       result.Name,
+		FactoryDir: result.FactoryDir,
 	}
 	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(result)
+		return json.NewEncoder(cfg.Output).Encode(updateResult)
 	}
-	return renderUpdateFromFileSuccess(result, cfg.Output)
+	return renderUpdateFromFileSuccess(updateResult, cfg.Output)
 }
 
 func renderUpdateFromFileSuccess(result UpdateFromFileResult, output io.Writer) error {
 	_, err := fmt.Fprintf(output, "Updated factory %s\nDirectory: %s\n", result.Name, result.FactoryDir)
-	return err
-}
-
-func renderUpdateFromFileError(err error) error {
-	if errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("factory not found: %w", err)
-	}
-	if configload.IsInvalidNamedFactory(err) || configpersist.IsInvalidNamedFactory(err) {
-		return fmt.Errorf("invalid factory config: %w", err)
-	}
 	return err
 }
