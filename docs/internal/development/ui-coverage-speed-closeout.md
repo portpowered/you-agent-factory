@@ -59,6 +59,31 @@ Local runs are useful for iteration and slow-file tuning but are **not** interch
 
 After a successful main covered pass, `make test-ui-coverage` prints a bounded `[ui-coverage] Main covered pass slowest test files (top 15):` block parsed from Vitest default-reporter output. Use that block for file-level targets; the analysis below uses the **2026-05-30 UTC** phase baseline plus representative slow-file snapshots from maintainer runs on the same head.
 
+## Main-pass worker trial (US-004, 2026-05-30 UTC)
+
+**Decision: keep `defaultMainCoveredMaxWorkers` at `2` in `ui/scripts/ui-coverage-runner.mjs`.** Do not raise the default without new green `make test-ui-coverage` evidence on `ubuntu-latest` showing both faster main-pass **and** total lane time without new failures.
+
+Reproduce comparison runs on one machine (same `bun install` + head):
+
+```bash
+UI_COVERAGE_MAIN_MAX_WORKERS=2 make test-ui-coverage 2>&1 | rg '\[ui-coverage\].*elapsed'
+UI_COVERAGE_MAIN_MAX_WORKERS=3 make test-ui-coverage 2>&1 | rg '\[ui-coverage\].*elapsed'
+UI_COVERAGE_MAIN_MAX_WORKERS=4 make test-ui-coverage 2>&1 | rg '\[ui-coverage\].*elapsed'
+```
+
+| `UI_COVERAGE_MAIN_MAX_WORKERS` | Environment | Command | Main pass elapsed | Phase total (runner + replay) | Pass/fail | Notes |
+| ---: | --- | --- | ---: | ---: | --- | --- |
+| **2** (default) | CI `ubuntu-latest` | `make test-ui-coverage` | **403.37s** | **~531.96s** (~8m52s lane step) | pass | Baseline table above ([run `26654493647`](https://github.com/portpowered/you-agent-factory/actions/runs/26654493647)) |
+| **2** (default) | Local macOS arm64, 10 CPUs | `make test-ui-coverage` | **846.11s** | **~932.42s** | pass | US-001 local table above |
+| **3** | Local macOS arm64, 10 CPUs | `bun run test:coverage` in `ui/` (same runner phases as `make test-ui-coverage` minus replay) | **1470.47s** | incomplete (failed in main pass) | **fail** | `src/App.layout-graph.test.tsx` > `renders and interacts with a 20-node workflow through React Flow` timed out at **30000ms**; 1489 other tests passed |
+| **4** | — | — | — | — | not run | Skipped after **3** regressed and failed; higher parallelism is not pursued without a passing **3** trial |
+
+**Rejection rationale:** On the same maintainer workstation class used for US-001, three workers **increased** main-pass wall time versus two workers (~1470s vs ~846s) and introduced a hard failure in a React Flow graph suite. That matches the ranked risk (mock/jsdom contention and flake) more than a predictable CPU-bound speedup. The historical CI rollout already captured the large win from one→two workers; further raises need CI proof, not local CPU headroom alone.
+
+**Pass/fail parity:** Worker **2** remains the only setting with passing full-lane evidence on both CI and local comparables in this initiative. Re-run `UI_COVERAGE_MAIN_MAX_WORKERS=4 make test-ui-coverage` on `ubuntu-latest` only if product owners want to re-open this decision after App/graph contention changes.
+
+Follow-up optimization effort should shift to **US-005** / **US-006** (megatest isolation and App slimming), not default worker increases.
+
 ## Root-cause analysis (why ~8–9 minutes on CI)
 
 The UI Coverage lane is slow because several independent costs stack in **one sequential job**: hundreds of jsdom specs under V8 instrumentation, a deliberately split main/isolated pass layout, and conservative timeouts—not because a single misconfigured flag dominates.
@@ -69,7 +94,7 @@ Every covered Vitest phase runs with `coverage.provider: "v8"` and blob reporter
 
 ### Two-worker main covered pass
 
-The main corpus runs with `UI_COVERAGE_MAIN_MAX_WORKERS` default **2** (`ui/scripts/ui-coverage-runner.mjs`). That choice cut the main pass roughly in half versus a single worker in the first rollout (see **Historical rollout** below) but caps parallelism below typical CI CPU counts. Raising workers may help until memory, jsdom, or shared mock contention flattens gains—**US-004** owns measurement.
+The main corpus runs with `UI_COVERAGE_MAIN_MAX_WORKERS` default **2** (`ui/scripts/ui-coverage-runner.mjs`). That choice cut the main pass roughly in half versus a single worker in the first rollout (see **Historical rollout** below) but caps parallelism below typical CI CPU counts. **US-004** rejected raising the default to 3 or 4 after a local three-worker trial regressed and failed (see **Main-pass worker trial**); further worker tuning is not the current lever.
 
 ### Isolated React Flow covered pass
 
@@ -101,7 +126,7 @@ Prioritized for follow-up stories in this initiative. **Impact** is qualitative 
 
 | Rank | Proposal | Est. impact | Risk | Owned command / story |
 | ---: | --- | --- | --- | --- |
-| 1 | Tune `UI_COVERAGE_MAIN_MAX_WORKERS` (trial 3 and 4 on CI) | Medium–high on main pass if CPU-bound; uncertain total lane if memory-bound | Medium (flake, OOM, mock races) | `UI_COVERAGE_MAIN_MAX_WORKERS=3 make test-ui-coverage` (and `=4`); compare `[ui-coverage]` phases | **US-004** |
+| 1 | Tune `UI_COVERAGE_MAIN_MAX_WORKERS` (trial 3 and 4) | **Rejected (US-004):** local w=3 slower and failed; w=4 not run | Medium (flake, OOM, mock races) | `UI_COVERAGE_MAIN_MAX_WORKERS=3 make test-ui-coverage`; default stays **2** | **US-004** ✓ |
 | 2 | Slim `App.test.tsx` (fewer redundant full-app mounts, tighter waits) | Medium on main pass (~20s+ file at CI) | Low–medium (behavior regressions if assertions weakened) | Edit `src/App.test.tsx`; verify slow-file line | **US-006** |
 | 3 | Isolate `App.test.tsx` in dedicated single-worker covered phase (like React Flow) | Low–negative to medium (extra startup; may help parallelism) | Medium (merge/threshold, phase ordering) | Trial in `ui/scripts/ui-coverage-runner.mjs`; measure total lane | **US-005** |
 | 4 | Optional CI matrix shard of main pass (directory splits, blob merge) | High on **job** wall if shards run parallel; workflow complexity | High (flake, merge, threshold gaps) | Design in closeout; implement in `ci.yml` if accepted | **US-008** |
