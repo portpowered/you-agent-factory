@@ -9,6 +9,7 @@ import {
   buildUiCoverageMergePhases,
   buildUiCoveragePhases,
   defaultMainCoveredMaxWorkers,
+  defaultShardMainCoveredMaxWorkers,
   defaultUiCoverageShardTotal,
   findMissingShardBlobIndices,
   formatElapsedMs,
@@ -172,9 +173,7 @@ test("rejects invalid UI_COVERAGE_SHARD values", () => {
 
 test("builds shard main pass with vitest shard flag and unique blob output", () => {
   const shard = { index: 3, label: "3/10", total: 10 };
-  const phase = buildMainCoveredShardPhase(shard, {
-    mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
-  });
+  const phase = buildMainCoveredShardPhase(shard);
 
   expect(phase.name).toBe(`${mainCoveredPhaseName} (shard 3/10)`);
   expect(phase.args).toContain("--shard=3/10");
@@ -183,7 +182,7 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
   );
   expect(phase.args).not.toContain("--outputFile.blob=.vitest-reports/main.json");
   expect(phase.args).toContain(
-    `--maxWorkers=${defaultMainCoveredMaxWorkers}`,
+    `--maxWorkers=${defaultShardMainCoveredMaxWorkers}`,
   );
   expect(phase.args).toEqual(
     expect.arrayContaining([
@@ -192,9 +191,20 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
       "--exclude",
       "scripts/dashboard-shell-storybook-responsive.test.mjs",
       "--exclude",
+      "scripts/ui-coverage-runner.test.mjs",
+      "--exclude",
       "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
     ]),
   );
+});
+
+test("allows UI_COVERAGE_MAIN_MAX_WORKERS to override shard worker default", () => {
+  const shard = { index: 1, label: "1/10", total: 10 };
+  const phase = buildMainCoveredShardPhase(shard, {
+    env: { UI_COVERAGE_MAIN_MAX_WORKERS: "2" },
+  });
+
+  expect(phase.args).toContain("--maxWorkers=2");
 });
 
 test("parses UI_COVERAGE_MERGE truthy values", () => {

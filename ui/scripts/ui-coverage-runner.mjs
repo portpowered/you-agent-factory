@@ -6,6 +6,7 @@ import { performance } from "node:perf_hooks";
 export const phaseLogPrefix = "[ui-coverage]";
 export const mainCoveredPhaseName = "Main covered Vitest pass";
 export const defaultMainCoveredMaxWorkers = "2";
+export const defaultShardMainCoveredMaxWorkers = "1";
 export const defaultSlowFileSummaryLimit = 15;
 export const defaultUiCoverageShardTotal = 10;
 
@@ -14,8 +15,14 @@ const vitestFileDurationLinePattern =
 
 const ansiEscapePattern = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
-export function getMainCoveredMaxWorkers(env = process.env) {
-  return env.UI_COVERAGE_MAIN_MAX_WORKERS || defaultMainCoveredMaxWorkers;
+export function getMainCoveredMaxWorkers(env = process.env, options = {}) {
+  if (env.UI_COVERAGE_MAIN_MAX_WORKERS) {
+    return env.UI_COVERAGE_MAIN_MAX_WORKERS;
+  }
+  if (options.shard) {
+    return defaultShardMainCoveredMaxWorkers;
+  }
+  return defaultMainCoveredMaxWorkers;
 }
 
 const mainCoveredPassKind = "main-covered";
@@ -108,8 +115,10 @@ export function buildUiCoverageMergePhases(options = {}) {
 }
 
 export function buildMainCoveredVitestArgs(options = {}) {
+  const shard = options.shard ?? null;
   const mainCoveredMaxWorkers =
-    options.mainCoveredMaxWorkers ?? getMainCoveredMaxWorkers(options.env);
+    options.mainCoveredMaxWorkers ??
+    getMainCoveredMaxWorkers(options.env, { shard: Boolean(shard) });
   const blobPath =
     options.blobPath ?? ".vitest-reports/main.json";
   const args = [
@@ -128,6 +137,8 @@ export function buildMainCoveredVitestArgs(options = {}) {
     "integration/*.integration.test.mjs",
     "--exclude",
     "scripts/dashboard-shell-storybook-responsive.test.mjs",
+    "--exclude",
+    "scripts/ui-coverage-runner.test.mjs",
     "--exclude",
     "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
   ];
