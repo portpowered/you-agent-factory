@@ -164,6 +164,55 @@ function submitButton(card: HTMLElement): HTMLElement {
   return button;
 }
 
+export const SharedWorkContentRowChrome = {
+  render: () => (
+    <SubmitWorkCard
+      draft={{
+        items: [
+          { id: "submission-item-1", text: "Review the active queue.", type: "text" },
+          { id: "submission-item-2", stagingStatus: "idle", type: "image" },
+        ],
+        requestName: "Multimodal review",
+        workTypeName: "story",
+      }}
+      onAddItem={() => {}}
+      onItemTextChange={() => {}}
+      onRemoveItem={() => {}}
+      onRequestNameChange={() => {}}
+      onStageFileItems={() => {}}
+      onSubmit={() => {}}
+      onWorkTypeNameChange={() => {}}
+      status={{
+        kind: "guidance",
+        message: "Shared work-content row chrome for text and image items.",
+      }}
+      submitWorkTypeNames={["story", "task"]}
+      widgetId="submit-work-shared-row-chrome"
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "Submit work" });
+    const scope = within(card);
+    const submissionItems = scope.getByRole("list", { name: "Submission items" });
+    const rows = within(submissionItems).getAllByRole("listitem");
+
+    await expect(rows).toHaveLength(2);
+    await expect(scope.getByText("Text")).toBeVisible();
+    await expect(scope.getByText("Image")).toBeVisible();
+    for (const row of rows) {
+      await expect(row).toHaveClass("border-af-border");
+      await expect(row).toHaveClass("bg-af-panel");
+    }
+    await expect(
+      scope.getByRole("button", { name: "Remove text item 1" }),
+    ).toBeVisible();
+    await expect(
+      scope.getByRole("button", { name: "Remove image item 2" }),
+    ).toBeVisible();
+  },
+};
+
 export const StableActionAlignment = {
   render: () => (
     <div className="grid gap-4">

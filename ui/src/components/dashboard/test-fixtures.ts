@@ -4,6 +4,7 @@ import { workstationIconMetadata } from "../../features/flowchart/lib/workstatio
 import { buildFactoryTimelineSnapshot } from "../../features/timeline/state/factoryTimelineStore";
 import {
   activeWorkRuntimeOverlay,
+  activeWorkWithMultimodalPayloadRuntimeOverlay,
   buildDashboardSnapshotFixture,
   buildEmptyDashboardRuntimeFixture,
   factoryFromDashboardTopology,
@@ -38,6 +39,11 @@ export const semanticWorkflowDashboardSnapshot: DashboardSnapshot =
     retryAttemptRuntimeOverlay,
     failedOutcomeRuntimeOverlay,
     rejectedOutcomeRuntimeOverlay,
+  ]);
+
+export const currentSelectionWorkContentsDashboardSnapshot: DashboardSnapshot =
+  buildDashboardSnapshotFixture(mediumBranchingDashboardTopology, [
+    activeWorkWithMultimodalPayloadRuntimeOverlay,
   ]);
 
 export const workstationKindParityDashboardSnapshot: DashboardSnapshot = {

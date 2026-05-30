@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
 import {
   getSelectedWorkItemFixture,
+  MULTIMODAL_SELECTED_WORK_PAYLOAD_CONTENT,
+  multimodalSelectedWorkPayloadOverrides,
   workstationRequest,
 } from "../../base/components/detail-card-test-helpers";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
@@ -43,13 +45,11 @@ function workContentsRegion() {
 
 describe("WorkItemDetailCard work contents", () => {
   it("renders resolved payload parts in an accessible Work contents region outside dispatch history", () => {
-    renderWorkItemDetailCard({
-      content: [
-        { text: "Primary selected-work payload text", type: "text" },
-        { json: { priority: 1 }, type: "JSON" },
-      ],
-      payload_status: "RESOLVED",
-    });
+    renderWorkItemDetailCard(multimodalSelectedWorkPayloadOverrides());
+
+    expect(
+      within(workContentsRegion()).getByText("Image: screenshot.png"),
+    ).toBeTruthy();
 
     const workContents = workContentsRegion();
     const dispatchHistory = screen.getByRole("region", {

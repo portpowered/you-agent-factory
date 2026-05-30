@@ -8,7 +8,10 @@ import type {
   DashboardTrace,
 } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import {
+  currentSelectionWorkContentsDashboardSnapshot,
+  semanticWorkflowDashboardSnapshot,
+} from "../../../components/dashboard/test-fixtures";
 import "../../../styles.css";
 import { expectNoPageHorizontalOverflow } from "../../../stories/dashboardStorySupport";
 import { CurrentSelectionWidget } from "../../current-selection/public";
@@ -558,6 +561,60 @@ function WorkflowGraphCardStory() {
       h: 8,
       id: "work-graph::story",
       w: 12,
+    }),
+  });
+}
+
+function CurrentSelectionWorkContentsCardStory() {
+  const currentSelection = useCurrentSelection({
+    sessionID: DEFAULT_FACTORY_SESSION_ID,
+    snapshot: currentSelectionWorkContentsDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      currentSelectionWorkContentsDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+  const providerSessionState =
+    useSelectedProviderSessionState(currentSelection);
+  const details = useCurrentSelectionDetails({
+    currentSelection,
+    selectedTrace: storyTrace,
+    snapshot: currentSelectionWorkContentsDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      currentSelectionWorkContentsDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+
+  useEffect(() => {
+    currentSelection.selectWorkByID("work-active-story");
+  }, [currentSelection.selectWorkByID]);
+
+  return renderCardFrame({
+    children: (
+      <CurrentSelectionWidget
+        activeTraceID={storyTrace.trace_id}
+        currentSelection={currentSelection}
+        failedWorkDetailsByWorkID={
+          currentSelectionWorkContentsDashboardSnapshot.runtime.session
+            .failed_work_details_by_work_id
+        }
+        now={STORY_NOW}
+        onSelectProviderSession={
+          providerSessionState.setSelectedProviderSession
+        }
+        onSelectTraceID={() => undefined}
+        selectedProviderSessionKey={
+          providerSessionState.selectedProviderSessionKey
+        }
+        selectedTrace={storyTrace}
+        selectedWorkExecutionDetails={details.selectedWorkExecutionDetails}
+        selectedWorkRelationshipGraph={details.selectedWorkRelationshipGraph}
+        widgetId="current-selection-work-contents::story"
+      />
+    ),
+    layout: layoutFor(DASHBOARD_WIDGET_IDS.currentSelection, {
+      h: 6,
+      id: "current-selection-work-contents::story",
+      w: 6,
     }),
   });
 }
@@ -1565,6 +1622,30 @@ export const CurrentSelection = {
     });
 
     await expect(within(card).getByText("Implement")).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Move Current selection" }),
+    ).toBeVisible();
+  },
+};
+
+export const CurrentSelectionWorkContents = {
+  render: () => <CurrentSelectionWorkContentsCardStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Current selection",
+    });
+    const workContents = await within(card).findByRole("region", {
+      name: "Work contents",
+    });
+
+    await expect(
+      within(workContents).getByText("Primary selected-work payload text"),
+    ).toBeVisible();
+    await expect(within(workContents).getByText(/"priority": 1/)).toBeVisible();
+    await expect(
+      within(workContents).getByText("Image: screenshot.png"),
+    ).toBeVisible();
     await expect(
       canvas.getByRole("button", { name: "Move Current selection" }),
     ).toBeVisible();
