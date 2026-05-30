@@ -64,6 +64,13 @@ export function useCurrentSelectionActions({
     });
   };
 
+  const selectWorker = (workerName: string) => {
+    commitSelectionState({
+      selection: { kind: "worker", workerName },
+      terminalWorkDetail: null,
+    });
+  };
+
   const selectWorkItem = (
     dispatchId: string,
     nodeId: string,
@@ -170,6 +177,7 @@ export function useCurrentSelectionActions({
     selectWorkItem,
     selectWorkstation,
     selectWorkstationRequest,
+    selectWorker,
   };
 }
 

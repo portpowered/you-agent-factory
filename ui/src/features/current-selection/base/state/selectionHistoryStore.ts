@@ -44,6 +44,9 @@ function selectionHistorySelectionKey(selection: DashboardSelection | null): str
     case "workstation-request":
       // hardcoded-ui-copy-exception: non-product-diagnostic
       return `request:${selection.nodeId}:${selection.dispatchId}`;
+    case "worker":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return `worker:${selection.workerName}`;
   }
 }
 

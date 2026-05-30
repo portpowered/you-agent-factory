@@ -132,6 +132,7 @@ function renderWorkflowActivityBentoCard({
         widgetInstanceID={widgetInstanceID}
         onSelectWorkID={vi.fn()}
         onSelectStateNode={vi.fn()}
+        onSelectWorker={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />
     </QueryClientProvider>,
@@ -159,6 +160,7 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
           widgetInstanceID="work-graph::primary"
           onSelectWorkID={vi.fn()}
           onSelectStateNode={vi.fn()}
+          onSelectWorker={vi.fn()}
           onSelectWorkstation={vi.fn()}
         />
         <WorkflowActivityBentoCard
@@ -170,6 +172,7 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
           widgetInstanceID="work-graph::instance-1"
           onSelectWorkID={vi.fn()}
           onSelectStateNode={vi.fn()}
+          onSelectWorker={vi.fn()}
           onSelectWorkstation={vi.fn()}
         />
       </div>

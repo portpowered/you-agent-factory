@@ -338,6 +338,7 @@ interface BuildCurrentActivityNodesInput {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectWorker: (workerName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   editor?: CurrentActivityEditorState;
   selection: CurrentActivitySelection | null;
@@ -417,14 +418,19 @@ function buildPlaceNode(
   }
 
   if (factoryGraphNode?.kind === "worker") {
+    const workerName = place.state_value ?? factoryGraphNode.nodeId.replace(/^worker:/, "");
     return {
       ...basePlaceNode,
       data: {
         ...basePlaceData,
         kind: "worker" as const,
+        onSelectWorker: input.onSelectWorker,
         place,
+        selectedWorker:
+          input.selection?.kind === "worker" &&
+          input.selection.workerName === workerName,
       },
-      selectable: false,
+      selectable: true,
       type: "worker",
     };
   }
@@ -538,6 +544,7 @@ export function buildCurrentActivityNodes({
   now,
   onSelectStateNode,
   onSelectWorkID,
+  onSelectWorker,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -556,6 +563,7 @@ export function buildCurrentActivityNodes({
     now,
     onSelectStateNode,
     onSelectWorkID,
+    onSelectWorker,
     onSelectWorkstation,
     selection,
     snapshot,

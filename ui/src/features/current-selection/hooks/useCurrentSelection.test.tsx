@@ -293,6 +293,12 @@ function SelectionHarness({
           .join(",")}
       </div>
       <div data-testid="selected-work-id">{currentSelection.selectedWorkID ?? ""}</div>
+      <div data-testid="selected-worker-name">{currentSelection.selectedWorkerName ?? ""}</div>
+      <div data-testid="selected-worker-type">{currentSelection.selectedWorker?.type ?? ""}</div>
+      <div data-testid="selected-worker-workstations">
+        {currentSelection.selectedWorkerWorkstationNames.join(",")}
+      </div>
+      <div data-testid="selection-kind">{currentSelection.selection?.kind ?? ""}</div>
     </>
   );
 }
@@ -706,6 +712,93 @@ describe("useCurrentSelection", () => {
       expect(screen.getByTestId("provider-sessions").textContent).toBe("");
     });
   });
+  it("derives selected worker data from the snapshot factory document", async () => {
+    const snapshot = buildSnapshot({
+      activeExecution: buildActiveExecution(
+        "dispatch-review-active",
+        [buildWorkItem("work-active", "Active Story")],
+        "2026-04-08T12:00:03Z",
+      ),
+    });
+    snapshot.factory = {
+      workers: [{ name: "writer", type: "MODEL_WORKER", model: "gpt-5.2" }],
+      workstations: [
+        { name: "Review", worker: "writer" },
+        { name: "Plan", worker: "writer" },
+      ],
+    };
+
+    act(() => {
+      useSelectionHistoryStore.getState().replacePresent({
+        selection: { kind: "worker", workerName: "writer" },
+        terminalWorkDetail: null,
+      });
+    });
+
+    render(
+      <SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-worker-name").textContent).toBe("writer");
+      expect(screen.getByTestId("selected-worker-type").textContent).toBe("MODEL_WORKER");
+      expect(screen.getByTestId("selected-worker-workstations").textContent).toBe(
+        "Review,Plan",
+      );
+      expect(screen.getByTestId("selection-kind").textContent).toBe("worker");
+    });
+  });
+
+  it("falls back worker selection when the worker disappears from the factory document", async () => {
+    const snapshot = buildSnapshot({
+      activeExecution: buildActiveExecution(
+        "dispatch-review-active",
+        [buildWorkItem("work-active", "Active Story")],
+        "2026-04-08T12:00:03Z",
+      ),
+    });
+    snapshot.factory = {
+      workers: [{ name: "writer", type: "MODEL_WORKER" }],
+      workstations: [{ name: "Review", worker: "writer" }],
+    };
+
+    act(() => {
+      useSelectionHistoryStore.getState().replacePresent({
+        selection: { kind: "worker", workerName: "removed-worker" },
+        terminalWorkDetail: null,
+      });
+    });
+
+    const { rerender } = render(
+      <SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selection-kind").textContent).toBe("node");
+      expect(screen.getByTestId("selected-worker-name").textContent).toBe("");
+      expect(screen.getByTestId("selected-worker-type").textContent).toBe("");
+    });
+
+    snapshot.factory = {
+      workers: [{ name: "writer", type: "MODEL_WORKER" }],
+      workstations: [{ name: "Review", worker: "writer" }],
+    };
+
+    act(() => {
+      useSelectionHistoryStore.getState().replacePresent({
+        selection: { kind: "worker", workerName: "writer" },
+        terminalWorkDetail: null,
+      });
+    });
+
+    rerender(<SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selection-kind").textContent).toBe("worker");
+      expect(screen.getByTestId("selected-worker-name").textContent).toBe("writer");
+    });
+  });
+
   it("drops the previous session's selected work when the session ID changes", async () => {
     const selectedWorkItem = buildWorkItem("work-active", "Active Story");
     seedSelectedWork("dispatch-review-active", "review", selectedWorkItem);

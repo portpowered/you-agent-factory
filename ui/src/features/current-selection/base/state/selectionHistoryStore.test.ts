@@ -71,5 +71,32 @@ describe("selectionHistoryStore", () => {
 
     expect(useSelectionHistoryStore.getState().present.selection).toBeNull();
   });
+
+  it("includes worker selections in undo and redo history", () => {
+    const store = useSelectionHistoryStore.getState();
+
+    store.commitSelectionState({
+      selection: { kind: "node", nodeId: "review" },
+      terminalWorkDetail: null,
+    });
+    store.commitSelectionState({
+      selection: { kind: "worker", workerName: "writer" },
+      terminalWorkDetail: null,
+    });
+
+    useSelectionHistoryStore.getState().undo();
+
+    expect(useSelectionHistoryStore.getState().present.selection).toEqual({
+      kind: "node",
+      nodeId: "review",
+    });
+
+    useSelectionHistoryStore.getState().redo();
+
+    expect(useSelectionHistoryStore.getState().present.selection).toEqual({
+      kind: "worker",
+      workerName: "writer",
+    });
+  });
 });
 

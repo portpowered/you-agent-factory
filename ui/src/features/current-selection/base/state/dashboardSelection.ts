@@ -5,6 +5,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
+import type { FactoryWorker } from "../../../../api/events/types";
 import { hasDashboardStatePlace } from "./dashboardStatePlaces";
 
 export interface DashboardNodeSelection {
@@ -32,11 +33,17 @@ export interface DashboardWorkstationRequestSelection {
   request: DashboardWorkstationRequest;
 }
 
+export interface DashboardWorkerSelection {
+  kind: "worker";
+  workerName: string;
+}
+
 export type DashboardSelection =
   | DashboardNodeSelection
   | DashboardStateNodeSelection
   | DashboardWorkItemSelection
-  | DashboardWorkstationRequestSelection;
+  | DashboardWorkstationRequestSelection
+  | DashboardWorkerSelection;
 
 export function selectDefaultSelection(snapshot: DashboardSnapshot): DashboardSelection | null {
   const firstActiveNodeId = snapshot.runtime.active_workstation_node_ids?.[0];
@@ -81,6 +88,12 @@ export function resolveDashboardSelection({
       selection,
       workstationRequestsByDispatchID,
     );
+  }
+
+  if (selection.kind === "worker") {
+    return workerExistsInSnapshotFactory(snapshot, selection.workerName)
+      ? selection
+      : selectDefaultSelection(snapshot);
   }
 
   return resolveWorkstationRequestSelection(
@@ -424,6 +437,30 @@ function resolveRetainedRequestNodeID(
     request.transition_id,
     request.workstation_name,
   );
+}
+
+function workerExistsInSnapshotFactory(
+  snapshot: DashboardSnapshot,
+  workerName: string,
+): boolean {
+  return findFactoryWorkerInSnapshot(snapshot, workerName) !== undefined;
+}
+
+export function findFactoryWorkerInSnapshot(
+  snapshot: DashboardSnapshot,
+  workerName: string,
+): FactoryWorker | undefined {
+  return snapshot.factory?.workers?.find((worker) => worker.name === workerName);
+}
+
+export function workstationNamesReferencingWorkerInSnapshot(
+  snapshot: DashboardSnapshot,
+  workerName: string,
+): string[] {
+  return (snapshot.factory?.workstations ?? [])
+    .filter((workstation) => workstation.worker === workerName)
+    .map((workstation) => workstation.name)
+    .filter((name) => name.length > 0);
 }
 
 function resolveTransitionNodeID(

@@ -5,7 +5,9 @@ import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 
 import { buildFactoryTimelineSnapshot } from "../../../timeline/state/factoryTimelineStore";
 import {
+  findFactoryWorkerInSnapshot,
   resolveDashboardSelection,
+  workstationNamesReferencingWorkerInSnapshot,
   type DashboardWorkItemSelection,
   type DashboardWorkstationRequestSelection,
 } from "./dashboardSelection";
@@ -269,6 +271,70 @@ describe("resolveDashboardSelection", () => {
       kind: "work-item",
       nodeId: "repair",
       workItem,
+    });
+  });
+
+  it("retains worker selections while the authored worker remains in the factory document", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+    snapshot.factory = {
+      ...snapshot.factory,
+      workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
+    };
+
+    const selection = {
+      kind: "worker" as const,
+      workerName: "reviewer",
+    };
+
+    expect(
+      resolveDashboardSelection({
+        selection,
+        snapshot,
+      }),
+    ).toEqual(selection);
+  });
+
+  it("resolves authored workers and referencing workstation names from the factory document", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+    snapshot.factory = {
+      ...snapshot.factory,
+      workers: [{ name: "reviewer", type: "MODEL_WORKER", model: "gpt-5" }],
+      workstations: [
+        { name: "Review", worker: "reviewer" },
+        { name: "Plan", worker: "reviewer" },
+        { name: "Code", worker: "planner" },
+      ],
+    };
+
+    expect(findFactoryWorkerInSnapshot(snapshot, "reviewer")).toEqual({
+      name: "reviewer",
+      type: "MODEL_WORKER",
+      model: "gpt-5",
+    });
+    expect(workstationNamesReferencingWorkerInSnapshot(snapshot, "reviewer")).toEqual([
+      "Review",
+      "Plan",
+    ]);
+  });
+
+  it("falls back to the default dashboard selection when the selected worker disappears", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+    snapshot.factory = {
+      ...snapshot.factory,
+      workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
+    };
+
+    const resolved = resolveDashboardSelection({
+      selection: {
+        kind: "worker",
+        workerName: "removed-worker",
+      },
+      snapshot,
+    });
+
+    expect(resolved).toEqual({
+      kind: "node",
+      nodeId: "review",
     });
   });
 });

@@ -25,9 +25,12 @@ import {
   CurrentSelectionHeaderActionProvider,
   CurrentSelectionLocaleProvider,
 } from "../base/public";
+import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
+import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
+  WorkerDetailCard,
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
 
@@ -51,12 +54,15 @@ function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
   editableConfigurationState,
+  editableWorkerConfigurationState,
   failedWorkDetailsByWorkID,
   headerAction,
   locale,
   now,
+  onSaveWorker,
   onSelectTraceID,
   saveState,
+  workerSaveState,
   selectedProviderSessionKey,
   selectedTrace,
   selectedWorkRelationshipGraph,
@@ -69,13 +75,20 @@ function renderCurrentSelectionDetailCard({
   editableConfigurationState: ReturnType<
     typeof useEditableWorkstationConfigurationState
   >;
+  editableWorkerConfigurationState: ReturnType<
+    typeof useEditableWorkerConfigurationState
+  >;
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
   headerAction: ReactNode;
   locale?: string;
   now: number;
+  onSaveWorker?: () => void;
   onSelectTraceID?: (traceID: string) => void;
   saveState: ReturnType<
     typeof useSaveEditableWorkstationConfiguration
+  >["saveState"];
+  workerSaveState: ReturnType<
+    typeof useSaveEditableWorkerConfiguration
   >["saveState"];
   selectedProviderSessionKey: string | null;
   selectedTrace?: DashboardTrace;
@@ -96,6 +109,7 @@ function renderCurrentSelectionDetailCard({
     selectedWorkDispatchAttempts,
     selectedWorkID,
     selectedWorkRequestHistory,
+    selectedWorkerName,
     selectedWorkstationRequest,
     selection,
     selectWorkByID,
@@ -152,6 +166,19 @@ function renderCurrentSelectionDetailCard({
     );
   }
 
+  if (selection?.kind === "worker" && selectedWorkerName) {
+    return (
+      <WorkerDetailCard
+        editableConfigurationState={editableWorkerConfigurationState}
+        locale={locale}
+        onSaveWorker={onSaveWorker}
+        saveState={workerSaveState}
+        widgetId={widgetId}
+        workerName={selectedWorkerName}
+      />
+    );
+  }
+
   if (selectedNode) {
     return (
       <WorkstationDetailCard
@@ -198,11 +225,17 @@ export function CurrentSelectionWidget({
     selectedNodeProviderSessions,
     selectedWorkDispatchAttempts,
     selectedWorkRequestHistory,
+    selectedWorkerName,
     selection,
   } = currentSelection;
   const editableConfigurationState = useEditableWorkstationConfigurationState(
     selection,
     selectedNode,
+    locale,
+  );
+  const editableWorkerConfigurationState = useEditableWorkerConfigurationState(
+    selection,
+    selectedWorkerName,
     locale,
   );
   const workstationSaveScopeKey =
@@ -213,6 +246,15 @@ export function CurrentSelectionWidget({
     editableConfigurationState,
     locale,
     scopeKey: workstationSaveScopeKey,
+  });
+  const workerSaveScopeKey =
+    selection?.kind === "worker" && selectedWorkerName
+      ? selectedWorkerName
+      : null;
+  const workerSave = useSaveEditableWorkerConfiguration({
+    editableConfigurationState: editableWorkerConfigurationState,
+    locale,
+    scopeKey: workerSaveScopeKey,
   });
   const providerSessionState = useSelectedProviderSessionState({
     selectedNode,
@@ -238,13 +280,16 @@ export function CurrentSelectionWidget({
     activeTraceID,
     currentSelection,
     editableConfigurationState,
+    editableWorkerConfigurationState,
     failedWorkDetailsByWorkID,
     headerAction: workstationHeaderAction,
     locale: locale ?? undefined,
     now,
+    onSaveWorker: () => void workerSave.save(),
     onSelectTraceID,
     saveState: workstationSave.saveState,
     selectedProviderSessionKey,
+    workerSaveState: workerSave.saveState,
     selectedTrace,
     selectedWorkRelationshipGraph,
     selectedWorkExecutionDetails,

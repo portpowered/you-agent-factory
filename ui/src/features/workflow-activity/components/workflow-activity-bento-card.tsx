@@ -24,6 +24,7 @@ interface WorkflowActivityBentoCardProps {
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
   onSelectStateNode: (placeId: string) => void;
+  onSelectWorker: (workerName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   widgetInstanceID?: string;
 }
@@ -40,6 +41,7 @@ export function WorkflowActivityBentoCard({
   widgetInstanceID,
   onSelectWorkID,
   onSelectStateNode,
+  onSelectWorker,
   onSelectWorkstation,
 }: WorkflowActivityBentoCardProps) {
   const messages = getWorkflowActivityShellMessages(locale);
@@ -79,6 +81,7 @@ export function WorkflowActivityBentoCard({
           widgetInstanceID={widgetInstanceID}
           onSelectWorkID={onSelectWorkID}
           onSelectStateNode={onSelectStateNode}
+          onSelectWorker={onSelectWorker}
           onSelectWorkstation={onSelectWorkstation}
         />
       </section>
@@ -91,6 +94,10 @@ function toCurrentActivitySelection(
 ): CurrentActivitySelection | null {
   if (selection?.kind === "workstation-request") {
     return { kind: "node", nodeId: selection.nodeId };
+  }
+
+  if (selection?.kind === "worker") {
+    return selection;
   }
 
   if (selection?.kind !== "work-item") {

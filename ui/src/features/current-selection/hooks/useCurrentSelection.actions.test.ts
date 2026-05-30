@@ -267,4 +267,28 @@ describe("useCurrentSelectionActions", () => {
       terminalWorkDetail: null,
     });
   });
+
+  it("selects workers by authored worker name", () => {
+    const commitSelectionState = vi.fn();
+
+    const actions = useCurrentSelectionActions({
+      commitSelectionState,
+      completedWorkItems: [],
+      failedWorkItems: [],
+      projectedWorkstationRequestsByDispatchID: undefined,
+      selection: null,
+      snapshot: null,
+      terminalWorkDetail: null,
+    });
+
+    actions.selectWorker("writer");
+
+    expect(commitSelectionState).toHaveBeenCalledWith({
+      selection: {
+        kind: "worker",
+        workerName: "writer",
+      },
+      terminalWorkDetail: null,
+    });
+  });
 });

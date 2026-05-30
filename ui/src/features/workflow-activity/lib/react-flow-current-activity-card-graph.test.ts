@@ -124,6 +124,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: resolvedSelection,
       snapshot,
@@ -363,6 +364,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
@@ -412,6 +414,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -465,6 +468,47 @@ describe("current activity graph editor handles", () => {
         expect.objectContaining({ id: "worker-assignment-source" }),
       ]),
       kind: "worker",
+      onSelectWorker: expect.any(Function),
+      selectedWorker: false,
+    });
+  });
+
+  it("marks the selected worker node while worker selection is active", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workers: [
+        {
+          ...baseFactoryDefinition.workers?.[0],
+          name: "writer",
+          type: "MODEL_WORKER" as const,
+        },
+      ],
+    };
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "worker", workerName: "writer" },
+      snapshot: {
+        factory,
+        runtime: { place_token_counts: {} },
+        topology: { workstation_nodes_by_id: {} },
+      } as never,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(nodes.find((node) => node.id === "worker:writer")?.data).toMatchObject({
+      kind: "worker",
+      selectedWorker: true,
     });
   });
 
@@ -516,6 +560,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -553,6 +598,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -641,6 +687,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
