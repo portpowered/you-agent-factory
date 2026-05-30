@@ -107,7 +107,7 @@
         "src/App.timeline.test.tsx",
         "src/App.toolbar-locale.test.tsx",
         "src/api/current-factory-definition/api.test.ts",
-        "src/api/current-factory-prompt-template/api.test.ts",
+        "src/api/session-factory/prompt-template/api.test.ts",
         "src/api/factory-definition/api.test.ts",
         "src/api/factory-sessions/api.test.ts",
         "src/api/named-factory/api.additional.test.ts",

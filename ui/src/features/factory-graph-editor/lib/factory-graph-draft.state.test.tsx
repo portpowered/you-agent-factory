@@ -174,6 +174,71 @@ it("keeps a dirty draft while newer editable-definition versions arrive", () => 
   expect(synced.latestDocument.version.logical).toBe("6");
 });
 
+it("clears draft state when the factory document scope key changes", () => {
+  const { result, rerender } = renderHook(
+    ({ factoryDocumentScopeKey }: { factoryDocumentScopeKey: string }) =>
+      useFactoryGraphDraftState({
+        currentFactoryDocument,
+        factoryDocumentScopeKey,
+      }),
+    {
+      initialProps: { factoryDocumentScopeKey: "session-alpha" },
+    },
+  );
+
+  act(() => {
+    result.current.replaceDraft({
+      ...createEmptyFactoryGraphDraft(),
+      additions: {
+        resources: [],
+        workers: [
+          {
+            model: "gpt-5-mini",
+            name: "reviewer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workStates: [],
+        workTypes: [],
+        workstations: [],
+      },
+    });
+  });
+
+  expect(result.current.hasChanges).toBe(true);
+
+  rerender({ factoryDocumentScopeKey: "session-beta" });
+
+  expect(result.current.hasChanges).toBe(false);
+  expect(result.current.source).toBe("current-factory");
+  expect(result.current.latestDocument).toEqual(currentFactoryDocument);
+  expect(result.current.baseDocument).toEqual(currentFactoryDocument);
+});
+
+it("resets draft state when the loaded factory document identity changes", () => {
+  const dirtyDraft = createEmptyFactoryGraphDraft();
+  dirtyDraft.additions.workers.push({
+    model: "gpt-5-mini",
+    name: "reviewer",
+    type: "MODEL_WORKER",
+  });
+
+  const synced = syncFactoryGraphDraftSession(
+    {
+      draft: dirtyDraft,
+      latestDocument: currentFactoryDocument,
+      sessionStartDocument: currentFactoryDocument,
+    },
+    {
+      ...currentFactoryDocument,
+      name: "Other Session Factory",
+    },
+  );
+
+  expect(synced.draft.additions.workers).toEqual([]);
+  expect(synced.latestDocument.name).toBe("Other Session Factory");
+});
+
 it("resets a dirty draft back to the latest server-backed document", () => {
   const { result } = renderHook(() =>
     useFactoryGraphDraftState({
