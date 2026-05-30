@@ -125,10 +125,8 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 	}
 	sessionRootDir := sessionFactoryPersistRoot(fs.factoryRootDir, session)
 
-	replaceExisting := false
-	if _, err := factoryconfig.ResolveNamedFactoryDir(sessionRootDir, string(request.Name)); err == nil {
-		replaceExisting = true
-	} else if !errors.Is(err, os.ErrNotExist) && !isNamedFactoryResolveNotFound(err) {
+	replaceExisting, err := namedFactoryExistsAtSessionRoot(sessionRootDir, request.Name)
+	if err != nil {
 		return factoryapi.Factory{}, err
 	}
 
@@ -152,19 +150,12 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 	}
 
 	nextVersion := nextEditableFactoryVersion(currentVersion, factory.EnsureClock(fs.clock).Now().UTC())
-	sanitized := request
-	sanitized.Version = nil
-	payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-
-	var factoryDir string
-	if replaceExisting {
-		factoryDir, err = factoryconfig.ReplaceNamedFactory(sessionRootDir, string(request.Name), payload)
-	} else {
-		factoryDir, err = factoryconfig.PersistNamedFactory(sessionRootDir, string(request.Name), payload)
-	}
+	factoryDir, err := persistUpsertNamedFactoryPayload(
+		sessionRootDir,
+		request,
+		nextVersion,
+		replaceExisting,
+	)
 	if err != nil {
 		switch {
 		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
@@ -205,6 +196,38 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 	}
 	serialized.Version = &version
 	return serialized, nil
+}
+
+func namedFactoryExistsAtSessionRoot(
+	sessionRootDir string,
+	name factoryapi.FactoryName,
+) (bool, error) {
+	_, err := factoryconfig.ResolveNamedFactoryDir(sessionRootDir, string(name))
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) || isNamedFactoryResolveNotFound(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+func persistUpsertNamedFactoryPayload(
+	sessionRootDir string,
+	request factoryapi.Factory,
+	nextVersion factoryapi.HybridLogicalTimestamp,
+	replaceExisting bool,
+) (string, error) {
+	sanitized := request
+	sanitized.Version = nil
+	payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
+	if err != nil {
+		return "", err
+	}
+	if replaceExisting {
+		return factoryconfig.ReplaceNamedFactory(sessionRootDir, string(request.Name), payload)
+	}
+	return factoryconfig.PersistNamedFactory(sessionRootDir, string(request.Name), payload)
 }
 
 func sessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.LiveSession) string {
