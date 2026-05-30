@@ -1072,12 +1072,33 @@ describe("current activity graph active item labels", () => {
       await buildCurrentActivityGraphLayoutFromFactory(factory);
     const validationProjection = projectFactoryValidationTargets([
       {
+        code: "factory.workstation.missingRejectionRoute",
+        message: "Workstation process must define a reject route.",
+        severity: "error",
+        subject: {
+          id: "process",
+          location: "ON_REJECTION",
+          type: "WORKSTATION",
+        },
+      },
+      {
         code: "factory.workstation.missingFailureRoute",
         message: 'Workstation "review" must define a failure route.',
         severity: "error",
         subject: {
           id: "review",
           location: "ON_FAILURE",
+          type: "WORKSTATION",
+        },
+      },
+      {
+        code: "factory.workstation.conflictingWorkStateOutputs",
+        message:
+          'Workstation "process" routes work type "task" to conflicting output states.',
+        severity: "error",
+        subject: {
+          id: "process",
+          location: "OUTPUTS",
           type: "WORKSTATION",
         },
       },
@@ -1105,11 +1126,28 @@ describe("current activity graph active item labels", () => {
       snapshot: buildSampleFactorySnapshot(factory),
       storedNodePositions: EMPTY_NODE_POSITIONS,
     });
-    const workstationNode = nodes.find(
-      (node) => node.id === "workstation:review",
-    );
+    const processNode = nodes.find((node) => node.id === "workstation:process");
+    const reviewNode = nodes.find((node) => node.id === "workstation:review");
 
-    expect(workstationNode?.data.handles).toEqual(
+    expect(processNode?.data.handles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-on-rejection-source",
+          buttonAriaLabel: "Workstation process must define a reject route.",
+          validationError: true,
+          validationMessage: "Workstation process must define a reject route.",
+          variant: "error",
+        }),
+        expect.objectContaining({
+          id: "workstation-output-source",
+          validationError: true,
+          validationMessage:
+            'Workstation "process" routes work type "task" to conflicting output states.',
+          variant: "error",
+        }),
+      ]),
+    );
+    expect(reviewNode?.data.handles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: "workstation-on-failure-source",
