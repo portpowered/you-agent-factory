@@ -1,30 +1,32 @@
 {
-  "project": "CLI docs for guards and relationships",
-  "branchName": "ralph/you-cli-docs-relationships-and-guards",
-  "description": "Add packaged `you docs guards` and `you docs relationships` CLI reference topics with self-contained markdown, index discovery, related-topic cross-links, and CLI tests so factory authors can learn guard and work-item relationship authoring from the installed binary.",
+  "project": "infinite-you",
+  "branchName": "ralph/factory-import-second-session",
+  "description": "Make dashboard factory PNG import session-aware so activation PUTs to /factory-sessions/{session_id}/factory for the selected workspace tab instead of POST /factories, with unit, functional, and browser integration tests proving correct endpoints, payloads, and session isolation.",
   "context": {
-    "customerAsk": "There is limited documentation on guards. Add new `you docs guards` and `you docs relationships` commands that document how both of those work.",
-    "problem": "Guard and relationship authoring guidance is scattered across internal maintainer guides and partial mentions in existing packaged topics. Guards and relationships are not registered `you docs` topics, so authors cannot print dedicated references from the CLI.",
-    "solution": "Ship two embedded packaged reference pages, register them as `guards` and `relationships` topics, list them in the `you docs` index, replace non-packaged internal cross-links in related CLI docs, and add CLI/docs tests that verify topic output and key sections."
+    "customerAsk": "Customers want to import factories on any factory tab. Import currently POSTs /factories and updates the default factory directory even on the second tab. Make import derive context from the active session and submit to factory-sessions/{session-id}/factory, and add functional and integration tests for the non-default tab import path.",
+    "problem": "useFactoryImportActivation defaults to createFactory which POSTs /factories globally. The dashboard tracks selectedSessionID for export and saves but not import, so operators on a second live factory session see import mutate the wrong factory root and runtime.",
+    "solution": "Add session-scoped import activation that GETs the current factory for the selected session, adapts the imported payload for name and version, PUTs to the session factory endpoint, wire selectedSessionID through the dashboard import controller, update app-shell tests, and add backend functional plus UI browser integration tests for second-tab import."
   },
   "acceptanceCriteria": [
-    "`you docs guards` prints a self-contained guard reference covering attachment levels, supported guard types, guarded LOGICAL_MOVE loop breakers, and common mistakes.",
-    "`you docs relationships` prints a self-contained relationship reference for DEPENDS_ON, PARENT_CHILD, and SPAWNED_BY with batch examples and parent-aware guard linkage.",
-    "Bare `you docs` and unsupported-topic errors include the new topics with stable descriptions.",
-    "Related packaged topics link to `guards` and `relationships` instead of internal-only doc paths.",
-    "CLI and docs package tests verify index listing, topic resolution, and representative content for both topics.",
-    "Typecheck, lint, and tests pass for all touched packages"
+    "Import on the default session tab activates via PUT /factory-sessions/~default/factory with versioned canonical payload, not POST /factories.",
+    "Import on a non-default session tab activates via PUT /factory-sessions/{session_id}/factory and does not call POST /factories.",
+    "Non-default session import updates only that session factory definition and on-disk directory; the default session factory is unchanged.",
+    "Import preview and activation error states continue to work with existing accessible dialog behavior.",
+    "Unit tests assert correct activation method, path, and body per selected session.",
+    "Backend functional and UI integration tests exercise the second-tab import path.",
+    "Quality gate: backend and frontend typecheck, lint, and relevant tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "you-cli-docs-relationships-and-guards-001",
-      "title": "Packaged guards reference and `you docs guards`",
-      "description": "As a factory author, I want `you docs guards` so I can choose the right guard type and attachment point without reading internal maintainer guides.",
+      "id": "factory-import-second-session-001",
+      "title": "Session-scoped factory import activation client",
+      "description": "As a dashboard operator, I want PNG import activation to save through my active session current-factory endpoint so import updates the factory I am viewing.",
       "acceptanceCriteria": [
-        "Running `you docs guards` prints embedded `guards.md` markdown with no index wrapper",
-        "Guards page documents workstation-level VISIT_COUNT and MATCHES_FIELDS, per-input SAME_NAME, ALL_CHILDREN_COMPLETE, ANY_CHILD_FAILED, factory inference_throttle_guard, and guarded LOGICAL_MOVE loop breakers with JSON examples",
-        "Guards page includes a quick-choice table and distinguishes guards from resources, maxExecutionTime, and maxRetries",
-        "Docs package and CLI tests assert guards topic registration and representative sections such as VISIT_COUNT and SAME_NAME",
+        "Session-aware activation reads the current factory document for the supplied sessionID, preserves the session current factory name on the imported payload, includes version metadata per saveCurrentFactoryDocument rules, and PUTs to /factory-sessions/{session_id}/factory.",
+        "Activation for ~default uses /factory-sessions/~default/factory; activation for a non-default session uses that session path.",
+        "Activation does not call POST /factories.",
+        "Structured failures such as FACTORY_NOT_IDLE and STALE_FACTORY_VERSION surface through the existing import activation error state.",
+        "API client unit tests assert method, path, and JSON body for default and non-default session IDs.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,35 +35,63 @@
       "notes": ""
     },
     {
-      "id": "you-cli-docs-relationships-and-guards-002",
-      "title": "Packaged relationships reference and `you docs relationships`",
-      "description": "As a factory author, I want `you docs relationships` so I can declare batch relations correctly and understand how they affect scheduling and parent-aware guards.",
+      "id": "factory-import-second-session-002",
+      "title": "Wire selected session into dashboard import controller",
+      "description": "As a dashboard operator, I want the import drop zone and preview confirm action on whichever tab is selected to activate against that tab session.",
       "acceptanceCriteria": [
-        "Running `you docs relationships` prints embedded `relationships.md` markdown with no index wrapper",
-        "Relationships page explains DEPENDS_ON, PARENT_CHILD, and SPAWNED_BY source/target semantics, optional required_state, batch validation rejection rules, and parent lineage for parent-aware guards",
-        "Relationships page includes batch JSON examples and cross-links to packaged guards and batch-inputs topics",
-        "Docs package and CLI tests assert relationships topic registration and representative sections such as DEPENDS_ON and PARENT_CHILD",
+        "useCurrentActivityImportController and DashboardBento pass selectedSessionID from useDashboardSessionStore into import activation, matching export session threading.",
+        "Switching the selected session tab before confirming import activates against the newly selected session without a page reload.",
+        "useFactoryImportActivation uses session-scoped activation by default instead of createFactory.",
+        "Hook-level tests cover session ID propagation into the activation dependency.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "you-cli-docs-relationships-and-guards-003",
-      "title": "Docs index and related-topic cross-links",
-      "description": "As a factory author browsing packaged docs, I want guards and relationships discoverable from the index and related topics so I do not hit dead internal links.",
+      "id": "factory-import-second-session-003",
+      "title": "Update default-tab app-shell import test for session PUT",
+      "description": "As a maintainer, I need the primary dashboard import test to expect PUT /factory-sessions/~default/factory so regressions back to POST /factories are caught.",
       "acceptanceCriteria": [
-        "Bare `you docs` lists guards and relationships with descriptions and example commands",
-        "Unsupported docs topic errors include guards and relationships in the supported-topic list",
-        "Packaged workstations, batch-inputs, work, config, and templates pages link to guards and relationships instead of non-packaged internal development paths",
-        "CLI root docs tests expect the new index lines and updated unsupported-topic message",
+        "App.import.test.tsx expects PUT /factory-sessions/~default/factory with the imported canonical factory payload and version field after the current-factory read.",
+        "The test still covers preview dialog confirm, submitting state, and successful activation refresh behavior.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "factory-import-second-session-004",
+      "title": "Backend functional test for non-default session import isolation",
+      "description": "As a maintainer, I need proof that session-scoped import replacement updates only the targeted session factory directory and runtime.",
+      "acceptanceCriteria": [
+        "A functional test opens a second live factory session, PUTs an imported-style factory payload to /factory-sessions/{session_id}/factory, and asserts the saved definition is returned from that session GET.",
+        "The default session current factory and on-disk factory directory remain unchanged after the non-default session import.",
+        "When the payload includes portable supportingFiles.bundledFiles with inline content, materialized files are written under the target session factory directory, not the default session root.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "factory-import-second-session-005",
+      "title": "Browser integration test for import on a second session tab",
+      "description": "As a dashboard operator, I want confidence that selecting a second factory tab and confirming import exercises the session-scoped network path in the real UI shell.",
+      "acceptanceCriteria": [
+        "A ui/integration test selects a non-default session tab, completes the import preview confirm flow, and asserts activation uses PUT /factory-sessions/{non-default-session-id}/factory.",
+        "The test asserts no POST /factories request occurs during that flow.",
+        "Loading, preview, and post-confirm behavior remain observable without silent failure.",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 5,
+      "passes": false,
       "notes": ""
     }
   ]

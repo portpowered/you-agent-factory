@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Session-scoped PNG import activation uses `activateImportedFactoryForSession` in `ui/src/api/named-factory/api.ts`: GET current factory via `getCurrentFactoryDocument`, preserve session `name` on the imported payload, PUT via `saveCurrentFactoryDocument` with incremented `version`, and map `CurrentFactoryDefinitionError` (including `STALE_FACTORY_VERSION`) into `NamedFactoryAPIError`; never `POST /factories`.
 - Inline single-use workflow-activity layout class strings directly on JSX in `workflow-activity-bento-card.tsx`; assert the graph panel shell via the viewport region’s `section[aria-labelledby]` parent in `workflow-activity-bento-card.test.tsx` (contains `relative`, `h-full`, `min-h-0`, `min-w-0`).
 - Parse worker/workstation `openCodeAgent` through `pkg/config/agents_config.go` with `validateOpenCodeAgentInFrontmatter` (rejects explicit empty or whitespace-only values), merge via `applyWorkerRuntimeExecution` / `applyWorkstationRuntimeIdentity`, and resolve dispatch precedence with `interfaces.ResolveOpenCodeAgent(workstation, worker)`.
 - Forward resolved OpenCode agent on `interfaces.ProviderInferenceRequest.OpenCodeAgent` from `pkg/workers/executor/agent.go` `inferenceRequestForExecutionRequest` only when `ModelProvider` is `opencode`; lookup workstation via `runtimeConfig.Workstation(inferenceWorkstationType(request))` and leave the field empty for other providers.
@@ -222,4 +223,13 @@
   - Patterns discovered: When `main` updates shared Ralph tracking files, rebase conflicts are often limited to `prd.json` and `progress.txt` while feature commits replay cleanly.
   - Gotchas encountered: Review can report `mergeable: CONFLICTING` while prior head checks remain green — push rebased head and wait for fresh CI before treating mergeability as resolved.
   - Useful context: Follow-up BLOCKING review comment on PR #441 requested rebase after `main` advanced past prior `43ea487e` rebase.
+---
+
+## 2026-05-30T12:50:00Z - factory-import-second-session-001
+- What was implemented: Added `activateImportedFactoryForSession` to the named-factory API client with GET-then-versioned-PUT session activation, session name preservation, `STALE_FACTORY_VERSION` on `NamedFactoryAPIError`, and unit tests for default and non-default session routes plus structured failure mapping.
+- Files changed: `ui/src/api/named-factory/api.ts`, `ui/src/api/named-factory/api.test.ts`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Reuse `getCurrentFactoryDocument` + `saveCurrentFactoryDocument` instead of duplicating fetch logic; strip `version` from imported and saved payloads when returning `FactoryValue` to match `createFactory` consumers.
+  - Gotchas encountered: `NamedFactoryAPIErrorCode` needed `STALE_FACTORY_VERSION` added explicitly; map `INVALID_FACTORY_DEFINITION` to `INVALID_FACTORY` when bridging from current-factory-definition errors.
+  - Useful context: Story 002 should default `useFactoryImportActivation` to `activateImportedFactoryForSession` and thread `selectedSessionID` from the dashboard session store.
 ---
