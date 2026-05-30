@@ -20,7 +20,7 @@ describe("named factory API error handling", () => {
     );
   });
 
-  it("rejects activation responses that are not shaped like a factory object", async () => {
+  it("rejects upsert responses that are not shaped like a factory object", async () => {
     await expect(
       createFactory(canonicalFactory, {
         fetch: vi.fn().mockResolvedValue(
@@ -34,7 +34,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The factory activation API returned an invalid response.", {
+      new NamedFactoryAPIError("The current factory editing API returned an invalid response.", {
         code: "INTERNAL_ERROR",
         responseBody: "not-a-factory",
         status: 200,
@@ -43,7 +43,7 @@ describe("named factory API error handling", () => {
     );
   });
 
-  it("wraps activation network failures in a typed error", async () => {
+  it("wraps upsert network failures in a typed error", async () => {
     const networkError = new Error("socket closed");
 
     await expect(
@@ -51,14 +51,14 @@ describe("named factory API error handling", () => {
         fetch: vi.fn().mockRejectedValue(networkError),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The dashboard could not reach the factory activation API.", {
+      new NamedFactoryAPIError("The dashboard could not reach the current factory editing API.", {
         code: "NETWORK_ERROR",
         responseBody: networkError,
       }),
     );
   });
 
-  it("falls back to INTERNAL_ERROR when the activation API returns an unknown error code", async () => {
+  it("falls back to INTERNAL_ERROR when the upsert API returns an unknown error code", async () => {
     await expect(
       createFactory(canonicalFactory, {
         fetch: vi.fn().mockResolvedValue(
@@ -84,7 +84,7 @@ describe("named factory API error handling", () => {
     );
   });
 
-  it("preserves BAD_REQUEST activation failures as typed API errors", async () => {
+  it("preserves BAD_REQUEST upsert failures as typed API errors", async () => {
     await expect(
       createFactory(canonicalFactory, {
         fetch: vi.fn().mockResolvedValue(
@@ -110,7 +110,7 @@ describe("named factory API error handling", () => {
     );
   });
 
-  it("falls back to the default activation error message when the error body has no string fields", async () => {
+  it("falls back to the default upsert error message when the error body has no string fields", async () => {
     await expect(
       createFactory(canonicalFactory, {
         fetch: vi.fn().mockResolvedValue(
@@ -124,7 +124,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The factory activation API rejected the request.", {
+      new NamedFactoryAPIError("The current factory editing API rejected the save request.", {
         code: "INTERNAL_ERROR",
         responseBody: {
           code: 42,

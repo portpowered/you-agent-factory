@@ -8,7 +8,7 @@ import {
 } from "./api";
 
 describe("factory API", () => {
-  it("posts the direct canonical factory payload to /factories and returns the canonical response", async () => {
+  it("upserts a named factory through PUT /factory-sessions/~default/factory with UPSERT_NAMED_AND_ACTIVATE", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -16,6 +16,10 @@ describe("factory API", () => {
           workTypes: [],
           workers: [],
           workstations: [],
+          version: {
+            logical: "1",
+            physical: "2026-05-18T14:41:00Z",
+          },
         }),
         {
           headers: {
@@ -40,23 +44,26 @@ describe("factory API", () => {
       workstations: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factories",
+      "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
-          name: "Dropped Factory",
-          workTypes: [],
-          workers: [],
-          workstations: [],
+          mode: "UPSERT_NAMED_AND_ACTIVATE",
+          factory: {
+            name: "Dropped Factory",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+          },
         }),
         headers: {
-          "Content-Type": "application/json",
+          "content-type": "application/json",
         },
-        method: "POST",
+        method: "PUT",
       }),
     );
   });
 
-  it("maps structured activation failures into a typed API error", async () => {
+  it("maps structured upsert failures into a typed API error", async () => {
     await expect(
       createFactory(
         {
