@@ -101,10 +101,11 @@ Required fields for `POST /work`:
 - `workTypeName`
 
 `name` is required for single-work API submission and remains independently
-required as `works[].name` for batch requests. Single-work `POST /work` bodies
-use the OpenAPI camelCase fields such as `workTypeName` and `traceId`; batch
-request bodies continue to use `works[].work_type_name` and `trace_id`. This
-change does not alter the existing batch naming rule.
+required as `works[].name` for batch requests. Both `POST /work` (`SubmitWorkRequest`)
+and batch `WorkRequest` payloads use the OpenAPI camelCase fields from
+`api/openapi.yaml`, such as `workTypeName` and `traceId` on submitted work items.
+See [Batch Inputs](batch-inputs.md) for the full `FACTORY_REQUEST_BATCH` contract,
+including `requestId`, relation fields, and optional `currentChainingTraceId`.
 
 Tags declared on submitted work items are available after the batch request has
 been accepted:
@@ -240,7 +241,7 @@ A work type describes one kind of work and every state that work can occupy:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | Yes | Stable work type name. Batch inputs use this as `work_type_name`; workstation IO uses this as `workType`. |
+| `name` | Yes | Stable work type name. Submitted work uses this as `workTypeName` on `POST /work` and `works[].workTypeName` in batch requests; workstation IO uses this as `workType`. |
 | `states` | Yes | State list for the work type. Each state creates one runtime place. |
 | `states[].name` | Yes | Stable state name used in workstation IO. |
 | `states[].type` | Yes | Lifecycle category: `INITIAL`, `PROCESSING`, `TERMINAL`, or `FAILED`. |
