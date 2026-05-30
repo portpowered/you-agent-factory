@@ -3,8 +3,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { activateImportedFactoryForSession } from "../../../api/named-factory";
-import { createFactoryImportConfirmInput } from "../../import/lib/factory-import-confirm-input.test-helpers";
-import { PORT_OS_FACTORY_PNG_SCHEMA_VERSION } from "../../import/lib/factory-png-import";
+import {
+  PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+  type FactoryPngImportValue,
+} from "../../import/lib/factory-png-import";
 import { useCurrentActivityImportController } from "./current-activity-import-controller";
 
 vi.mock("../../../api/named-factory", async () => {
@@ -39,24 +41,21 @@ describe("useCurrentActivityImportController", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    const importInput = createFactoryImportConfirmInput({
+    const importValue: FactoryPngImportValue = {
       factory: canonicalFactory,
       previewImageSrc: "blob:preview",
       revokePreviewImageSrc: vi.fn(),
       schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
-    });
+    };
 
     await act(async () => {
-      await result.current.activateImport(importInput);
+      await result.current.activateImport(importValue);
     });
 
     await waitFor(() => {
       expect(mockedActivateImportedFactoryForSession).toHaveBeenCalledWith(
         canonicalFactory,
-        expect.objectContaining({
-          choice: "replace_current",
-          sessionID: "session-2",
-        }),
+        { sessionID: "session-2" },
       );
     });
   });
