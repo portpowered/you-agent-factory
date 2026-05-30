@@ -13,10 +13,8 @@ import {
   WorkstationDetailCard,
 } from "../workstation-selection/public";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import {
-  useSelectedProviderSessionState,
-  WorkItemDetailCard,
-} from "../work-selection/public";
+import { useSelectedProviderSessionState } from "../work-selection/hooks/useSelectedProviderSessionState";
+import { WorkItemDetailCard } from "../work-selection/public";
 import type {
   SelectedWorkItemExecutionDetails,
   SelectedWorkRelationshipGraph,
