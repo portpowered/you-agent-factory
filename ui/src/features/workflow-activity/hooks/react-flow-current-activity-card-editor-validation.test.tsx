@@ -370,7 +370,7 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     await waitFor(() => {
       expect(result.current.structuralValidation.targets).toHaveLength(1);
       expect(result.current.structuralValidation.targets[0]?.subject.location).toBe(
-        "ON_FAILURE",
+        "ON_REJECTION",
       );
     });
 
