@@ -31,3 +31,11 @@ export function factorySessionScopedPath(
     : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
   return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}${normalizedPath}`;
 }
+
+export function factorySessionWorkPath(sessionID: string | null | undefined): string {
+  return factorySessionScopedPath("/work", sessionID);
+}
+
+export function factorySessionEventsPath(sessionID: string | null | undefined): string {
+  return factorySessionScopedPath("/events", sessionID);
+}

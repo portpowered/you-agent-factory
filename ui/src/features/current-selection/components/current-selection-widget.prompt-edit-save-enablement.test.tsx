@@ -1,6 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 import {
   getCurrentFactoryWorkstationPromptTemplateContract,
@@ -17,6 +15,7 @@ import {
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import { renderWithQueryClient } from "./current-selection-widget-test-utils";
 
 const saveCurrentFactoryMutation = vi.fn();
 
@@ -251,15 +250,3 @@ function buildEditableFactoryDefinition(): CurrentFactoryDocument {
   };
 }
 
-function renderWithQueryClient(view: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      mutations: { retry: false },
-      queries: { retry: false },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
-  );
-}

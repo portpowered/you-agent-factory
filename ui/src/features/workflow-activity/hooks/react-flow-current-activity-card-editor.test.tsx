@@ -114,8 +114,7 @@ vi.mock("../../current-factory-definition/public", () => ({
   useSaveCurrentFactory: () => hookState.saveEditableDefinition,
 }));
 
-vi.mock("../../factory-graph-editor/public", () => ({
-  createEmptyFactoryGraphDraft,
+vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
   useEditableFactoryGraph: () => ({
     actions: {
       discard: hookState.draftState.resetDraft,

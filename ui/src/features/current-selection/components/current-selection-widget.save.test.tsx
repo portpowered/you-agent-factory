@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
@@ -15,6 +15,11 @@ import {
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import {
+  createCurrentSelectionWidgetQueryClient,
+  renderWithExistingQueryClient,
+  renderWithQueryClient,
+} from "./current-selection-widget-test-utils";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
@@ -470,12 +475,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
@@ -500,17 +500,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       buildEditableDefinitionResult(refreshedFactory),
     );
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode,
             selection: { kind: "node", nodeId: selectedNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -577,12 +574,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("keeps save feedback scoped to the workstation that started the save after switching selections", async () => {
     const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
@@ -616,17 +608,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
     expect(screen.getAllByRole("button", { name: "Saving..." })[0]).toBeTruthy();
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: planNode,
             selection: { kind: "node", nodeId: planNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -669,12 +658,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const savedFactory = buildMultiWorkstationEditableFactoryDefinition({
       reviewPrompt: "Review the saved factory before approval.",
     });
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -714,14 +698,11 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       buildEditableDefinitionResult(savedFactory),
     );
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection()}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expect(
@@ -730,17 +711,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ),
     ).toBeNull();
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: reviewNode,
             selection: { kind: "node", nodeId: reviewNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -810,12 +788,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const savedFactory = buildMultiWorkstationEditableFactoryDefinition({
       reviewPrompt: "Review the saved factory before approval.",
     });
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
@@ -856,17 +829,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       buildEditableDefinitionResult(savedFactory),
     );
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: planNode,
             selection: { kind: "node", nodeId: planNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -877,17 +847,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ),
     ).toBeNull();
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: reviewNode,
             selection: { kind: "node", nodeId: reviewNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -910,12 +877,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("does not leak a failed save message into a different workstation after switching selections", async () => {
     const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
@@ -948,17 +910,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
     });
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: planNode,
             selection: { kind: "node", nodeId: planNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -991,12 +950,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("clears failed save feedback after leaving workstation detail and returning to the same workstation", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -1039,29 +993,23 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ).toBeTruthy();
     });
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection()}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: reviewNode,
             selection: { kind: "node", nodeId: reviewNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -1083,12 +1031,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("clears failed save feedback after switching to another workstation and returning", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
@@ -1132,34 +1075,28 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ).toBeTruthy();
     });
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: planNode,
             selection: { kind: "node", nodeId: planNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
 
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+    rerender(<CurrentSelectionWidget
           currentSelection={buildCurrentSelection({
             selectedNode: reviewNode,
             selection: { kind: "node", nodeId: reviewNode.node_id },
           })}
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />,
     );
 
     expandEditableConfiguration();
@@ -1408,26 +1345,6 @@ function buildSharedWorkerFactoryDefinition(
     ],
     workTypes: [],
   };
-}
-
-function renderWithQueryClient(view: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      mutations: { retry: false },
-      queries: { retry: false },
-    },
-  });
-
-  return renderWithExistingQueryClient(queryClient, view);
-}
-
-function renderWithExistingQueryClient(
-  queryClient: QueryClient,
-  view: ReactNode,
-) {
-  return render(
-    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
-  );
 }
 
 function createDeferredPromise<T>() {

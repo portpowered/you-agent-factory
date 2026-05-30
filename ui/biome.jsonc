@@ -39,10 +39,49 @@
             "skipBlankLines": true
           }
         }
+      },
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["**/*dashboardSessionStore*"],
+                "message": "Import useDashboardSession() for session identity and API paths. Direct dashboardSessionStore access is limited to session tabs and DashboardSessionProvider. See docs/internal/development/dashboard-session-scope-import-boundaries.md."
+              }
+            ]
+          }
+        }
       }
     }
   },
   "overrides": [
+    {
+      "includes": [
+        "src/features/dashboard/state/dashboardSessionStore.ts",
+        "src/features/dashboard/session/dashboard-session-provider.tsx",
+        "src/features/header/hooks/use-dashboard-session-tabs-state.ts",
+        ".storybook/dashboard-story-runtime.tsx",
+        "src/testing/app-shell-test-utils.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
+    },
     {
       "includes": ["src/api/generated/**"],
       "linter": {

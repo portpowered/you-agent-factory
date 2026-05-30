@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
@@ -18,9 +17,7 @@ export function SubmitWorkWidget({
   locale,
   submitWorkTypes = [],
 }: SubmitWorkWidgetProps) {
-  const selectedSessionID = useDashboardSessionStore(
-    (state) => state.selectedSessionID,
-  );
+  const { sessionID } = useDashboardSession();
   const messages = getSubmitWorkMessages(locale);
   const {
     draft,
@@ -35,11 +32,7 @@ export function SubmitWorkWidget({
     status,
     submitWorkTypeNames,
     validationErrors,
-  } = useSubmitWorkWidget(
-    selectedSessionID ?? DEFAULT_FACTORY_SESSION_ID,
-    submitWorkTypes,
-    messages,
-  );
+  } = useSubmitWorkWidget(sessionID, submitWorkTypes, messages);
 
   return (
     <SubmitWorkCard

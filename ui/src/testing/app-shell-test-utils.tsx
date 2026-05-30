@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, type Mock, vi } from "vitest";
 import { App } from "../App";
 import type {
   DashboardSnapshot,
@@ -8,9 +8,9 @@ import type {
   DashboardTrace,
   DashboardWorkstationRequest,
 } from "../api/dashboard";
-import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import type { FactoryEvent } from "../api/events";
 import type { FactorySessionSummary } from "../api/factory-sessions/api";
+import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import {
   buildDashboardSnapshotFixture,
   mediumBranchingDashboardTopology,
@@ -21,18 +21,23 @@ import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDas
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
 import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
 import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
+import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../features/dashboard/state/dashboardStreamStore";
-import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
 import {
-  type WorldState,
   useFactoryTimelineStore,
+  type WorldState,
 } from "../features/timeline/state/factoryTimelineStore";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
+
+export {
+  renderWithDashboardSessionTest,
+  wrapWithDashboardSessionTest,
+} from "./dashboard-session-test-utils";
 
 vi.mock("../features/flowchart/lib/layout", async () => {
   const actual = await vi.importActual("../features/flowchart/lib/layout");
@@ -113,7 +118,9 @@ interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
 }
 
-type CurrentFactoryDocumentResult = ReturnType<typeof useCurrentFactoryDocument>;
+type CurrentFactoryDocumentResult = ReturnType<
+  typeof useCurrentFactoryDocument
+>;
 
 const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];

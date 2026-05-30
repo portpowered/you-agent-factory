@@ -4,7 +4,9 @@ import {
   DEFAULT_FACTORY_SESSION_ID,
   currentFactoryWorkstationPath,
   currentFactorySessionPath,
+  factorySessionEventsPath,
   factorySessionScopedPath,
+  factorySessionWorkPath,
   isDefaultFactorySessionID,
 } from "./session-routing";
 
@@ -47,6 +49,16 @@ describe("factorySessionScopedPath", () => {
       ),
     ).toBe(
       "/factory-sessions/session%2Fbeta/factory/workstations/Review%20Queue/prompt-template-contract",
+    );
+  });
+
+  it("exposes explicit work and events session routes", () => {
+    expect(factorySessionWorkPath(undefined)).toBe("/factory-sessions/~default/work");
+    expect(factorySessionEventsPath("session-beta")).toBe(
+      "/factory-sessions/session-beta/events",
+    );
+    expect(factorySessionWorkPath("session/beta")).toBe(
+      "/factory-sessions/session%2Fbeta/work",
     );
   });
 });

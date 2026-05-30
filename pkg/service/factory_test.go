@@ -30,35 +30,6 @@ import (
 const servicePortableBundledScriptBody = "Write-Output 'portable script'\n"
 const serviceStreamedRecordingTimeout = 5 * time.Second
 
-// minimalFactoryConfig returns a minimal factory.json config for testing.
-func minimalFactoryConfig() map[string]any {
-	return map[string]any{
-		"name": "factory",
-		"workTypes": []map[string]any{
-			{
-				"name": "task",
-				"states": []map[string]string{
-					{"name": "init", "type": "INITIAL"},
-					{"name": "complete", "type": "TERMINAL"},
-					{"name": "failed", "type": "FAILED"},
-				},
-			},
-		},
-		"workers": []map[string]string{
-			{"name": "worker-a"},
-		},
-		"workstations": []map[string]any{
-			{
-				"name":      "process",
-				"worker":    "worker-a",
-				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
-			},
-		},
-	}
-}
-
 func serviceNamedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 	return serviceNamedFactoryPayloadWithWorkType(t, project, "task")
@@ -267,18 +238,6 @@ func writeWorkRequestFile(t *testing.T, path string, req interfaces.SubmitReques
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write work request file: %v", err)
-	}
-}
-
-// writeFactoryJSON writes a factory.json into the given directory.
-func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
-	t.Helper()
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal factory config: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
 	}
 }
 

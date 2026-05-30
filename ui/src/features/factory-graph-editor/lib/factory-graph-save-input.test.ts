@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import {
-  buildFactoryGraphSaveInput,
+  applyFactoryGraphPendingEdits,
   connectFactoryGraphNodes,
-  createEmptyFactoryGraphDraft,
   disconnectFactoryGraphEdge,
-} from "../public";
+} from "./factory-graph-operations";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -189,7 +189,7 @@ describe("factory graph save input", () => {
       },
     );
 
-    const saveInput = buildFactoryGraphSaveInput({
+    const saveInput = applyFactoryGraphPendingEdits({
       baseFactoryDefinition: richFactoryDefinition,
       draft,
     });
@@ -265,7 +265,7 @@ describe("factory graph save input", () => {
       },
     };
 
-    const saveInput = buildFactoryGraphSaveInput({
+    const saveInput = applyFactoryGraphPendingEdits({
       baseFactoryDefinition: richFactoryDefinition,
       draft: invalidDraft,
     });

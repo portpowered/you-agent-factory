@@ -209,32 +209,6 @@ export function collectPendingRemovalNodeIds(
   return pendingNodeIds;
 }
 
-export function collectPendingRemovalEdgeIds(
-  baseFactoryDefinition: CanonicalFactoryDefinition,
-  draft: FactoryGraphDraft,
-): Set<string> {
-  const pendingNodeIds = collectPendingRemovalNodeIds(
-    baseFactoryDefinition,
-    draft,
-  );
-  const pendingEdgeIds = new Set<string>();
-  const baseTopology = buildFactoryGraphTopologyFromDefinition(
-    baseFactoryDefinition,
-  );
-
-  for (const edge of baseTopology.edges) {
-    if (
-      pendingNodeIds.has(edge.sourceId) ||
-      pendingNodeIds.has(edge.targetId) ||
-      matchesExplicitEdgeRemoval(edge, draft.edgeChanges.removals)
-    ) {
-      pendingEdgeIds.add(edge.id);
-    }
-  }
-
-  return pendingEdgeIds;
-}
-
 function removeDraftAddition(
   draft: FactoryGraphDraft,
   key: FactoryGraphNodeKey,

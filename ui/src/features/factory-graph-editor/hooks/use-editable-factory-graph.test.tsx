@@ -3,10 +3,8 @@ import {
   baseFactoryDefinition,
   currentFactoryDocument,
 } from "../lib/factory-graph-draft.test-helpers";
-import {
-  buildFactoryGraphTopologyFromDefinition,
-  createEmptyFactoryGraphDraft,
-} from "../public";
+import { buildFactoryGraphTopologyFromDefinition } from "../lib/factory-graph-draft-graph";
+import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const hookState = vi.hoisted(() => ({
