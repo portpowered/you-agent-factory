@@ -90,13 +90,7 @@ func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.Wo
 	if err != nil {
 		return interfaces.WorkRequestSubmitResult{}, err
 	}
-	result := interfaces.WorkRequestSubmitResult{
-		RequestID: request.RequestID,
-		Accepted:  true,
-	}
-	if len(normalized) > 0 {
-		result.TraceID = normalized[0].TraceID
-	}
+	result := requests.SubmitResultFromNormalized(request.RequestID, normalized)
 	if m.WorkRequestResults == nil {
 		m.WorkRequestResults = make(map[string]interfaces.WorkRequestSubmitResult)
 	}

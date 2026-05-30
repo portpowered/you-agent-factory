@@ -225,15 +225,7 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 	default:
 	}
 
-	traceID := ""
-	if len(work) > 0 {
-		traceID = work[0].TraceID
-	}
-	result := interfaces.WorkRequestSubmitResult{
-		RequestID: requestID,
-		TraceID:   traceID,
-		Accepted:  true,
-	}
+	result := requests.SubmitResultFromNormalized(requestID, work)
 
 	e.mu.Lock()
 	if !e.acceptingSubmits {
@@ -784,15 +776,7 @@ func (e *FactoryEngine) recordGeneratedSubmissionRequest(
 	batch interfaces.GeneratedSubmissionBatch,
 	normalized []interfaces.SubmitRequest,
 ) {
-	traceID := ""
-	if len(normalized) > 0 {
-		traceID = normalized[0].TraceID
-	}
-	e.workRequests[requestID] = interfaces.WorkRequestSubmitResult{
-		RequestID: requestID,
-		TraceID:   traceID,
-		Accepted:  true,
-	}
+	e.workRequests[requestID] = requests.SubmitResultFromNormalized(requestID, normalized)
 	if e.recordWorkRequest == nil {
 		return
 	}

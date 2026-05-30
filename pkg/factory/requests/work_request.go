@@ -88,6 +88,28 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 	return normalized, nil
 }
 
+// SubmitResultFromNormalized builds accepted batch metadata from normalized submit requests.
+func SubmitResultFromNormalized(requestID string, normalized []interfaces.SubmitRequest) interfaces.WorkRequestSubmitResult {
+	traceID := ""
+	if len(normalized) > 0 {
+		traceID = normalized[0].TraceID
+	}
+	works := make([]interfaces.WorkRequestSubmittedWork, 0, len(normalized))
+	for _, req := range normalized {
+		works = append(works, interfaces.WorkRequestSubmittedWork{
+			Name:         SubmitWorkName(req),
+			WorkTypeName: req.WorkTypeID,
+			WorkID:       req.WorkID,
+		})
+	}
+	return interfaces.WorkRequestSubmitResult{
+		RequestID: requestID,
+		TraceID:   traceID,
+		Accepted:  true,
+		Works:     works,
+	}
+}
+
 // NormalizeGeneratedSubmissionBatch validates the canonical generated request
 // and merges optional runtime submission fields onto the matching work items.
 func NormalizeGeneratedSubmissionBatch(batch interfaces.GeneratedSubmissionBatch, opts interfaces.WorkRequestNormalizeOptions) ([]interfaces.SubmitRequest, error) {

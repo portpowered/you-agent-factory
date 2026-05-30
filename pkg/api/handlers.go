@@ -210,7 +210,7 @@ func (s *Server) UpsertWorkRequest(w http.ResponseWriter, r *http.Request, reque
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, factoryapi.UpsertWorkRequestResponse{RequestId: result.RequestID, TraceId: result.TraceID})
+	s.writeJSON(w, http.StatusCreated, upsertWorkRequestResponse(result))
 }
 
 func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, requestID string) {
@@ -267,7 +267,23 @@ func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, factoryapi.UpsertWorkRequestResponse{RequestId: result.RequestID, TraceId: result.TraceID})
+	s.writeJSON(w, http.StatusCreated, upsertWorkRequestResponse(result))
+}
+
+func upsertWorkRequestResponse(result interfaces.WorkRequestSubmitResult) factoryapi.UpsertWorkRequestResponse {
+	works := make([]factoryapi.UpsertWorkRequestSubmittedWork, 0, len(result.Works))
+	for _, work := range result.Works {
+		works = append(works, factoryapi.UpsertWorkRequestSubmittedWork{
+			Name:         work.Name,
+			WorkTypeName: work.WorkTypeName,
+			WorkId:       work.WorkID,
+		})
+	}
+	return factoryapi.UpsertWorkRequestResponse{
+		RequestId: result.RequestID,
+		TraceId:   result.TraceID,
+		Works:     works,
+	}
 }
 
 func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {

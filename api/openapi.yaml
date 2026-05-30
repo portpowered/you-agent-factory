@@ -1222,17 +1222,36 @@ components:
           type: string
           minLength: 1
           description: Browser-authored MIME type preserved for inline identification after staging.
+    UpsertWorkRequestSubmittedWork:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - workTypeName
+        - workId
+      properties:
+        name:
+          type: string
+        workTypeName:
+          type: string
+        workId:
+          type: string
     UpsertWorkRequestResponse:
       type: object
       additionalProperties: false
       required:
         - requestId
         - traceId
+        - works
       properties:
         requestId:
           type: string
         traceId:
           type: string
+        works:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpsertWorkRequestSubmittedWork'
     ListWorkResponse:
       type: object
       additionalProperties: false

@@ -2210,8 +2210,16 @@ type Transition struct {
 
 // UpsertWorkRequestResponse defines model for UpsertWorkRequestResponse.
 type UpsertWorkRequestResponse struct {
-	RequestId string `json:"requestId"`
-	TraceId   string `json:"traceId"`
+	RequestId string                           `json:"requestId"`
+	TraceId   string                           `json:"traceId"`
+	Works     []UpsertWorkRequestSubmittedWork `json:"works"`
+}
+
+// UpsertWorkRequestSubmittedWork defines model for UpsertWorkRequestSubmittedWork.
+type UpsertWorkRequestSubmittedWork struct {
+	Name         string `json:"name"`
+	WorkId       string `json:"workId"`
+	WorkTypeName string `json:"workTypeName"`
 }
 
 // WallClock defines model for WallClock.

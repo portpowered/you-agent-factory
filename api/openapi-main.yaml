@@ -843,6 +843,8 @@ components:
       $ref: './components/schemas/api/StageSubmitWorkFileRequest.yaml'
     StageSubmitWorkFileResponse:
       $ref: './components/schemas/api/StageSubmitWorkFileResponse.yaml'
+    UpsertWorkRequestSubmittedWork:
+      $ref: './components/schemas/api/UpsertWorkRequestSubmittedWork.yaml'
     UpsertWorkRequestResponse:
       $ref: './components/schemas/api/UpsertWorkRequestResponse.yaml'
     ListWorkResponse:
