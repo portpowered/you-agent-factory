@@ -35,6 +35,7 @@ var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
 var listWork = workcli.List
 var listSessions = sessioncli.List
+var deleteSession = sessioncli.Delete
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
 var saveFactoryFromFile = factorycli.SaveFromFile
@@ -332,7 +333,7 @@ func newSessionCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	sessionCmd.AddCommand(
 		newSessionListCommand(diagnostics),
 		newSessionCreateCommand(),
-		newSessionDeleteCommand(),
+		newSessionDeleteCommand(diagnostics),
 	)
 	return sessionCmd
 }
@@ -371,13 +372,28 @@ func newSessionCreateCommand() *cobra.Command {
 	}
 }
 
-func newSessionDeleteCommand() *cobra.Command {
-	return &cobra.Command{
+func newSessionDeleteCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := sessioncli.DeleteConfig{Port: defaultcmd.FactoryPort}
+
+	cmd := &cobra.Command{
 		Use:   "delete <session-id>",
 		Short: "Close a live factory session",
 		Long: "Close one live factory session via DELETE /factory-sessions/{session_id}.\n\n" +
-			"Use the same --port selection as session list.",
+			"Use the same --port selection as session list. Use --json to emit a JSON confirmation on stdout.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.SessionID = args[0]
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
+			return deleteSession(cfg)
+		},
 	}
+
+	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit a JSON confirmation after the session closes")
+	return cmd
 }
 
 func newWorkCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
