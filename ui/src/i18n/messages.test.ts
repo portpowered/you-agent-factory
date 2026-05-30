@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { currentSelectionDetailMessagesByLocale } from "../features/current-selection/messages/current-selection-detail";
-import { currentSelectionDispatchHistoryMessagesByLocale } from "../features/current-selection/messages/current-selection-dispatch-history";
-import { currentSelectionShellMessagesByLocale } from "../features/current-selection/messages/current-selection-shell";
+import { currentSelectionDetailMessagesByLocale } from "../features/current-selection/base/messages/current-selection-detail";
+import { currentSelectionDispatchHistoryMessagesByLocale } from "../features/current-selection/base/messages/current-selection-dispatch-history";
+import { currentSelectionShellMessagesByLocale } from "../features/current-selection/base/messages/current-selection-shell";
 import { providerSessionDetailMessagesByLocale } from "../features/provider-session-detail/messages/provider-session-detail";
 import { workstationDetailMessagesByLocale } from "../features/current-selection/workstation-selection/public";
 import { exportDialogMessagesByLocale } from "../features/export/messages/export-dialog";
