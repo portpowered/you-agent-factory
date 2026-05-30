@@ -11,6 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
@@ -89,9 +91,24 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	current, err := svc.GetCurrentFactory(context.Background())
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	go func() {
+		_ = svc.Run(runCtx)
+	}()
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		snap, snapErr := svc.GetEngineStateSnapshotForSession(context.Background(), factorysessions.DefaultSessionID)
+		if snapErr == nil && snap.RuntimeStatus == interfaces.RuntimeStatusIdle {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	current, err := svc.GetCurrentFactoryForSession(context.Background(), factorysessions.DefaultSessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentFactory: %v", err)
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
 	}
 	if current.Version == nil {
 		t.Fatal("expected current factory version metadata")
@@ -103,10 +120,15 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 		Physical: current.Version.Physical.Add(time.Second),
 	}
 
-	_, err = svc.SaveCurrentFactory(context.Background(), invalid)
+	_, err = svc.SaveFactoryForSession(
+		context.Background(),
+		factorysessions.DefaultSessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		invalid,
+	)
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(err, &topologyErr) {
-		t.Fatalf("SaveCurrentFactory error = %v, want topology validation error", err)
+		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
 	}
 	return factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
 }

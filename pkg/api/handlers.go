@@ -602,26 +602,6 @@ func (s *Server) loadCurrentFactoryBySession(w http.ResponseWriter, r *http.Requ
 	return namedFactory, true
 }
 
-func (s *Server) SaveCurrentFactory(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeSaveCurrentFactoryBody(r.Body)
-	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
-			return
-		}
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
-		return
-	}
-
-	saved, err := s.runtime.SaveCurrentFactory(r.Context(), req.Factory)
-	if err != nil {
-		s.writeCurrentFactoryError(w, err, "save")
-		return
-	}
-
-	s.writeJSON(w, http.StatusOK, saved)
-}
-
 func (s *Server) SaveCurrentFactoryBySessionId(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -646,51 +626,12 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 		mode = *req.Mode
 	}
 
-	var saved factoryapi.Factory
-	switch mode {
-	case factoryapi.FactorySaveModeUpsertNamedAndActivate:
-		if nameErr := apisurface.ValidateWritableNamedFactoryName(req.Factory.Name); nameErr != nil {
-			s.writeError(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME")
-			return
-		}
-		var upsertErr error
-		saved, upsertErr = s.runtime.CreateNamedFactory(r.Context(), req.Factory)
-		if upsertErr != nil {
-			s.writeCreateNamedFactoryError(w, upsertErr)
-			return
-		}
-	default:
-		var saveErr error
-		saved, saveErr = sessionRuntime.SaveCurrentFactoryForSession(r.Context(), string(sessionID), req.Factory)
-		if saveErr != nil {
-			s.writeCurrentFactoryError(w, saveErr, "save", zap.String("session_id", string(sessionID)))
-			return
-		}
+	saved, err := sessionRuntime.SaveFactoryForSession(r.Context(), string(sessionID), mode, req.Factory)
+	if err != nil {
+		s.writeCurrentFactoryError(w, err, "save", zap.String("session_id", string(sessionID)))
+		return
 	}
 	s.writeJSON(w, http.StatusOK, saved)
-}
-
-func (s *Server) writeCreateNamedFactoryError(w http.ResponseWriter, err error) {
-	var topologyErr *apisurface.TopologyValidationError
-	switch {
-	case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.FactoryValidationTarget{factoryvalidation.InvalidFactoryNameTarget()})
-	case errors.As(err, &topologyErr):
-		targets := topologyErr.Targets
-		if len(targets) == 0 {
-			targets = []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()}
-		}
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", targets)
-	case errors.Is(err, apisurface.ErrInvalidNamedFactory):
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
-	case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
-		s.writeError(w, http.StatusConflict, "Named factory already exists.", "FACTORY_ALREADY_EXISTS")
-	case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
-		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.FactoryValidationTarget{factoryvalidation.FactoryRuntimeNotIdleTarget()})
-	default:
-		s.logger.Error("upsert named factory failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to store named factory", "INTERNAL_ERROR")
-	}
 }
 
 func (s *Server) writeCurrentFactoryError(
@@ -725,6 +666,9 @@ func (s *Server) writeCurrentFactoryError(
 		return
 	case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
 		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.FactoryValidationTarget{factoryvalidation.FactoryRuntimeNotIdleTarget()})
+		return
+	case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
+		s.writeError(w, http.StatusConflict, "Named factory already exists.", "FACTORY_ALREADY_EXISTS")
 		return
 	default:
 		logFields := append([]zap.Field{zap.String("action", action)}, fields...)

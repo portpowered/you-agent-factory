@@ -1002,26 +1002,25 @@ func TestFactoryService_CreateNamedFactory_ActivatesPersistedFactoryFromDefaultR
 		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
 	}
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
 
-	created, err := svc.CreateNamedFactory(context.Background(), serviceNamedFactoryContract(t, "beta"))
+	created, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		serviceNamedFactoryContract(t, "beta"),
+	)
 	if err != nil {
-		t.Fatalf("CreateNamedFactory(beta): %v", err)
+		t.Fatalf("SaveFactoryForSession(upsert beta): %v", err)
 	}
 	if created.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("created factory name = %q, want beta", created.Name)
 	}
 	assertCurrentFactoryPointer(t, rootDir, "beta", "after create from default runtime")
-	assertServiceCurrentFactory(t, svc, "beta", "after create from default runtime")
-	if svc.runtimeCfg == nil || svc.runtimeCfg.FactoryDir() != filepath.Join(rootDir, "beta") {
-		t.Fatalf("service runtime dir after create = %q, want %q", svc.runtimeCfg.FactoryDir(), filepath.Join(rootDir, "beta"))
+	assertServiceCurrentFactory(t, harness.svc, "beta", "after create from default runtime")
+	if harness.svc.runtimeCfg == nil || harness.svc.runtimeCfg.FactoryDir() != filepath.Join(rootDir, "beta") {
+		t.Fatalf("service runtime dir after create = %q, want %q", harness.svc.runtimeCfg.FactoryDir(), filepath.Join(rootDir, "beta"))
 	}
 }
 
@@ -1033,18 +1032,17 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
 	}
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
 
-	created, err := svc.CreateNamedFactory(context.Background(), serviceNamedFactoryContractWithBundledFiles(t, "beta"))
+	created, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		serviceNamedFactoryContractWithBundledFiles(t, "beta"),
+	)
 	if err != nil {
-		t.Fatalf("CreateNamedFactory(beta): %v", err)
+		t.Fatalf("SaveFactoryForSession(upsert beta): %v", err)
 	}
 	if created.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("created factory name = %q, want beta", created.Name)
@@ -1057,9 +1055,9 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 	}
 	bundledFiles := *created.SupportingFiles.BundledFiles
 	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.BundledFileTypeINPUT, "factory/inputs/task/default/starter.md")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[3], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1")
+	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.BundledFileTypeINPUT, "factory/inputs/task/default/starter.md", "starter work\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[3], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
 
 	importedDir := filepath.Join(rootDir, "beta")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")
@@ -1224,9 +1222,14 @@ func TestFactoryService_CreateNamedFactory_RejectsReservedCurrentFactoryName(t *
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	_, err = svc.CreateNamedFactory(context.Background(), serviceNamedFactoryContract(t, string(apisurface.DefaultCurrentFactoryName)))
+	_, err = svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		serviceNamedFactoryContract(t, string(apisurface.DefaultCurrentFactoryName)),
+	)
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
-		t.Fatalf("CreateNamedFactory(%q) error = %v, want %v", apisurface.DefaultCurrentFactoryName, err, apisurface.ErrInvalidNamedFactoryName)
+		t.Fatalf("SaveFactoryForSession(upsert %q) error = %v, want %v", apisurface.DefaultCurrentFactoryName, err, apisurface.ErrInvalidNamedFactoryName)
 	}
 	assertCurrentFactoryPointerMissing(t, rootDir, "after reserved-name rejection")
 }
@@ -1263,10 +1266,15 @@ func TestFactoryService_CreateNamedFactory_RejectsMissingFailureRouteTargets(t *
 	(*invalid.Workstations)[0].OnFailure = nil
 	(*invalid.Workstations)[0].OnRejection = &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}}
 
-	_, err = svc.CreateNamedFactory(context.Background(), invalid)
+	_, err = svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		invalid,
+	)
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(err, &topologyErr) {
-		t.Fatalf("CreateNamedFactory error = %v, want topology validation error", err)
+		t.Fatalf("SaveFactoryForSession(upsert) error = %v, want topology validation error", err)
 	}
 	assertHasValidationTarget(
 		t,
@@ -1279,30 +1287,44 @@ func TestFactoryService_CreateNamedFactory_RejectsMissingFailureRouteTargets(t *
 	)
 }
 
-func TestFactoryService_CreateNamedFactory_RejectsDuplicatePersistedName(t *testing.T) {
+func TestFactoryService_SaveFactoryForSession_UpsertReplacesExistingNamedFactory(t *testing.T) {
 	rootDir := t.TempDir()
 	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
 	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
 		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
 	}
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
 
-	if _, err := svc.CreateNamedFactory(context.Background(), serviceNamedFactoryContract(t, "beta")); err != nil {
-		t.Fatalf("CreateNamedFactory(beta): %v", err)
+	created, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		serviceNamedFactoryContract(t, "beta"),
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert beta): %v", err)
 	}
-	_, err = svc.CreateNamedFactory(context.Background(), serviceNamedFactoryContract(t, "beta"))
-	if !errors.Is(err, config.ErrNamedFactoryAlreadyExists) {
-		t.Fatalf("duplicate CreateNamedFactory(beta) error = %v, want %v", err, config.ErrNamedFactoryAlreadyExists)
+	replacement := serviceNamedFactoryContractWithWorkType(t, "beta", "story")
+	if created.Version == nil {
+		t.Fatal("expected created factory version metadata")
 	}
-	assertCurrentFactoryPointer(t, rootDir, "beta", "after duplicate create rejection")
+	replacement.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  created.Version.Logical + 1,
+		Physical: created.Version.Physical.Add(time.Second),
+	}
+	replaced, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		replacement,
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert replace beta): %v", err)
+	}
+	assertFactoryWorkType(t, replaced.WorkTypes, "story", "replaced beta work types")
+	assertCurrentFactoryPointer(t, rootDir, "beta", "after upsert replace")
 }
 
 func TestFactoryService_ActivateNamedFactory_FromDefaultRuntimeLeavesRootReadableWhenReplacementBuildFails(t *testing.T) {
@@ -1434,28 +1456,27 @@ func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-
 	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
 	replacement.Version = &factoryapi.HybridLogicalTimestamp{
 		Logical:  initialVersion.Logical + 1,
 		Physical: initialVersion.Physical.Add(time.Second),
 	}
-	saved, err := svc.SaveCurrentFactory(context.Background(), replacement)
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
+
+	saved, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		replacement,
+	)
 	if err != nil {
-		t.Fatalf("SaveCurrentFactory: %v", err)
+		t.Fatalf("SaveFactoryForSession(replace current): %v", err)
 	}
 	assertFactoryWorkType(t, saved.WorkTypes, "story", "saved work types")
 	assertFactoryVersionAdvanced(t, saved.Version, initialVersion)
 
-	current, err := svc.GetCurrentFactory(context.Background())
+	current, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentFactory after save: %v", err)
 	}
@@ -1500,16 +1521,10 @@ func TestFactoryService_SaveCurrentFactory_RejectsStaleBaseVersion(t *testing.T)
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
 
-	current, err := svc.GetCurrentFactory(context.Background())
+	current, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentFactory: %v", err)
 	}
@@ -1523,12 +1538,17 @@ func TestFactoryService_SaveCurrentFactory_RejectsStaleBaseVersion(t *testing.T)
 
 	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
 	replacement.Version = current.Version
-	_, err = svc.SaveCurrentFactory(context.Background(), replacement)
+	_, err = harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		replacement,
+	)
 	if !errors.Is(err, apisurface.ErrFactoryVersionStale) {
-		t.Fatalf("SaveCurrentFactory error = %v, want stale version", err)
+		t.Fatalf("SaveFactoryForSession error = %v, want stale version", err)
 	}
 
-	currentAfterStaleSave, err := svc.GetCurrentFactory(context.Background())
+	currentAfterStaleSave, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentFactory after stale save: %v", err)
 	}
@@ -1554,15 +1574,10 @@ func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-	currentBeforeInvalidSave, err := svc.GetCurrentFactory(context.Background())
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
+
+	currentBeforeInvalidSave, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentFactory before rejected save: %v", err)
 	}
@@ -1582,14 +1597,19 @@ func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t
 	(*replacement.Workstations)[0].Worker = "missing-worker"
 	(*replacement.Workstations)[0].Outputs = &[]factoryapi.WorkstationIO{{WorkType: "story", State: "missing-state"}}
 
-	_, err = svc.SaveCurrentFactory(context.Background(), replacement)
+	_, err = harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		replacement,
+	)
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(err, &topologyErr) {
-		t.Fatalf("SaveCurrentFactory error = %v, want topology validation error", err)
+		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
 	}
 	assertCanonicalTopologyTargets(t, topologyErr.Targets)
 
-	current, err := svc.GetCurrentFactory(context.Background())
+	current, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentFactory after rejected save: %v", err)
 	}
@@ -1612,15 +1632,10 @@ func TestFactoryService_SaveCurrentFactory_RejectsMissingOutcomeRoutes(t *testin
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-	current, err := svc.GetCurrentFactory(context.Background())
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
+
+	current, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentFactory before rejected save: %v", err)
 	}
@@ -1647,10 +1662,15 @@ func TestFactoryService_SaveCurrentFactory_RejectsMissingOutcomeRoutes(t *testin
 	(*replacement.Workstations)[0].OnFailure = nil
 	(*replacement.Workstations)[0].OnRejection = nil
 
-	_, err = svc.SaveCurrentFactory(context.Background(), replacement)
+	_, err = harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		replacement,
+	)
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(err, &topologyErr) {
-		t.Fatalf("SaveCurrentFactory error = %v, want topology validation error", err)
+		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
 	}
 	assertHasValidationTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingFailureRoute, "missing failure route target")
 	assertHasValidationTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingRejectionRoute, "missing rejection route target")
