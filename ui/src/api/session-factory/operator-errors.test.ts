@@ -54,6 +54,17 @@ describe("resolveSessionFactoryAPIErrorMessage", () => {
       }),
     ).toBe(sessionFactoryAPIErrorMessages.rejectedSaveRequest);
   });
+
+  it("maps non-5xx internal failures to the API message when present", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        apiMessage: "Factory payload could not be parsed.",
+        code: "INTERNAL_ERROR",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+        status: 400,
+      }),
+    ).toBe("Factory payload could not be parsed.");
+  });
 });
 
 describe("session factory HTTP error mapping", () => {

@@ -236,11 +236,69 @@ describe("saveSessionFactory errors", () => {
 });
 
 describe("getSessionFactory errors", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("throws SessionFactoryAPIError when fetch is unavailable", async () => {
     await expect(
       getSessionFactory("~default", {
         fetch: undefined,
       }),
     ).rejects.toBeInstanceOf(SessionFactoryAPIError);
+  });
+
+  it("maps transport failures to NETWORK_ERROR when fetch rejects", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockRejectedValue(new Error("connection refused")),
+      }),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+    });
+  });
+
+  it("maps unknown API error codes to INTERNAL_ERROR", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "UNEXPECTED_CODE",
+              message: "Something went wrong.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 400,
+              statusText: "Bad Request",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "Something went wrong.",
+      status: 400,
+    });
+  });
+
+  it("rejects successful responses that are not session factory documents", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ workers: [] }), {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          }),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+    });
   });
 });

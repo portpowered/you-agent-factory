@@ -291,8 +291,8 @@ describe.sequential("factory graph editor browser integration", () => {
         onActivateFactory: async (value) => {
           postFactoryActivations.push(value);
         },
-        onSaveCurrentFactory: async ({ body, sessionID }) => {
-          sessionFactoryPutRequests.push({ body, sessionID });
+        onSaveCurrentFactory: async ({ body, mode, sessionID }) => {
+          sessionFactoryPutRequests.push({ body, mode, sessionID });
         },
       });
       const browserPage = await openBrowserPage({ acceptDownloads: true });
