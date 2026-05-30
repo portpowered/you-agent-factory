@@ -10,12 +10,7 @@ import type {
 import type { FactoryEvent } from "../api/events";
 import type { FactorySessionSummary } from "../api/factory-sessions/api";
 import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
-import {
-  buildDashboardSnapshotFixture,
-  mediumBranchingDashboardTopology,
-} from "../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../components/dashboard/test-browser-shims";
-import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
 import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
@@ -49,6 +44,13 @@ export {
   MockEventSource,
 } from "./app-shell-session-stream-test-utils";
 
+export {
+  activeSnapshot,
+  baselineSnapshot,
+  importedFactorySnapshot,
+  terminalSnapshot,
+} from "./app-shell-test-snapshots";
+
 interface RenderAppOptions {
   browserLanguage?: string | null;
   browserLanguages?: readonly string[] | null;
@@ -76,83 +78,8 @@ type CurrentFactoryDocumentResult = ReturnType<
   typeof useCurrentFactoryDocument
 >;
 
-const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
-export const baselineSnapshot = buildDashboardSnapshotFixture(
-  mediumBranchingDashboardTopology,
-);
-
-export const activeSnapshot = semanticWorkflowDashboardSnapshot;
-
-export const terminalSnapshot = {
-  ...terminalBaseSnapshot,
-  tick_count: 4,
-  runtime: {
-    ...terminalBaseSnapshot.runtime,
-    place_occupancy_work_items_by_place_id: {
-      ...(terminalBaseSnapshot.runtime.place_occupancy_work_items_by_place_id ??
-        {}),
-      "story:blocked": [
-        {
-          display_name: "Failed Story",
-          trace_id: "trace-failed-story",
-          work_id: "work-failed-story",
-          work_type_id: "story",
-        },
-      ],
-      "story:complete": [
-        {
-          display_name: "Done Story",
-          trace_id: "trace-done-story",
-          work_id: "work-complete",
-          work_type_id: "story",
-        },
-      ],
-    },
-    place_token_counts: {
-      ...(terminalBaseSnapshot.runtime.place_token_counts ?? {}),
-      "story:blocked": 1,
-      "story:complete": 1,
-    },
-    session: {
-      ...terminalBaseSnapshot.runtime.session,
-      completed_count: 1,
-      completed_work_labels: ["Done Story"],
-      provider_sessions: [
-        ...(terminalBaseSnapshot.runtime.session.provider_sessions ?? []),
-        {
-          dispatch_id: "dispatch-complete",
-          outcome: "ACCEPTED",
-          provider_session: {
-            id: "sess-done-story",
-            kind: "session_id",
-            provider: "codex",
-          },
-          transition_id: "complete",
-          workstation_name: "Complete",
-          work_items: [
-            {
-              display_name: "Done Story",
-              trace_id: "trace-done-story",
-              work_id: "work-complete",
-              work_type_id: "story",
-            },
-          ],
-        },
-      ],
-    },
-  },
-} satisfies DashboardSnapshot;
-
-export const importedFactorySnapshot = (() => {
-  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-
-  snapshot.factory_state = "Imported factory active";
-  snapshot.tick_count = semanticWorkflowDashboardSnapshot.tick_count + 1;
-
-  return snapshot;
-})();
 
 export async function waitForDashboardShell(): Promise<void> {
   await screen.findByRole("heading", { name: "U" });
