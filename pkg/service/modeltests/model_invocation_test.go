@@ -15,6 +15,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
 )
 
@@ -116,7 +117,7 @@ func buildModelCatalogServiceWithOptions(t *testing.T, cfg map[string]any, optio
 	t.Helper()
 
 	dir := t.TempDir()
-	writeFactoryJSON(t, dir, cfg)
+	factoryfixtures.WriteFactoryJSON(t, dir, cfg)
 	options.Dir = dir
 	options.MockWorkersConfig = factoryconfig.NewEmptyMockWorkersConfig()
 	options.Logger = zap.NewNop()
