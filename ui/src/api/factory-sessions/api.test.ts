@@ -197,6 +197,91 @@ describe("factory sessions API", () => {
     );
   });
 
+  it("posts initNewFactory when creating a factory from an empty folder", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          session: {
+            factoryDir: "/workspace/new",
+            folderPath: "/workspace/new",
+            id: "session-new",
+            isDefault: false,
+            project: "new",
+            target: {
+              kind: "default",
+            },
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      openFactorySession({
+        folderPath: "/workspace/new",
+        initNewFactory: true,
+      }),
+    ).resolves.toEqual({
+      session: {
+        factoryDir: "/workspace/new",
+        folderPath: "/workspace/new",
+        id: "session-new",
+        isDefault: false,
+        project: "new",
+        target: {
+          kind: "default",
+        },
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions",
+      expect.objectContaining({
+        body: JSON.stringify({
+          folderPath: "/workspace/new",
+          initNewFactory: true,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      }),
+    );
+  });
+
+  it("accepts validateOnly initsNewFactory discovery responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          folderPath: "/workspace/empty",
+          initsNewFactory: true,
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      openFactorySession({
+        folderPath: "/workspace/empty",
+        validateOnly: true,
+      }),
+    ).resolves.toEqual({
+      folderPath: "/workspace/empty",
+      initsNewFactory: true,
+    });
+  });
+
   it("maps validation failures into typed API errors", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

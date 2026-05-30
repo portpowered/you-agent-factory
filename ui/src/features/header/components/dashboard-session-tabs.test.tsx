@@ -678,6 +678,201 @@ describe("DashboardSessionTabs", () => {
     ).toBeNull();
   });
 
+  it("confirms init-new-factory after validateOnly returns initsNewFactory", async () => {
+    const emptyFolderPath = "/workspace/new-factory-root";
+    listFactorySessions
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: emptyFolderPath,
+          folderPath: emptyFolderPath,
+          id: "session-new-factory",
+          isDefault: false,
+          project: "new-factory-root",
+          target: {
+            kind: "default",
+          },
+        },
+      ]);
+    openFactorySession
+      .mockResolvedValueOnce({
+        folderPath: emptyFolderPath,
+        initsNewFactory: true,
+      })
+      .mockResolvedValueOnce({
+        session: {
+          factoryDir: emptyFolderPath,
+          folderPath: emptyFolderPath,
+          id: "session-new-factory",
+          isDefault: false,
+          project: "new-factory-root",
+          target: {
+            kind: "default",
+          },
+        },
+      });
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: emptyFolderPath },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+        folderPath: emptyFolderPath,
+        validateOnly: true,
+      });
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: messages.openSessionCreateFactoryLabel,
+        }),
+      ).toBeTruthy();
+    });
+    expect(screen.getByText(emptyFolderPath)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: messages.openSessionSubmitLabel }),
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: messages.openSessionCreateFactoryLabel,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+        folderPath: emptyFolderPath,
+        initNewFactory: true,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "new-factory-root" })).toBeTruthy();
+    });
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      "session-new-factory",
+    );
+    expect(openFactorySession).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns to folder entry when canceling init-new-factory confirmation", async () => {
+    const emptyFolderPath = "/workspace/cancel-init-root";
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+    openFactorySession.mockResolvedValueOnce({
+      folderPath: emptyFolderPath,
+      initsNewFactory: true,
+    });
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: emptyFolderPath },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: messages.openSessionCreateFactoryLabel,
+        }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: messages.openSessionCancelCreateFactoryLabel,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionSubmitLabel }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.queryByRole("button", {
+        name: messages.openSessionCreateFactoryLabel,
+      }),
+    ).toBeNull();
+    expect(openFactorySession).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: messages.sessionFolderFieldLabel,
+        }) as HTMLInputElement
+      ).value,
+    ).toBe(emptyFolderPath);
+  });
+
   it("closes the active session tab and selects the remaining session deterministically", async () => {
     listFactorySessions
       .mockResolvedValueOnce([

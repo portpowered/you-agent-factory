@@ -12,6 +12,7 @@ export type FolderValidationState =
   | { status: "idle" }
   | { status: "pending" }
   | { status: "error"; reason: FolderValidationErrorReason }
+  | { status: "init_ready"; folderPath: string }
   | { status: "ready"; targets: FactorySessionTarget[] };
 
 export type FolderValidationErrorReason =
@@ -109,6 +110,8 @@ export function folderValidationStatusMessage(
   switch (validation.status) {
     case "pending":
       return messages.openSessionValidationPendingLabel;
+    case "init_ready":
+      return null;
     case "ready":
       return validation.targets.length > 1
         ? messages.openSessionLaunchReadyMultipleTargets

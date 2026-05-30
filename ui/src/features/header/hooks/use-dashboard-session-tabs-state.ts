@@ -169,6 +169,39 @@ function useOpenSessionDialogState({
     }
   }
 
+  async function handleCreateNewFactory() {
+    const initFolderPath =
+      folderValidation.status === "init_ready"
+        ? folderValidation.folderPath
+        : validatedFolderPath ?? folderPath;
+    setDialogError(null);
+    try {
+      const response = await openSessionMutation.mutateAsync({
+        folderPath: initFolderPath,
+        initNewFactory: true,
+      });
+      if (response.session) {
+        await finishOpeningSession(
+          queryClient,
+          response.session,
+          resetDialogState,
+          setActiveSessionID,
+          setDialogOpen,
+        );
+      }
+    } catch (error) {
+      setDialogError(normalizeFactorySessionsError(error));
+    }
+  }
+
+  function handleCancelInitConfirmation() {
+    setDialogError(null);
+    setDiscoveredTargets([]);
+    setFolderValidation({ status: "idle" });
+    setSelectedTargetValue("");
+    setValidatedFolderPath(null);
+  }
+
   function resetDialogState() {
     setDialogError(null);
     setDiscoveredTargets([]);
@@ -194,7 +227,9 @@ function useOpenSessionDialogState({
     folderValidation,
     folderPath,
     selectedTargetValue,
+    handleCancelInitConfirmation,
     handleChangeFolderPath,
+    handleCreateNewFactory,
     handleInspectFolder,
     handleOpenTarget,
     setSelectedTargetValue,
@@ -250,6 +285,18 @@ async function inspectFolderCandidate({
   const response = await validateFolder({
     folderPath,
   });
+  if (response.initsNewFactory) {
+    const resolvedFolderPath = response.folderPath ?? folderPath;
+    setDiscoveredTargets([]);
+    setSelectedTargetValue("");
+    setValidatedFolderPath(resolvedFolderPath);
+    setFolderValidation({
+      status: "init_ready",
+      folderPath: resolvedFolderPath,
+    });
+    return;
+  }
+
   const targets = response.targets ?? [];
   const resolvedFolderPath = targets[0]?.folderPath ?? folderPath;
   setDiscoveredTargets(targets);
