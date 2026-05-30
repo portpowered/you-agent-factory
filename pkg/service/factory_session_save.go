@@ -159,21 +159,9 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 		return factoryapi.Factory{}, err
 	}
 
-	var factoryDir string
-	if replaceExisting {
-		factoryDir, err = factoryconfig.ReplaceNamedFactory(sessionRootDir, string(request.Name), payload)
-	} else {
-		factoryDir, err = factoryconfig.PersistNamedFactory(sessionRootDir, string(request.Name), payload)
-	}
+	factoryDir, err := persistUpsertNamedFactoryAtSessionRoot(sessionRootDir, request.Name, payload, replaceExisting)
 	if err != nil {
-		switch {
-		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
-			return factoryapi.Factory{}, factoryconfig.ErrNamedFactoryAlreadyExists
-		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
-			return factoryapi.Factory{}, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
-		default:
-			return factoryapi.Factory{}, err
-		}
+		return factoryapi.Factory{}, err
 	}
 
 	if err := factoryconfig.WriteCurrentFactoryPointer(sessionRootDir, string(request.Name)); err != nil {
@@ -205,6 +193,32 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 	}
 	serialized.Version = &version
 	return serialized, nil
+}
+
+func persistUpsertNamedFactoryAtSessionRoot(
+	sessionRootDir string,
+	name factoryapi.FactoryName,
+	payload []byte,
+	replaceExisting bool,
+) (string, error) {
+	var factoryDir string
+	var err error
+	if replaceExisting {
+		factoryDir, err = factoryconfig.ReplaceNamedFactory(sessionRootDir, string(name), payload)
+	} else {
+		factoryDir, err = factoryconfig.PersistNamedFactory(sessionRootDir, string(name), payload)
+	}
+	if err != nil {
+		switch {
+		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
+			return "", factoryconfig.ErrNamedFactoryAlreadyExists
+		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
+			return "", fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
+		default:
+			return "", err
+		}
+	}
+	return factoryDir, nil
 }
 
 func sessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.LiveSession) string {
