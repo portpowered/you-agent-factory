@@ -17,13 +17,15 @@ func TestPrepareFactoryPromptWorkFile_WritesCanonicalBatchForDefaultWorkType(t *
     "handlingBehavior": ["DEFAULT"],
     "states": [
       {"name": "init", "type": "INITIAL"},
-      {"name": "complete", "type": "TERMINAL"}
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
     ]
   }],
   "workstations": [{
     "name": "ws",
     "inputs": [{"workType": "story", "state": "init"}],
-    "outputs": [{"workType": "story", "state": "complete"}]
+    "outputs": [{"workType": "story", "state": "complete"}],
+    "onFailure": [{"workType": "story", "state": "failed"}]
   }]
 }`), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)

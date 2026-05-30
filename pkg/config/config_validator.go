@@ -129,7 +129,7 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 	cv.rules = []validationRule{
 		ruleInputTypes,
 		cv.ruleWorkTypeHandlingBehavior,
-		rulePlaceReferences,
+		ruleCanonicalStructuralValidation,
 		ruleFactoryGuards,
 		ruleGuards,
 		ruleWorkstationKind,
@@ -139,7 +139,6 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 		ruleHostedWorkers,
 		ruleWorkerModelOperations,
 		ruleModelInvokeWorkstations,
-		ruleWorkerReferences,
 		rulePerInputGuards,
 		ruleResourceDefinitions,
 		ruleResourceUsage,

@@ -1183,6 +1183,7 @@ func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(
 			"states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
 				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
 			},
 		}},
 		"workers": []map[string]any{{

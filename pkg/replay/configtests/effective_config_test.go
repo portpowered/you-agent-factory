@@ -12,6 +12,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -254,6 +255,7 @@ func loadLiveReplayInitialProjection(t *testing.T, factoryDir string) (*config.L
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
+	factoryvalidation.NormalizeFixtureConfig(loaded.FactoryConfig())
 	mapper := config.ConfigMapper{}
 	liveNet, err := mapper.Map(context.Background(), loaded.FactoryConfig())
 	if err != nil {
