@@ -33,6 +33,8 @@ export function buildSessionScope(
     workPath: factorySessionWorkPath(selectedSessionID),
     eventsPath: factorySessionEventsPath(selectedSessionID),
     isPaused:
-      selectedSessionID != null && pausedSessionIDs.includes(selectedSessionID),
+      !isDefault &&
+      selectedSessionID != null &&
+      pausedSessionIDs.includes(selectedSessionID),
   };
 }
