@@ -532,6 +532,12 @@ export interface components {
         };
         SubmitWorkResponse: {
             traceId: string;
+            /** @description Unique identifier for the accepted work item after normalization. */
+            workId?: string;
+            /** @description Human-readable work name returned for submit verification. */
+            name?: string;
+            /** @description Configured work type name for the accepted work item. */
+            workTypeName?: string;
         };
         /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
         SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
