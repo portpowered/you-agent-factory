@@ -313,6 +313,32 @@ make lint
 
 Review any generated diff together with the authored OpenAPI change. Do not hand-edit `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, or `ui/src/api/generated/openapi.ts`; change `api/openapi-main.yaml` or a referenced fragment, then regenerate.
 
+## Factory CLI Wire Composition
+
+`google/wire` is limited to `cmd/factory/compose/`. Production `you run` builds
+`*service.FactoryService` through the generated `InjectFactoryService` entry;
+HTTP serving uses the same wired instance via `compose.ServeAPIServer`. See
+[cmd-factory-wire-composition.md](cmd-factory-wire-composition.md) for the full
+workflow.
+
+From a clean checkout, after editing `wire.go` or `providers.go`:
+
+1. Regenerate the checked-in injector:
+
+```bash
+go generate ./cmd/factory/compose/...
+```
+
+2. Commit `wire_gen.go` with the provider changes. Do not hand-edit
+   `wire_gen.go`.
+
+3. Verify the factory binary and composition tests:
+
+```bash
+go build ./cmd/factory/...
+go test ./cmd/factory/compose/... ./pkg/cli/run/... -count=1
+```
+
 ## Factory Sharing Contract
 
 The canonical export/import sharing boundary is the generated OpenAPI
@@ -510,6 +536,7 @@ The config validator checks workstation scheduling values against a known set of
 
 ## Related Docs
 
+- [Factory CLI wire composition](cmd-factory-wire-composition.md)
 - [CLI release policy](cli-release-policy.md)
 - [Agent Factory README](../../README.md)
 - [Internal Architecture](architecture.md)
