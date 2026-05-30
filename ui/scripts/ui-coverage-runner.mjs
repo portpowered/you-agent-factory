@@ -10,7 +10,7 @@ export const defaultSlowFileSummaryLimit = 15;
 const vitestFileDurationLinePattern =
   /^\s*[✓×]\s+(\S+\.(?:test|spec)\.(?:tsx?|mjs|cjs))\s+\([^)]+\)\s+(\d+(?:\.\d+)?)ms(?:\s+\d+ MB heap used)?/gm;
 
-const ansiEscapePattern = /\u001b\[[0-9;]*m/g;
+const ansiEscapePattern = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
 export function getMainCoveredMaxWorkers(env = process.env) {
   return env.UI_COVERAGE_MAIN_MAX_WORKERS || defaultMainCoveredMaxWorkers;

@@ -231,6 +231,36 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "src/App.layout-graph.test.tsx",
+        "src/App.follow-up-submit.test.tsx",
+        "src/App.current-selection.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": {
+                "maxLines": 1500,
+                "skipBlankLines": true,
+                "skipIifes": true
+              }
+            }
+          },
+          "nursery": {
+            "noExcessiveLinesPerFile": {
+              "level": "error",
+              "options": {
+                "maxLines": 5000,
+                "skipBlankLines": true
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }

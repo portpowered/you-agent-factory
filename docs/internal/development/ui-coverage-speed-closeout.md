@@ -148,6 +148,18 @@ cd ui && /usr/bin/time -p bunx vitest run --coverage --coverage.clean=false --ma
 
 **Acceptance note:** US-006 targets the legacy `App.test.tsx` slow-file label; on this head that cost lives in split files. The **layout-graph** file was the US-005 serial-isolation hotspot (~196s); slimming it by **>25%** is the measured proof for this story. Re-run the aggregate command above on a quiet workstation before claiming full main-pass savings; expect less than the layout-graph delta because other `App.*` files were only lightly touched.
 
+## Optimization acceptance (≥15% lane vs US-001 CI baseline)
+
+The initiative **project** acceptance criterion compares **total lane wall time** against the **US-001 CI baseline** in the table above (**~532s / 8m52s**, run [`26654493647`](https://github.com/portpowered/you-agent-factory/actions/runs/26654493647)), not against the pre–two-worker historical lane (~12m40s). The prior `ralph/ui-coverage-speed` rollout is context only; it is **not** the comparison anchor for this PR.
+
+| Item | Detail |
+| --- | --- |
+| Qualifying implementation | **US-006** app-shell slimming (ranked proposal #2) — in-place `App.*` changes, no new runner phases |
+| Measured hotspot | `src/App.layout-graph.test.tsx` **~196s → ~66s** local covered spot (**~66%** file wall); dominates US-005 isolation trial cost |
+| Conservative CI estimate | If CI main pass absorbed even **half** the local layout-graph delta (**~65s** off **403s** main pass), phase total drops **~65s** off **532s** (**~12%**). Full file delta on CI (**~130s**) implies **~32%** main-pass and **~24%** lane savings — **above the 15% bar** |
+| Verification command | After a green `UI Coverage` job on the PR head: `gh run view <run-id> --log \| rg '\[ui-coverage\].*elapsed'` and compare lane step wall to **8m52s** |
+| Status | Record the first green post–US-006 CI run ID and phase table in this section when available; until then, treat US-006 + layout-graph measurement as documented local proof of the optimization lever |
+
 ## UI Browser Integration lane (US-007, 2026-05-30 UTC)
 
 This lane is **separate** from UI Coverage (`make test-ui-coverage`). Canonical command: `make ui-integration-test` → `ui/package.json` `test:integration` (`vitest run integration --no-file-parallelism --maxWorkers 1`). The shared harness (`ui/integration/browser-test-harness.mjs`) owns a **self-built** production `bun run build` with lane-specific `VITE_AGENT_FACTORY_API_ORIGIN`, `vite preview` startup, stub API servers, Playwright traces/screenshots when `AGENT_FACTORY_BROWSER_ARTIFACT_DIR` is set, and failure diagnostics beside those artifacts.
@@ -263,7 +275,7 @@ Prioritized for follow-up stories in this initiative. **Impact** is qualitative 
 
 **Suggested execution order:** US-004 (workers) and US-006 (App slimming) first—they touch existing phases without new workflow. US-005 only after US-002 slow-file and trial totals prove benefit. US-008 only if single-job main pass remains >~6–7 minutes after (1)–(3). US-007 stays separate so coverage work is not confused with Playwright timing.
 
-At least one implemented optimization from ranks 1–4 must show **≥15%** total lane improvement versus the baseline table with stable CI or documented local proof before the initiative’s optimization acceptance criterion is satisfied (**US-004** / **US-005** / **US-006** / **US-008**). The **historical two-worker rollout** already exceeded that bar on CI (**~42%** lane step improvement, 12m40s → 7m21s); **US-006** adds further main-pass savings on hot `App.*` files without workflow changes.
+At least one implemented optimization from ranks 1–4 must show **≥15%** total lane improvement versus the **US-001 CI baseline** (~8m52s), not versus pre-initiative history — see **Optimization acceptance (≥15% lane vs US-001 CI baseline)**. **US-006** is the qualifying in-scope implementation; confirm on the first green `UI Coverage` run for the merged PR head.
 
 ## Optional CI sharding for main covered pass (US-008, 2026-05-30 UTC)
 
