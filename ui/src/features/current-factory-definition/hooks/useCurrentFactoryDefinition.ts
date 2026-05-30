@@ -10,7 +10,7 @@ import {
   type CurrentFactoryDocument,
   type SaveCurrentFactoryInput,
 } from "../../../api/current-factory-definition";
-import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 
 export const CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX =
   "current-factory-definition";
@@ -32,7 +32,7 @@ export const CURRENT_FACTORY_DEFINITION_QUERY_KEY =
   currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID);
 
 export function useCurrentFactoryDefinition(isEnabled = true) {
-  const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
+  const { sessionID } = useDashboardSession();
 
   return useQuery<CanonicalFactoryDefinition, CurrentFactoryDefinitionError>({
     queryKey: currentFactoryDefinitionQueryKey(sessionID),
@@ -57,7 +57,7 @@ export const CURRENT_FACTORY_DOCUMENT_QUERY_KEY =
   currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID);
 
 export function useCurrentFactoryDocument(isEnabled = true) {
-  const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
+  const { sessionID } = useDashboardSession();
 
   return useQuery<
     CurrentFactoryDocument,
@@ -74,7 +74,7 @@ export function useCurrentFactoryDocument(isEnabled = true) {
 
 export function useSaveCurrentFactory() {
   const queryClient = useQueryClient();
-  const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
+  const { sessionID } = useDashboardSession();
 
   return useMutation<
     CurrentFactoryDocument,
