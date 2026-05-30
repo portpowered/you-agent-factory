@@ -116,8 +116,18 @@ vi.mock("../../provider-session-detail/public", () => ({
   ),
 }));
 
-vi.mock("../../import", () => ({
+vi.mock("../../import/public", () => ({
   DashboardImportPreviewDialog: () => null,
+}));
+
+vi.mock("../../import/hooks/use-factory-import-activation-target", () => ({
+  useFactoryImportActivationTarget: () => ({
+    createTargetFactoryName: null,
+    currentFactoryName: null,
+    existingNamedFactoryNames: [],
+    isLoading: false,
+    replacesExistingCreateTarget: false,
+  }),
 }));
 
 vi.mock("../../submit-work/public", () => ({
