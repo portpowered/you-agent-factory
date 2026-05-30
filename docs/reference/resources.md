@@ -3,7 +3,7 @@
 Use this page when you need the current you-agent-factory resource contract for
 bounded concurrency.
 
-Use [Factory JSON and work configuration](work.md) for the overall
+Use [Config](config.md) for the overall
 `factory.json` topology and field ownership. This page owns the bounded
 concurrency behavior of `resources` pools and resource requirements.
 
@@ -123,7 +123,8 @@ should be throttled.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Factory JSON and work configuration](work.md)
+- [Config](config.md)
+- [Submitted work](work.md)
 - [Models and model operations](models.md)
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Workstations](workstations.md)

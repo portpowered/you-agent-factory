@@ -1,17 +1,16 @@
 # Config Reference
 
-Use this page when you need the canonical factory directory layout and where
-each authored file lives. Use
-[Factory JSON and work configuration](work.md) for the field-by-field
-`factory.json` contract.
+Use this page when you need the canonical factory directory layout, the
+field-by-field `factory.json` topology contract, and where each authored file
+lives. Use [Submitted work](work.md) for `POST /work`, tags, and batch
+cross-links.
 
 ## Current Contract
 
 - `factory.json` is the canonical root file. It owns factory-level workflow
   topology such as `id`, `workTypes`, `workers`, `workstations`, routes,
   optional runtime `resources`, and the optional portability
-  `supportingFiles`; the normative field contract lives in
-  [Factory JSON and work configuration](work.md).
+  `supportingFiles`; the normative field contract lives on this page.
 - Keep worker runtime instructions in `workers/<name>/AGENTS.md`.
 - Keep workstation runtime instructions in `workstations/<name>/AGENTS.md`.
 - Keep watched work inputs under `inputs/<work-type-or-BATCH>/<channel>/`.
@@ -50,17 +49,77 @@ factory/
 - Drop mixed-work-type or relation-heavy batch files under
   `inputs/BATCH/default/`.
 
-For a minimal `factory.json` example, use
-[Factory JSON and work configuration](work.md#minimal-factory).
+## Minimal Factory
 
-## Portability Manifest Placement
+A minimal factory needs one work type, one worker, and one workstation that
+moves submitted work from an initial state to a terminal state:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "processor" }
+  ],
+  "workstations": [
+    {
+      "name": "process",
+      "worker": "processor",
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": { "workType": "task", "state": "failed" }
+    }
+  ]
+}
+```
+
+## How The Pieces Fit
+
+Work enters the factory as a token in a work type's initial state. A
+workstation is enabled when its configured input places have matching tokens.
+The workstation dispatches to its worker, then routes the token based on the
+worker outcome:
+
+| Worker outcome | Routing field |
+|----------------|---------------|
+| Accepted | `outputs` |
+| Continue | `onContinue` |
+| Rejected | `onRejection` |
+| Failed, timed out, or errored | `onFailure` |
+
+Each `workType` and `state` pair becomes a place named
+`<workType>:<state>`, such as `task:init`.
+
+## Top-Level Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | No | Factory-level identifier. Prompt context uses this when a submitted work item does not carry a `project` tag. |
+| `inputTypes` | No | Named input kinds. The implicit `default` input type already exists; omit this unless adding a supported non-default input kind. |
+| `workTypes` | Yes | Work categories and lifecycle states. Workstation input and output places must reference these names. |
+| `resources` | No | Bounded concurrency pools. Workers and workstations declare requirements against these pools through their `resources` entries. |
+| `supportingFiles` | No | Portability-only manifest for validation-only external tools and bundled files. This is distinct from runtime-capacity `resources`. |
+| `runner` | No | Factory-level default runner ID. Supported built-ins are `codex`, `gemini`, `kiro`, `cursor-cli`, and `opencode`. |
+| `workers` | Yes | Worker identities that workstations reference by `name`; see [Workers](workers.md) for worker runtime fields. |
+| `workstations` | Yes | Dispatch steps that consume input states and produce output states; see [Workstations](workstations.md) for the workstation field contract. |
+
+Do not rely on stale top-level `global_limits` or `exhaustionRules` examples.
+The current public `factory.json` authoring contract uses guarded
+`LOGICAL_MOVE` workstations and workstation limits for user-configured safety
+behavior.
+
+## Portability Resource Manifest
 
 Use `supportingFiles` in `factory.json` when the portable factory must declare
-external tools or carry bundled helper files beyond workflow topology. The
-manifest field contract belongs in
-[Factory JSON and work configuration](work.md#portability-resource-manifest);
-this page only records that bundled files are restored beside the expanded
-factory layout.
+external tools or carry bundled helper files beyond workflow topology.
 
 In v1 shared-factory flows, that same portability manifest also carries starter
 work copied from the source factory's live `inputs/` tree. Sharing snapshots
@@ -91,6 +150,95 @@ shared recipient after import or create
 
 The recipient copy is ready to inspect or run immediately, but it is no longer
 live-linked to the source factory.
+
+```json
+{
+  "supportingFiles": {
+    "requiredTools": [
+      {
+        "name": "python",
+        "command": "python3",
+        "purpose": "Runs bundled helper scripts",
+        "versionArgs": ["--version"]
+      }
+    ],
+    "bundledFiles": [
+      {
+        "type": "ROOT_HELPER",
+        "targetPath": "Makefile",
+        "content": {
+          "encoding": "utf-8",
+          "inline": "test:\n\tgo test ./...\n"
+        }
+      },
+      {
+        "type": "SCRIPT",
+        "targetPath": "factory/scripts/setup-workspace.py",
+        "content": {
+          "encoding": "utf-8",
+          "inline": "print('portable')\n"
+        }
+      },
+      {
+        "type": "DOC",
+        "targetPath": "factory/docs/usage.md",
+        "content": {
+          "encoding": "utf-8",
+          "inline": "# Usage\n"
+        }
+      }
+    ]
+  }
+}
+```
+
+- `requiredTools` declare validation-only external dependencies that later
+  portability checks can probe on `PATH`.
+- `bundledFiles` carry portable file content and a canonical factory-relative
+  `targetPath`; they are not the same as runtime `resources`.
+- `config flatten` collects the supported allowlist from `factory/scripts/**`,
+  `factory/docs/**`, and supported root helper files such as `Makefile` when
+  you flatten a checked-in `factory/` layout.
+- `targetPath` must use forward slashes and must not be absolute or contain `.`
+  or `..` path segments.
+
+## Work Types
+
+A work type describes one kind of work and every state that work can occupy.
+Submitted work references `workTypes[].name` as `workTypeName`. See
+[Submitted work](work.md) for API and batch submission fields.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Stable work type name used in workstation IO and submitted work. |
+| `states` | Yes | State list for the work type. Each state creates one runtime place. |
+| `states[].name` | Yes | Stable state name used in workstation IO. |
+| `states[].type` | Yes | Lifecycle category: `INITIAL`, `PROCESSING`, `TERMINAL`, or `FAILED`. |
+| `handlingBehavior` | No | Optional CLI routing markers. Use `["DEFAULT"]` on exactly one work type for `you run --factory`. |
+
+### Default Handling For One-Shot CLI Runs
+
+Mark exactly one work type with `handlingBehavior: ["DEFAULT"]` when you want
+customers to submit a single raw-text prompt through the simplified CLI.
+Validation rejects more than one `DEFAULT` work type. Factories used with
+`you run --factory <factory.json> <prompt>` must declare `DEFAULT` on exactly
+one work type.
+
+## Workstation IO And Resources
+
+Workstation inputs, outputs, rejection routes, failure routes, and guarded
+loop-breaker routes use `{ "workType": "<name>", "state": "<name>" }`. Top-level
+`resources` declare bounded concurrency pools that workstations reference through
+`resources` entries. See [Workstations](workstations.md), [Workers](workers.md),
+[Resources](resources.md), and [Guards](guards.md) for field-level contracts.
+
+## Topology Authoring Checklist
+
+- Every `workstations[].worker` matches a `workers[].name`.
+- Every IO object references an existing `workType` and `state`.
+- Every normal workflow path has a failure route when failure should be visible.
+- Repeater and review-loop paths have a guarded `LOGICAL_MOVE` loop breaker.
+- Runtime `resources` entries reference declared resources and use positive capacity.
 
 ## Bootstrap Checklist
 
@@ -147,7 +295,7 @@ and record/replay flags:
 
 - `--factory <factory.json>` — load a portable `factory.json` by file path and,
   with a trailing positional prompt, submit raw text to the work type that
-  declares `handlingBehavior: ["DEFAULT"]` (see [Work types](work.md#default-handling-for-one-shot-cli-runs))
+  declares `handlingBehavior: ["DEFAULT"]` (see [Default handling for one-shot CLI runs](#default-handling-for-one-shot-cli-runs))
 - `--with-mock-workers` — deterministic worker outcomes without live provider calls
 - `--record`, `--replay`, `--no-record` — control replay artifact capture and playback
 
@@ -166,6 +314,7 @@ see [Author factories](authoring-factories.md).
 
 ## Related
 
+- [Agents](agents.md)
 - [Guards](guards.md)
 - [Relationships](relationships.md)
 - [Mock workers](mock-workers.md)
@@ -173,7 +322,7 @@ see [Author factories](authoring-factories.md).
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
 - [Author factories](authoring-factories.md)
-- [Factory JSON and work configuration](work.md)
+- [Submitted work](work.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Author AGENTS.md](authoring-agents-md.md)

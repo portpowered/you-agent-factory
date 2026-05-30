@@ -12,7 +12,7 @@ instructions in `workers/<name>/AGENTS.md`, and workstation prompts in
 `workstations/<name>/AGENTS.md`.
 
 Use this guide for workflow sequencing, runnable examples, and command order.
-Use [Factory JSON And Work Configuration](work.md) for the field-by-field
+Use [Config](config.md) for the field-by-field
 `factory.json` reference, [Workstations](workstations.md) for workstation
 runtime fields, [Workers](workers.md) for worker backend fields, and
 [Batch Inputs](batch-inputs.md) for the watched-file and API request shape.
@@ -75,7 +75,7 @@ At runtime:
 3. Accepted work routes to `task:complete`.
 4. Failed or timed-out work routes to `task:failed`.
 
-Use [Factory JSON And Work Configuration](work.md#how-the-pieces-fit) for the
+Use [Config](config.md#how-the-pieces-fit) for the
 canonical routing contract, including continue and rejection routes.
 
 ## Build Your First Workflow
@@ -145,7 +145,7 @@ guarded loop breaker so a rejected story cannot cycle forever.
 Add `supportingFiles` only when the workflow also needs declarative host-tool
 checks or bundled helper files that should travel with the factory contract.
 Use
-[Factory JSON And Work Configuration](work.md#portability-resource-manifest)
+[Config](config.md#portability-resource-manifest)
 for the manifest fields and validation rules.
 
 ### 2. Create the split runtime definitions
@@ -223,7 +223,7 @@ Return REJECTED with concrete feedback when another pass is needed.
 
 For a portable `factory.json` and a single customer prompt, mark one work type
 with `handlingBehavior: ["DEFAULT"]` in `factory.json` (see
-[Work types](work.md#default-handling-for-one-shot-cli-runs)) and run:
+[Work types](config.md#default-handling-for-one-shot-cli-runs)) and run:
 
 ```bash
 you run --factory ./factory.json "Fix the lint issues"
@@ -491,7 +491,7 @@ installed, and optionally set `INFINITE_YOU_OMNIVOICE_COMMAND` or
 
 ## Related Contract Detail
 
-- [Factory JSON And Work Configuration](work.md) owns work types, states,
+- [Config](config.md) owns work types, states,
   routing, resources, and portability fields.
 - [Workstations](workstations.md) owns workstation kinds, runtime fields,
   route fields, and guards.
@@ -504,7 +504,7 @@ installed, and optionally set `INFINITE_YOU_OMNIVOICE_COMMAND` or
 
 For workflow design, add explicit failure, continue, and rejection destinations
 to the topology so every outcome lands somewhere intentional. Use
-[Factory JSON And Work Configuration](work.md#how-the-pieces-fit) for the
+[Config](config.md#how-the-pieces-fit) for the
 canonical routing contract, [Workstations](workstations.md) for route fields
 and execution limits, and [Workers](workers.md) for worker backend behavior.
 
@@ -672,9 +672,11 @@ review-loop workflow.
 
 ## Related
 
+- [Agents](agents.md)
 - [Mock workers](mock-workers.md)
 - [Record and replay](record-replay.md)
-- [Factory JSON And Work Configuration](work.md)
+- [Config](config.md)
+- [Submitted work](work.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Batch Inputs](batch-inputs.md)
