@@ -778,6 +778,47 @@ describe("current activity graph editor handles", () => {
     expect(handleIds).not.toContain("workstation-on-rejection-source");
   });
 
+  it("keeps hidden continue and reject handles for authored edges without stopWords", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const reviewNode = nodes.find((node) => node.id === "workstation:review");
+    const rejectionHandle = reviewNode?.data.handles?.find(
+      (handle) => handle.id === "workstation-on-rejection-source",
+    );
+
+    expect(
+      visibleGraphEdges.some(
+        (edge) =>
+          edge.fromNodeId === "workstation:review" &&
+          edge.outcomeKind === "rejected",
+      ),
+    ).toBe(true);
+    expect(rejectionHandle).toEqual(
+      expect.objectContaining({
+        connectable: false,
+        hidden: true,
+        id: "workstation-on-rejection-source",
+      }),
+    );
+  });
+
   it("includes continue and reject editor handles when stopWords are configured", async () => {
     const factory = {
       ...baseFactoryDefinition,

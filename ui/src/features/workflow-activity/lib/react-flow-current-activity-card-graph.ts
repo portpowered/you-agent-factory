@@ -19,6 +19,7 @@ import type {
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
 import {
+  authoredProgressOutcomeSourceHandlesByWorkstationNodeId,
   buildSemanticGraphHandles,
   type CurrentActivityEditorState,
   resolveWorkstationConnectionAnchorContext,
@@ -459,6 +460,7 @@ function buildPlaceNode(
 function buildWorkstationNode(
   positionedNode: PositionedWorkstationNode,
   input: BuildCurrentActivityNodesInput,
+  authoredProgressOutcomeSourceHandleIds?: ReadonlySet<string>,
 ): CurrentActivityNode | null {
   const workstation =
     input.snapshot.topology.workstation_nodes_by_id[
@@ -498,6 +500,7 @@ function buildWorkstationNode(
       executions,
       factoryGraphNodeId: positionedNode.nodeId,
       handles: buildSemanticGraphHandles({
+        authoredProgressOutcomeSourceHandleIds,
         connectionAnchorContext,
         editor: input.editor,
         locale: input.locale,
@@ -557,6 +560,12 @@ export function buildCurrentActivityNodes({
 }: BuildCurrentActivityNodesInput): CurrentActivityNode[] {
   const nextNodes: CurrentActivityNode[] = [];
   const resourceAliases = resourceAliasNodeIds(graphLayout.nodes);
+  const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+  const authoredProgressOutcomeSourceHandlesByNodeId =
+    authoredProgressOutcomeSourceHandlesByWorkstationNodeId(
+      visibleGraphEdges,
+      graphLayout.nodes,
+    );
   const input = {
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
@@ -589,6 +598,7 @@ export function buildCurrentActivityNodes({
     const workstationNode = buildWorkstationNode(
       positionedNode as PositionedWorkstationNode,
       input,
+      authoredProgressOutcomeSourceHandlesByNodeId.get(positionedNode.nodeId),
     );
     if (workstationNode) {
       nextNodes.push(workstationNode);

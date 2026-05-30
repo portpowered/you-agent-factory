@@ -37,7 +37,7 @@ export interface FactoryGraphConnectionResolver {
   ) => WorkstationProgressOutcomeRouteContext | undefined;
 }
 
-const PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS = new Set([
+export const PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS = new Set([
   "workstation-on-continue-source",
   "workstation-on-rejection-source",
 ]);
@@ -199,6 +199,27 @@ function filterWorkstationConnectionAnchors(
   return anchors.filter(
     (anchor) => !PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id),
   );
+}
+
+export function mergeAuthoredProgressOutcomeConnectionAnchors<
+  T extends FactoryGraphConnectionAnchor,
+>(
+  anchors: readonly T[],
+  requiredSourceHandleIds: ReadonlySet<string> | undefined,
+): T[] {
+  if (!requiredSourceHandleIds?.size) {
+    return [...anchors];
+  }
+
+  const presentIds = new Set(anchors.map((anchor) => anchor.id));
+  const extras = ANCHORS_BY_KIND.workstation.filter(
+    (anchor) =>
+      PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id) &&
+      requiredSourceHandleIds.has(anchor.id) &&
+      !presentIds.has(anchor.id),
+  ) as T[];
+
+  return extras.length === 0 ? [...anchors] : [...anchors, ...extras];
 }
 
 export function getFactoryGraphConnectionAnchors(
