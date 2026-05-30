@@ -1,5 +1,4 @@
 ## Codebase Patterns
-- `ui/src/features/dashboard/public/index.ts` is the app composition boundary for `DashboardScreen` only; session scope (`DashboardSessionProvider`, `useDashboardSession`) lives in `ui/src/features/dashboard/session/dashboard-session-provider` — do not re-export session hooks from the public barrel; `public/index.test.ts` uses `not.toHaveProperty` for session symbols (mirror `flowchart/public/index.test.tsx`).
 - Human-mode `you submit` success stdout is formatted in `pkg/cli/submit/human_output.go` via `writeHumanSubmitSuccess`: lines for `Submitted: <name> (<workTypeName>)`, `traceId`, optional `workId`, then `Verify: you work show <work-id>` or fallback `workId was not returned; verify with:` + `you work list --name <name>`; use `submitResponseString` for API pointer fields with request fallbacks; httptest proof in `TestSubmit_HumanStdoutIncludesWorkMetadataAndShowHint` and `TestSubmit_HumanStdoutFallsBackToWorkListWithoutWorkId`.
 - `--json` submit success uses `pkg/cli/submit/json_output.go` (`SubmitSuccessResult` / `writeJSONSubmitSuccess`): emit `workId` (pointer, omitted when absent), `name`, `workTypeName`, `traceId`, `sessionId` (API field, else `clidiag.SessionLabel`, else `sessionpath.DefaultFactorySessionID`), and `endpointPath` from `sessionpath.ScopedPath`; proof in `TestSubmit_JSONStdoutEmitsStableSuccessEnvelope` and `TestSubmit_JSONStdoutEmitsSessionScopedEndpointPath`.
 - Submit failure surfaces live in `pkg/cli/submit/error_output.go` (`submitFailureError`): transport errors as `factory not reachable at <url>` with empty stdout; non-201 responses as `submission failed (<status>): <message>` from `ErrorResponse.message` or a bounded raw-body preview (`submitErrorBodyPreviewLimit` = 200 runes/bytes); optional `workId=<id>` suffix from best-effort JSON parse; proof in `TestSubmit_FactoryNotRunning`, `TestSubmit_ServerError`, `TestSubmit_NonJSONErrorBodyUsesBoundedPreview`, `TestSubmit_ErrorIncludesWorkIdWhenPresent`, and `TestSubmit_JSONModeDoesNotEmitSuccessOnFailure`.
@@ -349,22 +348,4 @@
   - Patterns discovered: Keep submit operator docs in `pkg/cli/docs/reference/work.md` under the Submitted Work topic; sync `docs/reference/work.md` with `cp` when both trees stay identical after main merges.
   - Gotchas encountered: UI Coverage threshold (93.1%) can fail by ~0.02% after OpenAPI field additions — add focused `ui/src/api/work/api.test.ts` assertions on the dashboard client, not only CLI httptest.
   - Useful context: All PRD stories now pass; await green UI Coverage on head `7c5b4b13` before `<COMPLETE>`.
----
-
-## 2026-05-31T00:05:00Z - remove-dashboard-session-hook-reexports-from-public-001
-- What was implemented: Removed `DashboardSessionProvider` and `useDashboardSession` re-exports from `ui/src/features/dashboard/public/index.ts`, leaving screen-only forwarding from `dashboard-screen`.
-- Files changed: `ui/src/features/dashboard/public/index.ts`
-- **Learnings for future iterations:**
-  - Patterns discovered: Production already imports session symbols from `dashboard/session/dashboard-session-provider`; `App.tsx` and app Storybook stories only import `DashboardScreen` from the public barrel.
-  - Gotchas encountered: Branch worktree used `remove-dashboard-session-hook-reexports-from-public` without `ralph/` prefix — checkout `-B ralph/remove-dashboard-session-hook-reexports-from-public` to match PRD `branchName`.
-  - Useful context: Story 002 audits `ui/` imports; story 003 adds behavioral public-barrel smoke — no export-name inventory test per PRD.
----
-
-## 2026-05-31T00:06:00Z - remove-dashboard-session-hook-reexports-from-public-002
-- What was implemented: Audited `ui/` imports from `features/dashboard/public` (only `DashboardScreen` in `App.tsx` and app Storybook stories); added `public/index.test.ts` asserting `DashboardScreen` export identity and absence of session symbols on the barrel; updated `development-guide-relevant-files.md` dashboard public-barrel seam row.
-- Files changed: `ui/src/features/dashboard/public/index.test.ts`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: No stragglers needed retargeting — production already imports session scope from `dashboard/session/dashboard-session-provider`; mirror `flowchart/public/index.test.tsx` `not.toHaveProperty` guards for excluded barrel symbols.
-  - Gotchas encountered: Story 003 owns behavioral render smoke from the public barrel; keep story 002 boundary proof narrow.
-  - Useful context: `bun run tsc`, `bun run lint`, and `vitest run src/features/dashboard/public/index.test.ts` green on head.
 ---
