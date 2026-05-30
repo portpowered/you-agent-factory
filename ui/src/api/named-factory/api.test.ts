@@ -234,6 +234,7 @@ describe("factory API", () => {
       "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
+          mode: "REPLACE_CURRENT",
           factory: {
             name: "Session Current Name",
             workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
@@ -329,7 +330,7 @@ describe("factory API", () => {
       "/factory-sessions/session-2/factory",
       expect.objectContaining({
         method: "PUT",
-        body: expect.stringContaining('"name":"Scoped Factory"'),
+        body: expect.stringContaining('"mode":"REPLACE_CURRENT"'),
       }),
     );
   });

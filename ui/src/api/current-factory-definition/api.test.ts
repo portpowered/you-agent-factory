@@ -574,6 +574,7 @@ describe("getCurrentFactoryDefinition", () => {
       "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
+          mode: "REPLACE_CURRENT",
           factory: {
             name: "Current Factory",
             workers: [],
@@ -655,6 +656,52 @@ describe("getCurrentFactoryDefinition", () => {
         ),
       }),
     );
+  });
+
+  it("never sends UPSERT_NAMED_AND_ACTIVATE on editor save paths", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "10",
+            physical: "2026-05-18T14:40:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveCurrentFactoryDocument(
+      {
+        factoryDefinition: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+      },
+      { fetch },
+    );
+
+    const putBody = JSON.parse(
+      String(
+        vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "PUT")?.[1]
+          ?.body,
+      ),
+    ) as { mode?: string };
+
+    expect(putBody.mode).toBe("REPLACE_CURRENT");
+    expect(putBody.mode).not.toBe("UPSERT_NAMED_AND_ACTIVATE");
   });
 
   it("saves through the session-scoped editable-definition route for non-default sessions", async () => {

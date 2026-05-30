@@ -110,6 +110,7 @@ export async function saveCurrentFactoryDocument(
     return await saveSessionFactory(
       {
         factory,
+        mode: "REPLACE_CURRENT",
         sessionID: resolveCurrentFactorySessionID(options.sessionID),
       },
       { fetch: options.fetch },

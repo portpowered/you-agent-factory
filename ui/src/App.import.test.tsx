@@ -180,6 +180,7 @@ describe("App shell import flows", () => {
         "/factory-sessions/~default/factory",
         expect.objectContaining({
           body: JSON.stringify({
+            mode: "REPLACE_CURRENT",
             factory: {
               name: currentSessionFactory.name,
               workTypes: importValue.factory.workTypes,
@@ -343,6 +344,7 @@ describe("App shell import flows", () => {
           }),
         );
         expect(JSON.parse(String(putActivationCall?.[1]?.body))).toEqual({
+          mode: "REPLACE_CURRENT",
           factory: {
             ...currentNamedFactoryExportResponse,
             version: incrementedSessionFactoryVersion,
