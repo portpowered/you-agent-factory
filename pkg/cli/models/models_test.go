@@ -91,6 +91,16 @@ func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
 func TestInvoke_AudioWritesOutputFile(t *testing.T) {
 	audioBytes := []byte("RIFF....WAVE")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		if !bytes.Contains(body, []byte(`"responseMode":"AUDIO_STREAM"`)) {
+			t.Fatalf("request body missing AUDIO_STREAM mode:\n%s", body)
+		}
 		w.Header().Set("Content-Type", "audio/wav")
 		_, _ = w.Write(audioBytes)
 	}))
@@ -114,6 +124,80 @@ func TestInvoke_AudioWritesOutputFile(t *testing.T) {
 	}
 	if !bytes.Equal(got, audioBytes) {
 		t.Fatalf("output bytes = %q, want %q", got, audioBytes)
+	}
+}
+
+func TestInvoke_AudioVerboseLogsOutputPath(t *testing.T) {
+	audioBytes := []byte("RIFF....WAVE")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/wav")
+		_, _ = w.Write(audioBytes)
+	}))
+	defer server.Close()
+
+	outputPath := filepath.Join(t.TempDir(), "speech.wav")
+	var diagnostics bytes.Buffer
+	serverBase := strings.TrimSuffix(server.URL, "/")
+	if err := Invoke(InvokeConfig{
+		ModelName:   "OMNIVOICE_Q4_K_M",
+		Operation:   "TTS",
+		Text:        "hello world",
+		OutputPath:  outputPath,
+		Server:      serverBase,
+		Output:      io.Discard,
+		Verbose:     true,
+		Diagnostics: &diagnostics,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	assertDiagnosticsContains(t, diagnostics.String(), []string{
+		"models invoke request",
+		"outputPath=" + outputPath,
+		"models invoke response",
+		"status=200",
+		"outputPath=" + outputPath,
+	})
+}
+
+func TestInvoke_AudioNotFoundUsesFriendlyError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"message":"model not found","family":"NOT_FOUND","code":"NOT_FOUND"}`)
+	}))
+	defer server.Close()
+
+	outputPath := filepath.Join(t.TempDir(), "speech.wav")
+	err := Invoke(InvokeConfig{
+		ModelName:  "missing",
+		Operation:  "TTS",
+		Text:       "hello world",
+		OutputPath: outputPath,
+		Server:     strings.TrimSuffix(server.URL, "/"),
+		Output:     io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected not found error")
+	}
+	if !errors.Is(err, ErrModelNotFound) {
+		t.Fatalf("error = %v, want ErrModelNotFound", err)
+	}
+}
+
+func TestInvoke_AudioUnreachableUsesEndpointMessage(t *testing.T) {
+	outputPath := filepath.Join(t.TempDir(), "speech.wav")
+	err := Invoke(InvokeConfig{
+		ModelName:  "OMNIVOICE_Q4_K_M",
+		Operation:  "TTS",
+		Text:       "hello world",
+		OutputPath: outputPath,
+		Server:     "http://127.0.0.1:1",
+		Output:     io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected unreachable error")
+	}
+	if !strings.Contains(err.Error(), "models endpoint not reachable at http://127.0.0.1:1/models/OMNIVOICE_Q4_K_M/invocations") {
+		t.Fatalf("error = %q, want models endpoint not reachable message", err)
 	}
 }
 

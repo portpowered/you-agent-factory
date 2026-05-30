@@ -266,6 +266,8 @@ func invokeModelMetadata(cfg invokeOptions) (factoryapi.ModelInvocationResponse,
 	return response, nil
 }
 
+// invokeModelAudio streams non-JSON audio on HTTP 200. It intentionally avoids
+// clihttp.PostJSON because success bodies are raw bytes, not JSON payloads.
 func invokeModelAudio(cfg invokeOptions) error {
 	mode := factoryapi.ModelInvocationResponseMode("AUDIO_STREAM")
 	request := factoryapi.ModelInvocationRequest{
