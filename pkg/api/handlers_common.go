@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -86,6 +87,26 @@ func ensureSingleJSONObject(dec *json.Decoder) error {
 		return err
 	}
 	return nil
+}
+
+func decodeStrictJSON[T any](body io.Reader) (T, error) {
+	var zero T
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return zero, err
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
+	var req T
+	if err := decoder.Decode(&req); err != nil {
+		return zero, err
+	}
+	if err := ensureSingleJSONObject(decoder); err != nil {
+		return zero, err
+	}
+	return req, nil
 }
 
 func validateCanonicalWorkRequestJSONForAPI(data []byte) error {
