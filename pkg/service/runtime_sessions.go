@@ -153,6 +153,14 @@ func (fs *FactoryService) SubmitWorkRequestForSession(ctx context.Context, sessi
 	return activeFactory.SubmitWorkRequest(ctx, request)
 }
 
+func (fs *FactoryService) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+	activeFactory, err := fs.sessionFactory(sessionID)
+	if err != nil {
+		return interfaces.OperatorMoveResult{}, err
+	}
+	return activeFactory.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
+}
+
 func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
 	activeFactory, err := fs.sessionFactory(sessionID)
 	if err != nil {

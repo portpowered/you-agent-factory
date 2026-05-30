@@ -1,8 +1,12 @@
 package interfaces
 
 import (
+	"errors"
 	"time"
 )
+
+// ErrMoveWorkRequestAlreadyApplied reports a duplicate operator move requestId.
+var ErrMoveWorkRequestAlreadyApplied = errors.New("operator move request was already applied")
 
 // WorkDispatch is the canonical dispatch-owned runtime payload.
 //

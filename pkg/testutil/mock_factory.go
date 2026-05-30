@@ -3,11 +3,13 @@ package testutil
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -55,7 +57,9 @@ type MockFactory struct {
 	OpenFactorySessionErr    error
 	OpenedFactorySessions    []factoryapi.OpenFactorySessionRequest
 	ClosedFactorySessions    []string
-	CloseFactorySessionErr   error
+	CloseFactorySessionErr      error
+	MoveWorkErr                 error
+	AppliedOperatorMoveRequests map[string]interfaces.OperatorMoveResult
 }
 
 var _ factory.APIFactory = (*MockFactory)(nil)
@@ -66,8 +70,78 @@ var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
 func (m *MockFactory) Run(_ context.Context) error   { return nil }
 func (m *MockFactory) Pause(_ context.Context) error { return nil }
 
-func (m *MockFactory) MoveWork(_ context.Context, _ string, _ string, _ interfaces.WorkStateChangeSource) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in MockFactory")
+func (m *MockFactory) MoveWork(_ context.Context, workID, stateName string, _ interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+	if m.MoveWorkErr != nil {
+		return interfaces.OperatorMoveResult{}, m.MoveWorkErr
+	}
+	return m.applyMockOperatorMove(workID, stateName, requestID)
+}
+
+func (m *MockFactory) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+	session, err := m.sessionFactory(sessionID)
+	if err != nil {
+		return interfaces.OperatorMoveResult{}, err
+	}
+	return session.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
+}
+
+func (m *MockFactory) applyMockOperatorMove(workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID != "" {
+		if m.AppliedOperatorMoveRequests == nil {
+			m.AppliedOperatorMoveRequests = make(map[string]interfaces.OperatorMoveResult)
+		}
+		if _, ok := m.AppliedOperatorMoveRequests[requestID]; ok {
+			return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+		}
+	}
+	if m.Marking == nil || m.Marking.Tokens == nil {
+		return interfaces.OperatorMoveResult{}, engine.ErrMoveWorkNotFound
+	}
+	token, ok := findMockWorkToken(m.Marking.Tokens, workID)
+	if !ok {
+		return interfaces.OperatorMoveResult{}, engine.ErrMoveWorkNotFound
+	}
+	if m.Net == nil {
+		return interfaces.OperatorMoveResult{}, engine.ErrMoveWorkInvalidState
+	}
+	toPlaceID := state.PlaceID(token.Color.WorkTypeID, stateName)
+	place, ok := m.Net.Places[toPlaceID]
+	if !ok || place.State != stateName {
+		return interfaces.OperatorMoveResult{}, engine.ErrMoveWorkInvalidState
+	}
+	fromPlaceID := token.PlaceID
+	fromState := ""
+	if fromPlace, ok := m.Net.Places[fromPlaceID]; ok {
+		fromState = fromPlace.State
+	}
+	token.PlaceID = toPlaceID
+	result := interfaces.OperatorMoveResult{
+		WorkID:      workID,
+		WorkTypeID:  token.Color.WorkTypeID,
+		FromState:   fromState,
+		ToState:     stateName,
+		FromPlaceID: fromPlaceID,
+		ToPlaceID:   toPlaceID,
+		TokenID:     token.ID,
+	}
+	if requestID != "" {
+		m.AppliedOperatorMoveRequests[requestID] = result
+	}
+	return result, nil
+}
+
+func findMockWorkToken(tokens map[string]*interfaces.Token, workID string) (*interfaces.Token, bool) {
+	for _, token := range tokens {
+		if token == nil || token.Color.WorkID != workID {
+			continue
+		}
+		if token.Color.DataType == interfaces.DataTypeResource {
+			continue
+		}
+		return token, true
+	}
+	return nil, false
 }
 
 func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {

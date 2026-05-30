@@ -55,8 +55,14 @@ type factoryImpl struct {
 	mu           sync.RWMutex
 	// completeCh is closed when Run() returns (either by termination or error).
 	// WaitToComplete() returns this channel.
-	completeCh chan struct{}
-	usePool    bool
+	completeCh           chan struct{}
+	usePool              bool
+	operatorMoveRequests map[string]appliedOperatorMove
+}
+
+type appliedOperatorMove struct {
+	workID string
+	result interfaces.OperatorMoveResult
 }
 
 // Compile-time checks.
@@ -224,18 +230,19 @@ func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.Typ
 
 func newFactoryImpl(cfg *factory.FactoryConfig, eng *engine.FactoryEngine, pool *workers.WorkerPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory *factoryevents.FactoryEventHistory, usePool bool) *factoryImpl {
 	return &factoryImpl{
-		engine:       eng,
-		pool:         pool,
-		cfg:          cfg,
-		topology:     cfg.GetNet(),
-		logger:       logger,
-		resultBuffer: resultBuffer,
-		dispatchHook: dispatchHook,
-		eventHistory: eventHistory,
-		state:        interfaces.FactoryStateIdle,
-		clock:        cfg.Clock,
-		completeCh:   make(chan struct{}),
-		usePool:      usePool,
+		engine:               eng,
+		pool:                 pool,
+		cfg:                  cfg,
+		topology:             cfg.GetNet(),
+		logger:               logger,
+		resultBuffer:         resultBuffer,
+		dispatchHook:         dispatchHook,
+		eventHistory:         eventHistory,
+		state:                interfaces.FactoryStateIdle,
+		clock:                cfg.Clock,
+		completeCh:           make(chan struct{}),
+		usePool:              usePool,
+		operatorMoveRequests: make(map[string]appliedOperatorMove),
 	}
 }
 
@@ -301,12 +308,40 @@ func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request interfaces.
 }
 
 // MoveWork validates and applies a synchronous operator relocation for one work item.
-func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string, source interfaces.WorkStateChangeSource) (interfaces.OperatorMoveResult, error) {
+func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID != "" {
+		f.mu.RLock()
+		if existing, ok := f.operatorMoveRequests[requestID]; ok {
+			f.mu.RUnlock()
+			if existing.workID != workID {
+				return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+			}
+			return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+		}
+		f.mu.RUnlock()
+	}
+
 	result, err := f.engine.MoveWork(ctx, workID, stateName)
-	if err != nil || source == "" {
+	if err != nil {
 		return result, err
 	}
-	f.recordOperatorWorkStateChange(result, source, "", "", "")
+
+	if requestID != "" {
+		f.mu.Lock()
+		if f.operatorMoveRequests == nil {
+			f.operatorMoveRequests = make(map[string]appliedOperatorMove)
+		}
+		f.operatorMoveRequests[requestID] = appliedOperatorMove{
+			workID: workID,
+			result: result,
+		}
+		f.mu.Unlock()
+	}
+
+	if source != "" {
+		f.recordOperatorWorkStateChange(result, source, requestID, "", "")
+	}
 	return result, nil
 }
 

@@ -38,7 +38,7 @@ func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
 		t.Fatalf("Pause: %v", err)
 	}
 
-	result, err := f.MoveWork(ctx, "work-paused-move", "complete", interfaces.WorkStateChangeSourceCLI)
+	result, err := f.MoveWork(ctx, "work-paused-move", "complete", interfaces.WorkStateChangeSourceCLI, "")
 	if err != nil {
 		t.Fatalf("MoveWork while paused: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestMoveWork_SubscribeReceivesWorkStateChangeInOrder(t *testing.T) {
 		t.Fatalf("SubscribeFactoryEvents: %v", err)
 	}
 
-	if _, err := f.MoveWork(submitCtx, "work-stream-move", "complete", interfaces.WorkStateChangeSourceAPI); err != nil {
+	if _, err := f.MoveWork(submitCtx, "work-stream-move", "complete", interfaces.WorkStateChangeSourceAPI, ""); err != nil {
 		t.Fatalf("MoveWork: %v", err)
 	}
 
