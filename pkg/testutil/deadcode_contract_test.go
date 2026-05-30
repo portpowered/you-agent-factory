@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 func TestWithExecutionBaseDir_SetsHarnessServiceConfig(t *testing.T) {
@@ -65,4 +66,33 @@ func TestWriteSeedBatchFile_WritesCanonicalBatchSeed(t *testing.T) {
 	if len(got.Works) != 1 || got.Works[0].WorkTypeID != "task" {
 		t.Fatalf("batch seed works = %#v, want one task work item", got.Works)
 	}
+}
+
+func TestAssertNoTransitionExhaustion_PassesWithoutExhaustion(t *testing.T) {
+	AssertNoTransitionExhaustion(t, map[string]*petri.Transition{
+		"work": {Type: petri.TransitionNormal},
+	}, PetriTransitionAssertOptions{ExhaustionContext: "customer-authored mapping"})
+}
+
+func TestAssertNoTransitionExhaustion_IgnoresNilTransitions(t *testing.T) {
+	AssertNoTransitionExhaustion(t, map[string]*petri.Transition{
+		"nil-entry": nil,
+		"work":      {Type: petri.TransitionNormal},
+	}, PetriTransitionAssertOptions{ExhaustionContext: "replay-mapped customer config"})
+}
+
+func TestAssertGuardedLoopBreakerTransition_ValidPasses(t *testing.T) {
+	transition := &petri.Transition{
+		Type: petri.TransitionNormal,
+		InputArcs: []petri.Arc{{
+			PlaceID: "task:init",
+			Guard: &petri.VisitCountGuard{
+				TransitionID: "reviewer",
+				MaxVisits:    3,
+			},
+		}},
+		OutputArcs: []petri.Arc{{PlaceID: "task:failed"}},
+	}
+
+	AssertGuardedLoopBreakerTransition(t, transition, "task:init", "task:failed", "reviewer", 3)
 }

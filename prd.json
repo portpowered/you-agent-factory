@@ -1,30 +1,29 @@
 {
-  "project": "UI Factory Document vs Snapshot Planes (U4 Recovery v2)",
-  "branchName": "ralph/ui-factory-document-snapshot-planes-recovery-v2",
-  "description": "Recovery retrigger for U4: separate the session factory document plane (React Query, authoritative for edit/save/export) from the dashboard event snapshot plane (timeline, authoritative for live runtime overlay), with documented authority rules, graph editor alignment, session-switch cache policy, after-save convergence, and export on the document plane.",
+  "project": "Consolidate Petri Net Test Assertions",
+  "branchName": "ralph/consolidate-petri-net-test-assertions",
+  "description": "Move duplicated Petri net transition exhaustion and guarded loop-breaker assertion helpers from pkg/config/maptests and pkg/replay/configtests into pkg/testutil, retarget call sites, and delete local copies without changing which transitions, guards, or places each test verifies.",
   "context": {
-    "customerAsk": "Retrigger; prior token blocked on failed U2 recovery plan. Program note: also requires ui-session-factory-client-recovery (v1) complete before implementation; backend S1 complete. Full spec: tasks/prd-ui-factory-document-snapshot-planes.md",
-    "problem": "The dashboard mixes React Query session factory documents with SSE DashboardSnapshot data. The graph editor, staleness checks, session switches, post-save refresh, and export can read or write the wrong plane, causing saves and displays to diverge when live runtime and editable definition differ.",
-    "solution": "Document a two-plane authority model, then enforce it: document plane owns edit/save/export structure; snapshot plane owns live runtime overlay and in-flight guards; session switch resets document queries; save success updates document cache and converges snapshot without fetch storms; export uses session factory GET."
+    "customerAsk": "Consolidate duplicated Petri transition assertion helpers (no TransitionExhaustion, guarded loop-breaker VisitCountGuard wiring) from maptests and replay/configtests into pkg/testutil as part of backend pkg/ duplication cleanup.",
+    "problem": "assertNoTransitionExhaustion/assertGuardedLoopBreakerTransition in maptests and assertReplayHasNoTransitionExhaustion/assertReplayGuardedLoopBreakerTransition in replay/configtests are near-identical copies that differ only in failure-message wording and minor guard formatting, increasing drift risk during Petri mapping test maintenance.",
+    "solution": "Add exported AssertNoTransitionExhaustion and AssertGuardedLoopBreakerTransition helpers in pkg/testutil with a small options value for exhaustion-context phrasing, migrate both test packages to import them, delete local helpers, and verify with go test ./pkg/config/maptests/... and go test ./pkg/replay/configtests/... without changing production mapper or replay behavior."
   },
   "acceptanceCriteria": [
-    "Editing and saving in one session never uses another session's DashboardSnapshot.factory as the sole save payload source when a document is loaded.",
-    "Graph edit mode seeds draft structure from the session factory document GET, not snapshot topology alone.",
-    "Session tab switch does not show the previous session's factory definition after loading completes.",
-    "Successful graph save updates the document cache and converges with the timeline without manual reload or unbounded refetch loops.",
-    "Export uses session-scoped factory document GET, not snapshot-only payload.",
-    "Dev guide section documents factory document vs dashboard snapshot authority with diagram.",
-    "Typecheck, lint, and make ui-test pass."
+    "Exactly one implementation of AssertNoTransitionExhaustion and AssertGuardedLoopBreakerTransition lives under pkg/testutil",
+    "pkg/config/maptests and pkg/replay/configtests import the shared helpers and contain no duplicate local exhaustion or loop-breaker assertion definitions",
+    "Existing test expectations are unchanged: same transitions, guard transition/workstation IDs, max-visit counts, and place IDs at each call site",
+    "Maptests exhaustion failures still use customer-authored mapping context; replay exhaustion failures still use replay-mapped customer config context",
+    "go test ./pkg/config/maptests/... and go test ./pkg/replay/configtests/... pass",
+    "Typecheck, lint, and tests pass for all touched backend areas"
   ],
   "userStories": [
     {
-      "id": "ui-factory-document-snapshot-planes-recovery-v2-001",
-      "title": "Document the two planes",
-      "description": "As a contributor, I want written rules for which data plane owns each dashboard concern so I do not wire new features to the wrong hook.",
+      "id": "consolidate-petri-net-test-assertions-001",
+      "title": "Shared Petri transition assertion helpers in testutil",
+      "description": "As a backend maintainer, I want shared Petri transition assertion helpers in pkg/testutil so exhaustion and loop-breaker checks are defined once and reused across mapping and replay tests.",
       "acceptanceCriteria": [
-        "Dev guide adds section Factory document vs dashboard snapshot with authority for edit/save, graph structure, runtime counts, timeline selection, export, and stale-save warnings.",
-        "Section includes a mermaid or ASCII diagram of SSE snapshot flow vs React Query document flow.",
-        "Section links to tasks/prd-ui-factory-document-snapshot-planes.md and states snapshot must not be the sole source for save payloads.",
+        "AssertNoTransitionExhaustion(t, transitions, opts) fails on TransitionExhaustion transitions and embeds opts.ExhaustionContext (or equivalent) in the fatal message",
+        "AssertGuardedLoopBreakerTransition(t, transition, inputPlace, outputPlace, watchedTransitionID, maxVisits) asserts normal type, single input/output arcs, VisitCountGuard transition ID and max visits, and expected place IDs",
+        "Both helpers call t.Helper() and live in pkg/testutil (assertions.go or petriassert.go in the same package)",
         "Typecheck passes"
       ],
       "priority": 1,
@@ -32,83 +31,35 @@
       "notes": ""
     },
     {
-      "id": "ui-factory-document-snapshot-planes-recovery-v2-002",
-      "title": "Graph editor structure from document plane",
-      "description": "As a graph editor user, I want the editable graph structure to follow the loaded session factory document so my edits match what will be saved.",
+      "id": "consolidate-petri-net-test-assertions-002",
+      "title": "maptests use shared Petri transition assertions",
+      "description": "As a config-mapping test author, I want maptests to call shared testutil helpers so local duplicate definitions are removed without changing what the mapper tests verify.",
       "acceptanceCriteria": [
-        "Entering graph edit mode with a loaded document shows nodes and edges from that document; while document GET is pending, editor shows loading or unavailable—not snapshot topology as the editable baseline.",
-        "useEditableFactoryGraph sets draft baseDocument and latestDocument from useCurrentFactoryDocument only; snapshot.factory is not assigned into draft baseline fields.",
-        "Vitest proves divergent document vs snapshot fixtures: editing uses document workstations, not snapshot-only extras.",
+        "config_mapper_test.go uses testutil.AssertNoTransitionExhaustion and testutil.AssertGuardedLoopBreakerTransition with customer-authored mapping exhaustion context and unchanged transition/place/guard arguments",
+        "Local assertNoTransitionExhaustion and assertGuardedLoopBreakerTransition are removed from config_mapper_resources_test.go",
+        "TestConfigMapping_RejectionLoopWithGuardedLoopBreaker and TestConfigMapping_GuardedLogicalMoveLoopBreaker still verify reviewer/process loop-breaker transitions with task:init, task:failed, watched transition IDs, and max visits 3",
+        "go test ./pkg/config/maptests/... passes",
         "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill: open graph editor and confirm structure matches persisted document after load"
+        "Tests pass"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ui-factory-document-snapshot-planes-recovery-v2-003",
-      "title": "Snapshot limited to runtime overlay",
-      "description": "As an operator watching a live factory, I want observe mode to reflect runtime overlay signals without treating snapshot topology as the save source of truth.",
+      "id": "consolidate-petri-net-test-assertions-003",
+      "title": "replay configtests use shared Petri transition assertions",
+      "description": "As a replay-mapping test author, I want replay/configtests to call the same shared helpers so effective-config tests stay aligned without duplicate assertion code.",
       "acceptanceCriteria": [
-        "Observe mode may render live snapshot projection for display; switching to edit mode re-baselines on the document plane.",
-        "Save-blocked and stale-draft messaging uses document version plus snapshot in_flight_dispatch_count, not snapshot factory version alone.",
-        "activeWorkCount and in-flight save guard come from snapshot runtime, not document GET.",
-        "Vitest proves save payload is built from latestDocument or pending draft, never DashboardSnapshot.factory alone when document is present.",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill: with in-flight work save stays blocked; after idle save uses document version"
-      ],
-      "priority": 3,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "ui-factory-document-snapshot-planes-recovery-v2-004",
-      "title": "Session switch document cache policy",
-      "description": "As an operator switching session tabs, I want factory document state for the new tab without seeing the previous session's definition in the editor.",
-      "acceptanceCriteria": [
-        "On sessionID change, timeline and selection reset remain; factory document queries are removed or refetched per documented policy aligned with resetDashboardSessionScopedState.",
-        "After switch from session A to B, graph editor and current-selection surfaces do not show session A factory name once loading completes.",
-        "Vitest covers document query keys scoped by normalized session ID on session lifecycle change.",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill: two sessions with distinct factory names—switch tabs and confirm name matches active tab"
-      ],
-      "priority": 4,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "ui-factory-document-snapshot-planes-recovery-v2-005",
-      "title": "After-save document and snapshot convergence",
-      "description": "As a user saving factory edits, I want the graph and live view to converge without manual reload or a burst of duplicate GETs.",
-      "acceptanceCriteria": [
-        "Successful graph save updates React Query document cache with returned version metadata.",
-        "Documented whether snapshot rebuild is immediate via FACTORY_CHANGE or refresh token or waits for event stream; implementation matches documentation.",
-        "Save success does not trigger unbounded document GET retries in unit tests.",
+        "effective_config_test.go uses testutil.AssertNoTransitionExhaustion and testutil.AssertGuardedLoopBreakerTransition with replay-mapped customer config exhaustion context and unchanged review-story-loop-breaker arguments (story:init, story:failed, review-story, max visits 3)",
+        "Local assertReplayHasNoTransitionExhaustion and assertReplayGuardedLoopBreakerTransition are deleted",
+        "Exhaustion assertion still ignores nil transitions and only fails on non-nil TransitionExhaustion transitions",
+        "go test ./pkg/replay/configtests/... passes",
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 5,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "ui-factory-document-snapshot-planes-recovery-v2-006",
-      "title": "Export uses document plane",
-      "description": "As an export user, I want the downloaded factory file to match the session document I would save, not a stale snapshot payload.",
-      "acceptanceCriteria": [
-        "Export hook fetches via session factory GET for useDashboardSession().sessionID, not DashboardSnapshot.factory.",
-        "Export loading and error states follow document query status.",
-        "Vitest asserts export request uses active session id and matches document GET fixture.",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill: export after edit returns updated content from document"
-      ],
-      "priority": 6,
-      "passes": false,
+      "priority": 3,
+      "passes": true,
       "notes": ""
     }
   ]
