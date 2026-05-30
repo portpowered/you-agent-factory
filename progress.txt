@@ -1,4 +1,11 @@
 ## Codebase Patterns
+- `buildSessionScope` in `ui/src/api/session-scope.ts` is the sole pure projection for dashboard session identity and API paths; `isPaused` is true only for a non-default `rawSessionID` listed in `pausedSessionIDs`—never for default/null/empty/`~default` selection even if the pause list includes `~default`.
+- Bento import threads `rawSessionID` from `useDashboardSession()` through `DashboardBento` → `useCurrentActivityImportController` / `useDashboardBentoImport`; prove scope-fed `sessionID` with a `vi.fn` spy on `useCurrentActivityImportController` in `dashboard-bento.test.tsx`—tab selection stays on `useDashboardSessionTabsState` → `dashboardSessionStore`.
+- `App.session-switching.stories.tsx` hides the work-graph bento card (`hidden: true` in stored layout) before `App` mounts—`mergeDashboardLayout` re-merges filtered layouts from `DEFAULT_DASHBOARD_LAYOUT`, so omitting work-graph from storage is not enough; run with `bun run vitest run --config vitest.storybook.config.ts --project=storybook src/App.session-switching.stories.tsx` against static Storybook on port 6008.
+- High-traffic dashboard hooks read `sessionID` / `rawSessionID` / `isPaused` from `useDashboardSession()`; `useDashboardSnapshot` passes scoped `rawSessionID` into `useFactoryEventStream` and `useDashboardSessionLifecycle`—prove tab retarget with `DashboardSessionProvider` + `setSelectedSessionID` in hook tests (factory definition refetch, submit-work route, snapshot stream URL).
+- Pin dashboard session scope in tests with `DashboardSessionTestProvider` / `renderWithDashboardSessionTest` / `renderApp({ sessionID })`; Storybook uses the same provider via `withDashboardStoryRuntime` and `parameters.dashboardApi.sessionID`—re-export from `ui/src/testing/index.ts`.
+- `ui/biome.jsonc` `style/noRestrictedImports` blocks `dashboardSessionStore` imports outside allowlisted production modules (provider, tabs state, store), Storybook runtime reset, app-shell test utils, and `*.test.*` / `*.stories.*`—see `docs/internal/development/dashboard-session-scope-import-boundaries.md`.
+- `App.session-switching.stories.tsx` hides `workGraph` via `hidden: true` on the layout item (not filter-only—`mergeDashboardLayout` re-merges defaults), seeds `DASHBOARD_LAYOUT_STORAGE_KEY`, gates render until `reloadDashboardLayoutFromStorage`, and uses the `App.stories.tsx` height decorator.
 - Offline `you factory save --from` and `you factory update --from` share `persistFromFile` in `pkg/cli/factory/persist_from_file.go` for validation, canonical JSON load, and mode-specific persist; keep `SaveFromFile` / `UpdateFromFile` as thin wrappers for human/JSON output and mode-specific error rendering in `save.go` / `update.go`.
 - `buildRuntimeBundle` in `pkg/service/factory_build.go` returns `factoryRuntimeBundle`, the single runtime wiring struct referenced from `liveRuntimeHandle`; add new runtime sidecars on `factoryRuntimeBundle` only—startup (`BuildFactoryService`) and `buildReplacementFactoryRuntime` both create `logSink` and session loggers inside `buildRuntimeBundle`, not after the fact.
 - Register every live session (including `~default` at `Run` startup and `OpenFactorySession` launches) through `registerLiveSession` in `pkg/service/runtime_sessions.go` with explicit `FactorySessionTarget` metadata; use `defaultSessionTargetFromRuntimeBundle` for default startup—do not call `sessions.Upsert` directly except in `replaceSessionRuntime` replacement updates.
@@ -596,6 +603,78 @@
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories `passes: true`; prior BLOCKING merge-conflict + missing CI items addressed on head `77399175`.
 ---
 
+## 2026-05-31T02:52:00Z - ui-session-scope-context-recovery-v2-001
+- What was implemented: Verified `SessionScope` / `buildSessionScope` contract on recovery branch; tightened `isPaused` to require non-default active `rawSessionID` per PRD; added regression test when `~default` appears in `pausedSessionIDs`.
+- Files changed: `ui/src/api/session-scope.ts`, `ui/src/api/session-scope.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Most U2 seam code already landed on `main`—recovery v2 starts from verifying contracts and flipping PRD per story rather than greenfield implementation.
+  - Gotchas encountered: `isPaused` must gate on `!isDefault`, not only `selectedSessionID != null`, or default-tab pause list entries incorrectly pause the stream.
+  - Useful context: Branch `ralph/ui-session-scope-context-recovery-v2`; story 002 provider/tests largely exist on `main`—verify head before re-implementing.
+---
+
+## 2026-05-31T03:00:00Z - ui-session-scope-context-recovery-v2-002
+- What was implemented: Verified `DashboardSessionProvider` / `useDashboardSession` / `DashboardScreen` shell wiring and provider tests on recovery branch head; `bun run tsc` and targeted provider + public smoke tests pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: U2 provider seam already landed on `main` before recovery v2—story 002 is verify-and-flip-PRD unless regression found.
+  - Gotchas encountered: Local `prd.json` may show `passes: true` for story 002 while committed HEAD still carries an unrelated Ralph PRD until metadata is refreshed locally.
+  - Useful context: `DashboardScreen` wraps `DashboardScreenContent` inside `DashboardSessionProvider`; scope updates propagate when `setSelectedSessionID` runs under the provider.
+---
+
+## 2026-05-31T03:01:00Z - ui-session-scope-context-recovery-v2-003
+- What was implemented: Verified high-traffic hooks use `useDashboardSession()` in production (factory definition/document/save, export, submit-work, snapshot composer); added `useDashboardSnapshot` regression proving tab switch reopens `/factory-sessions/session-beta/events`; fixed `dashboard-screen.tsx` import order for Biome.
+- Files changed: `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx`, `ui/src/features/dashboard/components/dashboard-screen.tsx`
+- **Learnings for future iterations:**
+  - Patterns discovered: Session-switch stream proof belongs in `useDashboardSnapshot.test.tsx` with `createReplayHarness` + `DashboardSessionProvider`; factory query retarget already lives in `useCurrentFactoryDefinition.test.tsx` and submit routing in `submit-work-widget.test.tsx`.
+  - Gotchas encountered: `useFactoryEventStream` intentionally receives `sessionID` as a parameter from the snapshot composer—do not import `dashboardSessionStore` into the transport hook.
+  - Useful context: Story 004 migrates bento/import to scope-fed `rawSessionID`; story 005 formalizes `DashboardSessionTestProvider` pinning.
+---
+
+## 2026-05-31T02:55:00Z - ui-session-scope-context-recovery-v2-002
+- What was implemented: Verified `DashboardSessionProvider` subscribes to `selectedSessionID` and `pausedSessionIDs`, memoizes `buildSessionScope`, and wraps `DashboardScreen` inner content; confirmed `useDashboardSession` throws outside the provider; provider and screen tests pass with `make typecheck`.
+- Files changed: none (verification iteration; implementation already on `main` at head `cfb0e8bb`)
+- **Learnings for future iterations:**
+  - Patterns discovered: `DashboardSessionScopeProvider` accepts a prebuilt scope for tests/Storybook; production shell uses `DashboardSessionProvider` which owns the store subscription.
+  - Gotchas encountered: Recovery v2 story 002 needs no new commit when `main` already contains the provider seam—verify tests and flip PRD only.
+  - Useful context: Next story 003 should confirm high-traffic hooks use `useDashboardSession` in production (many already do on `main`).
+---
+
+## 2026-05-31T03:04:00Z - ui-session-scope-context-recovery-v2-004
+- What was implemented: Verified `DashboardBento` reads `rawSessionID` and `sessionID` from `useDashboardSession()` and passes `rawSessionID` into `useCurrentActivityImportController` and `useDashboardBentoImport`; confirmed bento/import/workflow-activity production modules do not import `dashboardSessionStore` (tabs remain store-backed via `useDashboardSessionTabsState`); added regression test spying import-controller options for scoped `sessionID`.
+- Files changed: `ui/src/features/bento/components/dashboard-bento.test.tsx`
+- **Learnings for future iterations:**
+  - Patterns discovered: U2 bento/import seam largely landed on `main` via factory-import-second-session—recovery v2 story 004 is verify-and-add-scope proof unless regression found.
+  - Gotchas encountered: Mock `useCurrentActivityImportController` as `vi.fn` when asserting call options from `DashboardBento`; static mock factories hide `sessionID` threading.
+  - Useful context: Story 005 formalizes `DashboardSessionTestProvider` pinning; story 006 adds Biome import boundaries.
+---
+
+## 2026-05-31T03:06:00Z - ui-session-scope-context-recovery-v2-005
+- What was implemented: Verified `DashboardSessionTestProvider` (default `~default`, optional `sessionID`/`paused`), `renderWithDashboardSessionTest`, `wrapWithDashboardSessionTest`, `renderApp({ sessionID })`, Storybook `withDashboardStoryRuntime` + `dashboardApi.sessionID`, and `ui/src/testing/index.ts` re-exports; provider and utils tests assert normalized paths for non-default sessions; `bun run tsc` and targeted vitest pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: Test pinning uses `DashboardSessionScopeProvider` with a prebuilt `buildSessionScope` scope—no store seeding when only identity matters; `paused` adds the pinned `sessionID` to `pausedSessionIDs` for stream pause assertions.
+  - Gotchas encountered: Story 005 seam landed on `main` in commit `f48bc735` (original U2 story 007)—recovery v2 is verify-and-flip-PRD unless regression found.
+  - Useful context: Story 006 enforces Biome `noRestrictedImports` and `dashboard-session-scope-import-boundaries.md`; story 007 adds session-switch Storybook regression.
+---
+
+## 2026-05-31T03:08:00Z - ui-session-scope-context-recovery-v2-006
+- What was implemented: Verified `dashboard-session-scope-import-boundaries.md` documents allowed production importers and the `useDashboardSession()` default rule; `ui/biome.jsonc` `noRestrictedImports` pattern and allowlist overrides match the doc; Biome lint on production feature modules (bento, submit-work, export, import, factory hooks, dashboard components) reports no store-import violations; `bun run tsc` passes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: Production store imports are limited to `dashboard-session-provider.tsx` and `use-dashboard-session-tabs-state.ts`; test/story overrides in biome use `**/*.test.tsx` and `**/*.stories.tsx`—per-file `biome lint` respects overrides even when folder scans with `--only` appear to flag tests.
+  - Gotchas encountered: Story 006 seam landed on `main` with the original U2 work—recovery v2 is verify-and-flip-PRD unless a new production module imports the store outside the allowlist.
+  - Useful context: Story 007 (`App.session-switching.stories.tsx`) needs `storybook:test-runner:ci` with a running static Storybook on port 6008.
+---
+
+## 2026-05-31T03:16:00Z - ui-session-scope-context-recovery-v2-007
+- What was implemented: Verified/finalized `App.session-switching.stories.tsx` on head `14dc8a66`: `SessionSwitchingStory` seeds layout with `workGraph` marked `hidden: true`, reloads storage, gates render, and uses height decorator; Storybook vitest `Verification` passes (default→beta tab, session-scoped labels, submit-draft reset).
+- Files changed: `ui/src/App.session-switching.stories.tsx` (committed as `14dc8a66`)
+- **Learnings for future iterations:**
+  - Patterns discovered: Mark `DASHBOARD_WIDGET_IDS.workGraph` as `hidden: true` in persisted layout—filtering it out of storage is insufficient because `mergeDashboardLayout` re-merges from `DEFAULT_DASHBOARD_LAYOUT`.
+  - Gotchas encountered: `render: () => <App />` without `SessionSwitchingStory` leaves work-graph mounted and fails vitest with React Flow error 004.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/514 — await full CI shard completion before `<COMPLETE>`.
+---
+
 ## 2026-05-31T00:00:00Z - consolidate-cli-factory-save-update-from-file-001
 - What was implemented: Added `persistFromFile` shared core in save mode (validation, payload read, `LoadFromCanonicalJSON`, `PersistNamedFactory`, optional `WriteCurrentFactoryPointer`); refactored `SaveFromFile` into a thin delegator preserving human/JSON output and save-specific error mapping.
 - Files changed: `pkg/cli/factory/persist_from_file.go`, `pkg/cli/factory/save.go`, `docs/internal/processes/development-guide-relevant-files.md`
@@ -603,4 +682,13 @@
   - Patterns discovered: Keep mode enum and `persistFromFileNamedFactory` switch in `persist_from_file.go`; leave success formatters and `renderSaveFromFileError` / `renderUpdateFromFileError` on the public wrappers until story 003 unifies errors.
   - Gotchas encountered: PRD `branchName` is `ralph/consolidate-cli-factory-save-update-from-file` — create/switch from the worktree branch name if they differ.
   - Useful context: Story 002 adds `persistFromFileModeUpdate` and delegates `UpdateFromFile`; `update.go` still duplicates the flow until then.
+---
+
+## 2026-05-30T20:26:00Z - mergeability (PR #514 main re-merge)
+- What was implemented: Merged `origin/main` into `ralph/ui-session-scope-context-recovery-v2` to clear `mergeStateStatus: DIRTY`; resolved `prd.json`/`progress.txt` conflicts keeping recovery v2 PRD and combined codebase patterns; prior CI on `14dc8a66` was green (all required checks success).
+- Files changed: merge brought main updates (wire-smoke, `persistFromFile`, compose package); conflict resolution in `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Patterns discovered: `mergeStateStatus: DIRTY` on an otherwise green PR usually means main advanced—re-merge before `<COMPLETE>` even when all stories pass.
+  - Gotchas encountered: Main may land unrelated Ralph `prd.json`/`progress.txt` edits; always keep branch PRD (`--ours`) during merge conflict resolution.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/514 — push merge commit and await CI before `<COMPLETE>`.
 ---

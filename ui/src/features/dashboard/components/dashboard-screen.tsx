@@ -1,12 +1,12 @@
 import { useAppLocale } from "../../../i18n";
 import { DashboardBento } from "../../bento/public";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
+import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import {
   DashboardExportDialog,
   DashboardHeader,
   DashboardStatusPanel,
 } from "../../header/public";
-import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 

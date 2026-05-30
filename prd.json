@@ -1,32 +1,31 @@
 {
-  "project": "Consolidate CLI Factory Save and Update From-File Commands",
-  "branchName": "ralph/consolidate-cli-factory-save-update-from-file",
-  "description": "Extract one shared internal implementation in pkg/cli/factory for file-based named-factory persistence used by you factory save --from and you factory update --from, preserving all CLI flags, exit codes, stdout/stderr text, JSON field names, and mode-specific persist and error behavior.",
+  "project": "UI Session Scope Context (U2 Recovery v2)",
+  "branchName": "ralph/ui-session-scope-context-recovery-v2",
+  "description": "Recovery implementation of dashboard session scope context (U2): project Zustand tab selection into SessionScope at the dashboard shell so factory, export, submit-work, import, and stream hooks share useDashboardSession() instead of scattering dashboardSessionStore access. Retriggers after work-plan-85 failed; baseline spec at tasks/prd-ui-session-scope-context.md.",
   "context": {
-    "customerAsk": "Consolidate duplicated file-based persist flow between SaveFromFile and UpdateFromFile in pkg/cli/factory without changing CLI flags, exit codes, stdout/stderr text, or JSON field names.",
-    "problem": "save.go and update.go duplicate validation, payload read, canonical JSON load, persist call, and overlapping error mapping. Only PersistNamedFactory vs ReplaceNamedFactory, optional SetCurrent on save, success message text, and update-specific factory-not-found mapping differ—creating drift risk when one path is fixed but not the other.",
-    "solution": "Add a shared persist-from-file helper with save|update mode and unified error rendering; refactor SaveFromFile and UpdateFromFile into thin wrappers; lock behavior with existing pkg/cli/factory tests."
+    "customerAsk": "Retrigger U2 (UI session scope context) after work-plan-85 failed on ui-session-scope-context-recovery. Deliver the session-scope seam from tasks/prd-ui-session-scope-context.md so dashboard features share one normalized session identity and API path surface.",
+    "problem": "Dashboard features read useDashboardSessionStore directly or duplicate sessionID and path normalization, so tab switches and pause state are easy to wire incorrectly across factory saves, export, submit-work, import, prompt templates, and the live event stream.",
+    "solution": "Keep dashboardSessionStore for selection and pause; project it through buildSessionScope and DashboardSessionProvider at the dashboard shell; migrate high-traffic hooks to useDashboardSession(); pin sessions in tests with DashboardSessionTestProvider; enforce store import boundaries with Biome and documentation; prove session-switch behavior with focused UI regression."
   },
   "acceptanceCriteria": [
-    "go test ./pkg/cli/factory/... passes with no intentional behavior changes to offline save or update",
-    "you factory save --from preserves create, duplicate rejection, invalid-config handling, --set-current pointer behavior, and human/JSON output",
-    "you factory update --from preserves replace, factory-not-found handling, invalid-config handling, and human/JSON output",
-    "CLI flags, command names, exit codes, stdout/stderr wording, and JSON field names remain unchanged",
-    "Shared internal helper in pkg/cli/factory owns validation, load, persist, optional pointer write, and mode-aware errors; SaveFromFile and UpdateFromFile are thin delegators",
-    "No HTTP/API, config/persist semantic, or clihttp submit migration changes",
-    "Typecheck, lint, and project tests pass"
+    "buildSessionScope is the single normalization point for sessionID, isDefault, factoryPath, workPath, eventsPath, and isPaused aligned with session-routing.ts",
+    "DashboardScreen wraps dashboard content in DashboardSessionProvider and useDashboardSession throws clearly outside the provider",
+    "High-traffic hooks (factory definition/document/save, export, submit-work, dashboard snapshot/stream) use useDashboardSession in production without importing dashboardSessionStore",
+    "Bento and import flows use session identity from scope consistent with factory saves; session tabs continue to mutate the store and refresh scope for children",
+    "DashboardSessionTestProvider and renderApp/renderWithDashboardSessionTest pin session scope for tests and Storybook",
+    "Biome noRestrictedImports and dashboard-session-scope-import-boundaries.md block store imports outside the documented allowlist",
+    "Session-switch regression (App.session-switching.stories.tsx or equivalent) proves tab changes retarget session-scoped behavior",
+    "Typecheck, lint, and targeted UI tests pass for all touched areas"
   ],
   "userStories": [
     {
-      "id": "consolidate-cli-factory-save-update-from-file-001",
-      "title": "Shared from-file persistence core for save mode",
-      "description": "As an operator running you factory save --from, I want the same create, validation, pointer, and output behavior after consolidation so existing scripts and docs stay valid.",
+      "id": "ui-session-scope-context-recovery-v2-001",
+      "title": "Session scope contract and pure builder",
+      "description": "As a feature developer, I want a typed SessionScope and pure buildSessionScope helper so session normalization and API paths are defined once.",
       "acceptanceCriteria": [
-        "Shared internal helper in pkg/cli/factory performs input validation, payload read, LoadFromCanonicalJSON, PersistNamedFactory, and optional WriteCurrentFactoryPointer when SetCurrent is true in save mode",
-        "SaveFromFile delegates to the shared helper and still prints Saved factory <name> and Directory: <dir> for human output",
-        "--json save output still encodes name and factoryDir with unchanged JSON field names",
-        "Save still returns factory already exists for duplicates and invalid factory config for bad payloads/topology without creating a named directory on topology failure",
-        "All TestSaveFromFile_* tests pass without relaxed assertions",
+        "ui/src/api/session-scope.ts exports SessionScope with sessionID, rawSessionID, isDefault, factoryPath, workPath, eventsPath, and isPaused",
+        "buildSessionScope maps null, empty, and ~default to the default session, encodes non-default paths per session-routing.ts, and sets isPaused only for the active raw session when listed in pausedSessionIDs",
+        "session-scope.test.ts covers default, encoded non-default, and pause cases",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -35,51 +34,94 @@
       "notes": ""
     },
     {
-      "id": "consolidate-cli-factory-save-update-from-file-002",
-      "title": "Update command uses the same shared core in update mode",
-      "description": "As an operator running you factory update --from, I want replace semantics and messaging unchanged so in-place factory upgrades remain predictable.",
+      "id": "ui-session-scope-context-recovery-v2-002",
+      "title": "Dashboard session provider at shell boundary",
+      "description": "As a dashboard user, I want every widget under the dashboard shell to see the same active session projection when I change tabs.",
       "acceptanceCriteria": [
-        "Shared helper update mode calls ReplaceNamedFactory and does not write the current-factory pointer",
-        "UpdateFromFile delegates to the shared helper and still prints Updated factory <name> and Directory: <dir> for human output",
-        "--json update output still encodes name and factoryDir with unchanged JSON field names",
-        "Update still returns factory not found for missing factories and invalid factory config for bad payloads; invalid topology update preserves prior on-disk factory body",
-        "All TestUpdateFromFile_* tests pass without relaxed assertions",
+        "DashboardSessionProvider subscribes to selectedSessionID and pausedSessionIDs and supplies memoized SessionScope via context",
+        "useDashboardSession throws with message useDashboardSession must be used within DashboardSessionProvider when context is missing",
+        "DashboardScreen wraps inner dashboard content in DashboardSessionProvider",
+        "Provider tests prove scope updates when setSelectedSessionID changes",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
-      "id": "consolidate-cli-factory-save-update-from-file-003",
-      "title": "Unified mode-aware error rendering",
-      "description": "As a maintainer, I want one error-mapping path for from-file persistence so save and update stay aligned on invalid-config handling while keeping mode-specific duplicate and not-found wording.",
+      "id": "ui-session-scope-context-recovery-v2-003",
+      "title": "High-traffic hooks consume session scope",
+      "description": "As an operator switching factory tabs, I want saves, export, submit-work, factory queries, and the live stream to target the newly selected session without reloading the app.",
       "acceptanceCriteria": [
-        "One internal error renderer maps save duplicate to factory already exists, update missing factory to factory not found, and both invalid named-factory cases to invalid factory config",
-        "Uncovered errors such as read factory config failures pass through with the same wording as today",
-        "TestSaveFromFile_RejectsDuplicateName, TestUpdateFromFile_RejectsMissingName, and invalid-payload tests for both commands still pass with the same error substrings",
+        "useCurrentFactoryDefinition, useCurrentFactoryDocument, useSaveCurrentFactory, use-current-factory-export, and submit-work-widget use useDashboardSession for sessionID in production code",
+        "useDashboardSnapshot and useFactoryEventStream use rawSessionID and isPaused from scope; production modules do not import dashboardSessionStore",
+        "Tests prove changing selected session retargets query keys or stream session keys",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
-      "id": "consolidate-cli-factory-save-update-from-file-004",
-      "title": "Thin public wrappers and duplication removed",
-      "description": "As a reviewer, I want save.go and update.go to expose only mode-specific config/result types and thin delegators so future CLI changes have one implementation path.",
+      "id": "ui-session-scope-context-recovery-v2-004",
+      "title": "Bento import uses the same session identity as saves",
+      "description": "As an operator importing a factory PNG, I want activation to apply to the same session tab I have selected for edits.",
       "acceptanceCriteria": [
-        "save.go and update.go contain no duplicated validation/read/load/persist logic beyond delegating to the shared helper and mode-specific success formatters",
-        "Exported SaveFromFileConfig, SaveFromFileResult, UpdateFromFileConfig, and UpdateFromFileResult types and JSON tags are unchanged",
-        "pkg/cli/root.go still wires factory save and factory update through SaveFromFile and UpdateFromFile without flag or help text changes",
-        "go test ./pkg/cli/factory/... passes",
+        "DashboardBento reads rawSessionID and sessionID from useDashboardSession and passes rawSessionID into import controller and bento import hooks",
+        "Import hooks accept optional sessionID for tests but dashboard production path uses scope-fed identity",
+        "DashboardSessionTabs mutates selection via header tabs state; bento and import production code do not import dashboardSessionStore",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-scope-context-recovery-v2-005",
+      "title": "Test and Storybook session pinning",
+      "description": "As a test author, I want to pin a session in one line so stories and hook tests do not reimplement store seeding when only session identity matters.",
+      "acceptanceCriteria": [
+        "DashboardSessionTestProvider exports with default ~default and optional sessionID and paused props",
+        "renderWithDashboardSessionTest and renderApp sessionID wrap trees with the test provider; Storybook dashboard runtime applies dashboardApi.sessionID via the same provider",
+        "ui/src/testing/index.ts re-exports test provider utilities",
+        "Test provider tests assert normalized paths for a non-default sessionID",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-scope-context-recovery-v2-006",
+      "title": "Enforce dashboard session store import boundaries",
+      "description": "As a reviewer, I want new dashboard features blocked from importing the session store outside approved seams.",
+      "acceptanceCriteria": [
+        "dashboard-session-scope-import-boundaries.md documents allowed production importers and the default useDashboardSession rule",
+        "ui/biome.jsonc noRestrictedImports blocks dashboardSessionStore outside allowlisted production modules, Storybook runtime, app-shell test utilities, and test/story files",
+        "UI lint reports no violations in production feature modules outside the allowlist",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-scope-context-recovery-v2-007",
+      "title": "Session-switch regression proof",
+      "description": "As an operator, I want confidence that switching session tabs updates visible session-scoped data and network targets.",
+      "acceptanceCriteria": [
+        "App.session-switching.stories.tsx or focused replacement exercises default-to-named session switch and asserts session-scoped UI or network behavior changes with the tab",
+        "Story test passes in CI via the project UI test command",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 7,
+      "passes": true,
       "notes": ""
     }
   ]
