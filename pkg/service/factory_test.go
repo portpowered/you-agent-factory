@@ -945,6 +945,41 @@ func TestFactoryService_ActivateNamedFactory_RejectsNonIdleRuntime(t *testing.T)
 	}
 }
 
+func TestFactoryService_RequireIdleRuntime_TargetsActiveRunSession(t *testing.T) {
+	idleFactory := &aggregateSnapshotFactory{
+		engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			RuntimeStatus: interfaces.RuntimeStatusIdle,
+		},
+	}
+	activeFactory := &aggregateSnapshotFactory{
+		engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			RuntimeStatus: interfaces.RuntimeStatusActive,
+		},
+	}
+
+	svc := &FactoryService{
+		sessions: factorysessions.NewRegistry(),
+		logger:   zap.NewNop(),
+	}
+	defaultHandle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{factory: idleFactory}}
+	betaHandle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{factory: activeFactory}}
+	svc.registerLiveSession(defaultFactorySessionID, defaultHandle, FactorySessionTarget{
+		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
+	}, false)
+	svc.registerLiveSession("session-beta", betaHandle, FactorySessionTarget{
+		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindNamed, Name: "beta"},
+	}, false)
+	svc.setRunState(context.Background(), "session-beta", betaHandle)
+
+	err := svc.requireIdleRuntime(context.Background())
+	if err == nil {
+		t.Fatal("requireIdleRuntime = nil, want active run session idle failure")
+	}
+	if !errors.Is(err, ErrFactoryActivationRequiresIdle) {
+		t.Fatalf("requireIdleRuntime error = %v, want ErrFactoryActivationRequiresIdle", err)
+	}
+}
+
 func TestFactoryService_ActivateNamedFactory_RollsBackCurrentPointerWhenReplacementBuildFails(t *testing.T) {
 	rootDir := t.TempDir()
 
