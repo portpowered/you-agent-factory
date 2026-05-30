@@ -1,5 +1,8 @@
 ## Codebase Patterns
 - Session-scoped PNG import activation uses `activateImportedFactoryForSession` in `ui/src/api/named-factory/api.ts`: GET current factory via `getCurrentFactoryDocument`, preserve session `name` on the imported payload, PUT via `saveCurrentFactoryDocument` with incremented `version`, and map `CurrentFactoryDefinitionError` (including `STALE_FACTORY_VERSION`) into `NamedFactoryAPIError`; never `POST /factories`.
+- Non-default session import isolation proof lives in `tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go` (`TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles`): `openNamedFactorySession` + `saveCurrentFactoryForSession` with imported-style bundled payload, assert session GET readback, unchanged default session/`alpha` on-disk config, and bundled files materialized only under `rootDir/<session-factory-name>/`.
+- Dashboard import threads `useDashboardSessionStore.selectedSessionID` through `DashboardBento` → `useCurrentActivityImportController` → `useFactoryImportActivation({ sessionID })`, which defaults to `activateImportedFactoryForSession` so tab switches before confirm retarget activation without reload (mirror `useCurrentFactoryExport` session routing).
+- `App.import.test.tsx` mocks `/factory-sessions/{session_id}/factory` by HTTP method (GET with `version`, then versioned PUT) and asserts no `POST /factories`; use `createDeferredPromise` from `app-shell-export-test-utils` to observe `Activating factory...` submitting state before resolving PUT.
 - Inline single-use workflow-activity layout class strings directly on JSX in `workflow-activity-bento-card.tsx`; assert the graph panel shell via the viewport region’s `section[aria-labelledby]` parent in `workflow-activity-bento-card.test.tsx` (contains `relative`, `h-full`, `min-h-0`, `min-w-0`).
 - Parse worker/workstation `openCodeAgent` through `pkg/config/agents_config.go` with `validateOpenCodeAgentInFrontmatter` (rejects explicit empty or whitespace-only values), merge via `applyWorkerRuntimeExecution` / `applyWorkstationRuntimeIdentity`, and resolve dispatch precedence with `interfaces.ResolveOpenCodeAgent(workstation, worker)`.
 - Forward resolved OpenCode agent on `interfaces.ProviderInferenceRequest.OpenCodeAgent` from `pkg/workers/executor/agent.go` `inferenceRequestForExecutionRequest` only when `ModelProvider` is `opencode`; lookup workstation via `runtimeConfig.Workstation(inferenceWorkstationType(request))` and leave the field empty for other providers.
@@ -10,6 +13,7 @@
 - Dashboard header-only submit proof belongs in `submit-work-widget.test.tsx` (`completes header-only submission when the default text item is blank`) and the empty-payload segment of `App.follow-up-submit.test.tsx`; assert POST body `items: []`, success trace status copy, and absence of submit error fallback.
 - Hide internal `__system_time` factory graph nodes with `filterFactoryGraphTopologyForCustomerDisplay` in `ui/src/features/factory-graph-editor/lib/factory-graph-customer-display.ts`; reuse `systemTime.ts` constants/predicates and apply the filter at graph render boundaries (layout/projection) before seeding nodes or edges.
 - Apply customer-display filtering in `projectFactoryGraphToReactFlow` only; keep `buildFactoryGraphTopologyFromDefinition` and draft-validation topology unfiltered so canonical factory data and editor mutations stay complete.
+- Second-tab PNG import browser proof lives in `ui/integration/factory-import-second-session.integration.test.mjs`: open a non-default session via the Factory Session dialog, export then import on that tab, track `onSaveCurrentFactory` for the non-default `sessionID` and keep `onActivateFactory` empty; use `expect.poll` for PUT completion because submitting-state copy can flash too quickly in Playwright.
 - Register new packaged `you docs` topics in the single `topicDocuments` table in `pkg/cli/docs/docs.go` with canonical name, description, `displayOrder`, path, and optional aliases together so `SupportedTopics()`, index output, and unsupported-topic errors stay aligned.
 - Keep `docs/reference/*.md` and `pkg/cli/docs/reference/*.md` synchronized when adding customer-facing packaged topics; embedded markdown is loaded from `pkg/cli/docs/reference/` via `//go:embed`.
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
@@ -232,4 +236,40 @@
   - Patterns discovered: Reuse `getCurrentFactoryDocument` + `saveCurrentFactoryDocument` instead of duplicating fetch logic; strip `version` from imported and saved payloads when returning `FactoryValue` to match `createFactory` consumers.
   - Gotchas encountered: `NamedFactoryAPIErrorCode` needed `STALE_FACTORY_VERSION` added explicitly; map `INVALID_FACTORY_DEFINITION` to `INVALID_FACTORY` when bridging from current-factory-definition errors.
   - Useful context: Story 002 should default `useFactoryImportActivation` to `activateImportedFactoryForSession` and thread `selectedSessionID` from the dashboard session store.
+---
+
+## 2026-05-30T12:52:00Z - factory-import-second-session-002
+- What was implemented: Wired `selectedSessionID` from `useDashboardSessionStore` through `DashboardBento` and `useCurrentActivityImportController` into `useFactoryImportActivation`, which now defaults to `activateImportedFactoryForSession` instead of `createFactory`; added hook tests for default session-scoped activation and session changes before confirm.
+- Files changed: `ui/src/features/import/hooks/use-factory-import-activation.ts`, `ui/src/features/import/hooks/use-factory-import-activation.test.tsx`, `ui/src/features/workflow-activity/hooks/current-activity-import-controller.ts`, `ui/src/features/workflow-activity/hooks/current-activity-import-controller.test.tsx`, `ui/src/features/bento/components/dashboard-bento.tsx`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Bind session-scoped activation with `useMemo` on `sessionID` so preview-open → tab-switch → confirm uses the latest session without remounting; keep `activateFactory` override for tests and stories.
+  - Gotchas encountered: Mock `activateImportedFactoryForSession` in hook tests when asserting default activation path; custom `activateFactory` tests remain unchanged.
+  - Useful context: Story 003 updates `App.import.test.tsx` to expect PUT `~default`; stories 004–005 cover non-default backend and browser paths.
+---
+
+## 2026-05-30T12:55:00Z - factory-import-second-session-003
+- What was implemented: Updated `App.import.test.tsx` to expect session-scoped import activation via GET then PUT `/factory-sessions/~default/factory` with version metadata, submitting-state UI during activation, no `POST /factories`, and export/import roundtrip PUT assertions aligned with `activateImportedFactoryForSession`.
+- Files changed: `ui/src/App.import.test.tsx`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Same-path `/factory-sessions/~default/factory` serves export GET, activation GET, and activation PUT — branch `fetchMock` on `init?.method` (or `Request.method`) instead of path alone.
+  - Gotchas encountered: `currentNamedFactoryExportResponse` lacks `version`; activation tests need GET responses that include `version` so PUT bodies get incremented logical/physical fields.
+  - Useful context: Stories 004–005 add non-default session backend functional and browser integration coverage.
+---
+
+## 2026-05-30T13:10:00Z - factory-import-second-session-004
+- What was implemented: Added `TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles` proving a second live session accepts imported-style PUT payloads with inline bundled files, returns the saved definition from session GET, leaves the default session and `alpha` on-disk factory config unchanged, and materializes portable files only under the target session factory directory.
+- Files changed: `tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Reuse `openNamedFactorySession`, `getCurrentFactoryForSession`, and `saveCurrentFactoryForSession` from `api_current_factory_put_test.go`; build import bodies by marshaling the session current factory, preserving `name`, advancing `version`, and attaching `supportingFiles.bundledFiles` like the default bundled-files PUT test.
+  - Gotchas encountered: `assertPersistedFactoryJSONStripsInlineBundledContent` only checks the legacy portable strings; add session-specific forbidden inline markers when bundled import content uses new literals.
+  - Useful context: Story 005 adds browser integration for the second-tab import path in `ui/integration/`.
+---
+
+## 2026-05-30T13:05:00Z - factory-import-second-session-005
+- What was implemented: Added `factory-import-second-session.integration.test.mjs` browser integration coverage that opens a non-default session tab, completes export/import preview confirm on that tab, asserts session-scoped PUT activation via `onSaveCurrentFactory` for `session-review`, and asserts no `POST /factories` via empty `onActivateFactory` callbacks.
+- Files changed: `ui/integration/factory-import-second-session.integration.test.mjs`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Reuse `dashboard-session-tabs.integration.test.mjs` session-open flow plus `factory-graph-editor.integration.test.mjs` PNG export/import drag-drop; activation preserves the session current factory `name` on PUT, not the PNG export display name.
+  - Gotchas encountered: `Activating factory...` submitting copy can finish before Playwright observes it—poll `onSaveCurrentFactory` / `sessionFactoryPutRequests` instead; PUT bodies carry incremented `version.logical` (`"2"` from `"1"`) and `physical` plus one millisecond.
+  - Useful context: Dev-browser skill verification was not run this iteration; Playwright integration test is the automated browser proof for story 005.
 ---
