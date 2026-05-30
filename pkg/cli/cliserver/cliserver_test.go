@@ -134,6 +134,16 @@ func TestResolveBase_InvalidInputs(t *testing.T) {
 	}
 }
 
+func TestRequestURL_JoinsAPIPathOntoServerBase(t *testing.T) {
+	got, err := RequestURL("http://127.0.0.1:9090", "/factory-sessions/~default/factory")
+	if err != nil {
+		t.Fatalf("RequestURL: %v", err)
+	}
+	if got != "http://127.0.0.1:9090/factory-sessions/~default/factory" {
+		t.Fatalf("RequestURL = %q, want joined endpoint", got)
+	}
+}
+
 func TestResolveBase_PreservesDefaultHTTPSPort(t *testing.T) {
 	t.Parallel()
 

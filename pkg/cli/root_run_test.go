@@ -585,7 +585,7 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 		"--max-results", "25",
 		"--next-token", "cursor-1",
 		"--json",
-		"--port", "9090",
+		"--server", "http://127.0.0.1:9090",
 	})
 
 	if err := root.Execute(); err != nil {
@@ -601,8 +601,8 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	if got.SortBy != "state.type" {
 		t.Fatalf("sort by = %q, want state.type", got.SortBy)
 	}
-	if got.Port != 9090 {
-		t.Fatalf("port = %d, want 9090", got.Port)
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
 	}
 	if got.MaxResults != 25 {
 		t.Fatalf("max results = %d, want 25", got.MaxResults)
@@ -618,7 +618,7 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	}
 }
 
-func TestWorkListCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
+func TestWorkListCommand_DefaultServerMapsToSharedLocalURI(t *testing.T) {
 	originalListWork := listWork
 	defer func() {
 		listWork = originalListWork
@@ -639,8 +639,8 @@ func TestWorkListCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
 		t.Fatalf("execute work list: %v", err)
 	}
 
-	if got.Port != 7437 {
-		t.Fatalf("port = %d, want 7437", got.Port)
+	if got.Server != "http://localhost:7437" {
+		t.Fatalf("server = %q, want http://localhost:7437", got.Server)
 	}
 }
 

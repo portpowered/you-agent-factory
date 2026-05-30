@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,7 +15,7 @@ import (
 )
 
 func TestSubmit_MissingWorkTypeName(t *testing.T) {
-	err := Submit(SubmitConfig{Name: "submit-task", Payload: "some-file.json", Port: 8080})
+	err := Submit(SubmitConfig{Name: "submit-task", Payload: "some-file.json", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for missing work type name")
 	}
@@ -45,7 +44,7 @@ func TestSubmit_VerboseLogsRequestAndResponseMetadataWithoutPayloadContent(t *te
 		Name:         "verbose-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Port:         mustServerPort(t, srv.URL),
+		Server: mustServerBase(t, srv.URL),
 		SessionID:    "session-alpha",
 		Verbose:      true,
 		Diagnostics:  &diagnostics,
@@ -58,7 +57,7 @@ func TestSubmit_VerboseLogsRequestAndResponseMetadataWithoutPayloadContent(t *te
 	for _, want := range []string{
 		"submit request",
 		"endpointPath=/factory-sessions/session-alpha/work",
-		"port=",
+		"server=",
 		"session=session-alpha",
 		"payloadPath=" + payloadPath,
 		"payloadType=markdown",
@@ -101,7 +100,7 @@ func TestSubmit_VerboseLogsJSONPayloadMetadataWithoutPayloadContentOrToken(t *te
 		Name:         "json-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Port:         mustServerPort(t, srv.URL),
+		Server: mustServerBase(t, srv.URL),
 		Verbose:      true,
 		Diagnostics:  &diagnostics,
 	})
@@ -148,7 +147,7 @@ func TestSubmit_VerboseLogsFailureStatus(t *testing.T) {
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Port:         mustServerPort(t, srv.URL),
+		Server: mustServerBase(t, srv.URL),
 		Verbose:      true,
 		Diagnostics:  &diagnostics,
 	})
@@ -165,7 +164,7 @@ func TestSubmit_VerboseLogsFailureStatus(t *testing.T) {
 }
 
 func TestSubmit_MissingPayload(t *testing.T) {
-	err := Submit(SubmitConfig{Name: "submit-task", WorkTypeName: "task", Port: 8080})
+	err := Submit(SubmitConfig{Name: "submit-task", WorkTypeName: "task", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for missing payload")
 	}
@@ -175,14 +174,14 @@ func TestSubmit_MissingPayload(t *testing.T) {
 }
 
 func TestSubmit_PayloadFileNotFound(t *testing.T) {
-	err := Submit(SubmitConfig{Name: "submit-task", WorkTypeName: "task", Payload: "/nonexistent/file.json", Port: 8080})
+	err := Submit(SubmitConfig{Name: "submit-task", WorkTypeName: "task", Payload: "/nonexistent/file.json", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for missing payload file")
 	}
 }
 
 func TestSubmit_MissingName(t *testing.T) {
-	err := Submit(SubmitConfig{WorkTypeName: "task", Payload: "some-file.json", Port: 8080})
+	err := Submit(SubmitConfig{WorkTypeName: "task", Payload: "some-file.json", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for missing name")
 	}
@@ -192,7 +191,7 @@ func TestSubmit_MissingName(t *testing.T) {
 }
 
 func TestSubmit_BlankName(t *testing.T) {
-	err := Submit(SubmitConfig{Name: "   ", WorkTypeName: "task", Payload: "some-file.json", Port: 8080})
+	err := Submit(SubmitConfig{Name: "   ", WorkTypeName: "task", Payload: "some-file.json", Server: "http://127.0.0.1:8080"})
 	if err == nil {
 		t.Fatal("expected error for blank name")
 	}
@@ -234,7 +233,7 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	port := mustServerPort(t, srv.URL)
+	server := mustServerBase(t, srv.URL)
 
 	// Create a JSON payload file.
 	dir := t.TempDir()
@@ -247,7 +246,7 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 		Name:         "  CLI JSON submit  ",
 		WorkTypeName: "code-change",
 		Payload:      payloadPath,
-		Port:         port,
+		Server:       server,
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -293,29 +292,19 @@ func TestSubmit_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	parsedURL, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatalf("parse server URL: %v", err)
-	}
-	port, err := strconv.Atoi(parsedURL.Port())
-	if err != nil {
-		t.Fatalf("parse server port: %v", err)
-	}
-
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "work.json")
 	if err := os.WriteFile(payloadPath, []byte(`{"title":"scoped task"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	err = Submit(SubmitConfig{
+	if err := Submit(SubmitConfig{
 		Name:         "scoped-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Port:         port,
+		Server:       mustServerBase(t, srv.URL),
 		SessionID:    "session-beta",
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
 
@@ -339,7 +328,7 @@ func TestSubmit_MarkdownPayload(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	port := mustServerPort(t, srv.URL)
+	server := mustServerBase(t, srv.URL)
 
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "request.md")
@@ -352,7 +341,7 @@ func TestSubmit_MarkdownPayload(t *testing.T) {
 		Name:         "markdown-submit",
 		WorkTypeName: "prd",
 		Payload:      payloadPath,
-		Port:         port,
+		Server:       server,
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -384,7 +373,7 @@ func TestSubmit_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	port := mustServerPort(t, srv.URL)
+	server := mustServerBase(t, srv.URL)
 
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "work.json")
@@ -396,7 +385,7 @@ func TestSubmit_ServerError(t *testing.T) {
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Port:         port,
+		Server:       server,
 	})
 	if err == nil {
 		t.Fatal("expected error for server error response")
@@ -418,23 +407,14 @@ func TestSubmit_FactoryNotRunning(t *testing.T) {
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Port:         19999,
+		Server:       "http://127.0.0.1:19999",
 	})
 	if err == nil {
 		t.Fatal("expected error when factory is not running")
 	}
 }
 
-func mustServerPort(t *testing.T, rawURL string) int {
+func mustServerBase(t *testing.T, rawURL string) string {
 	t.Helper()
-
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		t.Fatalf("parse server url %q: %v", rawURL, err)
-	}
-	port, err := strconv.Atoi(parsed.Port())
-	if err != nil {
-		t.Fatalf("parse server port from %q: %v", rawURL, err)
-	}
-	return port
+	return strings.TrimSuffix(rawURL, "/")
 }

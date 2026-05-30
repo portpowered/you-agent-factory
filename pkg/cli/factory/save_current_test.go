@@ -19,7 +19,7 @@ func TestSaveCurrent_WritesHumanReadableConfirmation(t *testing.T) {
 	defer srv.Close()
 
 	var out strings.Builder
-	if err := SaveCurrent(SaveCurrentConfig{Port: serverPort(t, srv), Output: &out}); err != nil {
+	if err := SaveCurrent(SaveCurrentConfig{Server: serverBase(t, srv), Output: &out}); err != nil {
 		t.Fatalf("SaveCurrent: %v", err)
 	}
 
@@ -38,7 +38,7 @@ func TestSaveCurrent_JSONEmitsSavedFactoryPayload(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	if err := SaveCurrent(SaveCurrentConfig{Port: serverPort(t, srv), JSON: true, Output: &out}); err != nil {
+	if err := SaveCurrent(SaveCurrentConfig{Server: serverBase(t, srv), JSON: true, Output: &out}); err != nil {
 		t.Fatalf("SaveCurrent: %v", err)
 	}
 	if bytes.Contains(out.Bytes(), []byte("Saved factory")) {
@@ -85,7 +85,7 @@ func TestSaveCurrent_PutSendsCurrentFactoryIncludingVersion(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := SaveCurrent(SaveCurrentConfig{Port: serverPort(t, srv), Output: ioDiscard(t)}); err != nil {
+	if err := SaveCurrent(SaveCurrentConfig{Server: serverBase(t, srv), Output: ioDiscard(t)}); err != nil {
 		t.Fatalf("SaveCurrent: %v", err)
 	}
 	if putPayload.Name != "beta" {
@@ -115,7 +115,7 @@ func TestSaveCurrent_UsesSessionScopedPath(t *testing.T) {
 
 	var out strings.Builder
 	if err := SaveCurrent(SaveCurrentConfig{
-		Port:      serverPort(t, srv),
+		Server: serverBase(t, srv),
 		SessionID: "session-beta",
 		Output:    &out,
 	}); err != nil {
@@ -128,14 +128,14 @@ func TestSaveCurrent_UsesSessionScopedPath(t *testing.T) {
 
 func TestSaveCurrent_ReturnsReachableServerError(t *testing.T) {
 	var out bytes.Buffer
-	err := SaveCurrent(SaveCurrentConfig{Port: 1, Output: &out})
+	err := SaveCurrent(SaveCurrentConfig{Server: "http://127.0.0.1:1", Output: &out})
 	if err == nil {
 		t.Fatal("expected save against unreachable server to fail")
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout should stay empty on failure, got %q", out.String())
 	}
-	if !strings.Contains(err.Error(), "factory not reachable at http://localhost:1/factory-sessions/~default/factory") {
+	if !strings.Contains(err.Error(), "factory not reachable at http://127.0.0.1:1/factory-sessions/~default/factory") {
 		t.Fatalf("error = %q, want reachability context", err.Error())
 	}
 }
@@ -157,7 +157,7 @@ func TestSaveCurrent_ReturnsActionableCurrentFactoryNotFoundError(t *testing.T) 
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := SaveCurrent(SaveCurrentConfig{Port: serverPort(t, srv), JSON: true, Output: &out})
+	err := SaveCurrent(SaveCurrentConfig{Server: serverBase(t, srv), JSON: true, Output: &out})
 	if !errors.Is(err, ErrCurrentFactoryNotFound) {
 		t.Fatalf("SaveCurrent error = %v, want ErrCurrentFactoryNotFound", err)
 	}
@@ -190,7 +190,7 @@ func TestSaveCurrent_SurfacesPUTValidationError(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := SaveCurrent(SaveCurrentConfig{Port: serverPort(t, srv), Output: &out})
+	err := SaveCurrent(SaveCurrentConfig{Server: serverBase(t, srv), Output: &out})
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
@@ -226,7 +226,7 @@ func TestSaveCurrent_SurfacesPUTConflictError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := SaveCurrent(SaveCurrentConfig{Port: serverPort(t, srv), Output: ioDiscard(t)})
+	err := SaveCurrent(SaveCurrentConfig{Server: serverBase(t, srv), Output: ioDiscard(t)})
 	if err == nil {
 		t.Fatal("expected conflict error")
 	}
@@ -246,7 +246,7 @@ func TestSaveCurrent_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *te
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	if err := SaveCurrent(SaveCurrentConfig{
-		Port:        serverPort(t, srv),
+		Server: serverBase(t, srv),
 		JSON:        true,
 		Verbose:     true,
 		Output:      &out,

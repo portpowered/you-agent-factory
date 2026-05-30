@@ -11,7 +11,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 )
 
-func TestModelsListCommand_DefaultPortAndJSONFlagMapToConfig(t *testing.T) {
+func TestModelsListCommand_DefaultServerAndJSONFlagMapToConfig(t *testing.T) {
 	originalListModels := listModels
 	defer func() {
 		listModels = originalListModels
@@ -31,8 +31,8 @@ func TestModelsListCommand_DefaultPortAndJSONFlagMapToConfig(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute models list: %v", err)
 	}
-	if got.Port != 7437 {
-		t.Fatalf("port = %d, want 7437", got.Port)
+	if got.Server != "http://localhost:7437" {
+		t.Fatalf("server = %q, want http://localhost:7437", got.Server)
 	}
 	if !got.JSON {
 		t.Fatal("expected --json to map to ListConfig.JSON")
@@ -82,7 +82,7 @@ func TestModelsListCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr
 	}
 }
 
-func TestModelsInspectCommand_MapsModelArgumentAndPort(t *testing.T) {
+func TestModelsInspectCommand_MapsModelArgumentAndServer(t *testing.T) {
 	originalInspectModel := inspectModel
 	defer func() {
 		inspectModel = originalInspectModel
@@ -97,7 +97,7 @@ func TestModelsInspectCommand_MapsModelArgumentAndPort(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"models", "inspect", "OMNIVOICE_Q4_K_M", "--port", "9090"})
+	root.SetArgs([]string{"models", "inspect", "OMNIVOICE_Q4_K_M", "--server", "http://127.0.0.1:9090"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute models inspect: %v", err)
@@ -105,8 +105,8 @@ func TestModelsInspectCommand_MapsModelArgumentAndPort(t *testing.T) {
 	if got.ModelName != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("model name = %q, want OMNIVOICE_Q4_K_M", got.ModelName)
 	}
-	if got.Port != 9090 {
-		t.Fatalf("port = %d, want 9090", got.Port)
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
 	}
 }
 
@@ -125,12 +125,12 @@ func TestModelsInvokeCommand_MapsArgumentsAndFlags(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "hello", "--output", "speech.wav", "--port", "9090"})
+	root.SetArgs([]string{"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "hello", "--output", "speech.wav", "--server", "http://127.0.0.1:9090"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute models invoke: %v", err)
 	}
-	if got.ModelName != "OMNIVOICE_Q4_K_M" || got.Operation != "TTS" || got.Text != "hello" || got.OutputPath != "speech.wav" || got.Port != 9090 {
+	if got.ModelName != "OMNIVOICE_Q4_K_M" || got.Operation != "TTS" || got.Text != "hello" || got.OutputPath != "speech.wav" || got.Server != "http://127.0.0.1:9090" {
 		t.Fatalf("invoke config = %#v, want mapped invoke args and flags", got)
 	}
 }
@@ -150,12 +150,12 @@ func TestModelsPullCommand_MapsArgumentsAndFlags(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"models", "pull", "OMNIVOICE_Q4_K_M", "--port", "9090", "--json"})
+	root.SetArgs([]string{"models", "pull", "OMNIVOICE_Q4_K_M", "--server", "http://127.0.0.1:9090", "--json"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute models pull: %v", err)
 	}
-	if got.ModelName != "OMNIVOICE_Q4_K_M" || got.Port != 9090 || !got.JSON {
+	if got.ModelName != "OMNIVOICE_Q4_K_M" || got.Server != "http://127.0.0.1:9090" || !got.JSON {
 		t.Fatalf("pull config = %#v, want mapped pull args and flags", got)
 	}
 }

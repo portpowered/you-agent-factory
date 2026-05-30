@@ -91,3 +91,16 @@ func normalizeBasePath(path string) string {
 	}
 	return strings.TrimSuffix(path, "/")
 }
+
+// RequestURL resolves server into a base URI and joins path into a full request URL.
+func RequestURL(server, path string) (string, error) {
+	base, err := ResolveBase(server)
+	if err != nil {
+		return "", err
+	}
+	joined, err := base.JoinPath(path)
+	if err != nil {
+		return "", err
+	}
+	return joined.String(), nil
+}

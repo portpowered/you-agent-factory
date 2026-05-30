@@ -198,7 +198,6 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 		"--name", "request-name",
 		"--work-type-name", "tasks",
 		"--payload", "request.md",
-		"--port", "7437",
 	})
 
 	if err := root.Execute(); err != nil {
@@ -214,12 +213,31 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 	if got.Payload != "request.md" {
 		t.Fatalf("payload = %q, want request.md", got.Payload)
 	}
-	if got.Port != 7437 {
-		t.Fatalf("port = %d, want 7437", got.Port)
+	if got.Server != "http://localhost:7437" {
+		t.Fatalf("server = %q, want http://localhost:7437", got.Server)
 	}
 }
 
-func TestSubmitCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
+func TestSubmitCommand_PortFlagRejected(t *testing.T) {
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"submit",
+		"--name", "request-name",
+		"--work-type-name", "tasks",
+		"--payload", "request.md",
+		"--port", "7437",
+	})
+
+	if execErr := root.Execute(); execErr == nil {
+		t.Fatal("expected --port rejection")
+	} else if !strings.Contains(execErr.Error(), "--server") {
+		t.Fatalf("error = %v, want --server guidance", execErr)
+	}
+}
+
+func TestSubmitCommand_DefaultServerMapsToSharedLocalURI(t *testing.T) {
 	originalSubmitWork := submitWork
 	defer func() {
 		submitWork = originalSubmitWork
@@ -245,7 +263,7 @@ func TestSubmitCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
 		t.Fatalf("execute submit: %v", err)
 	}
 
-	if got.Port != 7437 {
-		t.Fatalf("port = %d, want 7437", got.Port)
+	if got.Server != "http://localhost:7437" {
+		t.Fatalf("server = %q, want http://localhost:7437", got.Server)
 	}
 }

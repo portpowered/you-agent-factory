@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,8 +47,8 @@ func TestQueryModel_NotFoundUsesFriendlyError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	port := server.Listener.Addr().(*net.TCPAddr).Port
-	_, err := QueryModel(port, "missing")
+	serverBase := strings.TrimSuffix(server.URL, "/")
+	_, err := QueryModel(serverBase, "missing")
 	if err == nil {
 		t.Fatal("expected not found error")
 	}
@@ -70,13 +69,13 @@ func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	port := server.Listener.Addr().(*net.TCPAddr).Port
+	serverBase := strings.TrimSuffix(server.URL, "/")
 	var out bytes.Buffer
 	if err := Invoke(InvokeConfig{
 		ModelName: "OMNIVOICE_Q4_K_M",
 		Operation: "TTS",
 		Text:      "hello world",
-		Port:      port,
+		Server:    serverBase,
 		JSON:      true,
 		Output:    &out,
 	}); err != nil {
@@ -98,13 +97,13 @@ func TestInvoke_AudioWritesOutputFile(t *testing.T) {
 	defer server.Close()
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
-	port := server.Listener.Addr().(*net.TCPAddr).Port
+	serverBase := strings.TrimSuffix(server.URL, "/")
 	if err := Invoke(InvokeConfig{
 		ModelName:  "OMNIVOICE_Q4_K_M",
 		Operation:  "TTS",
 		Text:       "hello world",
 		OutputPath: outputPath,
-		Port:       port,
+		Server:     serverBase,
 		Output:     io.Discard,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
@@ -130,11 +129,11 @@ func TestPull_JSONWritesPullMetadataResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	port := server.Listener.Addr().(*net.TCPAddr).Port
+	serverBase := strings.TrimSuffix(server.URL, "/")
 	var out bytes.Buffer
 	if err := Pull(PullConfig{
 		ModelName: "OMNIVOICE_Q4_K_M",
-		Port:      port,
+		Server:    serverBase,
 		JSON:      true,
 		Output:    &out,
 	}); err != nil {
@@ -161,7 +160,7 @@ func TestModelsList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *tes
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	if err := List(ListConfig{
-		Port:        server.Listener.Addr().(*net.TCPAddr).Port,
+		Server:      strings.TrimSuffix(server.URL, "/"),
 		JSON:        true,
 		Verbose:     true,
 		Output:      &out,
@@ -176,7 +175,7 @@ func TestModelsList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *tes
 	assertDiagnosticsContains(t, diagnostics.String(), []string{
 		"models list request",
 		"endpointPath=/models",
-		"port=",
+		"server=",
 		"models list response",
 		"status=200",
 		"resultCount=1",
@@ -203,15 +202,15 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 	}))
 	defer server.Close()
 
-	port := server.Listener.Addr().(*net.TCPAddr).Port
+	serverBase := strings.TrimSuffix(server.URL, "/")
 	var diagnostics bytes.Buffer
-	if err := Inspect(InspectConfig{ModelName: "OMNIVOICE_Q4_K_M", Port: port, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+	if err := Inspect(InspectConfig{ModelName: "OMNIVOICE_Q4_K_M", Server: serverBase, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
 		t.Fatalf("Inspect: %v", err)
 	}
-	if err := Invoke(InvokeConfig{ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS", Text: "secret direct input", Port: port, JSON: true, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+	if err := Invoke(InvokeConfig{ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS", Text: "secret direct input", Server: serverBase, JSON: true, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if err := Pull(PullConfig{ModelName: "OMNIVOICE_Q4_K_M", Port: port, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+	if err := Pull(PullConfig{ModelName: "OMNIVOICE_Q4_K_M", Server: serverBase, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
 
@@ -247,7 +246,7 @@ func TestModelsVerboseFailureUsesBoundedNonJSONErrorPreview(t *testing.T) {
 
 	var diagnostics bytes.Buffer
 	_, err := queryModel(queryOptions{
-		Port:        server.Listener.Addr().(*net.TCPAddr).Port,
+		Server:      strings.TrimSuffix(server.URL, "/"),
 		ModelName:   "broken",
 		Verbose:     true,
 		Diagnostics: &diagnostics,
@@ -284,7 +283,7 @@ func TestModelsVerboseLogsFailureStatus(t *testing.T) {
 
 	var diagnostics bytes.Buffer
 	_, err := queryModel(queryOptions{
-		Port:        server.Listener.Addr().(*net.TCPAddr).Port,
+		Server:      strings.TrimSuffix(server.URL, "/"),
 		ModelName:   "missing",
 		Verbose:     true,
 		Diagnostics: &diagnostics,

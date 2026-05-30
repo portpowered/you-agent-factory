@@ -13,6 +13,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
@@ -21,7 +22,7 @@ type SubmitConfig struct {
 	Name         string
 	WorkTypeName string
 	Payload      string
-	Port         int
+	Server       string
 	SessionID    string
 	Verbose      bool
 	Debug        bool
@@ -77,14 +78,17 @@ func Submit(cfg SubmitConfig) error {
 
 	// POST to running factory.
 	endpointPath := sessionpath.ScopedPath("/work", cfg.SessionID)
-	url := fmt.Sprintf("http://localhost:%d%s", cfg.Port, endpointPath)
+	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
+	if err != nil {
+		return err
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"submit request endpointPath=%s endpoint=%s port=%d session=%s payloadPath=%s payloadType=%s payloadBytes=%d requestName=%q workTypeName=%q requestBytes=%d",
+		"submit request endpointPath=%s endpoint=%s server=%s session=%s payloadPath=%s payloadType=%s payloadBytes=%d requestName=%q workTypeName=%q requestBytes=%d",
 		endpointPath,
-		url,
-		cfg.Port,
+		endpointURL,
+		cfg.Server,
 		clidiag.SessionLabel(cfg.SessionID),
 		cfg.Payload,
 		payloadType,
@@ -94,10 +98,10 @@ func Submit(cfg SubmitConfig) error {
 		len(body),
 	)
 	started := time.Now()
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := http.Post(endpointURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s error=unreachable durationMillis=%d", endpointPath, time.Since(started).Milliseconds())
-		return fmt.Errorf("factory not reachable at %s: %w", url, err)
+		return fmt.Errorf("factory not reachable at %s: %w", endpointURL, err)
 	}
 	defer resp.Body.Close()
 

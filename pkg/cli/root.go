@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
@@ -55,7 +56,12 @@ const (
 const cliBinaryName = "you"
 
 // NewRootCommand creates the top-level Cobra command for the you-agent-factory CLI.
+type cliGlobalOptions struct {
+	server string
+}
+
 func NewRootCommand() *cobra.Command {
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
 	diagnostics := &cliDiagnosticsOptions{}
 	root := &cobra.Command{
 		Use:          cliBinaryName,
@@ -86,17 +92,18 @@ func NewRootCommand() *cobra.Command {
 	}
 	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
 	root.PersistentFlags().BoolVarP(&diagnostics.debug, "debug", "d", false, "emit lower-level command diagnostics where supported (implies --verbose)")
+	root.PersistentFlags().StringVar(&globals.server, "server", cliserver.DefaultBaseURI, "factory API base URI for HTTP client commands (http:// or https://)")
 
 	root.AddCommand(
 		newConfigCommand(diagnostics),
 		newDocsCommand(diagnostics),
-		newFactoryCommand(diagnostics),
+		newFactoryCommand(globals, diagnostics),
 		newInitCommand(diagnostics),
-		newModelsCommand(diagnostics),
+		newModelsCommand(globals, diagnostics),
 		newRunCommand(diagnostics),
-		newSubmitCommand(diagnostics),
+		newSubmitCommand(globals, diagnostics),
 		newSessionCommand(diagnostics),
-		newWorkCommand(diagnostics),
+		newWorkCommand(globals, diagnostics),
 	)
 
 	return root
@@ -105,6 +112,21 @@ func NewRootCommand() *cobra.Command {
 type cliDiagnosticsOptions struct {
 	verbose bool
 	debug   bool
+}
+
+const deprecatedPortFlagMessage = "--port is no longer supported; use --server instead (for example, --server http://localhost:7437)"
+
+func rejectDeprecatedPortFlag(cmd *cobra.Command, _ []string) error {
+	if cmd.Flags().Lookup("port") != nil && cmd.Flags().Changed("port") {
+		return fmt.Errorf("%s", deprecatedPortFlagMessage)
+	}
+	return nil
+}
+
+func registerDeprecatedPortFlag(cmd *cobra.Command) {
+	var deprecatedPort int
+	cmd.Flags().IntVar(&deprecatedPort, "port", 0, "deprecated; use --server")
+	_ = cmd.Flags().MarkHidden("port")
 }
 
 func (opts *cliDiagnosticsOptions) verboseEnabled() bool {
@@ -118,7 +140,7 @@ func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
 	return cmd.ErrOrStderr()
 }
 
-func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	factoryCmd := &cobra.Command{
 		Use:   "factory",
 		Short: "Inspect and manage factory definitions",
@@ -146,9 +168,9 @@ func newFactoryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"  " + cliBinaryName + " factory save",
 	}
 	factoryCmd.AddCommand(
-		newFactoryQueryCommand(diagnostics),
+		newFactoryQueryCommand(globals, diagnostics),
 		newFactoryListCommand(diagnostics),
-		newFactorySaveCommand(diagnostics),
+		newFactorySaveCommand(globals, diagnostics),
 		newFactoryUpdateFromFileCommand(diagnostics),
 		newFactoryDeleteCommand(diagnostics),
 	)
@@ -212,9 +234,9 @@ func newFactoryUpdateFromFileCommand(_ *cliDiagnosticsOptions) *cobra.Command {
 	return cmd
 }
 
-func newFactorySaveCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newFactorySaveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	fileCfg := factorycli.SaveFromFileConfig{Dir: defaultcmd.FactoryDir}
-	liveCfg := factorycli.SaveCurrentConfig{Port: defaultcmd.FactoryPort}
+	liveCfg := factorycli.SaveCurrentConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
 		Use:   "save [name]",
@@ -233,8 +255,10 @@ func newFactorySaveCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"  " + cliBinaryName + " factory save --session session-beta --json",
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
+		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
+				liveCfg.Server = globals.server
 				liveCfg.Output = cmd.OutOrStdout()
 				liveCfg.Diagnostics = diagnostics.writer(cmd)
 				liveCfg.Verbose = diagnostics.verboseEnabled()
@@ -250,7 +274,7 @@ func newFactorySaveCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cmd.Flags().StringVar(&fileCfg.From, "from", "", "path to an existing factory.json payload (required with <name>)")
 	cmd.Flags().StringVar(&fileCfg.Dir, "dir", fileCfg.Dir, "factory root directory containing named factories")
 	cmd.Flags().BoolVar(&fileCfg.SetCurrent, "set-current", false, "update .current-factory to the saved name")
-	cmd.Flags().IntVar(&liveCfg.Port, "port", liveCfg.Port, "HTTP server port for live save")
+	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().StringVar(&liveCfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	cmd.Flags().BoolVar(&fileCfg.JSON, "json", false, "emit structured confirmation JSON")
 	return cmd
@@ -282,8 +306,8 @@ func newFactoryListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	return cmd
 }
 
-func newFactoryQueryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := factorycli.QueryConfig{Port: defaultcmd.FactoryPort}
+func newFactoryQueryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.QueryConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
 		Use:   "query",
@@ -300,7 +324,9 @@ func newFactoryQueryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"  # Query a different service port when your runtime is not on the default port.\n" +
 			"  " + cliBinaryName + " factory query --port 9090 --json",
 		SilenceUsage: true,
+		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -309,7 +335,7 @@ func newFactoryQueryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API current-factory JSON response")
 	return cmd
 }
@@ -428,16 +454,16 @@ func newSessionDeleteCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command 
 	return cmd
 }
 
-func newWorkCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	workCmd := &cobra.Command{
 		Use:   "work",
 		Short: "Inspect work from a running factory",
 	}
-	workCmd.AddCommand(newWorkListCommand(diagnostics))
+	workCmd.AddCommand(newWorkListCommand(globals, diagnostics))
 	return workCmd
 }
 
-func newModelsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	modelsCmd := &cobra.Command{
 		Use:   "models",
 		Short: "Inspect discovered models from a running service",
@@ -446,16 +472,23 @@ func newModelsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"invoke to call a discovered model directly through the same /models contract exposed by the API, " +
 			"and pull to populate the managed local-model cache for supported local assets.",
 	}
-	modelsCmd.AddCommand(newModelsListCommand(diagnostics), newModelsInspectCommand(diagnostics), newModelsInvokeCommand(diagnostics), newModelsPullCommand(diagnostics))
+	modelsCmd.AddCommand(
+		newModelsListCommand(globals, diagnostics),
+		newModelsInspectCommand(globals, diagnostics),
+		newModelsInvokeCommand(globals, diagnostics),
+		newModelsPullCommand(globals, diagnostics),
+	)
 	return modelsCmd
 }
 
-func newModelsListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := modelscli.ListConfig{Port: defaultcmd.FactoryPort}
+func newModelsListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := modelscli.ListConfig{Server: globals.server}
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List discovered models",
+		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -463,18 +496,20 @@ func newModelsListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			return listModels(cfg)
 		},
 	}
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API list-models JSON response")
 	return cmd
 }
 
-func newModelsInspectCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := modelscli.InspectConfig{Port: defaultcmd.FactoryPort}
+func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := modelscli.InspectConfig{Server: globals.server}
 	cmd := &cobra.Command{
 		Use:   "inspect <model-name>",
 		Short: "Inspect one discovered model",
 		Args:  cobra.ExactArgs(1),
+		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
 			cfg.ModelName = args[0]
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
@@ -483,18 +518,20 @@ func newModelsInspectCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command 
 			return inspectModel(cfg)
 		},
 	}
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API model-detail JSON response")
 	return cmd
 }
 
-func newModelsInvokeCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := modelscli.InvokeConfig{Port: defaultcmd.FactoryPort, Operation: "TTS"}
+func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
 	cmd := &cobra.Command{
 		Use:   "invoke <model-name>",
 		Short: "Invoke one discovered model",
 		Args:  cobra.ExactArgs(1),
+		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
 			cfg.ModelName = args[0]
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
@@ -503,7 +540,7 @@ func newModelsInvokeCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			return invokeModel(cfg)
 		},
 	}
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().StringVar(&cfg.Operation, "operation", cfg.Operation, "uppercase provider-agnostic operation name")
 	cmd.Flags().StringVar(&cfg.Text, "text", "", "text input for direct invocation")
 	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "output file path for streamed audio responses")
@@ -511,13 +548,15 @@ func newModelsInvokeCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	return cmd
 }
 
-func newModelsPullCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := modelscli.PullConfig{Port: defaultcmd.FactoryPort}
+func newModelsPullCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := modelscli.PullConfig{Server: globals.server}
 	cmd := &cobra.Command{
 		Use:   "pull <model-name>",
 		Short: "Pull one discovered local model into the managed cache",
 		Args:  cobra.ExactArgs(1),
+		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
 			cfg.ModelName = args[0]
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
@@ -526,13 +565,13 @@ func newModelsPullCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			return pullModel(cfg)
 		},
 	}
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API model-pull JSON response")
 	return cmd
 }
 
-func newWorkListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := workcli.ListConfig{Port: defaultcmd.FactoryPort}
+func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := workcli.ListConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -541,7 +580,9 @@ func newWorkListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"By default the command targets the default compatibility session. " +
 			"Use --session to route the request to one specific live factory session instead. " +
 			"Run " + cliBinaryName + " session list to discover live session ids.",
+		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -550,7 +591,7 @@ func newWorkListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().StringVar(&cfg.StateName, "state-name", "", "filter by current state name")
 	cmd.Flags().StringVar(&cfg.StateType, "state-type", "", "filter by current state type (INITIAL, PROCESSING, TERMINAL, FAILED)")
 	cmd.Flags().StringVar(&cfg.SortBy, "sort-by", "", "sort returned work by field (state.type)")
@@ -865,8 +906,8 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	return nil
 }
 
-func newSubmitCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := submitcli.SubmitConfig{Port: defaultcmd.FactoryPort}
+func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := submitcli.SubmitConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
 		Use:   "submit",
@@ -874,7 +915,9 @@ func newSubmitCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		Long: "Submit work to a running you-agent-factory service.\n\n" +
 			"By default the command submits to the default compatibility session. " +
 			"Use --session to submit to one specific live factory session instead.",
+		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
@@ -882,10 +925,10 @@ func newSubmitCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		},
 	}
 
+	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().StringVar(&cfg.Name, "name", "", "authored request name for the submitted work (required)")
 	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
 	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	return cmd
 }
