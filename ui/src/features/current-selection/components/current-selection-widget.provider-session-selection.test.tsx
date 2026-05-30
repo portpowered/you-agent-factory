@@ -1,7 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
 import {
   buildDashboardInferenceAttemptFixture,
   buildDashboardWorkstationRequestFixture,
@@ -16,6 +14,11 @@ import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { DashboardSelection } from "../state/selection-types";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import {
+  createCurrentSelectionWidgetQueryClient,
+  renderWithQueryClient,
+  wrapCurrentSelectionWidgetView,
+} from "./current-selection-widget-test-utils";
 
 vi.mock("../../current-factory-definition/public", async () => {
   const actual = await vi.importActual("../../current-factory-definition/public");
@@ -440,24 +443,20 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       selection: { kind: "node", nodeId: selectedNode.node_id },
     });
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const renderCurrentSelection = (
       selectedProviderSessionKey: string | null,
-    ) => (
-      <QueryClientProvider client={queryClient}>
+    ) =>
+      wrapCurrentSelectionWidgetView(
+        queryClient,
         <CurrentSelectionWidget
           currentSelection={currentSelection}
           now={DETAIL_CARD_NOW}
           onSelectProviderSession={onSelectProviderSession}
           selectedProviderSessionKey={selectedProviderSessionKey}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>
-    );
+        />,
+      );
     const { rerender } = render(renderCurrentSelection(null));
 
     const currentSelectionCard = screen.getByRole("article", {
@@ -498,14 +497,3 @@ describe("CurrentSelectionWidget provider-session selection", () => {
   });
 });
 
-function renderWithQueryClient(view: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
-  );
-}

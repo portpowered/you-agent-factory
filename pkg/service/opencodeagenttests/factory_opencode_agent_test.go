@@ -2,7 +2,6 @@ package opencodeagenttests
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,12 +10,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
 )
 
 func TestBuildFactoryService_RejectsOpenCodeAgentOnNonOpenCodeRunner(t *testing.T) {
 	dir := t.TempDir()
-	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: gpt-5.4
@@ -40,9 +40,9 @@ You are a helpful assistant.
 
 func TestBuildFactoryService_AllowsOpenCodeAgentWithOpenCodeFactoryRunner(t *testing.T) {
 	dir := t.TempDir()
-	cfg := minimalFactoryConfig()
+	cfg := factoryfixtures.MinimalFactoryConfig()
 	cfg["runner"] = interfaces.RunnerIDOpenCode
-	writeFactoryJSON(t, dir, cfg)
+	factoryfixtures.WriteFactoryJSON(t, dir, cfg)
 	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: gpt-5.4
@@ -67,7 +67,7 @@ You are a helpful assistant.
 
 func TestBuildFactoryService_AllowsUnsetOpenCodeAgentOnNonOpenCodeRunner(t *testing.T) {
 	dir := t.TempDir()
-	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: gpt-5.4
@@ -85,41 +85,6 @@ You are a helpful assistant.
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService error = %v, want unchanged non-opencode runner behavior", err)
-	}
-}
-
-func minimalFactoryConfig() map[string]any {
-	return map[string]any{
-		"name": "factory",
-		"workTypes": []map[string]any{
-			{
-				"name": "task",
-				"states": []map[string]string{
-					{"name": "init", "type": "INITIAL"},
-					{"name": "complete", "type": "TERMINAL"},
-					{"name": "failed", "type": "FAILED"},
-				},
-			},
-		},
-		"workers": []map[string]string{{"name": "worker-a"}},
-		"workstations": []map[string]any{{
-			"name":      "process",
-			"worker":    "worker-a",
-			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
-		}},
-	}
-}
-
-func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
-	t.Helper()
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal factory.json: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
 	}
 }
 

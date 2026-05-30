@@ -1,5 +1,6 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: Storybook runtime coverage stays consolidated because these tests share the same decorator installation seam.
-import { waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DashboardSnapshot } from "../src/api/dashboard";
@@ -9,6 +10,7 @@ import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
 } from "../src/features/current-selection/base/public";
+import { useDashboardSession } from "../src/features/dashboard/session/dashboard-session-provider";
 import {
   resetDashboardSessionStore,
   useDashboardSessionStore,
@@ -16,6 +18,38 @@ import {
 import { useFactoryTimelineStore } from "../src/features/timeline/state/factoryTimelineStore";
 
 import { withDashboardStoryRuntime } from "./dashboard-story-runtime";
+
+function SessionScopeProbe() {
+  const { sessionID } = useDashboardSession();
+
+  return createElement(
+    "div",
+    { "data-testid": "story-session-id" },
+    sessionID,
+  );
+}
+
+function renderStoryRuntime(
+  parameters: Record<string, unknown> = {},
+  storyId = "dashboard-runtime-story",
+) {
+  const decoratedStory = withDashboardStoryRuntime(
+    () => createElement(SessionScopeProbe),
+    {
+    args: {},
+    globals: {},
+    hooks: {} as never,
+    id: storyId,
+    initialArgs: {},
+    name: storyId,
+    parameters,
+    title: "storybook/runtime",
+    viewMode: "story",
+    },
+  );
+
+  return render(decoratedStory);
+}
 
 describe("withDashboardStoryRuntime", () => {
   beforeEach(() => {
@@ -64,68 +98,48 @@ describe("withDashboardStoryRuntime", () => {
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
   });
 
-  it("applies sessionID from story parameters after resetting dashboard session state", () => {
+  it("applies sessionID from story parameters via DashboardSessionTestProvider", () => {
     useDashboardSessionStore.setState({
       pausedSessionIDs: ["session-beta"],
       selectedSessionID: "session-beta",
     });
 
-    withDashboardStoryRuntime(() => null, {
-      args: {},
-      globals: {},
-      hooks: {} as never,
-      id: "dashboard-runtime-session-id",
-      initialArgs: {},
-      name: "Dashboard runtime session id",
-      parameters: {
+    renderStoryRuntime(
+      {
         dashboardApi: {
           sessionID: "session-review",
         },
       },
-      title: "storybook/runtime",
-      viewMode: "story",
-    });
+      "dashboard-runtime-session-id",
+    );
 
     expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([]);
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      DEFAULT_FACTORY_SESSION_ID,
+    );
+    expect(screen.getByTestId("story-session-id").textContent).toBe(
       "session-review",
     );
   });
 
-  it("does not leak selected session across story installs", () => {
-    withDashboardStoryRuntime(() => null, {
-      args: {},
-      globals: {},
-      hooks: {} as never,
-      id: "dashboard-runtime-session-leak-a",
-      initialArgs: {},
-      name: "Dashboard runtime session leak A",
-      parameters: {
+  it("does not leak pinned session scope across story installs", () => {
+    const { unmount } = renderStoryRuntime(
+      {
         dashboardApi: {
           sessionID: "session-beta",
         },
       },
-      title: "storybook/runtime",
-      viewMode: "story",
-    });
+      "dashboard-runtime-session-leak-a",
+    );
 
-    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+    expect(screen.getByTestId("story-session-id").textContent).toBe(
       "session-beta",
     );
 
-    withDashboardStoryRuntime(() => null, {
-      args: {},
-      globals: {},
-      hooks: {} as never,
-      id: "dashboard-runtime-session-leak-b",
-      initialArgs: {},
-      name: "Dashboard runtime session leak B",
-      parameters: {},
-      title: "storybook/runtime",
-      viewMode: "story",
-    });
+    unmount();
+    renderStoryRuntime({}, "dashboard-runtime-session-leak-b");
 
-    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+    expect(screen.getByTestId("story-session-id").textContent).toBe(
       DEFAULT_FACTORY_SESSION_ID,
     );
   });

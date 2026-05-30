@@ -35,6 +35,11 @@ import {
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
 
+export {
+  renderWithDashboardSessionTest,
+  wrapWithDashboardSessionTest,
+} from "./dashboard-session-test-utils";
+
 vi.mock("../features/flowchart/lib/layout", async () => {
   const actual = await vi.importActual("../features/flowchart/lib/layout");
 

@@ -9,11 +9,9 @@ import type { FactoryGraphEditorTool } from "../../factory-graph-editor/componen
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/public";
-import {
-  type EditableFactoryGraphViewModel,
-  useEditableFactoryGraph,
-} from "../../factory-graph-editor/public";
+import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
+import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import { findClassifierGraphEditorUnsupportedWorkstationName } from "./factory-graph-editor-availability";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";

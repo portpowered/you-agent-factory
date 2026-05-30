@@ -6,10 +6,8 @@ import {
   getCurrentFactoryWorkstationPromptTemplateContract,
   type PromptTemplateContract,
 } from "../../../../api/current-factory-prompt-template";
-import {
-  resetDashboardSessionStore,
-  useDashboardSessionStore,
-} from "../../../dashboard/state/dashboardSessionStore";
+import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
+import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import {
   buildCurrentWorkstationPromptTemplateContractQueryKey,
   useCurrentWorkstationPromptTemplateContract,
@@ -41,7 +39,7 @@ const promptTemplateContract: PromptTemplateContract = {
 
 describe("useCurrentWorkstationPromptTemplateContract", () => {
   beforeEach(() => {
-    resetDashboardSessionStore();
+    useDashboardSessionStore.setState({ selectedSessionID: "~default" });
     vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockReset();
   });
 
@@ -174,7 +172,9 @@ function createQueryClientWrapper() {
     children: ReactNode;
   }): ReactNode {
     return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+      </QueryClientProvider>
     );
   };
 }

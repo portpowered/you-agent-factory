@@ -13,10 +13,7 @@ import {
   useFactoryTimelineStore,
   type WorldState,
 } from "../src/features/timeline/state/factoryTimelineStore";
-import {
-  DashboardSessionTestProvider,
-  seedDashboardSessionForTest,
-} from "../src/testing/dashboard-session-test-provider";
+import { DashboardSessionTestProvider } from "../src/testing/dashboard-session-test-provider";
 
 const DASHBOARD_STORYBOOK_BASE_PATH = "/dashboard/ui/";
 type FetchLike = (
@@ -281,9 +278,6 @@ function installDashboardApiMock(
 ): void {
   captureBrowserRuntime();
   resetDashboardStoryStores();
-  if (parameters?.sessionID !== undefined) {
-    seedDashboardSessionForTest(parameters.sessionID);
-  }
   const fetchMocks = parameters?.fetchMocks ?? [];
   installedEventSourceMocks = parameters?.eventSourceMocks ?? [];
   const hasTimelineData =

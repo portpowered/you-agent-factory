@@ -1,11 +1,12 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
-import type { ReactNode } from "react";
-
+import { screen, within } from "@testing-library/react";
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import {
+  createCurrentSelectionWidgetQueryClient,
+  renderWithExistingQueryClient,
+} from "./current-selection-widget-test-utils";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { DashboardSelection } from "../state/selection-types";
@@ -63,12 +64,7 @@ describe("CurrentSelectionWidget selection switching", () => {
   });
 
   it("replaces workstation configuration with the selected non-workstation detail view", () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
-      },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const dispatchId = snapshot.runtime.active_dispatch_ids?.[0] ?? "";
@@ -124,20 +120,18 @@ describe("CurrentSelectionWidget selection switching", () => {
     expect(screen.getByRole("heading", { name: "Configuration" })).toBeTruthy();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode,
-            selectedNodeProviderSessions: providerSessions ?? [],
-            selectedWorkDispatchAttempts: providerSessions ?? [],
-            selectedWorkProviderSessions: providerSessions ?? [],
-            selectedWorkRequestHistory,
-            selection,
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={executionDetails}
-        />
-      </QueryClientProvider>,
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selectedNodeProviderSessions: providerSessions ?? [],
+          selectedWorkDispatchAttempts: providerSessions ?? [],
+          selectedWorkProviderSessions: providerSessions ?? [],
+          selectedWorkRequestHistory,
+          selection,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={executionDetails}
+      />,
     );
 
     const currentSelection = screen.getByRole("article", {
@@ -253,13 +247,3 @@ function buildEditableFactoryDefinition(): CanonicalFactoryDefinition {
   };
 }
 
-function renderWithExistingQueryClient(
-  queryClient: QueryClient,
-  view: ReactNode,
-) {
-  return render(view, {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    ),
-  });
-}

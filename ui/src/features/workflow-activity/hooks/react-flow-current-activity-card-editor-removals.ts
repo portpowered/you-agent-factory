@@ -2,11 +2,11 @@ import { useCallback, useState } from "react";
 
 import type { useSaveCurrentFactory } from "../../current-factory-definition/public";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import {
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
-  type EditableFactoryGraphViewModel,
-} from "../../factory-graph-editor/public";
+} from "../../factory-graph-editor/lib/factory-graph-editor-removals";
 
 export function useFactoryGraphRemovalController({
   activeTool,

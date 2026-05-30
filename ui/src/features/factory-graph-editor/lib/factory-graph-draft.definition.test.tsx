@@ -1,12 +1,10 @@
 import { renderHook } from "@testing-library/react";
 
-import {
-  buildFactoryGraphTopologyFromDefinition,
-  buildPendingFactoryDefinition,
-  createEmptyFactoryGraphDraft,
-  useFactoryGraphDraftState,
-  validateFactoryGraphDraft,
-} from "../public";
+import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
+import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
+import { useFactoryGraphDraftState } from "../hooks/factory-graph-draft-hook";
 import {
   baseFactoryDefinition,
   currentFactoryDocument,

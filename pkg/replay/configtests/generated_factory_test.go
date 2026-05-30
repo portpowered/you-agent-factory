@@ -12,13 +12,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
 
 // portos:func-length-exception owner=agent-factory reason=generated-factory-serialization-fixture review=2026-07-18 removal=split-fixture-builder-before-next-factory-serialization-change
 // pkgmaintcheck:ignore-cyclomatic-complexity this generated-factory artifact test keeps split-definition embedding assertions together on the public contract seam.
 func TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory(t *testing.T) {
 	factoryDir := t.TempDir()
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "customer-project",
 		"id":   "customer-project",
 		"workTypes": []map[string]any{{
@@ -104,7 +105,7 @@ Fallback body.
 
 func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOnlyMaps(t *testing.T) {
 	factoryDir := t.TempDir()
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",

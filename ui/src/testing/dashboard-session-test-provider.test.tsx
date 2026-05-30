@@ -1,60 +1,54 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
-import {
-  resetDashboardSessionStore,
-  useDashboardSessionStore,
-} from "../features/dashboard/state/dashboardSessionStore";
-import {
-  DashboardSessionTestProvider,
-  seedDashboardSessionForTest,
-} from "./dashboard-session-test-provider";
+import { useDashboardSession } from "../features/dashboard/session/dashboard-session-provider";
+import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
 
-describe("dashboard-session-test-provider", () => {
-  it("defaults selected session to ~default", () => {
-    resetDashboardSessionStore();
-    useDashboardSessionStore.setState({
-      selectedSessionID: "session-beta",
-    });
+function SessionScopeProbe() {
+  const { eventsPath, factoryPath, isPaused, sessionID, workPath } =
+    useDashboardSession();
 
+  return (
+    <div data-testid="session-scope-probe">
+      {sessionID}|{factoryPath}|{workPath}|{eventsPath}|{String(isPaused)}
+    </div>
+  );
+}
+
+describe("DashboardSessionTestProvider", () => {
+  it("defaults to the ~default session scope", () => {
     render(
       <DashboardSessionTestProvider>
-        <span>child</span>
+        <SessionScopeProbe />
       </DashboardSessionTestProvider>,
     );
 
-    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
-      DEFAULT_FACTORY_SESSION_ID,
+    expect(screen.getByTestId("session-scope-probe").textContent).toBe(
+      "~default|/factory-sessions/~default/factory|/factory-sessions/~default/work|/factory-sessions/~default/events|false",
     );
-    expect(screen.getByText("child")).toBeTruthy();
   });
 
-  it("seeds a non-default sessionID override", () => {
-    resetDashboardSessionStore();
-
+  it("pins non-default session paths without dashboard session store selection", () => {
     render(
-      <DashboardSessionTestProvider sessionID="session-review">
-        <span>child</span>
+      <DashboardSessionTestProvider sessionID="session-beta">
+        <SessionScopeProbe />
       </DashboardSessionTestProvider>,
     );
 
-    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
-      "session-review",
+    expect(screen.getByTestId("session-scope-probe").textContent).toBe(
+      "session-beta|/factory-sessions/session-beta/factory|/factory-sessions/session-beta/work|/factory-sessions/session-beta/events|false",
     );
   });
 
-  it("seedDashboardSessionForTest aligns with session-routing defaults", () => {
-    resetDashboardSessionStore();
-    seedDashboardSessionForTest();
-
-    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
-      DEFAULT_FACTORY_SESSION_ID,
+  it("reflects paused overrides for the pinned session", () => {
+    render(
+      <DashboardSessionTestProvider paused sessionID="session-beta">
+        <SessionScopeProbe />
+      </DashboardSessionTestProvider>,
     );
 
-    seedDashboardSessionForTest("session-review");
-    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
-      "session-review",
+    expect(screen.getByTestId("session-scope-probe").textContent).toContain(
+      "|true",
     );
   });
 });
