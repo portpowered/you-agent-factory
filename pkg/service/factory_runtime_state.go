@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -828,14 +828,7 @@ func warnPortableBundledReplacementReport(
 	message string,
 	replacements []factoryconfig.PortableBundledFileReplacement,
 ) {
-	if logger == nil || len(replacements) == 0 {
-		return
-	}
-	targets := make([]string, 0, len(replacements))
-	for _, replacement := range replacements {
-		targets = append(targets, replacement.TargetPath)
-	}
-	logger.Warn(message, zap.Strings("target_paths", targets))
+	runtimebuild.WarnPortableBundledReplacementReport(logger, message, replacements)
 }
 
 func runtimeWorkflowContext(cfg *interfaces.FactoryConfig) *factory_context.FactoryContext {
@@ -898,29 +891,11 @@ func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntime
 }
 
 func newSessionLogger(base *zap.Logger, sessionID string, folderPath string, factoryDir string) *zap.Logger {
-	if base == nil {
-		base = zap.NewNop()
-	}
-	return base.With(
-		zap.String("session_id", sessionID),
-		zap.String("folder_path", folderPath),
-		zap.String("factory_dir", factoryDir),
-	)
+	return runtimebuild.NewSessionLogger(base, sessionID, folderPath, factoryDir)
 }
 
 func sessionScopedRecordPath(basePath string, sessionID string) string {
-	if strings.TrimSpace(basePath) == "" {
-		return basePath
-	}
-	if strings.Contains(basePath, "__factory_session_id__") {
-		return strings.ReplaceAll(basePath, "__factory_session_id__", sessionID)
-	}
-	if sessionID == defaultFactorySessionID {
-		return basePath
-	}
-	ext := filepath.Ext(basePath)
-	base := strings.TrimSuffix(basePath, ext)
-	return base + "." + sessionID + ext
+	return runtimebuild.SessionScopedRecordPath(basePath, sessionID)
 }
 
 func (r *factoryRuntimeBundle) runtimeLogger() *zap.Logger {
