@@ -2,6 +2,7 @@ import {
   factoryRuntimeNotIdleTarget,
   staleFactoryVersionTarget,
 } from "../../testing/factory-validation-target-fixtures";
+import { sessionFactoryOperatorErrorMessages } from "../session-factory/operator-errors";
 import {
   CURRENT_FACTORY_EDITOR_SAVE_MODE,
   CurrentFactoryDefinitionError,
@@ -282,7 +283,7 @@ describe("getCurrentFactoryDefinition", () => {
       }),
     ).rejects.toMatchObject({
       code: "INVALID_FACTORY_DEFINITION",
-      message: "The editable definition payload is invalid.",
+      message: sessionFactoryOperatorErrorMessages.INVALID_FACTORY,
       name: "CurrentFactoryDefinitionError",
       responseBody: {
         code: "INVALID_FACTORY",
