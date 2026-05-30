@@ -317,6 +317,9 @@ jobs:
           artifact_root=".artifacts/ui-coverage-shard-${{ matrix.shard }}"
           mkdir -p "$artifact_root"
           make ui-test-coverage 2>&1 | tee "$artifact_root/command.log"
+          exit_code=$?
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          exit "$exit_code"
 
       - name: Report shard execution
         if: always()
@@ -338,7 +341,10 @@ jobs:
             echo "### Execution result"
             echo
             echo "- Verified: main covered Vitest shard \`${{ matrix.shard }}/${{ matrix.shard-total }}\` through \`UI_COVERAGE_SHARD=${{ matrix.shard }}/${{ matrix.shard-total }} make ui-test-coverage\`."
+            echo "- Shard: \`${{ matrix.shard }}/${{ matrix.shard-total }}\`"
+            echo "- Exit code: \`${{ steps.run_ui_coverage_shard.outputs.exit_code }}\`"
             echo "- Result: \`failed\`"
+            echo "- Retained artifact: \`ui-coverage-shard-${{ matrix.shard }}\` for 14 days"
             echo "- Primary log: \`$artifact_root/command.log\`"
             echo
             echo "#### Failing log tail"
@@ -357,6 +363,17 @@ jobs:
             ui/.vitest-reports/
             .artifacts/ui-coverage-shard-${{ matrix.shard }}/
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload UI coverage shard failure artifacts
+        if: steps.run_ui_coverage_shard.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage-shard-${{ matrix.shard }}
+          path: |
+            .artifacts/ui-coverage-shard-${{ matrix.shard }}/
+            ui/.vitest-reports/
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Fail for UI coverage shard errors
