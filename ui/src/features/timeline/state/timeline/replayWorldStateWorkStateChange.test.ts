@@ -151,4 +151,66 @@ describe("applyWorkStateChange", () => {
     expect(state.occupancyByID["task:init"]?.workItemIDs ?? []).toEqual([]);
     expect(state.occupancyByID["task:review"]?.workItemIDs).toEqual(["work-orphan"]);
   });
+
+  it("creates work item and fills work_type_id when absent from workItemsByID", () => {
+    const state = replayStateWithWork("work-new", "task:init", "PROCESSING");
+    delete state.workItemsByID["work-new"];
+    state.topology.places = [
+      { category: "PROCESSING", id: "task:init", name: "task:init" },
+      { category: "PROCESSING", id: "task:review", name: "task:review" },
+    ];
+    applyWorkStateChange(state, workStateChangeEvent({
+      fromPlaceId: "task:init",
+      fromState: "init",
+      source: "cli",
+      toPlaceId: "task:review",
+      toState: "review",
+      workId: "work-new",
+      workTypeName: "task",
+    }));
+    expect(state.workItemsByID["work-new"]).toEqual({
+      id: "work-new",
+      place_id: "task:review",
+      work_type_id: "task",
+    });
+    expect(state.occupancyByID["task:review"]?.workItemIDs).toEqual(["work-new"]);
+  });
+
+  it("fills empty work_type_id from payload workTypeName", () => {
+    const state = replayStateWithWork("work-type-fill", "task:init", "PROCESSING");
+    state.workItemsByID["work-type-fill"] = {
+      id: "work-type-fill",
+      place_id: "task:init",
+      work_type_id: "",
+    };
+    state.topology.places = [
+      { category: "PROCESSING", id: "task:init", name: "task:init" },
+      { category: "PROCESSING", id: "task:review", name: "task:review" },
+    ];
+    applyWorkStateChange(state, workStateChangeEvent({
+      fromPlaceId: "task:init",
+      fromState: "init",
+      source: "api",
+      toPlaceId: "task:review",
+      toState: "review",
+      workId: "work-type-fill",
+      workTypeName: "task",
+    }));
+    expect(state.workItemsByID["work-type-fill"]?.work_type_id).toBe("task");
+  });
+
+  it("skips removeWorkTokenFromPlace when fromPlaceId equals toPlaceId", () => {
+    const state = replayStateWithWork("work-same-place", "task:init", "PROCESSING");
+    applyWorkStateChange(state, workStateChangeEvent({
+      fromPlaceId: "task:init",
+      fromState: "init",
+      source: "cli",
+      toPlaceId: "task:init",
+      toState: "init",
+      workId: "work-same-place",
+      workTypeName: "task",
+    }));
+    expect(state.occupancyByID["task:init"]?.workItemIDs).toEqual(["work-same-place"]);
+    expect(state.workItemsByID["work-same-place"]?.place_id).toBe("task:init");
+  });
 });

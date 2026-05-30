@@ -2374,6 +2374,16 @@ func TestFactoryService_SaveFactoryForSession_UpsertCreateAllowsOmittedVersion(t
 	})
 	defer harness.stop(t)
 
+	// CI runners can be slower to reach idle than the default 1s harness wait.
+	waitForSessionRuntimeStatus(
+		t,
+		harness.svc,
+		defaultFactorySessionID,
+		interfaces.RuntimeStatusIdle,
+		5*time.Second,
+		"upsert create readiness",
+	)
+
 	created, err := harness.svc.SaveFactoryForSession(
 		context.Background(),
 		defaultFactorySessionID,
