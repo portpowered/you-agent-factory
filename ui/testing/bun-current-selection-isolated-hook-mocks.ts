@@ -7,9 +7,9 @@ import { mock } from "bun:test";
 import "./bun-current-factory-definition-public-mocks";
 
 const PROMPT_TEMPLATE_CONTRACT_HOOK_MODULE =
-  "../src/features/current-selection/hooks/useCurrentWorkstationPromptTemplateContract";
+  "../src/features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateContract";
 const PROMPT_TEMPLATE_VALIDATION_HOOK_MODULE =
-  "../src/features/current-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
+  "../src/features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 const promptTemplateContractHookActual = await import(
   PROMPT_TEMPLATE_CONTRACT_HOOK_MODULE,
 );

@@ -357,7 +357,8 @@ function renderWithQueryClient(view: ReactElement) {
 function createEditableGraphTestViewModel(
   options: Parameters<typeof useEditableFactoryGraph>[0],
 ): ReturnType<typeof useEditableFactoryGraph> {
-  const draftState = useFactoryGraphDraftStateMock();
+  const readFactoryGraphDraftState = useFactoryGraphDraftStateMock;
+  const draftState = readFactoryGraphDraftState();
   const baseFactoryDefinition =
     draftState.latestDocument ?? draftState.baseDocument ?? null;
   const activeWorkCount = options.activeWorkCount ?? 0;

@@ -188,7 +188,7 @@ export function buildMainCoveredVitestArgs(options = {}) {
   return args;
 }
 
-export function buildMainCoveredShardPhase(shard, options = {}) {
+export function buildMainCoveredShardPhase(shard, _options = {}) {
   return {
     kind: mainCoveredPassKind,
     name: `${mainCoveredPhaseName} (shard ${shard.label})`,
@@ -198,9 +198,6 @@ export function buildMainCoveredShardPhase(shard, options = {}) {
 }
 
 export function buildUiCoveragePhases(options = {}) {
-  const mainCoveredMaxWorkers =
-    options.mainCoveredMaxWorkers ?? getMainCoveredMaxWorkers(options.env);
-
   return [
     {
       kind: mainCoveredPassKind,

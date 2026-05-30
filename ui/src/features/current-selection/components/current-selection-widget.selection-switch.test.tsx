@@ -1,8 +1,6 @@
 import "../../../../testing/bun-current-selection-widget-chrome-mocks";
-import { beforeEach, describe, expect, it } from "bun:test";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { screen, within } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
@@ -24,44 +22,45 @@ import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
-describe("CurrentSelectionWidget selection switching", () => {
-  beforeEach(() => {
-    resetSelectionHistoryStore();
-    useCurrentWorkstationPromptTemplateContractMock.mockReturnValue({
-      data: {
-        availableVariables: [],
-        inputCount: 0,
-        unavailableAccessPatterns: [],
-      },
-      error: null,
-      isError: false,
-      isPending: false,
-      isSuccess: true,
-      status: "success",
-    } as never);
-    useCurrentWorkstationPromptTemplateValidationMock.mockReturnValue({
-      data: {
-        diagnostics: [],
-        valid: true,
-      },
-      error: null,
-      isError: false,
-      isPending: false,
-      isSuccess: true,
-      status: "success",
-    } as never);
-    useCurrentFactoryDefinitionMock.mockReturnValue(
-      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
-    );
-    useSaveEditableWorkstationConfigurationMock.mockReturnValue({
-      beginSaveConfirmation: vi.fn(),
-      canSave: false,
-      cancelSaveConfirmation: vi.fn(),
-      confirmSave: vi.fn(),
-      saveState: { status: "idle" },
-    });
+function resetSelectionSwitchWidgetMocks(): void {
+  resetSelectionHistoryStore();
+  useCurrentWorkstationPromptTemplateContractMock.mockReturnValue({
+    data: {
+      availableVariables: [],
+      inputCount: 0,
+      unavailableAccessPatterns: [],
+    },
+    error: null,
+    isError: false,
+    isPending: false,
+    isSuccess: true,
+    status: "success",
+  } as never);
+  useCurrentWorkstationPromptTemplateValidationMock.mockReturnValue({
+    data: {
+      diagnostics: [],
+      valid: true,
+    },
+    error: null,
+    isError: false,
+    isPending: false,
+    isSuccess: true,
+    status: "success",
+  } as never);
+  useCurrentFactoryDefinitionMock.mockReturnValue(
+    buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+  );
+  useSaveEditableWorkstationConfigurationMock.mockReturnValue({
+    beginSaveConfirmation: vi.fn(),
+    canSave: false,
+    cancelSaveConfirmation: vi.fn(),
+    confirmSave: vi.fn(),
+    saveState: { status: "idle" },
   });
+}
 
+describe("CurrentSelectionWidget selection switching", () => {
+  beforeEach(resetSelectionSwitchWidgetMocks);
   afterEach(() => {
     resetSelectionHistoryStore();
   });

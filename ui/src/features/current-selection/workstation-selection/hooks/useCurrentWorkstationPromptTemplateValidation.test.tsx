@@ -21,12 +21,7 @@ const promptTemplateValidationResult: PromptTemplateValidationResult = {
   valid: true,
 };
 
-describe("useCurrentWorkstationPromptTemplateValidation", () => {
-  beforeEach(() => {
-    resetDashboardSessionStore();
-    validateCurrentFactoryWorkstationPromptTemplateMock.mockReset();
-  });
-
+describe("useCurrentWorkstationPromptTemplateValidation query key", () => {
   it("builds a stable query key for one prompt draft", () => {
     expect(
       buildCurrentWorkstationPromptTemplateValidationQueryKey(
@@ -40,6 +35,13 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       "Review",
       "Use {{ .Prompt }}",
     ]);
+  });
+});
+
+describe("useCurrentWorkstationPromptTemplateValidation", () => {
+  beforeEach(() => {
+    resetDashboardSessionStore();
+    validateCurrentFactoryWorkstationPromptTemplateMock.mockReset();
   });
 
   it("does not fetch validation while the draft is blank", () => {

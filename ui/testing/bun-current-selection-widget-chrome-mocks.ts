@@ -16,7 +16,7 @@ export {
 };
 
 const SAVE_EDITABLE_WORKSTATION_CONFIGURATION_HOOK_MODULE =
-  "../src/features/current-selection/hooks/use-save-editable-workstation-configuration";
+  "../src/features/current-selection/workstation-selection/hooks/use-save-editable-workstation-configuration";
 
 const saveEditableWorkstationConfigurationHookActual = await import(
   SAVE_EDITABLE_WORKSTATION_CONFIGURATION_HOOK_MODULE,

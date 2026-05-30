@@ -10,10 +10,6 @@ import type {
 import type { FactoryEvent } from "../api/events";
 import type { FactorySessionSummary } from "../api/factory-sessions/api";
 import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
-import {
-  buildDashboardSnapshotFixture,
-  mediumBranchingDashboardTopology,
-} from "../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
@@ -26,13 +22,31 @@ import {
   useDashboardStreamStore,
 } from "../features/dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
-import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
 import {
   useFactoryTimelineStore,
   type WorldState,
 } from "../features/timeline/state/factoryTimelineStore";
 import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
+import {
+  createFactoryImportValue,
+  createFileDropTransfer,
+  jsonResponse,
+  nonPromptTemplateFetchPaths,
+  type FetchMock,
+} from "../../testing/app-shell-test-http-utils";
 
+export {
+  activeSnapshot,
+  baselineSnapshot,
+  importedFactorySnapshot,
+  terminalSnapshot,
+} from "./app-shell-test-snapshots";
+export {
+  createFactoryImportValue,
+  createFileDropTransfer,
+  jsonResponse,
+  nonPromptTemplateFetchPaths,
+};
 export {
   renderWithDashboardSessionTest,
   wrapWithDashboardSessionTest,
@@ -75,7 +89,11 @@ function restoreGlobalStubs(): void {
     | undefined;
 
   while (globalStubStack.length > 0) {
-    const { key, previous, previousWindow } = globalStubStack.pop()!;
+    const entry = globalStubStack.pop();
+    if (!entry) {
+      break;
+    }
+    const { key, previous, previousWindow } = entry;
     globalTarget[key as string] = previous;
     if (windowRef) {
       windowRef[key as string] = previousWindow;
@@ -134,10 +152,6 @@ interface RenderAppOptions {
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
 
-type FetchMock = Mock<
-  (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
->;
-
 interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
 }
@@ -146,7 +160,6 @@ type CurrentFactoryDocumentResult = ReturnType<
   typeof useCurrentFactoryDocument
 >;
 
-const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
 const defaultFactorySessionSummary: FactorySessionSummary = {
@@ -159,81 +172,6 @@ const defaultFactorySessionSummary: FactorySessionSummary = {
     kind: "default",
   },
 };
-
-export const baselineSnapshot = buildDashboardSnapshotFixture(
-  mediumBranchingDashboardTopology,
-);
-
-export const activeSnapshot = semanticWorkflowDashboardSnapshot;
-
-export const terminalSnapshot = {
-  ...terminalBaseSnapshot,
-  tick_count: 4,
-  runtime: {
-    ...terminalBaseSnapshot.runtime,
-    place_occupancy_work_items_by_place_id: {
-      ...(terminalBaseSnapshot.runtime.place_occupancy_work_items_by_place_id ??
-        {}),
-      "story:blocked": [
-        {
-          display_name: "Failed Story",
-          trace_id: "trace-failed-story",
-          work_id: "work-failed-story",
-          work_type_id: "story",
-        },
-      ],
-      "story:complete": [
-        {
-          display_name: "Done Story",
-          trace_id: "trace-done-story",
-          work_id: "work-complete",
-          work_type_id: "story",
-        },
-      ],
-    },
-    place_token_counts: {
-      ...(terminalBaseSnapshot.runtime.place_token_counts ?? {}),
-      "story:blocked": 1,
-      "story:complete": 1,
-    },
-    session: {
-      ...terminalBaseSnapshot.runtime.session,
-      completed_count: 1,
-      completed_work_labels: ["Done Story"],
-      provider_sessions: [
-        ...(terminalBaseSnapshot.runtime.session.provider_sessions ?? []),
-        {
-          dispatch_id: "dispatch-complete",
-          outcome: "ACCEPTED",
-          provider_session: {
-            id: "sess-done-story",
-            kind: "session_id",
-            provider: "codex",
-          },
-          transition_id: "complete",
-          workstation_name: "Complete",
-          work_items: [
-            {
-              display_name: "Done Story",
-              trace_id: "trace-done-story",
-              work_id: "work-complete",
-              work_type_id: "story",
-            },
-          ],
-        },
-      ],
-    },
-  },
-} satisfies DashboardSnapshot;
-
-export const importedFactorySnapshot = (() => {
-  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-
-  snapshot.factory_state = "Imported factory active";
-  snapshot.tick_count = semanticWorkflowDashboardSnapshot.tick_count + 1;
-
-  return snapshot;
-})();
 
 function timelineSnapshot(
   snapshot: DashboardSnapshot,
@@ -385,68 +323,6 @@ export async function renderAppWithDashboardShell(
   const result = renderApp(options);
   await waitForDashboardShell();
   return result;
-}
-
-function fetchCallPaths(fetchMock: FetchMock) {
-  return fetchMock.mock.calls.map(([input]: [RequestInfo | URL]) =>
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? `${input.pathname}${input.search}`
-        : input.url,
-  );
-}
-
-export function nonPromptTemplateFetchPaths(fetchMock: FetchMock) {
-  return fetchCallPaths(fetchMock).filter(
-    (path: string) =>
-      !path.includes("/prompt-template-contract") &&
-      path !== "/factory-sessions",
-  );
-}
-
-export function jsonResponse(
-  body: unknown,
-  status = 200,
-  statusText?: string,
-): Response {
-  return new Response(JSON.stringify(body), {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    status,
-    statusText,
-  });
-}
-
-export function createFactoryImportValue(): FactoryPngImportValue {
-  return {
-    factory: {
-      name: "Dropped Factory",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-    },
-    previewImageSrc: "blob:factory-preview",
-    revokePreviewImageSrc: vi.fn(),
-    schemaVersion: "portos.agent-factory.png.v1",
-  };
-}
-
-export function createFileDropTransfer(files: File[]): {
-  dataTransfer: {
-    dropEffect: string;
-    files: File[];
-    types: string[];
-  };
-} {
-  return {
-    dataTransfer: {
-      dropEffect: "none",
-      files,
-      types: ["Files"],
-    },
-  };
 }
 
 export function mockCurrentFactoryDocument(

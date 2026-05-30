@@ -1,35 +1,20 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import "../../../../testing/bun-current-factory-definition-api-mocks";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import {
-  type CanonicalFactoryDefinition,
-  type CurrentFactoryDocument,
+import type {
+  CanonicalFactoryDefinition,
+  CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
+import {
+  getCurrentFactoryDefinitionMock,
+  getCurrentFactoryDocumentMock,
+  saveCurrentFactoryDocumentMock,
+} from "../../../../testing/bun-current-factory-definition-api-mocks";
 import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-
-const CURRENT_FACTORY_API_MODULE = "../../../api/current-factory-definition";
-
-const currentFactoryApiActual = await import(CURRENT_FACTORY_API_MODULE);
-
-export const getCurrentFactoryDefinitionMock = mock(() => {
-  throw new Error("getCurrentFactoryDefinitionMock not configured");
-});
-export const getCurrentFactoryDocumentMock = mock(() => {
-  throw new Error("getCurrentFactoryDocumentMock not configured");
-});
-export const saveCurrentFactoryDocumentMock = mock(() => {
-  throw new Error("saveCurrentFactoryDocumentMock not configured");
-});
-
-mock.module(CURRENT_FACTORY_API_MODULE, () => ({
-  ...currentFactoryApiActual,
-  getCurrentFactoryDefinition: getCurrentFactoryDefinitionMock,
-  getCurrentFactoryDocument: getCurrentFactoryDocumentMock,
-  saveCurrentFactoryDocument: saveCurrentFactoryDocumentMock,
-}));
 
 const {
   currentFactoryDefinitionQueryKey,
@@ -128,21 +113,19 @@ describe("useCurrentFactoryDefinition", () => {
   });
 
   it("refetches when the selected session tab changes", async () => {
-    vi.mocked(getCurrentFactoryDefinition).mockResolvedValue(
-      editableFactoryDefinition,
-    );
+    getCurrentFactoryDefinitionMock.mockResolvedValue(editableFactoryDefinition);
 
     const { rerender } = renderHook(() => useCurrentFactoryDefinition(), {
       wrapper: createQueryClientWrapper(),
     });
 
     await waitFor(() => {
-      expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDefinitionMock).toHaveBeenCalledWith({
         sessionID: "~default",
       });
     });
 
-    vi.mocked(getCurrentFactoryDefinition).mockClear();
+    getCurrentFactoryDefinitionMock.mockClear();
 
     act(() => {
       useDashboardSessionStore.getState().setSelectedSessionID("session-2");
@@ -151,7 +134,7 @@ describe("useCurrentFactoryDefinition", () => {
     rerender();
 
     await waitFor(() => {
-      expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDefinitionMock).toHaveBeenCalledWith({
         sessionID: "session-2",
       });
     });
