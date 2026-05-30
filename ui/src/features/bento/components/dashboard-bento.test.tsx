@@ -120,6 +120,16 @@ vi.mock("../../import", () => ({
   DashboardImportPreviewDialog: () => null,
 }));
 
+vi.mock("../../import/hooks/use-factory-import-activation-target", () => ({
+  useFactoryImportActivationTarget: () => ({
+    createTargetFactoryName: null,
+    currentFactoryName: null,
+    existingNamedFactoryNames: [],
+    isLoading: false,
+    replacesExistingCreateTarget: false,
+  }),
+}));
+
 vi.mock("../../submit-work/public", () => ({
   SubmitWorkWidget: ({ headerAction }: { headerAction?: React.ReactNode }) => (
     <section>{headerAction}Submit work card</section>
