@@ -13,13 +13,18 @@ import {
   useFactoryTimelineStore,
   type WorldState,
 } from "../src/features/timeline/state/factoryTimelineStore";
+import { DashboardSessionTestProvider } from "../src/testing/dashboard-session-test-provider";
 
 const DASHBOARD_STORYBOOK_BASE_PATH = "/dashboard/ui/";
-type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type FetchLike = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
 
 interface DashboardApiMockParameters {
   eventSourceMocks?: DashboardEventSourceMock[];
   fetchMocks?: DashboardFetchMock[];
+  sessionID?: string | null;
   snapshot?: DashboardSnapshot;
   timelineSnapshots?: DashboardSnapshot[];
   timelineEvents?: FactoryEvent[];
@@ -40,7 +45,10 @@ interface DashboardFetchMock {
   path: string;
   response:
     | DashboardFetchMockResponse
-    | ((input: RequestInfo | URL, init?: RequestInit) => DashboardFetchMockResponse | Promise<DashboardFetchMockResponse>);
+    | ((
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => DashboardFetchMockResponse | Promise<DashboardFetchMockResponse>);
 }
 
 interface DashboardFetchMockResponse {
@@ -143,7 +151,8 @@ function findFetchMock(
   return fetchMocks.find(
     (fetchMock) =>
       fetchMock.path === path &&
-      (fetchMock.method === undefined || fetchMock.method.toUpperCase() === method),
+      (fetchMock.method === undefined ||
+        fetchMock.method.toUpperCase() === method),
   );
 }
 
@@ -152,10 +161,14 @@ function findEventSourceMock(
   url: string,
 ): DashboardEventSourceMock | undefined {
   const path = normalizeURLPath(url);
-  return eventSourceMocks.find((eventSourceMock) => eventSourceMock.path === path);
+  return eventSourceMocks.find(
+    (eventSourceMock) => eventSourceMock.path === path,
+  );
 }
 
-function buildFetchMockResponse(mockResponse: DashboardFetchMockResponse): Response {
+function buildFetchMockResponse(
+  mockResponse: DashboardFetchMockResponse,
+): Response {
   const headers = new Headers(mockResponse.headers);
   let responseBody = mockResponse.body ?? null;
 
@@ -212,7 +225,9 @@ function seedDashboardStorySnapshots(
     return;
   }
 
-  const latestTick = Math.max(...snapshots.map((snapshot) => snapshot.tick_count));
+  const latestTick = Math.max(
+    ...snapshots.map((snapshot) => snapshot.tick_count),
+  );
 
   useFactoryTimelineStore.setState({
     events: [],
@@ -228,7 +243,9 @@ function seedDashboardStorySnapshots(
             timelineSnapshot(
               snapshot,
               snapshot.tick_count === latestTick ? tracesByWorkID : {},
-              snapshot.tick_count === latestTick ? workstationRequestsByDispatchID : {},
+              snapshot.tick_count === latestTick
+                ? workstationRequestsByDispatchID
+                : {},
             ),
           ] as const,
       ),
@@ -256,7 +273,9 @@ function resetDashboardStoryStores(): void {
   useFactoryTimelineStore.getState().reset();
 }
 
-function installDashboardApiMock(parameters: DashboardApiMockParameters | undefined): void {
+function installDashboardApiMock(
+  parameters: DashboardApiMockParameters | undefined,
+): void {
   captureBrowserRuntime();
   resetDashboardStoryStores();
   const fetchMocks = parameters?.fetchMocks ?? [];
@@ -266,14 +285,19 @@ function installDashboardApiMock(parameters: DashboardApiMockParameters | undefi
     parameters?.timelineSnapshots != null ||
     parameters?.timelineEvents != null;
 
-  if (!hasTimelineData && fetchMocks.length === 0 && installedEventSourceMocks.length === 0) {
+  if (
+    !hasTimelineData &&
+    fetchMocks.length === 0 &&
+    installedEventSourceMocks.length === 0
+  ) {
     window.fetch = originalFetch ?? window.fetch;
     window.EventSource = originalEventSource;
     return;
   }
 
   const tracesByWorkID = parameters.tracesByWorkID ?? {};
-  const workstationRequestsByDispatchID = parameters.workstationRequestsByDispatchID ?? {};
+  const workstationRequestsByDispatchID =
+    parameters.workstationRequestsByDispatchID ?? {};
   if (parameters.timelineEvents) {
     useFactoryTimelineStore.getState().replaceEvents(parameters.timelineEvents);
   } else if (parameters.timelineSnapshots) {
@@ -310,23 +334,30 @@ function installDashboardApiMock(parameters: DashboardApiMockParameters | undefi
     return (originalFetch ?? window.fetch)(input, init);
   };
 
-  window.EventSource = DashboardStoryEventSource as unknown as typeof EventSource;
+  window.EventSource =
+    DashboardStoryEventSource as unknown as typeof EventSource;
 }
 
 function StorybookDashboardRuntime({ children }: { children: ReactNode }) {
   return (
-    <QueryClientProvider client={createQueryClient()}>{children}</QueryClientProvider>
+    <QueryClientProvider client={createQueryClient()}>
+      {children}
+    </QueryClientProvider>
   );
 }
 
 export const withDashboardStoryRuntime: Decorator = (Story, context) => {
-  installDashboardApiMock(
-    context.parameters.dashboardApi as DashboardApiMockParameters | undefined,
-  );
+  const dashboardApi = context.parameters.dashboardApi as
+    | DashboardApiMockParameters
+    | undefined;
+
+  installDashboardApiMock(dashboardApi);
 
   return (
     <StorybookDashboardRuntime>
-      <Story />
+      <DashboardSessionTestProvider sessionID={dashboardApi?.sessionID}>
+        <Story />
+      </DashboardSessionTestProvider>
     </StorybookDashboardRuntime>
   );
 };

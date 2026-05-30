@@ -1,94 +1,98 @@
 {
-  "project": "Consolidate Validation Target Test Assertions",
-  "branchName": "ralph/consolidate-validation-target-test-asserts",
-  "description": "Consolidate duplicated validation-target test assertion helpers into pkg/testutil/validationassert and retarget API, service, and factory-validation tests with no production or validation-semantics change.",
+  "project": "CLI Submit Response Contract",
+  "branchName": "ralph/cli-submit-response-contract",
+  "description": "Make `you submit` success output actionable for humans and scripts by extending the submit API response with work identifiers, shaping human and `--json` CLI output (including verify hints), clarifying error surfaces, and documenting the submit → verify loop in packaged docs.",
   "context": {
-    "customerAsk": "As part of pkg/ duplication cleanup (customer ask 11), move repeated assertHasValidationTarget and assertHasValidationTargetCode helpers into one shared test-only package and retarget API and service test call sites so validation topology tests share the same assertions without changing runtime behavior.",
-    "problem": "The same validation-target presence checks are copy-pasted across pkg/api, pkg/service, and pkg/factory/validation tests with risk of divergent matching rules and harder review of topology validation regressions.",
-    "solution": "Add canonical helpers in pkg/testutil/validationassert for API-shaped (factoryapi.FactoryValidationTarget) and domain-shaped (factoryvalidation.Target) slices, retarget all scoped test call sites, remove duplicate local definitions, and prove behavior neutrality by running existing validation topology test suites unchanged."
+    "customerAsk": "After `you submit`, operators and agents need the created work id, name, and work type—not only a trace id—plus a suggested `you work show` or `you work list` command. Scripts need a stable `--json` object. Errors should distinguish unreachable factory vs API rejection.",
+    "problem": "`you submit` prints `Submitted work: <traceId>` on success and the OpenAPI `SubmitWorkResponse` only requires `traceId`, forcing immediate `you work list` and causing duplicate submits during agent-driven docs work.",
+    "solution": "Extend `SubmitWorkResponse` with normalized work metadata from the submit handler, map it in `pkg/cli/submit` to human lines and a stable `--json` envelope (including `endpointPath` and `sessionId`), improve bounded error text, and document the contract and verify loop in `you docs work` aligned with work-inspection commands."
   },
   "acceptanceCriteria": [
-    "pkg/testutil/validationassert exports canonical API and domain validation-target assertion helpers with unchanged match semantics",
-    "Duplicate assertHasValidationTarget, assertHasValidationTargetCode, assertHasTargetCode, and assertHasTargetSubject definitions are removed from scoped pkg/api, pkg/service, and pkg/factory/validation test files",
-    "All retargeted tests assert the same validation codes, subject types, subject ids, and locations as before consolidation",
-    "go test ./pkg/api/... ./pkg/service/... ./pkg/factory/validation/... passes with no production package importing validationassert",
-    "No production API, CLI, UI, or OpenAPI schema changes are introduced in this lane",
-    "Typecheck, lint, and the scoped test suites above pass (quality gate)"
+    "HTTP 201 submit responses expose workId, name, and workTypeName (and sessionId for session-scoped routes) via OpenAPI and handlers using existing normalization rules.",
+    "Human-mode `you submit` prints name, workTypeName, traceId, workId when available, and a one-line `you work show` or `you work list --name` hint without dumping full payloads.",
+    "Global `--json` success emits one object with workId, name, workTypeName, traceId, sessionId, and endpointPath; exit code 0.",
+    "Submit failures never print success output; transport errors are distinguishable from HTTP API errors with bounded body summaries.",
+    "Packaged `you docs work` documents human and JSON success shapes plus the submit → verify command loop.",
+    "Targeted CLI and API tests prove success and failure output behavior with mocked HTTP.",
+    "Quality gate: backend typecheck, lint, and relevant tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "consolidate-validation-target-test-asserts-001",
-      "title": "Canonical API validation target assertions",
-      "description": "As a maintainer, I want shared helpers for OpenAPI FactoryValidationTarget slices so API and service tests assert targets the same way.",
+      "id": "cli-submit-response-contract-001",
+      "title": "Submit API returns work identifiers on 201",
+      "description": "As an API consumer, I need SubmitWorkResponse to include accepted work identifiers so clients do not guess after a successful submit.",
       "acceptanceCriteria": [
-        "pkg/testutil/validationassert provides HasTarget matching code, subject type, subject id, and location on []factoryapi.FactoryValidationTarget",
-        "HasTargetCode matches when any target carries the given validation code with optional failure label for diagnostics",
-        "Helpers use t.Helper() and preserve existing match semantics without production imports of the package",
+        "OpenAPI SubmitWorkResponse includes workId, name, workTypeName, and traceId; session-scoped routes also return sessionId matching the path.",
+        "pkg/api submit handlers populate fields from the same WorkRequest normalization that assigns stable work ids before returning HTTP 201.",
+        "API tests assert the success JSON body for default and session-scoped submit.",
+        "Generated Go and UI OpenAPI types compile after regeneration.",
         "Typecheck passes",
-        "Tests pass for any helper unit coverage added in this story"
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "consolidate-validation-target-test-asserts-002",
-      "title": "API tests use shared validation assertions",
-      "description": "As a maintainer, I want API validation topology tests to import shared assertions so duplicate helpers are not redefined per test file.",
+      "id": "cli-submit-response-contract-002",
+      "title": "Human success output for you submit",
+      "description": "As an operator, I want submit stdout to show what was accepted and which work command to run next so I can verify without listing the entire factory.",
       "acceptanceCriteria": [
-        "pkg/api/server_test_helpers_test.go, pkg/api/server_factory_test.go, and pkg/api/servertests/server_factory_validation_test.go use validationassert instead of local helpers",
-        "Local assertHasValidationTarget and assertHasValidationTargetCode definitions are removed from those API test files",
-        "Existing API validation topology tests still expect the same validation codes and subject coordinates for the same inputs",
+        "On HTTP 201, stdout includes name, workTypeName, traceId, and workId when the API returns workId.",
+        "Stdout prints you work show <work-id> when workId is present; otherwise you work list --name <name> with explicit fallback wording.",
+        "Stdout does not print the full HTTP response or request payload; verbose diagnostics remain stderr-only.",
+        "CLI httptest covers human stdout and hint selection for responses with and without workId.",
         "Typecheck passes",
-        "Tests pass (go test ./pkg/api/...)"
+        "Tests pass"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "consolidate-validation-target-test-asserts-003",
-      "title": "Service tests use shared validation assertions",
-      "description": "As a maintainer, I want service-layer factory validation tests to share the same target assertions as API tests.",
+      "id": "cli-submit-response-contract-003",
+      "title": "JSON success output for you submit --json",
+      "description": "As a script, I want a single parseable JSON confirmation object after submit so I can automate verify steps without scraping text.",
       "acceptanceCriteria": [
-        "pkg/service/factory_test.go imports validationassert for topology and canonical target assertions",
-        "Local assertHasValidationTarget and assertHasValidationTargetCode definitions are removed from factory_test.go",
-        "Service validation target tests including assertCanonicalTopologyTargets call sites expect the same codes and subject fields as before",
+        "Global --json success writes one JSON object with keys workId, name, workTypeName, traceId, sessionId, and endpointPath.",
+        "Exit code is 0 on success; stdout contains only that JSON object.",
+        "CLI test asserts JSON field presence and values from a mocked 201 response including a session-scoped endpointPath.",
         "Typecheck passes",
-        "Tests pass (go test ./pkg/service/...)"
+        "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
-      "id": "consolidate-validation-target-test-asserts-004",
-      "title": "Domain validation tests use shared assertions",
-      "description": "As a maintainer, I want pkg/factory/validation unit tests to use the same canonical assertion module for domain Target slices.",
+      "id": "cli-submit-response-contract-004",
+      "title": "Clear submit error surfaces",
+      "description": "As an agent, I want submit failures to be clearly classified so I do not treat transport or API errors as successful enqueue.",
       "acceptanceCriteria": [
-        "validationassert exposes domain helpers equivalent to prior assertHasTargetCode and assertHasTargetSubject on []factoryvalidation.Target",
-        "pkg/factory/validation/validation_test.go retargets to shared helpers and removes local duplicate definitions",
-        "Explicit validation unit tests still fail on the same missing codes and subjects for invalid factory configs",
+        "Connection and transport failures report the factory URL as unreachable and emit no success line.",
+        "Non-201 HTTP responses return an error including status and a bounded API message or body snippet.",
+        "When error JSON includes workId, the CLI error text includes it in a stable workId= form.",
+        "CLI tests cover unreachable server, structured 400 ErrorResponse, and non-JSON error bodies.",
         "Typecheck passes",
-        "Tests pass (go test ./pkg/factory/validation/...)"
+        "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
-      "id": "consolidate-validation-target-test-asserts-005",
-      "title": "Duplication cleanup verification",
-      "description": "As a reviewer, I want confidence that consolidation is complete and behavior-neutral across all touched packages.",
+      "id": "cli-submit-response-contract-005",
+      "title": "Document submit output and verify loop",
+      "description": "As an agent author, I want you docs work to describe submit success output and the verify commands that follow.",
       "acceptanceCriteria": [
-        "No duplicate validation-target assertion helpers remain in scoped pkg/api, pkg/service, and pkg/factory/validation test files",
-        "go test ./pkg/api/... ./pkg/service/... ./pkg/factory/validation/... passes with unchanged expected validation target shapes in test assertions",
-        "No changes to production validation logic, handlers, or OpenAPI schemas",
+        "you docs work documents human success fields, --json keys, and example success objects.",
+        "The same section documents verify with you work show and you work list --name / --work-type-name aligned with work-inspection behavior.",
+        "Docs state diagnostics stay on stderr and payloads are not echoed on success.",
         "Typecheck passes",
-        "Tests pass (full scoped suite above)"
+        "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]

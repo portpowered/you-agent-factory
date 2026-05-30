@@ -1,195 +1,180 @@
-# PRD: Consolidate Validation Target Test Assertions
+# PRD: CLI Submit Response Contract (`you submit`)
 
 ---
 author: Codex
 last modified: 2026-05-30
 status: draft
+work-item: batch-request-b8e7cd2f426dfb741e49b31aef9753d4-cli-submit-response-contract
 ---
 
 ## Introduction
 
-Customer ask `11` (`pkg/` duplication cleanup) is consolidating repeated test helpers into shared `pkg/testutil` modules. PR `#492` moved `minimalFactoryConfig` / `writeFactoryJSON` into `pkg/testutil/factoryfixtures`. The next non-overlapping slice consolidates duplicated **validation target assertion helpers** used by API, service, and factory-validation tests.
+`you submit` posts a single work item to a running factory session and today prints only `Submitted work: <traceId>` on success (or encodes the raw `SubmitWorkResponse` object under `--json`). Operators and autonomous agents cannot tell which **work id**, **name**, or **work type** were accepted without immediately running `you work list`. That gap caused duplicate ingress attempts and missed verification during the docs PRD submission exercise.
 
-Today, the same “does this validation result include target X?” logic is copy-pasted across `pkg/api`, `pkg/service`, and `pkg/factory/validation` tests. That drift risks subtly different matching rules (for example, different `t.Fatalf` messages or subject-field comparisons) and makes topology validation regressions harder to review.
-
-**Intent:** Provide one canonical, test-only assertion module and retarget call sites so validation topology tests share identical assertion behavior with **no production or validation-semantics change**.
+This project makes successful submit output **actionable** (human and `--json`), clarifies failure modes (transport vs API rejection), extends the HTTP contract when needed so `workId` is available at `201`, and documents the submit → verify loop alongside [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md) and [`prd-docs-agents-consolidation-wave2.md`](../prd-docs-agents-consolidation-wave2.md).
 
 ## Context
 
-### Customer ask
-
-Consolidate duplicated `assertHasValidationTarget` and `assertHasValidationTargetCode` helpers into a shared test-only package; remove duplicate definitions from API and service tests (and validation package tests where equivalent); retarget imports only.
-
-### Concrete problem
-
-- `assertHasValidationTarget` (full match on code, subject type, subject id, location) is defined in `pkg/api/server_test_helpers_test.go`, `pkg/api/servertests/server_factory_validation_test.go`, and `pkg/service/factory_test.go`.
-- `assertHasValidationTargetCode` is duplicated in `pkg/api/server_factory_test.go`, `pkg/api/servertests/server_factory_validation_test.go`, and `pkg/service/factory_test.go` (service copy also takes a custom failure label).
-- `pkg/factory/validation/validation_test.go` duplicates the same ideas as `assertHasTargetCode` and `assertHasTargetSubject` on `factoryvalidation.Target` / `factoryvalidation.Subject`.
-
-### High-level solution
-
-Add `pkg/testutil/validationassert` (or extend an existing `pkg/testutil` submodule if import boundaries require it) with:
-
-1. **API-shaped helpers** for `[]factoryapi.FactoryValidationTarget`: full target match and code-only match.
-2. **Domain-shaped helpers** for `[]factoryvalidation.Target`: code-only and subject match (replacing `assertHasTargetCode` / `assertHasTargetSubject`).
-
-Retarget test call sites, delete local copies, and prove equivalence by running the existing validation topology test suites unchanged.
-
-## Goals
-
-- Exactly one canonical implementation per assertion shape (API full match, API code-only, domain code-only, domain subject match).
-- All listed duplicate definitions removed from API, service, and validation package tests.
-- Existing validation topology tests continue to pass with the same expected codes, subjects, and locations—no assertion weakening or semantic drift.
-- Test-only change: no production API, CLI, UI, or OpenAPI contract changes.
+| | |
+|---|---|
+| **Customer ask** | After `you submit`, stdout/`--json` must identify the created work and suggest the next inspection command; errors must distinguish unreachable factory vs API rejection. |
+| **Concrete problem** | Success output exposes only `traceId`; `SubmitWorkResponse` OpenAPI schema requires only `traceId`; agents re-submit or poll blindly. |
+| **High-level solution** | Return stable work identifiers from the submit API where normalization already assigns them; shape CLI human/JSON output around those fields plus session/route context; improve bounded error text; document verify commands in `you docs work`. |
 
 ## Project-level acceptance criteria
 
-- [ ] `pkg/testutil/validationassert` (or approved `pkg/testutil` submodule) exports canonical helpers for API and domain validation target assertions.
-- [ ] No remaining duplicate `assertHasValidationTarget`, `assertHasValidationTargetCode`, `assertHasTargetCode`, or `assertHasTargetSubject` definitions in `pkg/api`, `pkg/service`, or `pkg/factory/validation` test files listed in scope.
-- [ ] All prior call sites use the shared helpers without changing which codes, subjects, or locations each test expects.
-- [ ] `go test ./pkg/api/... ./pkg/service/... ./pkg/factory/validation/...` passes.
-- [ ] No production packages import `validationassert` (test-only boundary preserved).
-- [ ] Typecheck, lint, and targeted tests pass (quality gate).
+- [ ] On HTTP `201`, human-mode stdout includes submitted **name**, **workTypeName**, **traceId**, and **workId** when the API returns it; otherwise it states the list-by-name fallback explicitly.
+- [ ] Human-mode stdout prints a one-line next-step hint: `you work show <work-id>` when `workId` is present, else `you work list --name <name>` (aligned with work-inspection filters).
+- [ ] `--json` on success emits one object with `workId`, `name`, `workTypeName`, `traceId`, `sessionId`, and `endpointPath`; exit code `0`.
+- [ ] Non-success paths never print the success confirmation line; transport failures and API failures are distinguishable by message shape.
+- [ ] OpenAPI `SubmitWorkResponse` and generated Go/TS types include new fields when the API is extended; contract tests updated.
+- [ ] `you docs work` documents the submit success and verify loop; cross-links work-inspection commands.
+- [ ] Quality gate: backend typecheck, lint, and targeted CLI/API tests pass without unrelated refactors.
+
+## Goals
+
+- Human-mode success prints actionable identifiers and a suggested follow-up command.
+- `--json` success is stable for scripts and agents (not only the generated API DTO).
+- Errors distinguish factory unreachable (transport) vs HTTP API rejection with bounded body summary.
+- API `201` body exposes `workId`, `name`, and `workTypeName` using the same normalization rules as ingress (no second id scheme).
+- Documentation tells agents to submit → verify with `you work show` / `you work list --name`.
 
 ## User Stories
 
-### consolidate-validation-target-test-asserts-001: Canonical API validation target assertions
+### US-001: Submit API returns work identifiers on 201
 
-**Description:** As a maintainer, I want shared helpers for OpenAPI `FactoryValidationTarget` slices so API and service tests assert targets the same way.
-
-**Acceptance Criteria:**
-
-- [ ] `pkg/testutil/validationassert` provides `HasTarget` matching code, subject type, subject id, and location on `[]factoryapi.FactoryValidationTarget`.
-- [ ] `HasTargetCode` matches when any target carries the given validation code (optional human-readable label for failure messages, preserving service-test ergonomics).
-- [ ] Helpers call `t.Helper()` and preserve existing match semantics (code gate first, then subject fields).
-- [ ] Package is test-only (`package validationassert` under `pkg/testutil`, no production imports).
-- [ ] Typecheck passes
-- [ ] Tests pass for any new helper unit coverage added in this story
-
-### consolidate-validation-target-test-asserts-002: API tests use shared validation assertions
-
-**Description:** As a maintainer, I want API validation topology tests to import shared assertions so duplicate helpers are not redefined per test file.
+**Description:** As an API consumer, I need `SubmitWorkResponse` to include the accepted work identifiers so CLI and UI do not guess after submit.
 
 **Acceptance Criteria:**
 
-- [ ] `pkg/api/server_test_helpers_test.go`, `pkg/api/server_factory_test.go`, and `pkg/api/servertests/server_factory_validation_test.go` call `validationassert` instead of local helpers.
-- [ ] Local `assertHasValidationTarget` / `assertHasValidationTargetCode` definitions are removed from those files.
-- [ ] Existing API validation tests (`TestValidateFactory_*`, save/create factory validation target tests, topology multi-target tests) still fail/pass on the same inputs as before this change.
+- [ ] OpenAPI `SubmitWorkResponse` adds `workId`, `name`, and `workTypeName` (required when a single work item is accepted); `traceId` remains required.
+- [ ] Session-scoped submit (`POST /factory-sessions/{sessionId}/work`) includes `sessionId` in the response body matching the path parameter (default label `~default` for the legacy `/work` route).
+- [ ] `pkg/api` submit handlers populate fields using the same `WorkRequest` normalization path that assigns `batch-{requestId}-{name}` (or caller-provided `workId`) before returning `201`.
+- [ ] API unit/contract tests assert the JSON body shape for default and session-scoped submit on success.
+- [ ] Regenerated `pkg/api/generated` and UI OpenAPI types compile; no handwritten duplicate DTOs in handlers.
 - [ ] Typecheck passes
-- [ ] Tests pass (`go test ./pkg/api/...`)
+- [ ] Tests pass
 
-### consolidate-validation-target-test-asserts-003: Service tests use shared validation assertions
+### US-002: Human success output for `you submit`
 
-**Description:** As a maintainer, I want service-layer factory validation tests to share the same target assertions as API tests.
+**Description:** As an operator, I want submit to tell me what was accepted and what command to run next so I can verify without listing the whole factory.
 
 **Acceptance Criteria:**
 
-- [ ] `pkg/service/factory_test.go` imports `validationassert` for topology and canonical target assertions.
-- [ ] Local `assertHasValidationTarget` and `assertHasValidationTargetCode` definitions are removed from `factory_test.go`.
-- [ ] Service tests that assert validation targets (including `assertCanonicalTopologyTargets` call sites) behave identically: same expected codes and subject coordinates.
-- [ ] Typecheck passes
-- [ ] Tests pass (`go test ./pkg/service/...`)
+- [x] On `201`, stdout includes at minimum: trimmed submitted **name**, **workTypeName**, **traceId**, and **workId** when the response includes it.
+- [x] When `workId` is present, stdout includes a one-line hint containing `you work show <work-id>`; when absent, the hint uses `you work list --name <name>` and states that work id was not returned.
+- [x] Stdout does not dump the full HTTP response body or request payload.
+- [x] Existing verbose diagnostics remain on stderr only (`clidiag`); payload content is not logged on success paths.
+- [x] CLI tests with `httptest` mock `201` responses assert human stdout lines and hint selection.
+- [x] Typecheck passes
+- [x] Tests pass
 
-### consolidate-validation-target-test-asserts-004: Domain validation tests use shared assertions
+### US-003: JSON success output for `you submit --json`
 
-**Description:** As a maintainer, I want `pkg/factory/validation` unit tests to use the same canonical assertion module for domain `Target` slices.
-
-**Acceptance Criteria:**
-
-- [ ] `validationassert` exposes domain helpers equivalent to prior `assertHasTargetCode` and `assertHasTargetSubject` on `[]factoryvalidation.Target`.
-- [ ] `pkg/factory/validation/validation_test.go` retargets to shared helpers and removes local duplicates.
-- [ ] Explicit validation unit tests still report the same missing-code and missing-subject failures for invalid factory configs.
-- [ ] Typecheck passes
-- [ ] Tests pass (`go test ./pkg/factory/validation/...`)
-
-### consolidate-validation-target-test-asserts-005: Duplication cleanup verification
-
-**Description:** As a reviewer, I want confidence that consolidation is complete and behavior-neutral across all touched packages.
+**Description:** As a script, I want a single parseable confirmation object so I can branch on `workId` without scraping text.
 
 **Acceptance Criteria:**
 
-- [ ] Repository search shows no duplicate validation-target assertion helpers remaining in scoped `pkg/api`, `pkg/service`, and `pkg/factory/validation` test files.
-- [ ] `go test ./pkg/api/... ./pkg/service/... ./pkg/factory/validation/...` passes with zero diff in expected validation codes or subject shapes in test assertions.
-- [ ] No changes to production validation logic, handlers, or OpenAPI schemas.
+- [ ] Global `--json` success emits one JSON object with keys: `workId`, `name`, `workTypeName`, `traceId`, `sessionId`, `endpointPath` (CLI-scoped path such as `/factory-sessions/~default/work`).
+- [ ] Omitted or empty `workId` is encoded as JSON `null` or omitted consistently (document the chosen rule in `you docs work`).
+- [ ] Exit code `0` on success; stdout contains only the JSON object (no extra prose).
+- [ ] CLI test asserts JSON shape from a mocked `201` response including session-scoped route.
 - [ ] Typecheck passes
-- [ ] Tests pass (full scoped suite above)
+- [ ] Tests pass
+
+### US-004: Clear submit error surfaces
+
+**Description:** As an agent, I want duplicate, invalid, or unreachable submit attempts to fail with messages I can classify without mistaking them for success.
+
+**Acceptance Criteria:**
+
+- [ ] When `http.Post` fails (connection refused, timeout, DNS), the error message states the factory is not reachable at the resolved URL and does not print a success line.
+- [ ] When HTTP status is not `201`, stderr/returned error includes HTTP status and a bounded API summary (`ErrorResponse.message` when JSON parses; otherwise a capped raw snippet).
+- [ ] If the error JSON body includes `workId` (present or added on conflict responses), the CLI error text appends it in a stable `workId=` form.
+- [ ] No `Submitted work:` or JSON success object is written on failure.
+- [ ] CLI tests cover at least: unreachable server, `400` with `ErrorResponse`, and non-JSON error body.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-005: Document submit output and verify loop
+
+**Description:** As an agent author, I want packaged docs to describe the submit contract and the verify commands that follow.
+
+**Acceptance Criteria:**
+
+- [ ] `you docs work` includes a **CLI submit success** subsection listing human fields, `--json` keys, and example success objects.
+- [ ] The same section documents the verify loop: `you work show <work-id>` or `you work list --name <name> --work-type-name <type>` (cross-reference work-inspection PRD behavior).
+- [ ] Docs state that diagnostics and verbose output stay on stderr; payloads are never echoed on success.
+- [ ] `pkg/cli/docs` test coverage updated if topic text assertions exist for `work`.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
 ## Functional Requirements
 
-- FR-1: Provide canonical API helpers for full validation target match and code-only match on `factoryapi.FactoryValidationTarget` slices.
-- FR-2: Provide canonical domain helpers for code-only and `factoryvalidation.Subject` match on `factoryvalidation.Target` slices.
-- FR-3: Remove duplicate helper definitions from `pkg/api/server_test_helpers_test.go`, `pkg/api/server_factory_test.go`, `pkg/api/servertests/server_factory_validation_test.go`, `pkg/service/factory_test.go`, and `pkg/factory/validation/validation_test.go`.
-- FR-4: Retarget imports and call sites only; do not alter validation rules, error codes, or expected target payloads in tests.
-- FR-5: Keep `pkg/cli/submit` clihttp migration, API handler extraction, and functional-test helper consolidation out of this lane.
+- **FR-1:** Extend `SubmitWorkResponse` in OpenAPI and propagate through codegen to Go (`factoryapi.SubmitWorkResponse`) and UI generated types.
+- **FR-2:** Populate response fields in `pkg/api` submit handlers from normalized submit metadata (`requestId`, work name, work type, trace, session).
+- **FR-3:** `pkg/cli/submit` maps API response + `SubmitConfig` (`SessionID`, scoped path) into human lines and the stable `--json` envelope.
+- **FR-4:** If the API cannot return `workId` for a documented edge case, human and JSON output must use the list-by-name fallback and docs must say so; prefer fixing normalization over leaving the gap.
+- **FR-5:** Error formatting reuses existing `ErrorResponse` parsing; optional `workId` in error JSON is best-effort without requiring schema changes in this lane unless needed for conflict cases.
+- **FR-6:** Align verify hints with [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md) (`--name`, `--work-type-name`, `you work show`).
 
 ## Non-Goals
 
-- Production API, CLI, or UI changes.
-- `pkg/cli/submit` clihttp migration (blocked on open PR `#480`).
-- API handler core extraction (`submitWorkCore`, strict JSON decode helpers).
-- Consolidating Petri/net, bundled-file, or functional-test `hasValidationTarget*` helpers under `tests/functional/...` (separate follow-on).
-- Meta-tests that assert helper file layout, import graphs, or assertion inventories.
-- Changing validation semantics or weakening tests to accommodate helper moves.
+- Changing submit HTTP routes, session model, or request body schema beyond `SubmitWorkResponse`.
+- Batch submit via `you submit` (batch remains file ingest, API batch, `you run --work`).
+- Returning dispatch history, workstation state, or full work payloads in submit output.
+- Dashboard/UI submit UX changes (CLI and contract only).
+- Converting idempotent duplicate `201` (engine `Accepted=false`) into `409` in this project unless required for a listed acceptance criterion.
 
 ## High-level technical design
 
 ```mermaid
-flowchart LR
-  subgraph tests [Test packages]
-    API[pkg/api tests]
-    SVC[pkg/service tests]
-    VAL[pkg/factory/validation tests]
-  end
-  subgraph shared [Test-only shared module]
-    VA[pkg/testutil/validationassert]
-  end
-  subgraph types [Target shapes]
-    APIType[factoryapi.FactoryValidationTarget]
-    DomType[factoryvalidation.Target]
-  end
-  API --> VA
-  SVC --> VA
-  VAL --> VA
-  VA --> APIType
-  VA --> DomType
+sequenceDiagram
+  participant Op as Operator_or_agent
+  participant CLI as you_submit
+  participant API as Factory_HTTP_API
+  participant RT as Runtime_normalize_and_accept
+
+  Op->>CLI: you submit --name --work-type-name --payload
+  CLI->>API: POST /factory-sessions/{session}/work
+  API->>RT: NormalizeWorkRequest + SubmitWorkRequest
+  RT-->>API: traceId + work metadata
+  API-->>CLI: 201 SubmitWorkResponse (extended)
+  CLI-->>Op: human lines or --json envelope + hint
 ```
 
-**Package ownership:** `pkg/testutil/validationassert` owns cross-package test assertions. Production validation remains in `pkg/factory/validation`; API projection remains in handlers/services.
+**Package ownership**
 
-**Import boundaries:** `validationassert` may depend on `pkg/api/generated` and `pkg/factory/validation` types. Production packages must not import `validationassert`. If a cycle appears, split API vs domain helpers into sibling files within the same testutil submodule rather than duplicating logic.
+| Layer | Owner | Notes |
+|-------|--------|------|
+| OpenAPI + codegen | `api/`, `pkg/api/generated`, `ui/src/api/generated` | Single schema source for `SubmitWorkResponse`. |
+| HTTP handlers | `pkg/api/handlers.go` | Build response after successful submit; session id from route. |
+| Normalization | `pkg/factory/requests` | Existing `batch-{requestId}-{name}` work id assignment. |
+| CLI presentation | `pkg/cli/submit` | Human/JSON mapping, hints, errors; no HTTP in tests beyond httptest. |
+| Docs | `pkg/cli/docs/reference/work.md` | Customer-facing contract; agents topic links when wave-2 lands. |
 
-**Matching semantics (must not change):**
+**CLI `--json` envelope vs API DTO:** The API returns `SubmitWorkResponse`; the CLI may add `endpointPath` and normalized `sessionId` that are known at the client. Scripts should treat the CLI envelope as the stable `you submit --json` contract.
 
-| Helper | Match rule |
-|--------|------------|
-| Full API target | Same `code`, `subject.type`, `subject.id`, `subject.location` |
-| API code-only | Any target with matching `code` |
-| Domain code-only | Any target with matching `code` |
-| Domain subject | Any target with `subject` equal to expected `factoryvalidation.Subject` |
+## Supporting technical and UX considerations
 
-**Verification surface:** Existing behavioral tests that exercise validation through API HTTP tests, service factory save/validation paths, and `factoryvalidation.Validate` unit tests. No new inventory or registration tests.
-
-## Supporting technical considerations
-
-- Follow the `pkg/testutil/factoryfixtures` precedent: small focused submodule under `pkg/testutil`, documented in `pkg/testutil/doc.go` if needed.
-- Prefer preserving distinct failure messages where tests rely on them (service topology messages vs API code-only messages) via optional label parameters—not by keeping duplicate implementations.
-- `pkg/factory/validation/target_equivalence.go` already centralizes signature comparison for equivalence tests; do not conflate signature helpers with per-target presence assertions.
-- Defer `assertFactorySessionValidationTarget` in service session tests (different shape: reason + field); out of scope unless trivially shareable without API/domain coupling.
+- Global `--json` is registered on the root command; submit must not add a per-subcommand duplicate flag.
+- Use `clidiag.SessionLabel` for empty session display consistency with other CLI commands.
+- Bound error body snippets (for example 512 bytes) to avoid dumping HTML or large payloads.
+- Regenerate OpenAPI artifacts per repository process after schema edits.
+- Pair implementation order with work-inspection PRD so hints reference commands that exist or land in the same release train.
 
 ## Success metrics
 
-- Zero duplicate validation-target assertion implementations in scoped packages after merge.
-- No new validation test failures or changed expected target lists in PR diff.
-- Reviewers can locate all validation-target presence checks via one import path.
+- Agents can copy `workId` or the suggested `you work` command from one successful submit without running list first (when API returns `workId`).
+- Duplicate submit attempts during docs exercises drop because verify commands are visible in stdout.
+- Scripted flows parse `--json` with a single `jq` expression (no trace-only workaround).
 
 ## Open Questions
 
-None. Scope and deferrals are explicit; functional-test duplication is intentionally a follow-on.
+- None blocking: `workId` assignment at accept time follows existing `NormalizeWorkRequest` rules; if product later requires caller-supplied ids only, document in `you docs work` without changing this PRD scope.
 
-## Dependencies
+## Related documents
 
-| Relationship | Item |
-|--------------|------|
-| Upstream context | Customer ask `11`, PR `#492` (`factoryfixtures`) |
-| Blocked elsewhere | PR `#480` (`cli-submit-response-contract-v3`) — do not touch `pkg/cli/submit` |
-| Independent follow-ons | Petri/net assertions, functional `hasValidationTarget*` under `tests/functional/` |
+- [`tasks/prd-cli-submit-response-contract.md`](../prd-cli-submit-response-contract.md) (source ask)
+- [`tasks/prd-cli-work-inspection.md`](../prd-cli-work-inspection.md)
+- [`tasks/prd-docs-agents-consolidation-wave2.md`](../prd-docs-agents-consolidation-wave2.md)
