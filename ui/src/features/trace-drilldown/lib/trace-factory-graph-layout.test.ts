@@ -4,6 +4,7 @@ import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factor
 import * as factoryGraphEditorLayout from "../../factory-graph-editor/lib/factory-graph-editor-layout";
 import { buildTraceFactoryGraphLayoutPositions } from "./trace-factory-graph-layout";
 import { projectTraceDispatchesToFactoryGraph } from "./trace-dispatch-factory-graph";
+import { projectTraceRelationsToFactoryGraph } from "./trace-relation-factory-graph";
 
 const EMPTY_TOPOLOGY: FactoryGraphTopology = {
   edges: [],
@@ -162,6 +163,44 @@ describe("buildTraceFactoryGraphLayoutPositions dispatch projection", () => {
     expect(positions.size).toBe(2);
     expect(positions.get("dispatch-plan")?.x).toBeLessThan(
       positions.get("dispatch-build")?.x ?? Number.POSITIVE_INFINITY,
+    );
+  });
+});
+
+describe("buildTraceFactoryGraphLayoutPositions relation projection", () => {
+  it("lays out relation projection topology with left-to-right endpoint ordering", async () => {
+    const projection = projectTraceRelationsToFactoryGraph([
+      {
+        request_id: "request-parent-child",
+        required_state: "DONE",
+        source_work_id: "work-plan",
+        source_work_name: "Plan story",
+        target_work_id: "work-implement",
+        target_work_name: "Implement story",
+        type: "PARENT_CHILD",
+      },
+      {
+        request_id: "request-retry",
+        required_state: "FAILED",
+        source_work_id: "work-implement",
+        source_work_name: "Implement story",
+        target_work_id: "work-repair",
+        target_work_name: "Repair story",
+        type: "RETRY",
+      },
+    ]);
+
+    const positions = await buildTraceFactoryGraphLayoutPositions(
+      projection.topology,
+      projection.endpointKeyByNodeId,
+    );
+
+    expect(positions.size).toBe(3);
+    expect(positions.get("work-plan")?.x).toBeLessThan(
+      positions.get("work-implement")?.x ?? Number.POSITIVE_INFINITY,
+    );
+    expect(positions.get("work-implement")?.x).toBeLessThan(
+      positions.get("work-repair")?.x ?? Number.POSITIVE_INFINITY,
     );
   });
 });

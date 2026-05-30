@@ -14,10 +14,9 @@ import {
 } from "../../../components/dashboard/dashboard-graph";
 import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "../../factory-graph-editor/components/factory-graph-editor-edge";
 import {
-  getCachedTraceGraphLayout,
-  layoutTraceGraphWithElk,
-  traceGraphLayoutKey,
-} from "../lib/trace-elk-layout";
+  traceRelationTopologyLayoutKey,
+  useTraceRelationFactoryGraphLayoutPositions,
+} from "../hooks/use-trace-relation-factory-graph-layout";
 import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
 import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
@@ -50,44 +49,16 @@ export function TraceRelationFlow({
       }),
     [locale, onSelectWorkID, relations],
   );
-  const layoutKey = useMemo(
-    () =>
-      traceGraphLayoutKey(graph.nodes, graph.edges, graph.graphDimensions),
-    [graph.edges, graph.graphDimensions, graph.nodes],
+  const topologyKey = useMemo(
+    () => traceRelationTopologyLayoutKey(graph.topology),
+    [graph.topology],
   );
-  const [layoutedNodes, setLayoutedNodes] = useState<TraceRelationFlowNode[]>(
-    () => getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes,
+  const positionsByTraceNodeId = useTraceRelationFactoryGraphLayoutPositions(
+    graph.topology,
+    graph.endpointKeyByNodeId,
+    topologyKey,
   );
-
-  useEffect(() => {
-    setLayoutedNodes(
-      getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes,
-    );
-  }, [graph.nodes, layoutKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void layoutTraceGraphWithElk(
-      graph.nodes,
-      graph.edges,
-      graph.graphDimensions,
-    ).then((nextNodes) => {
-      if (!cancelled) {
-        setLayoutedNodes(nextNodes);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [graph.edges, graph.graphDimensions, graph.nodes]);
-
   const baseNodes = useMemo<TraceRelationFlowNode[]>(() => {
-    const positionsByID = new Map(
-      layoutedNodes.map((node) => [node.id, node.position]),
-    );
-
     return graph.nodes.map((node) => ({
       ...node,
       data: {
@@ -95,13 +66,22 @@ export function TraceRelationFlow({
         onSelectWorkID,
         selectable: Boolean(node.data.workID && onSelectWorkID),
       },
-      position: positionsByID.get(node.id) ?? node.position,
+      position: positionsByTraceNodeId.get(node.id) ?? node.position,
     }));
-  }, [graph.nodes, layoutedNodes, onSelectWorkID]);
+  }, [graph.nodes, onSelectWorkID, positionsByTraceNodeId]);
   const [nodes, setNodes] = useState<TraceRelationFlowNode[]>(baseNodes);
 
   useEffect(() => {
-    setNodes(baseNodes);
+    setNodes((currentNodes) => {
+      const currentPositions = new Map(
+        currentNodes.map((node) => [node.id, node.position]),
+      );
+
+      return baseNodes.map((node) => ({
+        ...node,
+        position: currentPositions.get(node.id) ?? node.position,
+      }));
+    });
   }, [baseNodes]);
 
   const handleNodesChange = useCallback(
@@ -133,7 +113,6 @@ export function TraceRelationFlow({
         {graphViewportReady ? (
           <TraceRelationReactFlow
             edges={graph.edges}
-            layoutKey={layoutKey}
             nodes={nodes}
             onNodesChange={handleNodesChange}
           />
@@ -145,12 +124,10 @@ export function TraceRelationFlow({
 
 function TraceRelationReactFlow({
   edges,
-  layoutKey,
   nodes,
   onNodesChange,
 }: {
   edges: ReturnType<typeof buildTraceRelationFactoryGraphFlow>["edges"];
-  layoutKey: string;
   nodes: TraceRelationFlowNode[];
   onNodesChange: (changes: NodeChange<TraceRelationFlowNode>[]) => void;
 }) {
@@ -160,7 +137,6 @@ function TraceRelationReactFlow({
       edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
       fitView
       fitViewOptions={GRAPH_FIT_VIEW_OPTIONS}
-      key={layoutKey}
       maxZoom={2}
       minZoom={0.35}
       nodes={nodes}

@@ -13,17 +13,6 @@ import { installDashboardBrowserTestShims } from "../../../components/dashboard/
 import type { DashboardWorkRelation } from "../../api/dashboard/types";
 import { TraceRelationFlow } from "./trace-relation-flow";
 
-vi.mock("../lib/trace-elk-layout", () => ({
-  getCachedTraceGraphLayout: () => null,
-  async layoutTraceGraphWithElk<TNode>(nodes: TNode[]): Promise<TNode[]> {
-    return nodes.map((node, index) => ({
-      ...node,
-      position: { x: index * 260, y: index * 140 },
-    }));
-  },
-  traceGraphLayoutKey: () => "trace-relation-layout-test",
-}));
-
 vi.mock("@xyflow/react", async () => {
   return {
     Background: ({
@@ -272,15 +261,15 @@ describe("TraceRelationFlow layout", () => {
     restoreBrowserShims = undefined;
   });
 
-  it("applies ELK positions after layout so relation nodes do not overlay", async () => {
+  it("applies factory graph layout positions so relation nodes do not overlay", async () => {
     render(<TraceRelationFlow relations={RELATIONS} />);
 
     await waitFor(() => {
-      expect(renderedNodePositions()).toEqual([
-        { x: 0, y: 0 },
-        { x: 260, y: 140 },
-        { x: 520, y: 280 },
-      ]);
+      const positions = renderedNodePositions();
+      expect(positions).toHaveLength(3);
+      expect(
+        new Set(positions.map((position) => `${position.x},${position.y}`)).size,
+      ).toBe(3);
     });
   });
 });

@@ -1,6 +1,7 @@
 import { MarkerType, type Node, Position } from "@xyflow/react";
 
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   type FactoryGraphReactFlowEdge,
   type FactoryGraphReactFlowNode,
@@ -32,8 +33,10 @@ export type TraceRelationFlowNode = Node<
 
 export interface TraceRelationFactoryGraphFlow {
   edges: FactoryGraphReactFlowEdge[];
+  endpointKeyByNodeId: ReadonlyMap<string, string>;
   graphDimensions: Map<string, { height: number; id: string; width: number }>;
   nodes: TraceRelationFlowNode[];
+  topology: FactoryGraphTopology;
 }
 
 export function buildTraceRelationFactoryGraphFlow(
@@ -116,8 +119,10 @@ export function buildTraceRelationFactoryGraphFlow(
 
   return {
     edges,
+    endpointKeyByNodeId: traceProjection.endpointKeyByNodeId,
     graphDimensions,
     nodes,
+    topology: traceProjection.topology,
   };
 }
 
