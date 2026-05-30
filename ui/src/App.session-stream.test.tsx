@@ -1,26 +1,22 @@
-import {
-  act,
-  fireEvent,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-
-import type { DashboardSnapshot } from "./api/dashboard";
+import {
+  buildBetaSessionSnapshot,
+  emitTimelineMessages,
+  requireEventStream,
+  resetTimelineForInitialStreamLoad,
+} from "./App.session-stream.test-helpers";
 import type { FactorySessionSummary } from "./api/factory-sessions/api";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
-import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
+import { useDashboardSessionStore } from "./features/dashboard/state/dashboardSessionStore";
+import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStreamStore";
 import { sessionStreamToggleLabel } from "./features/header/lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "./features/header/messages/header-controls";
-import {
-  createDefaultDashboardStreamState,
-  useDashboardStreamStore,
-} from "./features/dashboard/state/dashboardStreamStore";
-import { useDashboardSessionStore } from "./features/dashboard/state/dashboardSessionStore";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
-  MockEventSource,
   activeSnapshot,
+  MockEventSource,
   registerAppDashboardTestLifecycle,
   renderApp,
   renderAppWithDashboardShell,
@@ -50,76 +46,7 @@ const betaFactorySession: FactorySessionSummary = {
   },
 };
 
-function requireEventStream(): MockEventSource {
-  const stream = MockEventSource.instances.at(-1);
-
-  if (!stream) {
-    throw new Error("expected factory event stream to be opened");
-  }
-
-  return stream;
-}
-
-function resetTimelineForInitialStreamLoad(): void {
-  useFactoryTimelineStore.setState({
-    events: [],
-    latestTick: 0,
-    mode: "current",
-    receivedEventIDs: [],
-    selectedTick: 0,
-    worldViewCache: {},
-  });
-  useDashboardStreamStore.setState({
-    streamState: createDefaultDashboardStreamState(),
-  });
-}
-
-function emitTimelineMessages(stream: MockEventSource, events = selectedTickTimelineEvents): void {
-  for (const event of events) {
-    stream.emit("message", event);
-  }
-}
-
-function buildBetaSessionSnapshot(): DashboardSnapshot {
-  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  snapshot.tick_count = 108;
-  snapshot.runtime.session.completed_count = 3;
-  snapshot.runtime.session.dispatched_count = 5;
-  snapshot.runtime.session.failed_count = 2;
-
-  const renameWorkItem = (
-    workItem: NonNullable<
-      DashboardSnapshot["runtime"]["current_work_items_by_place_id"]
-    >[string][number],
-  ) => ({
-    ...workItem,
-    display_name:
-      workItem.display_name === "Active Story"
-        ? "Beta Story"
-        : workItem.display_name,
-    trace_id:
-      workItem.trace_id === "trace-active-story"
-        ? "trace-beta-story"
-        : workItem.trace_id,
-    work_id:
-      workItem.work_id === "work-active-story"
-        ? "work-beta-story"
-        : workItem.work_id,
-  });
-
-  snapshot.runtime.current_work_items_by_place_id = Object.fromEntries(
-    Object.entries(
-      snapshot.runtime.current_work_items_by_place_id ?? {},
-    ).map(([placeID, workItems]) => [
-      placeID,
-      workItems?.map(renameWorkItem),
-    ]),
-  );
-
-  return snapshot;
-}
-
-describe("App dashboard session stream shell", () => {
+describe("App dashboard session stream loading", () => {
   registerAppDashboardTestLifecycle();
 
   it("shows the loading shell before the first streamed event, then clears after the first message", async () => {
@@ -138,12 +65,12 @@ describe("App dashboard session stream shell", () => {
     expect(
       screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("slider", { name: "Timeline tick" }),
-    ).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Timeline tick" })).toBeNull();
 
     act(() => {
-      emitTimelineMessages(requireEventStream(), [selectedTickTimelineEvents[0]]);
+      emitTimelineMessages(requireEventStream(MockEventSource.instances), [
+        selectedTickTimelineEvents[0],
+      ]);
     });
 
     const slider = await screen.findByRole<HTMLInputElement>("slider", {
@@ -156,6 +83,10 @@ describe("App dashboard session stream shell", () => {
       expect(slider.value).toBe("1");
     });
   });
+});
+
+describe("App dashboard session stream tab switch", () => {
+  registerAppDashboardTestLifecycle();
 
   it("retargets the live stream URL on session tab switches and closes the prior connection", async () => {
     const betaSnapshot = buildBetaSessionSnapshot();
@@ -170,7 +101,7 @@ describe("App dashboard session stream shell", () => {
     });
     await screen.findByRole("tab", { name: "beta" });
 
-    const defaultStream = requireEventStream();
+    const defaultStream = requireEventStream(MockEventSource.instances);
     expect(defaultStream.url).toBe(
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
@@ -193,7 +124,7 @@ describe("App dashboard session stream shell", () => {
       expect(useFactoryTimelineStore.getState().events).toHaveLength(0);
     });
 
-    const betaStream = requireEventStream();
+    const betaStream = requireEventStream(MockEventSource.instances);
     expect(betaStream.url).toBe("/factory-sessions/session-beta/events");
 
     act(() => {
@@ -210,6 +141,10 @@ describe("App dashboard session stream shell", () => {
       );
     });
   });
+});
+
+describe("App dashboard session stream pause", () => {
+  registerAppDashboardTestLifecycle();
 
   it("stops the live stream when a non-default session is paused and reopens it on resume", async () => {
     const messages = getHeaderControlsMessages("en");
@@ -224,12 +159,12 @@ describe("App dashboard session stream shell", () => {
     fireEvent.click(screen.getByRole("tab", { name: "beta" }));
 
     await waitFor(() => {
-      expect(requireEventStream().url).toBe(
+      expect(requireEventStream(MockEventSource.instances).url).toBe(
         "/factory-sessions/session-beta/events",
       );
     });
 
-    const liveStream = requireEventStream();
+    const liveStream = requireEventStream(MockEventSource.instances);
 
     act(() => {
       liveStream.emit("snapshot", betaSnapshot);
@@ -245,9 +180,9 @@ describe("App dashboard session stream shell", () => {
 
     await waitFor(() => {
       expect(liveStream.closed).toBe(true);
-      expect(
-        useDashboardStreamStore.getState().streamState.message,
-      ).toBe("Live session updates paused. Showing last event state.");
+      expect(useDashboardStreamStore.getState().streamState.message).toBe(
+        "Live session updates paused. Showing last event state.",
+      );
     });
 
     const streamCountBeforeResume = MockEventSource.instances.length;
@@ -264,8 +199,72 @@ describe("App dashboard session stream shell", () => {
       );
     });
 
-    const resumedStream = requireEventStream();
+    const resumedStream = requireEventStream(MockEventSource.instances);
     expect(resumedStream.closed).toBe(false);
     expect(resumedStream.url).toBe("/factory-sessions/session-beta/events");
+  });
+});
+
+describe("App dashboard session stream refresh", () => {
+  registerAppDashboardTestLifecycle();
+
+  it("shows the loading shell and reopens the stream when the bento refresh token increments", async () => {
+    const messages = getHeaderControlsMessages("en");
+
+    renderApp({
+      seedTimelineFromSnapshot: false,
+      snapshot: activeSnapshot,
+    });
+    resetTimelineForInitialStreamLoad();
+
+    await waitFor(() => {
+      expect(MockEventSource.instances.length).toBeGreaterThan(0);
+    });
+
+    const initialStream = requireEventStream(MockEventSource.instances);
+    act(() => {
+      emitTimelineMessages(initialStream, [selectedTickTimelineEvents[0]]);
+    });
+
+    await screen.findByRole<HTMLInputElement>("slider", {
+      name: "Timeline tick",
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("heading", { name: messages.loadingDashboardTitle }),
+      ).toBeNull();
+    });
+
+    const streamCountBeforeRefresh = MockEventSource.instances.length;
+
+    act(() => {
+      useDashboardBentoStore.getState().incrementRefreshToken();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
+      ).toBeTruthy();
+      expect(initialStream.closed).toBe(true);
+      expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+      expect(MockEventSource.instances.length).toBeGreaterThan(
+        streamCountBeforeRefresh,
+      );
+    });
+
+    const refreshedStream = requireEventStream(MockEventSource.instances);
+    expect(refreshedStream.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+
+    act(() => {
+      emitTimelineMessages(refreshedStream, [selectedTickTimelineEvents[0]]);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("heading", { name: messages.loadingDashboardTitle }),
+      ).toBeNull();
+    });
   });
 });

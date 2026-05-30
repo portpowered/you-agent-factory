@@ -28,11 +28,17 @@ import {
 } from "../features/dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
+import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import {
-  useFactoryTimelineStore,
-  type WorldState,
-} from "../features/timeline/state/factoryTimelineStore";
+  defaultFactorySessionSummary,
+  fetchRequestPath,
+  MockEventSource,
+} from "./app-shell-session-stream-test-utils";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
+import {
+  seedTimelineSnapshot,
+  seedTimelineSnapshots,
+} from "./app-shell-timeline-seed-utils";
 import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
 
 export {
@@ -61,46 +67,10 @@ vi.mock("../features/current-factory-definition/public", async () => {
   };
 });
 
-export class MockEventSource {
-  public static instances: MockEventSource[] = [];
-
-  public closed = false;
-  public onerror: ((event: Event) => void) | null = null;
-  public onopen: ((event: Event) => void) | null = null;
-
-  private readonly listeners = new Map<string, EventListener[]>();
-
-  public constructor(public readonly url: string) {
-    MockEventSource.instances.push(this);
-  }
-
-  public addEventListener(type: string, listener: EventListener): void {
-    const existing = this.listeners.get(type) ?? [];
-    existing.push(listener);
-    this.listeners.set(type, existing);
-  }
-
-  public close(): void {
-    this.closed = true;
-  }
-
-  public emit(type: string, data: unknown): void {
-    if (type === "snapshot") {
-      const state = useFactoryTimelineStore.getState();
-      const tracesByWorkID =
-        state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {};
-      seedTimelineSnapshot(data as DashboardSnapshot, tracesByWorkID);
-    }
-
-    const event = new MessageEvent(type, {
-      data: JSON.stringify(data),
-    });
-
-    for (const listener of this.listeners.get(type) ?? []) {
-      listener(event);
-    }
-  }
-}
+export {
+  fetchRequestPath,
+  MockEventSource,
+} from "./app-shell-session-stream-test-utils";
 
 interface RenderAppOptions {
   browserLanguage?: string | null;
@@ -132,17 +102,6 @@ type CurrentFactoryDocumentResult = ReturnType<
 const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
-const defaultFactorySessionSummary: FactorySessionSummary = {
-  factoryDir: "/workspace/default",
-  folderPath: "/workspace",
-  id: DEFAULT_FACTORY_SESSION_ID,
-  isDefault: true,
-  project: "default",
-  target: {
-    kind: "default",
-  },
-};
-
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
 );
@@ -217,85 +176,6 @@ export const importedFactorySnapshot = (() => {
 
   return snapshot;
 })();
-
-function timelineSnapshot(
-  snapshot: DashboardSnapshot,
-  tracesByWorkID: Record<string, DashboardTrace> = {},
-  workstationRequestsByDispatchID: Record<
-    string,
-    DashboardWorkstationRequest
-  > = {},
-): WorldState {
-  return {
-    ...snapshot,
-    relationsByWorkID: {},
-    tracesByWorkID,
-    workstationRequestsByDispatchID,
-    workRequestsByID: {},
-  };
-}
-
-function seedTimelineSnapshot(
-  snapshot: DashboardSnapshot,
-  tracesByWorkID: Record<string, DashboardTrace> = {},
-  workstationRequestsByDispatchID: Record<
-    string,
-    DashboardWorkstationRequest
-  > = {},
-): void {
-  useFactoryTimelineStore.setState({
-    events: [],
-    latestTick: snapshot.tick_count,
-    mode: "current",
-    receivedEventIDs: [],
-    selectedTick: snapshot.tick_count,
-    worldViewCache: {
-      [snapshot.tick_count]: timelineSnapshot(
-        snapshot,
-        tracesByWorkID,
-        workstationRequestsByDispatchID,
-      ),
-    },
-  });
-}
-
-function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
-  const worldViewCache = Object.fromEntries(
-    snapshots.map(
-      (snapshot) =>
-        [
-          snapshot.tick_count,
-          timelineSnapshot(snapshot) satisfies WorldState,
-        ] as const,
-    ),
-  );
-  const latestTick = Math.max(
-    ...snapshots.map((snapshot) => snapshot.tick_count),
-  );
-
-  useFactoryTimelineStore.setState({
-    events: [],
-    latestTick,
-    mode: "current",
-    receivedEventIDs: [],
-    selectedTick: latestTick,
-    worldViewCache,
-  });
-}
-
-function fetchRequestPath(input: RequestInfo | URL): string {
-  if (typeof input === "string") {
-    return input.startsWith("http") ? new URL(input).pathname : input;
-  }
-
-  if (input instanceof URL) {
-    return `${input.pathname}${input.search}`;
-  }
-
-  return input.url.startsWith("http")
-    ? new URL(input.url).pathname
-    : input.url;
-}
 
 export async function waitForDashboardShell(): Promise<void> {
   await screen.findByRole("heading", { name: "U" });
