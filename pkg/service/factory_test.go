@@ -1170,6 +1170,28 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 }
 
 func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(t *testing.T) {
+	sourceDir := writePortableBundledReplacementFactoryFixture(t)
+
+	logCore, observedLogs := observer.New(zap.WarnLevel)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               sourceDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.New(logCore),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	closeStartupRuntimeLogSink(t, svc.currentRuntimeBundle())
+
+	if svc.currentRuntimeConfig() == nil {
+		t.Fatal("expected runtime config after portable load")
+	}
+	assertPortableBundledReplacementWarningLogged(t, observedLogs, sourceDir)
+}
+
+func writePortableBundledReplacementFactoryFixture(t *testing.T) string {
+	t.Helper()
+
 	projectDir := t.TempDir()
 	sourceDir := filepath.Join(projectDir, "factory")
 	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
@@ -1220,28 +1242,24 @@ func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(
 	if err := os.WriteFile(filepath.Join(sourceDir, "scripts", "execute-story.ps1"), []byte("Write-Output 'stale script'\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(portable script): %v", err)
 	}
+	return sourceDir
+}
 
-	logCore, observedLogs := observer.New(zap.WarnLevel)
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               sourceDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.New(logCore),
+func closeStartupRuntimeLogSink(t *testing.T, startupBundle *factoryRuntimeBundle) {
+	t.Helper()
+	if startupBundle == nil || startupBundle.logSink == nil {
+		return
+	}
+	t.Cleanup(func() {
+		if err := startupBundle.logSink.Close(); err != nil {
+			t.Fatalf("Close(runtime log sink): %v", err)
+		}
 	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-	startupBundle := svc.currentRuntimeBundle()
-	if startupBundle != nil && startupBundle.logSink != nil {
-		defer func() {
-			if err := startupBundle.logSink.Close(); err != nil {
-				t.Fatalf("Close(runtime log sink): %v", err)
-			}
-		}()
-	}
+}
 
-	if svc.currentRuntimeConfig() == nil {
-		t.Fatal("expected runtime config after portable load")
-	}
+func assertPortableBundledReplacementWarningLogged(t *testing.T, observedLogs *observer.ObservedLogs, sourceDir string) {
+	t.Helper()
+
 	warnings := observedLogs.FilterMessage("runtime config load replaced portable bundled files").All()
 	if len(warnings) != 1 {
 		t.Fatalf("replacement warning count = %d, want 1", len(warnings))

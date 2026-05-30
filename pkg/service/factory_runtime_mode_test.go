@@ -827,6 +827,11 @@ func TestFactoryService_Run_RegistersDefaultSessionInRegistry(t *testing.T) {
 	})
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	assertDefaultSessionRegisteredAfterRun(t, svc, alphaDir, rootDir)
+}
+
+func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, alphaDir, rootDir string) {
+	t.Helper()
 
 	defaultSession := svc.defaultSession()
 	if defaultSession == nil {

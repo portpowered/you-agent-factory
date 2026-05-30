@@ -286,26 +286,9 @@ func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string)
 
 	sessionID := fs.runSessionID()
 	session := fs.sessionByID(sessionID)
+	persistRoot, folderPath := fs.namedFactoryActivationPaths(session)
 
-	persistRoot := fs.factoryRootDir
-	if persistRoot == "" && fs.cfg != nil {
-		persistRoot = fs.cfg.Dir
-	}
-	folderPath := persistRoot
-	if session != nil {
-		persistRoot = sessionFactoryPersistRoot(fs.factoryRootDir, session)
-		if trimmed := strings.TrimSpace(session.FolderPath); trimmed != "" {
-			folderPath = trimmed
-		} else {
-			folderPath = persistRoot
-		}
-	}
-
-	if session != nil && liveSessionHandle(session) != nil {
-		if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
-			return err
-		}
-	} else if err := fs.requireIdleRuntime(ctx); err != nil {
+	if err := fs.requireIdleBeforeNamedFactoryActivation(ctx, sessionID, session); err != nil {
 		return err
 	}
 
@@ -320,14 +303,61 @@ func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string)
 	}
 
 	if session != nil && liveSessionHandle(session) != nil {
-		if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
-			return err
-		}
-		if err := factoryconfig.WriteCurrentFactoryPointer(persistRoot, name); err != nil {
-			return err
-		}
-		return fs.replaceSessionRuntime(ctx, session, name, replacement)
+		return fs.activateNamedFactoryForLiveSession(ctx, session, sessionID, persistRoot, name, replacement)
 	}
+	return fs.activateNamedFactoryWithoutLiveSession(ctx, persistRoot, name, replacement)
+}
+
+func (fs *FactoryService) namedFactoryActivationPaths(session *factorysessions.LiveSession) (persistRoot, folderPath string) {
+	persistRoot = fs.factoryRootDir
+	if persistRoot == "" && fs.cfg != nil {
+		persistRoot = fs.cfg.Dir
+	}
+	folderPath = persistRoot
+	if session == nil {
+		return persistRoot, folderPath
+	}
+	persistRoot = sessionFactoryPersistRoot(fs.factoryRootDir, session)
+	if trimmed := strings.TrimSpace(session.FolderPath); trimmed != "" {
+		return persistRoot, trimmed
+	}
+	return persistRoot, persistRoot
+}
+
+func (fs *FactoryService) requireIdleBeforeNamedFactoryActivation(
+	ctx context.Context,
+	sessionID string,
+	session *factorysessions.LiveSession,
+) error {
+	if session != nil && liveSessionHandle(session) != nil {
+		return fs.requireIdleRuntimeForSession(ctx, sessionID)
+	}
+	return fs.requireIdleRuntime(ctx)
+}
+
+func (fs *FactoryService) activateNamedFactoryForLiveSession(
+	ctx context.Context,
+	session *factorysessions.LiveSession,
+	sessionID string,
+	persistRoot string,
+	name string,
+	replacement *factoryRuntimeBundle,
+) error {
+	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+		return err
+	}
+	if err := factoryconfig.WriteCurrentFactoryPointer(persistRoot, name); err != nil {
+		return err
+	}
+	return fs.replaceSessionRuntime(ctx, session, name, replacement)
+}
+
+func (fs *FactoryService) activateNamedFactoryWithoutLiveSession(
+	ctx context.Context,
+	persistRoot string,
+	name string,
+	replacement *factoryRuntimeBundle,
+) error {
 	if err := fs.requireIdleRuntime(ctx); err != nil {
 		return err
 	}
