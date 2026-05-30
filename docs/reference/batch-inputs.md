@@ -385,7 +385,7 @@ Before dropping a batch file into `factory/inputs/...`, confirm:
 
 - `you docs agents`
 - `you docs config`
-- [Submitted work](work.md)
+- `you docs work`
 - [Author factories](../reference/authoring-factories.md)
 - [Relationships](relationships.md)
 - [Guards](guards.md)
