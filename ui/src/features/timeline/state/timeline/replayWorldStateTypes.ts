@@ -12,6 +12,7 @@ import type {
   ScriptRequestPayload,
   ScriptResponsePayload,
   WorkRequestPayload,
+  WorkStateChangeEventPayload,
 } from "../../../../api/events";
 
 export type InitialStructureRequestEvent = FactoryEvent<InitialStructureRequestPayload>;
@@ -26,3 +27,4 @@ export type ScriptRequestEvent = FactoryEvent<ScriptRequestPayload>;
 export type ScriptResponseEvent = FactoryEvent<ScriptResponsePayload>;
 export type DispatchResponseEvent = FactoryEvent<DispatchResponsePayload>;
 export type FactoryStateResponseEvent = FactoryEvent<FactoryStateResponsePayload>;
+export type WorkStateChangeEvent = FactoryEvent<WorkStateChangeEventPayload>;
