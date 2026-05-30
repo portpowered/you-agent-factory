@@ -400,7 +400,7 @@ func (fs *FactoryService) openFactorySessionForTarget(ctx context.Context, targe
 	return sessionID, nil
 }
 
-func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle *replacementFactoryRuntime) error {
+func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle *factoryRuntimeBundle) error {
 	return fs.startBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{
 			Kind: FactorySessionTargetKindDefault,
@@ -415,7 +415,7 @@ func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID 
 func (fs *FactoryService) startBackgroundSessionWithMetadata(
 	ctx context.Context,
 	sessionID string,
-	runtimeBundle *replacementFactoryRuntime,
+	runtimeBundle *factoryRuntimeBundle,
 	target FactorySessionTarget,
 ) error {
 	if fs == nil {
@@ -503,7 +503,7 @@ func (fs *FactoryService) replaceSessionRuntime(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
 	name string,
-	replacement *replacementFactoryRuntime,
+	replacement *factoryRuntimeBundle,
 ) error {
 	if session == nil {
 		return fmt.Errorf("%w: session handle is unavailable", apisurface.ErrFactorySessionNotFound)

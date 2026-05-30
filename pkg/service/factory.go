@@ -77,7 +77,9 @@ type localModelRuntime = localmodels.Runtime
 type localModelResourceLimiter = localmodels.ResourceLimiter
 type managedLocalModelManager = localmodels.Manager
 
-type replacementFactoryRuntime struct {
+// factoryRuntimeBundle is the single runtime wiring struct produced by
+// buildRuntimeBundle and referenced from liveRuntimeHandle.
+type factoryRuntimeBundle struct {
 	dir            string
 	folderPath     string
 	eventHistory   *factoryevents.FactoryEventHistory
@@ -95,7 +97,7 @@ type replacementFactoryRuntime struct {
 }
 
 type liveRuntimeHandle struct {
-	runtime       *replacementFactoryRuntime
+	runtime       *factoryRuntimeBundle
 	runCancel     context.CancelFunc
 	runDone       chan struct{}
 	sidecarCancel context.CancelFunc
@@ -114,9 +116,11 @@ type serviceRunState struct {
 type runtimeBundleBuildInput struct {
 	dir                   string
 	folderPath            string
+	sessionID             string
 	cfg                   *FactoryServiceConfig
 	loadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
-	logger                *zap.Logger
+	baseLogger            *zap.Logger
+	runtimeInstanceID     string
 	clock                 factory.Clock
 	recordPath            string
 	workflowID            string
@@ -321,7 +325,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	folderPath string,
 	factoryDir string,
 	sessionID string,
-) (*replacementFactoryRuntime, error) {
+) (*factoryRuntimeBundle, error) {
 	baseLogger := fs.baseLogger
 	if baseLogger == nil {
 		baseLogger = zap.NewNop()
@@ -331,28 +335,19 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	if err != nil {
 		return nil, fmt.Errorf("load factory config: %w", err)
 	}
-	runtimeInstanceID := uuid.NewString()
-	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, fs.cfg.RuntimeLogDir, fs.cfg.RuntimeLogConfig)
-	if err != nil {
-		return nil, fmt.Errorf("build runtime logger: %w", err)
-	}
-	logger := newSessionLogger(logSink.Logger(), sessionID, folderPath, loadedFactoryCfg.FactoryDir())
-	runtimeBuilt := false
-	defer func() {
-		if !runtimeBuilt {
-			_ = logSink.Close()
-		}
-	}()
+	logger := newSessionLogger(baseLogger, sessionID, folderPath, loadedFactoryCfg.FactoryDir())
 	warnPortableBundledReplacementReport(logger, "named factory activation replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
 	loadedFactoryCfg.SetRuntimeBaseDir(fs.cfg.ExecutionBaseDir)
 	clock := factory.EnsureClock(fs.clock)
 	recordPath := sessionScopedRecordPath(fs.cfg.RecordPath, sessionID)
-	replacementRuntime, err := buildRuntimeBundle(ctx, runtimeBundleBuildInput{
+	return buildRuntimeBundle(ctx, runtimeBundleBuildInput{
 		dir:                   factoryDir,
 		folderPath:            folderPath,
+		sessionID:             sessionID,
 		cfg:                   fs.cfg,
 		loadedFactoryCfg:      loadedFactoryCfg,
-		logger:                logger,
+		baseLogger:            baseLogger,
+		runtimeInstanceID:     uuid.NewString(),
 		clock:                 clock,
 		recordPath:            recordPath,
 		workflowID:            fs.cfg.WorkflowID,
@@ -360,12 +355,6 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 		providerCommandRunner: providerCommandRunnerForMode(fs.cfg, loadedFactoryCfg),
 		commandRunnerOverride: commandRunnerOverrideForMode(fs.cfg, loadedFactoryCfg, nil),
 	})
-	if err != nil {
-		return nil, err
-	}
-	runtimeBuilt = true
-	replacementRuntime.logSink = logSink
-	return replacementRuntime, nil
 }
 
 // Run starts the file watcher, dashboard, API server, and factory engine.
@@ -595,7 +584,7 @@ func (fs *FactoryService) activateReplacementRuntime(
 	ctx context.Context,
 	rootDir string,
 	name string,
-	replacement *replacementFactoryRuntime,
+	replacement *factoryRuntimeBundle,
 ) error {
 	runState := fs.currentRunState()
 	if runState == nil || runState.runtime == nil || runState.ctx == nil {
@@ -637,7 +626,7 @@ func (fs *FactoryService) activateReplacementRuntime(
 func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
 	rootDir string,
 	name string,
-	replacement *replacementFactoryRuntime,
+	replacement *factoryRuntimeBundle,
 ) error {
 	if err := configpersist.WriteCurrentFactoryPointer(rootDir, name); err != nil {
 		return err
@@ -649,7 +638,7 @@ func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
 func (fs *FactoryService) startReplacementRuntime(
 	ctx context.Context,
 	runCtx context.Context,
-	replacement *replacementFactoryRuntime,
+	replacement *factoryRuntimeBundle,
 	serviceMode bool,
 ) (*liveRuntimeHandle, error) {
 	replacementHandle := fs.startLiveRuntime(runCtx, replacement)
@@ -718,7 +707,7 @@ func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.Markin
 	return false
 }
 
-func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
+func (fs *FactoryService) currentRuntimeBundle() *factoryRuntimeBundle {
 	if fs == nil {
 		return nil
 	}
@@ -732,7 +721,7 @@ func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
 	if fs.factory == nil {
 		return nil
 	}
-	return &replacementFactoryRuntime{
+	return &factoryRuntimeBundle{
 		dir:            fs.cfg.Dir,
 		folderPath:     fs.factoryRootDir,
 		eventHistory:   fs.eventHistory,
@@ -753,7 +742,7 @@ func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
 func (fs *FactoryService) publishFactoryChangeEvent(
 	ctx context.Context,
 	currentRuntime *liveRuntimeHandle,
-	replacement *replacementFactoryRuntime,
+	replacement *factoryRuntimeBundle,
 ) {
 	if replacement == nil || replacement.eventHistory == nil {
 		return
@@ -797,7 +786,7 @@ func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factorya
 	return factoryapi.FactoryChangeEventPayload{}, false
 }
 
-func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *replacementFactoryRuntime) *liveRuntimeHandle {
+func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *factoryRuntimeBundle) *liveRuntimeHandle {
 	if runtimeBundle == nil {
 		return nil
 	}

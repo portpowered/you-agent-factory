@@ -178,7 +178,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 		},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
@@ -235,7 +235,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 		},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
@@ -327,7 +327,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			runtimeCfg: runtimeCfg,
 			factory:    submitted,
 		},
@@ -412,7 +412,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			runtimeCfg: runtimeCfg,
 			factory:    &aggregateSnapshotFactory{},
 		},
@@ -464,7 +464,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			runtimeCfg: runtimeCfg,
 			factory:    &aggregateSnapshotFactory{},
 		},
@@ -517,7 +517,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 		},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
@@ -562,7 +562,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 		},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
@@ -735,7 +735,7 @@ func newScriptPollerRuntimeHandleForWorkstation(
 	t.Helper()
 
 	return &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory: activeFactory,
 			runtimeCfg: newScriptPollerLoadedRuntimeConfigForServiceTest(
 				t,
@@ -1382,7 +1382,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 		clock:   fakeClock,
 	}
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    replacementFactory,
 			runtimeCfg: runtimeCfg,
 		},
@@ -1644,7 +1644,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 		clock:      fakeClock,
 	}
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    replacementFactory,
 			runtimeCfg: cronLoadedFactoryConfigForServiceTest(t, "beta", true),
 		},

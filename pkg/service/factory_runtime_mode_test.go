@@ -644,13 +644,48 @@ func TestBuildReplacementFactoryRuntime_WiresLocalModelDelegationSeam(t *testing
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
 	if replacement.localModels == nil {
-		t.Fatal("replacement runtime localModels = nil, want managed localmodels.Manager from buildRuntimeBundle seam")
+		t.Fatal("runtime bundle localModels = nil, want managed localmodels.Manager from buildRuntimeBundle seam")
 	}
 	if replacement.modelAssets == nil {
-		t.Fatal("replacement runtime modelAssets = nil, want localmodels.AssetPuller from buildRuntimeBundle seam")
+		t.Fatal("runtime bundle modelAssets = nil, want localmodels.AssetPuller from buildRuntimeBundle seam")
 	}
 	if replacement.modelResources == nil {
-		t.Fatal("replacement runtime modelResources = nil, want localmodels.ResourceLimiter from buildRuntimeBundle seam")
+		t.Fatal("runtime bundle modelResources = nil, want localmodels.ResourceLimiter from buildRuntimeBundle seam")
+	}
+	if replacement.logSink == nil {
+		t.Fatal("runtime bundle logSink = nil, want runtime log sink from buildRuntimeBundle seam")
+	}
+	if replacement.logger == nil {
+		t.Fatal("runtime bundle logger = nil, want session logger from buildRuntimeBundle seam")
+	}
+}
+
+func TestBuildFactoryService_StartupRuntimeBundleMatchesLiveHandleShape(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.logSink == nil {
+		t.Fatal("service logSink = nil, want startup bundle runtime log sink")
+	}
+
+	bundle := svc.currentRuntimeBundle()
+	if bundle == nil {
+		t.Fatal("currentRuntimeBundle = nil, want service shadow bundle during startup")
+	}
+	if bundle.factory != svc.factory || bundle.logSink != svc.logSink {
+		t.Fatalf("startup bundle fields diverged from service copy: bundle=%#v", bundle)
 	}
 }
 
