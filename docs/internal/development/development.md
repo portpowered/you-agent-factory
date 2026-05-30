@@ -591,6 +591,17 @@ Implementation hooks live under `ui/src/features/current-factory-definition/`, `
 
 **Session switch:** When `sessionID` changes, `useDashboardSessionLifecycle` calls `resetDashboardSessionScopedState`, which resets the timeline and selection stores and `removeQueries` for every `current-factory-definition` cache entry (all sessions). `useCurrentFactoryDocument` then refetches for the active session only. Graph editor draft state resets via `factoryDocumentScopeKey` on `useFactoryGraphDraftState` / `useEditableFactoryGraph` so a dirty draft from the previous tab cannot seed the next session while the new document GET is pending.
 
+### After-save convergence
+
+Successful graph saves converge the document plane and live snapshot without a full page reload:
+
+1. **Document plane (immediate):** `useSaveCurrentFactory` writes the PUT response—including `version` metadata—into both `currentFactoryDocumentQueryKey` and `currentFactoryDefinitionQueryKey` via `setQueryData`. The mutation does not refetch the document GET.
+2. **Graph draft:** `useEditableFactoryGraph` clears pending edits after save; `useFactoryGraphDraftState` re-syncs `latestDocument` from the updated React Query cache on the next render.
+3. **Snapshot plane (SSE):** The backend emits `FACTORY_CHANGE` on the session event stream after a live runtime replacement. Timeline replay rebuilds `DashboardSnapshot` from streamed events—there is no separate dashboard refresh token on save. Observe-mode overlay and runtime counts update when the event is processed.
+4. **Document cache bridge:** `syncCurrentFactoryDefinition` (called from `useFactoryEventStream`) updates the definition cache from the event payload. When the payload includes hybrid logical `version` metadata, it also `setQueryData`s the document cache so a post-save `FACTORY_CHANGE` does not trigger a redundant document GET. When version metadata is absent, it invalidates the document query once so stale-save warnings can refresh version from GET.
+
+`refreshToken` on the dashboard bento store only forces stream/timeline reset on explicit operator refresh or session lifecycle changes—not on each successful save.
+
 ## Related Docs
 
 - [Factory CLI wire composition](cmd-factory-wire-composition.md)
