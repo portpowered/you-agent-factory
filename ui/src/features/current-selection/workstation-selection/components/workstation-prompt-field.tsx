@@ -1,3 +1,10 @@
+import { useId, useState } from "react";
+
+import { DisclosureButton } from "../../../../components/ui/disclosure-button";
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "../../../../components/ui/collapsible";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -10,8 +17,12 @@ import {
   CURRENT_SELECTION_CODE_SUBTLE_CLASS,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
+  HISTORY_TOGGLE_CLASS,
 } from "../../base/components/detail-card-shared";
-import type { WorkstationDetailCardProps } from "../lib/detail-card-types";
+import type {
+  EditableWorkstationPromptHelpState,
+  WorkstationDetailCardProps,
+} from "../lib/detail-card-types";
 import { WorkstationPromptEditor } from "./workstation-prompt-editor";
 
 export function EditableConfigurationPromptInput({
@@ -111,49 +122,90 @@ function EditableConfigurationPromptAutocompleteFeedback({
   }
 
   return (
+    <EditableConfigurationReadyPromptHelp
+      messages={messages}
+      promptHelpState={state.promptHelpState}
+    />
+  );
+}
+
+function EditableConfigurationReadyPromptHelp({
+  messages,
+  promptHelpState,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  promptHelpState: Extract<EditableWorkstationPromptHelpState, { status: "ready" }>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const sectionId = useId();
+  const contentId = `${sectionId}-prompt-help-content`;
+
+  return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
-      <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
-        {messages.editableConfigurationPromptAutocompleteSummary(
-          state.promptHelpState.contract.availableVariables.length,
-          state.promptHelpState.contract.inputCount,
-        )}
-      </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationPromptAutocompleteDetail}
-      </p>
-      <div className="grid gap-2">
-        {state.promptHelpState.contract.availableVariables.length > 0 ? (
-          <PromptContractList
-            heading={messages.editableConfigurationPromptAvailableVariablesHeading}
-            items={state.promptHelpState.contract.availableVariables.map(
-              (variable) => ({
-                detail: variable.description,
-                example: variable.example,
-                key: `${variable.category}:${variable.path}:${variable.example}`,
-                label: variable.path,
-              }),
-            )}
-          />
-        ) : null}
-        {state.promptHelpState.contract.unavailableAccessPatterns.length > 0 ? (
-          <PromptContractList
-            heading={messages.editableConfigurationPromptUnavailableAccessHeading}
-            items={state.promptHelpState.contract.unavailableAccessPatterns.map(
-              (pattern) => ({
-                detail: pattern.reason,
-                example: pattern.example,
-                key: `${pattern.path}:${pattern.example}:${pattern.reason}`,
-                label: pattern.path,
-              }),
-            )}
-          />
-        ) : null}
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className={cn("m-0 min-w-0 flex-1", CURRENT_SELECTION_NOTICE_SUBTLE_CLASS)}>
+          {messages.editableConfigurationPromptAutocompleteSummary(
+            promptHelpState.contract.availableVariables.length,
+            promptHelpState.contract.inputCount,
+          )}
+        </p>
+        <DisclosureButton
+          aria-label={
+            expanded
+              ? messages.editableConfigurationPromptHelpCollapseActionLabel
+              : messages.editableConfigurationPromptHelpExpandActionLabel
+          }
+          className={HISTORY_TOGGLE_CLASS}
+          controlsID={contentId}
+          expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+          type="button"
+        >
+          {expanded ? messages.collapseAction : messages.expandAction}
+        </DisclosureButton>
       </div>
+      <Collapsible onOpenChange={setExpanded} open={expanded}>
+        <CollapsibleContent className="grid gap-2 pt-2" id={contentId}>
+          <p
+            className={cn(
+              "m-0 text-af-text-subtle",
+              DASHBOARD_SUPPORTING_TEXT_CLASS,
+            )}
+          >
+            {messages.editableConfigurationPromptAutocompleteDetail}
+          </p>
+          {promptHelpState.contract.availableVariables.length > 0 ? (
+            <PromptContractList
+              heading={
+                messages.editableConfigurationPromptAvailableVariablesHeading
+              }
+              items={promptHelpState.contract.availableVariables.map(
+                (variable) => ({
+                  detail: variable.description,
+                  example: variable.example,
+                  key: `${variable.category}:${variable.path}:${variable.example}`,
+                  label: variable.path,
+                }),
+              )}
+            />
+          ) : null}
+          {promptHelpState.contract.unavailableAccessPatterns.length > 0 ? (
+            <PromptContractList
+              heading={
+                messages.editableConfigurationPromptUnavailableAccessHeading
+              }
+              items={promptHelpState.contract.unavailableAccessPatterns.map(
+                (pattern) => ({
+                  detail: pattern.reason,
+                  example: pattern.example,
+                  key: `${pattern.path}:${pattern.example}:${pattern.reason}`,
+                  label: pattern.path,
+                }),
+              )}
+            />
+          ) : null}
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

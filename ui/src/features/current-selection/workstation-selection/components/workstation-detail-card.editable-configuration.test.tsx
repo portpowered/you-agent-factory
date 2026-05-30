@@ -8,6 +8,20 @@ import { WorkstationDetailCard } from "./workstation-detail-card";
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 const editableConfigurationCoverageTimeoutMs = 240_000;
 
+function expandEditableConfiguration() {
+  fireEvent.click(
+    within(editableConfigurationSection()).getByRole("button", {
+      name: "Expand editable configuration",
+    }),
+  );
+}
+
+function promptVariableHelpToggle() {
+  return within(editableConfigurationSection()).getByRole("button", {
+    name: "Open prompt variable help",
+  });
+}
+
 function expectHeadingBefore(first: HTMLElement, second: HTMLElement) {
   expect(
     first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -86,6 +100,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       };
   sharedWorkerWorkstationNames?: string[];
   overwriteFieldNames?: EditableWorkstationOverwriteField[];
+  initialValuesWorkstationName?: string;
   validationErrors?: {
     behavior?: string;
     prompt?: string;
@@ -134,7 +149,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         planner: "MODEL_WORKER",
         reviewer: "MODEL_WORKER",
       },
-      workstationName: "Review",
+      workstationName: overrides?.initialValuesWorkstationName ?? "Review",
       workstationType: "MODEL_WORKSTATION",
     },
     isDirty: Boolean(
@@ -323,6 +338,7 @@ describe("WorkstationDetailCard editable configuration", () => {
         "Autocomplete is ready with 2 variables for 1 authored input.",
       ),
     ).toBeTruthy();
+    expect(screen.queryByText("Available variables")).toBeNull();
     expect(
       screen.getByDisplayValue(
         "Review the latest story changes before approval.",
@@ -740,11 +756,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    fireEvent.click(
-      within(editableConfigurationSection()).getByRole("button", {
-        name: "Expand editable configuration",
-      }),
-    );
+    expandEditableConfiguration();
 
     expect(
       screen.getByText(
@@ -752,8 +764,21 @@ describe("WorkstationDetailCard editable configuration", () => {
       ),
     ).toBeTruthy();
     expect(
+      screen.queryByText(
+        "Suggestions appear only while typing inside {{ ... }}.",
+      ),
+    ).toBeNull();
+    expect(screen.queryByText("Available variables")).toBeNull();
+    expect(promptVariableHelpToggle()).toBeTruthy();
+    expect(promptVariableHelpToggle().getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+
+    fireEvent.click(promptVariableHelpToggle());
+
+    expect(
       screen.getByText(
-        "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
+        "Suggestions appear only while typing inside {{ ... }}.",
       ),
     ).toBeTruthy();
     expect(screen.getByText("Available variables")).toBeTruthy();
@@ -770,9 +795,10 @@ describe("WorkstationDetailCard editable configuration", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Open prompt variable help" }),
-    ).toBeNull();
-    expect(screen.queryByText("Prompt variable help")).toBeNull();
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Close prompt variable help",
+      }).getAttribute("aria-expanded"),
+    ).toBe("true");
   });
 
   it("renders inline prompt diagnostics with squiggle feedback for invalid variables", () => {
@@ -1219,7 +1245,91 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(editor?.getAttribute("data-monaco-marker-count")).toBe("2");
   });
 
-  it("keeps prompt guidance inline without a separate prompt variable help disclosure", () => {
+  it("collapses ready prompt variable help by default and preserves list content when expanded", async () => {
+    const user = userEvent.setup();
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    const toggle = promptVariableHelpToggle();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-controls")).toBeTruthy();
+    expect(screen.queryByText("Available variables")).toBeNull();
+    expect(screen.queryByText("Unavailable access")).toBeNull();
+
+    toggle.focus();
+    await user.keyboard("{Enter}");
+
+    expect(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Close prompt variable help",
+      }).getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(screen.getByText("Available variables")).toBeTruthy();
+    expect(screen.getByText(".WorkID")).toBeTruthy();
+    expect(screen.getByText("Unavailable access")).toBeTruthy();
+    expect(screen.getByText(".Inputs[1].Payload")).toBeTruthy();
+
+    await user.keyboard(" ");
+
+    expect(promptVariableHelpToggle().getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(screen.queryByText("Available variables")).toBeNull();
+  });
+
+  it("resets prompt variable help disclosure when the selected workstation changes", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
+    const planNode = snapshot.topology.workstation_nodes_by_id.plan;
+
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={reviewNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+    fireEvent.click(promptVariableHelpToggle());
+    expect(screen.getByText("Available variables")).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          initialValuesWorkstationName: "Plan",
+          prompt: "Plan the next change.",
+          workerName: "planner",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={planNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+    expect(promptVariableHelpToggle().getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(screen.queryByText("Available variables")).toBeNull();
+  });
+
+  it("keeps loading, empty, and error prompt help states outside the disclosure", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const { rerender } = render(
@@ -1534,7 +1644,7 @@ describe("WorkstationDetailCard editable configuration", () => {
         .getByText(
           "Autocomplete is ready with 2 variables for 1 authored input.",
         )
-        .closest("div")?.className,
+        .closest(".border-af-border")?.className,
     ).toContain("border-af-border");
     expect(
       screen.getByText("Prompt diagnostics").closest("[role='alert']")

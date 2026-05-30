@@ -50,6 +50,8 @@ export interface WorkstationDetailMessages {
     inputCount: number,
   ) => string;
   editableConfigurationPromptAutocompleteDetail: string;
+  editableConfigurationPromptHelpCollapseActionLabel: string;
+  editableConfigurationPromptHelpExpandActionLabel: string;
   editableConfigurationPromptAvailableVariablesHeading: string;
   editableConfigurationPromptUnavailableAccessHeading: string;
   editableConfigurationSaveFallbackError: string;

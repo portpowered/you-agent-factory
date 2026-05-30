@@ -94,7 +94,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
       `Autocomplete is ready with ${singularPlural(variableCount, "variable", "variables")} for ${singularPlural(inputCount, "authored input", "authored inputs")}.`,
     editableConfigurationPromptAutocompleteDetail:
-      "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
+      "Suggestions appear only while typing inside {{ ... }}.",
+    editableConfigurationPromptHelpExpandActionLabel:
+      "Open prompt variable help",
+    editableConfigurationPromptHelpCollapseActionLabel:
+      "Close prompt variable help",
     editableConfigurationPromptAvailableVariablesHeading:
       "Available variables",
     editableConfigurationPromptUnavailableAccessHeading:
@@ -277,7 +281,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
       `${inputCount} 件の入力コンテキストで ${variableCount} 件の補完候補を利用できます。`,
     editableConfigurationPromptAutocompleteDetail:
-      "{{ ... }} の中で入力すると候補が表示され、エディターの補完コマンドで手動表示することもできます。",
+      "候補は {{ ... }} の中で入力しているときだけ表示されます。",
+    editableConfigurationPromptHelpExpandActionLabel:
+      "プロンプト変数ヘルプを開く",
+    editableConfigurationPromptHelpCollapseActionLabel:
+      "プロンプト変数ヘルプを閉じる",
     editableConfigurationPromptAvailableVariablesHeading: "利用可能な変数",
     editableConfigurationPromptUnavailableAccessHeading: "利用できないアクセス",
     editableConfigurationSaveFallbackError:
@@ -458,7 +466,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
       `${inputCount}개의 입력 컨텍스트에서 ${variableCount}개의 자동완성 변수를 사용할 수 있습니다.`,
     editableConfigurationPromptAutocompleteDetail:
-      "{{ ... }} 안에서 입력하면 추천이 나타나고, 프롬프트 편집기 어디서나 Monaco 자동완성 명령으로 수동 호출할 수도 있습니다.",
+      "추천은 {{ ... }} 안에서 입력할 때만 표시됩니다.",
+    editableConfigurationPromptHelpExpandActionLabel:
+      "프롬프트 변수 도움말 열기",
+    editableConfigurationPromptHelpCollapseActionLabel:
+      "프롬프트 변수 도움말 닫기",
     editableConfigurationPromptAvailableVariablesHeading: "사용 가능한 변수",
     editableConfigurationPromptUnavailableAccessHeading: "사용할 수 없는 접근",
     editableConfigurationSaveFallbackError:
@@ -627,7 +639,9 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
       `自动补全已就绪，可为 ${inputCount} 个已编写输入上下文提供 ${variableCount} 个变量候选。`,
     editableConfigurationPromptAutocompleteDetail:
-      "在 {{ ... }} 内输入时会显示建议，也可以在提示词编辑器任意位置手动触发 Monaco 补全。",
+      "仅在 {{ ... }} 内输入时显示建议。",
+    editableConfigurationPromptHelpExpandActionLabel: "打开提示词变量帮助",
+    editableConfigurationPromptHelpCollapseActionLabel: "关闭提示词变量帮助",
     editableConfigurationPromptAvailableVariablesHeading: "可用变量",
     editableConfigurationPromptUnavailableAccessHeading: "不可用访问",
     editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",

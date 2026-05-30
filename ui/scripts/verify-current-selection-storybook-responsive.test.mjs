@@ -143,9 +143,9 @@ function createPromptHintFixture() {
   const expandEditableConfigurationButton = createVisibleLocator(
     "Expand editable configuration",
   );
-  const removedHelpButton = createVisibleLocator("removed help button", {
-    count: vi.fn().mockResolvedValue(0),
-  });
+  const expandPromptVariableHelpButton = createVisibleLocator(
+    "Open prompt variable help",
+  );
   const legacySquiggleOverlay = createVisibleLocator("legacy mark", {
     count: vi.fn().mockResolvedValue(0),
   });
@@ -173,9 +173,9 @@ function createPromptHintFixture() {
       }
       if (
         role === "button" &&
-        String(options?.name).includes("prompt variable help")
+        options?.name === "Open prompt variable help"
       ) {
-        return removedHelpButton;
+        return expandPromptVariableHelpButton;
       }
       return createVisibleLocator(`${role}:${options?.name}`);
     }),
@@ -238,7 +238,7 @@ function createPromptHintFixture() {
     page,
     planWorkstationButton,
     promptField,
-    removedHelpButton,
+    expandPromptVariableHelpButton,
     reviewWorkstationButton,
     saveButton,
     completedPromptLine,
@@ -250,7 +250,6 @@ describe("verifyCurrentSelectionPromptHint", () => {
   test("expands editable configuration before verifying Monaco inline guidance", async () => {
     const {
       calls,
-      currentSelection,
       expectNoHorizontalOverflow,
       expectVisible,
       expandEditableConfigurationButton,
@@ -259,7 +258,7 @@ describe("verifyCurrentSelectionPromptHint", () => {
       page,
       planWorkstationButton,
       promptField,
-      removedHelpButton,
+      expandPromptVariableHelpButton,
       reviewWorkstationButton,
       saveButton,
       completedPromptLine,
@@ -273,10 +272,7 @@ describe("verifyCurrentSelectionPromptHint", () => {
       viewport: { height: 900, label: "desktop", width: 1440 },
     });
 
-    expect(currentSelection.getByRole).not.toHaveBeenCalledWith("button", {
-      name: "Close prompt variable help",
-    });
-    expect(removedHelpButton.count).toHaveBeenCalled();
+    expect(expandPromptVariableHelpButton.focus).toHaveBeenCalled();
     expect(legacySquiggleOverlay.count).toHaveBeenCalled();
     expect(planWorkstationButton.focus).toHaveBeenCalled();
     expect(implementWorkstationButton.focus).toHaveBeenCalled();
@@ -312,6 +308,10 @@ describe("verifyCurrentSelectionPromptHint", () => {
       page,
       "Current selection prompt hinting at desktop",
     );
+    expect(calls).toContainEqual([
+      "text",
+      "Suggestions appear only while typing inside {{ ... }}.",
+    ]);
     expect(calls).toContainEqual([
       "text",
       "Save stays disabled until the prompt validates cleanly for this workstation context.",

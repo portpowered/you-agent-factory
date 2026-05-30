@@ -69,16 +69,12 @@ export function registerWorkstationPromptCompletionProvider(
 
         const prompt = model.getValue();
         const cursorOffset = model.getOffsetAt(position);
-        const isManualTrigger = isManualCompletionTrigger(
-          monaco,
-          _context.triggerKind,
-        );
         const isInsideTemplateExpression = isInsideTemplate(
           prompt,
           cursorOffset,
         );
 
-        if (!isInsideTemplateExpression && !isManualTrigger) {
+        if (!isInsideTemplateExpression) {
           return { suggestions: [] };
         }
 
@@ -162,13 +158,6 @@ export function buildWorkstationPromptCompletionItems(
       },
     ];
   });
-}
-
-function isManualCompletionTrigger(
-  monaco: MonacoModule,
-  triggerKind: MonacoLanguagesAPI.CompletionTriggerKind,
-) {
-  return triggerKind === monaco.languages.CompletionTriggerKind.Invoke;
 }
 
 export function isInsideTemplate(prompt: string, cursorOffset: number) {
