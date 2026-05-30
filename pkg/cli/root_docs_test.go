@@ -23,7 +23,9 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 	got := stdout.String()
 	for _, want := range []string{
 		"# Docs",
+		"`agents` - Agent orientation: read order, work submission ingress, command matrix, and topic routing.",
 		"`authoring-factories` - Practical factory authoring workflow",
+		"`you docs agents`",
 		"`config` - Factory.json topology: work types, states, routing, resources, and portability.",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
@@ -156,7 +158,7 @@ func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unexpected docs error %q", got)
 	}
 	if got := stdout.String(); got != "" {

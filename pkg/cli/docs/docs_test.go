@@ -50,6 +50,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
+		"agents",
 		"authoring-factories",
 		"config",
 		"mock-workers",
@@ -80,6 +81,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
+		"agents",
 		"authoring-factories",
 		"config",
 		"mock-workers",
@@ -147,7 +149,9 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 	got := IndexMarkdown("you")
 	for _, want := range []string{
 		"# Docs",
+		"`agents` - Agent orientation: read order, work submission ingress, command matrix, and topic routing.",
 		"`authoring-factories` - Practical factory authoring workflow",
+		"`you docs agents`",
 		"`config` - Factory.json topology: work types, states, routing, resources, and portability.",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
@@ -202,6 +206,51 @@ func TestMarkdown_ReturnsRawPackagedMarkdownForEachSupportedTopic(t *testing.T) 
 				t.Fatalf("Markdown(%q) returned empty content", doc.topic)
 			}
 		})
+	}
+}
+
+func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("agents")
+	if err != nil {
+		t.Fatalf("Markdown(agents) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Agents",
+		"## Start Here",
+		"## Read Order For Any Factory",
+		"factory/docs/overview.md",
+		"factory/docs/README.md",
+		"## Submitting Work",
+		"FACTORY_REQUEST_BATCH",
+		"you run --work",
+		"you submit",
+		"PUT /work-requests/{request_id}",
+		"## Command Matrix",
+		"you run --dir",
+		"## Planner, Executor, And AGENTS.md Authoring",
+		"authoring-agents-md.md",
+		"## Topic Router",
+		"`you docs config`",
+		"`you docs batch-inputs`",
+		"`you docs relationships`",
+		"`you docs guards`",
+		"`you docs templates`",
+		"you docs authoring-factories",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(agents) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs agents`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(agents) included wrapper text %q:\n%s", wrapper, got)
+		}
 	}
 }
 
@@ -575,7 +624,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

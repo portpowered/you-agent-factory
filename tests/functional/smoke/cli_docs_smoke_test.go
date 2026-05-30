@@ -22,6 +22,7 @@ type docsSmokeTopic struct {
 }
 
 var docsSmokeTopics = []docsSmokeTopic{
+	{name: "agents", heading: "# Agents", markers: []string{"## Start Here", "## Read Order For Any Factory", "factory/docs/overview.md", "factory/docs/README.md", "FACTORY_REQUEST_BATCH", "you run --work", "you submit", "PUT /work-requests/{request_id}", "## Command Matrix", "you run --dir", "## Planner, Executor, And AGENTS.md Authoring", "authoring-agents-md.md", "## Topic Router", "`you docs config`", "`you docs batch-inputs`", "`you docs relationships`", "`you docs guards`", "`you docs templates`", "you docs authoring-factories"}},
 	{name: "authoring-factories", heading: "# Authoring Factories", markers: []string{"factory.json", "workers/<name>/AGENTS.md", "workstations/<name>/AGENTS.md", "you run --factory ./factory.json \"Fix the lint issues\"", "handlingBehavior: [\"DEFAULT\"]", "you run --dir ./factory --with-mock-workers", "you docs mock-workers", "you docs record-replay", "--no-record", "requestId", "workTypeName"}, absent: []string{"work_type_name", "source_work_name", `"request_id"`}},
 	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "## Work Types", "## Top-Level Fields", "supportingFiles", "bundledFiles", "handlingBehavior: [\"DEFAULT\"]", "you run --factory", "## Resources", "you docs work", "you docs mock-workers", "you docs record-replay", "you docs guards", "you docs relationships", "you docs authoring-factories", "--factory", "you run --factory ./factory.json \"Fix the lint issues\"", "--with-mock-workers", "--record", "--replay", "--no-record", "you-agent-factory run"}, absent: []string{"Agent Factory run", "## Single-Work API Submission"}},
 	{name: "mock-workers", heading: "# Mock Workers", markers: []string{"--with-mock-workers", "mockWorkers", "runType", "accept", "reject", "script", "docs/examples/mock-workers.json", "docs/examples/startup-work.json"}},
@@ -81,7 +82,7 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 	}
 
 	index := executeDocsSmokeCommand(t, workingDir, "docs")
-	for _, want := range []string{"# Docs", "`authoring-factories` - Practical factory authoring workflow", "`config` - Factory.json topology: work types, states, routing, resources, and portability.", "`mock-workers` - Mock-worker runs", "`record-replay` - Record and replay run modes", "`guards` - Workstation, input, and factory guards", "`relationships` - Batch DEPENDS_ON", "`work` - Submitted work contracts: POST /work, tags, tokens, and batch cross-links.", "`batch-inputs` - Batch input files", "`workstations` - Workstation kinds", "`you docs authoring-factories`", "`you docs config`", "`you docs mock-workers`", "`you docs record-replay`", "`you docs guards`", "`you docs relationships`", "`you docs work`", "`you docs batch-inputs`", "`you docs workstations`"} {
+	for _, want := range []string{"# Docs", "`agents` - Agent orientation: read order, work submission ingress, command matrix, and topic routing.", "`authoring-factories` - Practical factory authoring workflow", "`config` - Factory.json topology: work types, states, routing, resources, and portability.", "`you docs agents`", "`mock-workers` - Mock-worker runs", "`record-replay` - Record and replay run modes", "`guards` - Workstation, input, and factory guards", "`relationships` - Batch DEPENDS_ON", "`work` - Submitted work contracts: POST /work, tags, tokens, and batch cross-links.", "`batch-inputs` - Batch input files", "`workstations` - Workstation kinds", "`you docs authoring-factories`", "`you docs config`", "`you docs mock-workers`", "`you docs record-replay`", "`you docs guards`", "`you docs relationships`", "`you docs work`", "`you docs batch-inputs`", "`you docs workstations`"} {
 		if !strings.Contains(index, want) {
 			t.Fatalf("docs index missing %q:\n%s", want, index)
 		}
@@ -103,7 +104,7 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 		if err == nil {
 			t.Fatal("expected unsupported docs topic to fail")
 		}
-		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
+		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
 			t.Fatalf("unexpected unsupported topic error %q", got)
 		}
 	})
