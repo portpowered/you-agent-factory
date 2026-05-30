@@ -279,6 +279,10 @@ type FactoryServiceConfig struct {
 	// collaborator. Tests use this to assert SaveFactoryForSession delegates
 	// without running the full save orchestration pipeline.
 	FactorySave factorySaveSaver
+	// ModelAssets, when non-nil, replaces the default localmodels.AssetPuller
+	// collaborator wired at service construction. Tests use this to assert
+	// PullModel delegates without running managed asset downloads.
+	ModelAssets modelAssetPuller
 }
 
 const serviceModeStartupWorkReadabilityDelay = 250 * time.Millisecond

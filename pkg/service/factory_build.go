@@ -101,7 +101,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, clock),
 		startupBundle:  runtimeBundle,
 		cfg:            cfg,
-		modelAssets:    collaborators.localModels.assets,
+		modelAssets:    wireModelAssetPuller(cfg, collaborators.localModels.assets),
 		baseLogger:     baseLogger,
 		logger:         runtimeBundle.logger,
 		clock:          clock,
@@ -115,6 +115,13 @@ type factoryServiceCollaborators struct {
 	sessions      *factorysessions.Registry
 	localModels   localModelDomain
 	runtimeBuild  *runtimebuild.Service
+}
+
+func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
+	if cfg != nil && cfg.ModelAssets != nil {
+		return cfg.ModelAssets
+	}
+	return production
 }
 
 func newFactoryServiceCollaborators(
