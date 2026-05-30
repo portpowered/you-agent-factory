@@ -235,8 +235,8 @@ export async function renderAppWithDashboardShell(
   return result;
 }
 
-function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
-  return fetchMock.mock.calls.map(([input]) =>
+function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>): string[] {
+  return fetchMock.mock.calls.map(([input]: [RequestInfo | URL]) =>
     typeof input === "string"
       ? input
       : input instanceof URL
@@ -249,7 +249,7 @@ export function nonPromptTemplateFetchPaths(
   fetchMock: ReturnType<typeof vi.fn>,
 ) {
   return fetchCallPaths(fetchMock).filter(
-    (path) =>
+    (path: string) =>
       !path.includes("/prompt-template-contract") &&
       path !== "/factory-sessions",
   );
@@ -302,9 +302,13 @@ export function createFileDropTransfer(files: File[]): {
 export function mockCurrentFactoryDocument(
   result: CurrentFactoryDocumentResult,
 ): void {
-  const isBunTestRuntime = typeof Bun !== "undefined";
-  if (isBunTestRuntime) {
-    const useCurrentFactoryDocumentMock = globalThis.__useCurrentFactoryDocumentMock;
+  const bunGlobal = globalThis as typeof globalThis & {
+    Bun?: unknown;
+    __useCurrentFactoryDocumentMock?: Mock;
+  };
+  if (typeof bunGlobal.Bun !== "undefined") {
+    const useCurrentFactoryDocumentMock =
+      bunGlobal.__useCurrentFactoryDocumentMock;
     if (!useCurrentFactoryDocumentMock) {
       throw new Error(
         "Bun app-shell mocks are not loaded; ensure ui/testing/bun-test.preload.ts runs before tests.",

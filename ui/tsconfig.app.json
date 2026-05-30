@@ -23,6 +23,7 @@
     "src/**/*.test.tsx",
     "src/**/*.stories.tsx",
     "src/testing/app-shell-test-utils.tsx",
+    "src/App.session-stream.test-helpers.ts",
     "src/features/bento/components/dashboard-bento-story-shared.tsx"
   ]
 }
