@@ -317,7 +317,7 @@ func TestSaveCurrentFactory_SubmitsCompleteDefinitionAndReturnsVersion(t *testin
 }
 
 func TestSaveCurrentFactory_MapsValidationErrorsToTargets(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.ErrInvalidNamedFactory})
+	srv := newTestServer(&testutil.MockFactory{SaveFactoryForSessionErr: apisurface.ErrInvalidNamedFactory})
 
 	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(saveFactoryForSessionRequestBody(`{"name":"beta"}`)))
 	req.Header.Set("Content-Type", "application/json")
@@ -344,7 +344,7 @@ func TestSaveCurrentFactory_MapsTopologyValidationTargets(t *testing.T) {
 			Location: factoryapi.FactoryValidationSubjectLocationOutputs,
 		},
 	}
-	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.FactoryValidationTarget{target})})
+	srv := newTestServer(&testutil.MockFactory{SaveFactoryForSessionErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.FactoryValidationTarget{target})})
 
 	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(saveFactoryForSessionRequestBody(`{"name":"beta"}`)))
 	req.Header.Set("Content-Type", "application/json")
@@ -365,7 +365,7 @@ func TestSaveCurrentFactory_MapsTopologyValidationTargets(t *testing.T) {
 }
 
 func TestSaveCurrentFactory_MapsStaleVersion(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.ErrFactoryVersionStale})
+	srv := newTestServer(&testutil.MockFactory{SaveFactoryForSessionErr: apisurface.ErrFactoryVersionStale})
 
 	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(saveFactoryForSessionRequestBody(`{"name":"beta"}`)))
 	req.Header.Set("Content-Type", "application/json")
