@@ -1,6 +1,8 @@
 package factory
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +30,34 @@ func TestDelete_WritesHumanReadableConfirmation(t *testing.T) {
 	}
 	if got := out.String(); got != "Deleted factory alpha\n" {
 		t.Fatalf("output = %q, want deleted confirmation", got)
+	}
+}
+
+func TestDelete_JSONEmitsStructuredConfirmation(t *testing.T) {
+	rootDir := t.TempDir()
+	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	if _, err := factoryconfig.PersistNamedFactory(rootDir, "beta", saveTestNamedFactoryPayload(t, "beta")); err != nil {
+		t.Fatalf("PersistNamedFactory(beta): %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Delete(DeleteConfig{
+		Name:   "alpha",
+		Dir:    rootDir,
+		JSON:   true,
+		Output: &out,
+	}); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	var result DeleteResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.Name != "alpha" {
+		t.Fatalf("result = %#v, want deleted factory alpha", result)
 	}
 }
 

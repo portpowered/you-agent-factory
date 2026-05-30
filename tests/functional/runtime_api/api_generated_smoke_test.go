@@ -5,12 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -334,7 +332,7 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 		Name:         "  cli-live-api-name  ",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Port:         functionalServerPort(t, server.URL()),
+		Server:       functionalServerBase(t, server.URL()),
 	}); err != nil {
 		t.Fatalf("agent-factory submit --work-type-name: %v", err)
 	}
@@ -636,21 +634,16 @@ func mustSubmitWorkImageItem(t *testing.T, stagedFileRef string, fileName string
 	return item
 }
 
-func functionalServerPort(t *testing.T, rawURL string) int {
+func functionalServerBase(t *testing.T, rawURL string) string {
 	t.Helper()
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		t.Fatalf("parse functional server URL %q: %v", rawURL, err)
 	}
-	_, portText, err := net.SplitHostPort(parsed.Host)
-	if err != nil {
-		t.Fatalf("parse functional server host %q: %v", parsed.Host, err)
+	if parsed.Scheme == "" || parsed.Host == "" {
+		t.Fatalf("functional server URL %q missing scheme or host", rawURL)
 	}
-	port, err := strconv.Atoi(portText)
-	if err != nil {
-		t.Fatalf("parse functional server port %q: %v", portText, err)
-	}
-	return port
+	return strings.TrimSuffix(rawURL, "/")
 }
 
 func assertFunctionalEventsUseCanonicalVocabulary(t *testing.T, events []factoryapi.FactoryEvent, required ...factoryapi.FactoryEventType) {

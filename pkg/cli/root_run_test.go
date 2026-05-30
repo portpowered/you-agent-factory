@@ -417,7 +417,7 @@ func TestFactoryQueryCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStde
 	root := NewRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"factory", "query", "--json", "--verbose"})
+	root.SetArgs([]string{"--json", "factory", "query", "--verbose"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute factory query --json --verbose: %v", err)
@@ -577,6 +577,8 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
+		"--json",
+		"--server", "http://127.0.0.1:9090",
 		"work",
 		"list",
 		"--state-name", "review",
@@ -584,8 +586,6 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 		"--sort-by", "state.type",
 		"--max-results", "25",
 		"--next-token", "cursor-1",
-		"--json",
-		"--port", "9090",
 	})
 
 	if err := root.Execute(); err != nil {
@@ -601,8 +601,8 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	if got.SortBy != "state.type" {
 		t.Fatalf("sort by = %q, want state.type", got.SortBy)
 	}
-	if got.Port != 9090 {
-		t.Fatalf("port = %d, want 9090", got.Port)
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
 	}
 	if got.MaxResults != 25 {
 		t.Fatalf("max results = %d, want 25", got.MaxResults)
@@ -618,7 +618,7 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	}
 }
 
-func TestWorkListCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
+func TestWorkListCommand_DefaultServerMapsToSharedLocalURI(t *testing.T) {
 	originalListWork := listWork
 	defer func() {
 		listWork = originalListWork
@@ -639,8 +639,8 @@ func TestWorkListCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
 		t.Fatalf("execute work list: %v", err)
 	}
 
-	if got.Port != 7437 {
-		t.Fatalf("port = %d, want 7437", got.Port)
+	if got.Server != "http://localhost:7437" {
+		t.Fatalf("server = %q, want http://localhost:7437", got.Server)
 	}
 }
 
@@ -712,7 +712,6 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 		"--dir", "custom-factory",
 		"--workflow", "workflow-1",
 		"--work", "work.json",
-		"--port", "0",
 	})
 
 	if err := root.Execute(); err != nil {
@@ -737,11 +736,14 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 	if got.RecordPath != "" {
 		t.Errorf("record path = %q, want empty", got.RecordPath)
 	}
-	if got.Port != 0 {
-		t.Errorf("port = %d, want %d", got.Port, 0)
+	if got.Port != 7437 {
+		t.Errorf("port = %d, want %d", got.Port, 7437)
 	}
-	if got.AutoPort {
-		t.Fatal("expected explicit --port to disable automatic port resolution")
+	if !got.AutoPort {
+		t.Fatal("expected default --server to enable automatic port resolution")
+	}
+	if got.BindHost != "localhost" {
+		t.Fatalf("bind host = %q, want localhost", got.BindHost)
 	}
 	if got.Logger == nil {
 		t.Fatal("expected run command to set logger")

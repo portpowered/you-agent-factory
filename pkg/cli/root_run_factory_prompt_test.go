@@ -61,7 +61,7 @@ func TestRunCommand_FactoryFlagResolvesFactoryRootBeforeRun(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--factory", factoryPath, "--port", "0"})
+	root.SetArgs([]string{"run", "--factory", factoryPath})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute run --factory: %v", err)
@@ -210,7 +210,7 @@ func TestRunCommand_FactoryPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix", "the", "lint", "issues", "--port", "0"})
+	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix", "the", "lint", "issues"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute run --factory with prompt: %v", err)

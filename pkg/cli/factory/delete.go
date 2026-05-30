@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +15,13 @@ import (
 type DeleteConfig struct {
 	Name   string
 	Dir    string
+	JSON   bool
 	Output io.Writer
+}
+
+// DeleteResult reports a successful factory deletion.
+type DeleteResult struct {
+	Name string `json:"name"`
 }
 
 // Delete removes a persisted named factory from disk.
@@ -35,6 +42,10 @@ func Delete(cfg DeleteConfig) error {
 		return renderDeleteError(err)
 	}
 
+	result := DeleteResult{Name: name}
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(result)
+	}
 	_, err := fmt.Fprintf(cfg.Output, "Deleted factory %s\n", name)
 	return err
 }

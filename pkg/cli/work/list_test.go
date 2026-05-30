@@ -3,7 +3,6 @@ package work
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -46,7 +45,7 @@ func TestList_SendsStateFilters(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:      serverPort(t, srv),
+		Server: serverBase(t, srv),
 		StateName: "review",
 		StateType: "PROCESSING",
 		SortBy:    "state.type",
@@ -79,7 +78,7 @@ func TestList_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:      serverPort(t, srv),
+		Server: serverBase(t, srv),
 		SessionID: "session-beta",
 		Output:    &out,
 	})
@@ -108,7 +107,7 @@ func TestList_HumanOutputShowsEmptyState(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:   serverPort(t, srv),
+		Server: serverBase(t, srv),
 		Output: &out,
 	})
 	if err != nil {
@@ -141,7 +140,7 @@ func TestList_HumanOutputShowsOneWorkItemIdentityAndState(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:   serverPort(t, srv),
+		Server: serverBase(t, srv),
 		Output: &out,
 	})
 	if err != nil {
@@ -187,7 +186,7 @@ func TestList_HumanOutputShowsManyWorkItems(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:   serverPort(t, srv),
+		Server: serverBase(t, srv),
 		Output: &out,
 	})
 	if err != nil {
@@ -234,7 +233,7 @@ func TestList_HumanOutputOmitsRuntimeResourcesWhenMixedResponseContainsOnlyVisib
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:   serverPort(t, srv),
+		Server: serverBase(t, srv),
 		Output: &out,
 	})
 	if err != nil {
@@ -282,7 +281,7 @@ func TestList_HumanOutputShowsRelationSummaryForOneRelation(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:   serverPort(t, srv),
+		Server: serverBase(t, srv),
 		Output: &out,
 	})
 	if err != nil {
@@ -339,7 +338,7 @@ func TestList_HumanOutputShowsDeterministicSummaryForMultipleRelations(t *testin
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:   serverPort(t, srv),
+		Server: serverBase(t, srv),
 		Output: &out,
 	})
 	if err != nil {
@@ -385,7 +384,7 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:       serverPort(t, srv),
+		Server: serverBase(t, srv),
 		MaxResults: 2,
 		NextToken:  "cursor-1",
 		JSON:       true,
@@ -433,7 +432,7 @@ func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	err := List(ListConfig{
-		Port:        serverPort(t, srv),
+		Server: serverBase(t, srv),
 		SessionID:   "session-alpha",
 		StateName:   "review",
 		StateType:   "PROCESSING",
@@ -482,7 +481,7 @@ func TestList_VerboseLogsFailureStatus(t *testing.T) {
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	err := List(ListConfig{
-		Port:        serverPort(t, srv),
+		Server: serverBase(t, srv),
 		Verbose:     true,
 		Output:      &out,
 		Diagnostics: &diagnostics,
@@ -520,7 +519,7 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 
 	var firstOut bytes.Buffer
 	err := List(ListConfig{
-		Port:       serverPort(t, srv),
+		Server: serverBase(t, srv),
 		MaxResults: 1,
 		JSON:       true,
 		Output:     &firstOut,
@@ -535,7 +534,7 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 
 	var secondOut bytes.Buffer
 	err = List(ListConfig{
-		Port:       serverPort(t, srv),
+		Server: serverBase(t, srv),
 		MaxResults: 1,
 		NextToken:  secondToken,
 		JSON:       true,
@@ -577,7 +576,7 @@ func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:   serverPort(t, srv),
+		Server: serverBase(t, srv),
 		JSON:   true,
 		Output: &out,
 	})
@@ -659,7 +658,7 @@ func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *t
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:       serverPort(t, srv),
+		Server: serverBase(t, srv),
 		StateName:  "review",
 		StateType:  "PROCESSING",
 		MaxResults: 1,
@@ -712,7 +711,7 @@ func TestList_JSONOutputLeavesRelationsOmittedWhenAPIResponseDoesNotIncludeThem(
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:   serverPort(t, srv),
+		Server: serverBase(t, srv),
 		JSON:   true,
 		Output: &out,
 	})
@@ -738,7 +737,7 @@ func TestList_JSONOutputLeavesRelationsOmittedWhenAPIResponseDoesNotIncludeThem(
 }
 
 func TestList_InvalidStateType(t *testing.T) {
-	err := List(ListConfig{Port: 8080, StateType: "UNKNOWN", Output: &bytes.Buffer{}})
+	err := List(ListConfig{Server: "http://127.0.0.1:8080", StateType: "UNKNOWN", Output: &bytes.Buffer{}})
 	if err == nil {
 		t.Fatal("expected invalid state type error")
 	}
@@ -748,7 +747,7 @@ func TestList_InvalidStateType(t *testing.T) {
 }
 
 func TestList_InvalidSortBy(t *testing.T) {
-	err := List(ListConfig{Port: 8080, SortBy: "name", Output: &bytes.Buffer{}})
+	err := List(ListConfig{Server: "http://127.0.0.1:8080", SortBy: "name", Output: &bytes.Buffer{}})
 	if err == nil {
 		t.Fatal("expected invalid sort-by error")
 	}
@@ -866,12 +865,7 @@ func jsonObject(t *testing.T, object map[string]any, key string) map[string]any 
 	return value
 }
 
-func serverPort(t *testing.T, srv *httptest.Server) int {
+func serverBase(t *testing.T, srv *httptest.Server) string {
 	t.Helper()
-
-	var port int
-	if _, err := fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port); err != nil {
-		t.Fatalf("parse test server port: %v", err)
-	}
-	return port
+	return strings.TrimSuffix(srv.URL, "/")
 }

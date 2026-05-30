@@ -15,6 +15,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
@@ -27,13 +28,13 @@ var ErrCurrentFactoryNotFound = errors.New("current factory not found")
 
 // QueryCurrentConfig holds parameters for querying the current factory.
 type QueryCurrentConfig struct {
-	Port      int
+	Server    string
 	SessionID string
 }
 
 // QueryConfig holds parameters for the factory query command.
 type QueryConfig struct {
-	Port        int
+	Server      string
 	JSON        bool
 	Verbose     bool
 	Debug       bool
@@ -48,7 +49,7 @@ func Query(cfg QueryConfig) error {
 	}
 
 	current, err := queryCurrent(queryCurrentOptions{
-		Port:        cfg.Port,
+		Server:      cfg.Server,
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
 	})
@@ -65,31 +66,35 @@ func Query(cfg QueryConfig) error {
 // QueryCurrent requests the active factory from a running factory service.
 func QueryCurrent(cfg QueryCurrentConfig) (factoryapi.Factory, error) {
 	return queryCurrent(queryCurrentOptions{
-		Port:      cfg.Port,
+		Server:    cfg.Server,
 		SessionID: cfg.SessionID,
 	})
 }
 
 type queryCurrentOptions struct {
-	Port        int
+	Server      string
 	SessionID   string
 	Verbose     bool
 	Diagnostics io.Writer
 }
 
 func queryCurrent(cfg queryCurrentOptions) (factoryapi.Factory, error) {
-	endpoint := url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   sessionpath.CurrentFactoryPath(cfg.SessionID),
+	endpointPath := sessionpath.CurrentFactoryPath(cfg.SessionID)
+	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	endpoint, err := url.Parse(endpointURL)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("parse factory query endpoint: %w", err)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"factory query request endpointPath=%s endpoint=%s port=%d session=%s",
+		"factory query request endpointPath=%s endpoint=%s server=%s session=%s",
 		endpoint.Path,
 		endpoint.String(),
-		cfg.Port,
+		cfg.Server,
 		clidiag.SessionLabel(cfg.SessionID),
 	)
 

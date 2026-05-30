@@ -14,6 +14,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
@@ -21,7 +22,7 @@ const saveCurrentRequestTimeout = queryCurrentRequestTimeout
 
 // SaveCurrentConfig holds parameters for persisting the live current factory.
 type SaveCurrentConfig struct {
-	Port        int
+	Server      string
 	SessionID   string
 	JSON        bool
 	Verbose     bool
@@ -36,7 +37,7 @@ func SaveCurrent(cfg SaveCurrentConfig) error {
 	}
 
 	saved, err := saveCurrentFactory(saveCurrentOptions{
-		Port:        cfg.Port,
+		Server:      cfg.Server,
 		SessionID:   cfg.SessionID,
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
@@ -53,7 +54,7 @@ func SaveCurrent(cfg SaveCurrentConfig) error {
 }
 
 type saveCurrentOptions struct {
-	Port        int
+	Server      string
 	SessionID   string
 	Verbose     bool
 	Diagnostics io.Writer
@@ -61,7 +62,7 @@ type saveCurrentOptions struct {
 
 func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 	current, err := queryCurrent(queryCurrentOptions{
-		Port:        cfg.Port,
+		Server:      cfg.Server,
 		SessionID:   cfg.SessionID,
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
@@ -70,18 +71,22 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 		return factoryapi.Factory{}, err
 	}
 
-	endpoint := url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   sessionpath.CurrentFactoryPath(cfg.SessionID),
+	endpointPath := sessionpath.CurrentFactoryPath(cfg.SessionID)
+	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	endpoint, err := url.Parse(endpointURL)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("parse factory save endpoint: %w", err)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"factory save request endpointPath=%s endpoint=%s port=%d session=%s factoryName=%q",
+		"factory save request endpointPath=%s endpoint=%s server=%s session=%s factoryName=%q",
 		endpoint.Path,
 		endpoint.String(),
-		cfg.Port,
+		cfg.Server,
 		clidiag.SessionLabel(cfg.SessionID),
 		current.Name,
 	)

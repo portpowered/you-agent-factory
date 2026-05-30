@@ -14,6 +14,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
@@ -21,7 +22,7 @@ const listRequestTimeout = 10 * time.Second
 
 // ListConfig holds parameters for the work list command.
 type ListConfig struct {
-	Port        int
+	Server      string
 	SessionID   string
 	StateName   string
 	StateType   string
@@ -44,14 +45,17 @@ func List(cfg ListConfig) error {
 		return err
 	}
 
-	endpoint := listEndpoint(cfg)
+	endpoint, err := listEndpoint(cfg)
+	if err != nil {
+		return err
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"work list request endpointPath=%s endpoint=%s port=%d session=%s filters=%s maxResults=%d nextTokenPresent=%t",
+		"work list request endpointPath=%s endpoint=%s server=%s session=%s filters=%s maxResults=%d nextTokenPresent=%t",
 		endpoint.Path,
 		endpoint.String(),
-		cfg.Port,
+		cfg.Server,
 		clidiag.SessionLabel(cfg.SessionID),
 		listFilterSummary(cfg),
 		cfg.MaxResults,
@@ -124,11 +128,15 @@ func listFilterSummary(cfg ListConfig) string {
 	return strings.Join(parts, ",")
 }
 
-func listEndpoint(cfg ListConfig) url.URL {
-	endpoint := url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   sessionpath.ScopedPath("/work", cfg.SessionID),
+func listEndpoint(cfg ListConfig) (url.URL, error) {
+	endpointPath := sessionpath.ScopedPath("/work", cfg.SessionID)
+	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
+	if err != nil {
+		return url.URL{}, err
+	}
+	endpoint, err := url.Parse(endpointURL)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("parse work list endpoint: %w", err)
 	}
 	query := endpoint.Query()
 	setListQueryParam(query, "state.name", cfg.StateName)
@@ -139,7 +147,7 @@ func listEndpoint(cfg ListConfig) url.URL {
 	}
 	setListQueryParam(query, "nextToken", cfg.NextToken)
 	endpoint.RawQuery = query.Encode()
-	return endpoint
+	return *endpoint, nil
 }
 
 func setListQueryParam(query url.Values, key, value string) {

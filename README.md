@@ -44,7 +44,7 @@ With the service running, ask the live API which factory is currently active:
 
 ```sh
 you factory query
-you factory query --port 7437 --json
+you --server http://localhost:7437 --json factory query
 ```
 
 `factory query` reads the running service's current-factory API. It does not infer
@@ -55,7 +55,7 @@ Manage persisted named factories under the factory root (default `factory/`):
 
 ```sh
 you factory list
-you factory list --dir my-factory --json
+you --json factory list --dir my-factory
 you factory save staging --from ./factory.json --set-current
 you factory update staging --from ./factory.json
 you factory delete staging
@@ -66,7 +66,7 @@ back to durable storage without a name argument:
 
 ```sh
 you factory save
-you factory save --session session-beta --json
+you --json factory save --session session-beta
 ```
 
 ## Submit Work From The CLI
