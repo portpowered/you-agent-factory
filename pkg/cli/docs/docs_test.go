@@ -50,6 +50,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
+		"agents",
 		"authoring-factories",
 		"config",
 		"mock-workers",
@@ -80,6 +81,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
+		"agents",
 		"authoring-factories",
 		"config",
 		"mock-workers",
@@ -147,17 +149,19 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 	got := IndexMarkdown("you")
 	for _, want := range []string{
 		"# Docs",
+		"`agents` - Agent orientation",
 		"`authoring-factories` - Practical factory authoring workflow",
-		"`config` - Factory configuration",
+		"`config` - factory.json topology",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
-		"`work` - Work types",
+		"`work` - Submitted work",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
 		"`batch-inputs` - Batch input files",
 		"`templates` - Prompt template variables",
+		"`you docs agents`",
 		"`you docs authoring-factories`",
 		"`you docs config`",
 		"`you docs mock-workers`",
@@ -541,7 +545,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }
