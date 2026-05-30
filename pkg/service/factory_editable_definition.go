@@ -479,11 +479,6 @@ func NewHostedWorkersConfig(
 	return buildHostedWorkersConfig(cfg, logger, clock)
 }
 
-// NewFactorySaveCollaborator wires the factorysave collaborator for a built service.
-func NewFactorySaveCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) factorySaveSaver {
-	return wireFactorySaveCollaborator(fs, cfg)
-}
-
 // ComposeCollaboratorSnapshot records whether S6 collaborators were initialized
 // on a built FactoryService. Tests compare snapshots across wire and direct build paths.
 type ComposeCollaboratorSnapshot struct {

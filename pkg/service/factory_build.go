@@ -52,21 +52,11 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	return ComposeFactoryService(ctx, cfg, root, collaborators, load, clock)
 }
 
-type factoryServiceCollaborators = FactoryServiceCollaborators
-
 func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
 	if cfg != nil && cfg.ModelAssets != nil {
 		return cfg.ModelAssets
 	}
 	return production
-}
-
-func newFactoryServiceCollaborators(
-	cfg *FactoryServiceConfig,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-) factoryServiceCollaborators {
-	return NewFactoryServiceCollaborators(cfg, clock, baseLogger, NewFactorySessionsRegistry())
 }
 
 func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {
