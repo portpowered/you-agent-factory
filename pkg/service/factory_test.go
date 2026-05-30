@@ -2152,3 +2152,266 @@ func normalizeInitFactoryJSON(t *testing.T, raw string) string {
 	}
 	return string(encoded)
 }
+
+// Session factory save tests (merged from factory_session_save*_test.go for pkg-file-count)
+func TestFactoryService_SaveFactoryForSession_UpsertOnNonDefaultSessionDoesNotMutateDefault(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	harness.waitIdle(t, betaSessionID, "beta runtime")
+
+	created, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		betaSessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		serviceNamedFactoryContractWithWorkType(t, "gamma", "gamma-task"),
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert gamma on beta session): %v", err)
+	}
+	if created.Name != factoryapi.FactoryName("gamma") {
+		t.Fatalf("created factory name = %q, want gamma", created.Name)
+	}
+
+	betaCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), betaSessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession(beta) after upsert: %v", err)
+	}
+	assertFactoryName(t, betaCurrent.Name, "gamma", "beta session current factory after upsert")
+	assertFactoryWorkType(t, betaCurrent.WorkTypes, "gamma-task", "beta session work types after upsert")
+
+	defaultCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession(default) after beta upsert: %v", err)
+	}
+	assertFactoryName(t, defaultCurrent.Name, "alpha", "default session current factory after beta upsert")
+	assertFactoryWorkType(t, defaultCurrent.WorkTypes, "task", "default session work types after beta upsert")
+
+	assertCurrentFactoryPointer(t, harness.rootDir, "alpha", "global default pointer after beta session upsert")
+	if _, err := config.ResolveNamedFactoryDir(harness.rootDir, "gamma"); err == nil {
+		t.Fatal("expected gamma factory to persist only under the beta session root, not the service root")
+	}
+}
+
+func TestFactoryService_SaveFactoryForSession_UpsertReplaceRequiresFreshVersion(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	created, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		serviceNamedFactoryContract(t, "beta"),
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert beta): %v", err)
+	}
+	if created.Version == nil {
+		t.Fatal("expected created factory version metadata")
+	}
+
+	stale := serviceNamedFactoryContractWithWorkType(t, "beta", "story")
+	stale.Version = created.Version
+	_, err = harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		stale,
+	)
+	if err == nil {
+		t.Fatal("expected stale upsert replace to fail")
+	}
+
+	fresh := serviceNamedFactoryContractWithWorkType(t, "beta", "story")
+	fresh.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  created.Version.Logical + 1,
+		Physical: created.Version.Physical.Add(time.Second),
+	}
+	replaced, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		fresh,
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert replace beta): %v", err)
+	}
+	assertFactoryWorkType(t, replaced.WorkTypes, "story", "replaced beta work types")
+}
+
+func TestFactoryService_SaveFactoryForSession_ReplaceCurrentRejectsMissingVersion(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	current, err := harness.svc.GetCurrentFactoryForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
+	replacement.Version = nil
+	_, err = harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		replacement,
+	)
+	if !errors.Is(err, apisurface.ErrFactoryVersionStale) {
+		t.Fatalf("SaveFactoryForSession(replace missing version) error = %v, want stale version", err)
+	}
+
+	reloaded, err := harness.svc.GetCurrentFactoryForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession after rejected save: %v", err)
+	}
+	assertFactoryWorkType(t, reloaded.WorkTypes, "task", "unchanged work types after missing-version reject")
+	if current.Version != nil && reloaded.Version != nil {
+		assertMatchingFactoryVersion(t, reloaded.Version, current.Version, "unchanged version after missing-version reject")
+	}
+}
+
+func TestFactoryService_SaveFactoryForSession_UpsertCreateAllowsOmittedVersion(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	created, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		serviceNamedFactoryContract(t, "beta"),
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert create beta): %v", err)
+	}
+	if created.Version == nil {
+		t.Fatal("expected created factory version metadata when client omitted version")
+	}
+	if created.Version.Logical.Int64() < 1 {
+		t.Fatalf("created version logical = %d, want >= 1", created.Version.Logical.Int64())
+	}
+	assertFactoryWorkType(t, created.WorkTypes, "task", "created beta work types")
+}
+
+func TestFactoryService_SaveFactoryForSession_UpsertReplaceUsesOnDiskVersion(t *testing.T) {
+	rootDir := t.TempDir()
+	initialVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  3,
+		Physical: time.Date(2026, 5, 30, 10, 0, 0, 0, time.UTC),
+	}
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithVersion(t, "alpha", initialVersion)); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
+
+	created, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		serviceNamedFactoryContract(t, "beta"),
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert create beta): %v", err)
+	}
+	if created.Version == nil {
+		t.Fatal("expected created beta version metadata")
+	}
+
+	onDiskVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  created.Version.Logical + 1,
+		Physical: created.Version.Physical.Add(time.Second),
+	}
+	if _, err := config.ReplaceNamedFactory(rootDir, "beta", serviceNamedFactoryPayloadWithVersion(t, "beta", onDiskVersion)); err != nil {
+		t.Fatalf("ReplaceNamedFactory(beta newer on-disk version): %v", err)
+	}
+
+	stale := serviceNamedFactoryContractWithWorkType(t, "beta", "story")
+	stale.Version = created.Version
+	_, err = harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		stale,
+	)
+	if !errors.Is(err, apisurface.ErrFactoryVersionStale) {
+		t.Fatalf("SaveFactoryForSession(upsert replace stale) error = %v, want stale version", err)
+	}
+
+	fresh := serviceNamedFactoryContractWithWorkType(t, "beta", "story")
+	fresh.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  onDiskVersion.Logical + 1,
+		Physical: onDiskVersion.Physical.Add(time.Second),
+	}
+	replaced, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		fresh,
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert replace fresh): %v", err)
+	}
+	assertFactoryWorkType(t, replaced.WorkTypes, "story", "replaced beta work types")
+	assertFactoryVersionAdvanced(t, replaced.Version, onDiskVersion)
+}
+
+func TestFactoryService_SaveFactoryForSession_UpsertReplaceDoesNotReturnAlreadyExists(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	created, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		serviceNamedFactoryContract(t, "beta"),
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert create beta): %v", err)
+	}
+	if created.Version == nil {
+		t.Fatal("expected created factory version metadata")
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "beta", "story")
+	replacement.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  created.Version.Logical + 1,
+		Physical: created.Version.Physical.Add(time.Second),
+	}
+	replaced, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeUpsertNamedAndActivate,
+		replacement,
+	)
+	if errors.Is(err, config.ErrNamedFactoryAlreadyExists) {
+		t.Fatalf("SaveFactoryForSession(upsert replace beta) error = %v, want replace not FACTORY_ALREADY_EXISTS", err)
+	}
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession(upsert replace beta): %v", err)
+	}
+	assertFactoryWorkType(t, replaced.WorkTypes, "story", "replaced beta work types")
+	if replaced.Version == nil {
+		t.Fatal("expected replaced factory version metadata")
+	}
+	assertFactoryVersionAdvanced(t, replaced.Version, *created.Version)
+}
