@@ -108,7 +108,6 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
     query.isFetching,
     query.isPending,
     rawSessionID,
-    sessionID,
   ]);
 }
 

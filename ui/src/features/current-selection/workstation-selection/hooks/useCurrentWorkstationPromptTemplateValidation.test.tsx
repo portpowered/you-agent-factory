@@ -6,10 +6,8 @@ import {
   type PromptTemplateValidationResult,
   validateCurrentFactoryWorkstationPromptTemplate,
 } from "../../../../api/current-factory-prompt-template";
-import {
-  resetDashboardSessionStore,
-  useDashboardSessionStore,
-} from "../../../dashboard/state/dashboardSessionStore";
+import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
+import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import {
   buildCurrentWorkstationPromptTemplateValidationQueryKey,
   useCurrentWorkstationPromptTemplateValidation,
@@ -33,7 +31,7 @@ const promptTemplateValidationResult: PromptTemplateValidationResult = {
 
 describe("useCurrentWorkstationPromptTemplateValidation", () => {
   beforeEach(() => {
-    resetDashboardSessionStore();
+    useDashboardSessionStore.setState({ selectedSessionID: "~default" });
     vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockReset();
   });
 
@@ -192,7 +190,9 @@ function createQueryClientWrapper() {
     children: ReactNode;
   }): ReactNode {
     return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+      </QueryClientProvider>
     );
   };
 }
