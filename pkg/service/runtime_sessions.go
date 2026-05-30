@@ -12,6 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -188,7 +190,7 @@ func (fs *FactoryService) GetCurrentFactoryForSession(_ context.Context, session
 	factoryName := factorysessions.FactoryName(rootDir, runtimeCfg)
 	versionRootDir := rootDir
 	if persistRoot := sessionFactoryPersistRoot(fs.factoryRootDir, session); persistRoot != "" {
-		if pointerName, err := factoryconfig.ReadCurrentFactoryPointer(persistRoot); err == nil {
+		if pointerName, err := configpersist.ReadCurrentFactoryPointer(persistRoot); err == nil {
 			pointerFactoryName := factoryapi.FactoryName(pointerName)
 			if session.IsDefault || pointerFactoryName == factoryName {
 				factoryName = pointerFactoryName
@@ -590,7 +592,7 @@ func (fs *FactoryService) probeFactorySessionTarget(
 	if fs == nil {
 		return factorysessions.Target{}, false
 	}
-	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
+	loaded, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
 	if err != nil {
 		return factorysessions.Target{}, false
 	}

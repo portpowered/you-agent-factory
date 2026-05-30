@@ -31,6 +31,19 @@ func LoadFromCanonicalJSON(payload []byte, opts LoadOptions) (*config.LoadedFact
 	return config.LoadFromCanonicalJSON(payload, opts.WorkstationLoader)
 }
 
+// LoadRuntimeConfig reads factory.json plus worker/workstation AGENTS.md files
+// into a single runtime configuration object, following current-factory pointer
+// indirection for workspace roots.
+func LoadRuntimeConfig(factoryDir string, workstationLoader config.WorkstationLoader) (*config.LoadedFactoryConfig, error) {
+	return config.LoadRuntimeConfig(factoryDir, workstationLoader)
+}
+
+// LoadRuntimeConfigFromFactoryDir loads one concrete factory directory without
+// following current-factory pointer indirection.
+func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader config.WorkstationLoader) (*config.LoadedFactoryConfig, error) {
+	return config.LoadRuntimeConfigFromFactoryDir(factoryDir, workstationLoader)
+}
+
 // IsInvalidNamedFactory reports whether err wraps ErrInvalidNamedFactory.
 func IsInvalidNamedFactory(err error) bool {
 	return errors.Is(err, ErrInvalidNamedFactory)
