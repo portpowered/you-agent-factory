@@ -64,6 +64,72 @@ describe("withDashboardStoryRuntime", () => {
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
   });
 
+  it("applies sessionID from story parameters after resetting dashboard session state", () => {
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: ["session-beta"],
+      selectedSessionID: "session-beta",
+    });
+
+    withDashboardStoryRuntime(() => null, {
+      args: {},
+      globals: {},
+      hooks: {} as never,
+      id: "dashboard-runtime-session-id",
+      initialArgs: {},
+      name: "Dashboard runtime session id",
+      parameters: {
+        dashboardApi: {
+          sessionID: "session-review",
+        },
+      },
+      title: "storybook/runtime",
+      viewMode: "story",
+    });
+
+    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([]);
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      "session-review",
+    );
+  });
+
+  it("does not leak selected session across story installs", () => {
+    withDashboardStoryRuntime(() => null, {
+      args: {},
+      globals: {},
+      hooks: {} as never,
+      id: "dashboard-runtime-session-leak-a",
+      initialArgs: {},
+      name: "Dashboard runtime session leak A",
+      parameters: {
+        dashboardApi: {
+          sessionID: "session-beta",
+        },
+      },
+      title: "storybook/runtime",
+      viewMode: "story",
+    });
+
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      "session-beta",
+    );
+
+    withDashboardStoryRuntime(() => null, {
+      args: {},
+      globals: {},
+      hooks: {} as never,
+      id: "dashboard-runtime-session-leak-b",
+      initialArgs: {},
+      name: "Dashboard runtime session leak B",
+      parameters: {},
+      title: "storybook/runtime",
+      viewMode: "story",
+    });
+
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      DEFAULT_FACTORY_SESSION_ID,
+    );
+  });
+
   it("installs dashboard fetch mocks and seeds timeline snapshots on the latest tick", async () => {
     const firstSnapshot = buildDashboardSnapshot(2);
     const latestSnapshot = buildDashboardSnapshot(5);
@@ -93,7 +159,9 @@ describe("withDashboardStoryRuntime", () => {
       viewMode: "story",
     });
 
-    const response = await window.fetch("http://example.test/api/dashboard-snapshot");
+    const response = await window.fetch(
+      "http://example.test/api/dashboard-snapshot",
+    );
 
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({ ok: true });
@@ -150,10 +218,7 @@ describe("withDashboardStoryRuntime", () => {
   });
 
   it("replaces timeline events when story parameters provide event history directly", () => {
-    const events = [
-      timelineEvent("tick-2", 2),
-      timelineEvent("tick-4", 4),
-    ];
+    const events = [timelineEvent("tick-2", 2), timelineEvent("tick-4", 4)];
 
     withDashboardStoryRuntime(() => null, {
       args: {},
@@ -212,7 +277,9 @@ describe("withDashboardStoryRuntime", () => {
     );
     eventSource.onopen = opened;
     eventSource.addEventListener("message", (event) => {
-      receivedEvents.push(JSON.parse((event as MessageEvent).data) as FactoryEvent);
+      receivedEvents.push(
+        JSON.parse((event as MessageEvent).data) as FactoryEvent,
+      );
     });
 
     await waitFor(() => {
