@@ -37,7 +37,6 @@ export interface ImportPreviewDialogMessages {
   title: string;
 }
 
-export const IMPORT_PREVIEW_FACTORY_NAME_TOKEN = "{{factoryName}}";
 export const IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN = "{{currentFactoryName}}";
 
 const importPreviewDialogMessagesByLocale = {
