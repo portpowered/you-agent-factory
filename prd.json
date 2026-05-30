@@ -1,29 +1,31 @@
 {
-  "project": "Service Runtime State Consolidation (S2)",
-  "branchName": "ralph/service-runtime-state-consolidation",
-  "description": "Make the factory session registry the sole source of truth for live runtimes: register ~default like other sessions, route reads and activation through session handles, share one runtime bundle type, and remove authoritative shadow runtime fields from FactoryService without changing API or session semantics.",
+  "project": "CI UI Coverage Test Sharding",
+  "branchName": "ralph/ci-coverage-test-sharding",
+  "description": "Shard the UI Coverage lane's main covered Vitest pass across ten parallel CI jobs, merge shard blob reports with Vitest --mergeReports, and keep make test-ui-coverage as the unsharded local canonical lane—cutting PR UI coverage wall time without weakening merged coverage thresholds.",
   "context": {
-    "customerAsk": "Session registry as sole runtime truth; drop duplicate FactoryService fields. Full spec: tasks/prd-service-runtime-state-consolidation.md",
-    "problem": "FactoryService still mirrors the active runtime in top-level fields while multi-session work already lives in factorysessions.Registry handles. That duplication lets work submit, factory save, snapshots, and idle checks target the wrong session or update the service root when a non-default session is active.",
-    "solution": "Incrementally route all runtime access through the session registry and liveRuntimeHandle, unify activation on replaceSessionRuntime, collapse build and live bundle types, then remove authoritative top-level runtime fields while preserving API, CLI, and session open/close behavior."
+    "customerAsk": "The CI pipeline takes about ten minutes because frontend coverage is slow. Separate UI coverage into its own CI steps, shard UI coverage tests into ten shards, and merge coverage results using Vitest merging.",
+    "problem": "The UI Coverage job runs the entire jsdom covered corpus on one ubuntu-latest runner (~8m52s lane command, ~403s main pass). That dominates PR CI wall time even though browser and backend lanes already run in parallel sibling jobs.",
+    "solution": "Keep UI coverage as a distinct lane but replace the monolithic job with a ten-way Vitest --shard matrix (blob reporter per shard) plus a merge job that downloads blobs, runs the existing serial follow-on phases (isolated React Flow, mergeReports with thresholds, standalone script, replay check), and preserves make test-ui-coverage for local full-lane reruns."
   },
   "acceptanceCriteria": [
-    "Every live runtime including ~default is registered in factorysessions.Registry with a liveRuntimeHandle; production code does not treat top-level FactoryService runtime fields as authoritative.",
-    "Work submission, engine snapshots, events, and idle checks scoped by session_id observe only that session's factory and artifacts; concurrent multi-session isolation is preserved.",
-    "Runtime replacement after persist uses session-scoped activation and writes the current-factory pointer under the targeted session root.",
-    "Process restart restores only ~default; additional live sessions remain ephemeral with no behavior change from today.",
-    "No OpenAPI request or response shape changes.",
+    "When classification routes UI coverage to run, CI executes ten parallel shard jobs and one merge job instead of a single runner invoking full make test-ui-coverage.",
+    "Each shard runs only its Vitest-assigned subset of the main covered corpus with the same exclusions as today and uploads a distinct blob artifact; no test file runs in more than one shard.",
+    "The merge job combines all shard blobs plus the isolated React Flow blob and enforces the existing ui/vite.config.ts coverage thresholds and replay coverage check.",
+    "Shard or merge failures surface shard index and missing-artifact detail in GitHub Actions summaries; failure artifacts are retained for 14 days.",
+    "make test-ui-coverage locally remains the unsharded canonical lane with stable [ui-coverage] phase timing labels.",
+    "Maintainer docs record before/after CI wall time for the ten-shard rollout on ubuntu-latest.",
     "Typecheck, lint, and project tests pass."
   ],
   "userStories": [
     {
-      "id": "service-runtime-state-consolidation-001",
-      "title": "One runtime bundle shape for build and live handles",
-      "description": "As a maintainer, I want a single runtime bundle type so build output and live session handles cannot drift when runtime wiring grows.",
+      "id": "ci-coverage-test-sharding-001",
+      "title": "Shard-aware main covered pass in the UI coverage runner",
+      "description": "As a maintainer, I want the UI coverage runner to execute one Vitest shard of the main covered pass so CI can fan out work without duplicating files across shards.",
       "acceptanceCriteria": [
-        "Building a runtime for service startup or session open returns one shared bundle type carrying factory, net, listener, loaded config, logger, event history, local models, recording, and related sidecars.",
-        "liveRuntimeHandle references that shared type; adding a new runtime sidecar requires updating one struct definition.",
-        "Existing service build and replay tests that start a runtime continue to pass without relaxed assertions.",
+        "When UI_COVERAGE_SHARD is set to i/n (e.g. 3/10), the runner runs only the main covered Vitest phase with --shard=i/n, today’s exclusions, coverage flags, and default two max workers unless overridden.",
+        "Each shard writes a unique blob under .vitest-reports/ via --outputFile.blob and does not run isolated React Flow, mergeReports, standalone script, or replay phases.",
+        "When UI_COVERAGE_SHARD is unset, make test-ui-coverage behavior is unchanged (full phased lane).",
+        "Shard mode emits [ui-coverage] elapsed timing for the shard main pass only.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -32,29 +34,29 @@
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-002",
-      "title": "Default session lives in the registry at startup",
-      "description": "As an operator running a single factory, I want the default session registered the same way as named sessions so session targeting is uniform from the first request.",
+      "id": "ci-coverage-test-sharding-002",
+      "title": "CI shard matrix job for UI coverage",
+      "description": "As a contributor waiting on CI, I want the main covered corpus split across ten parallel jobs so wall time drops below the current single-runner baseline.",
       "acceptanceCriteria": [
-        "After BuildFactoryService and service run, ~default is present in the session registry with a live handle pointing at the started factory directory.",
-        "Default session registration uses the same registerLiveSession path as OpenFactorySession, not a parallel service-only runtime slot.",
-        "runState.sessionID matches the registry entry used for ~default while the default runtime is active.",
-        "Typecheck passes",
-        "Tests pass"
+        "ci.yml defines ui-coverage-shard with strategy.matrix.shard 1 through 10, gated by run_ui_coverage like today’s lane.",
+        "Each matrix cell runs make ui-deps then the shard entrypoint with UI_COVERAGE_SHARD=<index>/10, teeing logs to .artifacts/ui-coverage-shard-<index>/command.log.",
+        "Each successful shard uploads an artifact with its .vitest-reports blob(s) and command log.",
+        "Shard matrix jobs execute in parallel when coverage runs.",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-003",
-      "title": "Runtime operations target the requested session",
-      "description": "As a dashboard user with multiple factory tabs, I want work, snapshots, and idle checks for each session_id to use only that session's runtime so sessions cannot leak into one another.",
+      "id": "ci-coverage-test-sharding-003",
+      "title": "CI merge job for shard blobs and serial follow-on phases",
+      "description": "As a maintainer, I want one merge job to combine shard coverage and run the remaining lane phases so the regression contract stays identical to the pre-shard lane.",
       "acceptanceCriteria": [
-        "Submitting work to session A records artifacts and dispatch identifiers only for session A; session B's replay and log artifacts do not contain session A work.",
-        "Engine snapshot and factory read APIs scoped by session_id return data from that session's factory directory, not another live session's directory.",
-        "Idle checks used before factory activation apply to the session being saved or opened, not whichever session was selected last on the service root.",
-        "pkg/api session-scoped routing tests continue to pass: mutations and reads for session-beta do not invoke default-session factories.",
+        "ui-coverage-merge depends on all ten shard jobs, downloads every shard blob into .vitest-reports/, and fails if any expected shard artifact is missing.",
+        "Merge job runs isolated React Flow covered pass, vitest --mergeReports .vitest-reports --coverage with ui/vite.config.ts thresholds, standalone script-style test, and ui-replay-coverage-check in that order.",
+        "Merge step summary reports passed or failed merged thresholds and names missing shard indices when blocked.",
+        "Merge failures retain .artifacts/ui-coverage-merge/ logs for 14 days.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -63,48 +65,45 @@
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-004",
-      "title": "Runtime replacement is always session-scoped",
-      "description": "As a maintainer, I want every runtime swap after persist to stop the prior handle for the same session and start the replacement under that session's root.",
+      "id": "ci-coverage-test-sharding-004",
+      "title": "Replace monolithic ui-coverage job wiring",
+      "description": "As a CI operator, I want the workflow’s UI Coverage lane to mean sharded execution plus merge so PR checks reflect the new architecture.",
       "acceptanceCriteria": [
-        "Factory definition save, OpenFactorySession, and named-factory activation call replaceSessionRuntime with the session idle guard, not the legacy global activation entry point.",
-        "When replacing the factory for a non-default session, the current-factory pointer is written under that session's SessionFactoryRootDir, not only the service host root.",
-        "A successful replacement stops the previous live handle for the same session before registering the successor; other live sessions keep running.",
-        "Service-mode sidecar start and stop behavior is unchanged (poller, cron, and related service tests still pass).",
-        "Typecheck passes",
-        "Tests pass"
+        "The old single-runner ui-coverage job that runs full make test-ui-coverage is removed or disabled; required coverage execution uses shard plus merge jobs only.",
+        "Classification outputs still recommend make test-ui-coverage for local reruns; CI summaries reference shard and merge jobs.",
+        "verify-pr documentation remains accurate: local verify uses unsharded test-ui-coverage.",
+        "Typecheck passes"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-005",
-      "title": "FactoryService no longer mirrors live runtime state",
-      "description": "As a reviewer, I want FactoryService to hold wiring and session orchestration only, so there is one obvious place to find the live runtime for a session.",
+      "id": "ci-coverage-test-sharding-005",
+      "title": "Shard failure observability",
+      "description": "As a contributor debugging a red PR, I want shard failures to identify which slice failed without reading ten full logs blindly.",
       "acceptanceCriteria": [
-        "Top-level factory, net, listener, runtimeCfg, and related runtime fields are removed or reduced to thin delegators that read the selected or requested session handle.",
-        "Runtime swap for a session updates only that session's registry entry and runState for that session; no production path writes the same swap to both top-level fields and the session handle.",
-        "Default and named-session behavior for submit, pause, wait-for-complete, and model catalog APIs remains unchanged from the caller's perspective.",
-        "Typecheck passes",
-        "Tests pass"
+        "Failed shard jobs upload logs and any partial blob artifacts.",
+        "Failed shard step summaries include shard index i/10, exit code, and the last 40 lines of command.log.",
+        "Merge job summaries list absent shard indices when merge is blocked by missing artifacts.",
+        "Typecheck passes"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-006",
-      "title": "Restart behavior documented for operators",
-      "description": "As an operator running multiple UI tabs, I need clear documentation of which sessions survive a process restart so I do not assume ephemeral tabs are restored.",
+      "id": "ci-coverage-test-sharding-006",
+      "title": "Timing evidence and maintainer documentation",
+      "description": "As a maintainer, I want recorded before/after CI timings and rerun instructions so we can verify the sharding investment and operate the lane safely.",
       "acceptanceCriteria": [
-        "Internal maintainer documentation states that only ~default is restored when the service process restarts; additional live sessions opened before restart are ephemeral and must be reopened.",
-        "TestFactoryService_Run_RestartsOnlyDefaultSession continues to pass without changing expected session count or default runtime directory after restart.",
-        "Typecheck passes",
-        "Tests pass"
+        "ui-coverage-speed-closeout.md documents a CI ten-shard rollout subsection with pre-shard baseline, post-shard wall time, and a link to the first green proof run.",
+        "development.md or development-guide relevant-files documents UI_COVERAGE_SHARD, shard-only vs full make test-ui-coverage, and mergeReports threshold ownership.",
+        "Post-shard UI Coverage lane completion on ubuntu-latest is at or below four minutes job wall for the baseline commit class, or the doc explains measured wall if overhead prevents the target.",
+        "Typecheck passes"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

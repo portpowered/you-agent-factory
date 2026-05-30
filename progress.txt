@@ -1,8 +1,6 @@
 ## Codebase Patterns
-- `buildRuntimeBundle` in `pkg/service/factory_build.go` returns `factoryRuntimeBundle`, the single runtime wiring struct referenced from `liveRuntimeHandle`; add new runtime sidecars on `factoryRuntimeBundle` only—startup (`BuildFactoryService`) and `buildReplacementFactoryRuntime` both create `logSink` and session loggers inside `buildRuntimeBundle`, not after the fact.
-- Register every live session (including `~default` at `Run` startup and `OpenFactorySession` launches) through `registerLiveSession` in `pkg/service/runtime_sessions.go` with explicit `FactorySessionTarget` metadata; use `defaultSessionTargetFromRuntimeBundle` for default startup—do not call `sessions.Upsert` directly except in `replaceSessionRuntime` replacement updates.
-- Route session-scoped work, snapshots, idle guards, and record/replay paths through `SubmitWorkRequestForSession`, `GetEngineStateSnapshotForSession`, and `requireIdleRuntimeForSession` in `pkg/service/runtime_sessions.go`; use `sessionScopedRecordPath` for per-session replay artifacts—do not read `fs.currentFactory()` when `session_id` is explicit.
-- After persist, swap live runtimes only through `replaceSessionRuntime` with `requireIdleRuntimeForSession`; write `current-factory` pointers under `sessionFactoryPersistRoot` (non-default sessions with `FolderPath` use that path). Pre-`Run` named activation without a live handle uses `activateReplacementWithoutLiveRuntime` on `startupBundle` only. `OpenFactorySession` starts new background sessions via `startBackgroundSessionWithMetadata`, not `replaceSessionRuntime`.
+- UI coverage sharding: set `UI_COVERAGE_SHARD=index/total` (for example `3/10`) so `ui/scripts/ui-coverage-runner.mjs` runs only the main covered Vitest pass with `--shard=index/total`, writes `.vitest-reports/main-shard-<index>.json`, and skips merge, isolated React Flow, standalone script, and replay; unset `UI_COVERAGE_SHARD` keeps full `make test-ui-coverage` (Makefile skips `ui-replay-coverage-check` while the env var is set).
+- CI `ui-coverage-shard` matrix: `strategy.matrix.shard` 1–10 with `shard-total: 10`, job-level `if: run_ui_coverage`, `fail-fast: false`, each cell runs `UI_COVERAGE_SHARD=<index>/10 make ui-test-coverage` with logs at `.artifacts/ui-coverage-shard-<index>/command.log`, and on success uploads `ui/.vitest-reports/` plus the command log as artifact `ui-coverage-shard-<index>`; `ui-coverage-merge` (job name `UI Coverage` when the lane runs) downloads shard artifacts, fails with missing shard indices when blobs are absent, and runs `make test-ui-coverage-merge` (`UI_COVERAGE_MERGE=1` merge phases plus `ui-replay-coverage-check`); lightweight `ui-coverage` job (same display name) publishes skip routing only when classification skips coverage—local reruns stay on unsharded `make test-ui-coverage`.
 - Canonical validation-target test assertions for API-shaped targets live in `pkg/testutil/validationassert` (`HasTarget`, `HasTargetCode` on `[]factoryapi.FactoryValidationTarget`); `HasTargetCode` accepts an optional topology failure label to preserve service-test diagnostics—import only from `_test.go` files. API tests in `pkg/api/server_factory_test.go` and `pkg/api/servertests/server_factory_validation_test.go` use `validationassert` directly (no local `assertHasValidationTarget*` in `pkg/api`).
 - Batch upsert success responses expose per-work identifiers via `UpsertWorkRequestResponse.works` (`name`, `workTypeName`, `workId`); build domain metadata with `requests.WorkRequestSubmitResultFromNormalized` in the engine and mock factory (primary-work fields plus `Works` slice), then map through `upsertWorkRequestResponse` in `pkg/api/handlers.go` for default and session-scoped PUT routes.
 - Load filesystem-path `FACTORY_REQUEST_BATCH` JSON for CLI ingress through `pkg/cli/batchload.LoadFromFile`, which wraps `pkg/factory/requests.ParseCanonicalWorkRequestJSON`; keep `run.LoadWorkFile` as a thin delegate for existing callers and future `you submit batch` file modes.
@@ -496,24 +494,6 @@
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/481 — BLOCKING rebase item from review comment on head `dbe841e5`.
 ---
 
-## 2026-05-30T16:45:00Z - service-runtime-state-consolidation-001
-- What was implemented: Renamed `replacementFactoryRuntime` to `factoryRuntimeBundle`, moved runtime log sink and session logger creation into `buildRuntimeBundle`, split `resolveFactoryServiceRoot` from log construction, and added regression tests that startup and replacement bundles include log sinks and match live-handle wiring.
-- Files changed: `pkg/service/factory.go`, `pkg/service/factory_build.go`, `pkg/service/factory_runtime_state.go`, `pkg/service/factory_runtime_mode_test.go`, `pkg/service/factory_editable_definition.go`, `pkg/service/runtime_sessions.go`, `pkg/service/poller_watcher_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: `liveRuntimeHandle.runtime` is `*factoryRuntimeBundle`; `buildRuntimeLogSink` centralizes per-runtime instance IDs for both startup and replacement builds.
-  - Gotchas encountered: `BuildFactoryService` defer must close `runtimeBundle.logSink` on failure after bundle allocation—do not keep a separate pre-bundle log sink.
-  - Useful context: Story 002 registers `~default` via `registerLiveSession`; story 005 removes shadow `FactoryService` runtime fields that still mirror the bundle today.
----
-
-## 2026-05-30T17:30:00Z - service-runtime-state-consolidation-002
-- What was implemented: Extended `registerLiveSession` to accept explicit `FactorySessionTarget` metadata, routed default startup and `OpenFactorySession` background launches through it via `defaultSessionTargetFromRuntimeBundle`, and added `TestFactoryService_Run_RegistersDefaultSessionInRegistry` proving `~default` is registered after `Run` with matching live handle, factory directory, and `runState.sessionID`.
-- Files changed: `pkg/service/runtime_sessions.go`, `pkg/service/factory.go`, `pkg/service/factory_runtime_mode_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Default startup passes bundle-derived `FactoryDir`/`FolderPath` into `registerLiveSession`; `currentRuntimeBundle()` resolves through the selected registry handle once `~default` registers—assert pointer equality in tests to catch shadow-bundle regressions.
-  - Gotchas encountered: `activateReplacementRuntime` must preserve existing session target metadata when re-registering replacements; only `replaceSessionRuntime` may still call `sessions.Upsert` directly for in-place handle swaps.
-  - Useful context: Story 003 routes runtime operations through requested session handles; story 005 removes authoritative top-level `FactoryService` runtime fields.
----
-
 ## 2026-05-30T15:04:15Z - consolidate-validation-target-test-asserts-001
 - What was implemented: Added `pkg/testutil/validationassert` with `HasTarget` and `HasTargetCode` for `[]factoryapi.FactoryValidationTarget`, preserving API and service match semantics (optional topology failure label on `HasTargetCode`); unit tests cover success paths; documented the seam in `factory-workstation-relevant-files.md`.
 - Files changed: `pkg/testutil/validationassert/api.go`, `pkg/testutil/validationassert/api_test.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
@@ -532,65 +512,38 @@
   - Useful context: Story 003 retargets `pkg/service/factory_test.go`; story 004 adds domain helpers and retargets `pkg/factory/validation/validation_test.go`.
 ---
 
-## 2026-05-30T18:00:00Z - service-runtime-state-consolidation-003
-- What was implemented: Verified story 003 on branch head—session-scoped `SubmitWorkRequestForSession`, `GetEngineStateSnapshotForSession`, `requireIdleRuntimeForSession`, and `sessionScopedRecordPath`; concurrent session isolation in `runtime_session_runtime_test.go`; idle-before-activation regression in `factory_test.go`; merged `origin/main` (validationassert consolidation) to clear PR #497 BLOCKING merge conflicts.
-- Files changed: merge from `origin/main` (`pkg/api/server_factory_test.go`, `pkg/service/factory_test.go`, `pkg/testutil/validationassert/*`, `docs/internal/processes/factory-workstation-relevant-files.md`); PRD/progress metadata updated locally for story 003
+## 2026-05-30T16:35:31Z - ci-coverage-test-sharding-001
+- What was implemented: Added `UI_COVERAGE_SHARD` parsing and shard-only main covered Vitest pass in `ui-coverage-runner.mjs` (`--shard=index/total`, per-shard blob `.vitest-reports/main-shard-<index>.json`, shard elapsed timing and slow-file summary); full phased lane unchanged when unset; `make test-ui-coverage` skips replay while `UI_COVERAGE_SHARD` is set.
+- Files changed: `ui/scripts/ui-coverage-runner.mjs`, `ui/scripts/ui-coverage-runner.test.mjs`, `Makefile`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: Story 003 landed in commit `25afa2f4`; broader isolation tests expanded in story 004 commit `b205a73f`—flip PRD per story even when follow-on commits add coverage on the same branch.
-  - Gotchas encountered: PR review marked all acceptance criteria PASS while `prd.json` still had stories 003–006 `passes: false`; merge conflicts with `main` were limited to Ralph tracking files after code auto-merged cleanly.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — BLOCKING items were merge conflicts + missing CI on head `da16e228`; push merge commit then wait for required checks.
+  - Patterns discovered: Extract `buildMainCoveredVitestArgs` for shared exclusions, coverage flags, and blob paths; tag main phases with `kind: "main-covered"` so slow-file capture works for both full and shard phase names.
+  - Gotchas encountered: `runUiCoverage` tests need injectable `spawn` via options because shard mode bypasses `cleanCoverageArtifacts` and only runs one phase.
+  - Useful context: Story 002 wires CI matrix jobs to `UI_COVERAGE_SHARD=<index>/10` via `make ui-test-coverage`; story 003 owns merge job and serial follow-on phases.
 ---
 
-## 2026-05-30T19:45:00Z - service-runtime-state-consolidation-004
-- What was implemented: Verified story 004 on branch (commit `b205a73f` routes factory save, upsert activate, and `ActivateNamedFactory` through `replaceSessionRuntime` + `requireIdleRuntimeForSession`); strengthened `TestFactoryService_SaveFactoryForSession_UpsertOnNonDefaultSessionDoesNotMutateDefault` to assert `current-factory` pointer under `sessionFactoryPersistRoot` for the beta session after upsert.
-- Files changed: `pkg/service/factory_test.go`
+## 2026-05-30T17:45:00Z - ci-coverage-test-sharding-002
+- What was implemented: Added `ui-coverage-shard` GitHub Actions matrix job (shards 1–10, `shard-total: 10`, `fail-fast: false`) gated by `run_ui_coverage`; each cell installs deps, runs `UI_COVERAGE_SHARD=<index>/10 make ui-test-coverage` with tee to `.artifacts/ui-coverage-shard-<index>/command.log`, and uploads `ui/.vitest-reports/` plus command log on success.
+- Files changed: `.github/workflows/ci.yml`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: `sessionFactoryPersistRoot` returns `LiveSession.FolderPath` for non-default sessions when set (background `openFactorySession` uses the named factory dir as both `FactoryDir` and `FolderPath`).
-  - Gotchas encountered: Story 004 landed in an earlier commit while `prd.json` still showed `passes: false`—flip PRD after verification even when the main implementation commit predates the metadata pass.
-  - Useful context: Isolation proofs live in `runtime_session_runtime_test.go` (`ActivateNamedFactory_ReplacesOnlyActiveSession`, `SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession`); stories 005–006 remain on branch head but need PRD flip in follow-up iterations.
+  - Patterns discovered: Shard blobs live under `ui/.vitest-reports/main-shard-<index>.json` because `make ui-test-coverage` runs from the `ui/` workspace; artifact paths must include the `ui/` prefix from the repo root.
+  - Gotchas encountered: Job-level `if: run_ui_coverage` skips the entire matrix when classification skips coverage—unlike monolithic `ui-coverage`, which still emits a routing summary while steps no-op.
+  - Useful context: Story 003 adds `ui-coverage-merge` to download shard artifacts; story 004 removes the monolithic `ui-coverage` job from required checks.
 ---
 
-## 2026-05-30T16:10:00Z - service-runtime-state-consolidation-005
-- What was implemented: Verified story 005 on branch head `53a71220` (implementation in `72d948c8`): `FactoryService` holds only `startupBundle` plus session-registry handles; live runtime fields live on `factoryRuntimeBundle` inside `liveRuntimeHandle`; `currentFactory` / `currentRuntimeBundle` / `currentRuntimeConfig` delegate through run-state, default session, or pre-`Run` startup bundle; `replaceSessionRuntime` updates registry and active `runState` only for the targeted session with no top-level mirror writes.
-- Files changed: none (verification iteration); PRD metadata updated locally for story 005
+## 2026-05-30T18:00:00Z - ci-coverage-test-sharding-003
+- What was implemented: Added `UI_COVERAGE_MERGE=1` merge mode in `ui-coverage-runner.mjs` (shard blob validation via `UI_COVERAGE_SHARD_TOTAL`, then isolated React Flow, `vitest --mergeReports`, and standalone script phases), `make test-ui-coverage-merge` / `ui-test-coverage-merge`, and `ui-coverage-merge` CI job that downloads shard artifacts, reports missing shard indices, runs the merge lane plus replay check, and retains `.artifacts/ui-coverage-merge/` failure logs for 14 days.
+- Files changed: `ui/scripts/ui-coverage-runner.mjs`, `ui/scripts/ui-coverage-runner.test.mjs`, `Makefile`, `.github/workflows/ci.yml`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: Story 005 landed in `72d948c8` before later story-004 test tightening on `53a71220`—flip PRD after verifying head, not only the story commit.
-  - Gotchas encountered: PR review acceptance table already marked consolidation criteria PASS while `prd.json` still had stories 005–006 `passes: false`.
-  - Useful context: `make test-backend-verification` and `go test -short ./pkg/service/...` pass locally; story 006 (restart docs + `TestFactoryService_Run_RestartsOnlyDefaultSession`) remains for the next iteration.
+  - Patterns discovered: Merge mode must not call `cleanCoverageArtifacts()` (that deletes `.vitest-reports/`); validate `main-shard-<index>.json` before follow-on phases; CI uses `actions/download-artifact` with `pattern: ui-coverage-shard-*` and `merge-multiple: true` into the repo root so `ui/.vitest-reports/` paths align with shard uploads.
+  - Gotchas encountered: Mocking `process.exit` without throwing lets merge tests continue into Vitest phases; use a throwing mock when asserting pre-phase failure. `ui-coverage-merge` needs `if: always()` plus `needs.ui-coverage-shard.result != 'skipped'` so it still runs when shard matrix legs fail and can list missing indices.
+  - Useful context: Story 004 removes monolithic `ui-coverage` from required checks; story 005 adds richer shard failure artifact uploads.
 ---
 
-## 2026-05-30T16:20:00Z - mergeability (PR #497 backend-size)
-- What was implemented: Fixed CI `backend-size` failures by extracting `instantiateRuntimeBundleFactory` from `buildRuntimeBundle` and splitting oversized `factory_runtime_mode_test.go` / `runtime_session_runtime_test.go` into `factory_engine_state_snapshot_test.go` and `runtime_session_list_test.go`.
-- Files changed: `pkg/service/factory_build.go`, `pkg/service/factory_runtime_mode_test.go`, `pkg/service/factory_engine_state_snapshot_test.go`, `pkg/service/runtime_session_runtime_test.go`, `pkg/service/runtime_session_list_test.go`
+## 2026-05-30T19:30:00Z - ci-coverage-test-sharding-004
+- What was implemented: Removed monolithic `ui-coverage` test execution from `.github/workflows/ci.yml`; added skip-only `ui-coverage` routing job (display name `UI Coverage`) when classification skips the lane; renamed `ui-coverage-merge` display name to `UI Coverage` when the lane runs; updated shard/merge step summaries and `development.md` / `development-guide-relevant-files.md` for CI shard+merge vs local `make test-ui-coverage`.
+- Files changed: `.github/workflows/ci.yml`, `docs/internal/development/development.md`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: When session/runtime stories grow test files past 1000 lines, split by concern (engine snapshot vs session list paths) into sibling `*_test.go` files in the same package rather than adding `backendsizecheck:ignore-file`.
-  - Gotchas encountered: `buildRuntimeBundle` can exceed the 100-line function cap after wiring grows—extract factory instantiation (`runtime.New` + listener) into a sibling helper.
-  - Useful context: Mergeability-only follow-up on PR #497 after story 005 verification; push triggers fresh required checks.
----
-
-## 2026-05-30T16:25:00Z - service-runtime-state-consolidation-006
-- What was implemented: Verified story 006 on branch head (commit `da16e228`): operator/maintainer restart semantics in `docs/internal/development/factory-session-process-restart.md` and `TestFactoryService_Run_RestartsOnlyDefaultSession` unchanged; mergeability follow-up extracted `ActivateNamedFactory` path helpers and test assertion helpers to satisfy `pkg-maint` cyclomatic-complexity limits on CI head `5e64896d`.
-- Files changed: `pkg/service/factory.go`, `pkg/service/factory_runtime_mode_test.go`, `pkg/service/factory_test.go`
-- **Learnings for future iterations:**
-  - Patterns discovered: Story 006 landed in `da16e228` before later mergeability commits—flip PRD after verifying docs + restart test even when no new feature diff is needed in the iteration.
-  - Gotchas encountered: `pkg-maint` can fail on `ActivateNamedFactory` and large session-registration tests after consolidation refactors even when `backend-size` already passed—run `make pkg-maint` locally before pushing.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories now pass; await green required checks on the pkg-maint fix head before `<COMPLETE>`.
----
-
-## 2026-05-30T16:30:00Z - mergeability (PR #497 pkg-file-count)
-- What was implemented: Merged `factory_engine_state_snapshot_test.go` and `runtime_session_list_test.go` into `factory_test.go` (already `backendsizecheck:ignore-file`) after backend-size split pushed `pkg/service` to 17 files; `make pkg-file-count`, `make pkg-maint`, and `make backend-size` pass locally.
-- Files changed: `pkg/service/factory_test.go` (consolidated tests); removed `factory_engine_state_snapshot_test.go`, `runtime_session_list_test.go`
-- **Learnings for future iterations:**
-  - Patterns discovered: Backend-size splits that add test files can fail `pkg-file-count` (15-file limit) even when line limits pass—consolidate into an existing `ignore-file` test file or extract a subpackage.
-  - Gotchas encountered: `cleanResolvedPath` and session-list helpers must stay in the same `package service` test bundle as `factory_runtime_mode_test.go` callers.
-  - Useful context: Follow-up on head `9e68316b` after pkg-maint cyclomatic-complexity fix.
----
-
-## 2026-05-30T16:44:32Z - mergeability (PR #497 main re-merge)
-- What was implemented: Merged current `origin/main` into `ralph/service-runtime-state-consolidation` at head `77399175`; resolved `pkg/service/factory.go` conflict by keeping session-registry `activateReplacementWithoutLiveRuntime` (`setStartupBundle` + `syncActiveSessionDir`) instead of legacy `swapActiveRuntime` / `startReplacementRuntime` from main; local `go test -short ./pkg/service/...`, `make pkg-maint`, `make pkg-file-count`, and `make backend-size` pass; pushed merge commit; PR now `mergeable: MERGEABLE` (awaiting required checks).
-- Files changed: `pkg/service/factory.go` (conflict resolution); merge brought in `pkg/config/load`, `pkg/config/persist`, and related main updates
-- **Learnings for future iterations:**
-  - Patterns discovered: After `main` advances, re-merge can conflict only in `activateReplacementWithoutLiveRuntime` when main still has pre-consolidation replacement helpers—keep branch session-registry paths, not `swapActiveRuntime`.
-  - Gotchas encountered: `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING` blocks CI even when local tests pass; push a conflict-free merge before waiting on checks.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories `passes: true`; prior BLOCKING merge-conflict + missing CI items addressed on head `77399175`.
+  - Patterns discovered: Use mutually exclusive `if` on `ui-coverage` (skip routing only) and `ui-coverage-merge` (both named `UI Coverage`) so branch protection keeps one check name; keep `development.md` lane table local rerun column exactly `` `make test-ui-coverage` `` because `TestDevelopmentGuideMatchesObservableCIRoutingContract` asserts it against `cmd/ciclassify` lane plans.
+  - Gotchas encountered: Putting CI debug commands in the markdown table's "Local rerun command" column breaks the ciclassify↔guide contract test—document shard/merge debug paths in Owned checks or Why columns instead.
+  - Useful context: Story 005 adds richer failed-shard artifact uploads and step summaries; story 006 records timing evidence in `ui-coverage-speed-closeout.md`.
 ---
