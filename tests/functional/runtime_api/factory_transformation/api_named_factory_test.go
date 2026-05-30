@@ -2,6 +2,7 @@ package factory_transformation
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -185,23 +186,23 @@ func TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEven
 
 func createNamedFactoryFromBody(t *testing.T, serverURL, body string) factoryapi.Factory {
 	t.Helper()
-	resp := createNamedFactoryExpectStatus(t, serverURL, body, http.StatusCreated)
+	resp := createNamedFactoryExpectStatus(t, serverURL, body, http.StatusOK)
 	var created factoryapi.Factory
-	decodeJSONResponse(t, resp, &created, "decode create factory response")
+	decodeJSONResponse(t, resp, &created, "decode upsert named factory response")
 	return created
 }
 
 func createNamedFactoryExpectStatus(t *testing.T, serverURL, body string, wantStatus int) *http.Response {
 	t.Helper()
-	resp, err := http.Post(serverURL+"/factories", "application/json", bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("POST /factories: %v", err)
-	}
-	if resp.StatusCode != wantStatus {
-		defer resp.Body.Close()
-		t.Fatalf("POST /factories status = %d, want %d", resp.StatusCode, wantStatus)
-	}
-	return resp
+	requestBody := fmt.Sprintf(`{"mode":"UPSERT_NAMED_AND_ACTIVATE","factory":%s}`, body)
+	return putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		http.DefaultClient,
+		serverURL,
+		"/factory-sessions/~default/factory",
+		requestBody,
+		wantStatus,
+	)
 }
 
 func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code string) bool {

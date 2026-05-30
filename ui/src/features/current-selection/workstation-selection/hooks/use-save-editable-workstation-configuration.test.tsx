@@ -127,21 +127,27 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/factory-sessions/session-beta/factory",
         expect.objectContaining({
-          body: JSON.stringify({
-            name: "Current Factory",
-            workers: [],
-            workstations: [],
-            version: {
-              logical: "8",
-              physical: "2026-05-23T15:52:00.001Z",
-            },
-          }),
           headers: {
             "content-type": "application/json",
           },
           method: "PUT",
         }),
       );
+      const putCall = fetchMock.mock.calls.find(
+        ([url]) => url === "/factory-sessions/session-beta/factory",
+      );
+      expect(JSON.parse(String(putCall?.[1]?.body))).toEqual({
+        factory: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          version: {
+            logical: "8",
+            physical: "2026-05-23T15:52:00.001Z",
+          },
+        },
+        mode: "REPLACE_CURRENT",
+      });
     });
     expect(markChangesSaved).toHaveBeenCalledTimes(1);
   });

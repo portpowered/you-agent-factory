@@ -61,13 +61,16 @@ describe("session-factory-mocks", () => {
         },
       }),
     ).toEqual({
-      name: "Session Current Name",
-      workTypes: [
-        { name: "story", states: [{ name: "new", type: "INITIAL" }] },
-      ],
-      workers: [],
-      workstations: [],
-      version: incrementedSessionFactoryVersion,
+      mode: "REPLACE_CURRENT",
+      factory: {
+        name: "Session Current Name",
+        workTypes: [
+          { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+        ],
+        workers: [],
+        workstations: [],
+        version: incrementedSessionFactoryVersion,
+      },
     });
   });
 

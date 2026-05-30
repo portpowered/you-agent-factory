@@ -32,6 +32,7 @@ import {
   mergeImportedFactoryIntoSessionDocument,
   mockGetSessionFactory,
   mockPutSessionFactory,
+  parseSessionFactoryPutFactory,
   sessionFactoryImportActivationDocument,
   sessionFactoryNamedExportDocument,
 } from "./testing/session-factory-mocks";
@@ -243,7 +244,9 @@ describe("App shell import flows", () => {
 
           if (method === "PUT") {
             return mockPutSessionFactory({
-              responseDocument: JSON.parse(String(init?.body)),
+              responseDocument: parseSessionFactoryPutFactory(
+                String(init?.body),
+              ),
             });
           }
         }
@@ -351,8 +354,11 @@ describe("App shell import flows", () => {
           }),
         );
         expect(JSON.parse(String(putActivationCall?.[1]?.body))).toEqual({
-          ...currentNamedFactoryExportResponse,
-          version: incrementedSessionFactoryVersion,
+          mode: "REPLACE_CURRENT",
+          factory: {
+            ...currentNamedFactoryExportResponse,
+            version: incrementedSessionFactoryVersion,
+          },
         });
       });
       expectNoPostFactoriesActivation(fetchMock);

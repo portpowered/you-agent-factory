@@ -112,14 +112,29 @@ export function mockPutSessionFactory(
 
 export function buildSessionFactoryActivationPutBody(
   options: SessionFactoryActivationPutBodyOptions,
-): components["schemas"]["Factory"] {
+): components["schemas"]["SaveFactoryForSessionRequest"] {
   return {
-    name: options.sessionName,
-    workTypes: options.importedFactory.workTypes,
-    workers: options.importedFactory.workers,
-    workstations: options.importedFactory.workstations,
-    version: options.version ?? incrementedSessionFactoryVersion,
+    mode: "REPLACE_CURRENT",
+    factory: {
+      name: options.sessionName,
+      workTypes: options.importedFactory.workTypes,
+      workers: options.importedFactory.workers,
+      workstations: options.importedFactory.workstations,
+      version: options.version ?? incrementedSessionFactoryVersion,
+    },
   };
+}
+
+export function parseSessionFactoryPutFactory(
+  body: string,
+): components["schemas"]["Factory"] {
+  const parsed = JSON.parse(body) as
+    | components["schemas"]["SaveFactoryForSessionRequest"]
+    | components["schemas"]["Factory"];
+  if ("factory" in parsed && parsed.factory) {
+    return parsed.factory;
+  }
+  return parsed as components["schemas"]["Factory"];
 }
 
 export function incrementSessionFactoryVersion(

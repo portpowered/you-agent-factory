@@ -3,6 +3,7 @@ package factory_transformation
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -653,6 +654,37 @@ func saveCurrentFactoryDefinitionExpectStatus(t *testing.T, serverURL, body stri
 	return saveCurrentFactoryDefinitionExpectStatusWithClient(t, http.DefaultClient, serverURL, body, wantStatus)
 }
 
+func saveFactoryForSessionRequestBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
+}
+
+func putFactoryForSessionRequestExpectStatusWithClient(
+	t *testing.T,
+	client *http.Client,
+	serverURL,
+	path string,
+	body string,
+	wantStatus int,
+) *http.Response {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodPut, serverURL+path, bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("new factory session save request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("PUT %s: %v", path, err)
+	}
+	if resp.StatusCode != wantStatus {
+		resp.Body.Close()
+		t.Fatalf("PUT %s status = %d, want %d", path, resp.StatusCode, wantStatus)
+	}
+	return resp
+}
+
 func saveCurrentFactoryDefinitionExpectStatusWithClient(
 	t *testing.T,
 	client *http.Client,
@@ -662,21 +694,14 @@ func saveCurrentFactoryDefinitionExpectStatusWithClient(
 ) *http.Response {
 	t.Helper()
 
-	req, err := http.NewRequest(http.MethodPut, serverURL+"/factory-sessions/~default/factory", bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("new current factory request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("PUT /factory-sessions/~default/factory: %v", err)
-	}
-	if resp.StatusCode != wantStatus {
-		resp.Body.Close()
-		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want %d", resp.StatusCode, wantStatus)
-	}
-	return resp
+	return putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		client,
+		serverURL,
+		"/factory-sessions/~default/factory",
+		saveFactoryForSessionRequestBody(body),
+		wantStatus,
+	)
 }
 
 func openNamedFactorySession(t *testing.T, serverURL, folderPath, name string) string {
@@ -724,19 +749,14 @@ func getCurrentFactoryForSession(t *testing.T, serverURL, sessionID string) fact
 
 func saveCurrentFactoryForSession(t *testing.T, serverURL, sessionID, body string) factoryapi.Factory {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPut, sessionFactoryURL(serverURL, sessionID), bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("new session current factory request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT /factory-sessions/%s/factory: %v", sessionID, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		t.Fatalf("PUT /factory-sessions/%s/factory status = %d, want 200", sessionID, resp.StatusCode)
-	}
+	resp := putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		http.DefaultClient,
+		serverURL,
+		"/factory-sessions/"+sessionID+"/factory",
+		saveFactoryForSessionRequestBody(body),
+		http.StatusOK,
+	)
 	var saved factoryapi.Factory
 	decodeJSONResponse(t, resp, &saved, "decode session current factory save response")
 	return saved

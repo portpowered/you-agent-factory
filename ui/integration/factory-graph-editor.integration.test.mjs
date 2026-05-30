@@ -484,7 +484,7 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(await importDialog.textContent()).toContain(exportName);
         expect(await importDialog.textContent()).toContain(download.filename);
         expect(await importDialog.textContent()).toContain(
-          "Activating the import switches the current dashboard factory to the embedded authored definition from this PNG.",
+          "Choose whether to replace the factory already current in this session or create a new named factory from the embedded PNG definition.",
         );
 
         await importDialog
@@ -665,6 +665,7 @@ describe.sequential("factory graph editor browser integration", () => {
                 },
               ],
             },
+            mode: "REPLACE_CURRENT",
             sessionID: "~default",
           },
         ]);
