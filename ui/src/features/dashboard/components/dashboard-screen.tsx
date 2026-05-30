@@ -17,6 +17,14 @@ export interface DashboardScreenProps {
 }
 
 export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
+  return (
+    <DashboardSessionProvider>
+      <DashboardScreenContent locale={locale} />
+    </DashboardSessionProvider>
+  );
+}
+
+function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
   const refreshToken = useDashboardBentoStore((state) => state.refreshToken);
   const { snapshot, isInitialLoading, error } = useDashboardSnapshot({
@@ -63,11 +71,9 @@ export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
 
   return (
     <main className={DASHBOARD_SHELL_CLASS}>
-      <DashboardSessionProvider>
-        <DashboardHeader locale={locale} />
-        <DashboardBento locale={locale} />
-        <DashboardExportDialog locale={locale} />
-      </DashboardSessionProvider>
+      <DashboardHeader locale={locale} />
+      <DashboardBento locale={locale} />
+      <DashboardExportDialog locale={locale} />
     </main>
   );
 }
