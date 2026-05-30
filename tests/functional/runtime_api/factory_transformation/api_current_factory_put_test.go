@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -290,6 +291,56 @@ func TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsol
 	}
 	submitWorkForSessionAndExpectStatus(t, server.URL(), betaSessionID, "beta-task", "old-session-work", http.StatusBadRequest)
 	submitWorkAndExpectStatus(t, server.URL(), "alpha-task", "default-still-alpha", http.StatusCreated)
+}
+
+func TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFactoryTransformationServer(t, rootDir)
+	current := getCurrentFactory(t, server.URL())
+	if current.Version == nil {
+		t.Fatal("current factory version = nil, want version metadata for save")
+	}
+
+	body := `{
+		"name":"alpha",
+		"version":{"physical":"` + current.Version.Physical.UTC().Add(time.Nanosecond).Format(time.RFC3339Nano) + `","logical":"` + strconv.FormatInt(current.Version.Logical.Int64()+1, 10) + `"},
+		"workTypes":[{"name":"story","states":[
+			{"name":"queued","type":"INITIAL"},
+			{"name":"queued-dup","type":"PROCESSING"}
+		]}],
+		"workers":[
+			{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"},
+			{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}
+		],
+		"workstations":[{
+			"name":"process",
+			"behavior":"STANDARD",
+			"type":"MODEL_WORKSTATION",
+			"worker":"missing-worker",
+			"inputs":[{"workType":"story","state":"queued"}],
+			"outputs":[{"workType":"story","state":"missing-state"}]
+		}]
+	}`
+
+	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	var errResp factoryapi.ErrorResponse
+	decodeJSONResponse(t, resp, &errResp, "decode invalid current factory save response")
+	if errResp.Code != factoryapi.INVALIDFACTORY {
+		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
+	}
+	if errResp.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("error family = %q, want BAD_REQUEST", errResp.Family)
+	}
+	if errResp.Targets == nil || len(*errResp.Targets) < 2 {
+		t.Fatalf("error targets = %#v, want multiple blocking validation targets", errResp.Targets)
+	}
+	if !hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDuplicateIdentifier) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingWorkerReference) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingPlaceReference) {
+		t.Fatalf("error targets = %#v, want duplicate worker, dangling worker, and dangling place targets", errResp.Targets)
+	}
 }
 
 func TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets(t *testing.T) {
