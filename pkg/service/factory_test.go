@@ -2227,6 +2227,9 @@ func TestFactoryService_SaveFactoryForSession_UpsertOnNonDefaultSessionDoesNotMu
 	assertFactoryWorkType(t, defaultCurrent.WorkTypes, "task", "default session work types after beta upsert")
 
 	assertCurrentFactoryPointer(t, harness.rootDir, "alpha", "global default pointer after beta session upsert")
+	betaSession := harness.requireSession(t, betaSessionID)
+	betaPersistRoot := sessionFactoryPersistRoot(harness.svc.factoryRootDir, betaSession)
+	assertCurrentFactoryPointer(t, betaPersistRoot, "gamma", "beta session pointer after upsert")
 	if _, err := config.ResolveNamedFactoryDir(harness.rootDir, "gamma"); err == nil {
 		t.Fatal("expected gamma factory to persist only under the beta session root, not the service root")
 	}
