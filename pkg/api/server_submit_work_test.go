@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -29,8 +31,17 @@ func TestSubmitWork(t *testing.T) {
 	}
 
 	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
-	if resp.TraceId != "test-trace-1" {
-		t.Errorf("expected trace_id test-trace-1, got %s", resp.TraceId)
+	assertSubmitWorkIdentityResponse(t, resp, submitWorkIdentityExpectation{
+		name:         "draft-prd",
+		workTypeName: "prd",
+		traceId:      "test-trace-1",
+		accepted:     true,
+	})
+	if resp.RequestId == "" {
+		t.Fatalf("requestId = %q, want non-empty normalized request id", resp.RequestId)
+	}
+	if stringValue(resp.WorkId) != "batch-"+resp.RequestId+"-draft-prd" {
+		t.Fatalf("workId = %q, want batch-%s-draft-prd", stringValue(resp.WorkId), resp.RequestId)
 	}
 	if len(mf.WorkRequests) != 1 {
 		t.Fatalf("expected 1 work request, got %d", len(mf.WorkRequests))
@@ -46,6 +57,66 @@ func TestSubmitWork(t *testing.T) {
 	}
 	if string(mf.Submitted[0].Payload) != `{"title":"Draft PRD"}` {
 		t.Errorf("payload = %s, want JSON object payload", string(mf.Submitted[0].Payload))
+	}
+}
+
+func TestSubmitWork_ReturnsAcceptedWorkIdentifiers(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{"name":"draft-prd","workTypeName":"prd","traceId":"test-trace-1","payload":{"title":"Draft PRD"}}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
+	assertSubmitWorkResponseIdentifiers(t, resp, submitWorkResponseExpectation{
+		traceID:      "test-trace-1",
+		name:         "draft-prd",
+		workTypeName: "prd",
+		sessionID:    factorysessions.DefaultSessionID,
+		workIDSuffix: "-draft-prd",
+	})
+	if resp.RequestId == "" {
+		t.Fatal("expected non-empty requestId")
+	}
+	if !strings.HasPrefix(stringValue(resp.WorkId), "batch-"+resp.RequestId) {
+		t.Fatalf("workId = %q, want batch-<requestId>-draft-prd prefix", stringValue(resp.WorkId))
+	}
+}
+
+type submitWorkResponseExpectation struct {
+	traceID      string
+	name         string
+	workTypeName string
+	sessionID    string
+	workIDSuffix string
+}
+
+func assertSubmitWorkResponseIdentifiers(t *testing.T, resp factoryapi.SubmitWorkResponse, want submitWorkResponseExpectation) {
+	t.Helper()
+
+	if resp.TraceId != want.traceID {
+		t.Fatalf("traceId = %q, want %q", resp.TraceId, want.traceID)
+	}
+	if !resp.Accepted {
+		t.Fatal("accepted = false, want true")
+	}
+	if stringValue(resp.Name) != want.name {
+		t.Fatalf("name = %q, want %q", stringValue(resp.Name), want.name)
+	}
+	if stringValue(resp.WorkTypeName) != want.workTypeName {
+		t.Fatalf("workTypeName = %q, want %q", stringValue(resp.WorkTypeName), want.workTypeName)
+	}
+	if stringValue(resp.SessionId) != want.sessionID {
+		t.Fatalf("sessionId = %q, want %q", stringValue(resp.SessionId), want.sessionID)
+	}
+	workID := stringValue(resp.WorkId)
+	if workID == "" {
+		t.Fatal("workId is empty, want normalized batch id")
+	}
+	if want.workIDSuffix != "" && !strings.HasSuffix(workID, want.workIDSuffix) {
+		t.Fatalf("workId = %q, want suffix %q", workID, want.workIDSuffix)
 	}
 }
 
@@ -532,6 +603,68 @@ func TestSubmitWorkUnknownWorkTypeReturnsBadRequest(t *testing.T) {
 
 	rec := submitWorkRequest(t, srv, `{"name":"unknown-work","workTypeName":"unknown","payload":"fix lint"}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("unknown-work") references unknown work type name "unknown"`)
+}
+
+func TestSubmitWorkBySessionId_ReturnsWorkIdentityFields(t *testing.T) {
+	sessionFactory := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}, Net: sessionScopedStateNet()}
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"session-alpha": sessionFactory,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-alpha/work", bytes.NewBufferString(`{"name":"scoped-draft","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"Scoped"}}`))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.SubmitWorkResponse](t, rec)
+	assertSubmitWorkIdentityResponse(t, resp, submitWorkIdentityExpectation{
+		name:         "scoped-draft",
+		workTypeName: "task",
+		traceId:      "trace-scoped-submit",
+		accepted:     true,
+	})
+	if len(sessionFactory.WorkRequests) != 1 {
+		t.Fatalf("session submitted work requests = %d, want 1", len(sessionFactory.WorkRequests))
+	}
+	if resp.RequestId == "" {
+		t.Fatalf("requestId = %q, want non-empty normalized request id", resp.RequestId)
+	}
+	if stringValue(resp.WorkId) != "batch-"+resp.RequestId+"-scoped-draft" {
+		t.Fatalf("workId = %q, want batch-%s-scoped-draft", stringValue(resp.WorkId), resp.RequestId)
+	}
+	if stringValue(resp.SessionId) != "session-alpha" {
+		t.Fatalf("sessionId = %q, want session-alpha", stringValue(resp.SessionId))
+	}
+}
+
+type submitWorkIdentityExpectation struct {
+	name         string
+	workTypeName string
+	traceId      string
+	accepted     bool
+}
+
+func assertSubmitWorkIdentityResponse(t *testing.T, resp factoryapi.SubmitWorkResponse, want submitWorkIdentityExpectation) {
+	t.Helper()
+	if resp.TraceId != want.traceId {
+		t.Fatalf("traceId = %q, want %q", resp.TraceId, want.traceId)
+	}
+	if resp.Accepted != want.accepted {
+		t.Fatalf("accepted = %v, want %v", resp.Accepted, want.accepted)
+	}
+	if stringValue(resp.Name) != want.name {
+		t.Fatalf("name = %q, want %q", stringValue(resp.Name), want.name)
+	}
+	if stringValue(resp.WorkTypeName) != want.workTypeName {
+		t.Fatalf("workTypeName = %q, want %q", stringValue(resp.WorkTypeName), want.workTypeName)
+	}
+	if want.name != "" && stringValue(resp.WorkId) == "" {
+		t.Fatalf("workId = %q, want non-empty work id for named submit", stringValue(resp.WorkId))
+	}
 }
 
 func TestSubmitWorkAutoTraceID(t *testing.T) {

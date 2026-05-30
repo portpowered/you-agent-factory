@@ -116,6 +116,9 @@ func TestSubmitWorkRequest_InjectsBatchAtomicallyAndIgnoresDuplicateRequestID(t 
 	if repeated.RequestID != result.RequestID || repeated.TraceID != result.TraceID || repeated.Accepted {
 		t.Fatalf("duplicate submit result = %#v, want original metadata with Accepted=false", repeated)
 	}
+	if repeated.WorkID != "work-plan" || repeated.Name != "plan" || repeated.WorkTypeName != "task" {
+		t.Fatalf("duplicate submit identity = %#v, want preserved primary work metadata", repeated)
+	}
 	if err := eng.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick after duplicate: %v", err)
 	}
