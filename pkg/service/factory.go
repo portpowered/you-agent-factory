@@ -159,6 +159,10 @@ type FactoryService struct {
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
+var _ apisurface.ModelAPI = (*FactoryService)(nil)
+var _ apisurface.FactorySaveAPI = (*FactoryService)(nil)
+var _ apisurface.SessionAPI = (*FactoryService)(nil)
+var _ apisurface.WorkAPI = (*FactoryService)(nil)
 var _ apisurface.APISurface = (*FactoryService)(nil)
 var _ apisurface.SessionAPISurface = (*FactoryService)(nil)
 
