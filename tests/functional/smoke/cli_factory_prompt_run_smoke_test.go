@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -50,7 +49,7 @@ func TestFactoryPromptRun_RealCLICompletesDefaultWorkType(t *testing.T) {
 		"--factory", factoryPath,
 		"--with-mock-workers",
 		"--no-record",
-		"--port", strconv.Itoa(port),
+		"--server", baseURL,
 		"--continuously",
 		"--quiet",
 		mockWorkersPath,
@@ -106,7 +105,6 @@ func TestFactoryPromptRun_RealCLIRejectsFactoryWithoutDefaultHandling(t *testing
 		"run",
 		"--factory", factoryPath,
 		"--no-record",
-		"--port", "0",
 		"--quiet",
 		"missing-default-handling",
 	)
