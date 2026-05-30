@@ -1,189 +1,225 @@
-# PRD: Command Wiring with Wire (S8)
+# PRD: UI Dashboard Stream and Timeline Split (U8 Recovery v2)
 
 ---
-author: Codex
+author: factory-agent
 last modified: 2026-05-31
 status: draft
+recovery: wave2-plan-failure (blocked on ui-session-scope-context-recovery-v2)
+baseline-spec: tasks/prd-ui-dashboard-stream-timeline-split.md
+graph: U8
+upstream-recovery: tasks/todo/ui-session-scope-context-recovery-v2.md
 ---
+
+## Introduction
+
+`useDashboardSnapshot` historically combined factory event SSE transport, session-switch lifecycle (timeline reset, stream reset, selection history, React Query invalidation), queued event flushing, optional timeline memory debug, and exposing `snapshot` from the timeline store. That coupling made the live dashboard shell hard to test and blurred **transport** with **derived dashboard state**.
+
+U8 splits those concerns into focused hooks while preserving observable dashboard behavior: loading, offline-before-first-event errors, pause semantics, session/refresh resets, and the `snapshot` surface consumed by `DashboardScreen` and bento cards.
+
+This document is a **recovery v2** plan after the wave-2 program token blocked on a failed U2 recovery plan. The full product intent remains in [`tasks/prd-ui-dashboard-stream-timeline-split.md`](../prd-ui-dashboard-stream-timeline-split.md). Main may already contain partial or complete implementation (for example `ralph/ui-dashboard-stream-timeline-split` on current `main`); stories are written to **verify, complete gaps, and prove behavior** idempotently rather than assume a greenfield start.
+
+**Program dependency:** Do not start implementation until [`ui-session-scope-context-recovery-v2`](ui-session-scope-context-recovery-v2.md) is complete. Stream and composer wiring must consume `useDashboardSession()` for `rawSessionID` and `isPaused`, not `dashboardSessionStore`.
 
 ## Context
 
 ### Customer ask
 
-Introduce optional compile-time dependency injection with **`google/wire`** at command entrypoints after service composition stabilizes (S6). Full upstream spec: [`tasks/prd-cmd-wire-composition.md`](../prd-cmd-wire-composition.md). Wave placement: backend simplification **S8** (optional, wave 4).
+Retrigger U8 (UI dashboard stream timeline split) after the prior recovery wave failed on U2. Deliver the split hook seams from [`tasks/prd-ui-dashboard-stream-timeline-split.md`](../prd-ui-dashboard-stream-timeline-split.md) so customers and maintainers get the same live dashboard behavior with isolated, testable ownership.
 
-### Problem
+### Concrete problem
 
-`FactoryService` construction today flows through `service.BuildFactoryService` and is invoked from `pkg/cli/run` via a package-level `buildFactoryService` hook. As S6 injects collaborators (`factorysave`, `runtimebuild`, `factorysessions`, `localmodels`, `hostedworkers`), manual wiring at the process edge risks duplication, ordering mistakes, and drift between the service build path and what operators actually run via `you run`.
-
-The repository standard places **process wiring in `cmd/`**, but `cmd/factory/main.go` is currently a one-line delegate to `pkg/cli.Execute`. Wire cannot live only in `cmd/` unless the binary registers the generated injector into the CLI run path (Go forbids `pkg/` importing `cmd/`).
+- A monolithic snapshot hook mixed SSE connection management, session lifecycle side effects, timeline projection, and debug tooling.
+- Dashboard shell loading and error states were easy to derive incorrectly from `snapshot` truthiness instead of stream progress plus timeline event ownership.
+- Session switches risked duplicate React Query removals, stale EventSource connections, or timeline/stream state leaking across tabs.
+- Downstream snapshot-plane work depends on a single lifecycle owner for session-scoped resets.
 
 ### High-level solution
 
-Add a **`cmd/factory/composition`** package (build tag `wireinject` in `wire.go`, checked-in `wire_gen.go`) that generates the `FactoryService` build function from plain constructors in `pkg/service` and related packages—**no `wire:` struct tags in `pkg/service` production code**.
-
-`cmd/factory/main.go` registers the wire-generated builder with `pkg/cli/run` before `cli.Execute()`. `you run` continues to parse flags, build `FactoryServiceConfig`, start the API server, and run the factory with **unchanged CLI flags, defaults, and HTTP behavior**. Tests keep overriding `buildFactoryService` without invoking Wire.
-
-**Gate:** Land only after [`prd-service-composition-seams.md`](../prd-service-composition-seams.md) (S6) stabilizes collaborator constructors. If `service.BuildFactoryService` already accepts an explicit `Deps` struct that is easy to read, this PRD may be deferred without blocking other work.
-
-## Introduction
-
-This PRD is an **optional maintainability** improvement. It does **not** change product APIs, OpenAPI contracts, dashboard UI, or factory execution semantics. Success means contributors can extend the service dependency graph by editing a localized provider set and regenerating code, while operators see the same `you` CLI and local API server behavior as before.
-
-## Project-level acceptance criteria
-
-- [ ] **AC-1:** Wire usage is confined to `cmd/factory/composition/**`; `pkg/service`, `pkg/api`, and `pkg/cli` contain no `wireinject` build tags and no `wire:` struct tags in production code.
-- [ ] **AC-2:** `you run` (and `go build -o you ./cmd/factory`) preserves existing CLI flags, help text, default port/bind behavior, and startup outcomes covered by `pkg/cli/run` tests.
-- [ ] **AC-3:** The wire-generated factory builder is registered from `cmd/factory/main.go` before `cli.Execute()`; `pkg/cli/run` tests can still replace `buildFactoryService` without running `go generate`.
-- [ ] **AC-4:** Checked-in `wire_gen.go` is produced by `go generate` documented for maintainers; generated files are not hand-edited.
-- [ ] **AC-5:** Post-S6 collaborator wiring (sessions, factory save, runtime build, local models, hosted workers, logger/config inputs) is expressed in one provider set; adding a new injected collaborator does not require parallel manual edits in multiple entrypoints.
-- [ ] **AC-6:** Existing integration and functional tests that exercise `you run` and the local API server pass without assertion weakening.
-- [ ] **AC-7 (quality gate):** `go build ./...`, repository lint/typecheck surfaces, and targeted tests for `cmd/factory/composition`, `pkg/cli/run`, and `pkg/service` pass for all changed behavior.
+Extract **`useFactoryEventStream`** (SSE transport + stream store updates + queued flush into timeline), **`useDashboardSessionLifecycle`** (session/`refreshToken` resets), and **`useDashboardWorldView`** (snapshot + shell loading/error derivation). Keep **`useDashboardSnapshot`** as a thin composer (≤80 LOC) used by `DashboardScreen`, or inline the three hooks at the screen if the composer adds no value. Gate **`useDashboardTimelineMemoryDebug`** behind existing debug flags only. Prove behavior with focused hook/unit tests and one browser-visible dashboard shell regression.
 
 ## Goals
 
-- Generate `wire_gen.go` for the factory CLI composition root under `cmd/factory/composition`.
-- Keep `pkg/service` constructors plain Go; Wire only calls them from `cmd/`.
-- Register the generated injector at process startup so `you run` uses it by default.
-- Preserve all CLI and local HTTP server observable behavior.
-- Document the regenerate-and-commit workflow for contributors.
+- Isolate factory event SSE transport from timeline projection and session lifecycle.
+- Derive dashboard shell `isInitialLoading` and `error` from stream state plus timeline event ownership, not `snapshot` truthiness alone.
+- Reset timeline, localized stream state, selection history, and current-factory definition queries exactly once per session or `refreshToken` transition.
+- Preserve pause semantics (`enabled: false` when the active session is paused).
+- Keep `DashboardScreen` / bento card APIs stable (`snapshot` prop or world-view hook).
+- Provide reviewer-verifiable tests at the hook and dashboard-shell layers without meta-inventory checks.
+
+## Project-level acceptance criteria
+
+- [ ] `useFactoryEventStream({ sessionID, enabled, refreshToken, locale, onEvent, openStream? })` owns SSE open/close, stream status updates, queued flush into `onEvent`, and `FACTORY_CHANGE` sync into current-factory React Query keys; opens `/factory-sessions/{sessionID}/events` for the active session.
+- [ ] Paused sessions do not open a live stream and surface the existing paused offline message; resuming reconnects without losing the `onEvent` contract.
+- [ ] `useDashboardSessionLifecycle({ sessionID, refreshToken, locale })` resets timeline, localized stream state, selection history, and `CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX` queries once per qualifying session/`refreshToken` change (no duplicate `removeQueries`).
+- [ ] `useDashboardWorldView()` returns `{ snapshot, selectedTick, hasEvents, streamState, isInitialLoading, error }` with `deriveDashboardWorldViewShellState` enforcing `selectedTick === 0 && eventCount === 0` for initial loading and offline-before-first-event errors.
+- [ ] `useDashboardSnapshot` is a thin composer (≤80 LOC) that wires lifecycle, stream (via `useDashboardSession()` for `rawSessionID` / `isPaused`), world view, and optional debug; production stream modules do not import `dashboardSessionStore`.
+- [ ] `useDashboardTimelineMemoryDebug` runs only when `readFactoryTimelineDebugOptions().memoryDebug` is true; default sessions do not install `__agentFactoryTimelineDebug__` or persist debug summary to `localStorage`.
+- [ ] Dashboard shell regression proves loading → live snapshot, refresh reset, pause/resume stream behavior, and session-scoped stream URLs without EventSource leaks across tab switches.
+- [ ] Typecheck, lint, and targeted UI tests pass for all touched areas.
 
 ## User Stories
 
-### cmd-wire-composition-001: Factory service builder registration seam
+### US-001: Factory event stream transport hook
 
-**Description:** As a maintainer, I want the CLI run path to accept a factory service builder registered from `cmd/factory/main` so compile-time DI can live under `cmd/` without `pkg` importing `cmd`.
+**Description:** As a maintainer, I want SSE connection wiring isolated so I can test transport without mounting the full dashboard.
 
 **Acceptance Criteria:**
 
-- [ ] `pkg/cli/run` exports a registration function (for example `SetBuildFactoryService`) that assigns the package-level `buildFactoryService` used by `Run`; when unset, behavior matches today's default (`service.BuildFactoryService`).
-- [ ] `pkg/cli/run` tests that override `buildFactoryService` continue to pass without calling the registration function.
+- [x] `useFactoryEventStream` opens the session-scoped events URL, updates `dashboardStreamStore` status messages, compacts events before `onEvent`, and syncs `FACTORY_CHANGE` payloads into current-factory query keys for the stream session.
+- [x] When `enabled` is false for a selected session, no new `EventSource` opens and stream state shows the paused offline copy; toggling `enabled` back to true opens a new connection.
+- [x] Changing `refreshToken` closes and reopens the stream for the same `sessionID`; `sessionID: null` never opens a stream.
+- [x] `useFactoryEventStream.test.tsx` covers open URL, paused/disabled, refresh reopen, resume-after-pause, offline-before-first-event, and factory-change query sync using the replay harness or injected `openStream`.
+- [x] Typecheck passes
+- [x] Tests pass
+
+### US-002: Dashboard session lifecycle hook
+
+**Description:** As an operator switching factory tabs or refreshing the dashboard, I want prior session timeline/stream/selection/factory-definition cache cleared once so I never see cross-session bleed.
+
+**Acceptance Criteria:**
+
+- [x] `useDashboardSessionLifecycle` calls `resetDashboardSessionScopedState` on qualifying `sessionID` or `refreshToken` changes: timeline reset, localized stream reset, `resetSelectionHistoryStore`, and a single `queryClient.removeQueries` for `CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX`.
+- [x] `shouldResetDashboardSessionScopedState` skips the initial mount for `refreshToken === 0` but resets on later refresh increments and session key changes.
+- [x] `dashboard-session-lifecycle.test.ts` and `useDashboardSessionLifecycle.test.tsx` prove no duplicate removes and correct reset on session switch vs first mount.
+- [x] Typecheck passes
+- [x] Tests pass
+
+### US-003: Dashboard world view and shell state derivation
+
+**Description:** As a dashboard user, I want the shell loading spinner and connection error to reflect stream progress before the first timeline event, not whether a cached snapshot object exists.
+
+**Acceptance Criteria:**
+
+- [ ] `useDashboardWorldView()` selects `worldViewCache[selectedTick]` and exposes `selectedTick`, `hasEvents`, `streamState`, `isInitialLoading`, and `error`.
+- [ ] `deriveDashboardWorldViewShellState` sets `isInitialLoading` only while `rawSessionID != null`, `selectedTick === 0`, `eventCount === 0`, and stream status is not `offline`; sets `error` from stream message only in the offline-before-first-event case.
+- [ ] Unit tests for `deriveDashboardWorldViewShellState` cover connecting, offline-before-first-event, and post-first-event success paths.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### cmd-wire-composition-002: Wire toolchain and composition package bootstrap
+### US-004: Thin dashboard snapshot composer and screen wiring
 
-**Description:** As a contributor, I want a checked-in Wire-generated injector in `cmd/factory/composition` so the factory binary has a single generated composition root.
+**Description:** As a reader of `DashboardScreen`, I want stream, lifecycle, and world-view concerns composed in one obvious place without re-embedding transport logic.
 
 **Acceptance Criteria:**
 
-- [ ] `github.com/google/wire` is available to the repo (module `require` and/or `tool` directive as appropriate); `cmd/factory/composition/wire.go` uses `//go:build wireinject` and `//go:generate` to produce `wire_gen.go`.
-- [ ] `wire_gen.go` is committed and builds without the `wireinject` tag; it exposes a function that builds `*service.FactoryService` from `context.Context` and `*service.FactoryServiceConfig` by delegating to existing `service.BuildFactoryService` (initial bootstrap graph).
-- [ ] `go build -o /dev/null ./cmd/factory` succeeds on a clean checkout after `go generate ./cmd/factory/composition/...`.
+- [ ] `useDashboardSnapshot` composes `useDashboardSessionLifecycle`, `useFactoryEventStream` (with `enabled: rawSessionID != null && !isPaused` from `useDashboardSession()`), `useDashboardWorldView`, and queued append into the timeline store; file length ≤80 LOC.
+- [ ] `DashboardScreen` continues to drive loading/error/empty/success panels from `useDashboardSnapshot({ locale, refreshToken })`; `DashboardBento` still receives live snapshot data through the existing screen/bento contract without forking timeline ownership.
+- [ ] `useDashboardSnapshot.test.tsx` proves refresh resets timeline to tick 0 with loading, streamed events append to timeline state, and default sessions do not enable timeline memory debug side effects.
+- [ ] Typecheck passes
+- [ ] Tests pass
+- [ ] Verify in browser using dev-browser skill: dashboard loads live stream, shows loading before first event, and recovers after refresh without stale cross-session UI
+
+### US-005: Optional timeline memory debug isolation
+
+**Description:** As a maintainer debugging timeline memory, I want debug globals and persistence opt-in only so normal operators are unaffected.
+
+**Acceptance Criteria:**
+
+- [ ] `useDashboardTimelineMemoryDebug` receives `debugOptions` from `readFactoryTimelineDebugOptions()` and runs only when `memoryDebug` is true (`?afMemoryDebug=1`).
+- [ ] Default sessions do not set `window.__agentFactoryTimelineDebug__` or write `agentFactory.timelineDebugSummary` to `localStorage`; `useDashboardTimelineMemoryDebug.test.tsx` proves both off and on paths.
+- [ ] Composer invokes debug hook only from `useDashboardSnapshot`; no behavior change for default users.
 - [ ] Typecheck passes
 - [ ] Tests pass
 
-### cmd-wire-composition-003: Register wire-built builder in factory main
+### US-006: Dashboard stream/timeline shell regression proof
 
-**Description:** As an operator, I want `you run` to use the wire-generated factory builder by default so runtime behavior stays the same while composition moves to `cmd/`.
+**Description:** As an operator, I want confidence that session tab switches and pause/resume do not leak streams or show the wrong session’s timeline state.
 
 **Acceptance Criteria:**
 
-- [ ] `cmd/factory/main.go` registers the composition package's generated builder via `pkg/cli/run` before `cli.Execute()`.
-- [ ] `go test ./pkg/cli/run/...` passes with no intentional changes to flag parsing, auto-port, dashboard URL, or API server startup tests.
-- [ ] A focused composition test (in `cmd/factory/composition` or `pkg/cli/run`) asserts the registered builder returns a non-nil `*service.FactoryService` for a minimal valid `FactoryServiceConfig` fixture (or returns the same error family as the direct `service.BuildFactoryService` call for an invalid fixture).
+- [ ] Existing app-shell or Storybook regression (`App.replay-stream.test.tsx`, `App.session-switching.stories.tsx`, or `ui/integration/event-stream-replay.integration.test.mjs`) exercises session-scoped stream URLs and observable shell outcomes (loading clears after first event, pause stops live connection, tab switch resets timeline/stream targets).
+- [ ] Regression asserts observable timeline scrubber or shell status outcomes, not internal hook file names or module registration inventories.
 - [ ] Typecheck passes
 - [ ] Tests pass
-
-### cmd-wire-composition-004: Explicit collaborator provider set (post-S6)
-
-**Description:** As a maintainer, I want Wire providers for each `FactoryService` collaborator so dependency order is visible in one place after S6 extraction.
-
-**Acceptance Criteria:**
-
-- [ ] `cmd/factory/composition/wire.go` defines providers for the S6 collaborators (at minimum: logger/config inputs, `factorysessions` registry, `factorysave`, `runtimebuild`, `localmodels`, `hostedworkers`) and assembles `*service.FactoryService` without duplicating business logic from `pkg/service`.
-- [ ] The wire-generated build path remains behaviorally equivalent to `service.BuildFactoryService` for the same `FactoryServiceConfig` on fixtures covered by existing `pkg/service` build tests (equivalence asserted in `cmd/factory/composition` or `pkg/service` test, not by file inventory).
-- [ ] `go test ./pkg/service/...` and `go test ./pkg/cli/run/...` pass without weakening assertions.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### cmd-wire-composition-005: Document Wire regeneration workflow
-
-**Description:** As a contributor, I want clear instructions for regenerating composition code after changing providers.
-
-**Acceptance Criteria:**
-
-- [ ] `docs/internal/development/` (or the development guide) documents: install Wire CLI, run `go generate ./cmd/factory/composition/...`, commit `wire_gen.go`, and never hand-edit generated files.
-- [ ] The doc states Wire is limited to `cmd/factory/composition` and that `pkg/service` stays tag-free.
-- [ ] Typecheck passes
-
-### cmd-wire-composition-006: Optional CI guard for stale wire_gen
-
-**Description:** As a maintainer, I want CI to fail when `wire_gen.go` is out of date so generated composition does not drift silently.
-
-**Acceptance Criteria:**
-
-- [ ] A CI or `make` target runs `go generate ./cmd/factory/composition/...` and fails if `git diff --exit-code` shows changes to `wire_gen.go` (or documents why this check is intentionally skipped).
-- [ ] When enabled, the check passes on a clean tree after regeneration.
-- [ ] Typecheck passes
-- [ ] Tests pass
+- [ ] Verify in browser using dev-browser skill when the regression surface is Storybook-backed
 
 ## Functional Requirements
 
-- **FR-1:** Wire usage is limited to `cmd/factory/composition/**`; no `wire:` struct tags in `pkg/service` production code.
-- **FR-2:** Generated files (`wire_gen.go`) are produced only by `go generate` and must not be hand-edited.
-- **FR-3:** CLI commands, flags, help strings, and default values remain unchanged from pre-Wire behavior.
-- **FR-4:** Local API server startup (`api.NewServer` with `apisurface.APISurface`) continues to receive the same `FactoryService` implementation type as today; HTTP routes, status codes, and JSON shapes are unchanged.
-- **FR-5:** `pkg/cli/run` tests and service tests may construct services manually or via `buildFactoryService` overrides without importing Wire.
-- **FR-6:** Post-S6, new collaborators are added by extending the provider set and regenerating, not by copying constructor blocks into multiple mains.
+- FR-1: Event stream URL is built from the active session identity supplied by `useDashboardSession()` / `session-routing`, not ad hoc store reads in transport modules.
+- FR-2: Session or `refreshToken` transition must close the previous session’s `EventSource` (no leak across tabs).
+- FR-3: `locale` is passed into stream reset for localized stream-state messages.
+- FR-4: `refreshToken` from `dashboardBentoStore` still triggers lifecycle reset and stream refresh through `DashboardScreen`.
+- FR-5: Dashboard shell panels use `isInitialLoading` and `error` from the world-view seam; empty snapshot without events follows existing empty-session copy.
+- FR-6: SSE protocol and event types are unchanged (no backend contract work).
 
 ## Non-Goals
 
-- `uber/fx` or other runtime DI containers.
-- Wiring the React dashboard or any `ui/` code.
-- Refactoring `service.BuildFactoryService` collaborator extraction (S6 scope).
-- Changing OpenAPI, HTTP routes, or CLI command surfaces.
-- Replacing test harnesses (`testutil`, functional tests) with Wire.
-- Mandatory CI wire check if it blocks contributor environments without Wire installed (story 006 may document skip).
+- Changing SSE protocol, event schemas, or backend session APIs.
+- Moving the timeline store to React Query or redesigning snapshot planes (see [`prd-ui-factory-document-snapshot-planes.md`](../prd-ui-factory-document-snapshot-planes.md)).
+- Replacing `dashboardSessionStore` or implementing U2 session scope (upstream recovery owns that).
+- Real-time graph layout performance, bento layout persistence, or unrelated dashboard card refactors.
+- Broad test harness rewrites, file-motion-only stories, or lint allowlist churn unless required to satisfy a behavioral criterion above.
 
 ## High-level technical design
 
-### Composition boundary
+```mermaid
+flowchart TB
+  subgraph scope [Session scope - U2 recovery]
+    DS[useDashboardSession]
+  end
 
-```text
-cmd/factory/main.go
-  → composition.InitializeRun()  // wire_gen: register buildFactoryService
-  → pkg/cli.Execute()
-       → pkg/cli/run.Run
-            → buildFactoryService(ctx, FactoryServiceConfig)
-            → startAPIServer(apisurface.APISurface, port, logger)
+  subgraph composer [Dashboard shell]
+    Screen[DashboardScreen]
+    Snap[useDashboardSnapshot ≤80 LOC]
+    Screen --> Snap
+  end
+
+  subgraph hooks [Split hooks]
+    Life[useDashboardSessionLifecycle]
+    Stream[useFactoryEventStream]
+    View[useDashboardWorldView]
+    Dbg[useDashboardTimelineMemoryDebug]
+    Snap --> Life
+    Snap --> Stream
+    Snap --> View
+    Snap --> Dbg
+    DS --> Stream
+    DS --> View
+  end
+
+  subgraph stores [State owners]
+    TL[(factoryTimelineStore)]
+    ST[(dashboardStreamStore)]
+    RQ[(React Query factory definition)]
+    Stream --> ST
+    Stream --> TL
+    Life --> TL
+    Life --> ST
+    Life --> RQ
+    View --> TL
+    View --> ST
+  end
 ```
 
-Go import rule: `pkg/cli/run` cannot import `cmd/factory/composition`. Registration from `main` is required.
+**Package ownership**
 
-### Provider layering
+| Concern | Owner |
+| --- | --- |
+| SSE transport + queued flush | `ui/src/features/dashboard/hooks/useFactoryEventStream.ts`, `lib/dashboard-event-stream.ts` |
+| Session/`refreshToken` resets | `ui/src/features/dashboard/hooks/useDashboardSessionLifecycle.ts`, `lib/dashboard-session-lifecycle.ts` |
+| Shell loading/error derivation | `ui/src/features/dashboard/hooks/useDashboardWorldView.ts`, `lib/dashboard-world-view.ts` |
+| Composer | `ui/src/features/dashboard/hooks/useDashboardSnapshot.ts` |
+| Debug-only memory tooling | `ui/src/features/dashboard/hooks/useDashboardTimelineMemoryDebug.ts` |
+| Screen wiring | `ui/src/features/dashboard/components/dashboard-screen.tsx` |
+| Session identity | `ui/src/features/dashboard/session/dashboard-session-provider.tsx` (U2) |
 
-1. **Bootstrap (story 002–003):** Single injector calling `service.BuildFactoryService`.
-2. **Post-S6 (story 004):** Providers call exported constructors/`Deps` from `pkg/service`, `pkg/service/factorysave`, `pkg/service/runtimebuild`, `pkg/factorysessions`, `pkg/localmodels`, `pkg/hostedworkers`—mirroring order already enforced inside `BuildFactoryService`.
+**Dependency fit:** Requires U2 recovery (`useDashboardSession`, `eventsPath`, pause projection). Soft coordination with factory document snapshot planes for query invalidation policy. No OpenAPI or Go changes.
 
-### Verification surfaces
+## Supporting technical and UX considerations
 
-| Behavior | Evidence |
-|----------|----------|
-| CLI run unchanged | `go test ./pkg/cli/run/...` |
-| Service build unchanged | `go test ./pkg/service/...` (existing build tests) |
-| Composition equivalence | New focused test in `cmd/factory/composition` |
-| End-to-end | Existing functional/smoke paths that start `you run` (no new inventory tests) |
-
-## Supporting technical considerations
-
-- **Upstream:** [`prd-service-composition-seams.md`](../prd-service-composition-seams.md) (hard dependency for story 004).
-- **Existing hook:** `pkg/cli/run` already uses `var buildFactoryService` for test doubles; registration formalizes the production injection point.
-- **Binary layout:** Only `cmd/factory` exists today; other `cmd/*` tools are maint checks and do not need Wire unless a future binary builds `FactoryService`.
-- **Tooling:** Follow repo patterns for `go tool` / `go generate` (see `pkg/api/server.go` codegen).
+- **Loading / empty / error / success:** Shell uses `isInitialLoading` while connecting before the first event; `error` when stream is offline with no events; existing empty-session copy when `snapshot` is missing after load; success path renders header + bento.
+- **Accessibility:** Preserve existing localized stream status and scrubber semantics; this PRD does not change header copy contracts.
+- **Pause:** `enabled: false` when `isPaused`; paused offline message remains customer-visible.
+- **Tests:** Prefer replay harness / injected `openStream` over full `EventSource` mocks; keep `docs/internal/processes/development-guide-relevant-files.md` live dashboard seam paragraph accurate when behavior owners change.
+- **Idempotent recovery:** If a criterion already passes on `main`, add or tighten tests only where proof is missing; do not rewrite working hooks for style.
 
 ## Success metrics
 
-- `cmd/factory/main.go` and `cmd/factory/composition` remain the only places that know the full collaborator graph.
-- Adding a collaborator after S6 is a provider-set change plus `go generate`, not a hunt through CLI and service files.
-- No operator-visible regression in `you run` startup, dashboard URL emission, or local API availability in existing tests.
+- `useDashboardSnapshot.ts` stays ≤80 LOC (or is removed in favor of explicit screen composition with no behavior change).
+- Stream and lifecycle hooks are unit-testable without mounting `DashboardScreen`.
+- Session switch and refresh do not leak `EventSource` instances or show the previous session’s timeline tick.
+- No user-visible regression in live stream, pause, refresh, or timeline scrubbing.
 
 ## Open Questions
 
-- None blocking planning. **Defer entire PRD** if S6 lands with a small, readable `Deps` struct and the team agrees manual wiring is sufficient.
-
-## Related documents
-
-- [`tasks/prd-cmd-wire-composition.md`](../prd-cmd-wire-composition.md) — upstream draft
-- [`tasks/prd-service-composition-seams.md`](../prd-service-composition-seams.md) — S6 prerequisite
-- [`tasks/dependence-graph-for-prds.md`](../dependence-graph-for-prds.md) — S6 → S8 ordering
+None for recovery v2—the baseline U8 spec is authoritative. Treat current `main` as the implementation baseline and extend only what fails the acceptance criteria above.
