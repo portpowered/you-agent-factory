@@ -8,7 +8,8 @@ import (
 	"os"
 	"strings"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 )
 
 // UpdateFromFileConfig holds parameters for replacing an existing named factory from disk.
@@ -49,7 +50,11 @@ func UpdateFromFile(cfg UpdateFromFileConfig) error {
 		return fmt.Errorf("read factory config %s: %w", from, err)
 	}
 
-	factoryDir, err := factoryconfig.ReplaceNamedFactory(cfg.Dir, name, payload)
+	if _, err := configload.LoadFromCanonicalJSON(payload, configload.LoadOptions{}); err != nil {
+		return renderUpdateFromFileError(err)
+	}
+
+	factoryDir, err := configpersist.ReplaceNamedFactory(cfg.Dir, name, payload)
 	if err != nil {
 		return renderUpdateFromFileError(err)
 	}
@@ -73,7 +78,7 @@ func renderUpdateFromFileError(err error) error {
 	if errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("factory not found: %w", err)
 	}
-	if errors.Is(err, factoryconfig.ErrInvalidNamedFactory) {
+	if configload.IsInvalidNamedFactory(err) || configpersist.IsInvalidNamedFactory(err) {
 		return fmt.Errorf("invalid factory config: %w", err)
 	}
 	return err

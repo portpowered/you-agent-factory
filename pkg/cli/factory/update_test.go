@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -123,6 +124,36 @@ func TestUpdateFromFile_RejectsInvalidPayload(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid factory config") {
 		t.Fatalf("error = %v, want invalid-config message", err)
+	}
+}
+
+func TestUpdateFromFile_RejectsInvalidTopologyBeforePersist(t *testing.T) {
+	rootDir := t.TempDir()
+	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	from := writeFactoryConfigFile(t, rootDir, "invalid", []byte(factoryvalidation.CrossPathInvalidFactoryJSON))
+
+	err := UpdateFromFile(UpdateFromFileConfig{
+		Name:   "alpha",
+		From:   from,
+		Dir:    rootDir,
+		Output: ioDiscard(t),
+	})
+	if err == nil {
+		t.Fatal("expected invalid factory topology to fail")
+	}
+	if !strings.Contains(err.Error(), "invalid factory config") {
+		t.Fatalf("error = %v, want invalid-config message", err)
+	}
+
+	configPath := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", configPath, err)
+	}
+	if !strings.Contains(string(data), "execute-alpha") {
+		t.Fatalf("factory config = %q, want original alpha workstation body preserved", string(data))
 	}
 }
 
