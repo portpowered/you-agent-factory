@@ -27,9 +27,9 @@ func TestResolveBatchInput_RejectsUnsupportedModes(t *testing.T) {
 			want: "batch file not found",
 		},
 		{
-			name: "file flag",
-			cfg:  BatchConfig{FileFlag: "./batch.json"},
-			want: "--file is not yet supported",
+			name: "file flag missing path",
+			cfg:  BatchConfig{FileFlag: "/no/such/batch.json"},
+			want: "batch file not found",
 		},
 		{
 			name: "too many args",
@@ -156,6 +156,91 @@ func TestResolveBatchInput_NonexistentJSONLookingPathParsesInlineNotFile(t *test
 	}
 	if resolved.source != batchSourceInline {
 		t.Fatalf("source = %q, want inline not filesystem", resolved.source)
+	}
+}
+
+func TestResolveBatchInput_ReadsFileFlag(t *testing.T) {
+	t.Parallel()
+
+	path := writeBatchFile(t, validBatchJSON("batch-file-flag", "alpha"))
+	cfg := BatchConfig{FileFlag: path}
+
+	resolved, err := resolveBatchInput(cfg)
+	if err != nil {
+		t.Fatalf("resolveBatchInput: %v", err)
+	}
+	if resolved.source != batchSourceFile {
+		t.Fatalf("source = %q, want %q", resolved.source, batchSourceFile)
+	}
+	if resolved.label != path {
+		t.Fatalf("label = %q, want %q", resolved.label, path)
+	}
+	if !bytes.Contains(resolved.data, []byte("batch-file-flag")) {
+		t.Fatalf("data = %q, want file contents", resolved.data)
+	}
+}
+
+func TestResolveBatchInput_FileFlagStdinDash(t *testing.T) {
+	t.Parallel()
+
+	json := validBatchJSON("batch-file-stdin", "alpha")
+	cfg := BatchConfig{
+		FileFlag: "-",
+		Stdin:    strings.NewReader(json),
+	}
+
+	resolved, err := resolveBatchInput(cfg)
+	if err != nil {
+		t.Fatalf("resolveBatchInput: %v", err)
+	}
+	if resolved.source != batchSourceStdin {
+		t.Fatalf("source = %q, want %q", resolved.source, batchSourceStdin)
+	}
+}
+
+func TestResolveBatchInput_FileFlagWinsOverPositional(t *testing.T) {
+	t.Parallel()
+
+	flagPath := writeBatchFile(t, validBatchJSON("batch-flag-wins", "alpha"))
+	posPath := writeBatchFile(t, validBatchJSON("batch-pos-loses", "beta"))
+	cfg := BatchConfig{
+		FileFlag: flagPath,
+		Args:     []string{posPath},
+	}
+
+	resolved, err := resolveBatchInput(cfg)
+	if err != nil {
+		t.Fatalf("resolveBatchInput: %v", err)
+	}
+	if resolved.source != batchSourceFile {
+		t.Fatalf("source = %q, want %q", resolved.source, batchSourceFile)
+	}
+	if resolved.label != flagPath {
+		t.Fatalf("label = %q, want flag path %q", resolved.label, flagPath)
+	}
+	if !bytes.Contains(resolved.data, []byte("batch-flag-wins")) {
+		t.Fatalf("data = %q, want --file contents not positional", resolved.data)
+	}
+}
+
+func TestResolveBatchInput_FileFlagIgnoresStdin(t *testing.T) {
+	t.Parallel()
+
+	path := writeBatchFile(t, validBatchJSON("batch-file-flag-ignores-stdin", "alpha"))
+	cfg := BatchConfig{
+		FileFlag: path,
+		Stdin:    strings.NewReader(`{"requestId":"wrong","type":"FACTORY_REQUEST_BATCH","works":[]}`),
+	}
+
+	resolved, err := resolveBatchInput(cfg)
+	if err != nil {
+		t.Fatalf("resolveBatchInput: %v", err)
+	}
+	if resolved.source != batchSourceFile {
+		t.Fatalf("source = %q, want %q", resolved.source, batchSourceFile)
+	}
+	if !bytes.Contains(resolved.data, []byte("batch-file-flag-ignores-stdin")) {
+		t.Fatalf("data = %q, want --file contents", resolved.data)
 	}
 }
 

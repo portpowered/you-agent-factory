@@ -62,6 +62,52 @@ func TestSubmitBatch_DryRunExplicitStdinDash(t *testing.T) {
 	}
 }
 
+func TestSubmitBatch_DryRunFileFlag(t *testing.T) {
+	path := writeBatchFile(t, validBatchJSON("batch-file-flag-dry", "alpha"))
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		FileFlag: path,
+		DryRun:   true,
+		Server:   "http://127.0.0.1:1",
+		Output:   &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"requestId: batch-file-flag-dry",
+		"batchSource: file",
+		"dry-run: no request sent",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestSubmitBatch_DryRunFileFlagStdinDash(t *testing.T) {
+	json := validBatchJSON("batch-file-flag-stdin", "alpha")
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		FileFlag: "-",
+		Stdin:    strings.NewReader(json),
+		DryRun:   true,
+		Server:   "http://127.0.0.1:1",
+		Output:   &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "batchSource: stdin") {
+		t.Fatalf("output missing stdin source:\n%s", out.String())
+	}
+}
+
 func TestSubmitBatch_NoArgsInteractiveTTYFailsWithUsageGuidance(t *testing.T) {
 	err := SubmitBatch(BatchConfig{
 		StdinIsTTY: func() bool { return true },

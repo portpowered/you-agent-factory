@@ -20,11 +20,11 @@ type batchResolvedInput struct {
 	label  string
 }
 
-// resolveBatchInput selects batch JSON bytes from file path, stdin, or inline JSON.
-// --file is implemented in a later story.
+// resolveBatchInput selects batch JSON bytes from --file, file path, stdin, or inline JSON.
+// When --file is set it wins over positional arguments and ignores unrelated stdin.
 func resolveBatchInput(cfg BatchConfig) (batchResolvedInput, error) {
-	if strings.TrimSpace(cfg.FileFlag) != "" {
-		return batchResolvedInput{}, fmt.Errorf("batch --file is not yet supported; use a positional file path or stdin")
+	if fileFlag := strings.TrimSpace(cfg.FileFlag); fileFlag != "" {
+		return resolveBatchFileFlag(cfg, fileFlag)
 	}
 
 	switch len(cfg.Args) {
@@ -67,6 +67,27 @@ func resolveBatchInput(cfg BatchConfig) (batchResolvedInput, error) {
 	default:
 		return batchResolvedInput{}, fmt.Errorf("batch accepts at most one positional argument")
 	}
+}
+
+func resolveBatchFileFlag(cfg BatchConfig, path string) (batchResolvedInput, error) {
+	if path == "-" {
+		data, err := readBatchStdin(cfg)
+		if err != nil {
+			return batchResolvedInput{}, err
+		}
+		return batchResolvedInput{data: data, source: batchSourceStdin, label: "stdin"}, nil
+	}
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return batchResolvedInput{}, fmt.Errorf("batch file not found: %s", path)
+		}
+		return batchResolvedInput{}, fmt.Errorf("batch file %s: %w", path, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return batchResolvedInput{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	return batchResolvedInput{data: data, source: batchSourceFile, label: path}, nil
 }
 
 func readBatchStdin(cfg BatchConfig) ([]byte, error) {
