@@ -19,6 +19,7 @@ properties:
       - INVALID_FACTORY
       - FACTORY_NOT_IDLE
       - STALE_FACTORY_VERSION
+      - MOVE_WORK_REQUEST_ALREADY_APPLIED
       - NOT_FOUND
       - INTERNAL_ERROR
     x-enum-descriptions:
@@ -28,6 +29,7 @@ properties:
       - Submitted named factory payload failed validation.
       - Current factory runtime is not idle and cannot activate a new named factory.
       - Submitted editable factory definition was based on an older version than the current definition.
+      - Operator move requestId was already applied for this session.
       - The requested resource does not exist.
       - The server failed while handling an otherwise valid request.
   targets:

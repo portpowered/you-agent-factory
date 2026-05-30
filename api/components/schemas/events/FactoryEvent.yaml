@@ -41,5 +41,6 @@ properties:
       - $ref: ./payloads/ScriptRequestEventPayload.yaml
       - $ref: ./payloads/ScriptResponseEventPayload.yaml
       - $ref: ./payloads/DispatchResponseEventPayload.yaml
+      - $ref: ./payloads/WorkStateChangeEventPayload.yaml
       - $ref: ./payloads/FactoryStateResponseEventPayload.yaml
       - $ref: ./payloads/RunResponseEventPayload.yaml

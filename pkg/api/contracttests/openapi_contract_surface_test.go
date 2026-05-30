@@ -150,6 +150,7 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 		"/factory-sessions/{session_id}/work/staged-files":          {"post"},
 		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
+		"/factory-sessions/{session_id}/work/{id}/move":             {"post"},
 		"/factory-sessions/{session_id}/events":                     {"get"},
 		"/factory-sessions/{session_id}/status":                     {"get"},
 		"/factory-sessions/{session_id}/factory":                    {"get", "put"},
@@ -267,6 +268,7 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/work/staged-files":                     {"post"},
 		"/work-requests/{request_id}":            {"put"},
 		"/work/{id}":                             {"get"},
+		"/work/{id}/move":                        {"post"},
 		"/events":                                {"get"},
 		"/status":                                {"get"},
 		"/models":                                {"get"},
@@ -398,6 +400,14 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertRequiredFields(t, submitWorkResponseSchema, "traceId", "requestId", "accepted")
 	submitWorkResponseProperties := schemaProperties(t, submitWorkResponseSchema, "SubmitWorkResponse")
 	assertSchemaPropertiesPresent(t, submitWorkResponseProperties, "SubmitWorkResponse", "traceId", "requestId", "accepted", "workId", "name", "workTypeName", "sessionId")
+}
+
+func TestOpenAPIContract_MoveWorkRequestSchema(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	moveWorkRequestSchema := schemaObject(t, schemas, "MoveWorkRequest")
+	assertRequiredFields(t, moveWorkRequestSchema, "stateName")
+	moveWorkRequestProperties := schemaProperties(t, moveWorkRequestSchema, "MoveWorkRequest")
+	assertSchemaPropertiesPresent(t, moveWorkRequestProperties, "MoveWorkRequest", "stateName", "requestId")
 }
 
 func assertWorkRequestSurfaceSchemas(t *testing.T, schemas map[string]any) {
@@ -629,6 +639,18 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	assertResponseSchemaRef(t, invokeModel, "200", "#/components/schemas/ModelInvocationResponse")
 	assertResponseRef(t, invokeModel, "400", "#/components/responses/BadRequest")
 	assertResponseRef(t, invokeModel, "404", "#/components/responses/NotFound")
+
+	moveWork := pathOperation(t, paths, "/work/{id}/move", "post")
+	assertRequestSchemaRef(t, moveWork, "#/components/schemas/MoveWorkRequest")
+	assertResponseSchemaRef(t, moveWork, "200", "#/components/schemas/Work")
+	assertResponseRef(t, moveWork, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, moveWork, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, moveWork, "409", "#/components/responses/MoveWorkConflict")
+
+	moveWorkBySession := pathOperation(t, paths, "/factory-sessions/{session_id}/work/{id}/move", "post")
+	assertRequestSchemaRef(t, moveWorkBySession, "#/components/schemas/MoveWorkRequest")
+	assertResponseSchemaRef(t, moveWorkBySession, "200", "#/components/schemas/Work")
+	assertResponseRef(t, moveWorkBySession, "409", "#/components/responses/MoveWorkConflict")
 }
 
 func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {
@@ -650,5 +672,8 @@ func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {
 	assertResponseExampleCodeFamilies(t, responses, "SaveCurrentFactoryConflict", map[string]string{
 		"FACTORY_NOT_IDLE":      "CONFLICT",
 		"STALE_FACTORY_VERSION": "CONFLICT",
+	})
+	assertResponseExampleCodeFamilies(t, responses, "MoveWorkConflict", map[string]string{
+		"MOVE_WORK_REQUEST_ALREADY_APPLIED": "CONFLICT",
 	})
 }

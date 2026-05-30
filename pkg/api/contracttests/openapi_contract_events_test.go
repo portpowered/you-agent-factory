@@ -22,6 +22,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertUnifiedFactorySchema(t, schemas)
 	assertUnifiedWorkRequestEvent(t, schemas)
 	assertUnifiedDispatchEvents(t, schemas)
+	assertUnifiedWorkStateChangeEvent(t, schemas)
 	assertUnifiedModelEvents(t, schemas)
 	assertUnifiedInferenceEvents(t, schemas)
 	assertUnifiedScriptEvents(t, schemas)
@@ -76,7 +77,8 @@ func assertUnifiedEventSchemasPresent(t *testing.T, schemas map[string]any) {
 		"RunRequestEventPayload", "InitialStructureRequestEventPayload", "FactoryChangeEventPayload", "WorkRequestEventPayload",
 		"RelationshipChangeRequestEventPayload", "DispatchRequestEventPayload", "ModelRequestEventPayload", "ModelResponseEventPayload", "InferenceRequestEventPayload", "InferenceResponseEventPayload",
 		"ScriptRequestEventPayload", "ScriptResponseEventPayload", "InferenceOutcome", "ScriptExecutionOutcome", "ScriptFailureType",
-		"DispatchResponseEventPayload", "FactoryStateResponseEventPayload", "RunResponseEventPayload",
+		"DispatchResponseEventPayload", "WorkStateChangeEventPayload", "WorkStateChangeSource",
+		"FactoryStateResponseEventPayload", "RunResponseEventPayload",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)
@@ -191,6 +193,39 @@ func assertUnifiedDispatchEvents(t *testing.T, schemas map[string]any) {
 	workMetricsProperties := schemaProperties(t, schemaObject(t, schemas, "WorkMetrics"), "WorkMetrics")
 	assertInt64Property(t, workMetricsProperties, "durationMillis")
 	assertPropertiesAbsent(t, workMetricsProperties, "WorkMetrics", "durationNanos")
+}
+
+func assertUnifiedWorkStateChangeEvent(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	workStateChange := schemaObject(t, schemas, "WorkStateChangeEventPayload")
+	assertRequiredFields(
+		t,
+		workStateChange,
+		"workId",
+		"workTypeName",
+		"fromState",
+		"toState",
+		"fromPlaceId",
+		"toPlaceId",
+		"source",
+	)
+	workStateChangeProperties := schemaProperties(t, workStateChange, "WorkStateChangeEventPayload")
+	assertPropertyRef(t, workStateChangeProperties, "source", "#/components/schemas/WorkStateChangeSource")
+	assertSchemaPropertiesPresent(t, workStateChangeProperties, "WorkStateChangeEventPayload", "triggerWorkId", "reason")
+	assertPropertiesAbsent(
+		t,
+		workStateChangeProperties,
+		"WorkStateChangeEventPayload",
+		"requestId",
+		"traceIds",
+		"workIds",
+		"dispatchId",
+	)
+	assertEnumValues(t, schemaObject(t, schemas, "WorkStateChangeSource"), "WorkStateChangeSource", []string{
+		"api",
+		"cli",
+		"cascading-failure",
+	})
 }
 
 func assertUnifiedInferenceEvents(t *testing.T, schemas map[string]any) {

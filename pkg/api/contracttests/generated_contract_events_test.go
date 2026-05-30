@@ -402,8 +402,9 @@ func generatedFactoryWorkEvents(t *testing.T) []factoryapi.FactoryEvent {
 
 func generatedFactoryExecutionEvents(t *testing.T) []factoryapi.FactoryEvent {
 	t.Helper()
-	events := make([]factoryapi.FactoryEvent, 0, 8)
+	events := make([]factoryapi.FactoryEvent, 0, 9)
 	events = append(events, generatedFactoryDispatchEvents(t)...)
+	events = append(events, generatedFactoryWorkStateChangeEvents(t)...)
 	events = append(events, generatedFactoryModelEvents(t)...)
 	events = append(events, generatedFactoryInferenceEvents(t)...)
 	events = append(events, generatedFactoryScriptEvents(t)...)
@@ -466,6 +467,37 @@ func generatedFactoryDispatchEvents(t *testing.T) []factoryapi.FactoryEvent {
 				PreviousChainingTraceIds: &[]string{"chain-a", "chain-z"},
 				Outcome:                  factoryapi.WorkOutcomeAccepted,
 				OutputWork:               &[]factoryapi.Work{work},
+			}),
+		},
+	}
+}
+
+func generatedFactoryWorkStateChangeEvents(t *testing.T) []factoryapi.FactoryEvent {
+	t.Helper()
+	eventTime := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	requestID := "move-request-1"
+	workIDs := []string{"work-1"}
+	source := factoryapi.WorkStateChangeSourceCLI
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-work-state-change-operator",
+			Type:          factoryapi.FactoryEventTypeWorkStateChange,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:  8,
+				Tick:      3,
+				EventTime: eventTime,
+				RequestId: &requestID,
+				WorkIds:   &workIDs,
+			},
+			Payload: factoryEventPayload(t, factoryapi.WorkStateChangeEventPayload{
+				WorkId:       "work-1",
+				WorkTypeName: "task",
+				FromState:    "failed",
+				ToState:      "in-progress",
+				FromPlaceId:  "task:failed",
+				ToPlaceId:    "task:in-progress",
+				Source:       source,
 			}),
 		},
 	}

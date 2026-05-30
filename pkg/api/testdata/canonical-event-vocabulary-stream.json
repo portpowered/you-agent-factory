@@ -326,10 +326,33 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
+    "id": "event-work-state-change-operator",
+    "type": "WORK_STATE_CHANGE",
+    "context": {
+      "sequence": 12,
+      "tick": 3,
+      "eventTime": "2026-04-21T12:00:07Z",
+      "requestId": "move-request-1",
+      "workIds": [
+        "work-1"
+      ]
+    },
+    "payload": {
+      "workId": "work-1",
+      "workTypeName": "task",
+      "fromState": "failed",
+      "toState": "in-progress",
+      "fromPlaceId": "task:failed",
+      "toPlaceId": "task:in-progress",
+      "source": "cli"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
     "id": "event-factory-state-response",
     "type": "FACTORY_STATE_RESPONSE",
     "context": {
-      "sequence": 12,
+      "sequence": 13,
       "tick": 3,
       "eventTime": "2026-04-21T12:00:08Z"
     },
@@ -344,7 +367,7 @@
     "id": "event-run-response",
     "type": "RUN_RESPONSE",
     "context": {
-      "sequence": 13,
+      "sequence": 14,
       "tick": 4,
       "eventTime": "2026-04-21T12:00:09Z"
     },

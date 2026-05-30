@@ -37,14 +37,15 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
-	BADREQUEST           ErrorResponseCode = "BAD_REQUEST"
-	FACTORYALREADYEXISTS ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
-	FACTORYNOTIDLE       ErrorResponseCode = "FACTORY_NOT_IDLE"
-	INTERNALERROR        ErrorResponseCode = "INTERNAL_ERROR"
-	INVALIDFACTORY       ErrorResponseCode = "INVALID_FACTORY"
-	INVALIDFACTORYNAME   ErrorResponseCode = "INVALID_FACTORY_NAME"
-	NOTFOUND             ErrorResponseCode = "NOT_FOUND"
-	STALEFACTORYVERSION  ErrorResponseCode = "STALE_FACTORY_VERSION"
+	BADREQUEST                    ErrorResponseCode = "BAD_REQUEST"
+	FACTORYALREADYEXISTS          ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
+	FACTORYNOTIDLE                ErrorResponseCode = "FACTORY_NOT_IDLE"
+	INTERNALERROR                 ErrorResponseCode = "INTERNAL_ERROR"
+	INVALIDFACTORY                ErrorResponseCode = "INVALID_FACTORY"
+	INVALIDFACTORYNAME            ErrorResponseCode = "INVALID_FACTORY_NAME"
+	MOVEWORKREQUESTALREADYAPPLIED ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+	NOTFOUND                      ErrorResponseCode = "NOT_FOUND"
+	STALEFACTORYVERSION           ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
 // Defines values for FactoryEventSchemaVersion.
@@ -69,6 +70,7 @@ const (
 	FactoryEventTypeScriptRequest             FactoryEventType = "SCRIPT_REQUEST"
 	FactoryEventTypeScriptResponse            FactoryEventType = "SCRIPT_RESPONSE"
 	FactoryEventTypeWorkRequest               FactoryEventType = "WORK_REQUEST"
+	FactoryEventTypeWorkStateChange           FactoryEventType = "WORK_STATE_CHANGE"
 )
 
 // Defines values for FactorySaveMode.
@@ -362,6 +364,13 @@ const (
 // Defines values for WorkRequestType.
 const (
 	WorkRequestTypeFactoryRequestBatch WorkRequestType = "FACTORY_REQUEST_BATCH"
+)
+
+// Defines values for WorkStateChangeSource.
+const (
+	WorkStateChangeSourceAPI              WorkStateChangeSource = "api"
+	WorkStateChangeSourceCLI              WorkStateChangeSource = "cli"
+	WorkStateChangeSourceCascadingFailure WorkStateChangeSource = "cascading-failure"
 )
 
 // Defines values for WorkStateType.
@@ -1471,6 +1480,15 @@ type ModelSummary struct {
 	Status ModelStatus `json:"status"`
 }
 
+// MoveWorkRequest Operator request to move one work item to another authored marking state.
+type MoveWorkRequest struct {
+	// RequestId Optional client idempotency key. Repeating the same requestId for an already-applied operator move returns 409 Conflict without a second mutation.
+	RequestId *string `json:"requestId,omitempty"`
+
+	// StateName Authored marking state name to move the work item into.
+	StateName string `json:"stateName"`
+}
+
 // OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
 type OpenFactorySessionRequest struct {
 	FolderPath string `json:"folderPath"`
@@ -2506,6 +2524,35 @@ type WorkState struct {
 	Type WorkStateType `json:"type"`
 }
 
+// WorkStateChangeEventPayload Canonical work marking position change. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
+type WorkStateChangeEventPayload struct {
+	// FromPlaceId Marking place identifier before the move.
+	FromPlaceId string `json:"fromPlaceId"`
+
+	// FromState Authored state name before the move.
+	FromState string `json:"fromState"`
+
+	// Reason Optional human-readable reason for the move.
+	Reason *string `json:"reason,omitempty"`
+
+	// Source Origin of a WORK_STATE_CHANGE event.
+	Source WorkStateChangeSource `json:"source"`
+
+	// ToPlaceId Marking place identifier after the move.
+	ToPlaceId string `json:"toPlaceId"`
+
+	// ToState Authored state name after the move.
+	ToState string `json:"toState"`
+
+	// TriggerWorkId Optional work identifier that triggered a cascade move.
+	TriggerWorkId *string `json:"triggerWorkId,omitempty"`
+	WorkId        string  `json:"workId"`
+	WorkTypeName  string  `json:"workTypeName"`
+}
+
+// WorkStateChangeSource Origin of a WORK_STATE_CHANGE event.
+type WorkStateChangeSource string
+
 // WorkStateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
 type WorkStateType string
 
@@ -2817,6 +2864,9 @@ type CurrentFactoryNotFound = ErrorResponse
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
+// MoveWorkConflict defines model for MoveWorkConflict.
+type MoveWorkConflict = ErrorResponse
+
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
@@ -2916,6 +2966,9 @@ type UpsertWorkRequestBySessionIdJSONRequestBody = WorkRequest
 // StageSubmitWorkFileBySessionIdJSONRequestBody defines body for StageSubmitWorkFileBySessionId for application/json ContentType.
 type StageSubmitWorkFileBySessionIdJSONRequestBody = StageSubmitWorkFileRequest
 
+// MoveWorkBySessionIdJSONRequestBody defines body for MoveWorkBySessionId for application/json ContentType.
+type MoveWorkBySessionIdJSONRequestBody = MoveWorkRequest
+
 // ValidateFactoryJSONRequestBody defines body for ValidateFactory for application/json ContentType.
 type ValidateFactoryJSONRequestBody = Factory
 
@@ -2930,6 +2983,9 @@ type UpsertWorkRequestJSONRequestBody = WorkRequest
 
 // StageSubmitWorkFileJSONRequestBody defines body for StageSubmitWorkFile for application/json ContentType.
 type StageSubmitWorkFileJSONRequestBody = StageSubmitWorkFileRequest
+
+// MoveWorkJSONRequestBody defines body for MoveWork for application/json ContentType.
+type MoveWorkJSONRequestBody = MoveWorkRequest
 
 // AsRunRequestEventPayload returns the union data inside the FactoryEvent_Payload as a RunRequestEventPayload
 func (t FactoryEvent_Payload) AsRunRequestEventPayload() (RunRequestEventPayload, error) {
@@ -3259,6 +3315,32 @@ func (t *FactoryEvent_Payload) FromDispatchResponseEventPayload(v DispatchRespon
 
 // MergeDispatchResponseEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchResponseEventPayload
 func (t *FactoryEvent_Payload) MergeDispatchResponseEventPayload(v DispatchResponseEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkStateChangeEventPayload returns the union data inside the FactoryEvent_Payload as a WorkStateChangeEventPayload
+func (t FactoryEvent_Payload) AsWorkStateChangeEventPayload() (WorkStateChangeEventPayload, error) {
+	var body WorkStateChangeEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkStateChangeEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided WorkStateChangeEventPayload
+func (t *FactoryEvent_Payload) FromWorkStateChangeEventPayload(v WorkStateChangeEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkStateChangeEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided WorkStateChangeEventPayload
+func (t *FactoryEvent_Payload) MergeWorkStateChangeEventPayload(v WorkStateChangeEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -3658,6 +3740,9 @@ type ServerInterface interface {
 	// Get work for one session
 	// (GET /factory-sessions/{session_id}/work/{id})
 	GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, id WorkOrTokenID)
+	// Move work to another state for one session
+	// (POST /factory-sessions/{session_id}/work/{id}/move)
+	MoveWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, id WorkOrTokenID)
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
@@ -3694,6 +3779,9 @@ type ServerInterface interface {
 	// Get work
 	// (GET /work/{id})
 	GetWork(w http.ResponseWriter, r *http.Request, id WorkOrTokenID)
+	// Move work to another state
+	// (POST /work/{id}/move)
+	MoveWork(w http.ResponseWriter, r *http.Request, id WorkOrTokenID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -4150,6 +4238,40 @@ func (siw *ServerInterfaceWrapper) GetWorkBySessionId(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// MoveWorkBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) MoveWorkBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id WorkOrTokenID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MoveWorkBySessionId(w, r, sessionId, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ValidateFactory operation middleware
 func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 
@@ -4492,6 +4614,31 @@ func (siw *ServerInterfaceWrapper) GetWork(w http.ResponseWriter, r *http.Reques
 	handler.ServeHTTP(w, r)
 }
 
+// MoveWork operation middleware
+func (siw *ServerInterfaceWrapper) MoveWork(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id WorkOrTokenID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MoveWork(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -4635,6 +4782,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/{id}", wrapper.GetWorkBySessionId).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/{id}/move", wrapper.MoveWorkBySessionId).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
@@ -4658,6 +4807,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/work/staged-files", wrapper.StageSubmitWorkFile).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/work/{id}", wrapper.GetWork).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/work/{id}/move", wrapper.MoveWork).Methods("POST")
 
 	return r
 }

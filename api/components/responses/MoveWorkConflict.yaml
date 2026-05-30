@@ -1,0 +1,12 @@
+description: Operator move request was already applied for the supplied requestId.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      duplicateRequestId:
+        summary: Duplicate operator move requestId.
+        value:
+          message: Operator move request was already applied.
+          family: CONFLICT
+          code: MOVE_WORK_REQUEST_ALREADY_APPLIED

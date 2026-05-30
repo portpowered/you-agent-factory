@@ -26,6 +26,7 @@ var canonicalFactoryEventTypeValues = []string{
 	"SCRIPT_REQUEST",
 	"SCRIPT_RESPONSE",
 	"DISPATCH_RESPONSE",
+	"WORK_STATE_CHANGE",
 	"FACTORY_STATE_RESPONSE",
 	"RUN_RESPONSE",
 }
@@ -75,6 +76,8 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"ScriptExecutionOutcome",
 	"ScriptFailureType",
 	"DispatchResponseEventPayload",
+	"WorkStateChangeEventPayload",
+	"WorkStateChangeSource",
 	"FactoryStateResponseEventPayload",
 	"RunResponseEventPayload",
 }
@@ -93,6 +96,7 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/ScriptRequestEventPayload",
 	"#/components/schemas/ScriptResponseEventPayload",
 	"#/components/schemas/DispatchResponseEventPayload",
+	"#/components/schemas/WorkStateChangeEventPayload",
 	"#/components/schemas/FactoryStateResponseEventPayload",
 	"#/components/schemas/RunResponseEventPayload",
 }
@@ -111,6 +115,7 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"SCRIPT_REQUEST":              "ScriptRequestEventPayload",
 	"SCRIPT_RESPONSE":             "ScriptResponseEventPayload",
 	"DISPATCH_RESPONSE":           "DispatchResponseEventPayload",
+	"WORK_STATE_CHANGE":           "WorkStateChangeEventPayload",
 	"FACTORY_STATE_RESPONSE":      "FactoryStateResponseEventPayload",
 	"RUN_RESPONSE":                "RunResponseEventPayload",
 }

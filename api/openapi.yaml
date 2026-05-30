@@ -287,6 +287,36 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /work/{id}/move:
+    post:
+      tags:
+        - Work
+      operationId: moveWork
+      summary: Move work to another state
+      description: Moves an existing work item to a named authored marking state in the default factory session. Rejects moves while the work item is consumed by an active dispatch.
+      parameters:
+        - $ref: '#/components/parameters/WorkOrTokenID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveWorkRequest'
+      responses:
+        '200':
+          description: Work item at the new marking position.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Work'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/MoveWorkConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work/{id}:
     get:
       tags:
@@ -306,6 +336,37 @@ paths:
                 $ref: '#/components/schemas/Work'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/work/{id}/move:
+    post:
+      tags:
+        - Work
+      operationId: moveWorkBySessionId
+      summary: Move work to another state for one session
+      description: Moves an existing work item to a named authored marking state in the selected live factory session. Rejects moves while the work item is consumed by an active dispatch.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkOrTokenID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveWorkRequest'
+      responses:
+        '200':
+          description: Work item at the new marking position for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Work'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/MoveWorkConflict'
         '500':
           $ref: '#/components/responses/InternalError'
   /events:
@@ -995,6 +1056,19 @@ components:
                       type: FACTORY
                       id: ''
                       location: DEFINITION
+    MoveWorkConflict:
+      description: Operator move request was already applied for the supplied requestId.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            duplicateRequestId:
+              summary: Duplicate operator move requestId.
+              value:
+                message: Operator move request was already applied.
+                family: CONFLICT
+                code: MOVE_WORK_REQUEST_ALREADY_APPLIED
     InternalError:
       description: Server failed while reading or building runtime state.
       content:
@@ -1281,6 +1355,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UpsertWorkRequestSubmittedWork'
+    MoveWorkRequest:
+      type: object
+      additionalProperties: false
+      description: Operator request to move one work item to another authored marking state.
+      required:
+        - stateName
+      properties:
+        stateName:
+          type: string
+          description: Authored marking state name to move the work item into.
+        requestId:
+          type: string
+          description: Optional client idempotency key. Repeating the same requestId for an already-applied operator move returns 409 Conflict without a second mutation.
     ListWorkResponse:
       type: object
       additionalProperties: false
@@ -1756,6 +1843,7 @@ components:
             - INVALID_FACTORY
             - FACTORY_NOT_IDLE
             - STALE_FACTORY_VERSION
+            - MOVE_WORK_REQUEST_ALREADY_APPLIED
             - NOT_FOUND
             - INTERNAL_ERROR
           x-enum-descriptions:
@@ -1765,6 +1853,7 @@ components:
             - Submitted named factory payload failed validation.
             - Current factory runtime is not idle and cannot activate a new named factory.
             - Submitted editable factory definition was based on an older version than the current definition.
+            - Operator move requestId was already applied for this session.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
         targets:
@@ -2635,6 +2724,7 @@ components:
             - $ref: '#/components/schemas/ScriptRequestEventPayload'
             - $ref: '#/components/schemas/ScriptResponseEventPayload'
             - $ref: '#/components/schemas/DispatchResponseEventPayload'
+            - $ref: '#/components/schemas/WorkStateChangeEventPayload'
             - $ref: '#/components/schemas/FactoryStateResponseEventPayload'
             - $ref: '#/components/schemas/RunResponseEventPayload'
     FactoryEventType:
@@ -2654,6 +2744,7 @@ components:
         - FactoryEventTypeScriptRequest
         - FactoryEventTypeScriptResponse
         - FactoryEventTypeDispatchResponse
+        - FactoryEventTypeWorkStateChange
         - FactoryEventTypeFactoryStateResponse
         - FactoryEventTypeRunResponse
       enum:
@@ -2670,6 +2761,7 @@ components:
         - SCRIPT_REQUEST
         - SCRIPT_RESPONSE
         - DISPATCH_RESPONSE
+        - WORK_STATE_CHANGE
         - FACTORY_STATE_RESPONSE
         - RUN_RESPONSE
       x-enum-descriptions:
@@ -2686,6 +2778,7 @@ components:
         - A script-backed worker is about to invoke one concrete command attempt.
         - A script-backed worker command attempt returned or failed before a normal exit.
         - A workstation response finished processing and produced an outcome.
+        - A work item moved between authored marking states.
         - The factory lifecycle state response was recorded.
         - A factory run response ended and final metadata is available.
     FactoryEventContext:
@@ -2735,6 +2828,21 @@ components:
         source:
           type: string
           description: Human-readable source such as api, filewatcher, replay, cron, or worker.
+    WorkStateChangeSource:
+      type: string
+      description: Origin of a WORK_STATE_CHANGE event.
+      x-enum-varnames:
+        - WorkStateChangeSourceAPI
+        - WorkStateChangeSourceCLI
+        - WorkStateChangeSourceCascadingFailure
+      enum:
+        - api
+        - cli
+        - cascading-failure
+      x-enum-descriptions:
+        - Operator move through the HTTP API.
+        - Operator move through the CLI.
+        - Automatic cascade propagation after a dependency failure.
     DispatchConsumedWorkRef:
       type: object
       additionalProperties: false
@@ -3177,6 +3285,43 @@ components:
             $ref: '#/components/schemas/Resource'
         metadata:
           $ref: '#/components/schemas/StringMap'
+    WorkStateChangeEventPayload:
+      type: object
+      additionalProperties: false
+      description: Canonical work marking position change. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
+      required:
+        - workId
+        - workTypeName
+        - fromState
+        - toState
+        - fromPlaceId
+        - toPlaceId
+        - source
+      properties:
+        workId:
+          type: string
+        workTypeName:
+          type: string
+        fromState:
+          type: string
+          description: Authored state name before the move.
+        toState:
+          type: string
+          description: Authored state name after the move.
+        fromPlaceId:
+          type: string
+          description: Marking place identifier before the move.
+        toPlaceId:
+          type: string
+          description: Marking place identifier after the move.
+        source:
+          $ref: '#/components/schemas/WorkStateChangeSource'
+        triggerWorkId:
+          type: string
+          description: Optional work identifier that triggered a cascade move.
+        reason:
+          type: string
+          description: Optional human-readable reason for the move.
     FactoryStateResponseEventPayload:
       type: object
       additionalProperties: false
