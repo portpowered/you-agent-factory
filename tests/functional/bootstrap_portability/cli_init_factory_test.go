@@ -119,7 +119,8 @@ func TestInitFactory_EndToEnd(t *testing.T) {
 		HasTokenInPlace(initcmd.DefaultFactoryInputType + ":complete").
 		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":init").
 		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":failed").
-		TokenCount(1)
+		PlaceTokenCount(initcmd.DefaultFactoryInputType+":complete", 1).
+		PlaceTokenCount("agent-slot:available", 1)
 
 	// Verify the mock provider was called exactly once (one workstation in the pipeline).
 	if provider.CallCount("processor") != 1 {
@@ -167,7 +168,8 @@ func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
 		HasTokenInPlace(initcmd.DefaultFactoryInputType + ":complete").
 		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":init").
 		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":failed").
-		TokenCount(1)
+		PlaceTokenCount(initcmd.DefaultFactoryInputType+":complete", 1).
+		PlaceTokenCount("agent-slot:available", 1)
 
 	if provider.CallCount("processor") != 1 {
 		t.Errorf("expected provider called 1 time, got %d", provider.CallCount("processor"))
@@ -211,7 +213,8 @@ func TestInitFactory_FailureRouting(t *testing.T) {
 		HasTokenInPlace(initcmd.DefaultFactoryInputType + ":failed").
 		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":init").
 		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":complete").
-		TokenCount(1)
+		PlaceTokenCount(initcmd.DefaultFactoryInputType+":failed", 1).
+		PlaceTokenCount("agent-slot:available", 1)
 }
 
 // TestInitFactory_Idempotent verifies that running Init twice on the same

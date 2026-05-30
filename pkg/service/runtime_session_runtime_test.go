@@ -449,7 +449,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *te
 	})
 	defer harness.stop(t)
 
-	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false)
+	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(single target): %v", err)
 	}
@@ -475,7 +475,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_ReturnsTargetPickerMetadata
 	})
 	defer harness.stop(t)
 
-	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false)
+	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(multi target): %v", err)
 	}
@@ -506,21 +506,21 @@ func TestFactoryService_OpenFactorySessionFromFolder_OpensExplicitDefaultAndName
 
 	defaultOpen, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, &FactorySessionTargetRef{
 		Kind: FactorySessionTargetKindDefault,
-	}, false)
+	}, false, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(default): %v", err)
 	}
 	betaOpenOne, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, &FactorySessionTargetRef{
 		Kind: FactorySessionTargetKindNamed,
 		Name: "beta",
-	}, false)
+	}, false, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(beta one): %v", err)
 	}
 	betaOpenTwo, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, &FactorySessionTargetRef{
 		Kind: FactorySessionTargetKindNamed,
 		Name: "beta",
-	}, false)
+	}, false, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(beta two): %v", err)
 	}
@@ -549,7 +549,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsInvalidFolderAndTarg
 	defer harness.stop(t)
 
 	before := harness.svc.sessions.Count()
-	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), filepath.Join(harness.rootDir, "missing"), nil, false); err == nil || !strings.Contains(err.Error(), "stat factory session folder") {
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), filepath.Join(harness.rootDir, "missing"), nil, false, false); err == nil || !strings.Contains(err.Error(), "stat factory session folder") {
 		t.Fatalf("OpenFactorySessionFromFolder(missing folder) error = %v, want folder stat failure", err)
 	} else {
 		assertFactorySessionValidationTarget(t, err, "missing", "folderPath")
@@ -561,7 +561,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsInvalidFolderAndTarg
 	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, &FactorySessionTargetRef{
 		Kind: FactorySessionTargetKindNamed,
 		Name: "missing",
-	}, false); err == nil || !strings.Contains(err.Error(), `factory session target "missing" was not found`) {
+	}, false, false); err == nil || !strings.Contains(err.Error(), `factory session target "missing" was not found`) {
 		t.Fatalf("OpenFactorySessionFromFolder(missing target) error = %v, want missing-target failure", err)
 	} else {
 		assertFactorySessionValidationTarget(t, err, "target_not_found", "target.name")
@@ -583,7 +583,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsReadableFolderWithou
 		t.Fatalf("Mkdir(empty): %v", err)
 	}
 
-	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, false); err == nil || !strings.Contains(err.Error(), `does not expose any runnable factory targets`) {
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, false, false); err == nil || !strings.Contains(err.Error(), `does not expose any runnable factory targets`) {
 		t.Fatalf("OpenFactorySessionFromFolder(empty runnable folder) error = %v, want no-runnable-targets failure", err)
 	} else {
 		assertFactorySessionValidationTarget(t, err, "not_runnable", "folderPath")
@@ -608,7 +608,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_CanceledRequestDoesNotRegis
 	openCtx, cancelOpen := context.WithCancel(context.Background())
 	cancelOpen()
 
-	if _, err := harness.svc.OpenFactorySessionFromFolder(openCtx, harness.factoryDirs["beta"], nil, false); !errors.Is(err, context.Canceled) {
+	if _, err := harness.svc.OpenFactorySessionFromFolder(openCtx, harness.factoryDirs["beta"], nil, false, false); !errors.Is(err, context.Canceled) {
 		t.Fatalf("OpenFactorySessionFromFolder(canceled) error = %v, want context canceled", err)
 	}
 
@@ -630,7 +630,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyReturnsTargetsW
 	defer harness.stop(t)
 
 	before := harness.svc.sessions.Count()
-	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, true)
+	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, true, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(validate only): %v", err)
 	}
@@ -678,6 +678,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_ExpandsLeadingTildeForValid
 		tildePath,
 		nil,
 		true,
+		false,
 	)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(validate tilde): %v", err)
@@ -705,6 +706,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_ExpandsLeadingTildeForValid
 			Kind: FactorySessionTargetKindNamed,
 			Name: "alpha",
 		},
+		false,
 		false,
 	)
 	if err != nil {

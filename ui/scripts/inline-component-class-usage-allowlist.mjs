@@ -29,7 +29,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_TIMELINE_ACTIONS_CLASS",
   "src/features/header/components/dashboard-header.tsx#LOCALE_MENU_PANEL_CLASS",
   "src/features/header/components/dashboard-session-tabs-open-dialog.tsx#SESSION_SECTION_LABEL_CLASS",
-  "src/features/header/components/dashboard-session-tabs-open-dialog.tsx#SESSION_TARGET_PICKER_CLASS",
   "src/features/header/components/dashboard-session-tabs-open-dialog.tsx#SESSION_TARGET_LIST_CLASS",
   "src/features/header/components/dashboard-session-tabs.tsx#SESSION_TABS_SHELL_CLASS",
   "src/features/header/components/dashboard-session-tabs.tsx#SESSION_TABS_ROW_CLASS",

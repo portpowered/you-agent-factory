@@ -28,7 +28,11 @@ export interface HeaderControlsMessages {
   openSessionLaunchReadyMultipleTargets: string;
   openSessionLaunchReadySingleTarget: string;
   openSessionLaunchSummaryTemplate: string;
+  openSessionCancelCreateFactoryLabel: string;
+  openSessionCreateFactoryLabel: string;
+  openSessionCreateFactoryPendingLabel: string;
   openSessionDialogTitle: string;
+  openSessionInitNewFactoryDescriptionTemplate: string;
   openSessionSubmitLabel: string;
   openSessionSubmitPendingLabel: string;
   pauseSessionStreamLabelTemplate: string;
@@ -103,7 +107,12 @@ const headerControlsMessagesByLocale = {
       "Folder is ready. Open the runnable target shown below to continue.",
     openSessionLaunchSummaryTemplate:
       "Launch will use folder {{folderPath}} and factory {{factoryName}}.",
+    openSessionCancelCreateFactoryLabel: "Cancel",
+    openSessionCreateFactoryLabel: "Create factory",
+    openSessionCreateFactoryPendingLabel: "Creating factory...",
     openSessionDialogTitle: "Factory Session",
+    openSessionInitNewFactoryDescriptionTemplate:
+      "No runnable factory was found at {{folderPath}}. Create a new factory here using the default scaffold?",
     openSessionSubmitLabel: "Start Factory",
     openSessionSubmitPendingLabel: "Checking folder...",
     openSessionTargetLabel: "Open selected target",
@@ -178,7 +187,12 @@ const headerControlsMessagesByLocale = {
       "フォルダーを確認できました。続行するには下に表示された実行可能なターゲットを開いてください。",
     openSessionLaunchSummaryTemplate:
       "起動にはフォルダー {{folderPath}} とファクトリー {{factoryName}} を使います。",
+    openSessionCancelCreateFactoryLabel: "キャンセル",
+    openSessionCreateFactoryLabel: "ファクトリーを作成",
+    openSessionCreateFactoryPendingLabel: "ファクトリーを作成しています...",
     openSessionDialogTitle: "ファクトリーフォルダーを開く",
+    openSessionInitNewFactoryDescriptionTemplate:
+      "{{folderPath}} には実行可能なファクトリーがありません。既定のスキャフォールドで新しいファクトリーを作成しますか？",
     openSessionSubmitLabel: "フォルダーを確認する",
     openSessionSubmitPendingLabel: "フォルダーを確認しています...",
     openSessionTargetLabel: "選択したターゲットを開く",
@@ -253,7 +267,12 @@ const headerControlsMessagesByLocale = {
       "폴더를 확인했습니다. 계속하려면 아래에 표시된 실행 가능한 대상을 여세요.",
     openSessionLaunchSummaryTemplate:
       "실행에는 폴더 {{folderPath}} 및 팩토리 {{factoryName}}이 사용됩니다.",
+    openSessionCancelCreateFactoryLabel: "취소",
+    openSessionCreateFactoryLabel: "팩토리 만들기",
+    openSessionCreateFactoryPendingLabel: "팩토리를 만드는 중...",
     openSessionDialogTitle: "팩토리 폴더 열기",
+    openSessionInitNewFactoryDescriptionTemplate:
+      "{{folderPath}}에 실행 가능한 팩토리가 없습니다. 기본 스캐폴드로 새 팩토리를 만드시겠습니까?",
     openSessionSubmitLabel: "폴더 확인",
     openSessionSubmitPendingLabel: "폴더 확인 중...",
     openSessionTargetLabel: "선택한 대상 열기",
@@ -328,7 +347,12 @@ const headerControlsMessagesByLocale = {
       "文件夹已就绪。请打开下方显示的可运行目标后继续。",
     openSessionLaunchSummaryTemplate:
       "启动将使用文件夹 {{folderPath}} 和工厂 {{factoryName}}。",
+    openSessionCancelCreateFactoryLabel: "取消",
+    openSessionCreateFactoryLabel: "创建工厂",
+    openSessionCreateFactoryPendingLabel: "正在创建工厂...",
     openSessionDialogTitle: "打开工厂文件夹",
+    openSessionInitNewFactoryDescriptionTemplate:
+      "在 {{folderPath}} 未找到可运行的工厂。是否使用默认脚手架在此创建新工厂？",
     openSessionSubmitLabel: "检查文件夹",
     openSessionSubmitPendingLabel: "正在检查文件夹...",
     openSessionTargetLabel: "打开所选目标",

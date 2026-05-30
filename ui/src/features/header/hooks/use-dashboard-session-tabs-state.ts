@@ -90,6 +90,56 @@ export function useDashboardSessionTabsState() {
   };
 }
 
+function useOpenSessionDialogFormState() {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
+  const [folderPath, setFolderPath] = useState("");
+  const [validatedFolderPath, setValidatedFolderPath] = useState<string | null>(null);
+  const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
+  const [selectedTargetValue, setSelectedTargetValue] = useState<string>("");
+  const [folderValidation, setFolderValidation] = useState<FolderValidationState>({
+    status: "idle",
+  });
+
+  function clearFolderInspection() {
+    setDialogError(null);
+    setDiscoveredTargets([]);
+    setFolderValidation({ status: "idle" });
+    setSelectedTargetValue("");
+    setValidatedFolderPath(null);
+  }
+
+  function resetDialogState() {
+    clearFolderInspection();
+    setFolderPath("");
+  }
+
+  function handleChangeFolderPath(value: string) {
+    setFolderPath(value);
+    clearFolderInspection();
+  }
+
+  return {
+    clearFolderInspection,
+    dialogError,
+    dialogOpen,
+    discoveredTargets,
+    folderPath,
+    folderValidation,
+    resetDialogState,
+    selectedTargetValue,
+    setDialogError,
+    setDialogOpen,
+    setDiscoveredTargets,
+    setFolderPath,
+    setFolderValidation,
+    setSelectedTargetValue,
+    setValidatedFolderPath,
+    validatedFolderPath,
+    handleChangeFolderPath,
+  };
+}
+
 function useOpenSessionDialogState({
   queryClient,
   setActiveSessionID,
@@ -97,6 +147,7 @@ function useOpenSessionDialogState({
   queryClient: ReturnType<typeof useQueryClient>;
   setActiveSessionID: (sessionID: string | null) => void;
 }) {
+  const form = useOpenSessionDialogFormState();
   const openSessionMutation = useMutation({
     mutationFn: (input: Parameters<typeof openFactorySession>[0]) =>
       openFactorySession(input),
@@ -109,36 +160,47 @@ function useOpenSessionDialogState({
         validateOnly: true,
       }),
   });
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
-  const [folderPath, setFolderPath] = useState("");
-  const [validatedFolderPath, setValidatedFolderPath] = useState<string | null>(null);
-  const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
-  const [selectedTargetValue, setSelectedTargetValue] = useState<string>("");
-  const [folderValidation, setFolderValidation] = useState<FolderValidationState>({
-    status: "idle",
-  });
+
+  async function openSessionAndFinish(
+    input: Parameters<typeof openFactorySession>[0],
+  ) {
+    form.setDialogError(null);
+    try {
+      const response = await openSessionMutation.mutateAsync(input);
+      if (response.session) {
+        await finishOpeningSession(
+          queryClient,
+          response.session,
+          form.resetDialogState,
+          setActiveSessionID,
+          form.setDialogOpen,
+        );
+      }
+    } catch (error) {
+      form.setDialogError(normalizeFactorySessionsError(error));
+    }
+  }
 
   async function handleInspectFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setDialogError(null);
-    setDiscoveredTargets([]);
-    setFolderValidation({ status: "pending" });
+    form.setDialogError(null);
+    form.setDiscoveredTargets([]);
+    form.setFolderValidation({ status: "pending" });
 
     try {
       await inspectFolderCandidate({
-        folderPath,
-        setDiscoveredTargets,
-        setFolderValidation,
-        setSelectedTargetValue,
-        setValidatedFolderPath,
+        folderPath: form.folderPath,
+        setDiscoveredTargets: form.setDiscoveredTargets,
+        setFolderValidation: form.setFolderValidation,
+        setSelectedTargetValue: form.setSelectedTargetValue,
+        setValidatedFolderPath: form.setValidatedFolderPath,
         validateFolder: validateFolderMutation.mutateAsync,
       });
     } catch (error) {
       const apiError = normalizeFactorySessionsError(error);
-      setDialogError(apiError);
-      setValidatedFolderPath(null);
-      setFolderValidation({
+      form.setDialogError(apiError);
+      form.setValidatedFolderPath(null);
+      form.setFolderValidation({
         status: "error",
         reason: classifyFactorySessionFolderValidationError(apiError),
       });
@@ -146,63 +208,70 @@ function useOpenSessionDialogState({
   }
 
   async function handleOpenTarget(targetValue?: string) {
-    setDialogError(null);
+    form.setDialogError(null);
     try {
       const response = await openValidatedTarget({
-        discoveredTargets,
-        folderPath,
+        discoveredTargets: form.discoveredTargets,
+        folderPath: form.folderPath,
         openSession: openSessionMutation.mutateAsync,
-        selectedTargetValue: targetValue ?? selectedTargetValue,
-        validatedFolderPath,
+        selectedTargetValue: targetValue ?? form.selectedTargetValue,
+        validatedFolderPath: form.validatedFolderPath,
       });
       if (response.session) {
         await finishOpeningSession(
           queryClient,
           response.session,
-          resetDialogState,
+          form.resetDialogState,
           setActiveSessionID,
-          setDialogOpen,
+          form.setDialogOpen,
         );
       }
     } catch (error) {
-      setDialogError(normalizeFactorySessionsError(error));
+      form.setDialogError(normalizeFactorySessionsError(error));
     }
   }
 
-  function resetDialogState() {
-    setDialogError(null);
-    setDiscoveredTargets([]);
-    setFolderValidation({ status: "idle" });
-    setFolderPath("");
-    setSelectedTargetValue("");
-    setValidatedFolderPath(null);
-  }
-
-  function handleChangeFolderPath(value: string) {
-    setFolderPath(value);
-    setDialogError(null);
-    setValidatedFolderPath(null);
-    setSelectedTargetValue("");
-    setDiscoveredTargets([]);
-    setFolderValidation({ status: "idle" });
+  async function handleCreateNewFactory() {
+    const initFolderPath = resolveInitNewFactoryFolderPath(
+      form.folderValidation,
+      form.validatedFolderPath,
+      form.folderPath,
+    );
+    await openSessionAndFinish({
+      folderPath: initFolderPath,
+      initNewFactory: true,
+    });
   }
 
   return {
-    dialogError,
-    dialogOpen,
-    discoveredTargets,
-    folderValidation,
-    folderPath,
-    selectedTargetValue,
-    handleChangeFolderPath,
+    dialogError: form.dialogError,
+    dialogOpen: form.dialogOpen,
+    discoveredTargets: form.discoveredTargets,
+    folderValidation: form.folderValidation,
+    folderPath: form.folderPath,
+    selectedTargetValue: form.selectedTargetValue,
+    handleCancelInitConfirmation: form.clearFolderInspection,
+    handleChangeFolderPath: form.handleChangeFolderPath,
+    handleCreateNewFactory,
     handleInspectFolder,
     handleOpenTarget,
-    setSelectedTargetValue,
+    setSelectedTargetValue: form.setSelectedTargetValue,
     openSessionMutation,
-    resetDialogState,
-    setDialogOpen,
+    resetDialogState: form.resetDialogState,
+    setDialogOpen: form.setDialogOpen,
     validateFolderMutation,
   };
+}
+
+function resolveInitNewFactoryFolderPath(
+  folderValidation: FolderValidationState,
+  validatedFolderPath: string | null,
+  folderPath: string,
+): string {
+  if (folderValidation.status === "init_ready") {
+    return folderValidation.folderPath;
+  }
+  return validatedFolderPath ?? folderPath;
 }
 
 async function finishOpeningSession(
@@ -250,6 +319,18 @@ async function inspectFolderCandidate({
   const response = await validateFolder({
     folderPath,
   });
+  if (response.initsNewFactory) {
+    const resolvedFolderPath = response.folderPath ?? folderPath;
+    setDiscoveredTargets([]);
+    setSelectedTargetValue("");
+    setValidatedFolderPath(resolvedFolderPath);
+    setFolderValidation({
+      status: "init_ready",
+      folderPath: resolvedFolderPath,
+    });
+    return;
+  }
+
   const targets = response.targets ?? [];
   const resolvedFolderPath = targets[0]?.folderPath ?? folderPath;
   setDiscoveredTargets(targets);

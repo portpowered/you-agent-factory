@@ -37,6 +37,7 @@ export interface OpenFactorySessionInput {
   folderPath: string;
   target?: FactorySessionTargetRef;
   validateOnly?: boolean;
+  initNewFactory?: boolean;
 }
 
 export interface OpenFactorySessionOptions {
@@ -300,6 +301,9 @@ function isOpenFactorySessionResponse(
   return (
     isAPIRecord(value) &&
     (value.session === undefined || isAPIRecord(value.session)) &&
-    (value.targets === undefined || Array.isArray(value.targets))
+    (value.targets === undefined || Array.isArray(value.targets)) &&
+    (value.initsNewFactory === undefined ||
+      typeof value.initsNewFactory === "boolean") &&
+    (value.folderPath === undefined || typeof value.folderPath === "string")
   );
 }

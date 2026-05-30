@@ -1394,8 +1394,11 @@ type ModelSummary struct {
 
 // OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
 type OpenFactorySessionRequest struct {
-	FolderPath string                   `json:"folderPath"`
-	Target     *FactorySessionTargetRef `json:"target,omitempty"`
+	FolderPath string `json:"folderPath"`
+
+	// InitNewFactory When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly.
+	InitNewFactory *bool                    `json:"initNewFactory,omitempty"`
+	Target         *FactorySessionTargetRef `json:"target,omitempty"`
 
 	// ValidateOnly When true, validate the folder and optional target selection without creating a live session.
 	ValidateOnly *bool `json:"validateOnly,omitempty"`
@@ -1403,8 +1406,13 @@ type OpenFactorySessionRequest struct {
 
 // OpenFactorySessionResponse defines model for OpenFactorySessionResponse.
 type OpenFactorySessionResponse struct {
-	Session *FactorySessionSummary  `json:"session,omitempty"`
-	Targets *[]FactorySessionTarget `json:"targets,omitempty"`
+	// FolderPath Absolute resolved session folder path when initsNewFactory is true.
+	FolderPath *string `json:"folderPath,omitempty"`
+
+	// InitsNewFactory When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath.
+	InitsNewFactory *bool                   `json:"initsNewFactory,omitempty"`
+	Session         *FactorySessionSummary  `json:"session,omitempty"`
+	Targets         *[]FactorySessionTarget `json:"targets,omitempty"`
 }
 
 // PaginationContext defines model for PaginationContext.

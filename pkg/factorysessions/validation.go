@@ -1,6 +1,8 @@
 package factorysessions
 
 import (
+	"errors"
+
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
@@ -73,6 +75,15 @@ func NewValidationError(reason string, field string, err error) error {
 		field:  field,
 		err:    err,
 	}
+}
+
+// ValidationReasonFromError returns the validation reason and field when err is a factory-session validation error.
+func ValidationReasonFromError(err error) (reason string, field string, ok bool) {
+	var ve *validationError
+	if !errors.As(err, &ve) || ve == nil {
+		return "", "", false
+	}
+	return ve.reason, ve.field, true
 }
 
 func validationErrorTarget(reason string, field string) factoryapi.ErrorTarget {

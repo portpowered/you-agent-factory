@@ -844,10 +844,16 @@ export interface components {
             target?: components["schemas"]["FactorySessionTargetRef"];
             /** @description When true, validate the folder and optional target selection without creating a live session. */
             validateOnly?: boolean;
+            /** @description When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly. */
+            initNewFactory?: boolean;
         };
         OpenFactorySessionResponse: {
             session?: components["schemas"]["FactorySessionSummary"];
             targets?: components["schemas"]["FactorySessionTarget"][];
+            /** @description When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath. */
+            initsNewFactory?: boolean;
+            /** @description Absolute resolved session folder path when initsNewFactory is true. */
+            folderPath?: string;
         };
         LoadableProviderSessionRef: {
             provider: components["schemas"]["LoadableProviderSessionProvider"];
