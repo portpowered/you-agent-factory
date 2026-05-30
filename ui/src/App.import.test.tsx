@@ -21,15 +21,12 @@ import {
   createFactoryImportValue,
   createFileDropTransfer,
   importedFactorySnapshot,
-  jsonResponse,
   MockEventSource,
   registerAppDashboardTestLifecycle,
   renderApp,
 } from "./testing/app-shell-test-utils";
-import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import {
   buildSessionFactoryActivationPutBody,
-  defaultSessionFactoryVersion,
   incrementedSessionFactoryVersion,
   isSessionFactoryRequest,
   mergeImportedFactoryIntoSessionDocument,
@@ -206,16 +203,9 @@ describe("App shell import flows", () => {
     expectNoPostFactoriesActivation(fetchMock);
   });
 
-  it("activates create-new-named imports through UPSERT_NAMED_AND_ACTIVATE on the selected session", async () => {
+  it("activates create-new-named imports through PUT UPSERT_NAMED_AND_ACTIVATE with suffixed naming", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
-    const currentSessionFactory = {
-      name: "Session Current Name",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-      version: defaultSessionFactoryVersion,
-    };
     vi.spyOn(factoryPngImportModule, "readFactoryImportPng").mockResolvedValue({
       ok: true,
       value: importValue,
@@ -229,51 +219,57 @@ describe("App shell import flows", () => {
         const path = resolveFetchPath(input);
         const method = resolveFetchMethod(input, init);
 
-        if (path === "/factory-sessions") {
-          if (method === "GET") {
-            return jsonResponse({
+        if (path === "/factory-sessions" && method === "GET") {
+          return new Response(
+            JSON.stringify({
               sessions: [
                 {
-                  factoryDir: "/workspace/default",
-                  folderPath: "/workspace",
-                  id: DEFAULT_FACTORY_SESSION_ID,
+                  factoryDir: "/tmp/factories",
+                  folderPath: "/tmp/factories",
+                  id: "~default",
                   isDefault: true,
                   project: "default",
                   target: { kind: "default" },
                 },
               ],
-            });
-          }
-
-          if (method === "POST") {
-            return jsonResponse({
-              targets: [
-                { ref: { kind: "named", name: "dashboard-fixture" } },
-                { ref: { kind: "named", name: "Dropped Factory" } },
-              ],
-            });
-          }
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+            },
+          );
         }
 
-        if (isSessionFactoryRequest(path, method)) {
-          if (method === "GET") {
-            return mockGetSessionFactory({
-              document: currentSessionFactory,
-            });
-          }
-
-          if (method === "PUT") {
-            return mockPutSessionFactory({
-              responseDocument: {
-                name: "Dropped Factory-2",
-                ...importValue.factory,
-                version: {
-                  logical: "1",
-                  physical: "2026-05-18T14:41:00Z",
+        if (path === "/factory-sessions" && method === "POST") {
+          return new Response(
+            JSON.stringify({
+              targets: [
+                {
+                  factoryDir: "/tmp/factories/Dropped Factory",
+                  folderPath: "/tmp/factories",
+                  label: "Dropped Factory",
+                  project: "Dropped Factory",
+                  ref: { kind: "named", name: "Dropped Factory" },
                 },
-              },
-            });
-          }
+              ],
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+            },
+          );
+        }
+
+        if (isSessionFactoryRequest(path, method) && method === "PUT") {
+          return mockPutSessionFactory({
+            responseDocument: {
+              name: "Dropped Factory-2",
+              workTypes: [],
+              workers: [],
+              workstations: [],
+              version: incrementedSessionFactoryVersion,
+            },
+          });
         }
 
         throw new Error(`unexpected fetch for ${path} (${method})`);
@@ -283,17 +279,18 @@ describe("App shell import flows", () => {
     const viewport = await screen.findByRole("region", {
       name: "Work graph viewport",
     });
+
     fireEvent.drop(viewport, createFileDropTransfer([file]));
 
     const previewDialog = await screen.findByRole("dialog", {
       name: "Review factory import",
     });
+
     fireEvent.click(
       within(previewDialog).getByRole("button", {
         name: /Create new named factory/i,
       }),
     );
-
     fireEvent.click(
       within(previewDialog).getByRole("button", { name: "Activate factory" }),
     );
@@ -310,9 +307,9 @@ describe("App shell import flows", () => {
         mode: "UPSERT_NAMED_AND_ACTIVATE",
         factory: {
           name: "Dropped Factory-2",
-          workTypes: importValue.factory.workTypes,
-          workers: importValue.factory.workers,
-          workstations: importValue.factory.workstations,
+          workTypes: [],
+          workers: [],
+          workstations: [],
         },
       });
     });

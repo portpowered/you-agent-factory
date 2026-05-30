@@ -4,5 +4,5 @@ export const sessionFactoryAPIErrorMessages = {
   rejectedRequest: "The session factory API rejected the request.",
   rejectedSaveRequest: "The session factory API rejected the save request.",
   unavailableInEnvironment:
-    "Session factory access is unavailable in this environment.",
+    "Session factory editing is unavailable in this environment.",
 } as const;

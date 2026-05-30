@@ -1,4 +1,4 @@
-import type { SessionFactoryAPIErrorCode } from "./api";
+import type { SessionFactoryAPIErrorCode } from "./errors";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 
 export const sessionFactoryOperatorErrorMessages = {

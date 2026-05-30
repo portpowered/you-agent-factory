@@ -6,7 +6,7 @@ import {
   validateCurrentFactoryWorkstationPromptTemplate,
 } from "./api";
 
-describe("current-factory prompt-template API", () => {
+describe("session-factory prompt-template API", () => {
   it("loads the current-factory workstation prompt-template contract", async () => {
     const contract = await getCurrentFactoryWorkstationPromptTemplateContract(
       "Review",

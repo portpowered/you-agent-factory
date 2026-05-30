@@ -1,5 +1,5 @@
 import {
-  activateImportedFactoryForSession,
+  activateImportedFactoryAsNewNamedForSession,
   getCurrentFactory,
   NamedFactoryAPIError,
 } from "./api";
@@ -11,22 +11,26 @@ const canonicalFactory = {
   workstations: [],
 } as const;
 
+const existingNamedFactoryNames = ["Current Factory"] as const;
+
 describe("named factory API error handling", () => {
-  it("fails fast when current-factory fetch is unavailable", async () => {
+  it("fails fast when create-new-named activation fetch is unavailable", async () => {
     await expect(
-      getCurrentFactory({
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: true as unknown as typeof fetch,
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("Current factory export is unavailable in this environment.", {
+      new NamedFactoryAPIError("Current factory editing is unavailable in this environment.", {
         code: "NETWORK_ERROR",
       }),
     );
   });
 
-  it("rejects current-factory responses that are not shaped like a factory object", async () => {
+  it("rejects upsert responses that are not shaped like a factory object", async () => {
     await expect(
-      getCurrentFactory({
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockResolvedValue(
           new Response(JSON.stringify("not-a-factory"), {
             headers: {
@@ -38,7 +42,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The current factory API returned an invalid response.", {
+      new NamedFactoryAPIError("The current factory editing API returned an invalid response.", {
         code: "INTERNAL_ERROR",
         responseBody: "not-a-factory",
         status: 200,
@@ -47,26 +51,28 @@ describe("named factory API error handling", () => {
     );
   });
 
-  it("wraps current-factory network failures in a typed error", async () => {
+  it("wraps upsert network failures in a typed error", async () => {
     const networkError = new Error("socket closed");
 
     await expect(
-      getCurrentFactory({
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockRejectedValue(networkError),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The dashboard could not reach the current factory API.", {
+      new NamedFactoryAPIError("The dashboard could not reach the current factory editing API.", {
         code: "NETWORK_ERROR",
         responseBody: networkError,
       }),
     );
   });
 
-  it("falls back to INTERNAL_ERROR when the current-factory API returns an unknown error code", async () => {
+  it("falls back to INTERNAL_ERROR when the upsert API returns an unknown error code", async () => {
     await expect(
-      getCurrentFactory({
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ code: "SOMETHING_NEW", message: "Lookup failed." }), {
+          new Response(JSON.stringify({ code: "SOMETHING_NEW", message: "Activation failed." }), {
             headers: {
               "Content-Type": "application/json",
             },
@@ -76,11 +82,11 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("Lookup failed.", {
+      new NamedFactoryAPIError("The current factory editing API rejected the save request.", {
         code: "INTERNAL_ERROR",
         responseBody: {
           code: "SOMETHING_NEW",
-          message: "Lookup failed.",
+          message: "Activation failed.",
         },
         status: 500,
         statusText: "Internal Server Error",
@@ -88,9 +94,10 @@ describe("named factory API error handling", () => {
     );
   });
 
-  it("preserves BAD_REQUEST current-factory failures as typed API errors", async () => {
+  it("preserves BAD_REQUEST upsert failures as typed API errors", async () => {
     await expect(
-      getCurrentFactory({
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockResolvedValue(
           new Response(JSON.stringify({ code: "BAD_REQUEST", message: "Factory name is required." }), {
             headers: {
@@ -114,9 +121,10 @@ describe("named factory API error handling", () => {
     );
   });
 
-  it("falls back to the default current-factory error message when the error body has no string fields", async () => {
+  it("falls back to the default upsert error message when the error body has no string fields", async () => {
     await expect(
-      getCurrentFactory({
+      activateImportedFactoryAsNewNamedForSession(canonicalFactory, {
+        existingNamedFactoryNames,
         fetch: vi.fn().mockResolvedValue(
           new Response(JSON.stringify({ code: 42, message: false }), {
             headers: {
@@ -128,7 +136,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The current factory API rejected the request.", {
+      new NamedFactoryAPIError("The current factory editing API rejected the save request.", {
         code: "INTERNAL_ERROR",
         responseBody: {
           code: 42,
@@ -140,60 +148,26 @@ describe("named factory API error handling", () => {
     );
   });
 
-  it("maps FACTORY_NOT_IDLE session save failures into named factory activation errors", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: "Current Factory",
-            workTypes: [],
-            workers: [],
-            workstations: [],
-            version: {
-              logical: "9",
-              physical: "2026-05-18T14:25:00Z",
-            },
-          }),
-          {
+  it("rejects a current-factory response that is not shaped like a factory object", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(JSON.stringify("not-an-object"), {
             headers: {
               "Content-Type": "application/json",
             },
             status: 200,
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            code: "FACTORY_NOT_IDLE",
-            message: "Current factory runtime must be idle before activation.",
+            statusText: "OK",
           }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 409,
-            statusText: "Conflict",
-          },
         ),
-      );
-
-    await expect(
-      activateImportedFactoryForSession(canonicalFactory, { fetch: fetchMock }),
+      }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError(
-        "Current factory runtime must be idle before activation.",
-        {
-          code: "FACTORY_NOT_IDLE",
-          status: 409,
-          statusText: "Conflict",
-          responseBody: {
-            code: "FACTORY_NOT_IDLE",
-            message: "Current factory runtime must be idle before activation.",
-          },
-        },
-      ),
+      new NamedFactoryAPIError("The current factory API returned an invalid response.", {
+        code: "INTERNAL_ERROR",
+        responseBody: "not-an-object",
+        status: 200,
+        statusText: "OK",
+      }),
     );
   });
 
@@ -249,48 +223,31 @@ describe("named factory API error handling", () => {
     );
   });
 
-  it("maps INVALID_FACTORY_NAME and NOT_FOUND codes from the current-factory API", async () => {
+  it("fails fast when current-factory fetch is unavailable", async () => {
     await expect(
       getCurrentFactory({
-        fetch: vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              code: "INVALID_FACTORY_NAME",
-              message: "Factory name is invalid.",
-            }),
-            {
-              headers: { "Content-Type": "application/json" },
-              status: 400,
-              statusText: "Bad Request",
-            },
-          ),
-        ),
+        fetch: true as unknown as typeof fetch,
       }),
-    ).rejects.toMatchObject({
-      code: "INVALID_FACTORY_NAME",
-      message: "Factory name is invalid.",
-    });
+    ).rejects.toEqual(
+      new NamedFactoryAPIError("Current factory export is unavailable in this environment.", {
+        code: "NETWORK_ERROR",
+      }),
+    );
+  });
+
+  it("wraps current-factory network failures in a typed error", async () => {
+    const networkError = new Error("socket closed");
 
     await expect(
       getCurrentFactory({
-        fetch: vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              code: "NOT_FOUND",
-              message: "Factory was not found.",
-            }),
-            {
-              headers: { "Content-Type": "application/json" },
-              status: 404,
-              statusText: "Not Found",
-            },
-          ),
-        ),
+        fetch: vi.fn().mockRejectedValue(networkError),
       }),
-    ).rejects.toMatchObject({
-      code: "NOT_FOUND",
-      message: "Factory was not found.",
-    });
+    ).rejects.toEqual(
+      new NamedFactoryAPIError("The dashboard could not reach the current factory API.", {
+        code: "NETWORK_ERROR",
+        responseBody: networkError,
+      }),
+    );
   });
 
   it("preserves raw current-factory error bodies when the response is not JSON", async () => {
@@ -307,6 +264,32 @@ describe("named factory API error handling", () => {
       new NamedFactoryAPIError("The current factory API rejected the request.", {
         code: "INTERNAL_ERROR",
         responseBody: "temporarily unavailable",
+        status: 503,
+        statusText: "Service Unavailable",
+      }),
+    );
+  });
+
+  it("falls back to the default current-factory error message when the error body has no string fields", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ code: 42, message: false }), {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 503,
+            statusText: "Service Unavailable",
+          }),
+        ),
+      }),
+    ).rejects.toEqual(
+      new NamedFactoryAPIError("The current factory API rejected the request.", {
+        code: "INTERNAL_ERROR",
+        responseBody: {
+          code: 42,
+          message: false,
+        },
         status: 503,
         statusText: "Service Unavailable",
       }),
