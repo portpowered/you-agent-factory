@@ -564,7 +564,7 @@ func TestBuildFactoryService_WorkFileRejectsConflictingTraceAliases(t *testing.T
 
 func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *testing.T) {
 	rootDir := t.TempDir()
-	runtimeLogDir := filepath.Join(t.TempDir(), "runtime-logs")
+	runtimeLogDir := filepath.Join(rootDir, "runtime-logs")
 	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
 	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
 	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {

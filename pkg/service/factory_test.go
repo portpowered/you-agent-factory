@@ -439,7 +439,9 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 	rootDir := t.TempDir()
 	runtimeLogDir := options.runtimeLogDir
 	if runtimeLogDir == "" {
-		runtimeLogDir = filepath.Join(t.TempDir(), "runtime-logs")
+		// Keep runtime logs under the same temp root so t.TempDir cleanup does not
+		// race a second directory while the service still holds log handles (CI flake).
+		runtimeLogDir = filepath.Join(rootDir, "runtime-logs")
 	}
 	if options.rootConfig != nil {
 		writeFactoryJSON(t, rootDir, options.rootConfig)
@@ -508,6 +510,19 @@ func (h *runningSessionService) stop(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for service shutdown")
+	}
+	closeSessionServiceRuntimeLogs(t, h.svc)
+}
+
+func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
+	t.Helper()
+	for _, bundle := range []*factoryRuntimeBundle{svc.startupRuntimeBundle(), svc.currentRuntimeBundle()} {
+		if bundle == nil || bundle.logSink == nil {
+			continue
+		}
+		if err := bundle.logSink.Close(); err != nil {
+			t.Fatalf("logSink.Close: %v", err)
+		}
 	}
 }
 
