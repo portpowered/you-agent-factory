@@ -186,17 +186,23 @@ func (fs *FactoryService) GetCurrentFactoryForSession(_ context.Context, session
 	}
 	rootDir := factorysessions.SessionFactoryRootDir(fs.factoryRootDir, session)
 	factoryName := factorysessions.FactoryName(rootDir, runtimeCfg)
+	versionRootDir := rootDir
 	if persistRoot := sessionFactoryPersistRoot(fs.factoryRootDir, session); persistRoot != "" {
 		if pointerName, err := factoryconfig.ReadCurrentFactoryPointer(persistRoot); err == nil {
-			factoryName = factoryapi.FactoryName(pointerName)
-			rootDir = persistRoot
+			pointerFactoryName := factoryapi.FactoryName(pointerName)
+			if session.IsDefault || pointerFactoryName == factoryName {
+				factoryName = pointerFactoryName
+			}
+		}
+		if sameFactoryDir(persistRoot, rootDir) {
+			versionRootDir = persistRoot
 		}
 	}
 	serialized, err := fs.serializeNamedFactory(factoryName, runtimeCfg, true)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	return fs.withCurrentFactoryVersion(rootDir, serialized.Name, serialized)
+	return fs.withCurrentFactoryVersion(versionRootDir, serialized.Name, serialized)
 }
 
 func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {

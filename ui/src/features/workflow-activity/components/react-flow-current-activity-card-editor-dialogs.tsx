@@ -42,10 +42,7 @@ export function CurrentActivityGraphEditorDialogs({
     if (readyImportPreviewState) {
       setImportSaveChoice("REPLACE_CURRENT");
     }
-  }, [
-    readyImportPreviewState?.file?.name,
-    readyImportPreviewState?.value?.factory?.name,
-  ]);
+  }, [readyImportPreviewState]);
 
   return (
     <>
