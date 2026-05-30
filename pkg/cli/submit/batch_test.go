@@ -15,6 +15,155 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
+func TestSubmitBatch_DryRunPipedStdinWithNoArgs(t *testing.T) {
+	json := validBatchJSON("batch-stdin-pipe", "alpha")
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Stdin:      strings.NewReader(json),
+		StdinIsTTY: func() bool { return false },
+		DryRun:     true,
+		Server:     "http://127.0.0.1:1",
+		Output:     &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"requestId: batch-stdin-pipe",
+		"batchSource: stdin",
+		"dry-run: no request sent",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestSubmitBatch_DryRunExplicitStdinDash(t *testing.T) {
+	json := validBatchJSON("batch-stdin-dash", "alpha")
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{"-"},
+		Stdin:  strings.NewReader(json),
+		DryRun: true,
+		Server: "http://127.0.0.1:1",
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "batchSource: stdin") {
+		t.Fatalf("output missing stdin source:\n%s", out.String())
+	}
+}
+
+func TestSubmitBatch_NoArgsInteractiveTTYFailsWithUsageGuidance(t *testing.T) {
+	err := SubmitBatch(BatchConfig{
+		StdinIsTTY: func() bool { return true },
+		Server:     "http://127.0.0.1:1",
+		Output:     io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected usage error")
+	}
+	if !strings.Contains(err.Error(), "batch input required") {
+		t.Fatalf("error = %v, want usage guidance", err)
+	}
+	if !strings.Contains(err.Error(), "you submit batch --help") {
+		t.Fatalf("error = %v, want help pointer", err)
+	}
+}
+
+func TestSubmitBatch_EmptyPipedStdinFailsBeforeHTTP(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	err := SubmitBatch(BatchConfig{
+		Stdin:      strings.NewReader("\n"),
+		StdinIsTTY: func() bool { return false },
+		Server:     mustServerBase(t, srv.URL),
+		Output:     io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected empty stdin error")
+	}
+	if !strings.Contains(err.Error(), "stdin input is empty") {
+		t.Fatalf("error = %v, want empty stdin message", err)
+	}
+	if called {
+		t.Fatal("expected no HTTP call for empty stdin")
+	}
+}
+
+func TestSubmitBatch_PUTFromPipedStdinUsesSessionScopedPath(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(factoryapi.UpsertWorkRequestResponse{
+			RequestId: "batch-stdin-put",
+			TraceId:   "trace-stdin-put",
+			Works:     []factoryapi.UpsertWorkRequestSubmittedWork{{Name: "alpha", WorkTypeName: "task", WorkId: "work-1"}},
+		})
+	}))
+	defer srv.Close()
+
+	err := SubmitBatch(BatchConfig{
+		Stdin:      strings.NewReader(validBatchJSON("batch-stdin-put", "alpha")),
+		StdinIsTTY: func() bool { return false },
+		Server:     mustServerBase(t, srv.URL),
+		Output:     io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+	if gotPath != "/factory-sessions/~default/work-requests/batch-stdin-put" {
+		t.Fatalf("path = %q, want session-scoped work-requests path", gotPath)
+	}
+}
+
+func TestSubmitBatch_FilePathIgnoresStdinContent(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(factoryapi.UpsertWorkRequestResponse{
+			RequestId: "batch-file-wins",
+			TraceId:   "trace-file-wins",
+			Works:     []factoryapi.UpsertWorkRequestSubmittedWork{{Name: "alpha", WorkTypeName: "task", WorkId: "work-1"}},
+		})
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, validBatchJSON("batch-file-wins", "alpha"))
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Stdin:  strings.NewReader(validBatchJSON("batch-wrong", "wrong")),
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+	if !strings.Contains(gotBody, "batch-file-wins") {
+		t.Fatalf("request body = %q, want file batch requestId", gotBody)
+	}
+	if strings.Contains(gotBody, "batch-wrong") {
+		t.Fatalf("request body used stdin content:\n%s", gotBody)
+	}
+}
+
 func TestSubmitBatch_DryRunValidFileExitsWithoutHTTP(t *testing.T) {
 	path := writeBatchFile(t, `{
 		"requestId": "batch-dry-run-1",

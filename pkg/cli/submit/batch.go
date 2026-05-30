@@ -21,16 +21,18 @@ import (
 
 // BatchConfig holds parameters for the submit batch command.
 type BatchConfig struct {
-	FilePath  string
-	FileFlag  string
-	DryRun    bool
-	Server    string
-	SessionID string
-	JSON      bool
-	Verbose   bool
-	Debug     bool
-	Args      []string
-	Output    io.Writer
+	FilePath    string
+	FileFlag    string
+	DryRun      bool
+	Server      string
+	SessionID   string
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Args        []string
+	Stdin       io.Reader
+	StdinIsTTY  func() bool
+	Output      io.Writer
 	Diagnostics io.Writer
 }
 
@@ -40,30 +42,25 @@ func SubmitBatch(cfg BatchConfig) error {
 		cfg.Output = os.Stdout
 	}
 
-	path, err := resolveBatchFileInput(cfg)
+	resolved, err := resolveBatchInput(cfg)
 	if err != nil {
 		return err
 	}
 
-	data, err := os.ReadFile(path)
+	req, err := requests.ParseCanonicalWorkRequestJSON(resolved.data)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-
-	req, err := requests.ParseCanonicalWorkRequestJSON(data)
-	if err != nil {
-		return fmt.Errorf("parse %s: %w", path, err)
+		return fmt.Errorf("parse %s: %w", resolved.label, err)
 	}
 	if err := validateBatchRequest(req); err != nil {
 		return err
 	}
 
-	batchSource := batchSourceFile
+	batchSource := resolved.source
 	if cfg.DryRun {
 		return printBatchDryRunSummary(cfg, req, batchSource)
 	}
 
-	return upsertBatchHTTP(cfg, req, data, batchSource)
+	return upsertBatchHTTP(cfg, req, resolved.data, batchSource)
 }
 
 func validateBatchRequest(req interfaces.WorkRequest) error {
