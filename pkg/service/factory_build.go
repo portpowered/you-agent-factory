@@ -201,12 +201,17 @@ func replayFactoryModeOptions(
 	if err != nil {
 		return nil, nil, fmt.Errorf("build replay submission hook: %w", err)
 	}
+	replayWorkStateChangeHook, err := replay.NewWorkStateChangeHook(replayArtifact)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build replay work state change hook: %w", err)
+	}
 	replayDeliveryPlan, err := replay.NewCompletionDeliveryPlan(replayArtifact)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build replay completion delivery plan: %w", err)
 	}
 	return replaySideEffects, []factory.FactoryOption{
 		factory.WithSubmissionHook(replaySubmissionHook),
+		factory.WithSubmissionHook(replayWorkStateChangeHook),
 		factory.WithCompletionDeliveryPlanner(replayDeliveryPlan),
 	}, nil
 }

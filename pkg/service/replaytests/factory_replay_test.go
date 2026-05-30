@@ -229,6 +229,64 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 	}
 }
 
+func TestBuildFactoryService_ReplayModeReplaysOperatorWorkStateChange(t *testing.T) {
+	sourceDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, sourceDir, factoryfixtures.MinimalFactoryConfig())
+	writeWorkerAgentsMD(t, sourceDir, "worker-a")
+	writeWorkstationAgentsMD(t, sourceDir, "process")
+
+	loaded, err := config.LoadRuntimeConfig(sourceDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	workID := "work-replay-move"
+	traceID := "trace-replay-move"
+
+	artifactPath := filepath.Join(t.TempDir(), "operator-move-recording.json")
+	recordedAt := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	artifact := newReplayArtifactFromLoadedFactory(t, recordedAt, loaded)
+	artifact.Events = append(artifact.Events,
+		serviceReplayWorkRequestEvent(t, "recorded-submission-move", 1, "recorded-artifact", []factoryapi.Work{{
+			Name:         "move-me",
+			WorkId:       serviceStringPtr(workID),
+			WorkTypeName: serviceStringPtr("task"),
+			TraceId:      serviceStringPtr(traceID),
+		}}, nil),
+		serviceReplayWorkStateChangeEvent(t, workID, "init", "failed", "task:init", "task:failed", factoryapi.WorkStateChangeSourceCLI, 1),
+	)
+	if err := replay.Save(artifactPath, artifact); err != nil {
+		t.Fatalf("Save replay artifact: %v", err)
+	}
+
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+		Dir:               t.TempDir(),
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		ReplayPath:        artifactPath,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService replay: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := svc.Run(ctx); err != nil {
+		t.Fatalf("Run replay: %v", err)
+	}
+
+	state, err := svc.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if len(state.Marking.TokensInPlace("task:failed")) != 1 {
+		t.Fatalf("expected replay token in task:failed after operator move, marking = %#v", state.Marking.Tokens)
+	}
+	if len(state.Marking.TokensInPlace("task:init")) != 0 {
+		t.Fatalf("expected no token in task:init after operator move, marking = %#v", state.Marking.Tokens)
+	}
+}
+
 func TestBuildFactoryService_ReplayModeUsesRecordedCommandRunnerSideEffects(t *testing.T) {
 	sourceDir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, sourceDir, factoryfixtures.MinimalFactoryConfig())
@@ -458,6 +516,43 @@ func serviceReplayDispatchCreatedEvent(t *testing.T, dispatch interfaces.WorkDis
 			RequestId:  serviceStringPtr(dispatch.Execution.RequestID),
 			TraceIds:   serviceStringSlicePtr([]string{dispatch.Execution.TraceID}),
 			WorkIds:    serviceStringSlicePtr(dispatch.Execution.WorkIDs),
+		},
+		Payload: union,
+	}
+}
+
+func serviceReplayWorkStateChangeEvent(
+	t *testing.T,
+	workID string,
+	fromState string,
+	toState string,
+	fromPlaceID string,
+	toPlaceID string,
+	source factoryapi.WorkStateChangeSource,
+	tick int,
+) factoryapi.FactoryEvent {
+	t.Helper()
+	payload := factoryapi.WorkStateChangeEventPayload{
+		WorkId:       workID,
+		WorkTypeName: "task",
+		FromState:    fromState,
+		ToState:      toState,
+		FromPlaceId:  fromPlaceID,
+		ToPlaceId:    toPlaceID,
+		Source:       source,
+	}
+	var union factoryapi.FactoryEvent_Payload
+	if err := union.FromWorkStateChangeEventPayload(payload); err != nil {
+		t.Fatalf("encode work state change event: %v", err)
+	}
+	return factoryapi.FactoryEvent{
+		Id:            fmt.Sprintf("factory-event/work-state-change/%s/%d", workID, tick),
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          factoryapi.FactoryEventTypeWorkStateChange,
+		Context: factoryapi.FactoryEventContext{
+			EventTime: time.Date(2026, time.April, 10, 12, 0, tick, 0, time.UTC),
+			Tick:      tick,
+			WorkIds:   serviceStringSlicePtr([]string{workID}),
 		},
 		Payload: union,
 	}

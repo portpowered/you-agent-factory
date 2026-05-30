@@ -697,8 +697,31 @@ func (e *FactoryEngine) invokeSubmissionHooks(ctx context.Context) (int, bool, e
 			totalSubmissions += count
 			snapshot = e.runtimeState.Snapshot()
 		}
+		if len(result.MarkingMutations) > 0 {
+			if err := e.applyHookMarkingMutations(result.MarkingMutations); err != nil {
+				return 0, false, fmt.Errorf("submission hook %q marking mutations: %w", hookName, err)
+			}
+			snapshot = e.runtimeState.Snapshot()
+		}
 	}
 	return totalSubmissions, keepAlive, nil
+}
+
+func (e *FactoryEngine) applyHookMarkingMutations(mutations []interfaces.MarkingMutation) error {
+	for _, mutation := range mutations {
+		if mutation.Type != interfaces.MutationMove {
+			continue
+		}
+		token, ok := e.runtimeState.Marking.Tokens[mutation.TokenID]
+		if !ok || token == nil {
+			continue
+		}
+		fromState := stateValueForPlace(e.state, mutation.FromPlace)
+		if leavingFailedPlace(e.state, token.Color.WorkTypeID, fromState) {
+			interfaces.ClearGuardBlockingFields(&token.History)
+		}
+	}
+	return applyMutations(e.runtimeState.Marking, e.state.Places, mutations)
 }
 
 func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []interfaces.GeneratedSubmissionBatch, defaultSource string) (int, error) {

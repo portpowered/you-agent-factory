@@ -471,6 +471,58 @@ func replaySubmissionHookContext(tick int) interfaces.SubmissionHookContext[inte
 	}
 }
 
+func replaySubmissionHookContextWithWorkToken(tick int, workID, tokenID, placeID string) interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]] {
+	ctx := replaySubmissionHookContext(tick)
+	ctx.Snapshot.Marking.Tokens = map[string]*interfaces.Token{
+		tokenID: {
+			ID:      tokenID,
+			PlaceID: placeID,
+			Color: interfaces.TokenColor{
+				WorkID:     workID,
+				WorkTypeID: "task",
+				DataType:   interfaces.DataTypeWork,
+			},
+		},
+	}
+	return ctx
+}
+
+func TestWorkStateChangeHook_ReplaysOperatorMoveAtRecordedTick(t *testing.T) {
+	hook, err := NewWorkStateChangeHook(testReplayArtifact(
+		t,
+		replayWorkStateChangeEvent(t, "work-recover", "failed", "init", "task:failed", "task:init", factoryapi.WorkStateChangeSourceAPI, 4),
+	))
+	if err != nil {
+		t.Fatalf("NewWorkStateChangeHook: %v", err)
+	}
+
+	before, err := hook.OnTick(context.Background(), replaySubmissionHookContextWithWorkToken(3, "work-recover", "token-work-recover", "task:failed"))
+	if err != nil {
+		t.Fatalf("OnTick before move tick: %v", err)
+	}
+	if len(before.MarkingMutations) != 0 {
+		t.Fatalf("marking mutations before due tick = %#v, want none", before.MarkingMutations)
+	}
+	if !before.KeepAlive {
+		t.Fatal("expected hook to stay alive before due operator move tick")
+	}
+
+	due, err := hook.OnTick(context.Background(), replaySubmissionHookContextWithWorkToken(4, "work-recover", "token-work-recover", "task:failed"))
+	if err != nil {
+		t.Fatalf("OnTick at move tick: %v", err)
+	}
+	if len(due.MarkingMutations) != 1 {
+		t.Fatalf("marking mutations = %#v, want one operator move", due.MarkingMutations)
+	}
+	mutation := due.MarkingMutations[0]
+	if mutation.Type != interfaces.MutationMove || mutation.TokenID != "token-work-recover" {
+		t.Fatalf("mutation = %#v, want MOVE for token-work-recover", mutation)
+	}
+	if mutation.FromPlace != "task:failed" || mutation.ToPlace != "task:init" {
+		t.Fatalf("mutation places = %q -> %q, want task:failed -> task:init", mutation.FromPlace, mutation.ToPlace)
+	}
+}
+
 func replayTestDispatch(dispatchID, transitionID string, tick int, traceID, workID, tokenID string) interfaces.WorkDispatch {
 	return interfaces.WorkDispatch{
 		DispatchID:      dispatchID,

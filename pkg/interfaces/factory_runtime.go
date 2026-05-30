@@ -245,6 +245,7 @@ type SubmissionHookContext[TSnapshot any] struct {
 type SubmissionHookResult struct {
 	GeneratedBatches  []GeneratedSubmissionBatch
 	Results           []WorkResult
+	MarkingMutations  []MarkingMutation
 	ContinuationState map[string]string
 	KeepAlive         bool
 }
