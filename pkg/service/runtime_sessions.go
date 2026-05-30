@@ -12,6 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -185,69 +187,24 @@ func (fs *FactoryService) GetCurrentFactoryForSession(_ context.Context, session
 		return factoryapi.Factory{}, err
 	}
 	rootDir := factorysessions.SessionFactoryRootDir(fs.factoryRootDir, session)
-	serialized, err := fs.serializeNamedFactory(factorysessions.FactoryName(rootDir, runtimeCfg), runtimeCfg, true)
+	factoryName := factorysessions.FactoryName(rootDir, runtimeCfg)
+	versionRootDir := rootDir
+	if persistRoot := sessionFactoryPersistRoot(fs.factoryRootDir, session); persistRoot != "" {
+		if pointerName, err := configpersist.ReadCurrentFactoryPointer(persistRoot); err == nil {
+			pointerFactoryName := factoryapi.FactoryName(pointerName)
+			if session.IsDefault || pointerFactoryName == factoryName {
+				factoryName = pointerFactoryName
+			}
+		}
+		if sameFactoryDir(persistRoot, rootDir) {
+			versionRootDir = persistRoot
+		}
+	}
+	serialized, err := fs.serializeNamedFactory(factoryName, runtimeCfg, true)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	return fs.withCurrentFactoryVersion(rootDir, serialized.Name, serialized)
-}
-
-func (fs *FactoryService) SaveCurrentFactoryForSession(
-	ctx context.Context,
-	sessionID string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	if fs == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
-	}
-
-	session, err := fs.requireSession(sessionID)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	current, err := fs.GetCurrentFactoryForSession(ctx, sessionID)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	sessionRootDir, sanitized, err := fs.prepareEditableFactoryDefinitionSave(factorysessions.SessionFactoryRootDir(fs.factoryRootDir, session), current, request)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	if current.Name == apisurface.DefaultCurrentFactoryName {
-		return fs.saveDefaultCurrentFactoryForSession(ctx, sessionID, session, sessionRootDir, current, request, sanitized)
-	}
-
-	fs.activationMu.Lock()
-	defer fs.activationMu.Unlock()
-
-	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
-		return factoryapi.Factory{}, err
-	}
-	if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, current.Name); err != nil {
-		return factoryapi.Factory{}, err
-	}
-	nextVersion := nextEditableFactoryVersion(current.Version, factory.EnsureClock(fs.clock).Now().UTC())
-	payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-
-	factoryDir, err := fs.replaceEditableFactoryDefinition(sessionRootDir, request.Name, payload)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	replacement, err := fs.buildSessionEditableFactoryReplacement(ctx, sessionRootDir, factoryDir, sessionID, request.Name)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
-		return factoryapi.Factory{}, err
-	}
-	if err := fs.replaceSessionRuntime(ctx, session, string(request.Name), replacement); err != nil {
-		return factoryapi.Factory{}, err
-	}
-
-	return fs.GetCurrentFactoryForSession(ctx, sessionID)
+	return fs.withCurrentFactoryVersion(versionRootDir, serialized.Name, serialized)
 }
 
 func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
@@ -635,7 +592,7 @@ func (fs *FactoryService) probeFactorySessionTarget(
 	if fs == nil {
 		return factorysessions.Target{}, false
 	}
-	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
+	loaded, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
 	if err != nil {
 		return factorysessions.Target{}, false
 	}

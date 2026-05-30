@@ -553,32 +553,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories:
-    post:
-      tags:
-        - Factory
-      operationId: createFactory
-      summary: Create factory
-      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory-sessions/~default/factory` readback only and cannot be activated as a customer-named factory.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Factory'
-      responses:
-        '201':
-          description: Factory was stored and activated.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Factory'
-        '400':
-          $ref: '#/components/responses/CreateFactoryBadRequest'
-        '409':
-          $ref: '#/components/responses/CreateFactoryConflict'
-        '500':
-          $ref: '#/components/responses/InternalError'
   /factory-sessions:
     get:
       tags:
@@ -692,8 +666,17 @@ paths:
       tags:
         - Factory
       operationId: saveCurrentFactoryBySessionId
-      summary: Save current factory for one session
-      description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      summary: Save factory for one session
+      description: >-
+        Submits one complete factory definition to the explicitly selected live
+        session using an explicit save mode. Omitted `mode` defaults to
+        `REPLACE_CURRENT`, which replaces the factory already current in the
+        session. `UPSERT_NAMED_AND_ACTIVATE` persists under the session factory
+        root using `factory.name`, updates the session current-factory pointer,
+        and activates that runtime when idle. Clients should echo the
+        server-managed `factory.version` field from the latest current-factory
+        read for replacement saves. Unknown session identifiers return
+        NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -701,7 +684,41 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Factory'
+              $ref: '#/components/schemas/SaveFactoryForSessionRequest'
+            examples:
+              replaceCurrent:
+                summary: Replace the factory already current in the session.
+                value:
+                  mode: REPLACE_CURRENT
+                  factory:
+                    name: alpha
+                    version:
+                      logical: '2'
+                      physical: '2026-05-30T12:00:00.000000000Z'
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers: []
+                    workstations: []
+              upsertNamedAndActivate:
+                summary: Create or replace a named factory and activate it in the session.
+                value:
+                  mode: UPSERT_NAMED_AND_ACTIVATE
+                  factory:
+                    name: beta
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers: []
+                    workstations: []
       responses:
         '200':
           description: Saved current factory definition and new version metadata for the targeted session.
@@ -1067,6 +1084,10 @@ components:
       $ref: './components/schemas/events/WallClock.yaml'
 
     # ==== Raw data schemas for a factor =======
+    FactorySaveMode:
+      $ref: './components/schemas/api/FactorySaveMode.yaml'
+    SaveFactoryForSessionRequest:
+      $ref: './components/schemas/api/SaveFactoryForSessionRequest.yaml'
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
     FactoryGuard:

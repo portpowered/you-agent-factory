@@ -232,7 +232,9 @@ func assertGeneratedWorkRequestJSON(t *testing.T, workRequest factoryapi.WorkReq
 func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.Factory) {
 	t.Helper()
 
-	createRequest := factoryapi.CreateFactoryJSONRequestBody(namedFactory)
+	saveRequest := factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{
+		Factory: namedFactory,
+	}
 	current := namedFactory
 	badRequest := factoryapi.CreateFactoryBadRequest{
 		Code:    factoryapi.INVALIDFACTORYNAME,
@@ -245,8 +247,8 @@ func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.
 		Message: "factory already exists",
 	}
 
-	if createRequest.Name == "" || createRequest.WorkTypes == nil || createRequest.Workers == nil || createRequest.Workstations == nil {
-		t.Fatal("generated named-factory request and response types should be usable")
+	if saveRequest.Factory.Name == "" || saveRequest.Factory.WorkTypes == nil || saveRequest.Factory.Workers == nil || saveRequest.Factory.Workstations == nil {
+		t.Fatal("generated session factory save request and response types should be usable")
 	}
 	if current.Name == "" || current.Workstations == nil {
 		t.Fatal("generated current named-factory response type should be usable")

@@ -21,6 +21,7 @@
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
-    "src/**/*.stories.tsx"
+    "src/**/*.stories.tsx",
+    "src/features/bento/components/dashboard-bento-story-shared.tsx"
   ]
 }

@@ -1,0 +1,14 @@
+type: string
+description: >-
+  Explicit save mode for session-scoped factory submission. Omitted mode on
+  PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+default: REPLACE_CURRENT
+x-enum-varnames:
+  - FactorySaveModeReplaceCurrent
+  - FactorySaveModeUpsertNamedAndActivate
+enum:
+  - REPLACE_CURRENT
+  - UPSERT_NAMED_AND_ACTIVATE
+x-enum-descriptions:
+  - Replace the factory already current in the selected live session.
+  - Create or replace a named factory under the session root and activate it in that session.

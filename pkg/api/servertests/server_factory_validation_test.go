@@ -15,6 +15,7 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
 func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndAPIPaths(t *testing.T) {
@@ -143,7 +144,7 @@ func TestValidateFactory_PreservesCanonicalStructuralCodesFromCrossPathFixture(t
 		factoryvalidation.CodeWorkStateMissingTerminalPath,
 	}
 	for _, code := range wantCodes {
-		assertHasValidationTargetCode(t, result.Targets, code)
+		validationassert.HasTargetCode(t, result.Targets, code)
 	}
 }
 
@@ -191,13 +192,13 @@ func TestSaveCurrentFactory_ReturnsMultipleTopologyValidationTargets(t *testing.
 		},
 	}
 	srv := newAPITestServer(&testutil.MockFactory{
-		SaveCurrentFactoryErr: apisurface.NewTopologyValidationError(
+		SaveFactoryForSessionErr: apisurface.NewTopologyValidationError(
 			"Factory topology contains invalid graph references.",
 			targets,
 		),
 	})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta"}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(saveFactoryForSessionRequestBody(`{"name":"beta"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -216,9 +217,9 @@ func TestSaveCurrentFactory_ReturnsMultipleTopologyValidationTargets(t *testing.
 	if response.Targets == nil || len(*response.Targets) < 3 {
 		t.Fatalf("targets = %#v, want multiple blocking validation targets", response.Targets)
 	}
-	assertHasValidationTargetCode(t, *response.Targets, factoryvalidation.CodeDuplicateIdentifier)
-	assertHasValidationTargetCode(t, *response.Targets, factoryvalidation.CodeDanglingWorkerReference)
-	assertHasValidationTargetCode(t, *response.Targets, factoryvalidation.CodeDanglingPlaceReference)
+	validationassert.HasTargetCode(t, *response.Targets, factoryvalidation.CodeDuplicateIdentifier)
+	validationassert.HasTargetCode(t, *response.Targets, factoryvalidation.CodeDanglingWorkerReference)
+	validationassert.HasTargetCode(t, *response.Targets, factoryvalidation.CodeDanglingPlaceReference)
 	assertBlockingValidationTarget(t, (*response.Targets)[0])
 }
 
@@ -234,13 +235,13 @@ func TestCreateFactory_ReturnsTopologyValidationTargets(t *testing.T) {
 		},
 	}
 	srv := newAPITestServer(&testutil.MockFactory{
-		CreateNamedFactoryErr: apisurface.NewTopologyValidationError(
+		SaveFactoryForSessionErr: apisurface.NewTopologyValidationError(
 			"Factory topology contains invalid graph references.",
 			[]factoryapi.FactoryValidationTarget{target},
 		),
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(upsertNamedFactoryRequestBody(validNamedFactoryBody("beta", "beta-task"))))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -270,9 +271,9 @@ func TestCreateFactory_ReturnsTopologyValidationTargets(t *testing.T) {
 }
 
 func TestCreateFactory_RejectsInvalidFactoryPayloadWithTargets(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{CreateNamedFactoryErr: apisurface.ErrInvalidNamedFactory})
+	srv := newAPITestServer(&testutil.MockFactory{SaveFactoryForSessionErr: apisurface.ErrInvalidNamedFactory})
 	body := `{"name":"beta","workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"missing-worker","inputs":[{"workType":"beta-task","state":"init"}],"outputs":[{"workType":"beta-task","state":"done"}]}]}`
-	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(upsertNamedFactoryRequestBody(body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -306,13 +307,13 @@ func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 		},
 	}
 	srv := newAPITestServer(&testutil.MockFactory{
-		SaveCurrentFactoryErr: apisurface.NewTopologyValidationError(
+		SaveFactoryForSessionErr: apisurface.NewTopologyValidationError(
 			"Factory topology contains invalid graph references.",
 			[]factoryapi.FactoryValidationTarget{target},
 		),
 	})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta"}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(saveFactoryForSessionRequestBody(`{"name":"beta"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -333,7 +334,7 @@ func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	}
 	got := (*response.Targets)[0]
 	assertBlockingValidationTarget(t, got)
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		[]factoryapi.FactoryValidationTarget{got},
 		factoryvalidation.CodeWorkstationMissingFailureRoute,
@@ -356,13 +357,13 @@ func TestCreateFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 		},
 	}
 	srv := newAPITestServer(&testutil.MockFactory{
-		CreateNamedFactoryErr: apisurface.NewTopologyValidationError(
+		SaveFactoryForSessionErr: apisurface.NewTopologyValidationError(
 			"Factory topology contains invalid graph references.",
 			[]factoryapi.FactoryValidationTarget{target},
 		),
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(upsertNamedFactoryRequestBody(validNamedFactoryBody("beta", "beta-task"))))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -383,7 +384,7 @@ func TestCreateFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	}
 	got := (*response.Targets)[0]
 	assertBlockingValidationTarget(t, got)
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		[]factoryapi.FactoryValidationTarget{got},
 		factoryvalidation.CodeWorkstationMissingFailureRoute,
@@ -442,40 +443,16 @@ func decodeJSONResponse[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 	return out
 }
 
-func assertHasValidationTarget(
-	t *testing.T,
-	targets []factoryapi.FactoryValidationTarget,
-	code string,
-	subjectType factoryapi.FactoryValidationSubjectType,
-	subjectID string,
-	location factoryapi.FactoryValidationSubjectLocation,
-	want string,
-) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code != code {
-			continue
-		}
-		if target.Subject.Type != subjectType || target.Subject.Id != subjectID || target.Subject.Location != location {
-			continue
-		}
-		return
-	}
-	t.Fatalf("validation targets = %#v, want %s", targets, want)
-}
-
-func assertHasValidationTargetCode(t *testing.T, targets []factoryapi.FactoryValidationTarget, code string) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code == code {
-			return
-		}
-	}
-	t.Fatalf("targets = %#v, want code %q", targets, code)
-}
-
 func validNamedFactoryBody(name, workType string) string {
 	return fmt.Sprintf(`{"name":%q,%s`, name, strings.TrimPrefix(namedFactoryPayloadJSON(name, workType), "{"))
+}
+
+func saveFactoryForSessionRequestBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
+}
+
+func upsertNamedFactoryRequestBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"mode":"UPSERT_NAMED_AND_ACTIVATE","factory":%s}`, factoryJSON)
 }
 
 func namedFactoryPayloadJSON(project, workType string) string {

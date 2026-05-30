@@ -32,12 +32,17 @@ function ImportPreviewStory() {
     useState<DashboardImportPreviewDialogProps["importPreviewState"]>(
       createReadyImportPreviewState(),
     );
+  const [importSaveChoice, setImportSaveChoice] =
+    useState<DashboardImportPreviewDialogProps["importSaveChoice"]>("REPLACE_CURRENT");
 
   return (
     <>
       <DashboardImportPreviewDialog
         activationState={{ status: "idle" }}
+        createTargetFactoryName="Dropped Factory"
+        currentFactoryName="Current Session Factory"
         importPreviewState={importPreviewState}
+        importSaveChoice={importSaveChoice}
         onCancel={() => {
           setActivationStatus("Import preview dismissed.");
           setImportPreviewState({ status: "idle" });
@@ -46,6 +51,7 @@ function ImportPreviewStory() {
           setActivationStatus("Activated factory: Dropped Factory");
           setImportPreviewState({ status: "idle" });
         }}
+        onImportSaveChoiceChange={setImportSaveChoice}
       />
       <p>{activationStatus}</p>
     </>
@@ -56,10 +62,14 @@ function LocalizedImportPreviewStory({ locale }: { locale: string }) {
   return (
     <DashboardImportPreviewDialog
       activationState={{ status: "idle" }}
+      createTargetFactoryName="Dropped Factory"
+      currentFactoryName="Current Session Factory"
       importPreviewState={createReadyImportPreviewState()}
+      importSaveChoice="REPLACE_CURRENT"
       locale={locale}
       onCancel={() => {}}
       onConfirm={async () => {}}
+      onImportSaveChoiceChange={() => {}}
     />
   );
 }

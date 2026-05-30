@@ -33,6 +33,7 @@ import {
   type WorldState,
 } from "../features/timeline/state/factoryTimelineStore";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
+import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
 
 export {
   renderWithDashboardSessionTest,
@@ -103,6 +104,7 @@ interface RenderAppOptions {
   browserLanguages?: readonly string[] | null;
   initialLocale?: string | null;
   locationSearch?: string | null;
+  sessionID?: string | null;
   snapshot: DashboardSnapshot;
   timelineEvents?: FactoryEvent[];
   timelineSnapshots?: DashboardSnapshot[];
@@ -285,6 +287,7 @@ export function renderApp({
   browserLanguages,
   initialLocale,
   locationSearch,
+  sessionID,
   snapshot,
   timelineEvents,
   timelineSnapshots,
@@ -337,12 +340,14 @@ export function renderApp({
 
   const result = render(
     <QueryClientProvider client={queryClient}>
-      <App
-        browserLanguage={browserLanguage}
-        browserLanguages={browserLanguages}
-        initialLocale={initialLocale}
-        locationSearch={locationSearch}
-      />
+      <DashboardSessionTestProvider sessionID={sessionID}>
+        <App
+          browserLanguage={browserLanguage}
+          browserLanguages={browserLanguages}
+          initialLocale={initialLocale}
+          locationSearch={locationSearch}
+        />
+      </DashboardSessionTestProvider>
     </QueryClientProvider>,
   );
 
