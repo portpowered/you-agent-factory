@@ -124,22 +124,43 @@ func TestConfigValidator_PreservesOperationalAndStructuralValidationCoverage(t *
 				Type: interfaces.StateTypeInitial,
 			}},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "w1"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
-			Name:           "classifier",
-			Type:           interfaces.WorkstationTypeClassify,
-			Kind:           "bogus-kind",
-			WorkerTypeName: "missing-worker",
-			Inputs: []interfaces.IOConfig{{
-				WorkTypeName: "task",
-				StateName:    "init",
-				Guard:        &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete},
-			}},
-			Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "missing-state"}},
-			Guards: []interfaces.GuardConfig{{
-				Type: interfaces.GuardTypeVisitCount,
-			}},
-		}},
+		Workers: []interfaces.WorkerConfig{
+			{Name: "w1"},
+			{Name: "planner", Type: interfaces.WorkerTypeModel},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name:           "classifier",
+				Type:           interfaces.WorkstationTypeClassify,
+				Kind:           "bogus-kind",
+				WorkerTypeName: "missing-worker",
+				Inputs: []interfaces.IOConfig{{
+					WorkTypeName: "task",
+					StateName:    "init",
+					Guard:        &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete},
+				}},
+				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "missing-state"}},
+				Guards: []interfaces.GuardConfig{{
+					Type: interfaces.GuardTypeVisitCount,
+				}},
+			},
+			{
+				Name:    "daily-refresh",
+				Kind:    interfaces.WorkstationKindCron,
+				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			},
+			{
+				Name:           "linear-poller",
+				Kind:           interfaces.WorkstationKindPoller,
+				WorkerTypeName: "planner",
+			},
+			{
+				Name:           "repeater-loop",
+				Kind:           interfaces.WorkstationKindRepeater,
+				WorkerTypeName: "w1",
+				Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			},
+		},
 		Resources: []interfaces.ResourceConfig{{
 			Name: "quota",
 			Type: interfaces.ResourceTypeProviderQuota,
@@ -160,10 +181,13 @@ func TestConfigValidator_PreservesOperationalAndStructuralValidationCoverage(t *
 	assertFindingExists(t, result.Findings, "input-type-reserved")
 	assertFindingExists(t, result.Findings, factoryvalidation.CodeDanglingPlaceReference)
 	assertFindingExists(t, result.Findings, factoryvalidation.CodeDanglingWorkerReference)
+	assertFindingExists(t, result.Findings, factoryvalidation.CodeWorkstationMissingRejectionRoute)
 	assertFindingExists(t, result.Findings, "workstation-kind")
 	assertFindingExists(t, result.Findings, "classifier-workstation-outputs")
 	assertFindingExists(t, result.Findings, "guard-visit-count-workstation")
 	assertFindingExists(t, result.Findings, "per-input-guard-parent-input")
+	assertFindingExists(t, result.Findings, "cron-config")
+	assertFindingExists(t, result.Findings, "poller-worker-type")
 	assertFindingExists(t, result.Findings, "resource-provider-quota-model")
 	assertFindingExists(t, result.Findings, "required-tool-name")
 	assertFindingExists(t, result.Findings, "bundled-file-target-path")
