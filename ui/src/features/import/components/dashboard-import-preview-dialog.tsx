@@ -38,7 +38,6 @@ const IMPORT_DIALOG_LABEL_CLASS = cn(
 );
 const IMPORT_ERROR_PANEL_CLASS =
   "border-af-danger-border bg-af-danger-surface text-af-danger-text";
-const IMPORT_DIALOG_MODE_OPTIONS_CLASS = "grid gap-3";
 const IMPORT_DIALOG_MODE_OPTION_CLASS =
   "grid w-full gap-2 rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-left";
 const IMPORT_DIALOG_MODE_OPTION_SELECTED_CLASS =
@@ -214,7 +213,7 @@ export function FactoryImportPreviewDialog({
             </div>
           </dl>
 
-          <fieldset className={IMPORT_DIALOG_MODE_OPTIONS_CLASS} disabled={isSubmitting}>
+          <fieldset className="grid gap-3" disabled={isSubmitting}>
             <legend className={IMPORT_DIALOG_LABEL_CLASS}>{messages.importSaveChoiceLegend}</legend>
             <SelectableCardButton
               className={cn(
