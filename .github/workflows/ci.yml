@@ -217,6 +217,10 @@ jobs:
         timeout-minutes: 10
         run: make api-smoke
 
+      - name: Run factory composition Wire verification
+        timeout-minutes: 10
+        run: make wire-smoke
+
   ui-coverage:
     name: UI Coverage
     runs-on: ubuntu-latest
