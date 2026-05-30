@@ -8,7 +8,8 @@ work inputs.
 
 | Surface | Role in the workflow | Current contract |
 | --- | --- | --- |
-| `factory/README.md` | Checked-in workflow overview | Describes the repository-local workflow and canonical inbox directories under `factory/inputs/`. |
+| `factory/docs/overview.md` | Checked-in factory instance overview | Portable per-factory walkthrough: pipeline from live `factory.json`, work types, inboxes, read-before-submit guidance, and related `you docs` topics; collected into export manifests under `factory/docs/**` via `ApplySupportedPortableBundledFiles`. |
+| `factory/README.md` | Checked-in factory pointer | Short pointer to `factory/docs/overview.md` and `you docs agents`; instance walkthrough lives in overview, not here. |
 | `factory/internal/{asks,view,progress,meta}.md` | Canonical repository-maintainer control surface | The checked-in maintainer workflow reads and updates these four files as one control surface; `asks.md` owns customer asks, `view.md` owns the current repository view, `progress.md` owns maintainer progress, and `meta.md` owns theory of mind. |
 | `docs/internal/development/process-review-loop-contract.md` | Checked-in process/review contract note | Defines the canonical meaning of `<CONTINUE>`, `<COMPLETE>`, and true rejection for the repository-maintainer workflow, records that the old rejection-overload mismatch is historical rather than current, and names the runtime, prompt, config, and replay surfaces that must stay aligned. |
 | `docs/internal/development/root-factory-artifact-contract-inventory.md` | Checked-in artifact inventory | Documents which root-level factory artifacts are checked in, generated, or obsolete. |
