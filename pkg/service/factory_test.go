@@ -1241,6 +1241,12 @@ func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(
 	if svc.currentRuntimeConfig() == nil {
 		t.Fatal("expected runtime config after portable load")
 	}
+	assertPortableBundledReplacementLogged(t, observedLogs, sourceDir)
+}
+
+func assertPortableBundledReplacementLogged(t *testing.T, observedLogs *observer.ObservedLogs, sourceDir string) {
+	t.Helper()
+
 	warnings := observedLogs.FilterMessage("runtime config load replaced portable bundled files").All()
 	if len(warnings) != 1 {
 		t.Fatalf("replacement warning count = %d, want 1", len(warnings))
