@@ -16,6 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui";
+import { SelectableCardButton } from "../../../components/ui/selectable-card-button";
+import type { FactoryImportSaveChoice } from "../../../api/named-factory";
 import { cn } from "../../../lib/cn";
 import type { FactoryPngImportValue } from "../lib/factory-png-import";
 import {
@@ -36,23 +38,37 @@ const IMPORT_DIALOG_LABEL_CLASS = cn(
 );
 const IMPORT_ERROR_PANEL_CLASS =
   "border-af-danger-border bg-af-danger-surface text-af-danger-text";
+const IMPORT_DIALOG_MODE_OPTIONS_CLASS = "grid gap-3";
+const IMPORT_DIALOG_MODE_OPTION_CLASS =
+  "grid w-full gap-2 rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-left";
+const IMPORT_DIALOG_MODE_OPTION_SELECTED_CLASS =
+  "border-af-accent bg-af-surface";
 
 type ReadyFactoryImportPreviewState = Extract<FactoryImportPreviewState, { status: "ready" }>;
 
 export interface FactoryImportPreviewDialogProps {
   activationState: FactoryImportActivationState;
+  createTargetFactoryName?: string | null;
+  currentFactoryName?: string | null;
+  importSaveChoice: FactoryImportSaveChoice;
   locale?: string;
   onCancel: () => void;
   onConfirm: () => void;
+  onImportSaveChoiceChange: (choice: FactoryImportSaveChoice) => void;
   previewState: ReadyFactoryImportPreviewState;
 }
 
 export interface DashboardImportPreviewDialogProps {
   activationState: FactoryImportActivationState;
+  createTargetFactoryName?: string | null;
+  currentFactoryName?: string | null;
   importPreviewState: FactoryImportPreviewState;
+  importSaveChoice: FactoryImportSaveChoice;
   locale?: string;
   onCancel: () => void;
-  onConfirm: (value: FactoryPngImportValue) => void;
+  onConfirm: (value: FactoryPngImportValue, choice: FactoryImportSaveChoice) => void;
+  onImportSaveChoiceChange: (choice: FactoryImportSaveChoice) => void;
+  sessionID?: string | null;
 }
 
 function renderImportPreviewDescription(template: string, factoryName: string) {
@@ -122,13 +138,19 @@ function FactoryImportActivationErrorPanel({
 
 export function FactoryImportPreviewDialog({
   activationState,
+  createTargetFactoryName,
+  currentFactoryName,
+  importSaveChoice,
   locale,
   onCancel,
   onConfirm,
+  onImportSaveChoiceChange,
   previewState,
 }: FactoryImportPreviewDialogProps) {
   const isSubmitting = activationState.status === "submitting";
   const messages = getImportPreviewDialogMessages(locale);
+  const resolvedCurrentFactoryName =
+    currentFactoryName?.trim() || previewState.value.factory.name;
   const handleOpenChange = (open: boolean) => {
     if (!open && !isSubmitting) {
       onCancel();
@@ -192,6 +214,57 @@ export function FactoryImportPreviewDialog({
             </div>
           </dl>
 
+          <fieldset className={IMPORT_DIALOG_MODE_OPTIONS_CLASS} disabled={isSubmitting}>
+            <legend className={IMPORT_DIALOG_LABEL_CLASS}>{messages.importSaveChoiceLegend}</legend>
+            <SelectableCardButton
+              className={cn(
+                IMPORT_DIALOG_MODE_OPTION_CLASS,
+                importSaveChoice === "REPLACE_CURRENT" &&
+                  IMPORT_DIALOG_MODE_OPTION_SELECTED_CLASS,
+              )}
+              disabled={isSubmitting}
+              onClick={() => {
+                onImportSaveChoiceChange("REPLACE_CURRENT");
+              }}
+              selected={importSaveChoice === "REPLACE_CURRENT"}
+              tone="outline"
+              type="button"
+            >
+              <span className="font-semibold text-af-text">
+                {messages.replaceCurrentFactoryLabel}
+              </span>
+              <span className={IMPORT_DIALOG_HINT_CLASS}>
+                {messages.replaceCurrentFactoryDescription(resolvedCurrentFactoryName)}
+              </span>
+            </SelectableCardButton>
+            <SelectableCardButton
+              className={cn(
+                IMPORT_DIALOG_MODE_OPTION_CLASS,
+                importSaveChoice === "CREATE_NEW_NAMED" &&
+                  IMPORT_DIALOG_MODE_OPTION_SELECTED_CLASS,
+              )}
+              disabled={isSubmitting}
+              onClick={() => {
+                onImportSaveChoiceChange("CREATE_NEW_NAMED");
+              }}
+              selected={importSaveChoice === "CREATE_NEW_NAMED"}
+              tone="outline"
+              type="button"
+            >
+              <span className="font-semibold text-af-text">
+                {messages.createNewNamedFactoryLabel}
+              </span>
+              <span className={IMPORT_DIALOG_HINT_CLASS}>
+                {messages.createNewNamedFactoryDescription}
+              </span>
+              {createTargetFactoryName ? (
+                <span className="m-0 text-sm font-semibold text-af-text">
+                  {messages.createNewNamedFactoryResolvedNameLabel}: {createTargetFactoryName}
+                </span>
+              ) : null}
+            </SelectableCardButton>
+          </fieldset>
+
           <p className={IMPORT_DIALOG_HINT_CLASS}>{messages.hint}</p>
 
           {activationState.status === "error" ? (
@@ -219,10 +292,14 @@ export function FactoryImportPreviewDialog({
 
 export function DashboardImportPreviewDialog({
   activationState,
+  createTargetFactoryName,
+  currentFactoryName,
   importPreviewState,
+  importSaveChoice,
   locale,
   onCancel,
   onConfirm,
+  onImportSaveChoiceChange,
 }: DashboardImportPreviewDialogProps) {
   const readyImportPreviewState =
     importPreviewState.status === "ready" ? importPreviewState : null;
@@ -234,11 +311,15 @@ export function DashboardImportPreviewDialog({
   return (
     <FactoryImportPreviewDialog
       activationState={activationState}
+      createTargetFactoryName={createTargetFactoryName}
+      currentFactoryName={currentFactoryName}
+      importSaveChoice={importSaveChoice}
       locale={locale}
       onCancel={onCancel}
       onConfirm={() => {
-        onConfirm(readyImportPreviewState.value);
+        onConfirm(readyImportPreviewState.value, importSaveChoice);
       }}
+      onImportSaveChoiceChange={onImportSaveChoiceChange}
       previewState={readyImportPreviewState}
     />
   );

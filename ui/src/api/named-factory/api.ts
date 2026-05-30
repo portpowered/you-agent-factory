@@ -4,9 +4,19 @@ import {
   CurrentFactoryDefinitionError,
   getCurrentFactoryDocument,
   saveCurrentFactoryDocument,
+  saveFactoryForSessionDocument,
   type CurrentFactoryDocument,
 } from "../current-factory-definition";
+import {
+  listFactorySessions,
+  openFactorySession,
+} from "../factory-sessions";
 import { currentFactorySessionPath } from "../session-routing";
+import {
+  extractNamedFactoryNamesFromSessionTargets,
+  resolveImportCreateFactoryName,
+  type FactoryImportSaveChoice,
+} from "./import-save-mode";
 import {
   extractAPIErrorPayload,
   isAPIRecord,
@@ -46,6 +56,24 @@ export interface ActivateImportedFactoryForSessionOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
 }
+
+export interface ActivateImportedFactoryAsNewNamedOptions {
+  fetch?: typeof globalThis.fetch;
+  existingNamedFactoryNames?: readonly string[];
+  sessionID?: string | null;
+}
+
+export interface DiscoverSessionNamedFactoryNamesOptions {
+  fetch?: typeof globalThis.fetch;
+  sessionID?: string | null;
+}
+
+export type { FactoryImportSaveChoice } from "./import-save-mode";
+export {
+  allocateFirstFreeSuffixedFactoryName,
+  extractNamedFactoryNamesFromSessionTargets,
+  resolveImportCreateFactoryName,
+} from "./import-save-mode";
 
 const CREATE_NAMED_FACTORY_ENDPOINT = "/factories";
 
@@ -205,6 +233,92 @@ export async function activateImportedFactoryForSession(
   }
 
   return toActivatedFactoryValue(savedDocument);
+}
+
+export async function discoverSessionNamedFactoryNames(
+  options: DiscoverSessionNamedFactoryNamesOptions = {},
+): Promise<string[]> {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const sessions = await listFactorySessions({ fetch: fetchImplementation });
+  const session = sessions.find((entry) => entry.id === normalizeSessionID(options.sessionID));
+  if (!session?.folderPath) {
+    return [];
+  }
+
+  const response = await openFactorySession(
+    {
+      folderPath: session.folderPath,
+      validateOnly: true,
+    },
+    { fetch: fetchImplementation },
+  );
+
+  return extractNamedFactoryNamesFromSessionTargets(response.targets);
+}
+
+export async function activateImportedFactoryAsNewNamedForSession(
+  importedFactory: FactoryValue,
+  options: ActivateImportedFactoryAsNewNamedOptions = {},
+): Promise<FactoryValue> {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const existingNamedFactoryNames =
+    options.existingNamedFactoryNames ??
+    (await discoverSessionNamedFactoryNames({
+      fetch: fetchImplementation,
+      sessionID: options.sessionID,
+    }));
+  const preferredName =
+    typeof importedFactory.name === "string" ? importedFactory.name : "";
+  const { factoryName, replacesExisting } = resolveImportCreateFactoryName(
+    preferredName,
+    existingNamedFactoryNames,
+  );
+
+  let currentDocument: CurrentFactoryDocument | undefined;
+  if (replacesExisting) {
+    try {
+      currentDocument = await getCurrentFactoryDocument({
+        fetch: fetchImplementation,
+        sessionID: options.sessionID,
+      });
+    } catch (error) {
+      throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
+    }
+  }
+
+  const { version: _version, ...importedWithoutVersion } = importedFactory;
+  const factoryDefinition: FactoryValue = {
+    ...importedWithoutVersion,
+    name: factoryName,
+  };
+
+  let savedDocument: CurrentFactoryDocument;
+  try {
+    savedDocument = await saveFactoryForSessionDocument(
+      {
+        baseVersion:
+          replacesExisting && currentDocument?.name === factoryName
+            ? currentDocument.version
+            : undefined,
+        factoryDefinition,
+        includeVersion: replacesExisting,
+        mode: "UPSERT_NAMED_AND_ACTIVATE",
+      },
+      {
+        fetch: fetchImplementation,
+        sessionID: options.sessionID,
+      },
+    );
+  } catch (error) {
+    throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
+  }
+
+  return toActivatedFactoryValue(savedDocument);
+}
+
+function normalizeSessionID(sessionID: string | null | undefined): string {
+  const trimmed = sessionID?.trim();
+  return trimmed ? trimmed : "~default";
 }
 
 function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFactoryAPIErrorCode {
