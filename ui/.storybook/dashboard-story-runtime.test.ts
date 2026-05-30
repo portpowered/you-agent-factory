@@ -1,5 +1,6 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: Storybook runtime coverage stays consolidated because these tests share the same decorator installation seam.
-import { waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DashboardSnapshot } from "../src/api/dashboard";
@@ -9,6 +10,7 @@ import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
 } from "../src/features/current-selection/base/public";
+import { useDashboardSession } from "../src/features/dashboard/session/dashboard-session-provider";
 import {
   resetDashboardSessionStore,
   useDashboardSessionStore,
@@ -16,6 +18,38 @@ import {
 import { useFactoryTimelineStore } from "../src/features/timeline/state/factoryTimelineStore";
 
 import { withDashboardStoryRuntime } from "./dashboard-story-runtime";
+
+function SessionScopeProbe() {
+  const { sessionID } = useDashboardSession();
+
+  return createElement(
+    "div",
+    { "data-testid": "story-session-id" },
+    sessionID,
+  );
+}
+
+function renderStoryRuntime(
+  parameters: Record<string, unknown> = {},
+  storyId = "dashboard-runtime-story",
+) {
+  const decoratedStory = withDashboardStoryRuntime(
+    () => createElement(SessionScopeProbe),
+    {
+    args: {},
+    globals: {},
+    hooks: {} as never,
+    id: storyId,
+    initialArgs: {},
+    name: storyId,
+    parameters,
+    title: "storybook/runtime",
+    viewMode: "story",
+    },
+  );
+
+  return render(decoratedStory);
+}
 
 describe("withDashboardStoryRuntime", () => {
   beforeEach(() => {
@@ -64,6 +98,52 @@ describe("withDashboardStoryRuntime", () => {
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
   });
 
+  it("applies sessionID from story parameters via DashboardSessionTestProvider", () => {
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: ["session-beta"],
+      selectedSessionID: "session-beta",
+    });
+
+    renderStoryRuntime(
+      {
+        dashboardApi: {
+          sessionID: "session-review",
+        },
+      },
+      "dashboard-runtime-session-id",
+    );
+
+    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([]);
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      DEFAULT_FACTORY_SESSION_ID,
+    );
+    expect(screen.getByTestId("story-session-id").textContent).toBe(
+      "session-review",
+    );
+  });
+
+  it("does not leak pinned session scope across story installs", () => {
+    const { unmount } = renderStoryRuntime(
+      {
+        dashboardApi: {
+          sessionID: "session-beta",
+        },
+      },
+      "dashboard-runtime-session-leak-a",
+    );
+
+    expect(screen.getByTestId("story-session-id").textContent).toBe(
+      "session-beta",
+    );
+
+    unmount();
+    renderStoryRuntime({}, "dashboard-runtime-session-leak-b");
+
+    expect(screen.getByTestId("story-session-id").textContent).toBe(
+      DEFAULT_FACTORY_SESSION_ID,
+    );
+  });
+
   it("installs dashboard fetch mocks and seeds timeline snapshots on the latest tick", async () => {
     const firstSnapshot = buildDashboardSnapshot(2);
     const latestSnapshot = buildDashboardSnapshot(5);
@@ -93,7 +173,9 @@ describe("withDashboardStoryRuntime", () => {
       viewMode: "story",
     });
 
-    const response = await window.fetch("http://example.test/api/dashboard-snapshot");
+    const response = await window.fetch(
+      "http://example.test/api/dashboard-snapshot",
+    );
 
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({ ok: true });
@@ -150,10 +232,7 @@ describe("withDashboardStoryRuntime", () => {
   });
 
   it("replaces timeline events when story parameters provide event history directly", () => {
-    const events = [
-      timelineEvent("tick-2", 2),
-      timelineEvent("tick-4", 4),
-    ];
+    const events = [timelineEvent("tick-2", 2), timelineEvent("tick-4", 4)];
 
     withDashboardStoryRuntime(() => null, {
       args: {},
@@ -212,7 +291,9 @@ describe("withDashboardStoryRuntime", () => {
     );
     eventSource.onopen = opened;
     eventSource.addEventListener("message", (event) => {
-      receivedEvents.push(JSON.parse((event as MessageEvent).data) as FactoryEvent);
+      receivedEvents.push(
+        JSON.parse((event as MessageEvent).data) as FactoryEvent,
+      );
     });
 
     await waitFor(() => {
