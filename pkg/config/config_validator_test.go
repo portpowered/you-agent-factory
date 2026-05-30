@@ -1,11 +1,13 @@
 package config
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestValidationResult_HasErrors_FalseWithOnlyWarningsAndHints(t *testing.T) {
@@ -78,6 +80,8 @@ func TestConfigValidator_ReportsAllErrors(t *testing.T) {
 	if len(errs) < 2 {
 		t.Fatalf("expected at least 2 errors from independent rules, got %d: %v", len(errs), errs)
 	}
+	assertFindingExists(t, errs, "input-type-name")
+	assertFindingExists(t, errs, factoryvalidation.CodeDanglingPlaceReference)
 }
 
 func TestRuleInputTypes_MissingName(t *testing.T) {
@@ -122,81 +126,6 @@ func TestRuleInputTypes_ValidConfig(t *testing.T) {
 	if len(findings) != 0 {
 		t.Fatalf("expected no findings, got %v", findings)
 	}
-}
-
-func TestRulePlaceReferences_InvalidInput(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
-		Name:   "ws",
-		Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
-	}}
-	findings := rulePlaceReferences(cfg)
-	assertFindingExists(t, findings, "workstation-input-ref")
-}
-
-func TestRulePlaceReferences_InvalidOutput(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
-		Name:    "ws",
-		Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
-	}}
-	findings := rulePlaceReferences(cfg)
-	assertFindingExists(t, findings, "workstation-output-ref")
-}
-
-func TestRulePlaceReferences_InvalidOnRejection(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
-		Name:        "ws",
-		Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
-	}}
-	findings := rulePlaceReferences(cfg)
-	assertFindingExists(t, findings, "workstation-on-rejection-ref")
-}
-
-func TestRulePlaceReferences_InvalidOnFailure(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
-		Name:      "ws",
-		Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
-	}}
-	findings := rulePlaceReferences(cfg)
-	assertFindingExists(t, findings, "workstation-on-failure-ref")
-}
-
-func TestRulePlaceReferences_AllValid(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
-		Name:        "ws",
-		Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-		OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
-		OnFailure:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
-	}}
-	findings := rulePlaceReferences(cfg)
-	if len(findings) != 0 {
-		t.Fatalf("expected no findings, got %v", findings)
-	}
-}
-
-func TestRulePlaceReferences_InvalidClassificationRouteOutput(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
-		Name:           "classifier",
-		Type:           interfaces.WorkstationTypeClassify,
-		WorkerTypeName: "w1",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		ClassificationRoutes: []interfaces.ClassificationRouteConfig{{
-			Label:   "approved",
-			Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
-		}},
-	}}
-
-	findings := rulePlaceReferences(cfg)
-	assertFindingExists(t, findings, "workstation-classification-route-ref")
 }
 
 type stubRequiredToolChecker map[string]RequiredToolCheckResult
