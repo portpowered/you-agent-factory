@@ -20,7 +20,6 @@ export interface WorkChartCardProps {
 
 const WORK_CHART_BODY_CLASS =
   "!flex !min-h-0 !flex-col !gap-0 !overflow-hidden px-0 pb-5";
-const WORK_CHART_REGION_CLASS = "flex min-h-0 flex-1 px-4 sm:px-5";
 
 export function WorkChartCard({
   chartState,
@@ -67,7 +66,7 @@ export function WorkChartCard({
     >
       <section
         aria-label={chartMessages.cardRegionLabel}
-        className={WORK_CHART_REGION_CLASS}
+        className="flex min-h-0 flex-1 px-4 sm:px-5"
         id={chartRegionID}
       >
         <WorkChart
