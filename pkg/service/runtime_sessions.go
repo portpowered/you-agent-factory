@@ -272,6 +272,13 @@ func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factor
 		return factoryapi.OpenFactorySessionResponse{}, err
 	}
 	response := factoryapi.OpenFactorySessionResponse{}
+	if result.InitsNewFactory {
+		initsNewFactory := true
+		response.InitsNewFactory = &initsNewFactory
+		if folderPath := strings.TrimSpace(result.FolderPath); folderPath != "" {
+			response.FolderPath = &folderPath
+		}
+	}
 	if len(result.Targets) > 0 {
 		targets := factorysessions.TargetsResponse(result.Targets)
 		response.Targets = &targets
@@ -321,6 +328,18 @@ func (fs *FactoryService) OpenFactorySessionFromFolder(
 
 	targets, err := fs.discoverFactorySessionTargets(folderPath)
 	if err != nil {
+		if validateOnly {
+			if reason, _, ok := factorysessions.ValidationReasonFromError(err); ok && reason == factorysessions.ValidationReasonNotRunnable {
+				resolved, resolveErr := factorysessions.ResolveSessionFolder(folderPath)
+				if resolveErr != nil {
+					return nil, resolveErr
+				}
+				return &FactorySessionOpenResult{
+					InitsNewFactory: true,
+					FolderPath:      resolved,
+				}, nil
+			}
+		}
 		return nil, err
 	}
 

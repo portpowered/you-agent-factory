@@ -32,8 +32,10 @@ type Target struct {
 
 // OpenResult is the internal outcome of opening or validating a session folder.
 type OpenResult struct {
-	SessionID string
-	Targets   []Target
+	SessionID       string
+	Targets         []Target
+	InitsNewFactory bool
+	FolderPath      string
 }
 
 // LiveSession tracks one live factory session and its runtime handle.

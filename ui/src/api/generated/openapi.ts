@@ -848,6 +848,10 @@ export interface components {
         OpenFactorySessionResponse: {
             session?: components["schemas"]["FactorySessionSummary"];
             targets?: components["schemas"]["FactorySessionTarget"][];
+            /** @description When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath. */
+            initsNewFactory?: boolean;
+            /** @description Absolute resolved session folder path when initsNewFactory is true. */
+            folderPath?: string;
         };
         LoadableProviderSessionRef: {
             provider: components["schemas"]["LoadableProviderSessionProvider"];

@@ -649,6 +649,97 @@ func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyReturnsTargetsW
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyReturnsInitsNewFactoryForEmptyReadableFolder(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	before := harness.svc.sessions.Count()
+	emptyDir := filepath.Join(harness.rootDir, "empty")
+	if err := os.Mkdir(emptyDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(empty): %v", err)
+	}
+
+	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, true)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate only, empty): %v", err)
+	}
+	if result == nil {
+		t.Fatal("validate-only empty-folder result = nil, want initsNewFactory metadata")
+	}
+	if !result.InitsNewFactory {
+		t.Fatalf("validate-only initsNewFactory = false, want true")
+	}
+	if result.FolderPath != emptyDir {
+		t.Fatalf("validate-only folderPath = %q, want absolute %q", result.FolderPath, emptyDir)
+	}
+	if result.SessionID != "" {
+		t.Fatalf("validate-only session id = %q, want none", result.SessionID)
+	}
+	if len(result.Targets) != 0 {
+		t.Fatalf("validate-only targets = %#v, want none", result.Targets)
+	}
+	if got := harness.svc.sessions.Count(); got != before {
+		t.Fatalf("validate-only empty-folder mutated live sessions to %d, want %d", got, before)
+	}
+}
+
+func TestFactoryService_OpenFactorySession_ValidateOnlyMapsInitsNewFactoryToAPIResponse(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	emptyDir := filepath.Join(harness.rootDir, "empty")
+	if err := os.Mkdir(emptyDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(empty): %v", err)
+	}
+
+	validateOnly := true
+	response, err := harness.svc.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{
+		FolderPath:   emptyDir,
+		ValidateOnly: &validateOnly,
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySession(validate only, empty): %v", err)
+	}
+	if response.InitsNewFactory == nil || !*response.InitsNewFactory {
+		t.Fatalf("response.initsNewFactory = %#v, want true", response.InitsNewFactory)
+	}
+	if response.FolderPath == nil || *response.FolderPath != emptyDir {
+		t.Fatalf("response.folderPath = %#v, want %q", response.FolderPath, emptyDir)
+	}
+	if response.Session != nil {
+		t.Fatalf("response.session = %#v, want none", response.Session)
+	}
+	if response.Targets != nil {
+		t.Fatalf("response.targets = %#v, want none", response.Targets)
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyRunnableFolderOmitsInitsNewFactory(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, true)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate only, runnable): %v", err)
+	}
+	if result == nil {
+		t.Fatal("validate-only runnable result = nil, want targets")
+	}
+	if result.InitsNewFactory {
+		t.Fatal("validate-only initsNewFactory = true, want false for runnable folder")
+	}
+	if len(result.Targets) == 0 {
+		t.Fatalf("validate-only targets = %#v, want runnable targets", result.Targets)
+	}
+}
+
 func TestFactoryService_OpenFactorySessionFromFolder_ExpandsLeadingTildeForValidationAndLaunch(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",

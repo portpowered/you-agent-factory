@@ -1403,8 +1403,13 @@ type OpenFactorySessionRequest struct {
 
 // OpenFactorySessionResponse defines model for OpenFactorySessionResponse.
 type OpenFactorySessionResponse struct {
-	Session *FactorySessionSummary  `json:"session,omitempty"`
-	Targets *[]FactorySessionTarget `json:"targets,omitempty"`
+	// FolderPath Absolute resolved session folder path when initsNewFactory is true.
+	FolderPath *string `json:"folderPath,omitempty"`
+
+	// InitsNewFactory When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath.
+	InitsNewFactory *bool                   `json:"initsNewFactory,omitempty"`
+	Session         *FactorySessionSummary  `json:"session,omitempty"`
+	Targets         *[]FactorySessionTarget `json:"targets,omitempty"`
 }
 
 // PaginationContext defines model for PaginationContext.

@@ -1785,6 +1785,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FactorySessionTarget'
+        initsNewFactory:
+          type: boolean
+          description: When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath.
+        folderPath:
+          type: string
+          description: Absolute resolved session folder path when initsNewFactory is true.
     LoadableProviderSessionRef:
       type: object
       additionalProperties: false
