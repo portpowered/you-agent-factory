@@ -735,9 +735,12 @@ func (s *Server) ListWorkBySessionId(w http.ResponseWriter, r *http.Request, ses
 		return
 	}
 	legacyParams := factoryapi.ListWorkParams{
-		MaxResults: params.MaxResults,
-		NextToken:  params.NextToken,
-		StateName:  params.StateName,
+		MaxResults:   params.MaxResults,
+		NextToken:    params.NextToken,
+		StateName:    params.StateName,
+		Name:         params.Name,
+		WorkTypeName: params.WorkTypeName,
+		TraceId:      params.TraceId,
 	}
 	if params.StateType != nil {
 		stateType := factoryapi.WorkStateType(*params.StateType)
@@ -935,6 +938,13 @@ func listWorkResults(items []listWorkItem) []factoryapi.Work {
 }
 
 func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	return workMatchesStateListFilters(work, params) &&
+		workMatchesNameListFilter(work, params) &&
+		workMatchesWorkTypeNameListFilter(work, params) &&
+		workMatchesTraceIDListFilter(work, params)
+}
+
+func workMatchesStateListFilters(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
 	if params.StateName != nil {
 		if work.State == nil || work.State.Name != *params.StateName {
 			return false
@@ -946,6 +956,28 @@ func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkPara
 		}
 	}
 	return true
+}
+
+func workMatchesNameListFilter(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	if params.Name == nil || *params.Name == "" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(work.Name), strings.ToLower(string(*params.Name)))
+}
+
+func workMatchesWorkTypeNameListFilter(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	if params.WorkTypeName == nil || *params.WorkTypeName == "" {
+		return true
+	}
+	return stringValue(work.WorkTypeName) == string(*params.WorkTypeName)
+}
+
+func workMatchesTraceIDListFilter(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	if params.TraceId == nil || *params.TraceId == "" {
+		return true
+	}
+	traceID := string(*params.TraceId)
+	return stringValue(work.TraceId) == traceID || stringValue(work.CurrentChainingTraceId) == traceID
 }
 
 func (s *Server) GetWork(w http.ResponseWriter, r *http.Request, id factoryapi.WorkOrTokenID) {
@@ -979,13 +1011,31 @@ func (s *Server) getWork(
 		return
 	}
 
-	token, ok := snapshot.Marking.Tokens[id]
-	if !ok || !publicWorkToken(token) {
-		s.writeError(w, http.StatusNotFound, "token not found", "NOT_FOUND")
+	token, ok := findPublicWorkToken(snapshot.Marking.Tokens, string(id))
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, tokenToResponse(token, true))
+	workNamesByID := publicWorkNamesByID(snapshot.Marking.Tokens)
+	work := tokenToWork(token, snapshot.Topology)
+	work.Relations = generatedWorkRelations(token, work.Name, workNamesByID)
+	s.writeJSON(w, http.StatusOK, work)
+}
+
+func findPublicWorkToken(tokens map[string]*interfaces.Token, id string) (*interfaces.Token, bool) {
+	if token, ok := tokens[id]; ok && publicWorkToken(token) {
+		return token, true
+	}
+	for _, token := range tokens {
+		if !publicWorkToken(token) {
+			continue
+		}
+		if token.Color.WorkID == id {
+			return token, true
+		}
+	}
+	return nil, false
 }
 
 // GetStatus handles GET /status as the supported runtime status read model.

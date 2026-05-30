@@ -35,6 +35,7 @@ var expandFactoryConfig = configcli.ExpandFactoryConfig
 var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
 var listWork = workcli.List
+var showWork = workcli.Show
 var listSessions = sessioncli.List
 var createSession = sessioncli.Create
 var deleteSession = sessioncli.Delete
@@ -462,15 +463,6 @@ func newSessionDeleteCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command 
 	return cmd
 }
 
-func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	workCmd := &cobra.Command{
-		Use:   "work",
-		Short: "Inspect work from a running factory",
-	}
-	workCmd.AddCommand(newWorkListCommand(globals, diagnostics))
-	return workCmd
-}
-
 func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	modelsCmd := &cobra.Command{
 		Use:   "models",
@@ -575,38 +567,6 @@ func newModelsPullCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostics
 		},
 	}
 	registerDeprecatedPortFlag(cmd)
-	return cmd
-}
-
-func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := workcli.ListConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List work from a running factory",
-		Long: "List work from a running you-agent-factory service.\n\n" +
-			"By default the command targets the default compatibility session. " +
-			"Use --session to route the request to one specific live factory session instead. " +
-			"Run " + cliBinaryName + " session list to discover live session ids.",
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return listWork(cfg)
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.StateName, "state-name", "", "filter by current state name")
-	cmd.Flags().StringVar(&cfg.StateType, "state-type", "", "filter by current state type (INITIAL, PROCESSING, TERMINAL, FAILED)")
-	cmd.Flags().StringVar(&cfg.SortBy, "sort-by", "", "sort returned work by field (state.type)")
-	cmd.Flags().IntVar(&cfg.MaxResults, "max-results", 0, "maximum work items to return")
-	cmd.Flags().StringVar(&cfg.NextToken, "next-token", "", "pagination cursor returned by a previous work list response")
-	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	return cmd
 }
 
