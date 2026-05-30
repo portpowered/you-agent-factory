@@ -133,11 +133,15 @@ func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
 	if svc.modelAssets == nil {
 		t.Fatal("expected BuildFactoryService to initialize modelAssets")
 	}
-	if svc.modelResources == nil {
-		t.Fatal("expected BuildFactoryService to initialize modelResources")
+	bundle := svc.currentRuntimeBundle()
+	if bundle == nil {
+		t.Fatal("expected startup runtime bundle")
 	}
-	if svc.localModels == nil {
-		t.Fatal("expected BuildFactoryService to initialize localModels")
+	if bundle.modelResources == nil {
+		t.Fatal("expected startup bundle to initialize modelResources")
+	}
+	if bundle.localModels == nil {
+		t.Fatal("expected startup bundle to initialize localModels")
 	}
 	if svc.sessions == nil {
 		t.Fatal("expected BuildFactoryService to initialize sessions")
@@ -187,8 +191,12 @@ func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalM
 		cancel()
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	svc.modelAssets = staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
-	svc.localModels = newManagedLocalModelManager(svc.modelAssets, runtime)
+	puller := staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
+	svc.modelAssets = puller
+	if bundle := svc.startupRuntimeBundle(); bundle != nil {
+		bundle.modelAssets = puller
+		bundle.localModels = newManagedLocalModelManager(puller, runtime)
+	}
 
 	runErrCh := make(chan error, 1)
 	go func() { runErrCh <- svc.Run(ctx) }()

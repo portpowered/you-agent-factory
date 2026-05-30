@@ -522,38 +522,50 @@ func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error
 	return nil
 }
 
-func (fs *FactoryService) swapActiveRuntime(runtimeBundle *factoryRuntimeBundle) {
-	if runtimeBundle == nil {
-		fs.clearActiveRuntime()
+func (fs *FactoryService) startupRuntimeBundle() *factoryRuntimeBundle {
+	if fs == nil {
+		return nil
+	}
+	fs.runtimeMu.RLock()
+	defer fs.runtimeMu.RUnlock()
+	return fs.startupBundle
+}
+
+func (fs *FactoryService) setStartupBundle(runtimeBundle *factoryRuntimeBundle) {
+	if fs == nil {
 		return
 	}
 	fs.runtimeMu.Lock()
 	defer fs.runtimeMu.Unlock()
-	fs.eventHistory = runtimeBundle.eventHistory
-	fs.factory = runtimeBundle.factory
-	fs.listener = runtimeBundle.listener
-	fs.net = runtimeBundle.net
-	fs.runtimeCfg = runtimeBundle.runtimeCfg
-	fs.modelResources = runtimeBundle.modelResources
-	fs.modelAssets = runtimeBundle.modelAssets
-	fs.localModels = runtimeBundle.localModels
+	fs.startupBundle = runtimeBundle
+}
+
+func (fs *FactoryService) clearStartupBundle() {
+	if fs == nil {
+		return
+	}
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	fs.startupBundle = nil
+}
+
+func (fs *FactoryService) syncActiveSessionDir(runtimeBundle *factoryRuntimeBundle) {
+	if fs == nil || fs.cfg == nil {
+		return
+	}
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	if runtimeBundle == nil || strings.TrimSpace(runtimeBundle.dir) == "" {
+		if strings.TrimSpace(fs.factoryRootDir) != "" {
+			fs.cfg.Dir = fs.factoryRootDir
+		}
+		return
+	}
 	fs.cfg.Dir = runtimeBundle.dir
 }
 
-func (fs *FactoryService) clearActiveRuntime() {
-	fs.runtimeMu.Lock()
-	defer fs.runtimeMu.Unlock()
-	fs.eventHistory = nil
-	fs.factory = nil
-	fs.listener = nil
-	fs.net = nil
-	fs.runtimeCfg = nil
-	fs.modelResources = nil
-	fs.modelAssets = nil
-	fs.localModels = nil
-	if fs.cfg != nil && strings.TrimSpace(fs.factoryRootDir) != "" {
-		fs.cfg.Dir = fs.factoryRootDir
-	}
+func (fs *FactoryService) resetActiveSessionDir() {
+	fs.syncActiveSessionDir(nil)
 }
 
 func (fs *FactoryService) currentRunState() *serviceRunState {
@@ -726,27 +738,17 @@ func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
 }
 
 func (fs *FactoryService) currentFactory() factory.Factory {
-	if fs == nil {
-		return nil
+	if bundle := fs.currentRuntimeBundle(); bundle != nil {
+		return bundle.factory
 	}
-	if activeFactory, err := fs.sessionFactory(defaultFactorySessionID); err == nil {
-		return activeFactory
-	}
-	fs.runtimeMu.RLock()
-	defer fs.runtimeMu.RUnlock()
-	return fs.factory
+	return nil
 }
 
 func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
-	if fs == nil {
-		return nil
+	if bundle := fs.currentRuntimeBundle(); bundle != nil {
+		return bundle.runtimeCfg
 	}
-	if runtimeCfg, err := fs.sessionRuntimeConfig(defaultFactorySessionID); err == nil {
-		return runtimeCfg
-	}
-	fs.runtimeMu.RLock()
-	defer fs.runtimeMu.RUnlock()
-	return fs.runtimeCfg
+	return nil
 }
 
 func (fs *FactoryService) workflowID() string {

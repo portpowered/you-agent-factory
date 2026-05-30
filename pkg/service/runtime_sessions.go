@@ -92,7 +92,10 @@ func (fs *FactoryService) registerLiveSession(
 		project,
 	), selectSession)
 	if selectSession && handle.runtime != nil {
-		fs.swapActiveRuntime(handle.runtime)
+		fs.syncActiveSessionDir(handle.runtime)
+		if sessionID == defaultFactorySessionID {
+			fs.clearStartupBundle()
+		}
 	}
 }
 
@@ -123,14 +126,14 @@ func (fs *FactoryService) unregisterLiveSession(sessionID string) {
 	fs.sessions.Remove(sessionID)
 	current := fs.sessions.Current()
 	if current == nil {
-		fs.clearActiveRuntime()
+		fs.resetActiveSessionDir()
 		return
 	}
 	if handle := liveSessionHandle(current); handle != nil && handle.runtime != nil {
-		fs.swapActiveRuntime(handle.runtime)
+		fs.syncActiveSessionDir(handle.runtime)
 		return
 	}
-	fs.clearActiveRuntime()
+	fs.resetActiveSessionDir()
 }
 
 func (fs *FactoryService) currentSession() *factorysessions.LiveSession {
@@ -496,10 +499,10 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 		if successor != nil {
 			successorHandle := liveSessionHandle(successor)
 			fs.setRunState(runState.ctx, successor.ID, successorHandle)
-			fs.swapActiveRuntime(successorHandle.runtime)
+			fs.syncActiveSessionDir(successorHandle.runtime)
 		} else {
 			fs.clearRunState()
-			fs.clearActiveRuntime()
+			fs.resetActiveSessionDir()
 		}
 	}
 
@@ -594,7 +597,7 @@ func (fs *FactoryService) replaceSessionRuntime(
 		session.Project,
 	), isActiveSession)
 	if isActiveSession {
-		fs.swapActiveRuntime(replacement)
+		fs.syncActiveSessionDir(replacement)
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
 	}
 	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {

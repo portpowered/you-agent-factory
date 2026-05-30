@@ -97,20 +97,12 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		factoryRootDir: factoryRootDir,
 		sessions:       factorysessions.NewRegistry(),
 		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, clock),
-		eventHistory:   runtimeBundle.eventHistory,
-		factory:        runtimeBundle.factory,
-		listener:       runtimeBundle.listener,
-		net:            runtimeBundle.net,
+		startupBundle:  runtimeBundle,
 		cfg:            cfg,
-		runtimeCfg:     runtimeBundle.runtimeCfg,
-		modelResources: runtimeBundle.modelResources,
 		modelAssets:    runtimeBundle.modelAssets,
-		localModels:    runtimeBundle.localModels,
 		baseLogger:     baseLogger,
 		logger:         runtimeBundle.logger,
 		clock:          clock,
-		recording:      runtimeBundle.recording,
-		logSink:        runtimeBundle.logSink,
 	}, nil
 }
 
@@ -142,13 +134,14 @@ type RuntimeLogDiagnostics struct {
 // RuntimeLogDiagnostics returns the selected runtime log metadata for startup
 // diagnostics without exposing the sink writer.
 func (fs *FactoryService) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
-	if fs == nil || fs.logSink == nil {
+	bundle := fs.currentRuntimeBundle()
+	if bundle == nil || bundle.logSink == nil {
 		return RuntimeLogDiagnostics{}
 	}
 	return RuntimeLogDiagnostics{
-		Path:         fs.logSink.Path(),
-		RootDir:      fs.logSink.RootDir(),
-		StartTimeUTC: fs.logSink.StartTimeUTC(),
+		Path:         bundle.logSink.Path(),
+		RootDir:      bundle.logSink.RootDir(),
+		StartTimeUTC: bundle.logSink.StartTimeUTC(),
 	}
 }
 

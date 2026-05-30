@@ -676,16 +676,56 @@ func TestBuildFactoryService_StartupRuntimeBundleMatchesLiveHandleShape(t *testi
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.logSink == nil {
-		t.Fatal("service logSink = nil, want startup bundle runtime log sink")
-	}
-
 	bundle := svc.currentRuntimeBundle()
 	if bundle == nil {
-		t.Fatal("currentRuntimeBundle = nil, want service shadow bundle during startup")
+		t.Fatal("currentRuntimeBundle = nil, want startup bundle before Run")
 	}
-	if bundle.factory != svc.factory || bundle.logSink != svc.logSink {
-		t.Fatalf("startup bundle fields diverged from service copy: bundle=%#v", bundle)
+	if bundle.logSink == nil {
+		t.Fatal("startup bundle logSink = nil, want runtime log sink")
+	}
+	if bundle.factory == nil {
+		t.Fatal("startup bundle factory = nil")
+	}
+	if svc.startupRuntimeBundle() != bundle {
+		t.Fatal("currentRuntimeBundle should resolve to startup bundle before Run registers ~default")
+	}
+}
+
+func TestFactoryService_Run_ClearsStartupBundleAfterDefaultRegisters(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.startupRuntimeBundle() == nil {
+		t.Fatal("expected startup bundle before Run")
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() { runErrCh <- svc.Run(runCtx) }()
+	t.Cleanup(func() {
+		cancelRun()
+		<-runErrCh
+	})
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	if svc.startupRuntimeBundle() != nil {
+		t.Fatal("startup bundle should be cleared after ~default registers at Run")
+	}
+	defaultHandle := liveSessionHandle(svc.defaultSession())
+	if bundle := svc.currentRuntimeBundle(); bundle == nil || defaultHandle == nil || bundle != defaultHandle.runtime {
+		t.Fatal("currentRuntimeBundle should resolve only through the default session handle after Run")
 	}
 }
 
@@ -940,7 +980,8 @@ func TestFactoryService_GetEngineStateSnapshot_DelegatesToFactoryAggregateSnapsh
 		TickCount:     7,
 	}
 	mock := &aggregateSnapshotFactory{engineState: expected}
-	svc := &FactoryService{factory: mock}
+	svc := &FactoryService{}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: mock})
 
 	got, err := svc.GetEngineStateSnapshot(context.Background())
 	if err != nil {
