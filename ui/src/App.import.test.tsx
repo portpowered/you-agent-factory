@@ -180,11 +180,14 @@ describe("App shell import flows", () => {
         "/factory-sessions/~default/factory",
         expect.objectContaining({
           body: JSON.stringify({
-            name: currentSessionFactory.name,
-            workTypes: importValue.factory.workTypes,
-            workers: importValue.factory.workers,
-            workstations: importValue.factory.workstations,
-            version: incrementedSessionFactoryVersion,
+            mode: "REPLACE_CURRENT",
+            factory: {
+              name: currentSessionFactory.name,
+              workTypes: importValue.factory.workTypes,
+              workers: importValue.factory.workers,
+              workstations: importValue.factory.workstations,
+              version: incrementedSessionFactoryVersion,
+            },
           }),
           headers: {
             "content-type": "application/json",
@@ -232,7 +235,10 @@ describe("App shell import flows", () => {
         }
 
         if (path === "/factory-sessions/~default/factory" && method === "PUT") {
-          return jsonResponse(JSON.parse(String(init?.body)));
+          const parsedBody = JSON.parse(String(init?.body)) as {
+            factory: Record<string, unknown>;
+          };
+          return jsonResponse(parsedBody.factory);
         }
 
         throw new Error(`unexpected fetch for ${path} (${method})`);
@@ -338,8 +344,11 @@ describe("App shell import flows", () => {
           }),
         );
         expect(JSON.parse(String(putActivationCall?.[1]?.body))).toEqual({
-          ...currentNamedFactoryExportResponse,
-          version: incrementedSessionFactoryVersion,
+          mode: "REPLACE_CURRENT",
+          factory: {
+            ...currentNamedFactoryExportResponse,
+            version: incrementedSessionFactoryVersion,
+          },
         });
       });
       expectNoPostFactoriesActivation(fetchMock);

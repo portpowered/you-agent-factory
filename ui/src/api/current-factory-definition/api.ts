@@ -16,8 +16,13 @@ import { currentFactoryDefinitionAPIErrorMessages } from "./messages";
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 
 type CanonicalFactory = components["schemas"]["Factory"];
+type FactorySaveMode = components["schemas"]["FactorySaveMode"];
 export type CurrentFactoryVersion =
   components["schemas"]["HybridLogicalTimestamp"];
+
+/** Dashboard editor and replace-current import activation use session PUT with this mode only. */
+export const CURRENT_FACTORY_EDITOR_SAVE_MODE =
+  "REPLACE_CURRENT" satisfies FactorySaveMode;
 type FactoryValidationTarget = components["schemas"]["FactoryValidationTarget"];
 
 export type CurrentFactoryDocument = CanonicalFactoryDefinition & {
@@ -117,6 +122,7 @@ export async function saveCurrentFactoryDocument(
   options: SaveCurrentFactoryOptions = {},
 ): Promise<CurrentFactoryDocument> {
   const requestBody = {
+    mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
     factory: {
       ...input.factoryDefinition,
       version: incrementCurrentFactoryVersion(input.baseVersion),
