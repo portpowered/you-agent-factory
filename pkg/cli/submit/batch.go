@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -14,7 +13,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
-	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -56,8 +54,9 @@ func SubmitBatch(cfg BatchConfig) error {
 	}
 
 	batchSource := resolved.source
+	endpointPath := batchSubmitEndpointPath(cfg.SessionID, req.RequestID)
 	if cfg.DryRun {
-		return printBatchDryRunSummary(cfg, req, batchSource)
+		return printBatchDryRunSummary(cfg, req, batchSource, endpointPath)
 	}
 
 	return upsertBatchHTTP(cfg, req, resolved.data, batchSource)
@@ -76,7 +75,7 @@ func validateBatchRequest(req interfaces.WorkRequest) error {
 	return nil
 }
 
-func printBatchDryRunSummary(cfg BatchConfig, req interfaces.WorkRequest, batchSource string) error {
+func printBatchDryRunSummary(cfg BatchConfig, req interfaces.WorkRequest, batchSource, endpointPath string) error {
 	names := make([]string, 0, len(req.Works))
 	for _, work := range req.Works {
 		names = append(names, work.Name)
@@ -84,18 +83,7 @@ func printBatchDryRunSummary(cfg BatchConfig, req interfaces.WorkRequest, batchS
 	relationCount := len(req.Relations)
 
 	if cfg.JSON {
-		summary := map[string]any{
-			"dryRun":        true,
-			"requestId":     req.RequestID,
-			"workCount":     len(req.Works),
-			"relationCount": relationCount,
-			"batchSource":   batchSource,
-			"workNames":     names,
-		}
-		if traceID := batchTraceIDFromRequest(req); traceID != "" {
-			summary["traceId"] = traceID
-		}
-		return json.NewEncoder(cfg.Output).Encode(summary)
+		return printBatchDryRunJSON(cfg.Output, cfg.SessionID, endpointPath, batchSource, req)
 	}
 
 	if _, err := fmt.Fprintf(cfg.Output, "requestId: %s\n", req.RequestID); err != nil {
@@ -117,21 +105,9 @@ func printBatchDryRunSummary(cfg BatchConfig, req interfaces.WorkRequest, batchS
 	return err
 }
 
-func batchTraceIDFromRequest(req interfaces.WorkRequest) string {
-	if req.CurrentChainingTraceID != "" {
-		return req.CurrentChainingTraceID
-	}
-	for _, work := range req.Works {
-		if work.TraceID != "" {
-			return work.TraceID
-		}
-	}
-	return ""
-}
-
 func upsertBatchHTTP(cfg BatchConfig, req interfaces.WorkRequest, body []byte, batchSource string) error {
 	requestID := req.RequestID
-	endpointPath := sessionpath.ScopedPath("/work-requests/"+url.PathEscape(requestID), cfg.SessionID)
+	endpointPath := batchSubmitEndpointPath(cfg.SessionID, requestID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
 	if err != nil {
 		return err
@@ -186,7 +162,7 @@ func upsertBatchHTTP(cfg BatchConfig, req interfaces.WorkRequest, body []byte, b
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s status=%d durationMillis=%d responseBytes=%d requestId=%s traceId=%s workCount=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody), result.RequestId, result.TraceId, len(result.Works))
 
 	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(result)
+		return printBatchSuccessJSON(cfg.Output, cfg.SessionID, endpointPath, batchSource, req, result)
 	}
 
 	return printBatchSuccessHuman(cfg.Output, req, result)
