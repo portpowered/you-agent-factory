@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
+import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import {
   type CanonicalFactoryDefinition,
   type CurrentFactoryDocument,
@@ -9,6 +10,7 @@ import {
   getCurrentFactoryDocument,
   saveCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
+import { syncCurrentFactoryDefinition } from "../../dashboard/lib/dashboard-event-stream";
 import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
@@ -226,6 +228,7 @@ describe("useCurrentFactoryDefinition", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: save/convergence cases share one query-client harness.
 describe("useSaveCurrentFactory", () => {
   it("saves the editable current-factory document and refreshes both query caches", async () => {
     const queryClient = new QueryClient({
@@ -286,6 +289,107 @@ describe("useSaveCurrentFactory", () => {
     expect(queryClient.getQueryData(result.current.definitionKey)).toEqual(
       savedDocument,
     );
+  });
+
+  it("does not refetch the document query after a successful save", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: 0,
+          retry: false,
+        },
+      },
+    });
+    const savedDocument: CurrentFactoryDocument = {
+      ...editableFactoryDefinition,
+      version: {
+        logical: "8",
+        physical: "2026-05-27T08:00:00Z",
+      },
+    };
+    vi.mocked(saveCurrentFactoryDocument).mockResolvedValue(savedDocument);
+    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+
+    const { result } = renderHook(() => useSaveCurrentFactory(), {
+      wrapper: createQueryClientWrapper(queryClient),
+    });
+
+    await result.current.mutateAsync({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-27T07:59:00Z",
+      },
+      factoryDefinition: editableFactoryDefinition,
+    });
+
+    expect(getCurrentFactoryDocument).not.toHaveBeenCalled();
+  });
+
+  it("converges document cache on FACTORY_CHANGE with version without a document GET", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: 0,
+          retry: false,
+        },
+      },
+    });
+    const savedDocument: CurrentFactoryDocument = {
+      ...editableFactoryDefinition,
+      version: {
+        logical: "8",
+        physical: "2026-05-27T08:00:00Z",
+      },
+    };
+    vi.mocked(saveCurrentFactoryDocument).mockResolvedValue(savedDocument);
+    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+
+    const { result } = renderHook(
+      () => ({
+        documentKey: currentFactoryDocumentQueryKey("session-2"),
+        save: useSaveCurrentFactory(),
+      }),
+      {
+        wrapper: createQueryClientWrapper(queryClient),
+      },
+    );
+
+    await result.current.save.mutateAsync({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-27T07:59:00Z",
+      },
+      factoryDefinition: editableFactoryDefinition,
+    });
+
+    expect(getCurrentFactoryDocument).not.toHaveBeenCalled();
+
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-05-27T08:00:01Z", sequence: 9, tick: 9 },
+        id: "factory-event/factory-change/9",
+        payload: {
+          factory: {
+            ...editableFactoryDefinition,
+            version: {
+              logical: "9",
+              physical: "2026-05-27T08:00:01Z",
+            },
+          },
+        },
+        type: FACTORY_EVENT_TYPES.factoryChange,
+      },
+      "session-2",
+    );
+
+    expect(getCurrentFactoryDocument).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(result.current.documentKey)).toMatchObject({
+      version: {
+        logical: "9",
+        physical: "2026-05-27T08:00:01Z",
+      },
+    });
   });
 
   it("preserves current-factory save API errors through the mutation", async () => {

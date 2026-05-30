@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   cleanup,
   fireEvent,
@@ -155,6 +156,19 @@ function refreshFactoryFromTopology(
 ): DashboardSnapshot {
   snapshot.factory = factoryFromDashboardTopology(snapshot.topology);
   return snapshot;
+}
+
+function currentFactoryDocumentFromSnapshot(
+  snapshot: DashboardSnapshot,
+): typeof baseFactoryDefinitionDocument {
+  if (!snapshot.factory) {
+    return baseFactoryDefinitionDocument;
+  }
+
+  return {
+    ...snapshot.factory,
+    version: baseFactoryDefinitionDocument.version,
+  };
 }
 
 function dashboardSnapshotWithEditableFactory(): DashboardSnapshot {
@@ -387,7 +401,9 @@ function renderWithQueryClient(view: ReactElement) {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
+    <QueryClientProvider client={queryClient}>
+      <DashboardSessionTestProvider>{view}</DashboardSessionTestProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -1262,14 +1278,27 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("renders supported workstation and work-state editor handles on the shared observer graph", async () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const document = currentFactoryDocumentFromSnapshot(snapshot);
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: baseFactoryDefinitionDocument,
+      data: document,
       error: null,
       status: "success",
     } as never);
+    wireMockEditableFactoryGraph(
+      {
+        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
+        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
+      },
+      createMockGraphEditorDraftState({
+        baseDocument: document,
+        latestDocument: document,
+        pendingFactoryDefinition: document,
+      }),
+    );
 
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot,
     });
 
     fireEvent.click(
@@ -3215,15 +3244,17 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
             })
           }
         >
-          <ReactFlowCurrentActivityCard
-            now={Date.parse("2026-04-08T12:00:04Z")}
-            onSelectWorkID={vi.fn()}
-            selection={null}
-            snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
-            onSelectStateNode={vi.fn()}
-            onSelectWorker={vi.fn()}
-            onSelectWorkstation={vi.fn()}
-          />
+          <DashboardSessionTestProvider>
+            <ReactFlowCurrentActivityCard
+              now={Date.parse("2026-04-08T12:00:04Z")}
+              onSelectWorkID={vi.fn()}
+              selection={null}
+              snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
+              onSelectStateNode={vi.fn()}
+              onSelectWorker={vi.fn()}
+              onSelectWorkstation={vi.fn()}
+            />
+          </DashboardSessionTestProvider>
         </QueryClientProvider>,
       );
 
@@ -3282,12 +3313,14 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
           })
         }
       >
-        <ReactFlowCurrentActivityCard
-          now={Date.parse("2026-04-08T12:00:04Z")}
-          selection={null}
-          snapshot={sixActiveSnapshot}
-          {...callbacks}
-        />
+        <DashboardSessionTestProvider>
+          <ReactFlowCurrentActivityCard
+            now={Date.parse("2026-04-08T12:00:04Z")}
+            selection={null}
+            snapshot={sixActiveSnapshot}
+            {...callbacks}
+          />
+        </DashboardSessionTestProvider>
       </QueryClientProvider>,
     );
 
