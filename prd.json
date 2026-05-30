@@ -1,97 +1,84 @@
 {
-  "project": "infinite-you",
-  "branchName": "ralph/factory-import-second-session",
-  "description": "Make dashboard factory PNG import session-aware so activation PUTs to /factory-sessions/{session_id}/factory for the selected workspace tab instead of POST /factories, with unit, functional, and browser integration tests proving correct endpoints, payloads, and session isolation.",
+  "project": "CLI Work Inspection v3",
+  "branchName": "ralph/cli-work-inspection-v3",
+  "description": "Improve the CLI submit-verify loop by adding a work type column to you work list, server-backed list filters (--name, --work-type-name, --trace-id), and a new you work show command for single-item inspection after submit.",
   "context": {
-    "customerAsk": "Customers want to import factories on any factory tab. Import currently POSTs /factories and updates the default factory directory even on the second tab. Make import derive context from the active session and submit to factory-sessions/{session-id}/factory, and add functional and integration tests for the non-default tab import path.",
-    "problem": "useFactoryImportActivation defaults to createFactory which POSTs /factories globally. The dashboard tracks selectedSessionID for export and saves but not import, so operators on a second live factory session see import mutate the wrong factory root and runtime.",
-    "solution": "Add session-scoped import activation that GETs the current factory for the selected session, adapts the imported payload for name and version, PUTs to the session factory endpoint, wire selectedSessionID through the dashboard import controller, update app-shell tests, and add backend functional plus UI browser integration tests for second-tab import."
+    "customerAsk": "Implement tasks/prd-cli-work-inspection.md: work type column on you work list, list filters for name/work type/trace, and you work show for post-submit verification.",
+    "problem": "After you submit, agents cannot quickly confirm work type and state: the default list table omits workTypeName, list filtering is limited to state fields, and there is no single-item show command—forcing blind pagination or manual JSON inspection.",
+    "solution": "Add WORK TYPE to the human list table; extend list-work OpenAPI and server filtering for name, workTypeName, and traceId; wire matching CLI flags; implement you work show against GET /work/{id} (session-scoped when --session is set) with human and --json output and direct CLI/API tests."
   },
   "acceptanceCriteria": [
-    "Import on the default session tab activates via PUT /factory-sessions/~default/factory with versioned canonical payload, not POST /factories.",
-    "Import on a non-default session tab activates via PUT /factory-sessions/{session_id}/factory and does not call POST /factories.",
-    "Non-default session import updates only that session factory definition and on-disk directory; the default session factory is unchanged.",
-    "Import preview and activation error states continue to work with existing accessible dialog behavior.",
-    "Unit tests assert correct activation method, path, and body per selected session.",
-    "Backend functional and UI integration tests exercise the second-tab import path.",
-    "Quality gate: backend and frontend typecheck, lint, and relevant tests pass before merge."
+    "you work list human output includes a WORK TYPE column sourced from each item workTypeName.",
+    "you work list supports --name, --work-type-name, and --trace-id with documented semantics and server-side filtering before pagination.",
+    "you work show <id> prints id, name, work type, state, trace, and relation summary; missing ids exit non-zero with a clear error; you --json work show emits one work-shaped JSON object.",
+    "List and show commands honor --session the same way as existing you work list.",
+    "CLI and API tests assert observable stdout, exit codes, and HTTP filter behavior without inventory-style registration checks.",
+    "Quality gate: Go typecheck, lint, and relevant tests pass for touched packages before merge."
   ],
   "userStories": [
     {
-      "id": "factory-import-second-session-001",
-      "title": "Session-scoped factory import activation client",
-      "description": "As a dashboard operator, I want PNG import activation to save through my active session current-factory endpoint so import updates the factory I am viewing.",
+      "id": "cli-work-inspection-v3-001",
+      "title": "Work type column on you work list",
+      "description": "As an agent verifying a submit, I want work type visible in the default list table so I can confirm the correct work type without --json.",
       "acceptanceCriteria": [
-        "Session-aware activation reads the current factory document for the supplied sessionID, preserves the session current factory name on the imported payload, includes version metadata per saveCurrentFactoryDocument rules, and PUTs to /factory-sessions/{session_id}/factory.",
-        "Activation for ~default uses /factory-sessions/~default/factory; activation for a non-default session uses that session path.",
-        "Activation does not call POST /factories.",
-        "Structured failures such as FACTORY_NOT_IDLE and STALE_FACTORY_VERSION surface through the existing import activation error state.",
-        "API client unit tests assert method, path, and JSON body for default and non-default session IDs.",
+        "Human you work list output includes a WORK TYPE column; each row shows workTypeName when present.",
+        "WORK ID, NAME, STATE NAME, STATE TYPE, and RELATIONS columns remain populated and tab-aligned as today.",
+        "you --json work list still encodes ListWorkResponse with workTypeName on each result.",
+        "CLI test asserts the human header contains WORK TYPE and a mocked row shows the expected work type.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": ""
+      "notes": "Verified on origin/main (merged PR #475); human table includes WORK TYPE from workTypeName; tests in pkg/cli/work/list_test.go."
     },
     {
-      "id": "factory-import-second-session-002",
-      "title": "Wire selected session into dashboard import controller",
-      "description": "As a dashboard operator, I want the import drop zone and preview confirm action on whichever tab is selected to activate against that tab session.",
+      "id": "cli-work-inspection-v3-002",
+      "title": "Server-side list filters for name, work type, and trace",
+      "description": "As a maintainer, I need list-work query parameters and handler filtering so CLI filters stay correct across pagination.",
       "acceptanceCriteria": [
-        "useCurrentActivityImportController and DashboardBento pass selectedSessionID from useDashboardSessionStore into import activation, matching export session threading.",
-        "Switching the selected session tab before confirming import activates against the newly selected session without a page reload.",
-        "useFactoryImportActivation uses session-scoped activation by default instead of createFactory.",
-        "Hook-level tests cover session ID propagation into the activation dependency.",
+        "OpenAPI list-work routes accept optional name (substring), workTypeName (exact), and traceId (exact match on traceId or currentChainingTraceId) query parameters.",
+        "List handler applies filters before pagination; API tests prove work-type, name substring, and trace-id filtering.",
+        "Empty filter values do not introduce new 400 responses beyond existing contract rules.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": ""
+      "notes": "Verified on origin/main: OpenAPI WorkListName/WorkTypeName/TraceId params; pkg/api/handlers.go workMatchesListFilters before pagination; API tests TestListWork_FiltersByWorkTypeNameNameSubstringAndTraceId and TestListWork_FiltersByNameBeforePagination pass."
     },
     {
-      "id": "factory-import-second-session-003",
-      "title": "Update default-tab app-shell import test for session PUT",
-      "description": "As a maintainer, I need the primary dashboard import test to expect PUT /factory-sessions/~default/factory so regressions back to POST /factories are caught.",
+      "id": "cli-work-inspection-v3-003",
+      "title": "CLI flags for you work list filters",
+      "description": "As an agent, I want you work list --name, --work-type-name, and --trace-id so I can find submitted work immediately after you submit.",
       "acceptanceCriteria": [
-        "App.import.test.tsx expects PUT /factory-sessions/~default/factory with the imported canonical factory payload and version field after the current-factory read.",
-        "The test still covers preview dialog confirm, submitting state, and successful activation refresh behavior.",
+        "you work list exposes --name, --work-type-name, and --trace-id mapped to list-work query parameters.",
+        "Command help documents substring vs exact match semantics and pagination after server filtering.",
+        "Verbose stderr filter summary includes active name, work-type-name, and trace-id filters.",
+        "CLI httptest covers --work-type-name and --name query forwarding and filtered human output.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "factory-import-second-session-004",
-      "title": "Backend functional test for non-default session import isolation",
-      "description": "As a maintainer, I need proof that session-scoped import replacement updates only the targeted session factory directory and runtime.",
+      "id": "cli-work-inspection-v3-004",
+      "title": "you work show for one work item",
+      "description": "As an agent, I want you work show <work-id> so I can inspect one item after submit without listing and scanning pages.",
       "acceptanceCriteria": [
-        "A functional test opens a second live factory session, PUTs an imported-style factory payload to /factory-sessions/{session_id}/factory, and asserts the saved definition is returned from that session GET.",
-        "The default session current factory and on-disk factory directory remain unchanged after the non-default session import.",
-        "When the payload includes portable supportingFiles.bundledFiles with inline content, materialized files are written under the target session factory directory, not the default session root.",
+        "you work show <id> is registered under you work with the same --session routing as you work list.",
+        "Command calls GET /work/{id} or session-scoped GET /factory-sessions/{session_id}/work/{id}.",
+        "Human stdout includes work id, name, work type, state name, state type, trace id, and relation summary consistent with you work list.",
+        "Unknown ids exit non-zero with a clear not-found message on stderr.",
+        "you --json work show <id> emits one JSON object with workId, name, workTypeName, state, traceId, and relations.",
+        "CLI tests cover success human output, success JSON shape, and not-found exit code.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "factory-import-second-session-005",
-      "title": "Browser integration test for import on a second session tab",
-      "description": "As a dashboard operator, I want confidence that selecting a second factory tab and confirming import exercises the session-scoped network path in the real UI shell.",
-      "acceptanceCriteria": [
-        "A ui/integration test selects a non-default session tab, completes the import preview confirm flow, and asserts activation uses PUT /factory-sessions/{non-default-session-id}/factory.",
-        "The test asserts no POST /factories request occurs during that flow.",
-        "Loading, preview, and post-confirm behavior remain observable without silent failure.",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

@@ -21,6 +21,26 @@
 - Register `relationships` at `displayOrder` 28 immediately after `guards` (27); relationships content adapts `batch-inputs.md` relation sections and `parent-aware-fan-in.md` with `SPAWNED_BY` called out as runtime/template-only, not batch-authored.
 - Story 003 index assertions belong in `root_docs_test.go` and `cli_docs_smoke_test.go` immediately after `record-replay` lines; smoke topic tests can use `absent` for `../internal/development/...` paths when replacing packaged cross-links.
 - Do not `cp` `pkg/cli/docs/reference/config.md` or `templates.md` onto `docs/reference/` — the layout-tree guides diverge from embedded packaged topics; apply cross-link edits to both trees separately.
+- `you work list` human output uses tab-separated columns in order `WORK ID`, `NAME`, `WORK TYPE` (from `workTypeName`, empty when absent), `STATE NAME`, `STATE TYPE`, `RELATIONS`; `--json` encodes generated `ListWorkResponse` unchanged. Human/JSON tests live in `pkg/cli/work/list_test.go` (`TestList_HumanOutputShowsOneWorkItemIdentityAndState`, `TestList_HumanOutputLeavesWorkTypeEmptyWhenAbsent`, `TestList_JSONOutputPreservesGeneratedResponseShape`).
+- List-work server filters live in `pkg/api/handlers.go` `workMatchesListFilters` (applied in `listWork` before sort/pagination): `name` is case-insensitive substring; `workTypeName` exact; `traceId` matches `traceId` or `currentChainingTraceId`; empty query values are no-ops. API proof: `TestListWork_FiltersByWorkTypeNameNameSubstringAndTraceId`, `TestListWork_FiltersByNameBeforePagination` in `pkg/api/server_work_query_test.go`; OpenAPI params in `api/components/parameters/WorkList*.yaml`.
+
+## 2026-05-30T09:55:07Z - cli-work-inspection-v3-002
+- What was implemented: Verified story acceptance on `ralph/cli-work-inspection-v3` at `origin/main`: OpenAPI `WorkListName`/`WorkListWorkTypeName`/`WorkListTraceId` on default and session list-work routes; `listWork` applies `workMatchesListFilters` before sort and pagination; empty filter values are no-ops; `go test ./pkg/api/... -run TestListWork` and `go vet ./pkg/api/...` pass. No code diff required this iteration.
+- Files changed: `prd.json`, `progress.txt` (tracking only)
+- **Learnings for future iterations:**
+  - Patterns discovered: Filter helpers (`workMatchesNameListFilter`, `workMatchesWorkTypeNameListFilter`, `workMatchesTraceIDListFilter`) return true when param is nil or empty string—no new 400s for empty filters beyond existing `state.type`/`sortBy` validation.
+  - Gotchas encountered: Story 003 CLI flags and story 004 `you work show` are also already on main; verify with `pkg/cli/work/list_test.go` and `show_test.go` in subsequent iterations rather than re-implementing.
+  - Useful context: `listWorkTokenWithTraces` test helper in `server_work_query_test.go` sets both `TraceID` and `CurrentChainingTraceID` on token color for trace-id filter cases.
+---
+
+## 2026-05-30T09:53:31Z - cli-work-inspection-v3-001
+- What was implemented: Verified story acceptance on `ralph/cli-work-inspection-v3` at `origin/main` (merge PR #475): `renderListResult` prints `WORK TYPE` from `workTypeName`; existing CLI tests assert header/row and JSON `workTypeName`; `go test`/`go vet` on `pkg/cli/work` pass. No code diff required this iteration.
+- Files changed: `prd.json`, `progress.txt` (tracking only)
+- **Learnings for future iterations:**
+  - Patterns discovered: CLI work inspection v1 shipped on `ralph/cli-work-inspection` (PR #475); v3 Ralph branch can track verification against main when feature is already merged—mark stories `passes: true` after test proof without duplicate commits.
+  - Gotchas encountered: `git checkout -B ralph/cli-work-inspection-v3 origin/main` resets the branch to main; no separate feature commits until stories need net-new work.
+  - Useful context: Column order and empty work-type row behavior are covered by `TestList_HumanOutputLeavesWorkTypeEmptyWhenAbsent`; story 002+ API/CLI filter work is also already on main for subsequent verification iterations.
+---
 
 ## 2026-05-29T14:50:44Z - docs-extensions-mock-workers-and-record-001
 - What was implemented: Added canonical `mock-workers` packaged docs topic with synchronized reference markdown, `docs.go` registration at display order 25, and test expectation updates for topic order and unsupported-topic errors.
