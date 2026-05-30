@@ -1,12 +1,4 @@
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import {
-  EMPTY_STATE_CLASS,
-} from "../../../components/ui/widget-frame";
+import type { FactoryImportSaveChoice } from "../../../api/named-factory";
 import {
   Button,
   Dialog,
@@ -16,16 +8,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui";
+import {
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "../../../components/ui/dashboard-typography";
 import { SelectableCardButton } from "../../../components/ui/selectable-card-button";
-import type { FactoryImportSaveChoice } from "../../../api/named-factory";
+import { EMPTY_STATE_CLASS } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
+import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";
+import type { FactoryImportPreviewState } from "../hooks/use-factory-import-preview";
 import type { FactoryPngImportValue } from "../lib/factory-png-import";
 import {
   getImportPreviewDialogMessages,
   IMPORT_PREVIEW_FACTORY_NAME_TOKEN,
 } from "../messages/import-preview-dialog";
-import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";
-import type { FactoryImportPreviewState } from "../hooks/use-factory-import-preview";
 
 const IMPORT_DIALOG_CONTENT_CLASS =
   "w-full max-w-5xl gap-6 p-4 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:p-5";
@@ -43,7 +41,10 @@ const IMPORT_DIALOG_MODE_OPTION_CLASS =
 const IMPORT_DIALOG_MODE_OPTION_SELECTED_CLASS =
   "border-af-accent bg-af-surface";
 
-type ReadyFactoryImportPreviewState = Extract<FactoryImportPreviewState, { status: "ready" }>;
+type ReadyFactoryImportPreviewState = Extract<
+  FactoryImportPreviewState,
+  { status: "ready" }
+>;
 
 export interface FactoryImportPreviewDialogProps {
   activationState: FactoryImportActivationState;
@@ -65,7 +66,10 @@ export interface DashboardImportPreviewDialogProps {
   importSaveChoice: FactoryImportSaveChoice;
   locale?: string;
   onCancel: () => void;
-  onConfirm: (value: FactoryPngImportValue, choice: FactoryImportSaveChoice) => void;
+  onConfirm: (
+    value: FactoryPngImportValue,
+    choice: FactoryImportSaveChoice,
+  ) => void;
   onImportSaveChoiceChange: (choice: FactoryImportSaveChoice) => void;
   sessionID?: string | null;
 }
@@ -202,11 +206,17 @@ export function FactoryImportPreviewDialog({
 
           <dl className="grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-sm text-af-text-muted">
             <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.droppedFileLabel}</dt>
-              <dd className="m-0 font-semibold text-af-text">{previewState.file.name}</dd>
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>
+                {messages.droppedFileLabel}
+              </dt>
+              <dd className="m-0 font-semibold text-af-text">
+                {previewState.file.name}
+              </dd>
             </div>
             <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.embeddedFactoryLabel}</dt>
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>
+                {messages.embeddedFactoryLabel}
+              </dt>
               <dd className="m-0 font-semibold text-af-text">
                 {previewState.value.factory.name}
               </dd>
@@ -214,7 +224,9 @@ export function FactoryImportPreviewDialog({
           </dl>
 
           <fieldset className="grid gap-3" disabled={isSubmitting}>
-            <legend className={IMPORT_DIALOG_LABEL_CLASS}>{messages.importSaveChoiceLegend}</legend>
+            <legend className={IMPORT_DIALOG_LABEL_CLASS}>
+              {messages.importSaveChoiceLegend}
+            </legend>
             <SelectableCardButton
               className={cn(
                 IMPORT_DIALOG_MODE_OPTION_CLASS,
@@ -233,7 +245,9 @@ export function FactoryImportPreviewDialog({
                 {messages.replaceCurrentFactoryLabel}
               </span>
               <span className={IMPORT_DIALOG_HINT_CLASS}>
-                {messages.replaceCurrentFactoryDescription(resolvedCurrentFactoryName)}
+                {messages.replaceCurrentFactoryDescription(
+                  resolvedCurrentFactoryName,
+                )}
               </span>
             </SelectableCardButton>
             <SelectableCardButton
@@ -258,7 +272,8 @@ export function FactoryImportPreviewDialog({
               </span>
               {createTargetFactoryName ? (
                 <span className="m-0 text-sm font-semibold text-af-text">
-                  {messages.createNewNamedFactoryResolvedNameLabel}: {createTargetFactoryName}
+                  {messages.createNewNamedFactoryResolvedNameLabel}:{" "}
+                  {createTargetFactoryName}
                 </span>
               ) : null}
             </SelectableCardButton>
@@ -267,11 +282,19 @@ export function FactoryImportPreviewDialog({
           <p className={IMPORT_DIALOG_HINT_CLASS}>{messages.hint}</p>
 
           {activationState.status === "error" ? (
-            <FactoryImportActivationErrorPanel error={activationState.error} locale={locale} />
+            <FactoryImportActivationErrorPanel
+              error={activationState.error}
+              locale={locale}
+            />
           ) : null}
 
           <DialogFooter>
-            <Button disabled={isSubmitting} onClick={onCancel} tone="outline" type="button">
+            <Button
+              disabled={isSubmitting}
+              onClick={onCancel}
+              tone="outline"
+              type="button"
+            >
               {messages.cancelAction}
             </Button>
             <Button
@@ -280,7 +303,9 @@ export function FactoryImportPreviewDialog({
               onClick={onConfirm}
               type="button"
             >
-              {isSubmitting ? messages.activatingAction : messages.activateAction}
+              {isSubmitting
+                ? messages.activatingAction
+                : messages.activateAction}
             </Button>
           </DialogFooter>
         </div>
