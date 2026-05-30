@@ -398,28 +398,7 @@ func (s *Server) UpsertWorkRequest(w http.ResponseWriter, r *http.Request, reque
 		return
 	}
 
-	workRequest, err := generatedWorkRequestToDomain(req)
-	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-			return
-		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-	applyStableTraceToWorkRequest(&workRequest)
-	result, err := s.runtime.SubmitWorkRequest(r.Context(), workRequest)
-	if err != nil {
-		if strings.HasPrefix(err.Error(), "work_request:") {
-			s.writeError(w, http.StatusBadRequest, submitWorkTypeNameMessage(err.Error()), "BAD_REQUEST")
-			return
-		}
-		s.logger.Error("upsert work request failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to submit work request", "INTERNAL_ERROR")
-		return
-	}
-
-	s.writeJSON(w, http.StatusCreated, upsertWorkRequestResponse(result))
+	s.upsertWorkRequestCore(w, r, req, "", s.runtime.SubmitWorkRequest)
 }
 
 func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, requestID string) {
@@ -451,6 +430,18 @@ func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	s.upsertWorkRequestCore(w, r, req, string(sessionID), func(ctx context.Context, workRequest interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+		return sessionRuntime.SubmitWorkRequestForSession(ctx, string(sessionID), workRequest)
+	})
+}
+
+func (s *Server) upsertWorkRequestCore(
+	w http.ResponseWriter,
+	r *http.Request,
+	req factoryapi.UpsertWorkRequestJSONRequestBody,
+	sessionID string,
+	submit func(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error),
+) {
 	workRequest, err := generatedWorkRequestToDomain(req)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -461,7 +452,8 @@ func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Req
 		return
 	}
 	applyStableTraceToWorkRequest(&workRequest)
-	result, err := sessionRuntime.SubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
+
+	result, err := submit(r.Context(), workRequest)
 	if err != nil {
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
@@ -471,7 +463,11 @@ func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Req
 			s.writeError(w, http.StatusBadRequest, submitWorkTypeNameMessage(err.Error()), "BAD_REQUEST")
 			return
 		}
-		s.logger.Error("upsert work request failed", zap.Error(err), zap.String("session_id", string(sessionID)))
+		logFields := []zap.Field{zap.Error(err)}
+		if sessionID != "" && sessionID != factorysessions.DefaultSessionID {
+			logFields = append(logFields, zap.String("session_id", sessionID))
+		}
+		s.logger.Error("upsert work request failed", logFields...)
 		s.writeError(w, http.StatusInternalServerError, "failed to submit work request", "INTERNAL_ERROR")
 		return
 	}
