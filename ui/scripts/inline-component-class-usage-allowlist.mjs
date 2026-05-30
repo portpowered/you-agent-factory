@@ -88,5 +88,4 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_CARD_CLASS",
   "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_HEADER_CLASS",
   "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_TITLE_CLASS",
-  "src/features/workflow-activity/components/workflow-activity-bento-card.tsx#GRAPH_PANEL_SHELL_CLASS",
 ];
