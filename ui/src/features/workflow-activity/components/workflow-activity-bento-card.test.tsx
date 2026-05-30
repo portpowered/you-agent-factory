@@ -11,7 +11,7 @@ import {
 } from "../../current-factory-definition/public";
 import type { DashboardSelection } from "../../current-selection/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
@@ -28,8 +28,10 @@ vi.mock("../../current-factory-definition/public", async () => {
   };
 });
 
-vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual("../../factory-graph-editor/public");
+vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () => {
+  const actual = await vi.importActual(
+    "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+  );
 
   return {
     ...actual,

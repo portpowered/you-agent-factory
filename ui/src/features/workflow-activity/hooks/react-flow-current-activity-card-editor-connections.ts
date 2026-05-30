@@ -14,11 +14,11 @@ import {
   type FactoryGraphConnectionResolver,
   resolveFactoryGraphConnectionAnchorContext,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import {
-  type EditableFactoryGraphViewModel,
   type FactoryGraphConnectionEndpoint,
   getFactoryGraphConnectionAnchor,
-} from "../../factory-graph-editor/public";
+} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 
 type FactoryGraphConnectionCommit = (connection: {
   sourceAnchorId: string;

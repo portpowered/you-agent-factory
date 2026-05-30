@@ -8,7 +8,7 @@ import type {
   FactoryGraphTopology,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/public";
+import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 
