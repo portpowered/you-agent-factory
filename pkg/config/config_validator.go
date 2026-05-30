@@ -683,19 +683,6 @@ func validateBundledFileTargetPath(targetPath string) error {
 	return nil
 }
 
-func buildValidPlaces(cfg *interfaces.FactoryConfig) map[string]bool {
-	places := make(map[string]bool)
-	for _, wt := range cfg.WorkTypes {
-		for _, s := range wt.States {
-			places[fmt.Sprintf("%s:%s", wt.Name, s.Name)] = true
-		}
-	}
-	for _, r := range cfg.Resources {
-		places[fmt.Sprintf("%s:available", r.Name)] = true
-	}
-	return places
-}
-
 func buildValidWorkstations(cfg *interfaces.FactoryConfig) map[string]bool {
 	ws := make(map[string]bool)
 	for _, w := range cfg.Workstations {

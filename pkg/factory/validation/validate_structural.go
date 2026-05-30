@@ -547,16 +547,6 @@ func buildValidPlaces(cfg *interfaces.FactoryConfig) map[string]bool {
 	return places
 }
 
-func workStateSet(cfg *interfaces.FactoryConfig) map[string]bool {
-	states := make(map[string]bool)
-	for _, workType := range cfg.WorkTypes {
-		for _, state := range workType.States {
-			states[placeKey(workType.Name, state.Name)] = true
-		}
-	}
-	return states
-}
-
 func placeKey(workType, state string) string {
 	return workType + ":" + state
 }
