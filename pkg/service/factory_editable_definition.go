@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
-	"go.uber.org/zap"
 )
 
 // GetCurrentFactory returns the canonical current factory definition together
@@ -94,45 +93,6 @@ func (fs *FactoryService) saveDefaultCurrentFactoryForSession(
 	return fs.GetCurrentFactoryForSession(ctx, sessionID)
 }
 
-func (fs *FactoryService) activateDefaultReplacementRuntime(
-	ctx context.Context,
-	replacement *replacementFactoryRuntime,
-) error {
-	runState := fs.currentRunState()
-	if runState == nil || runState.runtime == nil || runState.ctx == nil {
-		fs.swapActiveRuntime(replacement)
-		return nil
-	}
-
-	restoreCurrentSidecars := false
-	serviceMode := fs.cfg != nil && runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
-	if serviceMode {
-		fs.stopLiveRuntimeSidecars(runState.runtime)
-		restoreCurrentSidecars = true
-		defer func() {
-			if restoreCurrentSidecars {
-				fs.restoreLiveRuntimeSidecars(runState)
-			}
-		}()
-	}
-	if err := fs.requireIdleRuntime(ctx); err != nil {
-		return err
-	}
-
-	replacementHandle, err := fs.startReplacementRuntime(ctx, runState.ctx, replacement, serviceMode)
-	if err != nil {
-		return err
-	}
-	fs.publishFactoryChangeEvent(ctx, runState.runtime, replacement)
-	restoreCurrentSidecars = false
-	fs.registerLiveSession(runState.sessionID, replacementHandle, true)
-	fs.setRunState(runState.ctx, runState.sessionID, replacementHandle)
-	if err := fs.stopLiveRuntime(runState.runtime); err != nil && !errors.Is(err, context.Canceled) {
-		fs.logger.Warn("prior default runtime shutdown failed", zap.Error(err))
-	}
-	return nil
-}
-
 func (fs *FactoryService) replaceEditableFactoryDefinition(
 	sessionRootDir string,
 	name factoryapi.FactoryName,
@@ -204,14 +164,6 @@ func (fs *FactoryService) buildSessionEditableFactoryReplacement(
 		return nil, fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
 	}
 	return replacement, nil
-}
-
-func (fs *FactoryService) requireFreshEditableFactoryVersion(baseVersion *factoryapi.HybridLogicalTimestamp, name factoryapi.FactoryName) error {
-	rootDir := fs.factoryRootDir
-	if rootDir == "" && fs.cfg != nil {
-		rootDir = fs.cfg.Dir
-	}
-	return fs.requireFreshEditableFactoryVersionAtRoot(baseVersion, rootDir, name)
 }
 
 func (fs *FactoryService) requireFreshEditableFactoryVersionAtRoot(baseVersion *factoryapi.HybridLogicalTimestamp, rootDir string, name factoryapi.FactoryName) error {
