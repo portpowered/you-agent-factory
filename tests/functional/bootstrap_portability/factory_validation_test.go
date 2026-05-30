@@ -24,10 +24,13 @@ func TestFactoryValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T)
 		t.Fatal("expected BuildFactoryService to fail for workstation referencing non-existent worker")
 	}
 
-	if !strings.Contains(err.Error(), "non-existent worker") {
-		t.Errorf("expected error about non-existent worker, got: %v", err)
+	if !strings.Contains(err.Error(), "invalid named factory") {
+		t.Errorf("expected load-boundary invalid factory error, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "ghost-worker") {
-		t.Errorf("expected error to mention the invalid worker name 'ghost-worker', got: %v", err)
+	if !strings.Contains(err.Error(), "invalid graph references") {
+		t.Errorf("expected blocking structural validation summary, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "blocking validation targets") {
+		t.Errorf("expected blocking validation target count in error, got: %v", err)
 	}
 }
