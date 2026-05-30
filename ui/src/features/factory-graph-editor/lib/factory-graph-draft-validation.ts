@@ -1,3 +1,7 @@
+import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
+import { buildDraftAppliedFactoryDefinition } from "./factory-graph-draft-apply";
+import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -7,9 +11,6 @@ import type {
   FactoryGraphNodeKind,
 } from "./factory-graph-draft-types";
 import { buildNode, nodeKeyId } from "./factory-graph-draft-types";
-import { buildDraftAppliedFactoryDefinition } from "./factory-graph-draft-apply";
-import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export function validateFactoryGraphDraft(
   baseFactoryDefinition: CanonicalFactoryDefinition,
@@ -78,7 +79,10 @@ export function validateFactoryGraphDraftSave(
   );
 
   for (const workstation of draft.additions.workstations) {
-    if (workstation.worker.trim().length === 0) {
+    if (
+      workstationRequiresWorkerAssignment(workstation) &&
+      workstation.worker.trim().length === 0
+    ) {
       errors.push(missingWorkerError(workstation.name, locale));
     }
   }
@@ -151,7 +155,10 @@ function validateFinalWorkerAssignments(
   locale?: string | null,
 ) {
   for (const workstation of pendingFactoryDefinition.workstations ?? []) {
-    if (workstation.worker.trim().length === 0) {
+    if (
+      workstationRequiresWorkerAssignment(workstation) &&
+      workstation.worker.trim().length === 0
+    ) {
       errors.push(missingWorkerError(workstation.name, locale));
     }
   }
