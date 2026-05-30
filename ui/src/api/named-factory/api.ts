@@ -43,11 +43,6 @@ export interface NamedFactoryAPIErrorDetails {
   statusText?: string;
 }
 
-export interface CreateFactoryOptions {
-  fetch?: typeof globalThis.fetch;
-  sessionID?: string | null;
-}
-
 export interface GetCurrentFactoryOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
@@ -90,40 +85,6 @@ export class NamedFactoryAPIError extends Error {
     this.status = details.status;
     this.statusText = details.statusText;
   }
-}
-
-export async function createFactory(
-  value: FactoryValue,
-  options: CreateFactoryOptions = {},
-): Promise<FactoryValue> {
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
-
-  if (typeof fetchImplementation !== "function") {
-    throw new NamedFactoryAPIError("Named factory activation is unavailable in this environment.", {
-      code: "NETWORK_ERROR",
-    });
-  }
-
-  const { version: _version, ...factoryWithoutVersion } = value;
-
-  let savedDocument: CurrentFactoryDocument;
-  try {
-    savedDocument = await saveFactoryForSessionDocument(
-      {
-        factoryDefinition: factoryWithoutVersion,
-        includeVersion: false,
-        mode: "UPSERT_NAMED_AND_ACTIVATE",
-      },
-      {
-        fetch: fetchImplementation,
-        sessionID: options.sessionID,
-      },
-    );
-  } catch (error) {
-    throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
-  }
-
-  return toActivatedFactoryValue(savedDocument);
 }
 
 export async function getCurrentFactory(
