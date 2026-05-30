@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Google Wire lives only in `cmd/factory/composition`: `wire.go` uses `//go:build wireinject` and `//go:generate go run -mod=mod github.com/google/wire/cmd/wire`; commit `wire_gen.go` (never hand-edit) and regenerate with `go generate ./cmd/factory/composition/...` after changing providers—`pkg/service` stays free of wire tags.
 - `you run` factory construction uses `pkg/cli/run` package-level `buildFactoryService` (`FactoryServiceBuilder`); register production wiring with `run.SetBuildFactoryService` from `cmd/factory/main` before `cli.Execute`, and keep tests overriding `buildFactoryService` directly without calling registration.
 - `buildRuntimeBundle` in `pkg/service/factory_build.go` returns `factoryRuntimeBundle`, the single runtime wiring struct referenced from `liveRuntimeHandle`; add new runtime sidecars on `factoryRuntimeBundle` only—startup (`BuildFactoryService`) and `buildReplacementFactoryRuntime` both create `logSink` and session loggers inside `buildRuntimeBundle`, not after the fact.
 - Register every live session (including `~default` at `Run` startup and `OpenFactorySession` launches) through `registerLiveSession` in `pkg/service/runtime_sessions.go` with explicit `FactorySessionTarget` metadata; use `defaultSessionTargetFromRuntimeBundle` for default startup—do not call `sessions.Upsert` directly except in `replaceSessionRuntime` replacement updates.
@@ -594,6 +595,15 @@
   - Patterns discovered: After `main` advances, re-merge can conflict only in `activateReplacementWithoutLiveRuntime` when main still has pre-consolidation replacement helpers—keep branch session-registry paths, not `swapActiveRuntime`.
   - Gotchas encountered: `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING` blocks CI even when local tests pass; push a conflict-free merge before waiting on checks.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories `passes: true`; prior BLOCKING merge-conflict + missing CI items addressed on head `77399175`.
+---
+
+## 2026-05-30T19:49:51Z - cmd-wire-composition-002
+- What was implemented: Added `cmd/factory/composition` with Wire injector bootstrap (`wire.go` + generated `wire_gen.go`) delegating to `service.BuildFactoryService`, `github.com/google/wire` module/tool dependency, and composition test proving error parity with the service builder.
+- Files changed: `cmd/factory/composition/wire.go`, `cmd/factory/composition/wire_gen.go`, `cmd/factory/composition/composition_test.go`, `go.mod`, `go.sum`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Run `go run -mod=mod github.com/google/wire/cmd/wire` from `cmd/factory/composition` when the package has only `wireinject`-tagged sources—`go generate ./cmd/factory/composition/...` works once `wire_gen.go` exists.
+  - Gotchas encountered: Wire is an indirect module dependency until `wire.go` is present; add `tool github.com/google/wire/cmd/wire` beside `oapi-codegen` for reproducible generation.
+  - Useful context: Story 003 registers `composition.BuildFactoryService` from `cmd/factory/main` via `run.SetBuildFactoryService`; story 004 replaces the single-provider set with explicit S6 collaborators.
 ---
 
 ## 2026-05-30T19:48:06Z - cmd-wire-composition-001
