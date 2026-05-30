@@ -115,6 +115,5 @@ func Submit(cfg SubmitConfig) error {
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(result)
 	}
-	_, err = fmt.Fprintf(cfg.Output, "Submitted work: %s\n", result.TraceId)
-	return err
+	return writeHumanSubmitSuccess(cfg.Output, result, name, cfg.WorkTypeName)
 }
