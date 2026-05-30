@@ -139,22 +139,7 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 		return factoryapi.Factory{}, err
 	}
 
-	var currentVersion *factoryapi.HybridLogicalTimestamp
-	if replaceExisting {
-		version, versionErr := fs.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
-		if versionErr != nil {
-			return factoryapi.Factory{}, versionErr
-		}
-		currentVersion = &version
-		if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, request.Name); err != nil {
-			return factoryapi.Factory{}, err
-		}
-	}
-
-	nextVersion := nextEditableFactoryVersion(currentVersion, factory.EnsureClock(fs.clock).Now().UTC())
-	sanitized := request
-	sanitized.Version = nil
-	payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
+	payload, err := fs.marshalUpsertNamedFactoryPayload(sessionRootDir, request, replaceExisting)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -168,6 +153,40 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 		return factoryapi.Factory{}, fmt.Errorf("write session current factory pointer: %w", err)
 	}
 
+	return fs.activateUpsertNamedFactorySave(ctx, sessionID, session, sessionRootDir, factoryDir, request)
+}
+
+func (fs *FactoryService) marshalUpsertNamedFactoryPayload(
+	sessionRootDir string,
+	request factoryapi.Factory,
+	replaceExisting bool,
+) ([]byte, error) {
+	var currentVersion *factoryapi.HybridLogicalTimestamp
+	if replaceExisting {
+		version, err := fs.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
+		if err != nil {
+			return nil, err
+		}
+		currentVersion = &version
+		if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, request.Name); err != nil {
+			return nil, err
+		}
+	}
+
+	nextVersion := nextEditableFactoryVersion(currentVersion, factory.EnsureClock(fs.clock).Now().UTC())
+	sanitized := request
+	sanitized.Version = nil
+	return marshalPersistedFactoryPayload(sanitized, nextVersion)
+}
+
+func (fs *FactoryService) activateUpsertNamedFactorySave(
+	ctx context.Context,
+	sessionID string,
+	session *factorysessions.LiveSession,
+	sessionRootDir string,
+	factoryDir string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
 	replacement, err := fs.buildSessionEditableFactoryReplacement(ctx, sessionRootDir, factoryDir, sessionID, request.Name)
 	if err != nil {
 		return factoryapi.Factory{}, err
