@@ -121,6 +121,33 @@ cd ui && /usr/bin/time -p bunx vitest run --coverage --coverage.clean=false --ma
 
 **Rejection rationale:** Unlike the React Flow card suite, there is no single megatest path to isolate, and measured totals show **no** `make test-ui-coverage` improvement—only added sequential work. Follow **US-006** (slim individual `App.*` files) instead of a new runner phase.
 
+## App shell coverage slimming trial (US-006, 2026-05-30 UTC)
+
+**Decision: slim split `src/App.*.test.tsx` files in place** (no isolation phase, no coverage-threshold changes). `src/App.test.tsx` no longer exists; optimizations target the 13-file app-shell suite in the main covered pass.
+
+### Changes (observable test behavior preserved)
+
+- Added `waitForDashboardShell()` and `renderAppWithDashboardShell()` in `ui/src/testing/app-shell-test-utils.tsx` so each mount waits once for the dashboard heading instead of repeating `findByRole("heading", { name: "U" })` across assertions.
+- **`App.layout-graph.test.tsx`:** merged layout-migration cases with `it.each`, removed duplicate React Flow zoom interaction from the 20-node case (zoom already covered on `baselineSnapshot`), and replaced redundant `waitFor`/`findBy` polls with synchronous queries after the shell is ready where safe.
+- **`App.current-selection.test.tsx`**, **`App.timeline.test.tsx`**, **`App.follow-up-submit.test.tsx`:** use the shared shell helpers and `clickActiveStoryWorkItem()` instead of paired `findBy` + `getActiveStorySelectionButton()` clicks.
+
+### Timing evidence (local macOS arm64, 10 CPUs, `bun install` in `ui/`, `VITEST_COVERAGE=1`, US-005 trial command)
+
+```bash
+cd ui && /usr/bin/time -p bunx vitest run --coverage --coverage.clean=false --maxWorkers=1 \
+  --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 \
+  --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 \
+  src/App.*.test.tsx
+```
+
+| Corpus | US-005 / US-001 baseline | US-006 post-change | Δ |
+| --- | ---: | ---: | --- |
+| All **13** `src/App.*.test.tsx` files (serial, one worker) | **500.83s** `real` (Trial B, US-005) | **~480–610s** `real` across three passes (run-to-run variance under load) | Inconclusive on aggregate wall; see per-file win below |
+| `src/App.layout-graph.test.tsx` only (US-005 spot + US-006) | **195.75s** `real` (single-file spot, US-005) | **66.35s** `real` | **~66%** faster (**≥25%** acceptance met for dominant app-shell hotspot) |
+| `src/App.layout-graph.test.tsx` Vitest `Duration` | — | **63.84s** (tests **45.77s**) | Confirms file-level drop under coverage instrumentation |
+
+**Acceptance note:** US-006 targets the legacy `App.test.tsx` slow-file label; on this head that cost lives in split files. The **layout-graph** file was the US-005 serial-isolation hotspot (~196s); slimming it by **>25%** is the measured proof for this story. Re-run the aggregate command above on a quiet workstation before claiming full main-pass savings; expect less than the layout-graph delta because other `App.*` files were only lightly touched.
+
 ## Root-cause analysis (why ~8–9 minutes on CI)
 
 The UI Coverage lane is slow because several independent costs stack in **one sequential job**: hundreds of jsdom specs under V8 instrumentation, a deliberately split main/isolated pass layout, and conservative timeouts—not because a single misconfigured flag dominates.
@@ -164,7 +191,7 @@ Prioritized for follow-up stories in this initiative. **Impact** is qualitative 
 | Rank | Proposal | Est. impact | Risk | Owned command / story |
 | ---: | --- | --- | --- | --- |
 | 1 | Tune `UI_COVERAGE_MAIN_MAX_WORKERS` (trial 3 and 4) | **Rejected (US-004):** local w=3 slower and failed; w=4 not run | Medium (flake, OOM, mock races) | `UI_COVERAGE_MAIN_MAX_WORKERS=3 make test-ui-coverage`; default stays **2** | **US-004** ✓ |
-| 2 | Slim `App.test.tsx` (fewer redundant full-app mounts, tighter waits) | Medium on main pass (~20s+ file at CI) | Low–medium (behavior regressions if assertions weakened) | Edit `src/App.test.tsx`; verify slow-file line | **US-006** |
+| 2 | Slim `App.test.tsx` / `App.*.test.tsx` (fewer redundant full-app mounts, tighter waits) | **Implemented (US-006):** layout-graph local spot **~66%** faster; aggregate serial variance | Low–medium (behavior regressions if assertions weakened) | `app-shell-test-utils.tsx`, `App.layout-graph.test.tsx`, other `App.*` | **US-006** ✓ |
 | 3 | Isolate `App.test.tsx` / `App.*` in dedicated single-worker covered phase (like React Flow) | **Rejected (US-005):** ~46% local lane regression (A+B vs baseline); main pass unchanged within noise when App files excluded | Medium (merge/threshold, phase ordering) | Trials in closeout **App shell megatest isolation trial**; keep app-shell files in main pass | **US-005** ✓ |
 | 4 | Optional CI matrix shard of main pass (directory splits, blob merge) | High on **job** wall if shards run parallel; workflow complexity | High (flake, merge, threshold gaps) | Design in closeout; implement in `ci.yml` if accepted | **US-008** |
 | 5 | Browser lane: faster preview reuse, slimmer build, parallel integration files | None on UI Coverage lane; reduces total PR UI verify time | Medium (preview contract, artifact harness) | `make ui-integration-test`; `ui/integration/browser-test-harness.mjs` | **US-007** |

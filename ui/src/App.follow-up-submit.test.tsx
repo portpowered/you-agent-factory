@@ -14,16 +14,19 @@ import {
   nonPromptTemplateFetchPaths,
   registerAppDashboardTestLifecycle,
   renderApp,
+  renderAppWithDashboardShell,
   terminalSnapshot,
+  waitForDashboardShell,
 } from "./testing/app-shell-test-utils";
 
-describe("App follow-up submit and dashboard shell flows", () => {
+describe("App follow-up flows", () => {
   registerAppDashboardTestLifecycle();
 
+  describe("dashboard shell", () => {
   it("renders the submit-work card alongside the existing dashboard widgets", async () => {
-    renderApp({ snapshot: terminalSnapshot });
+    await renderAppWithDashboardShell({ snapshot: terminalSnapshot });
 
-    const dashboardGrid = await screen.findByRole("region", {
+    const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
     });
 
@@ -73,11 +76,9 @@ describe("App follow-up submit and dashboard shell flows", () => {
     });
     expect(within(exportDialog).getByLabelText("Factory name")).toBeTruthy();
   });
-});
+  });
 
-describe("App follow-up submit request flows", () => {
-  registerAppDashboardTestLifecycle();
-
+  describe("submit request flows", () => {
   it("submits configured and empty work requests, while preserving failed form state", async () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
     fetchMock.mockImplementation(
@@ -104,7 +105,7 @@ describe("App follow-up submit request flows", () => {
       },
     );
 
-    await screen.findByRole("heading", { name: "U" });
+    await waitForDashboardShell();
 
     const {
       requestName,
@@ -195,11 +196,9 @@ describe("App follow-up submit request flows", () => {
       "Retry the broken submission from the dashboard shell.",
     );
   });
-});
+  });
 
-describe("App follow-up submit multimodal flows", () => {
-  registerAppDashboardTestLifecycle();
-
+  describe("multimodal submit", () => {
   it("submits a light text-plus-image multimodal request through the dashboard shell", async () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
     fetchMock.mockImplementation(
@@ -229,7 +228,7 @@ describe("App follow-up submit multimodal flows", () => {
       },
     );
 
-    await screen.findByRole("heading", { name: "U" });
+    await waitForDashboardShell();
 
     const {
       requestName,
@@ -292,11 +291,9 @@ describe("App follow-up submit multimodal flows", () => {
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
     ]);
   });
-});
+  });
 
-describe("App follow-up workstation and live totals flows", () => {
-  registerAppDashboardTestLifecycle();
-
+  describe("workstation and live totals", () => {
   it("shows workstation-scoped workstation runs on the free-floating cards", async () => {
     renderApp({ snapshot: activeSnapshot });
 
@@ -360,7 +357,7 @@ describe("App follow-up workstation and live totals flows", () => {
   it("updates completed and failed totals from the live stream", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "U" });
+    await waitForDashboardShell();
     const stream = MockEventSource.instances[0];
     if (!stream) {
       throw new Error("expected dashboard stream to be opened");
@@ -401,6 +398,7 @@ describe("App follow-up workstation and live totals flows", () => {
       ).toBeTruthy();
     });
     expect(screen.queryByRole("status", { name: /Event stream/i })).toBeNull();
+  });
   });
 });
 

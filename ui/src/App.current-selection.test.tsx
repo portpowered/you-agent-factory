@@ -1360,11 +1360,8 @@ describe("App current selection", () => {
     expect(workstationSelectionSlot).toBe(stateSelectionSlot);
     expect(within(workstationInfo).getByText("Input work types")).toBeTruthy();
   });
-});
 
-describe("App current selection layout", () => {
-  registerAppDashboardTestLifecycle();
-
+  describe("layout", () => {
   it("keeps selection detail out of the workflow graph inspector layer", async () => {
     renderApp({
       snapshot: activeSnapshot,
@@ -1888,11 +1885,9 @@ describe("App current selection layout", () => {
       window.innerWidth,
     );
   });
-});
+  });
 
-describe("App current selection terminal states", () => {
-  registerAppDashboardTestLifecycle();
-
+  describe("terminal states", () => {
   it("opens completed and failed work summaries and updates the trace card", async () => {
     renderApp({
       snapshot: terminalSnapshot,
@@ -2091,5 +2086,6 @@ describe("App current selection terminal states", () => {
         "No retained dispatch history is currently available for this work item.",
       ),
     ).toBeTruthy();
+  });
   });
 });
