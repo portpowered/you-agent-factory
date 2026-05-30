@@ -234,13 +234,15 @@ describe("factory API", () => {
       "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
-          name: "Session Current Name",
-          workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
-          workers: [],
-          workstations: [],
-          version: {
-            logical: "10",
-            physical: "2026-05-18T14:25:00.001Z",
+          factory: {
+            name: "Session Current Name",
+            workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
+            },
           },
         }),
         headers: {

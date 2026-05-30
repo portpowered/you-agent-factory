@@ -314,54 +314,6 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeNamedFactoryBody(r.Body)
-	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-			return
-		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-	if err := apisurface.ValidateWritableNamedFactoryName(req.Name); err != nil {
-		s.writeError(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME")
-		return
-	}
-
-	created, err := s.runtime.CreateNamedFactory(r.Context(), req)
-	if err != nil {
-		var topologyErr *apisurface.TopologyValidationError
-		switch {
-		case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
-			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.FactoryValidationTarget{factoryvalidation.InvalidFactoryNameTarget()})
-			return
-		case errors.As(err, &topologyErr):
-			targets := topologyErr.Targets
-			if len(targets) == 0 {
-				targets = []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()}
-			}
-			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", targets)
-			return
-		case errors.Is(err, apisurface.ErrInvalidNamedFactory):
-			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
-			return
-		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
-			s.writeError(w, http.StatusConflict, "Named factory already exists.", "FACTORY_ALREADY_EXISTS")
-			return
-		case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
-			s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.FactoryValidationTarget{factoryvalidation.FactoryRuntimeNotIdleTarget()})
-			return
-		default:
-			s.logger.Error("create factory failed", zap.Error(err))
-			s.writeError(w, http.StatusInternalServerError, "failed to store named factory", "INTERNAL_ERROR")
-			return
-		}
-	}
-
-	s.writeJSON(w, http.StatusCreated, created)
-}
-
 func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
@@ -661,7 +613,7 @@ func (s *Server) SaveCurrentFactory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	saved, err := s.runtime.SaveCurrentFactory(r.Context(), req)
+	saved, err := s.runtime.SaveCurrentFactory(r.Context(), req.Factory)
 	if err != nil {
 		s.writeCurrentFactoryError(w, err, "save")
 		return
@@ -689,12 +641,56 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 		return
 	}
 
-	saved, err := sessionRuntime.SaveCurrentFactoryForSession(r.Context(), string(sessionID), req)
-	if err != nil {
-		s.writeCurrentFactoryError(w, err, "save", zap.String("session_id", string(sessionID)))
-		return
+	mode := factoryapi.FactorySaveModeReplaceCurrent
+	if req.Mode != nil {
+		mode = *req.Mode
+	}
+
+	var saved factoryapi.Factory
+	switch mode {
+	case factoryapi.FactorySaveModeUpsertNamedAndActivate:
+		if nameErr := apisurface.ValidateWritableNamedFactoryName(req.Factory.Name); nameErr != nil {
+			s.writeError(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME")
+			return
+		}
+		var upsertErr error
+		saved, upsertErr = s.runtime.CreateNamedFactory(r.Context(), req.Factory)
+		if upsertErr != nil {
+			s.writeCreateNamedFactoryError(w, upsertErr)
+			return
+		}
+	default:
+		var saveErr error
+		saved, saveErr = sessionRuntime.SaveCurrentFactoryForSession(r.Context(), string(sessionID), req.Factory)
+		if saveErr != nil {
+			s.writeCurrentFactoryError(w, saveErr, "save", zap.String("session_id", string(sessionID)))
+			return
+		}
 	}
 	s.writeJSON(w, http.StatusOK, saved)
+}
+
+func (s *Server) writeCreateNamedFactoryError(w http.ResponseWriter, err error) {
+	var topologyErr *apisurface.TopologyValidationError
+	switch {
+	case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.FactoryValidationTarget{factoryvalidation.InvalidFactoryNameTarget()})
+	case errors.As(err, &topologyErr):
+		targets := topologyErr.Targets
+		if len(targets) == 0 {
+			targets = []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()}
+		}
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", targets)
+	case errors.Is(err, apisurface.ErrInvalidNamedFactory):
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
+	case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
+		s.writeError(w, http.StatusConflict, "Named factory already exists.", "FACTORY_ALREADY_EXISTS")
+	case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
+		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.FactoryValidationTarget{factoryvalidation.FactoryRuntimeNotIdleTarget()})
+	default:
+		s.logger.Error("upsert named factory failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to store named factory", "INTERNAL_ERROR")
+	}
 }
 
 func (s *Server) writeCurrentFactoryError(
@@ -1648,24 +1644,24 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 	return req, nil
 }
 
-func decodeNamedFactoryBody(body io.Reader) (factoryapi.CreateFactoryJSONRequestBody, error) {
+func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return factoryapi.CreateFactoryJSONRequestBody{}, err
+		return factoryapi.Factory{}, err
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 
-	var req factoryapi.CreateFactoryJSONRequestBody
+	var req factoryapi.Factory
 	if err := decoder.Decode(&req); err != nil {
-		return factoryapi.CreateFactoryJSONRequestBody{}, err
+		return factoryapi.Factory{}, err
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		if err == nil {
-			return factoryapi.CreateFactoryJSONRequestBody{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
+			return factoryapi.Factory{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
 		}
-		return factoryapi.CreateFactoryJSONRequestBody{}, err
+		return factoryapi.Factory{}, err
 	}
 	return req, nil
 }

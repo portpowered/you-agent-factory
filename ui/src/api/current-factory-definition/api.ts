@@ -116,9 +116,11 @@ export async function saveCurrentFactoryDocument(
   input: SaveCurrentFactoryInput,
   options: SaveCurrentFactoryOptions = {},
 ): Promise<CurrentFactoryDocument> {
-  const requestBody: CanonicalFactory = {
-    ...input.factoryDefinition,
-    version: incrementCurrentFactoryVersion(input.baseVersion),
+  const requestBody = {
+    factory: {
+      ...input.factoryDefinition,
+      version: incrementCurrentFactoryVersion(input.baseVersion),
+    } satisfies CanonicalFactory,
   };
 
   return requestCurrentFactoryDocument({

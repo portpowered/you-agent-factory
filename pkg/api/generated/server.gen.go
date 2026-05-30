@@ -71,6 +71,12 @@ const (
 	FactoryEventTypeWorkRequest               FactoryEventType = "WORK_REQUEST"
 )
 
+// Defines values for FactorySaveMode.
+const (
+	FactorySaveModeReplaceCurrent         FactorySaveMode = "REPLACE_CURRENT"
+	FactorySaveModeUpsertNamedAndActivate FactorySaveMode = "UPSERT_NAMED_AND_ACTIVATE"
+)
+
 // Defines values for FactorySessionTargetRefKind.
 const (
 	FactorySessionTargetRefKindDefault FactorySessionTargetRefKind = "default"
@@ -706,6 +712,9 @@ type FactoryGuard struct {
 
 // FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
+
+// FactorySaveMode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+type FactorySaveMode string
 
 // FactorySessionSummary defines model for FactorySessionSummary.
 type FactorySessionSummary struct {
@@ -1945,6 +1954,15 @@ type SafeWorkDiagnostics struct {
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
 
+// SaveFactoryForSessionRequest Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
+type SaveFactoryForSessionRequest struct {
+	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
+	Factory Factory `json:"factory"`
+
+	// Mode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+	Mode *FactorySaveMode `json:"mode,omitempty"`
+}
+
 // ScriptExecutionOutcome Result category returned by one public script execution boundary.
 type ScriptExecutionOutcome string
 
@@ -2880,14 +2898,11 @@ type ListWorkParams struct {
 // ListWorkParamsSortBy defines parameters for ListWork.
 type ListWorkParamsSortBy string
 
-// CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
-type CreateFactoryJSONRequestBody = Factory
-
 // OpenFactorySessionJSONRequestBody defines body for OpenFactorySession for application/json ContentType.
 type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
 
 // SaveCurrentFactoryBySessionIdJSONRequestBody defines body for SaveCurrentFactoryBySessionId for application/json ContentType.
-type SaveCurrentFactoryBySessionIdJSONRequestBody = Factory
+type SaveCurrentFactoryBySessionIdJSONRequestBody = SaveFactoryForSessionRequest
 
 // ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplateBySessionId for application/json ContentType.
 type ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody = PromptTemplateValidationRequest
@@ -3601,9 +3616,6 @@ type ServerInterface interface {
 	// Stream factory events
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
-	// Create factory
-	// (POST /factories)
-	CreateFactory(w http.ResponseWriter, r *http.Request)
 	// List live factory sessions
 	// (GET /factory-sessions)
 	ListFactorySessions(w http.ResponseWriter, r *http.Request)
@@ -3619,7 +3631,7 @@ type ServerInterface interface {
 	// Get current factory for one session
 	// (GET /factory-sessions/{session_id}/factory)
 	GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Save current factory for one session
+	// Save factory for one session
 	// (PUT /factory-sessions/{session_id}/factory)
 	SaveCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get workstation prompt-template contract
@@ -3698,20 +3710,6 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEvents(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateFactory operation middleware
-func (siw *ServerInterfaceWrapper) CreateFactory(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateFactory(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4608,8 +4606,6 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	}
 
 	r.HandleFunc(options.BaseURL+"/events", wrapper.GetEvents).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factories", wrapper.CreateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.ListFactorySessions).Methods("GET")
 

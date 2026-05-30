@@ -1,0 +1,44 @@
+type: object
+description: >-
+  Session-scoped factory submission payload for PUT
+  /factory-sessions/{session_id}/factory.
+additionalProperties: false
+required:
+  - factory
+properties:
+  mode:
+    $ref: './FactorySaveMode.yaml'
+    default: REPLACE_CURRENT
+  factory:
+    $ref: '../data-models/Factory.yaml'
+example:
+  mode: REPLACE_CURRENT
+  factory:
+    name: alpha
+    version:
+      logical: '2'
+      physical: '2026-05-30T12:00:00.000000000Z'
+    workTypes:
+      - name: task
+        states:
+          - name: init
+            type: INITIAL
+          - name: done
+            type: TERMINAL
+    workers:
+      - name: planner
+        type: MODEL_WORKER
+        modelProvider: CLAUDE
+        executorProvider: SCRIPT_WRAP
+        model: claude-sonnet-4-20250514
+    workstations:
+      - name: plan-task
+        behavior: STANDARD
+        type: MODEL_WORKSTATION
+        worker: planner
+        inputs:
+          - workType: task
+            state: init
+        outputs:
+          - workType: task
+            state: done
