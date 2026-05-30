@@ -327,9 +327,9 @@ go generate ./cmd/factory/composition/...
 
 2. Commit `cmd/factory/composition/wire_gen.go` together with `wire.go` and any provider changes. Never hand-edit `wire_gen.go`.
 
-3. Verify with `go test ./cmd/factory/composition/... ./pkg/cli/run/... ./pkg/service/...` and `go build -o /tmp/you-factory ./cmd/factory` (use an explicit output path when a sibling `factory/` directory exists in the working directory).
+3. Verify with `make factory-composition-smoke` (regenerates `wire_gen.go`, fails on drift, and runs composition tests) or `go test ./cmd/factory/composition/... ./pkg/cli/run/... ./pkg/service/...`, plus `go build -o /tmp/you-factory ./cmd/factory` (use an explicit output path when a sibling `factory/` directory exists in the working directory).
 
-Install Wire with `go install github.com/google/wire/cmd/wire@v0.6.0`, or rely on the `go.mod` `tool` entry via the `go generate` directive in `wire.go`. See [Factory CLI Wire Composition](factory-cli-wire-composition.md) for layout, boundaries, and maintainer rules.
+Install Wire with `go install github.com/google/wire/cmd/wire@v0.6.0`, or rely on the `go.mod` `tool` entry via the `go generate` directive in `wire.go`. CI runs the same stale-generation guard via `make factory-composition-smoke` in the Build, Lint, and API job. See [Factory CLI Wire Composition](factory-cli-wire-composition.md) for layout, boundaries, and maintainer rules.
 
 ## Factory Sharing Contract
 

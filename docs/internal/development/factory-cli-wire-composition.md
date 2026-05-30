@@ -56,6 +56,8 @@ go test ./pkg/cli/run/...
 go test ./pkg/service/...
 ```
 
+CI and local build-contract verification run `make factory-composition-smoke`, which regenerates `wire_gen.go` twice and fails when `git diff` shows drift. Use that target before pushing provider changes.
+
 ## Rules
 
 1. **Never hand-edit `wire_gen.go`.** Change providers in `wire.go` or exported helpers in `pkg/service/factory_build.go`, then regenerate.
@@ -78,4 +80,4 @@ If `wire_gen.go` is missing on a fresh checkout, run `go generate ./cmd/factory/
 - [Development Guide](development.md) — root verification commands (`make typecheck`, `make test`).
 - [Development Guide Relevant Files](../processes/development-guide-relevant-files.md) — inventory row for `cmd/factory/composition/`.
 
-Optional CI stale-generation checks for `wire_gen.go` are described in the cmd-wire-composition PRD follow-up story; until that guard lands, reviewers should confirm `go generate ./cmd/factory/composition/...` produces a clean `git diff` on provider changes.
+Stale-generation checks for `wire_gen.go` run in CI via `make factory-composition-smoke` (also included in `make verify-build-contracts` and `make verify-pr`).
