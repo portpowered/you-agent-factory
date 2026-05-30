@@ -60,8 +60,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified on ralph/cli-work-inspection-v3 at origin/main: flags in pkg/cli/root_work.go; query mapping and verbose filter summary in pkg/cli/work/list.go; tests TestList_SendsNameAndWorkTypeNameFilters, TestList_SendsTraceIdFilter, TestList_VerboseDiagnosticsIncludeActiveFilterKeys pass."
     },
     {
       "id": "cli-work-inspection-v3-004",
@@ -78,8 +78,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified on ralph/cli-work-inspection-v3 at origin/main (merged PR #475): show.go uses sessionpath GET /work/{id}; human/JSON/not-found/session tests in pkg/cli/work/show_test.go; registration in root_work.go with --session; go test ./pkg/cli/work/... passes."
     }
   ]
 }

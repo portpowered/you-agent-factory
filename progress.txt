@@ -23,6 +23,26 @@
 - Do not `cp` `pkg/cli/docs/reference/config.md` or `templates.md` onto `docs/reference/` — the layout-tree guides diverge from embedded packaged topics; apply cross-link edits to both trees separately.
 - `you work list` human output uses tab-separated columns in order `WORK ID`, `NAME`, `WORK TYPE` (from `workTypeName`, empty when absent), `STATE NAME`, `STATE TYPE`, `RELATIONS`; `--json` encodes generated `ListWorkResponse` unchanged. Human/JSON tests live in `pkg/cli/work/list_test.go` (`TestList_HumanOutputShowsOneWorkItemIdentityAndState`, `TestList_HumanOutputLeavesWorkTypeEmptyWhenAbsent`, `TestList_JSONOutputPreservesGeneratedResponseShape`).
 - List-work server filters live in `pkg/api/handlers.go` `workMatchesListFilters` (applied in `listWork` before sort/pagination): `name` is case-insensitive substring; `workTypeName` exact; `traceId` matches `traceId` or `currentChainingTraceId`; empty query values are no-ops. API proof: `TestListWork_FiltersByWorkTypeNameNameSubstringAndTraceId`, `TestListWork_FiltersByNameBeforePagination` in `pkg/api/server_work_query_test.go`; OpenAPI params in `api/components/parameters/WorkList*.yaml`.
+- `you work list` filter flags (`--name`, `--work-type-name`, `--trace-id`) register in `pkg/cli/root_work.go` with Long help for server-side substring/exact semantics and pagination; HTTP query mapping and verbose `filters=name,workTypeName,traceId` diagnostics live in `pkg/cli/work/list.go`. CLI proof: `TestList_SendsNameAndWorkTypeNameFilters`, `TestList_SendsTraceIdFilter`, `TestList_VerboseDiagnosticsIncludeActiveFilterKeys` in `pkg/cli/work/list_test.go`.
+- `you work show <work-id>` lives in `pkg/cli/work/show.go` with Cobra registration in `pkg/cli/root_work.go` (`show <work-id>`, `--session`). `sessionpath.ScopedPath("/work/"+id)` hits GET `/work/{id}` or `/factory-sessions/{session_id}/work/{id}`; human output uses title-case labels and `primaryWorkTrace` (chaining trace before legacy `traceId`); `--json` encodes `factoryapi.Work` directly; 404 returns non-zero with `work "<id>" not found` and empty stdout. CLI proof: `TestShow_HumanOutputIncludesWorkSummary`, `TestShow_JSONOutputEmitsWorkObject`, `TestShow_NotFoundExitsWithClearError`, `TestShow_SessionScopedRouteUsesFactorySessionPath` in `pkg/cli/work/show_test.go`.
+
+## 2026-05-30T09:58:41Z - cli-work-inspection-v3-004
+- What was implemented: Verified story acceptance on `ralph/cli-work-inspection-v3` at `origin/main` (merge PR #475): `you work show` registered in `root_work.go` with `--session`; `show.go` calls session-scoped GET work by id, renders human summary (id, name, work type, state, trace, relations) or JSON `Work`; 404 is non-zero with clear error; `go test`/`go vet` on `pkg/cli/work` pass. No code diff required this iteration.
+- Files changed: `prd.json`, `progress.txt` (tracking only)
+- **Learnings for future iterations:**
+  - Patterns discovered: `showWork` aliases `workcli.Show` from `root.go` like `listWork`; reuse `formatWorkRelations` and `workStateColumns` from `list.go` for consistent relation/state formatting between list and show.
+  - Gotchas encountered: v3 `you work show` uses dedicated GET `/work/{id}` (not v1 list+workId filter); verify against `show_test.go` paths, not v1 PR #478 assumptions.
+  - Useful context: All four v3 stories verified against main after PR #475; open PR named `cli-work-inspection-v3` with prd.json body and branch head aligned to `origin/main` so tracking files stay out of review history.
+---
+
+## 2026-05-30T09:56:53Z - cli-work-inspection-v3-003
+- What was implemented: Verified story acceptance on `ralph/cli-work-inspection-v3` at `origin/main` (merge PR #475): `root_work.go` exposes `--name`, `--work-type-name`, and `--trace-id` with documented server-side filter semantics; `list.go` maps query params and verbose `listFilterSummary`; `go test ./pkg/cli/work/...` and `go vet ./pkg/cli/work/...` pass. No code diff required this iteration.
+- Files changed: `prd.json`, `progress.txt` (tracking only)
+- **Learnings for future iterations:**
+  - Patterns discovered: Cobra flag registration stays in `root_work.go`; HTTP/query/diagnostics logic stays in `pkg/cli/work/list.go`—mirror this split for future work CLI flags.
+  - Gotchas encountered: `TestList_SendsNameAndWorkTypeNameFilters` proves query forwarding with empty filtered results; human row rendering is covered by separate human-output tests—do not duplicate unless AC explicitly needs combined filter+row assertion.
+  - Useful context: Story 004 `you work show` is also on main (`show.go`, `show_test.go`, `newWorkShowCommand`); verify in the next iteration rather than re-implementing.
+---
 
 ## 2026-05-30T09:55:07Z - cli-work-inspection-v3-002
 - What was implemented: Verified story acceptance on `ralph/cli-work-inspection-v3` at `origin/main`: OpenAPI `WorkListName`/`WorkListWorkTypeName`/`WorkListTraceId` on default and session list-work routes; `listWork` applies `workMatchesListFilters` before sort and pagination; empty filter values are no-ops; `go test ./pkg/api/... -run TestListWork` and `go vet ./pkg/api/...` pass. No code diff required this iteration.
