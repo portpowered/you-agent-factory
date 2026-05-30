@@ -1,30 +1,30 @@
 {
-  "project": "OpenCode Agent Support",
-  "branchName": "ralph/opencode-agent-support",
-  "description": "Let factory authors select OpenCode agent profiles via openCodeAgent on workers and workstations, forward the resolved name through ProviderInferenceRequest, pass opencode run --agent during OpenCode dispatch, surface the value in inference diagnostics, align factory OpenAPI shapes, document the field, and prove the behavior with backend tests.",
+  "project": "Inline Workflow Activity Bento Card Graph Panel Shell Class",
+  "branchName": "ralph/inline-workflow-activity-bento-card-class",
+  "description": "Inline the single-use GRAPH_PANEL_SHELL_CLASS constant directly on the workflow-activity bento card graph panel shell section, remove the matching inline-class allowlist exception, and prove layout and card behavior are unchanged through focused component tests and the inline-class guard.",
   "context": {
-    "customerAsk": "Add agent support for OpenCode using the OpenCode CLI documentation (https://opencode.ai/docs/cli/), including corresponding backend tests.",
-    "problem": "The opencode runner invokes opencode run without the --agent flag, factory config has no openCodeAgent field, and inference diagnostics do not record which OpenCode agent profile was requested even though the CLI supports named agents.",
-    "solution": "Add openCodeAgent to worker and workstation configuration with workstation override precedence, validate it against resolved runner opencode, populate ProviderInferenceRequest.OpenCodeAgent, append --agent to opencode run in openCodeProviderBehavior, record opencode_agent in request metadata, extend OpenAPI factory schemas, update reference docs, and add backend tests for command construction, dispatch wiring, and misconfiguration errors."
+    "customerAsk": "Inline GRAPH_PANEL_SHELL_CLASS directly on the JSX className and remove the matching allowlist entry while preserving workflow-activity bento card layout.",
+    "problem": "workflow-activity-bento-card.tsx still declares GRAPH_PANEL_SHELL_CLASS as a module constant used only once on the graph panel shell section, which keeps an unnecessary inline-component-class allowlist exception alive without improving reuse or readability.",
+    "solution": "Move the relative h-full min-h-0 min-w-0 class string onto the graph panel shell section className, delete the constant, remove the allowlist entry, and verify unchanged card behavior with focused WorkflowActivityBentoCard tests plus bun run check:inline-component-class-usage."
   },
   "acceptanceCriteria": [
-    "Worker or workstation openCodeAgent with resolved runner opencode dispatches opencode run with --agent <name> before the user prompt.",
-    "Omitting openCodeAgent leaves existing OpenCode dispatch behavior unchanged.",
-    "Setting openCodeAgent when the resolved runner is not opencode fails before subprocess start with a clear configuration error.",
-    "Inference request diagnostics include opencode_agent when an agent was configured.",
-    "OpenAPI worker and workstation schemas accept openCodeAgent and round-trip through config load and projection.",
-    "Reference docs describe openCodeAgent, precedence, and opencode agent list discovery.",
-    "Repository quality gate passes: typecheck, lint, and affected backend and UI test suites are green."
+    "GRAPH_PANEL_SHELL_CLASS no longer exists in ui/src/features/workflow-activity/components/workflow-activity-bento-card.tsx.",
+    "The graph panel shell section renders with relative h-full min-h-0 min-w-0 in the DOM.",
+    "The allowlist entry src/features/workflow-activity/components/workflow-activity-bento-card.tsx#GRAPH_PANEL_SHELL_CLASS is removed from ui/scripts/inline-component-class-usage-allowlist.mjs.",
+    "bun run check:inline-component-class-usage --cwd ui passes with no stale allowlist entries.",
+    "Focused WorkflowActivityBentoCard tests pass with no changes to graph editor wiring, selection behavior, or card composition.",
+    "Repository quality gate passes: UI typecheck, lint, and affected tests are green."
   ],
   "userStories": [
     {
-      "id": "opencode-agent-support-001",
-      "title": "Author OpenCode agent names in factory config",
-      "description": "As a factory author, I want to declare which OpenCode agent profile a worker or workstation should use so I can reuse agents I created with opencode agent create without duplicating prompts in infinite-you.",
+      "id": "inline-workflow-activity-bento-card-class-001",
+      "title": "Inline graph panel shell classes on WorkflowActivityBentoCard",
+      "description": "As a dashboard user, I want the workflow-activity bento card graph panel shell to keep the same flex-safe layout classes so the embedded React Flow graph still fills the card without overflow regressions.",
       "acceptanceCriteria": [
-        "Worker AGENTS.md frontmatter accepts optional openCodeAgent as a non-empty string.",
-        "Workstation AGENTS.md frontmatter accepts optional openCodeAgent that overrides the worker default when both are set.",
-        "Loaded runtime worker and workstation config retain the resolved openCodeAgent value through factory build.",
+        "Remove the GRAPH_PANEL_SHELL_CLASS module constant from workflow-activity-bento-card.tsx.",
+        "Set the graph panel shell section className directly to \"relative h-full min-h-0 min-w-0\".",
+        "Do not change graph editor wiring, selection handlers, header actions, or ReactFlowCurrentActivityCardView props.",
+        "Add or extend a WorkflowActivityBentoCard rendering test that asserts the graph panel shell section wrapping the viewport region has a className containing relative, h-full, min-h-0, and min-w-0.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,90 +33,19 @@
       "notes": ""
     },
     {
-      "id": "opencode-agent-support-002",
-      "title": "Reject OpenCode agent config on non-OpenCode runners",
-      "description": "As an operator, I want a clear configuration error when openCodeAgent is set but the dispatch will not use the OpenCode runner, so misconfigured factories fail fast instead of silently ignoring the field.",
+      "id": "inline-workflow-activity-bento-card-class-002",
+      "title": "Remove the graph panel shell allowlist exception",
+      "description": "As a frontend maintainer, I want the inline-class guard to stop carrying an exception for a constant that no longer exists so policy checks stay honest and the allowlist keeps shrinking.",
       "acceptanceCriteria": [
-        "When openCodeAgent is non-empty and the resolved runner for a model dispatch is not opencode, the factory reports a validation or dispatch-time error that references openCodeAgent and the resolved runner ID.",
-        "When openCodeAgent is empty or unset, non-OpenCode runners behave exactly as before.",
+        "Remove src/features/workflow-activity/components/workflow-activity-bento-card.tsx#GRAPH_PANEL_SHELL_CLASS from ui/scripts/inline-component-class-usage-allowlist.mjs.",
+        "Do not modify other allowlisted entries or unrelated workflow-activity files in this slice.",
+        "bun run check:inline-component-class-usage --cwd ui exits successfully with no stale allowlist entries reported.",
+        "Focused workflow-activity-bento-card tests still pass after the allowlist cleanup.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "opencode-agent-support-003",
-      "title": "Forward OpenCode agent into provider inference requests",
-      "description": "As a backend maintainer, I want the resolved OpenCode agent name on ProviderInferenceRequest so provider behavior can build CLI arguments without re-reading frontmatter.",
-      "acceptanceCriteria": [
-        "ProviderInferenceRequest carries an OpenCodeAgent field populated from workstation override else worker default when the resolved runner is opencode.",
-        "The shared inference-request builder sets OpenCodeAgent only for OpenCode dispatches and leaves it empty for other runners.",
-        "Cloning and diagnostic helpers preserve OpenCodeAgent without mutating shared maps.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "opencode-agent-support-004",
-      "title": "Pass --agent to opencode run",
-      "description": "As a factory operator, I want OpenCode dispatches to invoke my configured agent profile so tool permissions and system prompts defined in OpenCode take effect.",
-      "acceptanceCriteria": [
-        "For model provider opencode with non-empty OpenCodeAgent, built CLI args include opencode run --agent <name> with existing --model, --session, --dir, and --dangerously-skip-permissions flags unchanged when those fields are set.",
-        "For empty OpenCodeAgent, built args match today's opencode run shape with no --agent flag.",
-        "Existing OpenCode unsupported capability guards still apply unchanged.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "opencode-agent-support-005",
-      "title": "Surface OpenCode agent in inference diagnostics",
-      "description": "As an operator reviewing inference events, I want to see which OpenCode agent was requested so I can correlate factory behavior with OpenCode session logs.",
-      "acceptanceCriteria": [
-        "Provider request metadata for OpenCode dispatches includes opencode_agent with the resolved agent name when configured.",
-        "OpenCode dispatches without a configured agent omit opencode_agent from request metadata.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "opencode-agent-support-006",
-      "title": "Extend factory OpenAPI shapes for openCodeAgent",
-      "description": "As an API consumer editing factory definitions through the API or UI, I want openCodeAgent on worker and workstation schemas so saved factories preserve the setting.",
-      "acceptanceCriteria": [
-        "OpenAPI Worker and Workstation components include optional openCodeAgent string fields with descriptions referencing OpenCode CLI agent selection.",
-        "Regenerated Go and TypeScript clients expose openCodeAgent; factory-definition validation accepts non-empty strings.",
-        "A contract or config round-trip test proves openCodeAgent survives OpenAPI decode and public projection for worker and workstation fixtures.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 6,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "opencode-agent-support-007",
-      "title": "Document OpenCode agent configuration for factory authors",
-      "description": "As a factory author reading reference docs, I want clear guidance on openCodeAgent and how it maps to the OpenCode CLI so I can configure agents without reading backend source.",
-      "acceptanceCriteria": [
-        "docs/reference/workers.md documents openCodeAgent for model workers used with runner or modelProvider OpenCode.",
-        "docs/reference/workstations.md documents workstation-level override and precedence over the worker default.",
-        "Docs reference opencode agent list per https://opencode.ai/docs/cli/ for discovering agent names.",
-        "Typecheck passes"
-      ],
-      "priority": 7,
-      "passes": false,
       "notes": ""
     }
   ]

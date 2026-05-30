@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Inline single-use workflow-activity layout class strings directly on JSX in `workflow-activity-bento-card.tsx`; assert the graph panel shell via the viewport region’s `section[aria-labelledby]` parent in `workflow-activity-bento-card.test.tsx` (contains `relative`, `h-full`, `min-h-0`, `min-w-0`).
 - Parse worker/workstation `openCodeAgent` through `pkg/config/agents_config.go` with `validateOpenCodeAgentInFrontmatter` (rejects explicit empty or whitespace-only values), merge via `applyWorkerRuntimeExecution` / `applyWorkstationRuntimeIdentity`, and resolve dispatch precedence with `interfaces.ResolveOpenCodeAgent(workstation, worker)`.
 - Forward resolved OpenCode agent on `interfaces.ProviderInferenceRequest.OpenCodeAgent` from `pkg/workers/executor/agent.go` `inferenceRequestForExecutionRequest` only when `ModelProvider` is `opencode`; lookup workstation via `runtimeConfig.Workstation(inferenceWorkstationType(request))` and leave the field empty for other providers.
 - Append `opencode run --agent <name>` in `openCodeProviderBehavior.BuildArgs` when `req.OpenCodeAgent` is non-empty, placing `--agent` after `--model` and before `--session`; empty agent leaves today's `opencode run` arg shape unchanged.
@@ -146,4 +147,22 @@
   - Patterns discovered: Omit `opencode_agent` from request metadata entirely when unset rather than emitting an empty string; mirror the conditional in both `pkg/workers/executor/diagnostics.go` and `pkg/workers/provider/helpers.go`.
   - Gotchas encountered: Safe projection drops unknown metadata keys—add new provider request metadata keys to `isSafeProviderMetadataKey` or inference events will lose them downstream.
   - Useful context: Story 006 extends OpenAPI factory schemas; story 007 documents `openCodeAgent` for factory authors.
+---
+
+## 2026-05-30T08:57:00Z - inline-workflow-activity-bento-card-class-001
+- What was implemented: Removed `GRAPH_PANEL_SHELL_CLASS` from `workflow-activity-bento-card.tsx`, inlined `relative h-full min-h-0 min-w-0` on the graph panel shell `<section>`, and added a rendering test that asserts those classes on the shell wrapping the viewport region.
+- Files changed: `ui/src/features/workflow-activity/components/workflow-activity-bento-card.tsx`, `ui/src/features/workflow-activity/components/workflow-activity-bento-card.test.tsx`
+- **Learnings for future iterations:**
+  - Patterns discovered: Graph panel shell is the parent of the workflow graph `section[aria-labelledby]`; locate it from `screen.getByRole("region", { name: messages.viewportLabel })` via `closest("section[aria-labelledby]")?.parentElement`.
+  - Gotchas encountered: Story 002 must remove the stale `GRAPH_PANEL_SHELL_CLASS` allowlist entry; inline-class guard will fail until then.
+  - Useful context: `ReactFlowCurrentActivityCardView` keeps its own `CURRENT_ACTIVITY_CARD_CLASS` on the inner workflow section—do not conflate with the bento card outer shell.
+---
+
+## 2026-05-30T02:16:00Z - inline-workflow-activity-bento-card-class-002
+- What was implemented: Removed stale `workflow-activity-bento-card.tsx#GRAPH_PANEL_SHELL_CLASS` entry from `inline-component-class-usage-allowlist.mjs` after story 001 inlined the shell classes; verified `bun run check:inline-component-class-usage`, allowlist guard tests, and `workflow-activity-bento-card.test.tsx`.
+- Files changed: `ui/scripts/inline-component-class-usage-allowlist.mjs`
+- **Learnings for future iterations:**
+  - Patterns discovered: After inlining a single-use class constant, remove the matching `file#CONSTANT` allowlist entry in the follow-up story so `check:inline-component-class-usage` reports no stale exceptions.
+  - Gotchas encountered: The allowlist guard test file is `ui/scripts/check-inline-component-class-usage.test.mjs`, not `.ts`.
+  - Useful context: No PR conversation feedback existed this iteration; PR creation follows when all PRD stories pass.
 ---
