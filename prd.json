@@ -1,30 +1,29 @@
 {
-  "project": "CLI Batch Work Submission",
-  "branchName": "ralph/cli-submit-batch",
-  "description": "Add `you submit batch` so operators and agents can submit canonical FACTORY_REQUEST_BATCH JSON to a running factory via file path, stdin, or inline JSON—with local validation, dry-run, and submit output aligned with unary submit.",
+  "project": "Service Runtime State Consolidation (S2)",
+  "branchName": "ralph/service-runtime-state-consolidation",
+  "description": "Make the factory session registry the sole source of truth for live runtimes: register ~default like other sessions, route reads and activation through session handles, share one runtime bundle type, and remove authoritative shadow runtime fields from FactoryService without changing API or session semantics.",
   "context": {
-    "customerAsk": "Implement CLI batch work submission: submit FACTORY_REQUEST_BATCH to a running factory via file, stdin, or inline JSON.",
-    "problem": "Batch ingress to a live factory today requires curl or watched input files. Unary `you submit` handles one work item; `you run --work` only submits at startup. There is no first-class CLI for upserting a canonical batch to an already-running session.",
-    "solution": "Add `you submit batch` under `you submit` that validates the same FACTORY_REQUEST_BATCH JSON as run and watched inputs, supports file/stdin/inline/--file/--dry-run, PUTs to the session work-requests endpoint, and prints human and JSON success output including per-work identifiers when the API returns them."
+    "customerAsk": "Session registry as sole runtime truth; drop duplicate FactoryService fields. Full spec: tasks/prd-service-runtime-state-consolidation.md",
+    "problem": "FactoryService still mirrors the active runtime in top-level fields while multi-session work already lives in factorysessions.Registry handles. That duplication lets work submit, factory save, snapshots, and idle checks target the wrong session or update the service root when a non-default session is active.",
+    "solution": "Incrementally route all runtime access through the session registry and liveRuntimeHandle, unify activation on replaceSessionRuntime, collapse build and live bundle types, then remove authoritative top-level runtime fields while preserving API, CLI, and session open/close behavior."
   },
   "acceptanceCriteria": [
-    "`you submit batch` exists under `you submit` and upserts valid FACTORY_REQUEST_BATCH JSON to a running factory session (default `~default` when `--session` is omitted).",
-    "Batch JSON is accepted from filesystem path (positional or `--file`), piped stdin or positional `-`, and inline `{…}` positional JSON.",
-    "`--dry-run` validates input, prints a summary, performs no HTTP, and exits 0 on valid input even when the factory is unreachable.",
-    "Success output (human and `--json`) includes requestId, traceId, work count, and per-work name, workTypeName, and workId when the API provides them.",
-    "Reference and packaged docs (`you docs batch-inputs`) document CLI batch submit alongside curl and watched-folder ingress.",
-    "Unary `you submit` and `you run --work` batch file behavior are unchanged.",
+    "Every live runtime including ~default is registered in factorysessions.Registry with a liveRuntimeHandle; production code does not treat top-level FactoryService runtime fields as authoritative.",
+    "Work submission, engine snapshots, events, and idle checks scoped by session_id observe only that session's factory and artifacts; concurrent multi-session isolation is preserved.",
+    "Runtime replacement after persist uses session-scoped activation and writes the current-factory pointer under the targeted session root.",
+    "Process restart restores only ~default; additional live sessions remain ephemeral with no behavior change from today.",
+    "No OpenAPI request or response shape changes.",
     "Typecheck, lint, and project tests pass."
   ],
   "userStories": [
     {
-      "id": "cli-submit-batch-001",
-      "title": "Shared canonical batch loader (file path)",
-      "description": "As a maintainer, I want one canonical batch JSON loader used by `you run --work` and `you submit batch` so parsing rules never diverge.",
+      "id": "service-runtime-state-consolidation-001",
+      "title": "One runtime bundle shape for build and live handles",
+      "description": "As a maintainer, I want a single runtime bundle type so build output and live session handles cannot drift when runtime wiring grows.",
       "acceptanceCriteria": [
-        "Reading batch JSON from an existing filesystem path returns a validated FACTORY_REQUEST_BATCH work request with the same semantics as today's `you run --work` file load.",
-        "Retired field aliases and conflicting trace fields are rejected with the same error guidance as today's run loader tests.",
-        "`you run --work` behavior is unchanged for file-based batches (regression tests pass).",
+        "Building a runtime for service startup or session open returns one shared bundle type carrying factory, net, listener, loaded config, logger, event history, local models, recording, and related sidecars.",
+        "liveRuntimeHandle references that shared type; adding a new runtime sidecar requires updating one struct definition.",
+        "Existing service build and replay tests that start a runtime continue to pass without relaxed assertions.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,13 +32,13 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-002",
-      "title": "Upsert API returns per-work identifiers",
-      "description": "As an agent, I want the batch upsert response to include work identifiers so I can verify submission without listing all work.",
+      "id": "service-runtime-state-consolidation-002",
+      "title": "Default session lives in the registry at startup",
+      "description": "As an operator running a single factory, I want the default session registered the same way as named sessions so session targeting is uniform from the first request.",
       "acceptanceCriteria": [
-        "Successful PUT /work-requests/{request_id} (session-scoped variant included) returns 201 with requestId, traceId, and a works array where each item includes name, workTypeName, and workId.",
-        "Multi-work batch upsert populates works for every accepted item in API tests.",
-        "OpenAPI schema and generated types reflect works on upsert response.",
+        "After BuildFactoryService and service run, ~default is present in the session registry with a live handle pointing at the started factory directory.",
+        "Default session registration uses the same registerLiveSession path as OpenFactorySession, not a parallel service-only runtime slot.",
+        "runState.sessionID matches the registry entry used for ~default while the default runtime is active.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -48,161 +47,64 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-003",
-      "title": "Command discovery and help",
-      "description": "As an operator, I want to discover batch submit next to unary submit so I know which command to use for multi-work ingress.",
+      "id": "service-runtime-state-consolidation-003",
+      "title": "Runtime operations target the requested session",
+      "description": "As a dashboard user with multiple factory tabs, I want work, snapshots, and idle checks for each session_id to use only that session's runtime so sessions cannot leak into one another.",
       "acceptanceCriteria": [
-        "`you submit batch --help` documents batch input modes (positional path, optional --file, -/stdin, pipe-with-no-args, inline JSON), --dry-run, --session, and global --server / --json / --verbose.",
-        "Help states the command expects FACTORY_REQUEST_BATCH and points to `you docs batch-inputs`.",
-        "Help does not advertise unary-only flags (--name, --work-type-name, --payload, --work-type-id).",
+        "Submitting work to session A records artifacts and dispatch identifiers only for session A; session B's replay and log artifacts do not contain session A work.",
+        "Engine snapshot and factory read APIs scoped by session_id return data from that session's factory directory, not another live session's directory.",
+        "Idle checks used before factory activation apply to the session being saved or opened, not whichever session was selected last on the service root.",
+        "pkg/api session-scoped routing tests continue to pass: mutations and reads for session-beta do not invoke default-session factories.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-004",
-      "title": "Submit batch to running factory (HTTP + dry-run)",
-      "description": "As an operator, I want to upsert a canonical batch to a running factory session, or validate locally without sending traffic.",
+      "id": "service-runtime-state-consolidation-004",
+      "title": "Runtime replacement is always session-scoped",
+      "description": "As a maintainer, I want every runtime swap after persist to stop the prior handle for the same session and start the replacement under that session's root.",
       "acceptanceCriteria": [
-        "With valid batch JSON from a file, the CLI issues PUT to /factory-sessions/{session}/work-requests/{requestId} where requestId in the path matches the body; Content-Type is application/json.",
-        "Body type must be FACTORY_REQUEST_BATCH with at least one works entry; violations fail locally before HTTP.",
-        "HTTP 201 is success; other statuses surface API error message when present; unreachable factory errors match unary submit transport style.",
-        "--session scopes the request like unary submit.",
-        "--dry-run parses and validates only, prints summary (requestId, work count, work names, relationCount, batchSource, dry-run: no request sent), performs zero HTTP calls, exits 0 on valid input even when the server is down.",
+        "Factory definition save, OpenFactorySession, and named-factory activation call replaceSessionRuntime with the session idle guard, not the legacy global activation entry point.",
+        "When replacing the factory for a non-default session, the current-factory pointer is written under that session's SessionFactoryRootDir, not only the service host root.",
+        "A successful replacement stops the previous live handle for the same session before registering the successor; other live sessions keep running.",
+        "Service-mode sidecar start and stop behavior is unchanged (poller, cron, and related service tests still pass).",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-005",
-      "title": "Piped stdin and explicit `-`",
-      "description": "As an agent, I want to pipe batch JSON so I can submit without a temp file.",
+      "id": "service-runtime-state-consolidation-005",
+      "title": "FactoryService no longer mirrors live runtime state",
+      "description": "As a reviewer, I want FactoryService to hold wiring and session orchestration only, so there is one obvious place to find the live runtime for a session.",
       "acceptanceCriteria": [
-        "`cat batch.json | you submit batch` submits when stdin is not a TTY.",
-        "`you submit batch -` reads batch JSON from stdin.",
-        "`you submit batch` with no args and interactive TTY stdin fails immediately with usage guidance.",
-        "Empty piped stdin fails with a clear empty-input error.",
-        "When a file path or --file is provided, stdin is ignored.",
+        "Top-level factory, net, listener, runtimeCfg, and related runtime fields are removed or reduced to thin delegators that read the selected or requested session handle.",
+        "Runtime swap for a session updates only that session's registry entry and runState for that session; no production path writes the same swap to both top-level fields and the session handle.",
+        "Default and named-session behavior for submit, pause, wait-for-complete, and model catalog APIs remains unchanged from the caller's perspective.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-006",
-      "title": "Inline JSON positional",
-      "description": "As a script author, I want to pass a small batch document as one positional argument.",
+      "id": "service-runtime-state-consolidation-006",
+      "title": "Restart behavior documented for operators",
+      "description": "As an operator running multiple UI tabs, I need clear documentation of which sessions survive a process restart so I do not assume ephemeral tabs are restored.",
       "acceptanceCriteria": [
-        "Positional whose first non-whitespace byte is `{` is parsed as inline JSON, not as a filesystem path.",
-        "A non-existent path that does not look like JSON errors as missing file/JSON, not as JSON parse of the path string.",
-        "Inline JSON uses the same canonical validation as file and stdin input.",
-        "Help notes shell length limits; large batches should use file or pipe.",
+        "Internal maintainer documentation states that only ~default is restored when the service process restarts; additional live sessions opened before restart are ephemeral and must be reopened.",
+        "TestFactoryService_Run_RestartsOnlyDefaultSession continues to pass without changing expected session count or default runtime directory after restart.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-007",
-      "title": "Optional `--file` flag",
-      "description": "As a script author, I want an explicit file flag when positional arguments are awkward.",
-      "acceptanceCriteria": [
-        "`--file <path>` reads batch JSON; `--file -` reads stdin.",
-        "When both --file and a positional path are set, --file wins (documented in help).",
-        "Positional path remains the primary documented form.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-008",
-      "title": "Human success output",
-      "description": "As an operator, I want confirmation that lists what was submitted and what to run next.",
-      "acceptanceCriteria": [
-        "On 201, stdout includes requestId, traceId, work count, and each accepted work's name and workTypeName.",
-        "When the API returns workId, each work line includes it and a hint `you work show <work-id>`; otherwise hints use `you work list --name <name>`.",
-        "Long name lists truncate (at most ten lines); relationCount shown when relations are non-empty.",
-        "Full batch JSON and per-work payloads are not printed on stdout.",
-        "--verbose logs endpoint, batchSource (file, stdin, inline), byte size, requestId, and work count on stderr—never payload content.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-009",
-      "title": "JSON success output",
-      "description": "As a script, I want machine-readable batch submit confirmation.",
-      "acceptanceCriteria": [
-        "Global --json emits one object with at minimum: requestId, traceId, workCount, relationCount, sessionId, endpointPath, batchSource, and works (each with name, workTypeName, workId when returned).",
-        "--json with --dry-run emits dryRun: true and summary fields without traceId unless present in input.",
-        "Exit code 0 on success; non-zero on validation or HTTP errors.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-010",
-      "title": "Error surfaces",
-      "description": "As an agent, I want validation failures before HTTP and API failures after HTTP to be distinguishable.",
-      "acceptanceCriteria": [
-        "Canonical validation errors include retired-field guidance where applicable.",
-        "Missing or empty requestId, empty works, and invalid JSON fail locally.",
-        "HTTP 400/404 (and 409 if applicable) print status and bounded API message; no success JSON on failure.",
-        "Tests cover invalid JSON, empty works, mocked 400, and mocked 404.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-011",
-      "title": "Reference and packaged documentation",
-      "description": "As a new contributor, I want docs to show CLI batch submit alongside curl and watched-folder ingress.",
-      "acceptanceCriteria": [
-        "docs/reference/batch-inputs.md adds a CLI subsection with examples for file, --file, pipe, inline JSON, and --dry-run; keeps existing curl example.",
-        "Ingress comparison covers: you submit (single), you submit batch (running factory), you run --work (startup), watched factory/inputs/BATCH/.",
-        "Packaged `you docs batch-inputs` content matches reference updates.",
-        "Doc tests guard you submit batch and FACTORY_REQUEST_BATCH markers where other CLI examples are guarded.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-012",
-      "title": "End-to-end smoke (optional)",
-      "description": "As a maintainer, I want one functional smoke proving batch CLI reaches a running factory when the harness supports it.",
-      "acceptanceCriteria": [
-        "If the existing smoke harness can start a factory and accept work-request upserts, one smoke runs `you submit batch` with a minimal checked-in batch file and asserts success markers in output.",
-        "If harness cost is prohibitive, implementation notes document deferral and httptest coverage from earlier stories is cited as the verification substitute.",
-        "Typecheck passes",
-        "Tests pass (or smoke story cancelled with documented justification)"
-      ],
-      "priority": 12,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]
