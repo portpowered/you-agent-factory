@@ -86,6 +86,116 @@ and batch `WorkRequest` payloads use the OpenAPI camelCase fields from
 See [Batch Inputs](batch-inputs.md) for the full `FACTORY_REQUEST_BATCH` contract,
 including `requestId`, relation fields, and optional `currentChainingTraceId`.
 
+## CLI `you submit` success and verify loop
+
+`you submit` posts one work item to a running factory session (`POST /work` or
+`POST /factory-sessions/{sessionId}/work`). On HTTP `201`, stdout is shaped for
+operators and scripts; failures never print the success confirmation.
+
+Use the same `--server` base URI and `--session` target as `you work list` and
+`you work show` when verifying work in a non-default factory session.
+
+### Human success output
+
+Human-mode stdout (default) includes accepted work metadata and a one-line verify
+hint. It does **not** echo the submitted payload or full HTTP response body.
+
+| Line | Meaning |
+|------|---------|
+| `Submitted: <name> (<workTypeName>)` | Accepted work name and type |
+| `traceId: <traceId>` | Trace id returned by the API |
+| `workId: <workId>` | Present only when the API returns `workId` |
+| `Verify: you work show <work-id>` | Preferred next step when `workId` is present |
+| `workId was not returned; verify with:` + `you work list --name <name>` | Fallback when `workId` is absent |
+
+Example with `workId`:
+
+```text
+Submitted: driver-incident-review (task)
+traceId: caller-trace-1
+workId: batch-req-1-driver-incident-review
+Verify: you work show batch-req-1-driver-incident-review
+```
+
+Example without `workId`:
+
+```text
+Submitted: driver-incident-review (task)
+traceId: caller-trace-2
+workId was not returned; verify with:
+you work list --name driver-incident-review
+```
+
+Verbose request and response diagnostics (`--verbose`, debug flags) stay on
+**stderr** only via the CLI diagnostics channel.
+
+### JSON success output (`you --json submit`)
+
+Global `--json` writes **one** JSON object to stdout and exits `0`. Stdout
+contains only that object (no extra prose).
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `workId` | string or `null` | Stable work id when returned; JSON `null` when absent (key always present) |
+| `name` | string | Accepted work name (API value, else the submitted `--name`) |
+| `workTypeName` | string | Accepted work type (API value, else `--work-type-name`) |
+| `traceId` | string | Trace id from the API |
+| `sessionId` | string | Session id from the API, else the CLI session label (`~default` when omitted) |
+| `endpointPath` | string | Scoped path used for the submit request (for example `/factory-sessions/~default/work` or `/factory-sessions/<session>/work`) |
+
+Example (default session):
+
+```json
+{
+  "workId": "batch-req-1-driver-incident-review",
+  "name": "driver-incident-review",
+  "workTypeName": "task",
+  "traceId": "caller-trace-1",
+  "sessionId": "~default",
+  "endpointPath": "/factory-sessions/~default/work"
+}
+```
+
+Example when `workId` is absent (`workId` is JSON `null`):
+
+```json
+{
+  "workId": null,
+  "name": "driver-incident-review",
+  "workTypeName": "task",
+  "traceId": "caller-trace-2",
+  "sessionId": "~default",
+  "endpointPath": "/factory-sessions/~default/work"
+}
+```
+
+### Submit failures
+
+Failures return a non-zero exit code and **no** human success lines or JSON
+success object on stdout.
+
+| Situation | Message shape |
+|-----------|----------------|
+| Factory unreachable (connection refused, timeout, DNS) | `factory not reachable at <url>` |
+| HTTP status not `201` | `submission failed (<status>): <message>` when `ErrorResponse.message` is present; otherwise a bounded raw-body preview (200 bytes) |
+| Error JSON includes `workId` | Same as above with a stable `workId=<id>` suffix |
+
+### Verify after submit
+
+After a successful submit, confirm the work item was accepted before submitting
+again:
+
+1. **When `workId` is present** (human hint or JSON `workId` string): run
+   `you work show <work-id>` to inspect that single work item.
+2. **When `workId` is absent** (human fallback line): run
+   `you work list --name <name>` and, when several items share a name, add
+   `--work-type-name <type>` to narrow the listing to the submitted work type.
+
+`you work list` also supports `--state-name`, `--state-type`, `--sort-by`,
+`--max-results`, and `--session` for broader inspection. Human-mode list output
+is tabular (`WORK ID`, `NAME`, `STATE NAME`, `STATE TYPE`, `RELATIONS`); use
+`you --json work list` when scripts need the API-shaped `ListWorkResponse`.
+
 ## Tags And Prompt Templates
 
 Tags declared on submitted work items are available after the batch request has
