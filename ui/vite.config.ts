@@ -119,6 +119,7 @@ export default defineConfig({
       exclude: [
         ...coverageConfigDefaults.exclude,
         "**/*.jsonl",
+        "src/api/generated/**",
         "scripts/**",
         "src/testing/app-shell-test-graph-layout.ts",
         "src/testing/replay-harness.ts",
