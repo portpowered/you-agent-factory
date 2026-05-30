@@ -83,16 +83,28 @@ Pull-request UI Coverage no longer runs the full phased lane on one runner. CI f
 | Runner meta tests | `scripts/ui-coverage-runner.test.mjs` is excluded from the covered corpus (mocked Vitest runs must not share the shard pass). |
 | Local debug | Full lane: `make test-ui-coverage`. One shard: `UI_COVERAGE_SHARD=<i>/10 make ui-test-coverage`. Merge-only: `make test-ui-coverage-merge` after blobs are present. |
 
-### Post-shard CI timing (first green proof run)
+### Post-shard CI timing
+
+#### First sharded CI attempt (shard 10 failed — coverage race; fixed on PR head `835ab92b`)
 
 | Field | Value |
 | --- | --- |
-| Pull request | [`#500`](https://github.com/portpowered/you-agent-factory/pull/500) (`ralph/ci-coverage-test-sharding`) |
-| Workflow run | _Recorded after green `UI Coverage` on PR head — see PR conversation_ |
-| Head SHA | _Same as PR head at proof run_ |
-| Slowest `ui-coverage-shard` job wall | _max of matrix legs (main pass only + setup)_ |
-| `ui-coverage-merge` job wall | _isolated React Flow + mergeReports thresholds + script + replay_ |
-| **PR lane critical path** | _max(shard job walls) + merge job wall (shards overlap in parallel)_ |
+| Pull request | [`#500`](https://github.com/portpowered/you-agent-factory/pull/500) |
+| Workflow run | [`26689364838`](https://github.com/portpowered/you-agent-factory/actions/runs/26689364838) |
+| Head SHA | `ca814198e0de58a7024d158bcbf73e6350de0f12` (pre-stability fix) |
+| Slowest successful `ui-coverage-shard` job wall | **1m36s** (shard `4/10`, 2026-05-30T16:50:01Z → 16:51:37Z) |
+| Failed shard `10/10` job wall | **37s** (Vitest v8 `ENOENT` on `coverage/.tmp-10-10/coverage-6.json` with two in-shard workers) |
+| `ui-coverage-merge` job wall | **37s** (blocked: missing shard `10` blob) |
+| **Parallel shard stage** | **~1m37s** wall (ten jobs; critical path = slowest shard) |
+| vs pre-shard `UI Coverage` job | **9m17s** → shard stage alone **~1m37s** for main pass fan-out (merge + setup not included) |
+
+#### First green proof run (expected on PR head after CI re-sync)
+
+| Field | Value |
+| --- | --- |
+| Head SHA | `835ab92b` or later (`defaultShardMainCoveredMaxWorkers=1`, exclude `scripts/ui-coverage-runner.test.mjs`) |
+| Workflow run | _Link recorded in PR conversation when `UI Coverage` is green on the reviewed head_ |
+| Projected lane critical path | **~1.5–2.5m** slowest shard (one worker per shard) + **~2.5–3.5m** merge job (isolated React Flow + `mergeReports` thresholds + script + replay + setup) ≈ **~4–6m** vs **~9m17s** monolithic job |
 
 Reproduce phase lines from a green merge job:
 
