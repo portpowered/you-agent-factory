@@ -313,6 +313,24 @@ make lint
 
 Review any generated diff together with the authored OpenAPI change. Do not hand-edit `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, or `ui/src/api/generated/openapi.ts`; change `api/openapi-main.yaml` or a referenced fragment, then regenerate.
 
+## Factory CLI Wire Composition
+
+The `you` factory binary uses Google Wire only under `cmd/factory/composition`. `cmd/factory/main.go` registers the generated `composition.BuildFactoryService` builder through `pkg/cli/run` before CLI execution; `pkg/service`, `pkg/api`, and `pkg/cli` stay free of `wireinject` tags and Wire struct tags.
+
+After changing providers in `cmd/factory/composition/wire.go` or exported assembly helpers in `pkg/service/factory_build.go`:
+
+1. Regenerate the checked-in injector from the repository root:
+
+```bash
+go generate ./cmd/factory/composition/...
+```
+
+2. Commit `cmd/factory/composition/wire_gen.go` together with `wire.go` and any provider changes. Never hand-edit `wire_gen.go`.
+
+3. Verify with `go test ./cmd/factory/composition/... ./pkg/cli/run/... ./pkg/service/...` and `go build -o /tmp/you-factory ./cmd/factory` (use an explicit output path when a sibling `factory/` directory exists in the working directory).
+
+Install Wire with `go install github.com/google/wire/cmd/wire@v0.6.0`, or rely on the `go.mod` `tool` entry via the `go generate` directive in `wire.go`. See [Factory CLI Wire Composition](factory-cli-wire-composition.md) for layout, boundaries, and maintainer rules.
+
 ## Factory Sharing Contract
 
 The canonical export/import sharing boundary is the generated OpenAPI
