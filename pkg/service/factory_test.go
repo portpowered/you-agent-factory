@@ -2463,3 +2463,419 @@ func TestFactoryService_SaveFactoryForSession_UpsertReplaceDoesNotReturnAlreadyE
 	}
 	assertFactoryVersionAdvanced(t, replaced.Version, *created.Version)
 }
+
+func TestGetEngineStateSnapshot_AggregatesAllState(t *testing.T) {
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	ctx := context.Background()
+	svc, err := BuildFactoryService(ctx, &FactoryServiceConfig{
+		Dir:               dir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	snap, err := svc.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+
+	if snap.FactoryState != string(interfaces.FactoryStateIdle) {
+		t.Errorf("expected FactoryState=IDLE, got %s", snap.FactoryState)
+	}
+	if snap.RuntimeStatus != interfaces.RuntimeStatusIdle {
+		t.Errorf("expected RuntimeStatus=IDLE, got %s", snap.RuntimeStatus)
+	}
+	if snap.TickCount != 0 {
+		t.Errorf("expected TickCount=0, got %d", snap.TickCount)
+	}
+	if snap.Topology == nil {
+		t.Fatal("expected aggregate snapshot topology")
+	}
+	if _, ok := snap.Topology.WorkTypes["task"]; !ok {
+		t.Fatalf("expected topology to include task work type, got %#v", snap.Topology.WorkTypes)
+	}
+	if snap.Uptime != 0 {
+		t.Errorf("expected zero uptime before runtime start, got %v", snap.Uptime)
+	}
+}
+
+func TestFactoryService_GetEngineStateSnapshot_DelegatesToFactoryAggregateSnapshot(t *testing.T) {
+	topology := &state.Net{ID: "aggregate-net"}
+	expected := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		RuntimeStatus: interfaces.RuntimeStatusActive,
+		FactoryState:  string(interfaces.FactoryStateRunning),
+		Uptime:        42 * time.Second,
+		Topology:      topology,
+		InFlightCount: 3,
+		TickCount:     7,
+	}
+	mock := &aggregateSnapshotFactory{engineState: expected}
+	svc := &FactoryService{}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: mock})
+
+	got, err := svc.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("service returned %#v, want factory aggregate snapshot %#v", got, expected)
+	}
+	if mock.engineStateSnapshotCalls != 1 {
+		t.Fatalf("factory aggregate snapshot calls = %d, want 1", mock.engineStateSnapshotCalls)
+	}
+}
+
+func TestFactoryService_GetEngineStateSnapshot_ReportsIdleActiveAndFinishedStates(t *testing.T) {
+	svc, releaseCh := buildServiceModeSnapshotFixture(t)
+	runCtx, cancelRun := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelRun()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	waitForSnapshotMatch(t, svc, time.Second, "idle startup", func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+		return snap.RuntimeStatus == interfaces.RuntimeStatusIdle
+	})
+	submitSnapshotStatusWork(t, svc)
+	waitForSnapshotMatch(t, svc, time.Second, "active work", func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+		return snap.RuntimeStatus == interfaces.RuntimeStatusActive && snap.InFlightCount > 0
+	})
+
+	close(releaseCh)
+	waitForSnapshotMatch(t, svc, time.Second, "idle after completion", func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+		return snapshotHasCompletedTaskToken(snap)
+	})
+
+	cancelRun()
+	if err := <-errCh; err != nil {
+		t.Fatalf("service-mode run error: %v", err)
+	}
+
+	batchSvc := buildBatchSnapshotFixture(t)
+	batchCtx, cancelBatch := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelBatch()
+	if err := batchSvc.Run(batchCtx); err != nil {
+		t.Fatalf("batch Run: %v", err)
+	}
+
+	terminalSnap, err := batchSvc.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot terminal: %v", err)
+	}
+	if terminalSnap.RuntimeStatus != interfaces.RuntimeStatusFinished {
+		t.Fatalf("terminal runtime status = %q, want %q", terminalSnap.RuntimeStatus, interfaces.RuntimeStatusFinished)
+	}
+	if terminalSnap.FactoryState != string(interfaces.FactoryStateCompleted) {
+		t.Fatalf("terminal factory state = %q, want %q", terminalSnap.FactoryState, interfaces.FactoryStateCompleted)
+	}
+}
+
+func buildServiceModeSnapshotFixture(t *testing.T) (*FactoryService, chan struct{}) {
+	t.Helper()
+
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	releaseCh := make(chan struct{})
+	provider := &blockingInferenceProvider{releaseCh: releaseCh, content: "COMPLETE"}
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:              dir,
+		RuntimeMode:      interfaces.RuntimeModeService,
+		Logger:           zap.NewNop(),
+		ProviderOverride: provider,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	return svc, releaseCh
+}
+
+func buildBatchSnapshotFixture(t *testing.T) *FactoryService {
+	t.Helper()
+
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName), 0o755); err != nil {
+		t.Fatalf("create batch inputs dir: %v", err)
+	}
+	workFile := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "seed.json")
+	if err := os.WriteFile(workFile, []byte(`{"title":"terminal-status"}`), 0o644); err != nil {
+		t.Fatalf("write seed work file: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService batch: %v", err)
+	}
+	return svc
+}
+
+func submitSnapshotStatusWork(t *testing.T, svc *FactoryService) {
+	t.Helper()
+
+	if err := submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+		WorkTypeID: "task",
+		TraceID:    "trace-engine-state-statuses",
+		Payload:    json.RawMessage(`{"title":"runtime-statuses"}`),
+	}}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+}
+
+func waitForSnapshotMatch(
+	t *testing.T,
+	svc *FactoryService,
+	timeout time.Duration,
+	phase string,
+	match func(*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool,
+) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	var last *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	for time.Now().Before(deadline) {
+		snap, err := svc.GetEngineStateSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot during %s: %v", phase, err)
+		}
+		last = snap
+		if match(snap) {
+			return snap
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if last == nil {
+		t.Fatalf("timed out waiting for %s snapshot", phase)
+	}
+	t.Fatalf("timed out waiting for %s, last status=%q inflight=%d tokens=%d", phase, last.RuntimeStatus, last.InFlightCount, len(last.Marking.Tokens))
+	return nil
+}
+
+func snapshotHasCompletedTaskToken(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+	if snap.RuntimeStatus != interfaces.RuntimeStatusIdle || len(snap.Marking.Tokens) != 1 {
+		return false
+	}
+	for _, token := range snap.Marking.Tokens {
+		return token.PlaceID == "task:complete"
+	}
+	return false
+}
+
+func TestFactoryService_ListFactorySessions_DefaultSessionUsesAbsolutePathsFromRelativeDir(t *testing.T) {
+	harness := startRunningSessionServiceFromRelativeDir(t)
+	defer harness.stop(t)
+
+	wantAbs := cleanResolvedPath(harness.absFactoryDir)
+	summary := requireDefaultSessionSummary(t, harness.svc)
+	assertAbsoluteFactorySessionPaths(t, summary, wantAbs, wantAbs)
+
+	defaultSession := harness.svc.defaultSession()
+	if defaultSession == nil || liveSessionHandle(defaultSession) == nil || liveSessionHandle(defaultSession).runtime == nil {
+		t.Fatal("expected live default session runtime")
+	}
+	if got := cleanResolvedPath(liveSessionHandle(defaultSession).runtime.dir); got != wantAbs {
+		t.Fatalf("default runtime dir = %q, want %q", got, wantAbs)
+	}
+}
+
+func TestFactoryService_ListFactorySessions_DefaultSessionAbsolutePathsMatchRuntimeWithCurrentPointer(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	defaultSummary := requireDefaultSessionSummary(t, harness.svc)
+
+	wantFolder := cleanResolvedPath(harness.rootDir)
+	wantFactory := cleanResolvedPath(harness.factoryDirs["alpha"])
+	assertAbsoluteFactorySessionPaths(t, defaultSummary, wantFolder, wantFactory)
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	if got := cleanResolvedPath(defaultSession.FactoryDir); got != wantFactory {
+		t.Fatalf("default session factoryDir = %q, want %q", got, wantFactory)
+	}
+	if got := cleanResolvedPath(defaultSession.FolderPath); got != wantFolder {
+		t.Fatalf("default session folderPath = %q, want %q", got, wantFolder)
+	}
+	if got := cleanResolvedPath(liveSessionHandle(defaultSession).runtime.dir); got != wantFactory {
+		t.Fatalf("default runtime dir = %q, want %q", got, wantFactory)
+	}
+}
+
+func TestFactoryService_DiscoverFactorySessionTargets_DefaultTargetMatchesAbsoluteSessionSummary(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig:     minimalFactoryConfig(),
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	targets, err := harness.svc.discoverFactorySessionTargets(harness.rootDir)
+	if err != nil {
+		t.Fatalf("discoverFactorySessionTargets: %v", err)
+	}
+	if len(targets) == 0 || targets[0].Ref.Kind != FactorySessionTargetKindDefault {
+		t.Fatalf("targets = %#v, want default target first", targets)
+	}
+
+	wantFolder := cleanResolvedPath(harness.rootDir)
+	if got := cleanResolvedPath(targets[0].FolderPath); got != wantFolder {
+		t.Fatalf("default target folderPath = %q, want %q", got, wantFolder)
+	}
+	if got := cleanResolvedPath(targets[0].FactoryDir); got != wantFolder {
+		t.Fatalf("default target factoryDir = %q, want %q", got, wantFolder)
+	}
+	if !filepath.IsAbs(targets[0].FolderPath) || !filepath.IsAbs(targets[0].FactoryDir) {
+		t.Fatalf("default target paths = folder %q factory %q, want absolute", targets[0].FolderPath, targets[0].FactoryDir)
+	}
+
+	defaultSummary := requireDefaultSessionSummary(t, harness.svc)
+	assertAbsoluteFactorySessionPaths(t, defaultSummary, wantFolder, wantFolder)
+}
+
+type relativeDirSessionHarness struct {
+	svc           *FactoryService
+	absFactoryDir string
+	runErrCh      chan error
+	cancelRun     context.CancelFunc
+}
+
+func startRunningSessionServiceFromRelativeDir(t *testing.T) *relativeDirSessionHarness {
+	t.Helper()
+
+	parent := t.TempDir()
+	relativeName := "factory"
+	absFactory := filepath.Join(parent, relativeName)
+	if err := os.MkdirAll(absFactory, 0o755); err != nil {
+		t.Fatalf("create factory dir: %v", err)
+	}
+	writeFactoryJSON(t, absFactory, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, absFactory, "process")
+	if err := os.MkdirAll(filepath.Join(absFactory, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	withWorkingDirectory(t, parent)
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               relativeName,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+
+	return &relativeDirSessionHarness{
+		svc:           svc,
+		absFactoryDir: absFactory,
+		runErrCh:      runErrCh,
+		cancelRun:     cancelRun,
+	}
+}
+
+func (h *relativeDirSessionHarness) stop(t *testing.T) {
+	t.Helper()
+
+	h.cancelRun()
+	select {
+	case err := <-h.runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
+func withWorkingDirectory(t *testing.T, dir string) {
+	t.Helper()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("Chdir(%s): %v", dir, err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+}
+
+func requireDefaultSessionSummary(t *testing.T, svc *FactoryService) *factoryapi.FactorySessionSummary {
+	t.Helper()
+
+	response, err := svc.ListFactorySessions(context.Background())
+	if err != nil {
+		t.Fatalf("ListFactorySessions: %v", err)
+	}
+	for i := range response.Sessions {
+		if response.Sessions[i].Id == defaultFactorySessionID {
+			return &response.Sessions[i]
+		}
+	}
+	t.Fatalf("sessions = %#v, want default session %q", response.Sessions, defaultFactorySessionID)
+	return nil
+}
+
+func assertAbsoluteFactorySessionPaths(
+	t *testing.T,
+	summary *factoryapi.FactorySessionSummary,
+	wantFolderPath string,
+	wantFactoryDir string,
+) {
+	t.Helper()
+	if summary == nil {
+		t.Fatal("summary is required")
+	}
+	if !filepath.IsAbs(summary.FolderPath) {
+		t.Fatalf("folderPath = %q, want absolute path", summary.FolderPath)
+	}
+	if !filepath.IsAbs(summary.FactoryDir) {
+		t.Fatalf("factoryDir = %q, want absolute path", summary.FactoryDir)
+	}
+	if got, want := cleanResolvedPath(summary.FolderPath), cleanResolvedPath(wantFolderPath); got != want {
+		t.Fatalf("folderPath = %q, want %q", got, want)
+	}
+	if got, want := cleanResolvedPath(summary.FactoryDir), cleanResolvedPath(wantFactoryDir); got != want {
+		t.Fatalf("factoryDir = %q, want %q", got, want)
+	}
+}
+
+func cleanResolvedPath(path string) string {
+	cleaned := filepath.Clean(path)
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		return cleaned
+	}
+	return filepath.Clean(resolved)
+}
