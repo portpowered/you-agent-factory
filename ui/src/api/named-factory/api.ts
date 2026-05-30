@@ -282,8 +282,10 @@ function normalizeNamedFactoryAPIErrorCodeFromCurrentFactoryDefinition(
     case "STALE_FACTORY_VERSION":
       return code;
     case "INVALID_FACTORY_DEFINITION":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INVALID_FACTORY";
     default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";
   }
 }
