@@ -844,6 +844,8 @@ export interface components {
             target?: components["schemas"]["FactorySessionTargetRef"];
             /** @description When true, validate the folder and optional target selection without creating a live session. */
             validateOnly?: boolean;
+            /** @description When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly. */
+            initNewFactory?: boolean;
         };
         OpenFactorySessionResponse: {
             session?: components["schemas"]["FactorySessionSummary"];
