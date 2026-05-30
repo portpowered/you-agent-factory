@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -375,7 +376,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 		baseLogger = zap.NewNop()
 	}
 
-	loadedFactoryCfg, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
+	loadedFactoryCfg, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
 	if err != nil {
 		return nil, fmt.Errorf("load factory config: %w", err)
 	}
