@@ -15,6 +15,7 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
 func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndAPIPaths(t *testing.T) {
@@ -143,7 +144,7 @@ func TestValidateFactory_PreservesCanonicalStructuralCodesFromCrossPathFixture(t
 		factoryvalidation.CodeWorkStateMissingTerminalPath,
 	}
 	for _, code := range wantCodes {
-		assertHasValidationTargetCode(t, result.Targets, code)
+		validationassert.HasTargetCode(t, result.Targets, code)
 	}
 }
 
@@ -216,9 +217,9 @@ func TestSaveCurrentFactory_ReturnsMultipleTopologyValidationTargets(t *testing.
 	if response.Targets == nil || len(*response.Targets) < 3 {
 		t.Fatalf("targets = %#v, want multiple blocking validation targets", response.Targets)
 	}
-	assertHasValidationTargetCode(t, *response.Targets, factoryvalidation.CodeDuplicateIdentifier)
-	assertHasValidationTargetCode(t, *response.Targets, factoryvalidation.CodeDanglingWorkerReference)
-	assertHasValidationTargetCode(t, *response.Targets, factoryvalidation.CodeDanglingPlaceReference)
+	validationassert.HasTargetCode(t, *response.Targets, factoryvalidation.CodeDuplicateIdentifier)
+	validationassert.HasTargetCode(t, *response.Targets, factoryvalidation.CodeDanglingWorkerReference)
+	validationassert.HasTargetCode(t, *response.Targets, factoryvalidation.CodeDanglingPlaceReference)
 	assertBlockingValidationTarget(t, (*response.Targets)[0])
 }
 
@@ -333,7 +334,7 @@ func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	}
 	got := (*response.Targets)[0]
 	assertBlockingValidationTarget(t, got)
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		[]factoryapi.FactoryValidationTarget{got},
 		factoryvalidation.CodeWorkstationMissingFailureRoute,
@@ -383,7 +384,7 @@ func TestCreateFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	}
 	got := (*response.Targets)[0]
 	assertBlockingValidationTarget(t, got)
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		[]factoryapi.FactoryValidationTarget{got},
 		factoryvalidation.CodeWorkstationMissingFailureRoute,
@@ -440,38 +441,6 @@ func decodeJSONResponse[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 		t.Fatalf("decode JSON response: %v", err)
 	}
 	return out
-}
-
-func assertHasValidationTarget(
-	t *testing.T,
-	targets []factoryapi.FactoryValidationTarget,
-	code string,
-	subjectType factoryapi.FactoryValidationSubjectType,
-	subjectID string,
-	location factoryapi.FactoryValidationSubjectLocation,
-	want string,
-) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code != code {
-			continue
-		}
-		if target.Subject.Type != subjectType || target.Subject.Id != subjectID || target.Subject.Location != location {
-			continue
-		}
-		return
-	}
-	t.Fatalf("validation targets = %#v, want %s", targets, want)
-}
-
-func assertHasValidationTargetCode(t *testing.T, targets []factoryapi.FactoryValidationTarget, code string) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code == code {
-			return
-		}
-	}
-	t.Fatalf("targets = %#v, want code %q", targets, code)
 }
 
 func validNamedFactoryBody(name, workType string) string {

@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"os"
@@ -1332,7 +1333,7 @@ func TestFactoryService_CreateNamedFactory_RejectsMissingFailureRouteTargets(t *
 	if !errors.As(err, &topologyErr) {
 		t.Fatalf("SaveFactoryForSession(upsert) error = %v, want topology validation error", err)
 	}
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		topologyErr.Targets,
 		factoryvalidation.CodeWorkstationMissingFailureRoute,
@@ -1730,8 +1731,8 @@ func TestFactoryService_SaveCurrentFactory_RejectsMissingOutcomeRoutes(t *testin
 	if !errors.As(err, &topologyErr) {
 		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
 	}
-	assertHasValidationTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingFailureRoute, "missing failure route target")
-	assertHasValidationTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingRejectionRoute, "missing rejection route target")
+	validationassert.HasTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingFailureRoute, "missing failure route target")
+	validationassert.HasTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingRejectionRoute, "missing rejection route target")
 }
 
 func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.FactoryValidationTarget) {
@@ -1741,7 +1742,7 @@ func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.FactoryVa
 		t.Fatalf("topology targets = %#v, want duplicate worker, missing worker, and dangling output targets", targets)
 	}
 
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		targets,
 		factoryvalidation.CodeDuplicateIdentifier,
@@ -1750,7 +1751,7 @@ func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.FactoryVa
 		factoryapi.FactoryValidationSubjectLocationDefinition,
 		"duplicate worker target",
 	)
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		targets,
 		factoryvalidation.CodeDanglingWorkerReference,
@@ -1759,7 +1760,7 @@ func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.FactoryVa
 		factoryapi.FactoryValidationSubjectLocationReference,
 		"missing workstation worker target",
 	)
-	assertHasValidationTarget(
+	validationassert.HasTarget(
 		t,
 		targets,
 		factoryvalidation.CodeDanglingPlaceReference,
@@ -1768,37 +1769,6 @@ func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.FactoryVa
 		factoryapi.FactoryValidationSubjectLocationOutputs,
 		"dangling output target",
 	)
-}
-
-func assertHasValidationTargetCode(t *testing.T, targets []factoryapi.FactoryValidationTarget, code, want string) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code == code {
-			return
-		}
-	}
-	t.Fatalf("topology targets = %#v, want %s", targets, want)
-}
-
-func assertHasValidationTarget(
-	t *testing.T,
-	targets []factoryapi.FactoryValidationTarget,
-	code string,
-	subjectType factoryapi.FactoryValidationSubjectType,
-	subjectID string,
-	location factoryapi.FactoryValidationSubjectLocation,
-	want string,
-) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code != code {
-			continue
-		}
-		if target.Subject.Type == subjectType && target.Subject.Id == subjectID && target.Subject.Location == location {
-			return
-		}
-	}
-	t.Fatalf("topology targets = %#v, want %s", targets, want)
 }
 
 func TestFactoryService_GetCurrentFactory_CollectsSupportedPortableBundledFilesFromDisk(t *testing.T) {
