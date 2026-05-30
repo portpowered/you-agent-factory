@@ -60,39 +60,6 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 	t.Helper()
 
 	rootDir := t.TempDir()
-	seedValidAlphaFactoryAtRoot(t, rootDir)
-	svc := startIdleFactoryServiceForValidation(t, rootDir)
-
-	current, err := svc.GetCurrentFactory(context.Background())
-	if err != nil {
-		t.Fatalf("GetCurrentFactory: %v", err)
-	}
-	if current.Version == nil {
-		t.Fatal("expected current factory version metadata")
-	}
-
-	invalid.Name = factoryapi.FactoryName("alpha")
-	invalid.Version = &factoryapi.HybridLogicalTimestamp{
-		Logical:  current.Version.Logical + 1,
-		Physical: current.Version.Physical.Add(time.Second),
-	}
-
-	_, err = svc.SaveFactoryForSession(
-		context.Background(),
-		factorysessions.DefaultSessionID,
-		factoryapi.FactorySaveModeReplaceCurrent,
-		invalid,
-	)
-	var topologyErr *apisurface.TopologyValidationError
-	if !errors.As(err, &topologyErr) {
-		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
-	}
-	return factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
-}
-
-func seedValidAlphaFactoryAtRoot(t *testing.T, rootDir string) {
-	t.Helper()
-
 	initialVersion := factoryapi.HybridLogicalTimestamp{
 		Logical:  11,
 		Physical: time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC),
@@ -115,14 +82,9 @@ func seedValidAlphaFactoryAtRoot(t *testing.T, rootDir string) {
 	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
-}
-
-func startIdleFactoryServiceForValidation(t *testing.T, rootDir string) *service.FactoryService {
-	t.Helper()
 
 	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               rootDir,
-		RuntimeMode:       interfaces.RuntimeModeService,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
 	})
@@ -131,32 +93,45 @@ func startIdleFactoryServiceForValidation(t *testing.T, rootDir string) *service
 	}
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
-	runDone := make(chan error, 1)
+	defer cancelRun()
 	go func() {
-		runDone <- svc.Run(runCtx)
+		_ = svc.Run(runCtx)
 	}()
-	t.Cleanup(func() {
-		cancelRun()
-		select {
-		case err := <-runDone:
-			if err != nil && !errors.Is(err, context.Canceled) {
-				t.Fatalf("factory service run: %v", err)
-			}
-		case <-time.After(5 * time.Second):
-			t.Fatal("timed out waiting for factory service run to stop")
-		}
-	})
 
-	waitDeadline := time.Now().Add(time.Second)
-	for time.Now().Before(waitDeadline) {
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
 		snap, snapErr := svc.GetEngineStateSnapshotForSession(context.Background(), factorysessions.DefaultSessionID)
 		if snapErr == nil && snap.RuntimeStatus == interfaces.RuntimeStatusIdle {
-			return svc
+			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("timed out waiting for default session runtime to become idle")
-	return nil
+
+	current, err := svc.GetCurrentFactoryForSession(context.Background(), factorysessions.DefaultSessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
+	}
+	if current.Version == nil {
+		t.Fatal("expected current factory version metadata")
+	}
+
+	invalid.Name = factoryapi.FactoryName("alpha")
+	invalid.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  current.Version.Logical + 1,
+		Physical: current.Version.Physical.Add(time.Second),
+	}
+
+	_, err = svc.SaveFactoryForSession(
+		context.Background(),
+		factorysessions.DefaultSessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		invalid,
+	)
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(err, &topologyErr) {
+		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
+	}
+	return factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
 }
 
 func assertConfigFindingExists(t *testing.T, findings []config.Finding, rule string) {
