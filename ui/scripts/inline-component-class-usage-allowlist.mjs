@@ -59,7 +59,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/trace-drilldown/components/trace-grid-card.tsx#TRACE_WORK_ITEM_BUTTON_CLASS",
   "src/features/trace-drilldown/components/trace-relation-flow.tsx#GRAPH_SHELL_CLASS",
   "src/features/trace-drilldown/components/trace-workstation-path.tsx#GRAPH_SHELL_CLASS",
-  "src/features/work-outcome/components/d3-information-card.tsx#WORK_CHART_REGION_CLASS",
   "src/features/work-outcome/components/trend-cards.tsx#TREND_TOOLBAR_CLASS",
   "src/features/work-outcome/components/trend-cards.tsx#TREND_RANGE_LABEL_CLASS",
   "src/features/work-outcome/components/trend-cards.tsx#TREND_RANGE_TEXT_CLASS",
