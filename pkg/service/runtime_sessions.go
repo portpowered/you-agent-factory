@@ -44,18 +44,6 @@ func liveSessionHandle(session *factorysessions.LiveSession) *liveRuntimeHandle 
 	return handle
 }
 
-func (fs *FactoryService) activeFactoryDirectory() string {
-	if fs == nil {
-		return ""
-	}
-	if fs.cfg != nil {
-		if dir := strings.TrimSpace(fs.cfg.Dir); dir != "" {
-			return dir
-		}
-	}
-	return fs.factoryRootDir
-}
-
 func (fs *FactoryService) registerLiveSession(
 	sessionID string,
 	handle *liveRuntimeHandle,
