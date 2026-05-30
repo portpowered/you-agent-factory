@@ -387,6 +387,15 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 	}
 	for _, want := range []string{
 		"# Batch Inputs",
+		"## Batch ingress comparison",
+		"`you submit batch`",
+		"`you submit`",
+		"`you run --work <path>`",
+		"factory/inputs/BATCH/default/<request_id>.json",
+		"## CLI batch submit (`you submit batch`)",
+		"you submit batch --dry-run",
+		"you submit batch --file",
+		"cat batch.json | you submit batch",
 		"## Quick reference",
 		"## Before you submit",
 		"factory.json",
