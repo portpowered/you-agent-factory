@@ -777,6 +777,10 @@ func intPtrIfPresent(value int, ok bool) *int {
 	return &value
 }
 
+func intPtr(value int) *int {
+	return &value
+}
+
 func defaultCodexSessionsRoot() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {

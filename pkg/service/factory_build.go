@@ -39,14 +39,15 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	if err := validateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
-	factoryRootDir, baseLogger, logSink, logger, err := buildPrimaryServiceLogger(cfg)
+	factoryRootDir, baseLogger, err := resolveFactoryServiceRoot(cfg)
 	if err != nil {
 		return nil, err
 	}
 	serviceBuilt := false
+	var runtimeBundle *factoryRuntimeBundle
 	defer func() {
-		if !serviceBuilt {
-			_ = logSink.Close()
+		if !serviceBuilt && runtimeBundle != nil && runtimeBundle.logSink != nil {
+			_ = runtimeBundle.logSink.Close()
 		}
 	}()
 	if cfg.ReplayPath == "" {
@@ -61,7 +62,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		cfg.Dir = resolvedDir
 	}
 
-	logger = newSessionLogger(logger, defaultFactorySessionID, factoryRootDir, cfg.Dir)
+	logger := newSessionLogger(baseLogger, defaultFactorySessionID, factoryRootDir, cfg.Dir)
 	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForService(cfg, logger)
 	if err != nil {
 		return nil, err
@@ -71,12 +72,14 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	if err != nil {
 		return nil, err
 	}
-	runtimeBundle, err := buildRuntimeBundle(ctx, runtimeBundleBuildInput{
+	runtimeBundle, err = buildRuntimeBundle(ctx, runtimeBundleBuildInput{
 		dir:                   cfg.Dir,
 		folderPath:            factoryRootDir,
+		sessionID:             defaultFactorySessionID,
 		cfg:                   cfg,
 		loadedFactoryCfg:      loadedFactoryCfg,
-		logger:                logger,
+		baseLogger:            baseLogger,
+		runtimeInstanceID:     cfg.RuntimeInstanceID,
 		clock:                 clock,
 		recordPath:            sessionScopedRecordPath(cfg.RecordPath, defaultFactorySessionID),
 		workflowID:            cfg.WorkflowID,
@@ -93,45 +96,31 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	return &FactoryService{
 		factoryRootDir: factoryRootDir,
 		sessions:       factorysessions.NewRegistry(),
-		hostedWorkers:  buildHostedWorkersConfig(cfg, logger, clock),
-		eventHistory:   runtimeBundle.eventHistory,
-		factory:        runtimeBundle.factory,
-		listener:       runtimeBundle.listener,
-		net:            runtimeBundle.net,
+		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, clock),
+		startupBundle:  runtimeBundle,
 		cfg:            cfg,
-		runtimeCfg:     runtimeBundle.runtimeCfg,
-		modelResources: runtimeBundle.modelResources,
 		modelAssets:    runtimeBundle.modelAssets,
-		localModels:    runtimeBundle.localModels,
 		baseLogger:     baseLogger,
-		logger:         logger,
+		logger:         runtimeBundle.logger,
 		clock:          clock,
-		recording:      runtimeBundle.recording,
-		logSink:        logSink,
 	}, nil
 }
 
-func buildPrimaryServiceLogger(cfg *FactoryServiceConfig) (string, *zap.Logger, *logging.RuntimeLogSink, *zap.Logger, error) {
+func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {
 	factoryRootDir, err := factorysessions.AbsolutizeFactoryDirectory(cfg.Dir)
 	if err != nil {
-		return "", nil, nil, nil, err
+		return "", nil, err
 	}
 	cfg.Dir = factoryRootDir
 	baseLogger := cfg.Logger
 	if baseLogger == nil {
 		baseLogger = zap.NewNop()
 	}
-	runtimeInstanceID := cfg.RuntimeInstanceID
-	if runtimeInstanceID == "" {
-		runtimeInstanceID = uuid.NewString()
+	if cfg.RuntimeInstanceID == "" {
+		cfg.RuntimeInstanceID = uuid.NewString()
 	}
-	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
-	if err != nil {
-		return "", nil, nil, nil, err
-	}
-	cfg.RuntimeInstanceID = runtimeInstanceID
 	cfg.Logger = baseLogger
-	return factoryRootDir, baseLogger, logSink, logSink.Logger(), nil
+	return factoryRootDir, baseLogger, nil
 }
 
 // RuntimeLogDiagnostics describes the active runtime log selected during
@@ -145,13 +134,14 @@ type RuntimeLogDiagnostics struct {
 // RuntimeLogDiagnostics returns the selected runtime log metadata for startup
 // diagnostics without exposing the sink writer.
 func (fs *FactoryService) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
-	if fs == nil || fs.logSink == nil {
+	bundle := fs.currentRuntimeBundle()
+	if bundle == nil || bundle.logSink == nil {
 		return RuntimeLogDiagnostics{}
 	}
 	return RuntimeLogDiagnostics{
-		Path:         fs.logSink.Path(),
-		RootDir:      fs.logSink.RootDir(),
-		StartTimeUTC: fs.logSink.StartTimeUTC(),
+		Path:         bundle.logSink.Path(),
+		RootDir:      bundle.logSink.RootDir(),
+		StartTimeUTC: bundle.logSink.StartTimeUTC(),
 	}
 }
 
@@ -214,11 +204,30 @@ func replayFactoryModeOptions(
 func buildRuntimeBundle(
 	ctx context.Context,
 	input runtimeBundleBuildInput,
-) (*replacementFactoryRuntime, error) {
+) (*factoryRuntimeBundle, error) {
+	logSink, runtimeInstanceID, err := buildRuntimeLogSink(input.cfg, input.baseLogger, input.runtimeInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	bundleBuilt := false
+	defer func() {
+		if !bundleBuilt && logSink != nil {
+			_ = logSink.Close()
+		}
+	}()
+	if input.cfg != nil && runtimeInstanceID != "" {
+		input.cfg.RuntimeInstanceID = runtimeInstanceID
+	}
+	sessionID := strings.TrimSpace(input.sessionID)
+	if sessionID == "" {
+		sessionID = defaultFactorySessionID
+	}
+	logger := newSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
+
 	mapper := factoryconfig.ConfigMapper{}
 	net, err := mapper.Map(ctx, input.loadedFactoryCfg.FactoryConfig())
 	if err != nil {
-		input.logger.Error("failed to map factory config", zap.Error(err))
+		logger.Error("failed to map factory config", zap.Error(err))
 		return nil, fmt.Errorf("map factory config: %w", err)
 	}
 
@@ -226,12 +235,28 @@ func buildRuntimeBundle(
 	eventHistory := factoryevents.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	localModels := newRuntimeLocalModelDependencies(input.cfg)
+	workerOpts, err := loadRuntimeBundleWorkerOptions(input, logger, effectiveFactoryRunnerID, eventHistory, localModels)
+	if err != nil {
+		return nil, err
+	}
+
+	bundleBuilt = true
+	return assembleRuntimeBundle(input, logger, logSink, net, eventHistory, localModels, workerOpts)
+}
+
+func loadRuntimeBundleWorkerOptions(
+	input runtimeBundleBuildInput,
+	logger *zap.Logger,
+	effectiveFactoryRunnerID string,
+	eventHistory *factoryevents.FactoryEventHistory,
+	localModels localModelDomain,
+) ([]factory.FactoryOption, error) {
 	workerOpts, err := loadWorkersFromConfig(
 		input.loadedFactoryCfg.FactoryDir(),
 		input.loadedFactoryCfg.FactoryConfig(),
 		effectiveFactoryRunnerID,
 		input.loadedFactoryCfg,
-		logging.NewZapLogger(input.logger, input.cfg.Verbose),
+		logging.NewZapLogger(logger, input.cfg.Verbose),
 		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		input.providerOverride,
 		input.providerCommandRunner,
@@ -244,10 +269,21 @@ func buildRuntimeBundle(
 		localModels.manager,
 	)
 	if err != nil {
-		input.logger.Error("failed to load workers from config", zap.Error(err))
+		logger.Error("failed to load workers from config", zap.Error(err))
 		return nil, fmt.Errorf("load workers: %w", err)
 	}
+	return workerOpts, nil
+}
 
+func assembleRuntimeBundle(
+	input runtimeBundleBuildInput,
+	logger *zap.Logger,
+	logSink *logging.RuntimeLogSink,
+	net *state.Net,
+	eventHistory *factoryevents.FactoryEventHistory,
+	localModels localModelDomain,
+	workerOpts []factory.FactoryOption,
+) (*factoryRuntimeBundle, error) {
 	recording, err := buildRuntimeRecorder(
 		input.cfg,
 		input.loadedFactoryCfg.FactoryDir(),
@@ -264,7 +300,7 @@ func buildRuntimeBundle(
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
 		factory.WithRuntimeMode(input.cfg.RuntimeMode),
-		factory.WithLogger(logging.NewZapLogger(input.logger, input.cfg.Verbose)),
+		factory.WithLogger(logging.NewZapLogger(logger, input.cfg.Verbose)),
 		factory.WithRuntimeConfig(input.loadedFactoryCfg),
 		factory.WithWorkflowContext(runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig())),
 		factory.WithClock(input.clock),
@@ -285,12 +321,12 @@ func buildRuntimeBundle(
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)
 	}
-	listener, err := buildRuntimeListener(input.dir, activeFactory, input.logger, net)
+	listener, err := buildRuntimeListener(input.dir, activeFactory, logger, net)
 	if err != nil {
 		return nil, err
 	}
 
-	return &replacementFactoryRuntime{
+	return &factoryRuntimeBundle{
 		dir:            input.dir,
 		folderPath:     input.folderPath,
 		eventHistory:   eventHistory,
@@ -301,14 +337,36 @@ func buildRuntimeBundle(
 		modelResources: localModels.resources,
 		modelAssets:    localModels.assets,
 		localModels:    localModels.manager,
-		logger:         input.logger,
+		logger:         logger,
+		logSink:        logSink,
 		recording:      recording,
 		recordPath:     input.recordPath,
 	}, nil
 }
 
+func buildRuntimeLogSink(
+	cfg *FactoryServiceConfig,
+	baseLogger *zap.Logger,
+	runtimeInstanceID string,
+) (*logging.RuntimeLogSink, string, error) {
+	if baseLogger == nil {
+		baseLogger = zap.NewNop()
+	}
+	if strings.TrimSpace(runtimeInstanceID) == "" {
+		runtimeInstanceID = uuid.NewString()
+	}
+	if cfg == nil {
+		return nil, runtimeInstanceID, fmt.Errorf("factory service config is required to build runtime log sink")
+	}
+	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
+	if err != nil {
+		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
+	}
+	return logSink, runtimeInstanceID, nil
+}
+
 // localModelDomain wires pkg/localmodels runtime dependencies constructed at
-// service build time and copied onto each replacement runtime bundle.
+// service build time and copied onto each factoryRuntimeBundle.
 type localModelDomain struct {
 	resources *localModelResourceLimiter
 	assets    modelAssetPuller
