@@ -171,3 +171,5 @@ func (s *Server) serveDashboardIndex(w http.ResponseWriter, r *http.Request, dis
 
 	http.ServeContent(w, r, dashboardUIIndexFile, noModTime, readSeeker)
 }
+
+//go:generate go tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=../../api/codegen_config/server.yaml ../../api/openapi.yaml
