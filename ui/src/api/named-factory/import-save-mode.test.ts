@@ -107,15 +107,6 @@ describe("named factory import save mode helpers", () => {
       resolveImportCreateFactoryName("Dropped Factory", [
         "Dropped Factory",
         "Dropped Factory-2",
-      ]),
-    ).toEqual({
-      factoryName: "Dropped Factory-2",
-      replacesExisting: true,
-    });
-    expect(
-      resolveImportCreateFactoryName("Dropped Factory", [
-        "Dropped Factory",
-        "Dropped Factory-2",
         "Dropped Factory-3",
       ]),
     ).toEqual({

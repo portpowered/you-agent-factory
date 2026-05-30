@@ -86,6 +86,16 @@ describe("resolveSessionFactoryAPIErrorMessage", () => {
       }),
     ).toBe("Bad request.");
   });
+
+  it("falls back to rejected copy for unrecognized codes without API message", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        code: "BAD_REQUEST",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+        status: 400,
+      }),
+    ).toBe(sessionFactoryAPIErrorMessages.rejectedSaveRequest);
+  });
 });
 
 describe("session factory HTTP error mapping", () => {

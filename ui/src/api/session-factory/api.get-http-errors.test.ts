@@ -114,6 +114,11 @@ describe("saveSessionFactory HTTP error mapping", () => {
   it.each([
     ["STALE_FACTORY_VERSION", sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION],
     ["FACTORY_NOT_IDLE", sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE],
+    ["INVALID_FACTORY", sessionFactoryOperatorErrorMessages.INVALID_FACTORY],
+    [
+      "INVALID_FACTORY_NAME",
+      sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
+    ],
   ] as const)(
     "maps %s PUT failures to canonical operator copy",
     async (code, message) => {
