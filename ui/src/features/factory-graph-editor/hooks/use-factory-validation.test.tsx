@@ -299,7 +299,7 @@ describe("useFactoryValidation stale response handling", () => {
   });
 });
 
-describe("useFactoryValidation draft mutation refresh", () => {
+describe("useFactoryValidation draft mutation refresh on add and remove", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -382,6 +382,12 @@ describe("useFactoryValidation draft mutation refresh", () => {
         "factory.route.danglingPlaceReference",
       );
     });
+  });
+});
+
+describe("useFactoryValidation draft mutation refresh on connect and disconnect", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   it("refreshes targets after a connect operation changes the draft-applied factory", async () => {
