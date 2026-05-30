@@ -16,23 +16,6 @@ export function workerFieldValidationTarget(
   };
 }
 
-export function workstationFieldValidationTarget(
-  fieldName: string,
-  workstationId = "review",
-  message = `Invalid ${fieldName}.`,
-): FactoryValidationTarget {
-  return {
-    code: `factory.workstation.${fieldName}`,
-    message,
-    severity: "error",
-    subject: {
-      id: workstationId,
-      location: "DEFINITION",
-      type: "WORKSTATION",
-    },
-  };
-}
-
 export function staleFactoryVersionTarget(
   message = "Current factory definition is stale. Refresh the graph before saving.",
 ): FactoryValidationTarget {
