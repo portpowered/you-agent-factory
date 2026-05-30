@@ -5,11 +5,9 @@ import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES, openFactoryEventStream } from "../../../api/events";
 import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import {
-  CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
   currentFactoryDocumentQueryKey,
   currentFactoryDefinitionQueryKey,
 } from "../../current-factory-definition/public";
-import { resetSelectionHistoryStore } from "../../current-selection/base/public";
 import {
   compactFactoryEventForTimeline,
   installFactoryTimelineDebugGlobal,
@@ -21,7 +19,9 @@ import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineSto
 import {
   useDashboardStreamStore,
 } from "../state/dashboardStreamStore";
+import { dashboardSessionKey } from "../lib/dashboard-session-lifecycle";
 import { useDashboardSession } from "../session/dashboard-session-provider";
+import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardWorldView } from "./useDashboardWorldView";
 
 export interface UseDashboardSnapshotOptions {
@@ -38,30 +38,9 @@ interface DashboardStreamConnectionOptions {
   isPaused: boolean;
   rawSessionID: string | null;
   refreshToken: number;
-  resetStreamState: (locale?: string | null) => void;
-  resetTimeline: () => void;
   scheduleQueuedFlush: () => void;
   sessionID: string;
   setStreamState: (streamState: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]) => void;
-}
-
-function resetDashboardSessionScopedState(
-  queryClient: ReturnType<typeof useQueryClient>,
-  resetStreamState: (locale?: string | null) => void,
-  resetTimeline: () => void,
-  locale?: string | null,
-): void {
-  resetTimeline();
-  resetStreamState(locale);
-  resetSelectionHistoryStore();
-  queryClient.removeQueries({
-    queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
-    exact: false,
-  });
-  queryClient.removeQueries({
-    queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
-    exact: false,
-  });
 }
 
 function clearQueuedFlush(flushHandleRef: RefObject<number | null>): void {
@@ -76,35 +55,27 @@ function clearQueuedFlush(flushHandleRef: RefObject<number | null>): void {
   flushHandleRef.current = null;
 }
 
-function resetDashboardSessionStateForSelectionChange({
+function prepareDashboardStreamSession({
   hasOpenedStreamRef,
   previousSessionKey,
-  queryClient,
   queuedEventsRef,
   refreshToken,
-  resetStreamState,
-  resetTimeline,
   selectedSessionID,
 }: {
   hasOpenedStreamRef: RefObject<boolean>;
   previousSessionKey: string | null;
-  queryClient: ReturnType<typeof useQueryClient>;
   queuedEventsRef: RefObject<FactoryEvent[]>;
   refreshToken: number;
-  resetStreamState: () => void;
-  resetTimeline: () => void;
   selectedSessionID: string | null;
 }): boolean {
   if (selectedSessionID == null) {
     queuedEventsRef.current = [];
     hasOpenedStreamRef.current = false;
-    resetDashboardSessionScopedState(queryClient, resetStreamState, resetTimeline);
     return false;
   }
 
   if (previousSessionKey !== null || refreshToken !== 0) {
     queuedEventsRef.current = [];
-    resetDashboardSessionScopedState(queryClient, resetStreamState, resetTimeline);
   }
   hasOpenedStreamRef.current = true;
 
@@ -119,13 +90,6 @@ function pausedDashboardStreamState() {
   };
 }
 
-function dashboardSessionKey(
-  selectedSessionID: string | null,
-  refreshToken: number,
-): string | null {
-  return selectedSessionID == null ? null : `${selectedSessionID}::${refreshToken}`;
-}
-
 function useDashboardStreamConnection({
   debugOptions,
   flushHandleRef,
@@ -135,8 +99,6 @@ function useDashboardStreamConnection({
   queuedEventsRef,
   rawSessionID,
   refreshToken,
-  resetStreamState,
-  resetTimeline,
   scheduleQueuedFlush,
   sessionID,
   setStreamState,
@@ -159,14 +121,11 @@ function useDashboardStreamConnection({
       return;
     }
 
-    const shouldOpenStream = resetDashboardSessionStateForSelectionChange({
+    const shouldOpenStream = prepareDashboardStreamSession({
       hasOpenedStreamRef,
       previousSessionKey: sessionSelectionChanged ? previousSessionKey : null,
-      queryClient,
       queuedEventsRef,
       refreshToken,
-      resetStreamState,
-      resetTimeline,
       selectedSessionID: rawSessionID,
     });
     if (!shouldOpenStream || rawSessionID == null) {
@@ -204,8 +163,6 @@ function useDashboardStreamConnection({
     queuedEventsRef,
     rawSessionID,
     refreshToken,
-    resetStreamState,
-    resetTimeline,
     scheduleQueuedFlush,
     sessionID,
     setStreamState,
@@ -253,17 +210,18 @@ export function useDashboardSnapshot({
   const queryClient = useQueryClient();
   const appendEvents = useFactoryTimelineStore((state) => state.appendEvents);
   const eventCount = useFactoryTimelineStore((state) => state.events.length);
-  const resetTimeline = useFactoryTimelineStore((state) => state.reset);
   const { error, isInitialLoading, snapshot, streamState } = useDashboardWorldView();
-  const resetStreamState = useDashboardStreamStore((state) => state.resetStreamState);
   const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
   const { isPaused, rawSessionID, sessionID } = useDashboardSession();
   const queuedEventsRef = useRef<FactoryEvent[]>([]);
   const flushHandleRef = useRef<number | null>(null);
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
-  const resetLocalizedStreamState = useCallback(() => {
-    resetStreamState(locale);
-  }, [locale, resetStreamState]);
+
+  useDashboardSessionLifecycle({
+    locale,
+    refreshToken,
+    sessionID: rawSessionID,
+  });
 
   const flushQueuedEvents = useCallback(() => {
     flushHandleRef.current = null;
@@ -305,8 +263,6 @@ export function useDashboardSnapshot({
     queuedEventsRef,
     rawSessionID,
     refreshToken,
-    resetStreamState: resetLocalizedStreamState,
-    resetTimeline,
     scheduleQueuedFlush,
     sessionID,
     setStreamState,
