@@ -35,6 +35,7 @@ var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
 var listWork = workcli.List
 var listSessions = sessioncli.List
+var createSession = sessioncli.Create
 var deleteSession = sessioncli.Delete
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
@@ -332,7 +333,7 @@ func newSessionCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	}
 	sessionCmd.AddCommand(
 		newSessionListCommand(diagnostics),
-		newSessionCreateCommand(),
+		newSessionCreateCommand(diagnostics),
 		newSessionDeleteCommand(diagnostics),
 	)
 	return sessionCmd
@@ -361,15 +362,42 @@ func newSessionListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	return cmd
 }
 
-func newSessionCreateCommand() *cobra.Command {
-	return &cobra.Command{
+func newSessionCreateCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := sessioncli.CreateConfig{Port: defaultcmd.FactoryPort}
+
+	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Open a live factory session from a folder",
 		Long: "Open another live factory session from a folder path via POST /factory-sessions.\n\n" +
 			"Use --dir to provide the folder path. Optional --init-new-factory and --validate-only " +
-			"map to the API request fields. Use --target-kind and --target-name when the folder exposes " +
-			"multiple runnable targets.",
+			"map to the API request fields and are mutually exclusive. Use --target-kind and --target-name " +
+			"when the folder exposes multiple runnable targets. Use --json to emit OpenFactorySessionResponse " +
+			"on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+		Example: "  # Open a session for an existing factory folder.\n" +
+			"  " + cliBinaryName + " session create --dir /workspace/fleet\n\n" +
+			"  # Validate a folder without opening a live session.\n" +
+			"  " + cliBinaryName + " session create --dir /workspace/fleet --validate-only\n\n" +
+			"  # Open a named target inside a multi-factory folder.\n" +
+			"  " + cliBinaryName + " session create --dir /workspace/fleet --target-kind named --target-name beta",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
+			return createSession(cfg)
+		},
 	}
+
+	cmd.Flags().StringVar(&cfg.Dir, "dir", "", "folder path to open as a live factory session")
+	cmd.Flags().BoolVar(&cfg.InitNewFactory, "init-new-factory", false, "write the default init scaffold at --dir and open a live session")
+	cmd.Flags().BoolVar(&cfg.ValidateOnly, "validate-only", false, "validate the folder and optional target without creating a live session")
+	cmd.Flags().StringVar(&cfg.TargetKind, "target-kind", "", "target kind when disambiguating runnable factories (default or named)")
+	cmd.Flags().StringVar(&cfg.TargetName, "target-name", "", "named target when --target-kind is named")
+	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API open-factory-session JSON response")
+	_ = cmd.MarkFlagRequired("dir")
+	cmd.MarkFlagsMutuallyExclusive("init-new-factory", "validate-only")
+	return cmd
 }
 
 func newSessionDeleteCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
