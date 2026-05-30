@@ -35,8 +35,6 @@ import {
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
 
-const CURRENT_ACTIVITY_LEGEND_CLASS = "absolute left-4 right-4 top-4 z-10";
-
 function CurrentActivityEditorToolbar(props: {
   activeTool: "add" | "connect" | "delete" | null;
   addMenuActions?: FactoryGraphEditorMenuAction[];
@@ -228,7 +226,7 @@ export function CurrentActivityGraphViewport({
   return (
     <div className="relative min-h-96 flex-1">
       <DashboardFlowAxisLegend
-        className={CURRENT_ACTIVITY_LEGEND_CLASS}
+        className="absolute left-4 right-4 top-4 z-10"
         defaultExpanded={false}
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(locale)}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems(locale)}
