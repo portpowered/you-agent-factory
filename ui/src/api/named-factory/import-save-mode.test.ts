@@ -64,6 +64,32 @@ describe("named factory import save mode helpers", () => {
     ).toBe("Dropped Factory-3");
   });
 
+  it("returns an empty list when session targets are missing or unnamed", () => {
+    expect(extractNamedFactoryNamesFromSessionTargets(undefined)).toEqual([]);
+    expect(
+      extractNamedFactoryNamesFromSessionTargets([
+        {
+          factoryDir: "/tmp/factories",
+          folderPath: "/tmp/factories",
+          label: "Default",
+          project: "default",
+          ref: { kind: "default" },
+        },
+        {
+          factoryDir: "/tmp/factories/ ",
+          folderPath: "/tmp/factories",
+          label: "Blank",
+          project: "blank",
+          ref: { kind: "named", name: "   " },
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("returns the preferred name unchanged when it is blank", () => {
+    expect(allocateFirstFreeSuffixedFactoryName("   ", ["alpha"])).toBe("   ");
+  });
+
   it("reports whether the resolved create target replaces an existing factory", () => {
     expect(
       resolveImportCreateFactoryName("Dropped Factory", ["alpha"]),

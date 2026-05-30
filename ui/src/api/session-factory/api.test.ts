@@ -3,6 +3,7 @@ import {
   SessionFactoryAPIError,
   saveSessionFactory,
 } from "./api";
+import { sessionFactoryAPIErrorMessages } from "./messages";
 
 const sessionFactoryFixture = {
   name: "Current Factory",
@@ -203,6 +204,22 @@ describe("saveSessionFactory errors", () => {
     vi.unstubAllGlobals();
   });
 
+  it("maps transport failures to NETWORK_ERROR", async () => {
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: sessionFactoryFixture,
+        },
+        {
+          fetch: vi.fn().mockRejectedValue(new Error("connection refused")),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+    });
+  });
+
   it("surfaces session factory transport failures with the original API error code", async () => {
     await expect(
       saveSessionFactory(
@@ -238,11 +255,155 @@ describe("saveSessionFactory errors", () => {
 });
 
 describe("getSessionFactory errors", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("throws SessionFactoryAPIError when fetch is unavailable", async () => {
     await expect(
       getSessionFactory("~default", {
         fetch: undefined,
       }),
     ).rejects.toBeInstanceOf(SessionFactoryAPIError);
+  });
+
+  it("maps transport failures to NETWORK_ERROR", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockRejectedValue(new Error("connection refused")),
+      }),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+    });
+  });
+
+  it("rejects session factory documents with invalid version metadata", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              name: "Broken Factory",
+              version: {
+                logical: "not-numeric",
+                physical: "2026-05-18T14:22:00Z",
+              },
+              workers: [],
+              workstations: [],
+              workTypes: [],
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY_DEFINITION",
+    });
+  });
+
+  it("rejects invalid session factory documents", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ name: "Broken Factory" }), {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          }),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+    });
+  });
+
+  it("maps invalid factory definitions to INVALID_FACTORY_DEFINITION", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              name: "Broken Factory",
+              version: {
+                logical: "1",
+                physical: "2026-05-18T14:22:00Z",
+              },
+              workers: "not-an-array",
+              workstations: [],
+              workTypes: [],
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY_DEFINITION",
+    });
+  });
+
+  it("maps unrecognized API error codes on 4xx responses to INTERNAL_ERROR with API copy", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "UNKNOWN_CODE",
+              message: "Unexpected failure.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 400,
+              statusText: "Bad Request",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "Unexpected failure.",
+      status: 400,
+    });
+  });
+
+  it("maps unrecognized API error codes on 5xx responses to rejected request copy", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "UNKNOWN_CODE",
+              message: "Unexpected failure.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 500,
+              statusText: "Internal Server Error",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: sessionFactoryAPIErrorMessages.rejectedRequest,
+      status: 500,
+    });
   });
 });

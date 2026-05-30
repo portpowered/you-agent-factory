@@ -54,6 +54,38 @@ describe("resolveSessionFactoryAPIErrorMessage", () => {
       }),
     ).toBe(sessionFactoryAPIErrorMessages.rejectedSaveRequest);
   });
+
+  it("maps non-5xx internal failures to the API message when provided", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        apiMessage: "Validation failed.",
+        code: "INTERNAL_ERROR",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+        status: 400,
+      }),
+    ).toBe("Validation failed.");
+  });
+
+  it("falls back to rejected copy for non-5xx internal failures without API message", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        code: "INTERNAL_ERROR",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+        status: 404,
+      }),
+    ).toBe(sessionFactoryAPIErrorMessages.rejectedSaveRequest);
+  });
+
+  it("maps unrecognized codes to the API message when provided", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        apiMessage: "Bad request.",
+        code: "BAD_REQUEST",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+        status: 400,
+      }),
+    ).toBe("Bad request.");
+  });
 });
 
 describe("session factory HTTP error mapping", () => {
@@ -73,6 +105,10 @@ describe("session factory HTTP error mapping", () => {
     [
       "INVALID_FACTORY",
       sessionFactoryOperatorErrorMessages.INVALID_FACTORY,
+    ],
+    [
+      "INVALID_FACTORY_NAME",
+      sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
     ],
   ] as const)(
     "surfaces canonical %s copy from mocked PUT failures",
