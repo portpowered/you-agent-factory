@@ -34,6 +34,7 @@ var flattenFactoryConfig = configcli.FlattenFactoryConfig
 var expandFactoryConfig = configcli.ExpandFactoryConfig
 var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
+var submitBatch = submitcli.SubmitBatch
 var listWork = workcli.List
 var showWork = workcli.Show
 var listSessions = sessioncli.List
@@ -899,7 +900,11 @@ func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 		Use:   "submit",
 		Short: "Submit work to a running factory",
 		Long: "Submit work to a running you-agent-factory service.\n\n" +
-			"By default the command submits to the default compatibility session. " +
+			"Unary submit (this command) posts one work item with --name, --work-type-name, and --payload. " +
+			"For multi-work FACTORY_REQUEST_BATCH ingress to an already-running session, use " +
+			cliBinaryName + " submit batch. See " + cliBinaryName + " submit batch --help and " +
+			cliBinaryName + " docs batch-inputs.\n\n" +
+			"By default unary submit targets the default compatibility session. " +
 			"Use --session to submit to one specific live factory session instead.",
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -918,5 +923,6 @@ func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
 	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
+	cmd.AddCommand(newSubmitBatchCommand(globals, diagnostics))
 	return cmd
 }

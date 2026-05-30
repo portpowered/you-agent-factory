@@ -370,6 +370,18 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 	if resp.RequestId != request.RequestId || resp.TraceId == "" {
 		t.Fatalf("PUT /work-requests response = %#v, want request id and trace id", resp)
 	}
+	if len(resp.Works) != 2 {
+		t.Fatalf("PUT /work-requests works = %#v, want 2 accepted items", resp.Works)
+	}
+	wantWorks := []factoryapi.UpsertWorkRequestSubmittedWork{
+		{Name: "first", WorkTypeName: workTypeName, WorkId: firstWorkID},
+		{Name: "second", WorkTypeName: workTypeName, WorkId: secondWorkID},
+	}
+	for i, work := range resp.Works {
+		if work != wantWorks[i] {
+			t.Fatalf("PUT /work-requests works[%d] = %#v, want %#v", i, work, wantWorks[i])
+		}
+	}
 
 	items := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second)
 	for _, item := range items {

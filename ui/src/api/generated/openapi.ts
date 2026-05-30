@@ -608,9 +608,15 @@ export interface components {
             /** @description Browser-authored MIME type preserved for inline identification after staging. */
             mediaType: string;
         };
+        UpsertWorkRequestSubmittedWork: {
+            name: string;
+            workTypeName: string;
+            workId: string;
+        };
         UpsertWorkRequestResponse: {
             requestId: string;
             traceId: string;
+            works: components["schemas"]["UpsertWorkRequestSubmittedWork"][];
         };
         ListWorkResponse: {
             results: components["schemas"]["Work"][];

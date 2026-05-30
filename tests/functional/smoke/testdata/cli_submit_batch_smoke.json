@@ -1,0 +1,13 @@
+{
+  "requestId": "cli-submit-batch-smoke",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "smoke-task",
+      "workTypeName": "task",
+      "payload": {
+        "title": "CLI submit batch smoke"
+      }
+    }
+  ]
+}

@@ -88,6 +88,11 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 	return normalized, nil
 }
 
+// SubmitResultFromNormalized builds accepted batch metadata from normalized submit requests.
+func SubmitResultFromNormalized(requestID string, normalized []interfaces.SubmitRequest) interfaces.WorkRequestSubmitResult {
+	return WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
+}
+
 // NormalizeGeneratedSubmissionBatch validates the canonical generated request
 // and merges optional runtime submission fields onto the matching work items.
 func NormalizeGeneratedSubmissionBatch(batch interfaces.GeneratedSubmissionBatch, opts interfaces.WorkRequestNormalizeOptions) ([]interfaces.SubmitRequest, error) {

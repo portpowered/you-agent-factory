@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - workTypeName
+  - workId
+properties:
+  name:
+    type: string
+  workTypeName:
+    type: string
+  workId:
+    type: string

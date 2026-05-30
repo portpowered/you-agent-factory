@@ -19,12 +19,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/api"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/cli/batchload"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -616,15 +616,7 @@ func isInteractiveOutput(output io.Writer) bool {
 
 // LoadWorkFile reads a canonical FACTORY_REQUEST_BATCH from a JSON file.
 func LoadWorkFile(path string) (interfaces.WorkRequest, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return interfaces.WorkRequest{}, fmt.Errorf("read %s: %w", path, err)
-	}
-	req, err := requests.ParseCanonicalWorkRequestJSON(data)
-	if err != nil {
-		return interfaces.WorkRequest{}, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return req, nil
+	return batchload.LoadFromFile(path)
 }
 
 // CountTokenStates counts tokens by their state category based on place ID conventions.

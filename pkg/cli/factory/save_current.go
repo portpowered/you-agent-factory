@@ -2,6 +2,7 @@ package factory
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
@@ -98,32 +100,37 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 
 	client := &http.Client{Timeout: saveCurrentRequestTimeout}
 	started := time.Now()
-	req, err := http.NewRequest(http.MethodPut, endpoint.String(), bytes.NewReader(payload))
+	var saved factoryapi.Factory
+	resp, err := clihttp.PutJSON(
+		context.Background(),
+		client,
+		endpoint.String(),
+		bytes.NewReader(payload),
+		&saved,
+		clihttp.RequestOptions{
+			Diagnostics:  cfg.Diagnostics,
+			Verbose:      cfg.Verbose,
+			EndpointPath: endpoint.Path,
+			LogLabel:     "factory save",
+		},
+	)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("build save current factory request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory save response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, time.Since(started).Milliseconds())
 		return factoryapi.Factory{}, fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("read save current factory response: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("read save current factory response: %w", err)
+		}
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory save response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds(), len(body))
 		return factoryapi.Factory{}, saveCurrentError(resp.StatusCode, body)
 	}
 
-	var saved factoryapi.Factory
-	if err := json.Unmarshal(body, &saved); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("parse save current factory response: %w", err)
+	responseBytes, err := currentFactoryResponseBytes(saved)
+	if err != nil {
+		return factoryapi.Factory{}, err
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
@@ -132,7 +139,7 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 		endpoint.Path,
 		resp.StatusCode,
 		time.Since(started).Milliseconds(),
-		len(body),
+		responseBytes,
 		saved.Name,
 	)
 	return saved, nil

@@ -56,6 +56,13 @@ type WorkRequest struct {
 	Relations              []WorkRelation  `json:"relations,omitempty"`
 }
 
+// WorkRequestSubmittedWork identifies one accepted work item in a batch upsert.
+type WorkRequestSubmittedWork struct {
+	Name         string
+	WorkTypeName string
+	WorkID       string
+}
+
 // WorkRequestSubmitResult describes accepted request metadata.
 type WorkRequestSubmitResult struct {
 	RequestID    string
@@ -64,6 +71,7 @@ type WorkRequestSubmitResult struct {
 	Name         string
 	WorkTypeName string
 	Accepted     bool
+	Works        []WorkRequestSubmittedWork
 }
 
 // Work is one public item inside a WorkRequest batch.

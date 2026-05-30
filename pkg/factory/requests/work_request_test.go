@@ -105,6 +105,26 @@ func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testin
 	}
 }
 
+func TestSubmitResultFromNormalized_PopulatesPerWorkIdentifiers(t *testing.T) {
+	normalized := []interfaces.SubmitRequest{
+		{RequestID: "request-1", WorkID: "batch-request-1-first", Name: "first", WorkTypeID: "task", TraceID: "trace-1"},
+		{RequestID: "request-1", WorkID: "batch-request-1-second", Name: "second", WorkTypeID: "review", TraceID: "trace-1"},
+	}
+	result := SubmitResultFromNormalized("request-1", normalized)
+	if result.RequestID != "request-1" || result.TraceID != "trace-1" || !result.Accepted {
+		t.Fatalf("result = %#v, want accepted request metadata", result)
+	}
+	if len(result.Works) != 2 {
+		t.Fatalf("works = %#v, want 2 items", result.Works)
+	}
+	if result.Works[0].Name != "first" || result.Works[0].WorkTypeName != "task" || result.Works[0].WorkID != "batch-request-1-first" {
+		t.Fatalf("works[0] = %#v, want first/task/batch-request-1-first", result.Works[0])
+	}
+	if result.Works[1].Name != "second" || result.Works[1].WorkTypeName != "review" || result.Works[1].WorkID != "batch-request-1-second" {
+		t.Fatalf("works[1] = %#v, want second/review/batch-request-1-second", result.Works[1])
+	}
+}
+
 func TestNormalizeWorkRequest_LegacyTraceIDPropagatesStableCurrentChainingTrace(t *testing.T) {
 	request := interfaces.WorkRequest{
 		RequestID: "request-legacy-trace",
