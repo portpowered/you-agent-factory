@@ -46,7 +46,7 @@ function anchorIdsForWorkstation(
   return node?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
 }
 
-describe("useEditableFactoryGraph worker assignment editing", () => {
+describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", () => {
   it("allows worker-assignment disconnect and reconnect while save stays blocked until reassigned", async () => {
     const saveFactoryDefinition = vi.fn(async () => undefined);
     const { result } = renderHook(() =>
@@ -136,7 +136,9 @@ describe("useEditableFactoryGraph worker assignment editing", () => {
       }),
     });
   });
+});
 
+describe("useEditableFactoryGraph logical-move worker handles", () => {
   it("omits worker-assignment handles on LOGICAL_MOVE stations and allows save without a worker", async () => {
     const saveFactoryDefinition = vi.fn(async () => undefined);
     const { result } = renderHook(() =>
