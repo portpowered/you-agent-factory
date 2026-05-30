@@ -2,31 +2,12 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vite";
 import monacoEditorPluginModule from "vite-plugin-monaco-editor";
-import { coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin = process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
-const isCoverageRun = process.argv.includes("--coverage");
-const isVitestRun = process.argv.includes("vitest") || process.env.VITEST === "true";
 const monacoEditorPlugin =
   typeof monacoEditorPluginModule === "function"
     ? monacoEditorPluginModule
     : monacoEditorPluginModule.default;
-const optimizedDeps = isVitestRun
-  ? ([
-      "@radix-ui/react-slot",
-      "react",
-      "react-dom",
-      "react/jsx-runtime",
-      "react/jsx-dev-runtime",
-    ] as const)
-  : ([
-      "@radix-ui/react-slot",
-      "monaco-editor/esm/vs/editor/editor.api.js",
-      "react",
-      "react-dom",
-      "react/jsx-runtime",
-      "react/jsx-dev-runtime",
-    ] as const);
 const storybookInteropDeps = [
   "react",
   "react-dom",
@@ -68,11 +49,6 @@ const apiProxy = Object.fromEntries(
 
 export default defineConfig({
   base: "/dashboard/ui/",
-  resolve: isVitestRun
-    ? {
-        alias: [{ find: "bun:test", replacement: "vitest" }],
-      }
-    : undefined,
   build: {
     rollupOptions: {
       output: {
@@ -86,19 +62,22 @@ export default defineConfig({
     jsxDev: false,
   },
   optimizeDeps: {
-    include: [...optimizedDeps],
+    include: [
+      "@radix-ui/react-slot",
+      "monaco-editor/esm/vs/editor/editor.api.js",
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+    ],
     needsInterop: [...storybookInteropDeps],
   },
   plugins: [
     react(),
-    ...(!isVitestRun ? [tailwindcss()] : []),
-    ...(!isVitestRun
-      ? [
-          monacoEditorPlugin({
-            languageWorkers: ["editorWorkerService"],
-          }),
-        ]
-      : []),
+    tailwindcss(),
+    monacoEditorPlugin({
+      languageWorkers: ["editorWorkerService"],
+    }),
   ],
   server: {
     host: true,
@@ -110,33 +89,5 @@ export default defineConfig({
     port: 4173,
     proxy: apiProxy,
     strictPort: true,
-  },
-  test: {
-    exclude: ["**/*.bun.test.{ts,tsx}"],
-    deps: {
-      interopDefault: true,
-    },
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./src/testing/vitest.setup.ts"],
-    testTimeout: isCoverageRun ? 180000 : 30000,
-    coverage: {
-      provider: "v8",
-      exclude: [
-        ...coverageConfigDefaults.exclude,
-        "**/*.jsonl",
-        "scripts/**",
-        "src/testing/app-shell-test-graph-layout.ts",
-        "src/testing/replay-harness.ts",
-        "src/styles.css",
-        "**/index.ts",
-      ],
-      thresholds: {
-        statements: 93.1,
-        branches: 80.4,
-        functions: 94.9,
-        lines: 93.1,
-      },
-    },
   },
 });

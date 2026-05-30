@@ -1,4 +1,4 @@
-/** Bun-owned coverage thresholds and excludes (mirrors ui/vite.config.ts today). */
+/** Bun-owned coverage thresholds and excludes for unit/coverage lanes. */
 export const bunCoverageReportsDir = ".bun-coverage-reports";
 export const mainCoverageReportsDir = `${bunCoverageReportsDir}/main`;
 export const reactFlowCoverageReportsDir = `${bunCoverageReportsDir}/react-flow-current-activity-card`;

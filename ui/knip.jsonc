@@ -5,6 +5,7 @@
     "src/**/*.test.{ts,tsx,mjs}",
     "src/**/*.stories.tsx",
     "integration/**/*.test.mjs",
+    "vitest.config.ts",
     "vitest.storybook.config.ts"
   ],
   "project": [

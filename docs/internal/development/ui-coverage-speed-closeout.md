@@ -39,7 +39,7 @@ The package-owned `test:coverage` flow should keep its phase definitions in `ui/
 
 The isolated `src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` pass remains intentionally separate and conservative with `--maxWorkers=1`. Keep that boundary unless future comparable CI evidence shows that merging or further parallelizing the React Flow-heavy pass improves runtime without adding flake.
 
-The blob report merge remains the owner of coverage threshold enforcement through `ui/vite.config.ts`. The main covered pass should continue to exclude browser-backed `integration/*.integration.test.mjs`, the standalone script-style `scripts/dashboard-shell-storybook-responsive.test.mjs`, and the isolated React Flow card test so each surface stays in its intended lane.
+The blob report merge remains the owner of coverage threshold enforcement through `ui/scripts/bun-coverage-config.mjs` and `ui/scripts/merge-bun-coverage-thresholds.mjs`. The main covered pass should continue to exclude browser-backed `integration/*.integration.test.mjs`, the standalone script-style `scripts/dashboard-shell-storybook-responsive.test.mjs`, and the isolated React Flow card test so each surface stays in its intended lane.
 
 Replay coverage is part of the preserved verification contract. Changes to UI coverage orchestration should keep the trailing replay coverage check visible through `make test-ui-coverage` and preserve the stable `[ui-coverage]` elapsed labels for the main covered pass, isolated React Flow covered pass, blob report merge pass, standalone script-style test, and replay coverage check.
 
@@ -47,4 +47,4 @@ Replay coverage is part of the preserved verification contract. Changes to UI co
 
 After migrating merge/threshold enforcement to Bun lcov merge (`ui/scripts/merge-bun-coverage-thresholds.mjs`), the first green local run on branch `ralph/ui-bun-test-migration` measured **87.80%** statements/lines on the Vitest-equivalent exclude set. Bun lcov output in this rollout does not emit branch/function summary records (`BRF`/`BRH`/`FNF`/`FNH`), so branch/function thresholds remain configured but are skipped until Bun exposes comparable metrics.
 
-Until a follow-up closes the engine gap, `ui/scripts/bun-coverage-config.mjs` temporarily enforces **87.5%** statements/lines (statements and lines only) instead of the historical Vitest v8 **93.1%** floors from `ui/vite.config.ts`. Record any future threshold ratchet in this closeout after comparable Bun CI evidence.
+Until a follow-up closes the engine gap, `ui/scripts/bun-coverage-config.mjs` temporarily enforces **87.5%** statements/lines (statements and lines only) instead of the historical Vitest v8 **93.1%** floors from the pre-migration `ui/vite.config.ts` `test.coverage` block. Record any future threshold ratchet in this closeout after comparable Bun CI evidence.

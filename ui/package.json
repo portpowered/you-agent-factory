@@ -29,9 +29,9 @@
     "storybook:wait-for-index": "wait-on --timeout 30000 http://127.0.0.1:6008/index.json",
     "storybook:test-runner:ci": "vitest run --config vitest.storybook.config.ts --project=storybook",
     "test:coverage": "node scripts/run-ui-coverage-with-timings.mjs",
-    "test:integration": "vitest run integration --no-file-parallelism --maxWorkers 1",
+    "test:integration": "vitest run --config vitest.config.ts integration --no-file-parallelism --maxWorkers 1",
     "test:unit": "node scripts/run-bun-unit.mjs",
-    "test": "node scripts/run-bun-unit.mjs && vitest run integration --no-file-parallelism --maxWorkers 1",
+    "test": "node scripts/run-bun-unit.mjs && vitest run --config vitest.config.ts integration --no-file-parallelism --maxWorkers 1",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",
     "tsc": "tsc -b --noEmit --pretty false"
   },

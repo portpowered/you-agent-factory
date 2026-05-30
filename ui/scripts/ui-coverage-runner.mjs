@@ -50,6 +50,8 @@ export function buildUiCoveragePhases(options = {}) {
       command: "vitest",
       args: [
         "run",
+        "--config",
+        "vitest.config.ts",
         "scripts/dashboard-shell-storybook-responsive.test.mjs",
         "--maxWorkers=1",
       ],

@@ -64,6 +64,8 @@ test("keeps browser-backed and standalone script-style tests outside the main co
 
   expect(standaloneScriptStyleTest.args).toEqual([
     "run",
+    "--config",
+    "vitest.config.ts",
     "scripts/dashboard-shell-storybook-responsive.test.mjs",
     "--maxWorkers=1",
   ]);
