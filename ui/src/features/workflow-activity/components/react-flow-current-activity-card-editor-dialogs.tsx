@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react";
-
-import type { FactoryImportSaveChoice } from "../../../api/named-factory";
 import { FactoryGraphEditorAddEntityDialog } from "../../factory-graph-editor/components/factory-graph-editor-add-dialog";
 import { FactoryGraphEditorConfirmationDialog } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/components/factory-graph-editor-leave-dialog";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { FactoryImportPreviewDialog } from "../../import/public";
 import { useFactoryImportActivationTarget } from "../../import/hooks/use-factory-import-activation-target";
+import { useFactoryImportSaveChoice } from "../../import/hooks/use-factory-import-save-choice";
+import { FactoryImportPreviewDialog } from "../../import/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";
@@ -30,26 +28,24 @@ export function CurrentActivityGraphEditorDialogs({
   shouldRenderImportPreviewDialog: boolean;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
-  const [importSaveChoice, setImportSaveChoice] =
-    useState<FactoryImportSaveChoice>("REPLACE_CURRENT");
+  const [importSaveChoice, setImportSaveChoice] = useFactoryImportSaveChoice(
+    readyImportPreviewState,
+  );
   const importActivationTarget = useFactoryImportActivationTarget({
-    enabled: shouldRenderImportPreviewDialog && readyImportPreviewState !== null,
+    enabled:
+      shouldRenderImportPreviewDialog && readyImportPreviewState !== null,
     preferredFactoryName: readyImportPreviewState?.value?.factory?.name,
     sessionID,
   });
-
-  useEffect(() => {
-    if (readyImportPreviewState) {
-      setImportSaveChoice("REPLACE_CURRENT");
-    }
-  }, [readyImportPreviewState]);
 
   return (
     <>
       {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
         <FactoryImportPreviewDialog
           activationState={imports.activationState}
-          createTargetFactoryName={importActivationTarget.createTargetFactoryName}
+          createTargetFactoryName={
+            importActivationTarget.createTargetFactoryName
+          }
           currentFactoryName={importActivationTarget.currentFactoryName}
           importSaveChoice={importSaveChoice}
           locale={locale}

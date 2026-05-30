@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
 import { useDashboardSession } from "../features/dashboard/session/dashboard-session-provider";
 import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";

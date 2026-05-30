@@ -14,6 +14,7 @@ import { currentFactorySessionPath } from "../session-routing";
 import {
   extractNamedFactoryNamesFromSessionTargets,
   resolveImportCreateFactoryName,
+  type FactoryImportSaveChoice,
 } from "./import-save-mode";
 import { factoryAPIURL } from "../baseUrl";
 import {
