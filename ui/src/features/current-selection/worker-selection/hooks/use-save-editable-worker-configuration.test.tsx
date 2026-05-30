@@ -317,7 +317,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
     ["factory.workers[0].model", "model"],
   ] as const)(
     "maps save validation target %s onto %s",
-    async (field, expectedField) => {
+    async (_field, expectedField) => {
       const message = `Invalid ${expectedField}.`;
       const mutateAsync = vi.fn().mockRejectedValue(
         new CurrentFactoryDefinitionError(message, {

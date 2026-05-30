@@ -125,6 +125,125 @@ function renderValidationHook(
   );
 }
 
+describe("useFactoryValidation debounce", () => {
+  const debounceMs = 50;
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("waits for debounce before validating rapid draft changes", async () => {
+    vi.mocked(validateFactoryDefinition).mockResolvedValue(
+      validationFixtures.validFactory,
+    );
+
+    const queryClient = createQueryClient();
+    const emptyDraftDefinition = buildDraftAppliedFactoryDefinition(
+      baseFactoryDefinition,
+      createEmptyFactoryGraphDraft(),
+    );
+    const repeaterDraft = createEmptyFactoryGraphDraft();
+    repeaterDraft.additions.workstations.push({
+      inputs: [],
+      name: "repeater",
+      outputs: [],
+      type: "REPEATER_WORKSTATION",
+      worker: "writer",
+    });
+    const repeaterDraftDefinition = buildDraftAppliedFactoryDefinition(
+      baseFactoryDefinition,
+      repeaterDraft,
+    );
+
+    const { rerender } = renderHook(
+      ({ definition }) =>
+        useFactoryValidation(definition, true, { debounceMs }),
+      {
+        initialProps: {
+          definition: emptyDraftDefinition,
+        },
+        wrapper: createWrapper(queryClient),
+      },
+    );
+
+    await waitFor(() => {
+      expect(validateFactoryDefinition).toHaveBeenCalledTimes(1);
+    });
+    vi.mocked(validateFactoryDefinition).mockClear();
+
+    rerender({
+      definition: repeaterDraftDefinition,
+    });
+
+    expect(validateFactoryDefinition).not.toHaveBeenCalled();
+
+    await waitFor(
+      () => {
+        expect(validateFactoryDefinition).toHaveBeenCalledTimes(1);
+      },
+      { timeout: debounceMs * 4 },
+    );
+    expect(validateFactoryDefinition).toHaveBeenCalledWith(
+      repeaterDraftDefinition,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+});
+
+describe("useFactoryValidation abort", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("aborts in-flight validation when a newer draft definition is requested", async () => {
+    const firstDeferred = createDeferred<FactoryValidationResult>();
+    const capturedSignals: AbortSignal[] = [];
+    vi.mocked(validateFactoryDefinition)
+      .mockImplementationOnce((_definition, options) => {
+        if (options?.signal) {
+          capturedSignals.push(options.signal);
+        }
+        return firstDeferred.promise;
+      })
+      .mockResolvedValueOnce(validationFixtures.validFactory);
+
+    const queryClient = createQueryClient();
+    const repeaterDraft = createEmptyFactoryGraphDraft();
+    repeaterDraft.additions.workstations.push({
+      inputs: [],
+      name: "repeater",
+      outputs: [],
+      type: "REPEATER_WORKSTATION",
+      worker: "writer",
+    });
+
+    const { rerender } = renderValidationHook(
+      queryClient,
+      buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        createEmptyFactoryGraphDraft(),
+      ),
+    );
+
+    await waitFor(() => {
+      expect(validateFactoryDefinition).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({
+      definition: buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        repeaterDraft,
+      ),
+    });
+
+    await waitFor(() => {
+      expect(validateFactoryDefinition).toHaveBeenCalledTimes(2);
+    });
+
+    expect(capturedSignals[0]?.aborted).toBe(true);
+  });
+});
+
 describe("useFactoryValidation stale response handling", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -180,7 +299,7 @@ describe("useFactoryValidation stale response handling", () => {
   });
 });
 
-describe("useFactoryValidation draft mutation refresh", () => {
+describe("useFactoryValidation draft mutation refresh on add and remove", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -262,6 +381,54 @@ describe("useFactoryValidation draft mutation refresh", () => {
       expect(result.current.targets[0]?.code).toBe(
         "factory.route.danglingPlaceReference",
       );
+    });
+  });
+});
+
+describe("useFactoryValidation draft mutation refresh on connect and disconnect", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("refreshes targets after a connect operation changes the draft-applied factory", async () => {
+    vi.mocked(validateFactoryDefinition)
+      .mockResolvedValueOnce(validationFixtures.disconnectedFailureRoute)
+      .mockResolvedValueOnce(validationFixtures.validFactory);
+
+    const queryClient = createQueryClient();
+    const disconnectedDraft = createEmptyFactoryGraphDraft();
+    const connectedDraft = connectFactoryGraphNodes({
+      baseFactoryDefinition,
+      draft: disconnectedDraft,
+      sourceAnchorId: "workstation-on-failure-source",
+      sourceNodeId: "workstation:draft",
+      targetAnchorId: "work-state-input-target",
+      targetNodeId: "work-state:story:done",
+    });
+    expect(connectedDraft.ok).toBe(true);
+
+    const { rerender, result } = renderValidationHook(
+      queryClient,
+      buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        disconnectedDraft,
+      ),
+    );
+
+    await waitFor(() => {
+      expect(result.current.targets).toHaveLength(1);
+      expect(result.current.targets[0]?.subject.location).toBe("ON_FAILURE");
+    });
+
+    rerender({
+      definition: buildDraftAppliedFactoryDefinition(
+        baseFactoryDefinition,
+        expectOk(connectedDraft).value,
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.targets).toEqual([]);
     });
   });
 

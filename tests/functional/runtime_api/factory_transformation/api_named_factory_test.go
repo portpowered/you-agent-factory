@@ -9,6 +9,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -72,6 +73,92 @@ func TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonical
 	assertPersistedFactoryJSONStripsInlineBundledContent(t, filepath.Join(importedDir, interfaces.FactoryConfigFile))
 }
 
+func TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFactoryTransformationServer(t, rootDir)
+	body := `{
+		"name":"beta",
+		"id":"beta",
+		"workTypes":[{"name":"task","states":[
+			{"name":"in-review","type":"PROCESSING"},
+			{"name":"complete","type":"TERMINAL"}
+		]}],
+		"workers":[{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],
+		"workstations":[{
+			"name":"bob",
+			"behavior":"REPEATER",
+			"type":"MODEL_WORKSTATION",
+			"worker":"worker-a",
+			"inputs":[],
+			"outputs":[{"workType":"task","state":"in-review"}],
+			"onRejection":[{"workType":"task","state":"complete"}]
+		}]
+	}`
+
+	resp := createNamedFactoryExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	var errResp factoryapi.ErrorResponse
+	decodeJSONResponse(t, resp, &errResp, "decode invalid named factory create response")
+	if errResp.Code != factoryapi.INVALIDFACTORY {
+		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
+	}
+	if errResp.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("error family = %q, want BAD_REQUEST", errResp.Family)
+	}
+	if errResp.Targets == nil || !hasValidationTarget(
+		*errResp.Targets,
+		factoryvalidation.CodeWorkstationMissingFailureRoute,
+		factoryapi.FactoryValidationSubjectTypeWorkstation,
+		"bob",
+		factoryapi.FactoryValidationSubjectLocationOnFailure,
+	) {
+		t.Fatalf("error targets = %#v, want bob ON_FAILURE target", errResp.Targets)
+	}
+}
+
+func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFactoryTransformationServer(t, rootDir)
+	body := `{
+		"name":"beta",
+		"id":"beta",
+		"workTypes":[{"name":"story","states":[
+			{"name":"queued","type":"INITIAL"},
+			{"name":"queued-dup","type":"PROCESSING"}
+		]}],
+		"workers":[
+			{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"},
+			{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}
+		],
+		"workstations":[{
+			"name":"process",
+			"behavior":"STANDARD",
+			"type":"MODEL_WORKSTATION",
+			"worker":"missing-worker",
+			"inputs":[{"workType":"story","state":"queued"}],
+			"outputs":[{"workType":"story","state":"missing-state"}]
+		}]
+	}`
+
+	resp := createNamedFactoryExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	var errResp factoryapi.ErrorResponse
+	decodeJSONResponse(t, resp, &errResp, "decode invalid named factory create response")
+	if errResp.Code != factoryapi.INVALIDFACTORY {
+		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
+	}
+	if errResp.Targets == nil || len(*errResp.Targets) < 2 {
+		t.Fatalf("error targets = %#v, want multiple blocking validation targets", errResp.Targets)
+	}
+	if !hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDuplicateIdentifier) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingWorkerReference) ||
+		!hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeDanglingPlaceReference) {
+		t.Fatalf("error targets = %#v, want duplicate worker, dangling worker, and dangling place targets", errResp.Targets)
+	}
+}
+
 func TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
@@ -98,17 +185,32 @@ func TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEven
 
 func createNamedFactoryFromBody(t *testing.T, serverURL, body string) factoryapi.Factory {
 	t.Helper()
+	resp := createNamedFactoryExpectStatus(t, serverURL, body, http.StatusCreated)
+	var created factoryapi.Factory
+	decodeJSONResponse(t, resp, &created, "decode create factory response")
+	return created
+}
+
+func createNamedFactoryExpectStatus(t *testing.T, serverURL, body string, wantStatus int) *http.Response {
+	t.Helper()
 	resp, err := http.Post(serverURL+"/factories", "application/json", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("POST /factories: %v", err)
 	}
-	if resp.StatusCode != http.StatusCreated {
-		resp.Body.Close()
-		t.Fatalf("POST /factories status = %d, want 201", resp.StatusCode)
+	if resp.StatusCode != wantStatus {
+		defer resp.Body.Close()
+		t.Fatalf("POST /factories status = %d, want %d", resp.StatusCode, wantStatus)
 	}
-	var created factoryapi.Factory
-	decodeJSONResponse(t, resp, &created, "decode create factory response")
-	return created
+	return resp
+}
+
+func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code string) bool {
+	for _, target := range targets {
+		if target.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func assertCurrentFactoryPointer(t *testing.T, rootDir, want string) {
