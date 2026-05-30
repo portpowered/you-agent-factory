@@ -22,6 +22,7 @@ import {
   useDashboardStreamStore,
 } from "../state/dashboardStreamStore";
 import { useDashboardSession } from "../session/dashboard-session-provider";
+import { useDashboardWorldView } from "./useDashboardWorldView";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;
@@ -253,9 +254,7 @@ export function useDashboardSnapshot({
   const appendEvents = useFactoryTimelineStore((state) => state.appendEvents);
   const eventCount = useFactoryTimelineStore((state) => state.events.length);
   const resetTimeline = useFactoryTimelineStore((state) => state.reset);
-  const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
-  const snapshot = useFactoryTimelineStore((state) => state.worldViewCache[state.selectedTick]);
-  const streamState = useDashboardStreamStore((state) => state.streamState);
+  const { error, isInitialLoading, snapshot, streamState } = useDashboardWorldView();
   const resetStreamState = useDashboardStreamStore((state) => state.resetStreamState);
   const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
   const { isPaused, rawSessionID, sessionID } = useDashboardSession();
@@ -317,18 +316,6 @@ export function useDashboardSnapshot({
     debugOptions,
     eventCount,
   });
-
-  const hasNoStreamedSnapshot = selectedTick === 0 && eventCount === 0;
-  const isInitialLoading =
-    rawSessionID != null &&
-    hasNoStreamedSnapshot &&
-    streamState.status !== "offline";
-  const error =
-    rawSessionID != null &&
-    hasNoStreamedSnapshot &&
-    streamState.status === "offline"
-      ? new Error(streamState.message)
-      : null;
 
   return useMemo(
     () => ({
