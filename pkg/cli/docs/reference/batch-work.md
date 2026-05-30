@@ -28,7 +28,7 @@ the canonical customer guide for the complete `FACTORY_REQUEST_BATCH` contract.
   `factory/inputs/BATCH/default/<request_id>.json`.
 - Put single-work-type batches under
   `factory/inputs/<work_type>/default/<request_id>.json`.
-- In `inputs/BATCH`, every work item must set `work_type_name`.
+- In `inputs/BATCH`, every work item must set `workTypeName`.
 - Submitted batch relations use `DEPENDS_ON` and `PARENT_CHILD`.
 
 ## Supported Paths
@@ -43,12 +43,12 @@ the canonical customer guide for the complete `FACTORY_REQUEST_BATCH` contract.
 
 ```json
 {
-  "request_id": "release-story-set",
+  "requestId": "release-story-set",
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
     {
       "name": "story-auth",
-      "work_type_name": "story",
+      "workTypeName": "story",
       "payload": { "title": "Harden auth session handling" }
     }
   ]
