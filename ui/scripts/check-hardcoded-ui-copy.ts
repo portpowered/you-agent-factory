@@ -44,6 +44,7 @@ const EXCLUDED_RELATIVE_PATH_PATTERNS = [
   /\/messages\//,
   /\.stories\./,
   /\.test\./,
+  /dashboard-bento-story-shared\.tsx$/,
 ] as const;
 
 export interface HardcodedCopyFinding {

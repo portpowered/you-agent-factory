@@ -9,6 +9,7 @@ import type { CanonicalFactoryDefinition } from "../../api/current-factory-defin
 import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/factory-graph-operations";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-apply";
+import { FACTORY_VALIDATION_DEBOUNCE_MS } from "../../factory-graph-editor/hooks/use-factory-validation";
 import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 
 const validationFixtures = vi.hoisted(() => {
@@ -272,6 +273,7 @@ function applyDraftMutation(
 describe("useCurrentActivityGraphEditor live validation refresh", () => {
   beforeEach(() => {
     resetHookState();
+    vi.mocked(validateFactoryDefinition).mockReset();
   });
 
   afterEach(() => {
@@ -312,11 +314,19 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
 
     applyDraftMutation(repeaterDraft, pendingAfterAdd);
     rerender();
-
-    await waitFor(() => {
-      expect(validateFactoryDefinition).toHaveBeenCalledTimes(2);
-      expect(result.current.structuralValidation.targets).toHaveLength(1);
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, FACTORY_VALIDATION_DEBOUNCE_MS + 50);
+      });
     });
+
+    await waitFor(
+      () => {
+        expect(validateFactoryDefinition).toHaveBeenCalledTimes(2);
+        expect(result.current.structuralValidation.targets).toHaveLength(1);
+      },
+      { timeout: 1_000 },
+    );
 
     expect(result.current.canInteractWithEditor).toBe(true);
     expect(result.current.draftState.pendingFactoryDefinition).toEqual(
@@ -367,20 +377,31 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
       result.current.handleEditorModeToggle();
     });
 
-    await waitFor(() => {
-      expect(result.current.structuralValidation.targets).toHaveLength(1);
-      expect(result.current.structuralValidation.targets[0]?.subject.location).toBe(
-        "ON_FAILURE",
-      );
-    });
+    await waitFor(
+      () => {
+        expect(result.current.structuralValidation.targets).toHaveLength(1);
+        expect(result.current.structuralValidation.targets[0]?.subject.location).toBe(
+          "ON_FAILURE",
+        );
+      },
+      { timeout: 1_000 },
+    );
 
     applyDraftMutation(connectedDraftValue, pendingConnected);
     rerender();
-
-    await waitFor(() => {
-      expect(validateFactoryDefinition).toHaveBeenCalledTimes(2);
-      expect(result.current.structuralValidation.targets).toEqual([]);
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, FACTORY_VALIDATION_DEBOUNCE_MS + 50);
+      });
     });
+
+    await waitFor(
+      () => {
+        expect(validateFactoryDefinition).toHaveBeenCalledTimes(2);
+        expect(result.current.structuralValidation.targets).toEqual([]);
+      },
+      { timeout: 1_000 },
+    );
 
     expect(result.current.canInteractWithEditor).toBe(true);
     expect(result.current.draftState.pendingFactoryDefinition).toEqual(
