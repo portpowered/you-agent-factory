@@ -1,3 +1,4 @@
+import { currentFactoryDefinitionAPIErrorMessages } from "../current-factory-definition/messages";
 import {
   activateImportedFactoryForSession,
   getCurrentFactory,
@@ -38,7 +39,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The current factory API returned an invalid response.", {
+      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.invalidResponse, {
         code: "INTERNAL_ERROR",
         responseBody: "not-a-factory",
         status: 200,
@@ -55,7 +56,7 @@ describe("named factory API error handling", () => {
         fetch: vi.fn().mockRejectedValue(networkError),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The dashboard could not reach the current factory API.", {
+      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.network, {
         code: "NETWORK_ERROR",
         responseBody: networkError,
       }),
@@ -76,7 +77,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("Lookup failed.", {
+      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
         code: "INTERNAL_ERROR",
         responseBody: {
           code: "SOMETHING_NEW",
@@ -128,7 +129,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The current factory API rejected the request.", {
+      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
         code: "INTERNAL_ERROR",
         responseBody: {
           code: 42,
@@ -208,7 +209,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The current factory API rejected the request.", {
+      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
         code: "INTERNAL_ERROR",
         responseBody: null,
         status: 503,
@@ -260,7 +261,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("The current factory API rejected the request.", {
+      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
         code: "INTERNAL_ERROR",
         responseBody: "temporarily unavailable",
         status: 503,

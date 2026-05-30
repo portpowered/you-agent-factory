@@ -13,6 +13,7 @@ import {
 import {
   extractNamedFactoryNamesFromSessionTargets,
 } from "./import-save-mode";
+import { extractAPIErrorPayload } from "../transport";
 export {
   allocateFirstFreeSuffixedFactoryName,
   extractNamedFactoryNamesFromSessionTargets,
@@ -281,12 +282,23 @@ function toActivatedFactoryValue(document: CurrentFactoryDocument): FactoryValue
   return factoryValue;
 }
 
+function resolveNamedFactoryAPIErrorCode(
+  error: CurrentFactoryDefinitionError,
+): NamedFactoryAPIErrorCode {
+  const errorBody = extractAPIErrorPayload(error.responseBody);
+  if (typeof errorBody?.code === "string") {
+    return normalizeNamedFactoryAPIErrorCode(errorBody.code);
+  }
+
+  return normalizeNamedFactoryAPIErrorCodeFromCurrentFactoryDefinition(error.code);
+}
+
 function toNamedFactoryAPIErrorFromCurrentFactoryDefinition(
   error: unknown,
 ): NamedFactoryAPIError {
   if (error instanceof CurrentFactoryDefinitionError) {
     return new NamedFactoryAPIError(error.message, {
-      code: normalizeNamedFactoryAPIErrorCodeFromCurrentFactoryDefinition(error.code),
+      code: resolveNamedFactoryAPIErrorCode(error),
       responseBody: error.responseBody,
       status: error.status,
       statusText: error.statusText,

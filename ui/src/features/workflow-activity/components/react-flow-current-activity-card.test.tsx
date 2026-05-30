@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   cleanup,
   fireEvent,
@@ -9,10 +10,6 @@ import {
 } from "@testing-library/react";
 import type { ReactElement } from "react";
 import type {
-  CanonicalFactoryDefinition,
-  CurrentFactoryDocument,
-} from "../../../api/current-factory-definition";
-import type {
   DashboardPlaceRef,
   DashboardSnapshot,
   DashboardWorkItemRef,
@@ -21,9 +18,8 @@ import {
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
-import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
   resourceOccupancySnapshotForTick,
   semanticWorkflowDashboardSnapshot,
@@ -33,6 +29,13 @@ import {
   workstationKindParityExpectations,
 } from "../../../components/dashboard/test-fixtures";
 import {
+  baseFactoryDefinition,
+  baseFactoryDefinitionDocument,
+  createMockGraphEditorDraftState,
+  wireMockEditableFactoryGraph,
+  workerDenseFactoryDefinitionDocument,
+} from "../../../testing/graph-editor-harness";
+import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
@@ -41,12 +44,7 @@ import {
   SYSTEM_TIME_WORK_TYPE_ID,
   systemTimeGraphNodeId,
 } from "../../factory-graph-editor/lib/factory-graph-customer-display";
-import {
-  addFactoryGraphNode,
-  connectFactoryGraphNodes,
-  disconnectFactoryGraphEdge,
-  removeFactoryGraphNode,
-} from "../../factory-graph-editor/lib/factory-graph-operations";
+import { removeFactoryGraphNode } from "../../factory-graph-editor/lib/factory-graph-operations";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 import {
@@ -56,11 +54,11 @@ import {
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
+import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "../lib/current-activity-factory-graph-layout";
-import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -108,7 +106,7 @@ vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () =>
 const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
 
 interface RenderCurrentActivityOptions {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
+  activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   importController?: CurrentActivityImportController;
   locale?: string;
   onFactoryActivated?: () => void;
@@ -139,184 +137,7 @@ const LEGEND_ICON_EXPECTATIONS = [
 ] as const;
 const workflowGraphLocaleFallbackTimeoutMs = 180_000;
 
-const editableFactoryDefinition: CanonicalFactoryDefinition = {
-  name: "Current Factory",
-  workers: [
-    {
-      model: "gpt-5",
-      name: "writer",
-      type: "MODEL_WORKER",
-    },
-  ],
-  workstations: [
-    {
-      body: "Review the work item.",
-      inputs: [
-        {
-          state: "queued",
-          workType: "story",
-        },
-      ],
-      name: "review",
-      outputs: [
-        {
-          state: "done",
-          workType: "story",
-        },
-      ],
-      type: "MODEL_WORKSTATION",
-      worker: "writer",
-    },
-  ],
-  workTypes: [
-    {
-      name: "story",
-      states: [
-        {
-          name: "queued",
-          type: "INITIAL",
-        },
-        {
-          name: "done",
-          type: "TERMINAL",
-        },
-      ],
-    },
-  ],
-};
-
-const editableFactoryDefinitionDocument: CurrentFactoryDocument = {
-  ...editableFactoryDefinition,
-  version: {
-    logical: "8",
-    physical: "2026-05-18T15:32:00Z",
-  },
-};
-
-const workerDenseFactoryDefinitionDocument: CurrentFactoryDocument = {
-  ...editableFactoryDefinition,
-  resources: [
-    {
-      capacity: 2,
-      name: "gpu",
-    },
-  ],
-  workers: [
-    {
-      model: "gpt-5",
-      name: "writer",
-      type: "MODEL_WORKER",
-    },
-    {
-      model: "gpt-5",
-      name: "reviewer",
-      type: "MODEL_WORKER",
-    },
-    {
-      model: "gpt-5",
-      name: "stalled",
-      type: "MODEL_WORKER",
-    },
-  ],
-  workstations: [
-    {
-      body: "Draft the story.",
-      inputs: [
-        {
-          state: "queued",
-          workType: "story",
-        },
-      ],
-      name: "draft",
-      outputs: [
-        {
-          state: "review",
-          workType: "story",
-        },
-      ],
-      resources: [{ capacity: 1, name: "gpu" }],
-      type: "MODEL_WORKSTATION",
-      worker: "writer",
-    },
-    {
-      body: "Review the draft.",
-      inputs: [
-        {
-          state: "review",
-          workType: "story",
-        },
-      ],
-      name: "review",
-      outputs: [
-        {
-          state: "done",
-          workType: "story",
-        },
-      ],
-      type: "MODEL_WORKSTATION",
-      worker: "reviewer",
-    },
-  ],
-  workTypes: [
-    {
-      name: "story",
-      states: [
-        {
-          name: "queued",
-          type: "INITIAL",
-        },
-        {
-          name: "review",
-          type: "PROCESSING",
-        },
-        {
-          name: "done",
-          type: "TERMINAL",
-        },
-      ],
-    },
-  ],
-  version: {
-    logical: "9",
-    physical: "2026-05-19T01:12:00Z",
-  },
-};
-
-const defaultDraftState = {
-  baseDocument: editableFactoryDefinitionDocument,
-  draft: {
-    additions: {
-      resources: [],
-      workers: [],
-      workStates: [],
-      workTypes: [],
-      workstations: [],
-    },
-    edgeChanges: {
-      additions: [],
-      removals: [],
-    },
-    removals: {
-      resources: [],
-      workers: [],
-      workStates: [],
-      workTypes: [],
-      workstations: [],
-    },
-  },
-  graph: {
-    edges: [],
-    nodes: [],
-  },
-  hasChanges: false,
-  latestDocument: editableFactoryDefinitionDocument,
-  pendingFactoryDefinition: editableFactoryDefinition,
-  replaceDraft: vi.fn(),
-  resetDraft: vi.fn(),
-  source: "current-factory" as const,
-  updateDraft: vi.fn(),
-  validationErrors: [],
-};
+const defaultDraftState = createMockGraphEditorDraftState();
 
 function dashboardSnapshotWithStateCounts(
   overrides: Record<string, number>,
@@ -330,14 +151,29 @@ function dashboardSnapshotWithStateCounts(
   return snapshot;
 }
 
-function refreshFactoryFromTopology(snapshot: DashboardSnapshot): DashboardSnapshot {
+function refreshFactoryFromTopology(
+  snapshot: DashboardSnapshot,
+): DashboardSnapshot {
   snapshot.factory = factoryFromDashboardTopology(snapshot.topology);
   return snapshot;
 }
 
+function currentFactoryDocumentFromSnapshot(
+  snapshot: DashboardSnapshot,
+): typeof baseFactoryDefinitionDocument {
+  if (!snapshot.factory) {
+    return baseFactoryDefinitionDocument;
+  }
+
+  return {
+    ...snapshot.factory,
+    version: baseFactoryDefinitionDocument.version,
+  };
+}
+
 function dashboardSnapshotWithEditableFactory(): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  snapshot.factory = structuredClone(editableFactoryDefinition);
+  snapshot.factory = structuredClone(baseFactoryDefinition);
   return snapshot;
 }
 
@@ -543,7 +379,12 @@ function renderCurrentActivity({
     />,
   );
 
-  return { onSelectStateNode, onSelectWorkID, onSelectWorker, onSelectWorkstation };
+  return {
+    onSelectStateNode,
+    onSelectWorkID,
+    onSelectWorker,
+    onSelectWorkstation,
+  };
 }
 
 function renderWithQueryClient(view: ReactElement) {
@@ -560,170 +401,10 @@ function renderWithQueryClient(view: ReactElement) {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
+    <QueryClientProvider client={queryClient}>
+      <DashboardSessionTestProvider>{view}</DashboardSessionTestProvider>
+    </QueryClientProvider>,
   );
-}
-
-function createEditableGraphTestViewModel(
-  options: Parameters<typeof useEditableFactoryGraph>[0],
-): ReturnType<typeof useEditableFactoryGraph> {
-  const draftState = vi.mocked(useFactoryGraphDraftState)();
-  const baseFactoryDefinition =
-    draftState.latestDocument ?? draftState.baseDocument ?? null;
-  const activeWorkCount = options.activeWorkCount ?? 0;
-  const isStale =
-    draftState.hasChanges &&
-    draftState.baseDocument?.version !== undefined &&
-    draftState.latestDocument?.version !== undefined &&
-    (draftState.baseDocument.version.logical !==
-      draftState.latestDocument.version.logical ||
-      draftState.baseDocument.version.physical !==
-        draftState.latestDocument.version.physical);
-
-  return {
-    actions: {
-      addNode: (node) => {
-        const result = baseFactoryDefinition
-          ? addFactoryGraphNode({
-              baseFactoryDefinition,
-              draft: draftState.draft,
-              node,
-            })
-          : {
-              message: "Load the current factory before editing graph nodes.",
-              ok: false as const,
-              reason: "INVALID_FIELD" as const,
-            };
-        if (result.ok) {
-          draftState.replaceDraft(result.value);
-        }
-        return result;
-      },
-      connectNodes: (connection) => {
-        const result = baseFactoryDefinition
-          ? connectFactoryGraphNodes({
-              baseFactoryDefinition,
-              draft: draftState.draft,
-              ...connection,
-            })
-          : {
-              message:
-                "Load the current factory before connecting graph nodes.",
-              ok: false as const,
-              reason: "INVALID_CONNECTION" as const,
-            };
-        if (result.ok) {
-          draftState.replaceDraft(result.value);
-        }
-        return result;
-      },
-      discard: draftState.resetDraft,
-      disconnectEdge: (edgeId) => {
-        const result = baseFactoryDefinition
-          ? disconnectFactoryGraphEdge({
-              baseFactoryDefinition,
-              draft: draftState.draft,
-              edgeId,
-            })
-          : {
-              message:
-                "Load the current factory before disconnecting graph edges.",
-              ok: false as const,
-              reason: "UNKNOWN_EDGE" as const,
-            };
-        if (result.ok) {
-          draftState.replaceDraft(result.value);
-        }
-        return result;
-      },
-      removeNode: (nodeId) => {
-        const result = baseFactoryDefinition
-          ? removeFactoryGraphNode({
-              baseFactoryDefinition,
-              draft: draftState.draft,
-              nodeId,
-            })
-          : {
-              message: "Load the current factory before removing graph nodes.",
-              ok: false as const,
-              reason: "NODE_NOT_FOUND" as const,
-            };
-        if (result.ok) {
-          draftState.replaceDraft(result.value);
-        }
-        return result;
-      },
-      save: async () => {
-        if (
-          !options.saveFactoryDefinition ||
-          !draftState.hasChanges ||
-          !draftState.pendingFactoryDefinition ||
-          !draftState.latestDocument ||
-          activeWorkCount > 0
-        ) {
-          return false;
-        }
-        await options.saveFactoryDefinition({
-          baseVersion: draftState.latestDocument.version,
-          factoryDefinition: draftState.pendingFactoryDefinition,
-        });
-        draftState.replaceDraft({
-          additions: {
-            resources: [],
-            workers: [],
-            workStates: [],
-            workTypes: [],
-            workstations: [],
-          },
-          edgeChanges: {
-            additions: [],
-            removals: [],
-          },
-          removals: {
-            resources: [],
-            workers: [],
-            workStates: [],
-            workTypes: [],
-            workstations: [],
-          },
-        });
-        return true;
-      },
-      updateNodeField: () => ({
-        message: "Field editing is not exercised by this component test.",
-        ok: false,
-        reason: "INVALID_FIELD",
-      }),
-    },
-    blockedOperation: null,
-    draftState,
-    graphState: null,
-    pendingState: {
-      hasChanges: draftState.hasChanges,
-      pendingFactoryDefinition: draftState.pendingFactoryDefinition,
-    },
-    projection: {
-      edges: [],
-      nodes: [],
-    },
-    saveState: {
-      canSave:
-        Boolean(options.saveFactoryDefinition) &&
-        draftState.hasChanges &&
-        draftState.pendingFactoryDefinition !== null &&
-        draftState.latestDocument !== null &&
-        activeWorkCount === 0 &&
-        !isStale,
-      isSaving: false,
-      isStale,
-      lastError: null,
-      lastSuccess: false,
-    },
-    validationState: {
-      errors: draftState.validationErrors,
-      isValid: draftState.validationErrors.length === 0,
-    },
-  };
 }
 
 function createFactoryImportValue(): FactoryPngImportValue {
@@ -1175,11 +856,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
       reset: vi.fn(),
       status: "idle",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue(
-      defaultDraftState as never,
-    );
-    vi.mocked(useEditableFactoryGraph).mockImplementation((options) =>
-      createEditableGraphTestViewModel(options as never),
+    wireMockEditableFactoryGraph(
+      {
+        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
+        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
+      },
+      defaultDraftState,
     );
   });
 
@@ -1206,7 +888,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("shows the add, delete, and connect toolbar in editor mode", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1238,7 +920,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     const snapshot = dashboardSnapshotWithActiveWorkItemCount(0);
     snapshot.topology.workstation_nodes_by_id.review.workstation_kind =
       "CLASSIFIER_WORKSTATION";
-    snapshot.factory = structuredClone(editableFactoryDefinition);
+    snapshot.factory = structuredClone(baseFactoryDefinition);
     const reviewWorkstation = snapshot.factory?.workstations?.find(
       (workstation) => workstation.name === "review",
     );
@@ -1282,7 +964,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   it("lists the supported add-entity options and validates duplicate worker names before mutating the draft", async () => {
     const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1323,7 +1005,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   it("submits valid add-entity forms into the pending graph draft", async () => {
     const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1369,7 +1051,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   it("distinguishes work-state creation from work-type creation and blocks missing work-type association", async () => {
     const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1423,7 +1105,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   it("submits valid work-state add-entity forms into the pending graph draft", async () => {
     const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1467,7 +1149,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("keeps editor mode on the shared observer graph surface", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1596,14 +1278,27 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("renders supported workstation and work-state editor handles on the shared observer graph", async () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const document = currentFactoryDocumentFromSnapshot(snapshot);
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: document,
       error: null,
       status: "success",
     } as never);
+    wireMockEditableFactoryGraph(
+      {
+        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
+        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
+      },
+      createMockGraphEditorDraftState({
+        baseDocument: document,
+        latestDocument: document,
+        pendingFactoryDefinition: document,
+      }),
+    );
 
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot,
     });
 
     fireEvent.click(
@@ -1654,7 +1349,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("removes a workstation without opening a confirmation", () => {
     const result = removeFactoryGraphNode({
-      baseFactoryDefinition: editableFactoryDefinitionDocument,
+      baseFactoryDefinition: baseFactoryDefinitionDocument,
       draft: defaultDraftState.draft,
       nodeId: "workstation:review",
     });
@@ -1684,7 +1379,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     ).toBeTruthy();
 
     const removeWorker = removeFactoryGraphNode({
-      baseFactoryDefinition: editableFactoryDefinitionDocument,
+      baseFactoryDefinition: baseFactoryDefinitionDocument,
       draft: defaultDraftState.draft,
       nodeId: "worker:writer",
     });
@@ -1696,7 +1391,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("keeps removed server-backed workstations visible with a pending-removal badge", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1771,7 +1466,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   it("requires save, discard, or keep editing before leaving editor mode with unsaved changes", async () => {
     const resetDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1814,7 +1509,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("shows explicit save and discard actions for pending graph changes", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1861,9 +1556,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
   it("confirms pending save changes before saving the graph draft", async () => {
     const mutateAsync = vi
       .fn()
-      .mockResolvedValue(editableFactoryDefinitionDocument);
+      .mockResolvedValue(baseFactoryDefinitionDocument);
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -1918,21 +1613,21 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({
-        baseVersion: editableFactoryDefinitionDocument.version,
-        factoryDefinition: editableFactoryDefinition,
+        baseVersion: baseFactoryDefinitionDocument.version,
+        factoryDefinition: baseFactoryDefinition,
       });
     });
   });
 
   it("warns when a newer editable-definition version arrives during a dirty draft", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
-      baseDocument: editableFactoryDefinitionDocument,
+      baseDocument: baseFactoryDefinitionDocument,
       draft: {
         ...defaultDraftState.draft,
         additions: {
@@ -1948,7 +1643,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
       },
       hasChanges: true,
       latestDocument: {
-        ...editableFactoryDefinitionDocument,
+        ...baseFactoryDefinitionDocument,
         version: {
           logical: "9",
           physical: "2026-05-19T01:45:00Z",
@@ -1981,7 +1676,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("blocks topology save while active work is still running", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -2027,10 +1722,10 @@ function registerCurrentActivityCardTestLifecycle(): void {
   it("saves the pending editable definition before leaving editor mode", async () => {
     const mutateAsync = vi
       .fn()
-      .mockResolvedValue(editableFactoryDefinitionDocument);
+      .mockResolvedValue(baseFactoryDefinitionDocument);
     const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -2065,8 +1760,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({
-        baseVersion: editableFactoryDefinitionDocument.version,
-        factoryDefinition: editableFactoryDefinition,
+        baseVersion: baseFactoryDefinitionDocument.version,
+        factoryDefinition: baseFactoryDefinition,
       });
     });
     expect(replaceDraft).toHaveBeenCalledTimes(1);
@@ -2136,7 +1831,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(previewDialog.textContent).toContain("Dropped Factory");
     expect(previewDialog.textContent).toContain("factory-import.png");
     expect(previewDialog.textContent).toContain(
-      "Review the dropped factory before confirming import.",
+      "Review the dropped factory before activation.",
     );
     expect(
       within(previewDialog)
@@ -2323,7 +2018,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const importValue = createFactoryImportValue();
     let resolveActivation: ((value: FactoryValue) => void) | null = null;
     const activateFactory = vi
-      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
+      .fn<(value: FactoryValue) => Promise<FactoryValue>>()
       .mockImplementation(
         () =>
           new Promise<FactoryValue>((resolve) => {
@@ -2356,16 +2051,11 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     });
 
     fireEvent.click(
-      within(previewDialog).getByRole("button", { name: "Confirm import" }),
+      within(previewDialog).getByRole("button", { name: "Activate factory" }),
     );
 
     await waitFor(() => {
-      expect(activateFactory).toHaveBeenCalledWith(
-        expect.objectContaining({
-          choice: "replace_current",
-          value: importValue,
-        }),
-      );
+      expect(activateFactory).toHaveBeenCalledWith(importValue.factory);
     });
     const activateButton = within(previewDialog).getByRole<HTMLButtonElement>(
       "button",
@@ -2408,7 +2098,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const activateFactory = vi
-      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
+      .fn<(value: FactoryValue) => Promise<FactoryValue>>()
       .mockRejectedValue(
         new NamedFactoryAPIError("Named factory already exists.", {
           code: "FACTORY_ALREADY_EXISTS",
@@ -2441,7 +2131,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     });
 
     fireEvent.click(
-      within(previewDialog).getByRole("button", { name: "Confirm import" }),
+      within(previewDialog).getByRole("button", { name: "Activate factory" }),
     );
 
     const alert = await within(previewDialog).findByRole("alert");
@@ -2461,7 +2151,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const activateFactory = vi
-      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
+      .fn<(value: FactoryValue) => Promise<FactoryValue>>()
       .mockRejectedValue(
         new NamedFactoryAPIError(
           "Current factory runtime must be idle before activation.",
@@ -2497,7 +2187,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     });
 
     fireEvent.click(
-      within(previewDialog).getByRole("button", { name: "Confirm import" }),
+      within(previewDialog).getByRole("button", { name: "Activate factory" }),
     );
 
     const alert = await within(previewDialog).findByRole("alert");
@@ -2576,7 +2266,9 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       ).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Select writer worker" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select writer worker" }),
+    );
 
     expect(onSelectWorker).toHaveBeenCalledWith("writer");
   });
@@ -2732,7 +2424,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       .spyOn(console, "error")
       .mockImplementation(() => {});
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -2770,7 +2462,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const idleSnapshot = dashboardSnapshotWithActiveWorkItemCount(0);
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
+      data: baseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
@@ -2907,8 +2599,12 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getByRole("img", { name: "Work type" })
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("work-type");
-    expect(resourceLabelContainer.getAttribute("aria-label")).toBe("agent-slot");
-    expect(workerLabelContainer.getAttribute("aria-label")).toBe("worker:agent");
+    expect(resourceLabelContainer.getAttribute("aria-label")).toBe(
+      "agent-slot",
+    );
+    expect(workerLabelContainer.getAttribute("aria-label")).toBe(
+      "worker:agent",
+    );
     expect(workTypeLabelContainer.getAttribute("aria-label")).toBe(
       "work-type:story",
     );
@@ -2979,7 +2675,9 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
   it("animates active graph flow while muting unrelated graph chrome", async () => {
     renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
 
-    expect(await screen.findByRole("button", { name: /Active Story/ })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: /Active Story/ }),
+    ).toBeTruthy();
     const idleStateArticle = await getStateNodeArticle("story:documented");
     const idleResourceArticle = screen
       .getByLabelText("agent-slot")
@@ -3544,15 +3242,17 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
             })
           }
         >
-          <ReactFlowCurrentActivityCard
-            now={Date.parse("2026-04-08T12:00:04Z")}
-            onSelectWorkID={vi.fn()}
-            selection={null}
-            snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
-            onSelectStateNode={vi.fn()}
-            onSelectWorker={vi.fn()}
-            onSelectWorkstation={vi.fn()}
-          />
+          <DashboardSessionTestProvider>
+            <ReactFlowCurrentActivityCard
+              now={Date.parse("2026-04-08T12:00:04Z")}
+              onSelectWorkID={vi.fn()}
+              selection={null}
+              snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
+              onSelectStateNode={vi.fn()}
+              onSelectWorker={vi.fn()}
+              onSelectWorkstation={vi.fn()}
+            />
+          </DashboardSessionTestProvider>
         </QueryClientProvider>,
       );
 
@@ -3611,12 +3311,14 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
           })
         }
       >
-        <ReactFlowCurrentActivityCard
-          now={Date.parse("2026-04-08T12:00:04Z")}
-          selection={null}
-          snapshot={sixActiveSnapshot}
-          {...callbacks}
-        />
+        <DashboardSessionTestProvider>
+          <ReactFlowCurrentActivityCard
+            now={Date.parse("2026-04-08T12:00:04Z")}
+            selection={null}
+            snapshot={sixActiveSnapshot}
+            {...callbacks}
+          />
+        </DashboardSessionTestProvider>
       </QueryClientProvider>,
     );
 
@@ -3968,7 +3670,7 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const activateFactory = vi
-      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
+      .fn<(value: FactoryValue) => Promise<FactoryValue>>()
       .mockRejectedValue(
         new NamedFactoryAPIError("Named factory already exists.", {
           code: "FACTORY_ALREADY_EXISTS",
@@ -4081,7 +3783,9 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
 
   it("derives persisted graph node keys from the canonical factory graph", async () => {
     if (!semanticWorkflowDashboardSnapshot.factory) {
-      throw new Error("expected semantic workflow fixture to include a factory");
+      throw new Error(
+        "expected semantic workflow fixture to include a factory",
+      );
     }
     const layout = await buildCurrentActivityGraphLayoutFromFactory(
       semanticWorkflowDashboardSnapshot.factory,

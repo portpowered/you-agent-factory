@@ -34,7 +34,7 @@ export function CurrentActivityGraphSurface({
         factoryDefinition:
           editor.draftState.pendingFactoryDefinition ??
           editor.currentFactoryDefinition ??
-          snapshot.factory,
+          (editor.editorMode ? undefined : snapshot.factory),
         projection: editor.structuralValidation.projection,
         selectionNodeId:
           selection?.kind === "node" ? selection.nodeId : undefined,
