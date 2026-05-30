@@ -1,12 +1,25 @@
-import { useEffect } from "react";
+import { useLayoutEffect, useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { App } from "./App";
 import type { DashboardSnapshot } from "./api/dashboard";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import {
+  DASHBOARD_LAYOUT_STORAGE_KEY,
+  DASHBOARD_WIDGET_IDS,
+  DEFAULT_DASHBOARD_LAYOUT,
+} from "./features/bento/hooks/dashboardLayoutSchema";
+import { reloadDashboardLayoutFromStorage } from "./features/bento/hooks/useDashboardLayout";
 import { useDashboardSessionStore } from "./features/dashboard/state/dashboardSessionStore";
 import { submitWorkCardControls } from "./stories/dashboardStoryTestUtils";
+
+const SESSION_SWITCHING_DASHBOARD_LAYOUT = DEFAULT_DASHBOARD_LAYOUT.map(
+  (item) =>
+    item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+      ? { ...item, hidden: true }
+      : item,
+);
 
 const defaultSession = {
   factoryDir: "/workspace/root",
@@ -47,6 +60,13 @@ const betaSessionSnapshot = buildSessionSnapshot({
 export default {
   title: "you-agent-factory/Workflow Dashboard/Session Switching",
   component: App,
+  decorators: [
+    (Story: () => JSX.Element) => (
+      <div style={{ height: "960px", minHeight: "760px" }}>
+        <Story />
+      </div>
+    ),
+  ],
   tags: ["test"],
 };
 
@@ -134,17 +154,25 @@ export const Verification = {
 };
 
 function SessionSwitchingStory() {
-  useEffect(() => {
+  const [isReady, setIsReady] = useState(false);
+
+  useLayoutEffect(() => {
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify(SESSION_SWITCHING_DASHBOARD_LAYOUT),
+    );
+    reloadDashboardLayoutFromStorage();
     useDashboardSessionStore.setState({
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
+    setIsReady(true);
   }, []);
 
-  return (
-    <div style={{ maxWidth: "100%", width: "1280px" }}>
-      <App />
-    </div>
-  );
+  if (!isReady) {
+    return null;
+  }
+
+  return <App />;
 }
 
 function buildSessionSnapshot({
