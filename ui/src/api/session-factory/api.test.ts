@@ -354,6 +354,12 @@ describe("getSessionFactory errors", () => {
       code: "INVALID_FACTORY_DEFINITION",
     });
   });
+});
+
+describe("getSessionFactory HTTP error mapping", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it("maps unrecognized API error codes on 4xx responses to INTERNAL_ERROR with API copy", async () => {
     await expect(
