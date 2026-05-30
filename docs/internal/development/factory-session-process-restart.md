@@ -17,7 +17,7 @@ writing operator runbooks, or extending session registry code.
 - Persisted factory definitions on disk under the service root are unchanged;
   only the **in-memory live session registry** is reset. Re-opening a session
   starts a new live runtime for that target; it does not resurrect the pre-restart
-  in-process engine, event buffers, or pause flags.
+  in-process engine, event buffers, and pause flags.
 
 ## Maintainer contract
 

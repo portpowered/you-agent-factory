@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -303,10 +304,7 @@ func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string)
 		return fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
 	}
 
-	if session != nil && liveSessionHandle(session) != nil {
-		return fs.activateNamedFactoryForLiveSession(ctx, session, sessionID, persistRoot, name, replacement)
-	}
-	return fs.activateNamedFactoryWithoutLiveSession(ctx, persistRoot, name, replacement)
+	return fs.applyNamedFactoryReplacement(ctx, sessionID, session, persistRoot, name, replacement)
 }
 
 func (fs *FactoryService) namedFactoryActivationPaths(session *factorysessions.LiveSession) (persistRoot, folderPath string) {
@@ -320,9 +318,11 @@ func (fs *FactoryService) namedFactoryActivationPaths(session *factorysessions.L
 	}
 	persistRoot = sessionFactoryPersistRoot(fs.factoryRootDir, session)
 	if trimmed := strings.TrimSpace(session.FolderPath); trimmed != "" {
-		return persistRoot, trimmed
+		folderPath = trimmed
+	} else {
+		folderPath = persistRoot
 	}
-	return persistRoot, persistRoot
+	return persistRoot, folderPath
 }
 
 func (fs *FactoryService) requireIdleBeforeNamedFactoryActivation(
@@ -336,29 +336,23 @@ func (fs *FactoryService) requireIdleBeforeNamedFactoryActivation(
 	return fs.requireIdleRuntime(ctx)
 }
 
-func (fs *FactoryService) activateNamedFactoryForLiveSession(
+func (fs *FactoryService) applyNamedFactoryReplacement(
 	ctx context.Context,
-	session *factorysessions.LiveSession,
 	sessionID string,
+	session *factorysessions.LiveSession,
 	persistRoot string,
 	name string,
 	replacement *factoryRuntimeBundle,
 ) error {
-	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
-		return err
+	if session != nil && liveSessionHandle(session) != nil {
+		if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+			return err
+		}
+		if err := factoryconfig.WriteCurrentFactoryPointer(persistRoot, name); err != nil {
+			return err
+		}
+		return fs.replaceSessionRuntime(ctx, session, name, replacement)
 	}
-	if err := factoryconfig.WriteCurrentFactoryPointer(persistRoot, name); err != nil {
-		return err
-	}
-	return fs.replaceSessionRuntime(ctx, session, name, replacement)
-}
-
-func (fs *FactoryService) activateNamedFactoryWithoutLiveSession(
-	ctx context.Context,
-	persistRoot string,
-	name string,
-	replacement *factoryRuntimeBundle,
-) error {
 	if err := fs.requireIdleRuntime(ctx); err != nil {
 		return err
 	}
@@ -646,7 +640,7 @@ func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
 	name string,
 	replacement *factoryRuntimeBundle,
 ) error {
-	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, name); err != nil {
+	if err := configpersist.WriteCurrentFactoryPointer(rootDir, name); err != nil {
 		return err
 	}
 	fs.setStartupBundle(replacement)

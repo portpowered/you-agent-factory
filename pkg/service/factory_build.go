@@ -235,6 +235,22 @@ func buildRuntimeBundle(
 	eventHistory := factoryevents.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	localModels := newRuntimeLocalModelDependencies(input.cfg)
+	workerOpts, err := loadRuntimeBundleWorkerOptions(input, logger, effectiveFactoryRunnerID, eventHistory, localModels)
+	if err != nil {
+		return nil, err
+	}
+
+	bundleBuilt = true
+	return assembleRuntimeBundle(input, logger, logSink, net, eventHistory, localModels, workerOpts)
+}
+
+func loadRuntimeBundleWorkerOptions(
+	input runtimeBundleBuildInput,
+	logger *zap.Logger,
+	effectiveFactoryRunnerID string,
+	eventHistory *factoryevents.FactoryEventHistory,
+	localModels localModelDomain,
+) ([]factory.FactoryOption, error) {
 	workerOpts, err := loadWorkersFromConfig(
 		input.loadedFactoryCfg.FactoryDir(),
 		input.loadedFactoryCfg.FactoryConfig(),
@@ -256,7 +272,18 @@ func buildRuntimeBundle(
 		logger.Error("failed to load workers from config", zap.Error(err))
 		return nil, fmt.Errorf("load workers: %w", err)
 	}
+	return workerOpts, nil
+}
 
+func assembleRuntimeBundle(
+	input runtimeBundleBuildInput,
+	logger *zap.Logger,
+	logSink *logging.RuntimeLogSink,
+	net *state.Net,
+	eventHistory *factoryevents.FactoryEventHistory,
+	localModels localModelDomain,
+	workerOpts []factory.FactoryOption,
+) (*factoryRuntimeBundle, error) {
 	recording, err := buildRuntimeRecorder(
 		input.cfg,
 		input.loadedFactoryCfg.FactoryDir(),
@@ -270,38 +297,6 @@ func buildRuntimeBundle(
 		return nil, err
 	}
 
-	activeFactory, listener, err := instantiateRuntimeBundleFactory(input, net, logger, eventHistory, workerOpts, recording)
-	if err != nil {
-		return nil, err
-	}
-
-	bundleBuilt = true
-	return &factoryRuntimeBundle{
-		dir:            input.dir,
-		folderPath:     input.folderPath,
-		eventHistory:   eventHistory,
-		factory:        activeFactory,
-		listener:       listener,
-		net:            net,
-		runtimeCfg:     input.loadedFactoryCfg,
-		modelResources: localModels.resources,
-		modelAssets:    localModels.assets,
-		localModels:    localModels.manager,
-		logger:         logger,
-		logSink:        logSink,
-		recording:      recording,
-		recordPath:     input.recordPath,
-	}, nil
-}
-
-func instantiateRuntimeBundleFactory(
-	input runtimeBundleBuildInput,
-	net *state.Net,
-	logger *zap.Logger,
-	eventHistory *factoryevents.FactoryEventHistory,
-	workerOpts []factory.FactoryOption,
-	recording *replay.Recorder,
-) (factory.Factory, *ingest.FileWatcher, error) {
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
 		factory.WithRuntimeMode(input.cfg.RuntimeMode),
@@ -324,13 +319,29 @@ func instantiateRuntimeBundleFactory(
 
 	activeFactory, err := runtime.New(opts...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create factory: %w", err)
+		return nil, fmt.Errorf("create factory: %w", err)
 	}
 	listener, err := buildRuntimeListener(input.dir, activeFactory, logger, net)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return activeFactory, listener, nil
+
+	return &factoryRuntimeBundle{
+		dir:            input.dir,
+		folderPath:     input.folderPath,
+		eventHistory:   eventHistory,
+		factory:        activeFactory,
+		listener:       listener,
+		net:            net,
+		runtimeCfg:     input.loadedFactoryCfg,
+		modelResources: localModels.resources,
+		modelAssets:    localModels.assets,
+		localModels:    localModels.manager,
+		logger:         logger,
+		logSink:        logSink,
+		recording:      recording,
+		recordPath:     input.recordPath,
+	}, nil
 }
 
 func buildRuntimeLogSink(
