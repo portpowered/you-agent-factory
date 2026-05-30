@@ -456,6 +456,17 @@ jobs:
         run: |
           set -euo pipefail
           reports_dir="ui/.vitest-reports"
+          mkdir -p "$reports_dir"
+          # merge-multiple can leave blobs under per-artifact folders; normalize to ui/.vitest-reports/.
+          for index in $(seq 1 10); do
+            target="$reports_dir/main-shard-${index}.json"
+            if [[ ! -f "$target" ]]; then
+              found="$(find . -type f -name "main-shard-${index}.json" ! -path "./${target}" 2>/dev/null | head -1 || true)"
+              if [[ -n "$found" ]]; then
+                cp "$found" "$target"
+              fi
+            fi
+          done
           missing=()
           for index in $(seq 1 10); do
             if [[ ! -f "$reports_dir/main-shard-${index}.json" ]]; then
