@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -267,6 +268,33 @@ func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Req
 	}
 
 	s.writeJSON(w, http.StatusCreated, factoryapi.UpsertWorkRequestResponse{RequestId: result.RequestID, TraceId: result.TraceID})
+}
+
+func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeNamedFactoryBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPI(req)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	result := factoryvalidation.Validate(&cfg)
+	s.writeJSON(w, http.StatusOK, factoryapi.FactoryValidationResult{
+		Targets: factoryvalidation.ToValidationTargets(result.Targets),
+	})
 }
 
 func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {

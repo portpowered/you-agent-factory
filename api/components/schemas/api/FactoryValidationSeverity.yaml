@@ -1,0 +1,10 @@
+type: string
+description: Validation severity for one factory validation target.
+x-enum-varnames:
+  - FactoryValidationSeverityError
+  - FactoryValidationSeverityWarning
+  - FactoryValidationSeverityHint
+enum:
+  - error
+  - warning
+  - hint

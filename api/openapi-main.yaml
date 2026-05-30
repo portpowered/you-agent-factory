@@ -523,6 +523,30 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-validations:
+    post:
+      tags:
+        - Factory
+      operationId: validateFactory
+      summary: Validate factory definition
+      description: Validates a submitted complete factory definition and returns canonical validation targets without persisting or activating the factory.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Factory'
+      responses:
+        '200':
+          description: Validation result for the submitted factory definition.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryValidationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factories:
     post:
       tags:
@@ -1109,6 +1133,18 @@ components:
       $ref: './components/schemas/api/PromptTemplateValidationResult.yaml'
     PromptTemplateDiagnostic:
       $ref: './components/schemas/api/PromptTemplateDiagnostic.yaml'
+    FactoryValidationSeverity:
+      $ref: './components/schemas/api/FactoryValidationSeverity.yaml'
+    FactoryValidationSubjectType:
+      $ref: './components/schemas/api/FactoryValidationSubjectType.yaml'
+    FactoryValidationSubjectLocation:
+      $ref: './components/schemas/api/FactoryValidationSubjectLocation.yaml'
+    FactoryValidationSubject:
+      $ref: './components/schemas/api/FactoryValidationSubject.yaml'
+    FactoryValidationTarget:
+      $ref: './components/schemas/api/FactoryValidationTarget.yaml'
+    FactoryValidationResult:
+      $ref: './components/schemas/api/FactoryValidationResult.yaml'
     # ==== Raw data types here =======
     WorkRequest:
       $ref: './components/schemas/api/WorkRequest.yaml'
