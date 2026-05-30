@@ -661,7 +661,7 @@ func (s *Server) SaveCurrentFactory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	saved, err := s.runtime.SaveCurrentFactory(r.Context(), req)
+	saved, err := s.runtime.SaveCurrentFactory(r.Context(), req.Factory)
 	if err != nil {
 		s.writeCurrentFactoryError(w, err, "save")
 		return
@@ -689,7 +689,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 		return
 	}
 
-	saved, err := sessionRuntime.SaveCurrentFactoryForSession(r.Context(), string(sessionID), req)
+	saved, err := sessionRuntime.SaveCurrentFactoryForSession(r.Context(), string(sessionID), req.Factory)
 	if err != nil {
 		s.writeCurrentFactoryError(w, err, "save", zap.String("session_id", string(sessionID)))
 		return
@@ -1648,24 +1648,24 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 	return req, nil
 }
 
-func decodeNamedFactoryBody(body io.Reader) (factoryapi.CreateFactoryJSONRequestBody, error) {
+func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return factoryapi.CreateFactoryJSONRequestBody{}, err
+		return factoryapi.Factory{}, err
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 
-	var req factoryapi.CreateFactoryJSONRequestBody
+	var req factoryapi.Factory
 	if err := decoder.Decode(&req); err != nil {
-		return factoryapi.CreateFactoryJSONRequestBody{}, err
+		return factoryapi.Factory{}, err
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		if err == nil {
-			return factoryapi.CreateFactoryJSONRequestBody{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
+			return factoryapi.Factory{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
 		}
-		return factoryapi.CreateFactoryJSONRequestBody{}, err
+		return factoryapi.Factory{}, err
 	}
 	return req, nil
 }
