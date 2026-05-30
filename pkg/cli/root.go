@@ -291,7 +291,8 @@ func newFactoryQueryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		Long: "Show the current active factory from a running you-agent-factory service.\n\n" +
 			"By default the command writes a human-readable table with the current factory name and " +
 			"runtime-identifying fields. Use --json for the API-shaped current-factory payload, and " +
-			"use --port to target the same server-port selection pattern as work list.",
+			"use --port to target the same server-port selection pattern as work list. Run " +
+			cliBinaryName + " session list to discover live session ids when routing other commands with --session.",
 		Example: "  # Show the current factory from the running service on the default port.\n" +
 			"  " + cliBinaryName + " factory query\n\n" +
 			"  # Emit API-shaped JSON for automation from the default local service.\n" +
@@ -328,7 +329,10 @@ func newSessionCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"  " + cliBinaryName + " session list\n\n" +
 			"  # Emit API-shaped JSON for automation.\n" +
 			"  " + cliBinaryName + " session list --json\n\n" +
-			"  # Target a different service port.\n" +
+			"  # Open and close sessions on a non-default port.\n" +
+			"  " + cliBinaryName + " session create --dir /workspace/fleet --port 9090\n" +
+			"  " + cliBinaryName + " session delete session-beta --port 9090 --json\n\n" +
+			"  # Target a different service port for list output.\n" +
 			"  " + cliBinaryName + " session list --port 9090",
 	}
 	sessionCmd.AddCommand(
@@ -535,7 +539,8 @@ func newWorkListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		Short: "List work from a running factory",
 		Long: "List work from a running you-agent-factory service.\n\n" +
 			"By default the command targets the default compatibility session. " +
-			"Use --session to route the request to one specific live factory session instead.",
+			"Use --session to route the request to one specific live factory session instead. " +
+			"Run " + cliBinaryName + " session list to discover live session ids.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
