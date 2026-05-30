@@ -1,30 +1,29 @@
 {
-  "project": "API Handlers Decomposition (S5 Recovery)",
-  "branchName": "ralph/api-handlers-decomposition-recovery",
-  "description": "Recovery implementation of approved S5: mechanically split monolithic pkg/api/handlers.go into route-family handlers_*.go files with centralized shared HTTP helpers, preserve all HTTP semantics and pkg/api test coverage after completed S1 factory save modes, satisfy backend size gates, and document handler ownership for maintainers.",
+  "project": "Service Runtime State Consolidation (S2)",
+  "branchName": "ralph/service-runtime-state-consolidation",
+  "description": "Make the factory session registry the sole source of truth for live runtimes: register ~default like other sessions, route reads and activation through session handles, share one runtime bundle type, and remove authoritative shadow runtime fields from FactoryService without changing API or session semantics.",
   "context": {
-    "customerAsk": "Downstream of S1 recovery. Retry after network outage interrupted batch-program-net-recovery-batch-api-handlers-decomposition-recovery. Full spec: tasks/prd-api-handlers-decomposition.md — API handlers decomposition (S5 recovery).",
-    "problem": "pkg/api/handlers.go remains a ~2,100-line monolith with backendsizecheck ignore, mixing work, factory, session, model, and events/status transport. Review cost is high and helper duplication is likely. The prior autonomous batch did not complete the split.",
-    "solution": "Move-only decomposition inside package api: handlers_common.go for shared writers/decoders, handlers_work.go, handlers_factory.go, handlers_factory_sessions.go, handlers_models.go, handlers_events.go for route families, retire or slim handlers.go, keep provider_session_details.go separate, preserve S1 session PUT decode, run full pkg/api tests, and update development-guide-relevant-files.md with a route-family map."
+    "customerAsk": "Session registry as sole runtime truth; drop duplicate FactoryService fields. Full spec: tasks/prd-service-runtime-state-consolidation.md",
+    "problem": "FactoryService still mirrors the active runtime in top-level fields while multi-session work already lives in factorysessions.Registry handles. That duplication lets work submit, factory save, snapshots, and idle checks target the wrong session or update the service root when a non-default session is active.",
+    "solution": "Incrementally route all runtime access through the session registry and liveRuntimeHandle, unify activation on replaceSessionRuntime, collapse build and live bundle types, then remove authoritative top-level runtime fields while preserving API, CLI, and session open/close behavior."
   },
   "acceptanceCriteria": [
-    "All existing HTTP routes remain registered with unchanged methods, paths, status codes, and response shapes.",
-    "Shared JSON/error writers and decode helpers live in one common handlers file with no duplicates across route-family files.",
-    "Factory session PUT keeps S1 { mode, factory } decoding and SaveFactoryForSession-only delegation in the factory/session handler file.",
-    "Handlers continue to use apisurface interfaces only; no new concrete service coupling.",
-    "Monolithic handlers.go is removed or wiring-only; per-file backend size policy is satisfied without unjustified file-level waivers.",
-    "development-guide-relevant-files.md maps each handlers_*.go file to its route families.",
-    "Quality gate: typecheck, lint, and go test ./pkg/api/... pass for all changed behavior."
+    "Every live runtime including ~default is registered in factorysessions.Registry with a liveRuntimeHandle; production code does not treat top-level FactoryService runtime fields as authoritative.",
+    "Work submission, engine snapshots, events, and idle checks scoped by session_id observe only that session's factory and artifacts; concurrent multi-session isolation is preserved.",
+    "Runtime replacement after persist uses session-scoped activation and writes the current-factory pointer under the targeted session root.",
+    "Process restart restores only ~default; additional live sessions remain ephemeral with no behavior change from today.",
+    "No OpenAPI request or response shape changes.",
+    "Typecheck, lint, and project tests pass."
   ],
   "userStories": [
     {
-      "id": "api-handlers-decomposition-recovery-001",
-      "title": "Centralize shared HTTP helpers",
-      "description": "As a maintainer, I want one shared place for JSON responses, error writing, and common decode utilities so route-family files do not fork transport behavior.",
+      "id": "service-runtime-state-consolidation-001",
+      "title": "One runtime bundle shape for build and live handles",
+      "description": "As a maintainer, I want a single runtime bundle type so build output and live session handles cannot drift when runtime wiring grows.",
       "acceptanceCriteria": [
-        "handlers_common.go owns writeJSON, writeError, writeErrorWithTargets, writeSSEDataJSON, errorFamilyForStatus, and shared body-decode helpers used by multiple route families.",
-        "No duplicate writeError or writeJSON implementations remain in other handler files after extraction.",
-        "Existing pkg/api tests that assert error JSON shape for bad requests still pass unchanged.",
+        "Building a runtime for service startup or session open returns one shared bundle type carrying factory, net, listener, loaded config, logger, event history, local models, recording, and related sidecars.",
+        "liveRuntimeHandle references that shared type; adding a new runtime sidecar requires updating one struct definition.",
+        "Existing service build and replay tests that start a runtime continue to pass without relaxed assertions.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,13 +32,13 @@
       "notes": ""
     },
     {
-      "id": "api-handlers-decomposition-recovery-002",
-      "title": "Extract work route handlers",
-      "description": "As a reviewer, I want work submission and query handlers isolated so work-transport changes do not touch factory or model routes.",
+      "id": "service-runtime-state-consolidation-002",
+      "title": "Default session lives in the registry at startup",
+      "description": "As an operator running a single factory, I want the default session registered the same way as named sessions so session targeting is uniform from the first request.",
       "acceptanceCriteria": [
-        "handlers_work.go owns SubmitWork, SubmitWorkBySessionId, UpsertWorkRequest, UpsertWorkRequestBySessionId, ListWork, ListWorkBySessionId, GetWork, GetWorkBySessionId, and work-list projection helpers.",
-        "POST /work still rejects missing or empty name with BAD_REQUEST before domain normalization; canonical work-request validation still routes through pkg/factory.ValidateCanonicalWorkRequestJSON with API-owned message translation.",
-        "go test ./pkg/api/... -run 'SubmitWork|UpsertWork|ListWork|GetWork' passes with no assertion changes.",
+        "After BuildFactoryService and service run, ~default is present in the session registry with a live handle pointing at the started factory directory.",
+        "Default session registration uses the same registerLiveSession path as OpenFactorySession, not a parallel service-only runtime slot.",
+        "runState.sessionID matches the registry entry used for ~default while the default runtime is active.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -48,14 +47,14 @@
       "notes": ""
     },
     {
-      "id": "api-handlers-decomposition-recovery-003",
-      "title": "Extract factory and session route handlers",
-      "description": "As a reviewer, I want factory validation, session lifecycle, and current-factory routes in dedicated files with S1 save-mode decode preserved.",
+      "id": "service-runtime-state-consolidation-003",
+      "title": "Runtime operations target the requested session",
+      "description": "As a dashboard user with multiple factory tabs, I want work, snapshots, and idle checks for each session_id to use only that session's runtime so sessions cannot leak into one another.",
       "acceptanceCriteria": [
-        "handlers_factory.go owns ValidateFactory and factory-definition validation response helpers.",
-        "handlers_factory_sessions.go owns ListFactorySessions, OpenFactorySession, CloseFactorySession, GetCurrentFactory, GetCurrentFactoryBySessionId, SaveCurrentFactoryBySessionId, workstation prompt-template handlers, and writeCurrentFactoryError / load helpers.",
-        "SaveCurrentFactoryBySessionId decodes { mode?, factory } and calls only SaveFactoryForSession; S1 error codes remain mappable.",
-        "go test ./pkg/api/... -run 'Factory|FactorySession|ValidateFactory|SaveCurrent|PromptTemplate' passes with no assertion changes.",
+        "Submitting work to session A records artifacts and dispatch identifiers only for session A; session B's replay and log artifacts do not contain session A work.",
+        "Engine snapshot and factory read APIs scoped by session_id return data from that session's factory directory, not another live session's directory.",
+        "Idle checks used before factory activation apply to the session being saved or opened, not whichever session was selected last on the service root.",
+        "pkg/api session-scoped routing tests continue to pass: mutations and reads for session-beta do not invoke default-session factories.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -64,12 +63,14 @@
       "notes": ""
     },
     {
-      "id": "api-handlers-decomposition-recovery-004",
-      "title": "Extract model route handlers",
-      "description": "As a reviewer, I want model catalog and invocation handlers isolated from work and factory transport.",
+      "id": "service-runtime-state-consolidation-004",
+      "title": "Runtime replacement is always session-scoped",
+      "description": "As a maintainer, I want every runtime swap after persist to stop the prior handle for the same session and start the replacement under that session's root.",
       "acceptanceCriteria": [
-        "handlers_models.go owns ListModels, GetModel, InvokeModel, PullModel, and model-invocation body decode helpers.",
-        "Model routes return the same status codes and response bodies as before the move for existing pkg/api model tests.",
+        "Factory definition save, OpenFactorySession, and named-factory activation call replaceSessionRuntime with the session idle guard, not the legacy global activation entry point.",
+        "When replacing the factory for a non-default session, the current-factory pointer is written under that session's SessionFactoryRootDir, not only the service host root.",
+        "A successful replacement stops the previous live handle for the same session before registering the successor; other live sessions keep running.",
+        "Service-mode sidecar start and stop behavior is unchanged (poller, cron, and related service tests still pass).",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -78,13 +79,13 @@
       "notes": ""
     },
     {
-      "id": "api-handlers-decomposition-recovery-005",
-      "title": "Extract events and status route handlers",
-      "description": "As a maintainer, I want status and events handlers and their token projection helpers separated from other route families.",
+      "id": "service-runtime-state-consolidation-005",
+      "title": "FactoryService no longer mirrors live runtime state",
+      "description": "As a reviewer, I want FactoryService to hold wiring and session orchestration only, so there is one obvious place to find the live runtime for a session.",
       "acceptanceCriteria": [
-        "handlers_events.go owns GetStatus, GetStatusBySessionId, GetEvents, GetEventsBySessionId, and projection helpers used only by those routes.",
-        "Work readback helpers shared between list and get remain compilable from handlers_work.go without import cycles.",
-        "go test ./pkg/api/... -run 'GetStatus|GetEvents' passes with no assertion changes.",
+        "Top-level factory, net, listener, runtimeCfg, and related runtime fields are removed or reduced to thin delegators that read the selected or requested session handle.",
+        "Runtime swap for a session updates only that session's registry entry and runState for that session; no production path writes the same swap to both top-level fields and the session handle.",
+        "Default and named-session behavior for submit, pause, wait-for-complete, and model catalog APIs remains unchanged from the caller's perspective.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -93,45 +94,16 @@
       "notes": ""
     },
     {
-      "id": "api-handlers-decomposition-recovery-006",
-      "title": "Retire monolithic handlers.go and satisfy size gates",
-      "description": "As a contributor, I want the monolithic handlers file removed so backend size checks apply per route-family file.",
+      "id": "service-runtime-state-consolidation-006",
+      "title": "Restart behavior documented for operators",
+      "description": "As an operator running multiple UI tabs, I need clear documentation of which sessions survive a process restart so I do not assume ephemeral tabs are restored.",
       "acceptanceCriteria": [
-        "handlers.go is deleted or contains only wiring or ServerInterface compile assertion with no route handler bodies.",
-        "Server still implements factoryapi.ServerInterface; go build ./pkg/api/... succeeds.",
-        "File-level backendsizecheck:ignore-file on the former monolith is removed; each handlers_*.go file passes make backend-size or has justified function-scoped waivers only.",
-        "Full go test ./pkg/api/... passes with no intentional OpenAPI contract test diffs.",
+        "Internal maintainer documentation states that only ~default is restored when the service process restarts; additional live sessions opened before restart are ephemeral and must be reopened.",
+        "TestFactoryService_Run_RestartsOnlyDefaultSession continues to pass without changing expected session count or default runtime directory after restart.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "api-handlers-decomposition-recovery-007",
-      "title": "Split oversized server tests when file-count gate requires",
-      "description": "As a maintainer, I want server tests organized by concern if handler splits push pkg/api over package file-count limits.",
-      "acceptanceCriteria": [
-        "If pkgmaintcheck fails on pkg/api file count after handler splits, reorganize tests into server_*_test.go files with shared helpers in server_test_helpers_test.go following existing patterns.",
-        "No test assertions weakened or deleted to greenwash the move.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "api-handlers-decomposition-recovery-008",
-      "title": "Document handler ownership in development guide",
-      "description": "As a contributor, I want a route-family to file map so new endpoints land in the correct handler file during review.",
-      "acceptanceCriteria": [
-        "docs/internal/processes/development-guide-relevant-files.md lists each handlers_*.go file and the route families it owns, noting provider_session_details.go stays separate.",
-        "Doc states work-request JSON compatibility checks continue through pkg/factory/requests and ValidateCanonicalWorkRequestJSON, not reimplemented in handlers.",
-        "Typecheck passes"
-      ],
-      "priority": 8,
       "passes": true,
       "notes": ""
     }
