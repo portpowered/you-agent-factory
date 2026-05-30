@@ -155,7 +155,7 @@ func AssertNoTransitionExhaustion(t *testing.T, transitions map[string]*petri.Tr
 	t.Helper()
 
 	for name, transition := range transitions {
-		if transition != nil && transition.Type == petri.TransitionExhaustion {
+		if transition != nil && transition.Type == petri.TransitionType("EXHAUSTION") {
 			t.Fatalf("unexpected TransitionExhaustion transition %q in %s", name, opts.ExhaustionContext)
 		}
 	}
