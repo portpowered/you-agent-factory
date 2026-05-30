@@ -14,7 +14,6 @@ import {
 import {
   extractNamedFactoryNamesFromSessionTargets,
   resolveImportCreateFactoryName,
-  type FactoryImportSaveChoice,
 } from "./import-save-mode";
 import { extractAPIErrorPayload } from "../transport";
 

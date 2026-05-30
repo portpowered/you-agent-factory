@@ -184,8 +184,10 @@ function mapSessionFactoryErrorCode(
     case "STALE_FACTORY_VERSION":
       return code;
     case "INVALID_FACTORY":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INVALID_FACTORY_DEFINITION";
     default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";
   }
 }
