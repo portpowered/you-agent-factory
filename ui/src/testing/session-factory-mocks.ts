@@ -10,9 +10,6 @@ import { baseFactoryDefinition } from "./graph-editor-harness";
 
 export type SessionFactoryDocument = CurrentFactoryDocument;
 export type SessionFactoryVersion = CurrentFactoryVersion;
-export type SessionFactoryErrorCode =
-  | "FACTORY_NOT_IDLE"
-  | "STALE_FACTORY_VERSION";
 
 export type SessionFactoryPutMode =
   | "success"

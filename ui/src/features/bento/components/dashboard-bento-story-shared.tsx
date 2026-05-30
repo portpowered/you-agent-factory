@@ -1575,8 +1575,3 @@ export function DashboardBentoResponsiveStory() {
     </div>
   );
 }
-
-export const bentoCardCatalogStoryMeta = {
-  title: "you-agent-factory/Dashboard/Bento Cards",
-  tags: ["test"],
-} as const;
