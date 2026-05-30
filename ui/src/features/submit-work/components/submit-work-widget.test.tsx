@@ -78,7 +78,7 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(submitButton.className).toContain("justify-center");
   });
 
-  it("orders submit-work header tools before the dashboard move control", () => {
+  it("orders submit-work header tools left of the header drag surface", () => {
     render(
       <SubmitWorkCard
         draft={{
@@ -109,7 +109,8 @@ describe("SubmitWorkWidget form behavior", () => {
     const remove = screen.getByRole("button", {
       name: "Remove Submit work widget from dashboard",
     });
-    const move = screen.getByRole("button", { name: "Move Submit work" });
+    const card = screen.getByRole("article", { name: "Submit work" });
+    const header = card.querySelector("header");
 
     expect(workType.compareDocumentPosition(addInput)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -117,9 +118,13 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(addInput.compareDocumentPosition(remove)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(remove.compareDocumentPosition(move)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(
+      screen.queryByRole("button", { name: "Move Submit work" }),
+    ).toBeNull();
+    expect(
+      header?.contains(screen.getByRole("heading", { name: "Submit work" })),
+    ).toBe(true);
   });
 
   it("enables submission only after a configured work type and non-blank request name are present", () => {

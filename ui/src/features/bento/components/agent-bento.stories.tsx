@@ -77,12 +77,15 @@ export const MultiCard = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const activity = await canvas.findByRole("article", { name: "Current activity" });
-    const handle = within(activity).getByRole("button", { name: "Move Current activity" });
+    const dragHeader = within(activity).getByRole("heading", {
+      level: 3,
+      name: "Current activity",
+    });
 
     await userEvent.pointer([
-      { keys: "[MouseLeft>]", target: handle, coords: { x: 120, y: 40 } },
-      { target: handle, coords: { x: 280, y: 42 } },
-      { keys: "[/MouseLeft]", target: handle, coords: { x: 280, y: 42 } },
+      { keys: "[MouseLeft>]", target: dragHeader, coords: { x: 12, y: 8 } },
+      { target: dragHeader, coords: { x: 180, y: 10 } },
+      { keys: "[/MouseLeft]", target: dragHeader, coords: { x: 180, y: 10 } },
     ]);
 
     await expect(activity).toBeVisible();

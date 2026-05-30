@@ -103,10 +103,9 @@ export async function verifyDashboardShellConsolidation(
   const sessionStreamToggle = toolbar.getByRole("button", {
     name: /(Pause|Resume) .* updates/,
   });
-  const moveButton = board.getByRole("button", {
-    exact: true,
-    name: "Move Work totals",
-  });
+  const workTotalsDragHeader = workTotalsCard.locator(
+    'header[data-bento-drag-handle="true"]',
+  );
 
   await expectVisible(toolbar, "Dashboard summary shell");
   await expectVisible(workTotalsCard, "Work totals grid-card shell");
@@ -114,7 +113,10 @@ export async function verifyDashboardShellConsolidation(
   await expectVisible(timelineSlider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(sessionStreamToggle, "Dashboard session stream toggle");
-  await expectVisible(moveButton, "Work totals move button");
+  await expectVisible(
+    workTotalsDragHeader,
+    "Work totals header drag surface",
+  );
   if ((await toolbar.getByRole("status", { name: /Event stream/i }).count()) > 0) {
     throw new Error(
       "Dashboard shell header still rendered the retired event-stream status pill.",

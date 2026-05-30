@@ -48,23 +48,22 @@ function expectSharedBentoCardHeaderSeam(
   });
   expect(titleHeading.className).toContain(DASHBOARD_SECTION_HEADING_CLASS);
 
-  const headerTools = cardHeader?.querySelector(
-    "[class*='shrink-0'][class*='items-center']",
-  );
-  expect(headerTools).toBeTruthy();
-
-  const moveHandle = within(card).getByRole("button", {
-    name: `Move ${title}`,
-  });
-  expect(moveHandle.getAttribute("data-bento-drag-handle")).toBe("true");
-  expect(headerTools?.contains(moveHandle)).toBe(true);
+  expect(cardHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
+  expect(cardHeader?.className).toContain("cursor-grab");
+  expect(
+    within(card).queryByRole("button", { name: `Move ${title}` }),
+  ).toBeNull();
 
   if (headerActionLabel) {
+    const headerTools = cardHeader?.querySelector(
+      "[class*='shrink-0'][class*='items-center']",
+    );
     const headerAction = within(card).getByRole("button", {
       name: headerActionLabel,
     });
+    expect(headerTools).toBeTruthy();
     expect(headerTools?.contains(headerAction)).toBe(true);
-    expect(headerAction.compareDocumentPosition(moveHandle)).toBe(
+    expect(titleHeading.compareDocumentPosition(headerAction)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
   }
@@ -167,7 +166,7 @@ describe("dashboard widget header seam", () => {
     ).toBeNull();
   });
 
-  it("routes submit work header controls through the shared tools region before the move handle", () => {
+  it("routes submit work header controls through the shared tools region without a separate move handle", () => {
     const messages = getSubmitWorkMessages();
     renderBentoWidget(
       <SubmitWorkCard

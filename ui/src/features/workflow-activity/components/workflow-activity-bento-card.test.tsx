@@ -207,6 +207,7 @@ function registerWorkflowActivityBentoCardTestSetup() {
   });
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: bento card layout regressions stay grouped for header, graph shell, and editor entry.
 describe("WorkflowActivityBentoCard", () => {
   registerWorkflowActivityBentoCardTestSetup();
 
@@ -245,9 +246,11 @@ describe("WorkflowActivityBentoCard", () => {
     expect(
       within(graphCard).getByRole("button", { name: "进入工厂图编辑器" }),
     ).toBeTruthy();
+    expect(graphHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(graphHeader?.className).toContain("cursor-grab");
     expect(
-      within(graphCard).getByRole("button", { name: "Move 工厂图" }).className,
-    ).toContain("h-10");
+      within(graphCard).queryByRole("button", { name: "Move 工厂图" }),
+    ).toBeNull();
     expect(within(graphCard).getByText("观察模式")).toBeTruthy();
     expect(graphHeader?.textContent).toContain("观察模式");
     expect(

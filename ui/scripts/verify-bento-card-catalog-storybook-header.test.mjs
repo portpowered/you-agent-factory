@@ -6,42 +6,67 @@ import {
   verifyBentoCardCatalogHeader,
 } from "./verify-bento-card-catalog-storybook-header.mjs";
 
-function createArticleLocator(metrics) {
+function createArticleLocator(metrics, { moveButtonCount = 0 } = {}) {
   return {
-    locator: () => ({
-      evaluate: async () => metrics,
-    }),
-    getByRole: () => ({
-      waitFor: async () => undefined,
-    }),
+    locator: (selector) => {
+      if (selector === "header" || selector === 'header[data-bento-drag-handle="true"]') {
+        return {
+          evaluate: async () => metrics,
+          waitFor: async () => undefined,
+        };
+      }
+
+      throw new Error(`Unexpected locator selector: ${selector}`);
+    },
+    getByRole: (role, options) => {
+      if (role === "button" && options?.name?.startsWith("Move ")) {
+        return {
+          count: async () => moveButtonCount,
+        };
+      }
+
+      return {
+        waitFor: async () => undefined,
+      };
+    },
   };
 }
 
 describe("verifyBentoCardCatalogHeader", () => {
-  test("assertCardHeaderMetrics rejects overlapping title and drag handle", () => {
+  test("assertCardHeaderMetrics rejects overlapping title and header action", () => {
     expect(() =>
       assertCardHeaderMetrics(
-        "Work totals",
+        "Submit work",
         {
-          compactChrome: true,
-          handleRect: { height: 40, width: 40, x: 40, y: 0 },
-          headerRect: { height: 44, width: 200, x: 0, y: 0 },
-          primaryActionRects: [],
-          titleRect: { height: 20, width: 60, x: 0, y: 0 },
+          compactChrome: false,
+          hasGrabCursor: true,
+          hasHeaderDragHandle: true,
+          headerRect: { height: 52, width: 300, x: 0, y: 0 },
+          primaryActionRects: [
+            {
+              height: 32,
+              label: "Remove Submit work widget from dashboard",
+              width: 32,
+              x: 0,
+              y: 0,
+            },
+          ],
+          titleRect: { height: 20, width: 120, x: 0, y: 0 },
           titleTag: "H3",
         },
-        { compactChrome: true },
+        { compactChrome: false },
       ),
-    ).toThrow(/overlapped the drag handle/);
+    ).toThrow(/overlapped header action/);
   });
 
-  test("assertCardHeaderMetrics accepts separated title and handle regions", () => {
+  test("assertCardHeaderMetrics accepts separated title and header action regions", () => {
     expect(() =>
       assertCardHeaderMetrics(
         "Provider session",
         {
           compactChrome: false,
-          handleRect: { height: 40, width: 40, x: 180, y: 0 },
+          hasGrabCursor: true,
+          hasHeaderDragHandle: true,
           headerRect: { height: 52, width: 240, x: 0, y: 0 },
           primaryActionRects: [],
           titleRect: { height: 20, width: 120, x: 0, y: 0 },
@@ -66,7 +91,8 @@ describe("verifyBentoCardCatalogHeader", () => {
           const metricsByName = {
             "Add widget": {
               compactChrome: false,
-              handleRect: { height: 40, width: 40, x: 220, y: 0 },
+              hasGrabCursor: true,
+              hasHeaderDragHandle: true,
               headerRect: { height: 52, width: 260, x: 0, y: 0 },
               primaryActionRects: [],
               titleRect: { height: 20, width: 120, x: 0, y: 0 },
@@ -74,7 +100,8 @@ describe("verifyBentoCardCatalogHeader", () => {
             },
             "Provider session": {
               compactChrome: false,
-              handleRect: { height: 40, width: 40, x: 220, y: 0 },
+              hasGrabCursor: true,
+              hasHeaderDragHandle: true,
               headerRect: { height: 52, width: 260, x: 0, y: 0 },
               primaryActionRects: [],
               titleRect: { height: 20, width: 120, x: 0, y: 0 },
@@ -82,7 +109,8 @@ describe("verifyBentoCardCatalogHeader", () => {
             },
             "Submit work": {
               compactChrome: false,
-              handleRect: { height: 40, width: 40, x: 260, y: 0 },
+              hasGrabCursor: true,
+              hasHeaderDragHandle: true,
               headerRect: { height: 52, width: 300, x: 0, y: 0 },
               primaryActionRects: [
                 {
@@ -98,7 +126,8 @@ describe("verifyBentoCardCatalogHeader", () => {
             },
             "Work totals": {
               compactChrome: true,
-              handleRect: { height: 40, width: 40, x: 180, y: 0 },
+              hasGrabCursor: true,
+              hasHeaderDragHandle: true,
               headerRect: { height: 44, width: 240, x: 0, y: 0 },
               primaryActionRects: [],
               titleRect: { height: 20, width: 120, x: 0, y: 0 },
@@ -107,12 +136,6 @@ describe("verifyBentoCardCatalogHeader", () => {
           };
 
           return createArticleLocator(metricsByName[options.name]);
-        }
-
-        if (role === "button") {
-          return {
-            waitFor: async () => undefined,
-          };
         }
 
         throw new Error(`Unexpected role lookup: ${role}`);
@@ -130,19 +153,20 @@ describe("verifyBentoCardCatalogHeader", () => {
 
     expect(visible.has("Header consistency bento board")).toBe(true);
     expect(visible.has("Work totals bento card")).toBe(true);
+    expect(visible.has("Work totals header drag handle")).toBe(true);
     expect(visible.has("Submit work primary header action")).toBe(true);
-    expect(visible.has("Add widget move handle")).toBe(true);
+    expect(visible.has("Add widget header drag handle")).toBe(true);
   });
 
   test("collectCardHeaderMetrics reports missing header pieces", async () => {
     const article = {
       locator: () => ({
-        evaluate: async () => ({ error: "Missing bento card title or drag handle." }),
+        evaluate: async () => ({ error: "Missing bento card title." }),
       }),
     };
 
     await expect(collectCardHeaderMetrics(article)).resolves.toEqual({
-      error: "Missing bento card title or drag handle.",
+      error: "Missing bento card title.",
     });
   });
 });

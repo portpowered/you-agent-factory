@@ -20,26 +20,23 @@ function expectBentoCardHeaderSemantics(
     within(card).getByRole("heading", { level: 3, name: title }),
   ).toBeTruthy();
 
-  const moveHandle = within(card).getByRole("button", {
-    name: `Move ${title}`,
-  });
-  expect(moveHandle.getAttribute("data-bento-drag-handle")).toBe("true");
-  expect(header?.contains(moveHandle)).toBe(true);
-
-  const toolsRegion = header?.lastElementChild;
-  expect(toolsRegion?.contains(moveHandle)).toBe(true);
+  expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+  expect(header?.className).toContain("cursor-grab");
+  expect(
+    within(card).queryByRole("button", { name: `Move ${title}` }),
+  ).toBeNull();
+  expect(
+    header?.contains(
+      within(card).getByRole("heading", { level: 3, name: title }),
+    ),
+  ).toBe(true);
 
   if (compactChrome) {
     expect(header?.className).toContain("min-h-11");
     expect(header?.className).toContain("flex-wrap");
-    expect(moveHandle.className).toContain("h-10");
-    expect(moveHandle.className).toContain("w-10");
-    expect(toolsRegion?.className).toContain("flex-wrap");
-    expect(toolsRegion?.className).toContain("justify-between");
   } else {
     expect(header?.className).toContain("min-h-13");
     expect(header?.className).not.toContain("flex-wrap");
-    expect(toolsRegion?.className).not.toContain("sm:w-auto");
   }
 }
 
