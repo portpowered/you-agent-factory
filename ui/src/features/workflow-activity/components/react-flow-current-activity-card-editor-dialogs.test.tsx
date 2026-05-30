@@ -98,14 +98,19 @@ vi.mock("../../import/public", () => ({
     previewState,
   }: {
     onCancel: () => void;
-    onConfirm: () => void;
-    previewState: { status: string };
+    onConfirm: (input: { value: { kind: string } }) => void;
+    previewState: { status: string; value: { kind: string } };
   }) => (
     <div data-status={previewState.status} data-testid="import-preview-dialog">
       <button onClick={onCancel} type="button">
         Trigger import cancel
       </button>
-      <button onClick={onConfirm} type="button">
+      <button
+        onClick={() => {
+          onConfirm({ value: previewState.value });
+        }}
+        type="button"
+      >
         Trigger import confirm
       </button>
     </div>
@@ -175,6 +180,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
 
     render(
       <CurrentActivityGraphEditorDialogs
+        currentSessionFactoryName="alpha"
         editor={editor as never}
         imports={imports as never}
         readyImportPreviewState={imports.importPreviewState}
@@ -252,6 +258,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
 
     render(
       <CurrentActivityGraphEditorDialogs
+        currentSessionFactoryName="alpha"
         editor={editor as never}
         imports={imports as never}
         readyImportPreviewState={imports.importPreviewState}

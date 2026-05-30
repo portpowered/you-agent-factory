@@ -481,6 +481,7 @@ export function ReactFlowCurrentActivityCardView(
         locale={props.locale}
       />
       <CurrentActivityGraphEditorDialogs
+        currentSessionFactoryName={props.snapshot.factory?.name ?? "factory"}
         editor={editor}
         imports={imports}
         locale={props.locale}

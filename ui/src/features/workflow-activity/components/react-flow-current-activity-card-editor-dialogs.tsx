@@ -8,12 +8,14 @@ import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";
 
 export function CurrentActivityGraphEditorDialogs({
+  currentSessionFactoryName,
   editor,
   imports,
   locale,
   readyImportPreviewState,
   shouldRenderImportPreviewDialog,
 }: {
+  currentSessionFactoryName: string;
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   imports: CurrentActivityImportController;
   locale?: string;
@@ -29,13 +31,14 @@ export function CurrentActivityGraphEditorDialogs({
       {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
         <FactoryImportPreviewDialog
           activationState={imports.activationState}
+          currentSessionFactoryName={currentSessionFactoryName}
           locale={locale}
           onCancel={() => {
             imports.clearActivationError();
             imports.closeImportPreview();
           }}
-          onConfirm={() => {
-            void imports.activateImport(readyImportPreviewState.value);
+          onConfirm={(input) => {
+            void imports.activateImport(input.value);
           }}
           previewState={readyImportPreviewState}
         />
