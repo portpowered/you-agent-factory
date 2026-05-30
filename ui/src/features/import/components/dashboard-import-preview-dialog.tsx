@@ -1,14 +1,4 @@
-import { useId, useMemo, useState } from "react";
-
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import {
-  EMPTY_STATE_CLASS,
-} from "../../../components/ui/widget-frame";
+import type { FactoryImportSaveChoice } from "../../../api/named-factory";
 import {
   Button,
   Dialog,
@@ -18,18 +8,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui";
-import { cn } from "../../../lib/cn";
-import { allocateImportCreateFactoryName } from "../lib/allocate-import-create-factory-name";
-import type {
-  FactoryImportConfirmInput,
-  FactoryImportSaveChoice,
-} from "../lib/factory-import-save-choice";
 import {
-  getImportPreviewDialogMessages,
-  IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN,
-} from "../messages/import-preview-dialog";
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "../../../components/ui/dashboard-typography";
+import { SelectableCardButton } from "../../../components/ui/selectable-card-button";
+import { EMPTY_STATE_CLASS } from "../../../components/ui/widget-frame";
+import { cn } from "../../../lib/cn";
 import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";
 import type { FactoryImportPreviewState } from "../hooks/use-factory-import-preview";
+import type { FactoryPngImportValue } from "../lib/factory-png-import";
+import {
+  getImportPreviewDialogMessages,
+  IMPORT_PREVIEW_FACTORY_NAME_TOKEN,
+} from "../messages/import-preview-dialog";
 
 const IMPORT_DIALOG_CONTENT_CLASS =
   "w-full max-w-5xl gap-6 p-4 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:p-5";
@@ -40,39 +34,49 @@ const IMPORT_DIALOG_LABEL_CLASS = cn(
   "text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-accent",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
-const IMPORT_SAVE_CHOICE_OPTION_CLASS =
-  "grid cursor-pointer gap-1 rounded-xl border border-transparent p-3 transition-colors has-[:focus-visible]:border-af-accent has-[:checked]:border-af-accent has-[:checked]:bg-af-surface";
 const IMPORT_ERROR_PANEL_CLASS =
   "border-af-danger-border bg-af-danger-surface text-af-danger-text";
+const IMPORT_DIALOG_MODE_OPTION_CLASS =
+  "grid w-full gap-2 rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-left";
+const IMPORT_DIALOG_MODE_OPTION_SELECTED_CLASS =
+  "border-af-accent bg-af-surface";
 
-type ReadyFactoryImportPreviewState = Extract<FactoryImportPreviewState, { status: "ready" }>;
+type ReadyFactoryImportPreviewState = Extract<
+  FactoryImportPreviewState,
+  { status: "ready" }
+>;
 
 export interface FactoryImportPreviewDialogProps {
   activationState: FactoryImportActivationState;
-  currentSessionFactoryName: string;
-  existingFactoryNames?: readonly string[];
+  createTargetFactoryName?: string | null;
+  currentFactoryName?: string | null;
+  importSaveChoice: FactoryImportSaveChoice;
   locale?: string;
   onCancel: () => void;
-  onConfirm: (input: FactoryImportConfirmInput) => void;
+  onConfirm: () => void;
+  onImportSaveChoiceChange: (choice: FactoryImportSaveChoice) => void;
   previewState: ReadyFactoryImportPreviewState;
 }
 
 export interface DashboardImportPreviewDialogProps {
   activationState: FactoryImportActivationState;
-  currentSessionFactoryName: string;
-  existingFactoryNames?: readonly string[];
+  createTargetFactoryName?: string | null;
+  currentFactoryName?: string | null;
   importPreviewState: FactoryImportPreviewState;
+  importSaveChoice: FactoryImportSaveChoice;
   locale?: string;
   onCancel: () => void;
-  onConfirm: (input: FactoryImportConfirmInput) => void;
+  onConfirm: (
+    value: FactoryPngImportValue,
+    choice: FactoryImportSaveChoice,
+  ) => void;
+  onImportSaveChoiceChange: (choice: FactoryImportSaveChoice) => void;
+  sessionID?: string | null;
 }
 
-function renderImportPreviewCurrentFactoryDescription(
-  template: string,
-  currentFactoryName: string,
-) {
+function renderImportPreviewDescription(template: string, factoryName: string) {
   const [beforeFactoryName, afterFactoryName] = template.split(
-    IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN,
+    IMPORT_PREVIEW_FACTORY_NAME_TOKEN,
   );
 
   if (afterFactoryName === undefined) {
@@ -82,7 +86,7 @@ function renderImportPreviewCurrentFactoryDescription(
   return (
     <>
       {beforeFactoryName}
-      <span className="font-semibold text-af-text">{currentFactoryName}</span>
+      <span className="font-semibold text-af-text">{factoryName}</span>
       {afterFactoryName}
     </>
   );
@@ -105,8 +109,6 @@ function factoryImportActivationErrorCopy(
       return messages.errorByCode.INVALID_FACTORY_NAME;
     case "NETWORK_ERROR":
       return messages.errorByCode.NETWORK_ERROR;
-    case "STALE_FACTORY_VERSION":
-      return messages.errorByCode.STALE_FACTORY_VERSION;
     default:
       return error.message;
   }
@@ -137,156 +139,25 @@ function FactoryImportActivationErrorPanel({
   );
 }
 
-function collectExistingFactoryNames(
-  currentSessionFactoryName: string,
-  embeddedFactoryName: string,
-  existingFactoryNames: readonly string[] | undefined,
-): string[] {
-  const names = new Set<string>();
-
-  for (const candidate of [
-    currentSessionFactoryName,
-    embeddedFactoryName,
-    ...(existingFactoryNames ?? []),
-  ]) {
-    const normalized = candidate.trim();
-    if (normalized.length > 0) {
-      names.add(normalized);
-    }
-  }
-
-  return [...names];
-}
-
-function FactoryImportSaveChoiceFieldset({
-  choice,
-  createFactoryName,
-  currentSessionFactoryName,
-  isSubmitting,
-  locale,
-  onChoiceChange,
-}: {
-  choice: FactoryImportSaveChoice;
-  createFactoryName: string;
-  currentSessionFactoryName: string;
-  isSubmitting: boolean;
-  locale?: string;
-  onChoiceChange: (choice: FactoryImportSaveChoice) => void;
-}) {
-  const messages = getImportPreviewDialogMessages(locale);
-  const replaceOptionId = useId();
-  const createOptionId = useId();
-
-  return (
-    <fieldset
-      className="grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4"
-      disabled={isSubmitting}
-    >
-      <legend className={IMPORT_DIALOG_LABEL_CLASS}>{messages.saveChoiceLegend}</legend>
-      <div className="grid gap-2" role="radiogroup" aria-label={messages.saveChoiceLegend}>
-        <label className={IMPORT_SAVE_CHOICE_OPTION_CLASS} htmlFor={replaceOptionId}>
-          <span className="flex items-start gap-3">
-            <input
-              checked={choice === "replace_current"}
-              className="mt-1"
-              id={replaceOptionId}
-              name="factory-import-save-choice"
-              onChange={() => {
-                onChoiceChange("replace_current");
-              }}
-              type="radio"
-              value="replace_current"
-            />
-            <span className="grid gap-1">
-              <span className="text-base font-semibold text-af-text">
-                {messages.replaceCurrentOption}
-              </span>
-              <span className={IMPORT_DIALOG_HINT_CLASS}>
-                {messages.replaceCurrentOptionDescription}
-              </span>
-              <span className="text-sm font-semibold text-af-text">
-                {currentSessionFactoryName}
-              </span>
-            </span>
-          </span>
-        </label>
-        <label className={IMPORT_SAVE_CHOICE_OPTION_CLASS} htmlFor={createOptionId}>
-          <span className="flex items-start gap-3">
-            <input
-              checked={choice === "create_new_named"}
-              className="mt-1"
-              id={createOptionId}
-              name="factory-import-save-choice"
-              onChange={() => {
-                onChoiceChange("create_new_named");
-              }}
-              type="radio"
-              value="create_new_named"
-            />
-            <span className="grid gap-1">
-              <span className="text-base font-semibold text-af-text">
-                {messages.createNewNamedOption}
-              </span>
-              <span className={IMPORT_DIALOG_HINT_CLASS}>
-                {messages.createNewNamedOptionDescription}
-              </span>
-              <span className="grid gap-1">
-                <span className={IMPORT_DIALOG_LABEL_CLASS}>
-                  {messages.createResolvedNameLabel}
-                </span>
-                <span className="text-sm font-semibold text-af-text">{createFactoryName}</span>
-              </span>
-            </span>
-          </span>
-        </label>
-      </div>
-    </fieldset>
-  );
-}
-
 export function FactoryImportPreviewDialog({
   activationState,
-  currentSessionFactoryName,
-  existingFactoryNames,
+  createTargetFactoryName,
+  currentFactoryName,
+  importSaveChoice,
   locale,
   onCancel,
   onConfirm,
+  onImportSaveChoiceChange,
   previewState,
 }: FactoryImportPreviewDialogProps) {
   const isSubmitting = activationState.status === "submitting";
   const messages = getImportPreviewDialogMessages(locale);
-  const [choice, setChoice] = useState<FactoryImportSaveChoice>("replace_current");
-  const resolvedExistingFactoryNames = useMemo(
-    () =>
-      collectExistingFactoryNames(
-        currentSessionFactoryName,
-        previewState.value.factory.name,
-        existingFactoryNames,
-      ),
-    [currentSessionFactoryName, existingFactoryNames, previewState.value.factory.name],
-  );
-  const createFactoryName = useMemo(
-    () =>
-      allocateImportCreateFactoryName(
-        previewState.value.factory.name,
-        resolvedExistingFactoryNames,
-      ),
-    [previewState.value.factory.name, resolvedExistingFactoryNames],
-  );
-
+  const resolvedCurrentFactoryName =
+    currentFactoryName?.trim() || previewState.value.factory.name;
   const handleOpenChange = (open: boolean) => {
     if (!open && !isSubmitting) {
       onCancel();
     }
-  };
-
-  const handleConfirm = () => {
-    onConfirm({
-      choice,
-      createFactoryName,
-      existingFactoryNames: resolvedExistingFactoryNames,
-      value: previewState.value,
-    });
   };
 
   return (
@@ -321,9 +192,9 @@ export function FactoryImportPreviewDialog({
                 {messages.title}
               </DialogTitle>
               <DialogDescription className={IMPORT_DIALOG_DESCRIPTION_CLASS}>
-                {renderImportPreviewCurrentFactoryDescription(
+                {renderImportPreviewDescription(
                   messages.descriptionTemplate,
-                  currentSessionFactoryName,
+                  previewState.value.factory.name,
                 )}
               </DialogDescription>
             </div>
@@ -335,43 +206,106 @@ export function FactoryImportPreviewDialog({
 
           <dl className="grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-sm text-af-text-muted">
             <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.droppedFileLabel}</dt>
-              <dd className="m-0 font-semibold text-af-text">{previewState.file.name}</dd>
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>
+                {messages.droppedFileLabel}
+              </dt>
+              <dd className="m-0 font-semibold text-af-text">
+                {previewState.file.name}
+              </dd>
             </div>
             <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.embeddedFactoryLabel}</dt>
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>
+                {messages.embeddedFactoryLabel}
+              </dt>
               <dd className="m-0 font-semibold text-af-text">
                 {previewState.value.factory.name}
               </dd>
             </div>
           </dl>
 
-          <FactoryImportSaveChoiceFieldset
-            choice={choice}
-            createFactoryName={createFactoryName}
-            currentSessionFactoryName={currentSessionFactoryName}
-            isSubmitting={isSubmitting}
-            locale={locale}
-            onChoiceChange={setChoice}
-          />
+          <fieldset className="grid gap-3" disabled={isSubmitting}>
+            <legend className={IMPORT_DIALOG_LABEL_CLASS}>
+              {messages.importSaveChoiceLegend}
+            </legend>
+            <SelectableCardButton
+              className={cn(
+                IMPORT_DIALOG_MODE_OPTION_CLASS,
+                importSaveChoice === "REPLACE_CURRENT" &&
+                  IMPORT_DIALOG_MODE_OPTION_SELECTED_CLASS,
+              )}
+              disabled={isSubmitting}
+              onClick={() => {
+                onImportSaveChoiceChange("REPLACE_CURRENT");
+              }}
+              selected={importSaveChoice === "REPLACE_CURRENT"}
+              tone="outline"
+              type="button"
+            >
+              <span className="font-semibold text-af-text">
+                {messages.replaceCurrentFactoryLabel}
+              </span>
+              <span className={IMPORT_DIALOG_HINT_CLASS}>
+                {messages.replaceCurrentFactoryDescription(
+                  resolvedCurrentFactoryName,
+                )}
+              </span>
+            </SelectableCardButton>
+            <SelectableCardButton
+              className={cn(
+                IMPORT_DIALOG_MODE_OPTION_CLASS,
+                importSaveChoice === "CREATE_NEW_NAMED" &&
+                  IMPORT_DIALOG_MODE_OPTION_SELECTED_CLASS,
+              )}
+              disabled={isSubmitting}
+              onClick={() => {
+                onImportSaveChoiceChange("CREATE_NEW_NAMED");
+              }}
+              selected={importSaveChoice === "CREATE_NEW_NAMED"}
+              tone="outline"
+              type="button"
+            >
+              <span className="font-semibold text-af-text">
+                {messages.createNewNamedFactoryLabel}
+              </span>
+              <span className={IMPORT_DIALOG_HINT_CLASS}>
+                {messages.createNewNamedFactoryDescription}
+              </span>
+              {createTargetFactoryName ? (
+                <span className="m-0 text-sm font-semibold text-af-text">
+                  {messages.createNewNamedFactoryResolvedNameLabel}:{" "}
+                  {createTargetFactoryName}
+                </span>
+              ) : null}
+            </SelectableCardButton>
+          </fieldset>
 
           <p className={IMPORT_DIALOG_HINT_CLASS}>{messages.hint}</p>
 
           {activationState.status === "error" ? (
-            <FactoryImportActivationErrorPanel error={activationState.error} locale={locale} />
+            <FactoryImportActivationErrorPanel
+              error={activationState.error}
+              locale={locale}
+            />
           ) : null}
 
           <DialogFooter>
-            <Button disabled={isSubmitting} onClick={onCancel} tone="outline" type="button">
+            <Button
+              disabled={isSubmitting}
+              onClick={onCancel}
+              tone="outline"
+              type="button"
+            >
               {messages.cancelAction}
             </Button>
             <Button
               aria-busy={isSubmitting ? "true" : undefined}
               disabled={isSubmitting}
-              onClick={handleConfirm}
+              onClick={onConfirm}
               type="button"
             >
-              {isSubmitting ? messages.activatingAction : messages.activateAction}
+              {isSubmitting
+                ? messages.activatingAction
+                : messages.activateAction}
             </Button>
           </DialogFooter>
         </div>
@@ -382,12 +316,14 @@ export function FactoryImportPreviewDialog({
 
 export function DashboardImportPreviewDialog({
   activationState,
-  currentSessionFactoryName,
-  existingFactoryNames,
+  createTargetFactoryName,
+  currentFactoryName,
   importPreviewState,
+  importSaveChoice,
   locale,
   onCancel,
   onConfirm,
+  onImportSaveChoiceChange,
 }: DashboardImportPreviewDialogProps) {
   const readyImportPreviewState =
     importPreviewState.status === "ready" ? importPreviewState : null;
@@ -398,13 +334,16 @@ export function DashboardImportPreviewDialog({
 
   return (
     <FactoryImportPreviewDialog
-      key={readyImportPreviewState.file.name}
       activationState={activationState}
-      currentSessionFactoryName={currentSessionFactoryName}
-      existingFactoryNames={existingFactoryNames}
+      createTargetFactoryName={createTargetFactoryName}
+      currentFactoryName={currentFactoryName}
+      importSaveChoice={importSaveChoice}
       locale={locale}
       onCancel={onCancel}
-      onConfirm={onConfirm}
+      onConfirm={() => {
+        onConfirm(readyImportPreviewState.value, importSaveChoice);
+      }}
+      onImportSaveChoiceChange={onImportSaveChoiceChange}
       previewState={readyImportPreviewState}
     />
   );

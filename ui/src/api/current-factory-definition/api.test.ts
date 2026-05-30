@@ -3,6 +3,7 @@ import {
   staleFactoryVersionTarget,
 } from "../../testing/factory-validation-target-fixtures";
 import {
+  CURRENT_FACTORY_EDITOR_SAVE_MODE,
   CurrentFactoryDefinitionError,
   getCurrentFactoryDefinition,
   getCurrentFactoryDocument,
@@ -281,7 +282,7 @@ describe("getCurrentFactoryDefinition", () => {
       }),
     ).rejects.toMatchObject({
       code: "INVALID_FACTORY_DEFINITION",
-      message: "The factory definition was rejected by the session factory API.",
+      message: "The editable definition payload is invalid.",
       name: "CurrentFactoryDefinitionError",
       responseBody: {
         code: "INVALID_FACTORY",
@@ -574,7 +575,7 @@ describe("getCurrentFactoryDefinition", () => {
       "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
-          mode: "REPLACE_CURRENT",
+          mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
           factory: {
             name: "Current Factory",
             workers: [],
@@ -593,6 +594,54 @@ describe("getCurrentFactoryDefinition", () => {
       }),
     );
     expect(document.version.logical).toBe("10");
+  });
+
+  it("sends explicit REPLACE_CURRENT mode and never UPSERT_NAMED_AND_ACTIVATE for editor saves", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "2",
+            physical: "2026-05-18T14:30:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveCurrentFactoryDocument(
+      {
+        baseVersion: {
+          logical: "1",
+          physical: "2026-05-18T14:25:00Z",
+        },
+        factoryDefinition: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+      },
+      { fetch },
+    );
+
+    const requestBody = JSON.parse(
+      String(fetch.mock.calls[0]?.[1]?.body),
+    ) as { mode?: string; factory?: { version?: { logical?: string } } };
+
+    expect(requestBody.mode).toBe(CURRENT_FACTORY_EDITOR_SAVE_MODE);
+    expect(requestBody.mode).not.toBe("UPSERT_NAMED_AND_ACTIVATE");
+    expect(requestBody.factory?.version?.logical).toBe("2");
   });
 
   it("increments large logical version strings without losing precision before save", async () => {
@@ -637,14 +686,6 @@ describe("getCurrentFactoryDefinition", () => {
     expect(fetch).toHaveBeenCalledWith(
       "/factory-sessions/~default/factory",
       expect.objectContaining({
-        body: expect.stringContaining(
-          '"factory":{"name":"Current Factory"',
-        ),
-      }),
-    );
-    expect(fetch).toHaveBeenCalledWith(
-      "/factory-sessions/~default/factory",
-      expect.objectContaining({
         body: expect.stringContaining('"logical":"1779941481569583434"'),
       }),
     );
@@ -656,52 +697,6 @@ describe("getCurrentFactoryDefinition", () => {
         ),
       }),
     );
-  });
-
-  it("never sends UPSERT_NAMED_AND_ACTIVATE on editor save paths", async () => {
-    const fetch = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          name: "Current Factory",
-          workers: [],
-          workstations: [],
-          workTypes: [],
-          version: {
-            logical: "10",
-            physical: "2026-05-18T14:40:00Z",
-          },
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          status: 200,
-          statusText: "OK",
-        },
-      ),
-    );
-
-    await saveCurrentFactoryDocument(
-      {
-        factoryDefinition: {
-          name: "Current Factory",
-          workers: [],
-          workstations: [],
-          workTypes: [],
-        },
-      },
-      { fetch },
-    );
-
-    const putBody = JSON.parse(
-      String(
-        vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "PUT")?.[1]
-          ?.body,
-      ),
-    ) as { mode?: string };
-
-    expect(putBody.mode).toBe("REPLACE_CURRENT");
-    expect(putBody.mode).not.toBe("UPSERT_NAMED_AND_ACTIVATE");
   });
 
   it("saves through the session-scoped editable-definition route for non-default sessions", async () => {

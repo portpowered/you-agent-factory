@@ -1,7 +1,7 @@
 import { SUPPORTED_LOCALES } from "../../../i18n";
 import {
   getImportPreviewDialogMessages,
-  IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN,
+  IMPORT_PREVIEW_FACTORY_NAME_TOKEN,
   importPreviewDialogMessagesByLocale,
 } from "./import-preview-dialog";
 
@@ -36,10 +36,8 @@ describe("getImportPreviewDialogMessages", () => {
     const messages = getImportPreviewDialogMessages("zh-CN");
 
     expect(messages.descriptionTemplate).toContain(
-      IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN,
+      IMPORT_PREVIEW_FACTORY_NAME_TOKEN,
     );
-    expect(messages.replaceCurrentOption).toBeTruthy();
-    expect(messages.createNewNamedOption).toBeTruthy();
     expect(messages.previewImageAlt("Dropped Factory")).toContain(
       "Dropped Factory",
     );

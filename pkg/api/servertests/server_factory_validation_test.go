@@ -197,7 +197,7 @@ func TestSaveCurrentFactory_ReturnsMultipleTopologyValidationTargets(t *testing.
 		),
 	})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(saveFactoryForSessionBody(`{"name":"beta"}`)))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(saveFactoryForSessionRequestBody(`{"name":"beta"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -222,23 +222,76 @@ func TestSaveCurrentFactory_ReturnsMultipleTopologyValidationTargets(t *testing.
 	assertBlockingValidationTarget(t, (*response.Targets)[0])
 }
 
-func TestCreateFactory_ReturnsTopologyValidationTargets(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+func TestUpsertNamedFactory_ReturnsTopologyValidationTargets(t *testing.T) {
+	target := factoryapi.FactoryValidationTarget{
+		Code:     factoryvalidation.CodeDanglingPlaceReference,
+		Severity: factoryapi.FactoryValidationSeverityError,
+		Message:  "workstation process routes to unknown place.",
+		Subject: factoryapi.FactoryValidationSubject{
+			Type:     factoryapi.FactoryValidationSubjectTypeWorkstation,
+			Id:       "process",
+			Location: factoryapi.FactoryValidationSubjectLocationOutputs,
+		},
+	}
+	srv := newAPITestServer(&testutil.MockFactory{
+		SaveFactoryForSessionErr: apisurface.NewTopologyValidationError(
+			"Factory topology contains invalid graph references.",
+			[]factoryapi.FactoryValidationTarget{target},
+		),
+	})
+
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(upsertNamedFactoryRequestBody(validNamedFactoryBody("beta", "beta-task"))))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	assertPostFactoriesRouteRemoved(t, rec)
+
+	response := decodeJSONResponse[factoryapi.ErrorResponse](t, rec)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	assertErrorResponsePreservesLegacyFields(
+		t,
+		response,
+		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorFamilyBadRequest,
+		"Factory payload is not a valid Agent Factory definition.",
+	)
+	if response.Targets == nil || len(*response.Targets) != 1 {
+		t.Fatalf("targets = %#v, want one canonical target", response.Targets)
+	}
+	gotTarget := (*response.Targets)[0]
+	assertBlockingValidationTarget(t, gotTarget)
+	if gotTarget.Code != factoryvalidation.CodeDanglingPlaceReference ||
+		gotTarget.Subject.Type != factoryapi.FactoryValidationSubjectTypeWorkstation ||
+		gotTarget.Subject.Id != "process" ||
+		gotTarget.Subject.Location != factoryapi.FactoryValidationSubjectLocationOutputs {
+		t.Fatalf("error target = %#v, want dangling output workstation target", gotTarget)
+	}
 }
 
-func TestCreateFactory_RejectsInvalidFactoryPayloadWithTargets(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{})
+func TestUpsertNamedFactory_RejectsInvalidFactoryPayloadWithTargets(t *testing.T) {
+	srv := newAPITestServer(&testutil.MockFactory{SaveFactoryForSessionErr: apisurface.ErrInvalidNamedFactory})
 	body := `{"name":"beta","workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"missing-worker","inputs":[{"workType":"beta-task","state":"init"}],"outputs":[{"workType":"beta-task","state":"done"}]}]}`
-	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(upsertNamedFactoryRequestBody(body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	assertPostFactoriesRouteRemoved(t, rec)
+
+	response := decodeJSONResponse[factoryapi.ErrorResponse](t, rec)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	assertErrorResponsePreservesLegacyFields(
+		t,
+		response,
+		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorFamilyBadRequest,
+		"Factory payload is not a valid Agent Factory definition.",
+	)
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Code != factoryvalidation.CodeFactoryPayloadInvalid {
+		t.Fatalf("error targets = %#v, want canonical invalid factory payload target", response.Targets)
+	}
+	assertBlockingValidationTarget(t, (*response.Targets)[0])
 }
 
 func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
@@ -259,7 +312,7 @@ func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 		),
 	})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(saveFactoryForSessionBody(`{"name":"beta"}`)))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(saveFactoryForSessionRequestBody(`{"name":"beta"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -291,13 +344,54 @@ func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	)
 }
 
-func TestCreateFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
-	srv := newAPITestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+func TestUpsertNamedFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
+	target := factoryapi.FactoryValidationTarget{
+		Code:     factoryvalidation.CodeWorkstationMissingFailureRoute,
+		Severity: factoryapi.FactoryValidationSeverityError,
+		Message:  `workstation "bob" must define a failure route.`,
+		Subject: factoryapi.FactoryValidationSubject{
+			Type:     factoryapi.FactoryValidationSubjectTypeWorkstation,
+			Id:       "bob",
+			Location: factoryapi.FactoryValidationSubjectLocationOnFailure,
+		},
+	}
+	srv := newAPITestServer(&testutil.MockFactory{
+		SaveFactoryForSessionErr: apisurface.NewTopologyValidationError(
+			"Factory topology contains invalid graph references.",
+			[]factoryapi.FactoryValidationTarget{target},
+		),
+	})
+
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(upsertNamedFactoryRequestBody(validNamedFactoryBody("beta", "beta-task"))))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	assertPostFactoriesRouteRemoved(t, rec)
+
+	response := decodeJSONResponse[factoryapi.ErrorResponse](t, rec)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("response = %#v status=%d", response, rec.Code)
+	}
+	assertErrorResponsePreservesLegacyFields(
+		t,
+		response,
+		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorFamilyBadRequest,
+		"Factory payload is not a valid Agent Factory definition.",
+	)
+	if response.Targets == nil || len(*response.Targets) != 1 {
+		t.Fatalf("targets = %#v, want one canonical target", response.Targets)
+	}
+	got := (*response.Targets)[0]
+	assertBlockingValidationTarget(t, got)
+	assertHasValidationTarget(
+		t,
+		[]factoryapi.FactoryValidationTarget{got},
+		factoryvalidation.CodeWorkstationMissingFailureRoute,
+		factoryapi.FactoryValidationSubjectTypeWorkstation,
+		"bob",
+		factoryapi.FactoryValidationSubjectLocationOnFailure,
+		"bob ON_FAILURE target",
+	)
 }
 
 func assertErrorResponsePreservesLegacyFields(
@@ -384,15 +478,12 @@ func validNamedFactoryBody(name, workType string) string {
 	return fmt.Sprintf(`{"name":%q,%s`, name, strings.TrimPrefix(namedFactoryPayloadJSON(name, workType), "{"))
 }
 
-func saveFactoryForSessionBody(factoryJSON string) string {
+func saveFactoryForSessionRequestBody(factoryJSON string) string {
 	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
 }
 
-func assertPostFactoriesRouteRemoved(t *testing.T, rec *httptest.ResponseRecorder) {
-	t.Helper()
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("POST /factories status = %d, want 404 (route removed from published API): %s", rec.Code, rec.Body.String())
-	}
+func upsertNamedFactoryRequestBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"mode":"UPSERT_NAMED_AND_ACTIVATE","factory":%s}`, factoryJSON)
 }
 
 func namedFactoryPayloadJSON(project, workType string) string {

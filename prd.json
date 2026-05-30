@@ -1,30 +1,31 @@
 {
-  "project": "CLI Batch Work Submission",
-  "branchName": "ralph/cli-submit-batch",
-  "description": "Add `you submit batch` so operators and agents can submit canonical FACTORY_REQUEST_BATCH JSON to a running factory via file path, stdin, or inline JSON—with local validation, dry-run, and submit output aligned with unary submit.",
+  "project": "CI UI Coverage Test Sharding",
+  "branchName": "ralph/ci-coverage-test-sharding",
+  "description": "Shard the UI Coverage lane's main covered Vitest pass across ten parallel CI jobs, merge shard blob reports with Vitest --mergeReports, and keep make test-ui-coverage as the unsharded local canonical lane—cutting PR UI coverage wall time without weakening merged coverage thresholds.",
   "context": {
-    "customerAsk": "Implement CLI batch work submission: submit FACTORY_REQUEST_BATCH to a running factory via file, stdin, or inline JSON.",
-    "problem": "Batch ingress to a live factory today requires curl or watched input files. Unary `you submit` handles one work item; `you run --work` only submits at startup. There is no first-class CLI for upserting a canonical batch to an already-running session.",
-    "solution": "Add `you submit batch` under `you submit` that validates the same FACTORY_REQUEST_BATCH JSON as run and watched inputs, supports file/stdin/inline/--file/--dry-run, PUTs to the session work-requests endpoint, and prints human and JSON success output including per-work identifiers when the API returns them."
+    "customerAsk": "The CI pipeline takes about ten minutes because frontend coverage is slow. Separate UI coverage into its own CI steps, shard UI coverage tests into ten shards, and merge coverage results using Vitest merging.",
+    "problem": "The UI Coverage job runs the entire jsdom covered corpus on one ubuntu-latest runner (~8m52s lane command, ~403s main pass). That dominates PR CI wall time even though browser and backend lanes already run in parallel sibling jobs.",
+    "solution": "Keep UI coverage as a distinct lane but replace the monolithic job with a ten-way Vitest --shard matrix (blob reporter per shard) plus a merge job that downloads blobs, runs the existing serial follow-on phases (isolated React Flow, mergeReports with thresholds, standalone script, replay check), and preserves make test-ui-coverage for local full-lane reruns."
   },
   "acceptanceCriteria": [
-    "`you submit batch` exists under `you submit` and upserts valid FACTORY_REQUEST_BATCH JSON to a running factory session (default `~default` when `--session` is omitted).",
-    "Batch JSON is accepted from filesystem path (positional or `--file`), piped stdin or positional `-`, and inline `{…}` positional JSON.",
-    "`--dry-run` validates input, prints a summary, performs no HTTP, and exits 0 on valid input even when the factory is unreachable.",
-    "Success output (human and `--json`) includes requestId, traceId, work count, and per-work name, workTypeName, and workId when the API provides them.",
-    "Reference and packaged docs (`you docs batch-inputs`) document CLI batch submit alongside curl and watched-folder ingress.",
-    "Unary `you submit` and `you run --work` batch file behavior are unchanged.",
+    "When classification routes UI coverage to run, CI executes ten parallel shard jobs and one merge job instead of a single runner invoking full make test-ui-coverage.",
+    "Each shard runs only its Vitest-assigned subset of the main covered corpus with the same exclusions as today and uploads a distinct blob artifact; no test file runs in more than one shard.",
+    "The merge job combines all shard blobs plus the isolated React Flow blob and enforces the existing ui/vite.config.ts coverage thresholds and replay coverage check.",
+    "Shard or merge failures surface shard index and missing-artifact detail in GitHub Actions summaries; failure artifacts are retained for 14 days.",
+    "make test-ui-coverage locally remains the unsharded canonical lane with stable [ui-coverage] phase timing labels.",
+    "Maintainer docs record before/after CI wall time for the ten-shard rollout on ubuntu-latest.",
     "Typecheck, lint, and project tests pass."
   ],
   "userStories": [
     {
-      "id": "cli-submit-batch-001",
-      "title": "Shared canonical batch loader (file path)",
-      "description": "As a maintainer, I want one canonical batch JSON loader used by `you run --work` and `you submit batch` so parsing rules never diverge.",
+      "id": "ci-coverage-test-sharding-001",
+      "title": "Shard-aware main covered pass in the UI coverage runner",
+      "description": "As a maintainer, I want the UI coverage runner to execute one Vitest shard of the main covered pass so CI can fan out work without duplicating files across shards.",
       "acceptanceCriteria": [
-        "Reading batch JSON from an existing filesystem path returns a validated FACTORY_REQUEST_BATCH work request with the same semantics as today's `you run --work` file load.",
-        "Retired field aliases and conflicting trace fields are rejected with the same error guidance as today's run loader tests.",
-        "`you run --work` behavior is unchanged for file-based batches (regression tests pass).",
+        "When UI_COVERAGE_SHARD is set to i/n (e.g. 3/10), the runner runs only the main covered Vitest phase with --shard=i/n, today’s exclusions, coverage flags, and default two max workers unless overridden.",
+        "Each shard writes a unique blob under .vitest-reports/ via --outputFile.blob and does not run isolated React Flow, mergeReports, standalone script, or replay phases.",
+        "When UI_COVERAGE_SHARD is unset, make test-ui-coverage behavior is unchanged (full phased lane).",
+        "Shard mode emits [ui-coverage] elapsed timing for the shard main pass only.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,28 +34,29 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-002",
-      "title": "Upsert API returns per-work identifiers",
-      "description": "As an agent, I want the batch upsert response to include work identifiers so I can verify submission without listing all work.",
+      "id": "ci-coverage-test-sharding-002",
+      "title": "CI shard matrix job for UI coverage",
+      "description": "As a contributor waiting on CI, I want the main covered corpus split across ten parallel jobs so wall time drops below the current single-runner baseline.",
       "acceptanceCriteria": [
-        "Successful PUT /work-requests/{request_id} (session-scoped variant included) returns 201 with requestId, traceId, and a works array where each item includes name, workTypeName, and workId.",
-        "Multi-work batch upsert populates works for every accepted item in API tests.",
-        "OpenAPI schema and generated types reflect works on upsert response.",
-        "Typecheck passes",
-        "Tests pass"
+        "ci.yml defines ui-coverage-shard with strategy.matrix.shard 1 through 10, gated by run_ui_coverage like today’s lane.",
+        "Each matrix cell runs make ui-deps then the shard entrypoint with UI_COVERAGE_SHARD=<index>/10, teeing logs to .artifacts/ui-coverage-shard-<index>/command.log.",
+        "Each successful shard uploads an artifact with its .vitest-reports blob(s) and command log.",
+        "Shard matrix jobs execute in parallel when coverage runs.",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-003",
-      "title": "Command discovery and help",
-      "description": "As an operator, I want to discover batch submit next to unary submit so I know which command to use for multi-work ingress.",
+      "id": "ci-coverage-test-sharding-003",
+      "title": "CI merge job for shard blobs and serial follow-on phases",
+      "description": "As a maintainer, I want one merge job to combine shard coverage and run the remaining lane phases so the regression contract stays identical to the pre-shard lane.",
       "acceptanceCriteria": [
-        "`you submit batch --help` documents batch input modes (positional path, optional --file, -/stdin, pipe-with-no-args, inline JSON), --dry-run, --session, and global --server / --json / --verbose.",
-        "Help states the command expects FACTORY_REQUEST_BATCH and points to `you docs batch-inputs`.",
-        "Help does not advertise unary-only flags (--name, --work-type-name, --payload, --work-type-id).",
+        "ui-coverage-merge depends on all ten shard jobs, downloads every shard blob into .vitest-reports/, and fails if any expected shard artifact is missing.",
+        "Merge job runs isolated React Flow covered pass, vitest --mergeReports .vitest-reports --coverage with ui/vite.config.ts thresholds, standalone script-style test, and ui-replay-coverage-check in that order.",
+        "Merge step summary reports passed or failed merged thresholds and names missing shard indices when blocked.",
+        "Merge failures retain .artifacts/ui-coverage-merge/ logs for 14 days.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -63,146 +65,45 @@
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-004",
-      "title": "Submit batch to running factory (HTTP + dry-run)",
-      "description": "As an operator, I want to upsert a canonical batch to a running factory session, or validate locally without sending traffic.",
+      "id": "ci-coverage-test-sharding-004",
+      "title": "Replace monolithic ui-coverage job wiring",
+      "description": "As a CI operator, I want the workflow’s UI Coverage lane to mean sharded execution plus merge so PR checks reflect the new architecture.",
       "acceptanceCriteria": [
-        "With valid batch JSON from a file, the CLI issues PUT to /factory-sessions/{session}/work-requests/{requestId} where requestId in the path matches the body; Content-Type is application/json.",
-        "Body type must be FACTORY_REQUEST_BATCH with at least one works entry; violations fail locally before HTTP.",
-        "HTTP 201 is success; other statuses surface API error message when present; unreachable factory errors match unary submit transport style.",
-        "--session scopes the request like unary submit.",
-        "--dry-run parses and validates only, prints summary (requestId, work count, work names, relationCount, batchSource, dry-run: no request sent), performs zero HTTP calls, exits 0 on valid input even when the server is down.",
-        "Typecheck passes",
-        "Tests pass"
+        "The old single-runner ui-coverage job that runs full make test-ui-coverage is removed or disabled; required coverage execution uses shard plus merge jobs only.",
+        "Classification outputs still recommend make test-ui-coverage for local reruns; CI summaries reference shard and merge jobs.",
+        "verify-pr documentation remains accurate: local verify uses unsharded test-ui-coverage.",
+        "Typecheck passes"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-005",
-      "title": "Piped stdin and explicit `-`",
-      "description": "As an agent, I want to pipe batch JSON so I can submit without a temp file.",
+      "id": "ci-coverage-test-sharding-005",
+      "title": "Shard failure observability",
+      "description": "As a contributor debugging a red PR, I want shard failures to identify which slice failed without reading ten full logs blindly.",
       "acceptanceCriteria": [
-        "`cat batch.json | you submit batch` submits when stdin is not a TTY.",
-        "`you submit batch -` reads batch JSON from stdin.",
-        "`you submit batch` with no args and interactive TTY stdin fails immediately with usage guidance.",
-        "Empty piped stdin fails with a clear empty-input error.",
-        "When a file path or --file is provided, stdin is ignored.",
-        "Typecheck passes",
-        "Tests pass"
+        "Failed shard jobs upload logs and any partial blob artifacts.",
+        "Failed shard step summaries include shard index i/10, exit code, and the last 40 lines of command.log.",
+        "Merge job summaries list absent shard indices when merge is blocked by missing artifacts.",
+        "Typecheck passes"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "cli-submit-batch-006",
-      "title": "Inline JSON positional",
-      "description": "As a script author, I want to pass a small batch document as one positional argument.",
+      "id": "ci-coverage-test-sharding-006",
+      "title": "Timing evidence and maintainer documentation",
+      "description": "As a maintainer, I want recorded before/after CI timings and rerun instructions so we can verify the sharding investment and operate the lane safely.",
       "acceptanceCriteria": [
-        "Positional whose first non-whitespace byte is `{` is parsed as inline JSON, not as a filesystem path.",
-        "A non-existent path that does not look like JSON errors as missing file/JSON, not as JSON parse of the path string.",
-        "Inline JSON uses the same canonical validation as file and stdin input.",
-        "Help notes shell length limits; large batches should use file or pipe.",
-        "Typecheck passes",
-        "Tests pass"
+        "ui-coverage-speed-closeout.md documents a CI ten-shard rollout subsection with pre-shard baseline, post-shard wall time, and a link to the first green proof run.",
+        "development.md or development-guide relevant-files documents UI_COVERAGE_SHARD, shard-only vs full make test-ui-coverage, and mergeReports threshold ownership.",
+        "Post-shard UI Coverage lane completion on ubuntu-latest is at or below four minutes job wall for the baseline commit class, or the doc explains measured wall if overhead prevents the target.",
+        "Typecheck passes"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-007",
-      "title": "Optional `--file` flag",
-      "description": "As a script author, I want an explicit file flag when positional arguments are awkward.",
-      "acceptanceCriteria": [
-        "`--file <path>` reads batch JSON; `--file -` reads stdin.",
-        "When both --file and a positional path are set, --file wins (documented in help).",
-        "Positional path remains the primary documented form.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-008",
-      "title": "Human success output",
-      "description": "As an operator, I want confirmation that lists what was submitted and what to run next.",
-      "acceptanceCriteria": [
-        "On 201, stdout includes requestId, traceId, work count, and each accepted work's name and workTypeName.",
-        "When the API returns workId, each work line includes it and a hint `you work show <work-id>`; otherwise hints use `you work list --name <name>`.",
-        "Long name lists truncate (at most ten lines); relationCount shown when relations are non-empty.",
-        "Full batch JSON and per-work payloads are not printed on stdout.",
-        "--verbose logs endpoint, batchSource (file, stdin, inline), byte size, requestId, and work count on stderr—never payload content.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-009",
-      "title": "JSON success output",
-      "description": "As a script, I want machine-readable batch submit confirmation.",
-      "acceptanceCriteria": [
-        "Global --json emits one object with at minimum: requestId, traceId, workCount, relationCount, sessionId, endpointPath, batchSource, and works (each with name, workTypeName, workId when returned).",
-        "--json with --dry-run emits dryRun: true and summary fields without traceId unless present in input.",
-        "Exit code 0 on success; non-zero on validation or HTTP errors.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-010",
-      "title": "Error surfaces",
-      "description": "As an agent, I want validation failures before HTTP and API failures after HTTP to be distinguishable.",
-      "acceptanceCriteria": [
-        "Canonical validation errors include retired-field guidance where applicable.",
-        "Missing or empty requestId, empty works, and invalid JSON fail locally.",
-        "HTTP 400/404 (and 409 if applicable) print status and bounded API message; no success JSON on failure.",
-        "Tests cover invalid JSON, empty works, mocked 400, and mocked 404.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-011",
-      "title": "Reference and packaged documentation",
-      "description": "As a new contributor, I want docs to show CLI batch submit alongside curl and watched-folder ingress.",
-      "acceptanceCriteria": [
-        "docs/reference/batch-inputs.md adds a CLI subsection with examples for file, --file, pipe, inline JSON, and --dry-run; keeps existing curl example.",
-        "Ingress comparison covers: you submit (single), you submit batch (running factory), you run --work (startup), watched factory/inputs/BATCH/.",
-        "Packaged `you docs batch-inputs` content matches reference updates.",
-        "Doc tests guard you submit batch and FACTORY_REQUEST_BATCH markers where other CLI examples are guarded.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "cli-submit-batch-012",
-      "title": "End-to-end smoke (optional)",
-      "description": "As a maintainer, I want one functional smoke proving batch CLI reaches a running factory when the harness supports it.",
-      "acceptanceCriteria": [
-        "If the existing smoke harness can start a factory and accept work-request upserts, one smoke runs `you submit batch` with a minimal checked-in batch file and asserts success markers in output.",
-        "If harness cost is prohibitive, implementation notes document deferral and httptest coverage from earlier stories is cited as the verification substitute.",
-        "Typecheck passes",
-        "Tests pass (or smoke story cancelled with documented justification)"
-      ],
-      "priority": 12,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

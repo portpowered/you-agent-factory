@@ -2,20 +2,21 @@ import { FactoryGraphEditorAddEntityDialog } from "../../factory-graph-editor/co
 import { FactoryGraphEditorConfirmationDialog } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/components/factory-graph-editor-leave-dialog";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { useFactoryImportActivationTarget } from "../../import/hooks/use-factory-import-activation-target";
+import { useFactoryImportSaveChoice } from "../../import/hooks/use-factory-import-save-choice";
 import { FactoryImportPreviewDialog } from "../../import/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";
 
 export function CurrentActivityGraphEditorDialogs({
-  currentSessionFactoryName,
   editor,
   imports,
   locale,
   readyImportPreviewState,
+  sessionID,
   shouldRenderImportPreviewDialog,
 }: {
-  currentSessionFactoryName: string;
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   imports: CurrentActivityImportController;
   locale?: string;
@@ -23,23 +24,42 @@ export function CurrentActivityGraphEditorDialogs({
     CurrentActivityImportController["importPreviewState"],
     { status: "ready" }
   > | null;
+  sessionID?: string | null;
   shouldRenderImportPreviewDialog: boolean;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
+  const [importSaveChoice, setImportSaveChoice] = useFactoryImportSaveChoice(
+    readyImportPreviewState,
+  );
+  const importActivationTarget = useFactoryImportActivationTarget({
+    enabled:
+      shouldRenderImportPreviewDialog && readyImportPreviewState !== null,
+    preferredFactoryName: readyImportPreviewState?.value?.factory?.name,
+    sessionID,
+  });
+
   return (
     <>
       {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
         <FactoryImportPreviewDialog
           activationState={imports.activationState}
-          currentSessionFactoryName={currentSessionFactoryName}
+          createTargetFactoryName={
+            importActivationTarget.createTargetFactoryName
+          }
+          currentFactoryName={importActivationTarget.currentFactoryName}
+          importSaveChoice={importSaveChoice}
           locale={locale}
           onCancel={() => {
             imports.clearActivationError();
             imports.closeImportPreview();
           }}
-          onConfirm={(input) => {
-            void imports.activateImport(input);
+          onConfirm={() => {
+            void imports.activateImport(
+              readyImportPreviewState.value,
+              importSaveChoice,
+            );
           }}
+          onImportSaveChoiceChange={setImportSaveChoice}
           previewState={readyImportPreviewState}
         />
       ) : null}

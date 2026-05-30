@@ -1,21 +1,22 @@
 import type { components } from "../generated/openapi";
-import { factoryAPIURL } from "../baseUrl";
 import {
   CurrentFactoryDefinitionError,
   getCurrentFactoryDocument,
   saveCurrentFactoryDocument,
+  saveFactoryForSessionDocument,
   type CurrentFactoryDocument,
-  type CurrentFactoryVersion,
 } from "../current-factory-definition";
 import {
-  saveSessionFactory,
-  SessionFactoryAPIError,
-} from "../session-factory";
+  listFactorySessions,
+  openFactorySession,
+} from "../factory-sessions";
+import { currentFactorySessionPath } from "../session-routing";
 import {
-  DEFAULT_FACTORY_SESSION_ID,
-  currentFactorySessionPath,
-  isDefaultFactorySessionID,
-} from "../session-routing";
+  extractNamedFactoryNamesFromSessionTargets,
+  resolveImportCreateFactoryName,
+  type FactoryImportSaveChoice,
+} from "./import-save-mode";
+import { factoryAPIURL } from "../baseUrl";
 import {
   extractAPIErrorPayload,
   isAPIRecord,
@@ -23,8 +24,6 @@ import {
 } from "../transport";
 
 export type FactoryValue = components["schemas"]["Factory"];
-
-export type FactoryImportSaveChoice = "replace_current" | "create_new_named";
 
 export type NamedFactoryAPIErrorCode =
   | "BAD_REQUEST"
@@ -50,12 +49,27 @@ export interface GetCurrentFactoryOptions {
 }
 
 export interface ActivateImportedFactoryForSessionOptions {
-  choice?: FactoryImportSaveChoice;
-  createFactoryName?: string;
-  existingFactoryNames?: readonly string[];
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
 }
+
+export interface ActivateImportedFactoryAsNewNamedOptions {
+  fetch?: typeof globalThis.fetch;
+  existingNamedFactoryNames?: readonly string[];
+  sessionID?: string | null;
+}
+
+export interface DiscoverSessionNamedFactoryNamesOptions {
+  fetch?: typeof globalThis.fetch;
+  sessionID?: string | null;
+}
+
+export type { FactoryImportSaveChoice } from "./import-save-mode";
+export {
+  allocateFirstFreeSuffixedFactoryName,
+  extractNamedFactoryNamesFromSessionTargets,
+  resolveImportCreateFactoryName,
+} from "./import-save-mode";
 
 export class NamedFactoryAPIError extends Error {
   public readonly code: NamedFactoryAPIErrorCode;
@@ -129,17 +143,6 @@ export async function activateImportedFactoryForSession(
   importedFactory: FactoryValue,
   options: ActivateImportedFactoryForSessionOptions = {},
 ): Promise<FactoryValue> {
-  if (options.choice === "create_new_named") {
-    return activateImportedFactoryCreateNamedForSession(importedFactory, options);
-  }
-
-  return activateImportedFactoryReplaceCurrentForSession(importedFactory, options);
-}
-
-async function activateImportedFactoryReplaceCurrentForSession(
-  importedFactory: FactoryValue,
-  options: ActivateImportedFactoryForSessionOptions,
-): Promise<FactoryValue> {
   let currentDocument: CurrentFactoryDocument;
   try {
     currentDocument = await getCurrentFactoryDocument({
@@ -172,50 +175,90 @@ async function activateImportedFactoryReplaceCurrentForSession(
   return toActivatedFactoryValue(savedDocument);
 }
 
-async function activateImportedFactoryCreateNamedForSession(
-  importedFactory: FactoryValue,
-  options: ActivateImportedFactoryForSessionOptions,
-): Promise<FactoryValue> {
-  const createFactoryName = options.createFactoryName?.trim();
-  if (!createFactoryName) {
-    throw new NamedFactoryAPIError("A factory name is required to create a new named factory.", {
-      code: "INVALID_FACTORY_NAME",
-    });
+export async function discoverSessionNamedFactoryNames(
+  options: DiscoverSessionNamedFactoryNamesOptions = {},
+): Promise<string[]> {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const sessions = await listFactorySessions({ fetch: fetchImplementation });
+  const session = sessions.find((entry) => entry.id === normalizeSessionID(options.sessionID));
+  if (!session?.folderPath) {
+    return [];
   }
 
-  const sessionID = resolveActivateImportedFactorySessionID(options.sessionID);
-  let currentDocument: CurrentFactoryDocument;
-  try {
-    currentDocument = await getCurrentFactoryDocument({
-      fetch: options.fetch,
+  const response = await openFactorySession(
+    {
+      folderPath: session.folderPath,
+      validateOnly: true,
+    },
+    { fetch: fetchImplementation },
+  );
+
+  return extractNamedFactoryNamesFromSessionTargets(response.targets);
+}
+
+export async function activateImportedFactoryAsNewNamedForSession(
+  importedFactory: FactoryValue,
+  options: ActivateImportedFactoryAsNewNamedOptions = {},
+): Promise<FactoryValue> {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const existingNamedFactoryNames =
+    options.existingNamedFactoryNames ??
+    (await discoverSessionNamedFactoryNames({
+      fetch: fetchImplementation,
       sessionID: options.sessionID,
-    });
+    }));
+  const preferredName =
+    typeof importedFactory.name === "string" ? importedFactory.name : "";
+  const { factoryName, replacesExisting } = resolveImportCreateFactoryName(
+    preferredName,
+    existingNamedFactoryNames,
+  );
+
+  let currentDocument: CurrentFactoryDocument | undefined;
+  if (replacesExisting) {
+    try {
+      currentDocument = await getCurrentFactoryDocument({
+        fetch: fetchImplementation,
+        sessionID: options.sessionID,
+      });
+    } catch (error) {
+      throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
+    }
+  }
+
+  const { version: _version, ...importedWithoutVersion } = importedFactory;
+  const factoryDefinition: FactoryValue = {
+    ...importedWithoutVersion,
+    name: factoryName,
+  };
+
+  let savedDocument: CurrentFactoryDocument;
+  try {
+    savedDocument = await saveFactoryForSessionDocument(
+      {
+        baseVersion:
+          replacesExisting && currentDocument?.name === factoryName
+            ? currentDocument.version
+            : undefined,
+        factoryDefinition,
+        includeVersion: replacesExisting,
+        mode: "UPSERT_NAMED_AND_ACTIVATE",
+      },
+      {
+        fetch: fetchImplementation,
+        sessionID: options.sessionID,
+      },
+    );
   } catch (error) {
     throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
   }
 
-  const factoryForSave = toCreateNamedImportedFactoryDefinition(
-    importedFactory,
-    createFactoryName,
-    currentDocument,
-    options.existingFactoryNames,
-  );
-
-  let savedDocument: CurrentFactoryDocument;
-  try {
-    savedDocument = await saveSessionFactory(
-      {
-        factory: factoryForSave,
-        mode: "UPSERT_NAMED_AND_ACTIVATE",
-        sessionID,
-      },
-      { fetch: options.fetch },
-    );
-  } catch (error) {
-    throw toNamedFactoryAPIErrorFromSessionFactory(error);
-  }
-
   return toActivatedFactoryValue(savedDocument);
+}
+
+function normalizeSessionID(sessionID: string | null | undefined): string {
+  const trimmed = sessionID?.trim();
+  return trimmed ? trimmed : "~default";
 }
 
 function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFactoryAPIErrorCode {
@@ -243,14 +286,6 @@ function isFactoryValue(value: unknown): value is FactoryValue {
   );
 }
 
-function resolveActivateImportedFactorySessionID(
-  sessionID: string | null | undefined,
-): string {
-  return isDefaultFactorySessionID(sessionID)
-    ? DEFAULT_FACTORY_SESSION_ID
-    : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
-}
-
 function toImportedFactoryDefinition(
   importedFactory: FactoryValue,
   sessionFactoryName: string,
@@ -262,95 +297,9 @@ function toImportedFactoryDefinition(
   };
 }
 
-function toCreateNamedImportedFactoryDefinition(
-  importedFactory: FactoryValue,
-  createFactoryName: string,
-  currentDocument: CurrentFactoryDocument,
-  existingFactoryNames: readonly string[] | undefined,
-): FactoryValue {
-  const { version: _version, ...importedWithoutVersion } = importedFactory;
-  const factory: FactoryValue = {
-    ...importedWithoutVersion,
-    name: createFactoryName,
-  };
-
-  if (!shouldIncludeVersionForImportCreateNamed(createFactoryName, currentDocument, existingFactoryNames)) {
-    return factory;
-  }
-
-  return {
-    ...factory,
-    version: incrementImportedFactoryVersion(currentDocument.version),
-  };
-}
-
-function shouldIncludeVersionForImportCreateNamed(
-  createFactoryName: string,
-  currentDocument: CurrentFactoryDocument,
-  existingFactoryNames: readonly string[] | undefined,
-): boolean {
-  const normalizedCreateFactoryName = createFactoryName.trim();
-  if (normalizedCreateFactoryName.length === 0) {
-    return false;
-  }
-
-  if (normalizedCreateFactoryName === currentDocument.name.trim()) {
-    return true;
-  }
-
-  const knownExistingNames = new Set(
-    [
-      currentDocument.name,
-      ...(existingFactoryNames ?? []),
-    ]
-      .map((name) => name.trim())
-      .filter((name) => name.length > 0),
-  );
-
-  return knownExistingNames.has(normalizedCreateFactoryName);
-}
-
-function incrementImportedFactoryVersion(
-  version: CurrentFactoryVersion,
-): CurrentFactoryVersion {
-  return {
-    logical: (BigInt(version.logical) + 1n).toString(),
-    physical: incrementImportedFactoryVersionPhysical(version.physical),
-  };
-}
-
-function incrementImportedFactoryVersionPhysical(physical: string): string {
-  const parsed = Date.parse(physical);
-  if (!Number.isFinite(parsed)) {
-    return physical;
-  }
-  return new Date(parsed + 1).toISOString();
-}
-
 function toActivatedFactoryValue(document: CurrentFactoryDocument): FactoryValue {
   const { version: _version, ...factoryValue } = document;
   return factoryValue;
-}
-
-function toNamedFactoryAPIErrorFromSessionFactory(error: unknown): NamedFactoryAPIError {
-  if (error instanceof SessionFactoryAPIError) {
-    return new NamedFactoryAPIError(error.message, {
-      code: normalizeNamedFactoryAPIErrorCode(error.code),
-      responseBody: error.responseBody,
-      status: error.status,
-      statusText: error.statusText,
-    });
-  }
-
-  if (error instanceof NamedFactoryAPIError) {
-    return error;
-  }
-
-  if (error instanceof Error) {
-    return new NamedFactoryAPIError(error.message, { code: "INTERNAL_ERROR" });
-  }
-
-  return new NamedFactoryAPIError("Factory activation failed.", { code: "INTERNAL_ERROR" });
 }
 
 function toNamedFactoryAPIErrorFromCurrentFactoryDefinition(

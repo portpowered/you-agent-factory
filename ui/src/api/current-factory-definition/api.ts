@@ -1,22 +1,28 @@
 import type { components } from "../generated/openapi";
-import type { CanonicalFactoryDefinition } from "../factory-definition";
+import { factoryAPIURL } from "../baseUrl";
 import {
-  getSessionFactory,
-  saveSessionFactory,
-  SessionFactoryAPIError,
-} from "../session-factory";
-import { sessionFactoryAPIErrorMessages } from "../session-factory/messages";
+  FactoryDefinitionAPIError,
+  normalizeFactoryDefinition,
+  type CanonicalFactoryDefinition,
+} from "../factory-definition";
+import { currentFactorySessionPath } from "../session-routing";
 import {
-  DEFAULT_FACTORY_SESSION_ID,
-  isDefaultFactorySessionID,
-} from "../session-routing";
+  extractAPIErrorPayload,
+  isAPIRecord,
+  readAPIResponseBody,
+} from "../transport";
 import { currentFactoryDefinitionAPIErrorMessages } from "./messages";
 
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 
 type CanonicalFactory = components["schemas"]["Factory"];
+type FactorySaveMode = components["schemas"]["FactorySaveMode"];
 export type CurrentFactoryVersion =
   components["schemas"]["HybridLogicalTimestamp"];
+
+/** Dashboard editor and replace-current import activation use session PUT with this mode only. */
+export const CURRENT_FACTORY_EDITOR_SAVE_MODE =
+  "REPLACE_CURRENT" satisfies FactorySaveMode;
 type FactoryValidationTarget = components["schemas"]["FactoryValidationTarget"];
 
 export type CurrentFactoryDocument = CanonicalFactoryDefinition & {
@@ -56,6 +62,27 @@ export interface SaveCurrentFactoryInput {
   factoryDefinition: CanonicalFactoryDefinition;
 }
 
+export interface SaveFactoryForSessionInput {
+  baseVersion?: CurrentFactoryVersion;
+  factoryDefinition: CanonicalFactoryDefinition;
+  includeVersion?: boolean;
+  mode: FactorySaveMode;
+}
+
+interface RequestCurrentFactoryDocumentOptions {
+  body?: string;
+  fetch?: typeof globalThis.fetch;
+  headers?: HeadersInit;
+  method: "GET" | "PUT";
+  rejectedMessage: string;
+  sessionID?: string | null;
+}
+
+type FactoryDocumentRecord = Record<string, unknown> & {
+  name?: unknown;
+  version: unknown;
+};
+
 export class CurrentFactoryDefinitionError extends Error {
   public readonly cause?: unknown;
   public readonly code: CurrentFactoryDefinitionErrorCode;
@@ -88,110 +115,194 @@ export async function getCurrentFactoryDefinition(
 export async function getCurrentFactoryDocument(
   options: GetCurrentFactoryDefinitionOptions = {},
 ): Promise<CurrentFactoryDocument> {
-  try {
-    return await getSessionFactory(resolveCurrentFactorySessionID(options.sessionID), {
-      fetch: options.fetch,
-    });
-  } catch (error) {
-    throw mapSessionFactoryError(error);
-  }
+  return requestCurrentFactoryDocument({
+    fetch: options.fetch,
+    method: "GET",
+    rejectedMessage:
+      currentFactoryDefinitionAPIErrorMessages.rejectedRequest,
+    sessionID: options.sessionID,
+  });
 }
 
 export async function saveCurrentFactoryDocument(
   input: SaveCurrentFactoryInput,
   options: SaveCurrentFactoryOptions = {},
 ): Promise<CurrentFactoryDocument> {
-  const factory: CanonicalFactory = {
-    ...input.factoryDefinition,
-    version: incrementCurrentFactoryVersion(input.baseVersion),
-  };
-
-  try {
-    return await saveSessionFactory(
-      {
-        factory,
-        mode: "REPLACE_CURRENT",
-        sessionID: resolveCurrentFactorySessionID(options.sessionID),
-      },
-      { fetch: options.fetch },
-    );
-  } catch (error) {
-    throw mapSessionFactoryError(error);
-  }
-}
-
-function resolveCurrentFactorySessionID(
-  sessionID: string | null | undefined,
-): string {
-  return isDefaultFactorySessionID(sessionID)
-    ? DEFAULT_FACTORY_SESSION_ID
-    : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
-}
-
-function mapSessionFactoryError(error: unknown): CurrentFactoryDefinitionError {
-  if (!(error instanceof SessionFactoryAPIError)) {
-    throw error;
-  }
-
-  throw new CurrentFactoryDefinitionError(
-    mapSessionFactoryErrorMessage(error),
+  return saveFactoryForSessionDocument(
     {
-      cause: error.cause,
-      code: mapSessionFactoryErrorCode(error.code),
-      responseBody: error.responseBody,
-      status: error.status,
-      statusText: error.statusText,
-      targets: error.targets,
+      baseVersion: input.baseVersion,
+      factoryDefinition: input.factoryDefinition,
+      mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
     },
+    options,
   );
 }
 
-function mapSessionFactoryErrorMessage(error: SessionFactoryAPIError): string {
-  switch (error.message) {
-    case sessionFactoryAPIErrorMessages.network:
-      return currentFactoryDefinitionAPIErrorMessages.network;
-    case sessionFactoryAPIErrorMessages.unavailableInEnvironment:
-      return currentFactoryDefinitionAPIErrorMessages.unavailableInEnvironment;
-    case sessionFactoryAPIErrorMessages.rejectedRequest:
-      return currentFactoryDefinitionAPIErrorMessages.rejectedRequest;
-    case sessionFactoryAPIErrorMessages.rejectedSaveRequest:
-      return currentFactoryDefinitionAPIErrorMessages.rejectedSaveRequest;
-    case sessionFactoryAPIErrorMessages.invalidResponse:
-      return currentFactoryDefinitionAPIErrorMessages.invalidResponse;
-    default:
-      if (
-        error.code === "INVALID_FACTORY_DEFINITION" &&
-        error.message.startsWith(
-          "The session factory API returned a factory definition the dashboard cannot use.",
-        )
-      ) {
-        return error.message.replace(
-          "The session factory API returned a factory definition the dashboard cannot use.",
-          "The current factory editing API returned a factory definition the dashboard cannot edit.",
-        );
-      }
-      return error.message;
+export async function saveFactoryForSessionDocument(
+  input: SaveFactoryForSessionInput,
+  options: SaveCurrentFactoryOptions = {},
+): Promise<CurrentFactoryDocument> {
+  const includeVersion =
+    input.includeVersion ?? input.mode === CURRENT_FACTORY_EDITOR_SAVE_MODE;
+  const factoryPayload: CanonicalFactory = {
+    ...input.factoryDefinition,
+  };
+  if (includeVersion) {
+    factoryPayload.version = incrementCurrentFactoryVersion(input.baseVersion);
+  } else {
+    delete factoryPayload.version;
+  }
+
+  const requestBody = {
+    mode: input.mode,
+    factory: factoryPayload,
+  };
+
+  return requestCurrentFactoryDocument({
+    body: JSON.stringify(requestBody),
+    fetch: options.fetch,
+    headers: {
+      "content-type": "application/json",
+    },
+    method: "PUT",
+    rejectedMessage:
+      currentFactoryDefinitionAPIErrorMessages.rejectedSaveRequest,
+    sessionID: options.sessionID,
+  });
+}
+
+async function requestCurrentFactoryDocument({
+  body,
+  fetch,
+  headers,
+  method,
+  rejectedMessage,
+  sessionID,
+}: RequestCurrentFactoryDocumentOptions): Promise<CurrentFactoryDocument> {
+  const fetchImplementation = fetch ?? globalThis.fetch;
+
+  if (typeof fetchImplementation !== "function") {
+    throw new CurrentFactoryDefinitionError(
+      currentFactoryDefinitionAPIErrorMessages.unavailableInEnvironment,
+      {
+        code: "NETWORK_ERROR",
+      },
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await fetchImplementation(
+      factoryAPIURL(currentFactorySessionPath(sessionID)),
+      {
+        body,
+        headers,
+        method,
+      },
+    );
+  } catch (error) {
+    throw new CurrentFactoryDefinitionError(
+      currentFactoryDefinitionAPIErrorMessages.network,
+      {
+        cause: error,
+        code: "NETWORK_ERROR",
+        responseBody: error,
+      },
+    );
+  }
+
+  const responseBody = await readAPIResponseBody(response);
+  if (!response.ok) {
+    const errorBody = extractAPIErrorPayload(responseBody, {
+      isTarget: isErrorTarget,
+    });
+    throw new CurrentFactoryDefinitionError(
+      errorBody?.message ?? rejectedMessage,
+      {
+        code: normalizeCurrentFactoryDefinitionErrorCode(
+          errorBody?.code,
+        ),
+        responseBody,
+        status: response.status,
+        statusText: response.statusText,
+        targets: errorBody?.targets,
+      },
+    );
+  }
+
+  return normalizeCurrentFactoryDocument(responseBody, {
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
+function normalizeCurrentFactoryDocument(
+  responseBody: unknown,
+  responseDetails: Pick<
+    CurrentFactoryDefinitionErrorDetails,
+    "status" | "statusText"
+  >,
+): CurrentFactoryDocument {
+  if (!isEditableFactoryDefinitionValue(responseBody)) {
+    throw new CurrentFactoryDefinitionError(
+      currentFactoryDefinitionAPIErrorMessages.invalidResponse,
+      {
+        code: "INTERNAL_ERROR",
+        responseBody,
+        ...responseDetails,
+      },
+    );
+  }
+
+  try {
+    const normalizedFactory = normalizeFactoryDefinition(responseBody);
+    const version = normalizeCurrentFactoryVersion(
+      normalizedFactory.version,
+    );
+
+    return {
+      ...normalizedFactory,
+      version,
+    };
+  } catch (error) {
+    if (error instanceof FactoryDefinitionAPIError) {
+      throw new CurrentFactoryDefinitionError(
+        `The current factory editing API returned a factory definition the dashboard cannot edit. ${error.message}`,
+        {
+          cause: error,
+          code: "INVALID_FACTORY_DEFINITION",
+          responseBody,
+          ...responseDetails,
+        },
+      );
+    }
+
+    throw error;
   }
 }
 
-function mapSessionFactoryErrorCode(
-  code: SessionFactoryAPIError["code"],
-): CurrentFactoryDefinitionErrorCode {
-  switch (code) {
-    case "BAD_REQUEST":
-    case "NOT_FOUND":
-    case "FACTORY_NOT_IDLE":
-    case "STALE_FACTORY_VERSION":
-    case "INVALID_FACTORY_DEFINITION":
-    case "NETWORK_ERROR":
-      return code;
-    case "INVALID_FACTORY":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "INVALID_FACTORY_DEFINITION";
-    default:
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "INTERNAL_ERROR";
+function normalizeCurrentFactoryVersion(
+  value: unknown,
+): CurrentFactoryVersion {
+  const record = isAPIRecord(value) ? value : null;
+  if (
+    !record ||
+    !isCurrentFactoryVersionLogicalValue(record.logical) ||
+    typeof record.physical !== "string"
+  ) {
+    throw new CurrentFactoryDefinitionError(
+      currentFactoryDefinitionAPIErrorMessages.invalidResponse,
+      {
+        code: "INTERNAL_ERROR",
+        responseBody: value,
+      },
+    );
   }
+
+  return {
+    logical: String(record.logical),
+    physical: record.physical,
+  };
 }
 
 function incrementCurrentFactoryVersion(
@@ -213,4 +324,54 @@ function incrementCurrentFactoryVersionPhysical(physical: string): string {
     return physical;
   }
   return new Date(parsed + 1).toISOString();
+}
+
+function isCurrentFactoryVersionLogicalValue(value: unknown): value is number | string {
+  if (typeof value === "string") {
+    return /^[0-9]+$/.test(value);
+  }
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function normalizeCurrentFactoryDefinitionErrorCode(
+  code: string | undefined,
+): CurrentFactoryDefinitionErrorCode {
+  switch (code) {
+    case "BAD_REQUEST":
+      return code;
+    case "NOT_FOUND":
+      return code;
+    case "FACTORY_NOT_IDLE":
+      return code;
+    case "STALE_FACTORY_VERSION":
+      return code;
+    case "INVALID_FACTORY":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return "INVALID_FACTORY_DEFINITION";
+    default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return "INTERNAL_ERROR";
+  }
+}
+
+function isEditableFactoryDefinitionValue(
+  value: unknown,
+): value is FactoryDocumentRecord {
+  if (!isAPIRecord(value) || !isAPIRecord(value.version)) {
+    return false;
+  }
+  return value.name !== undefined;
+}
+
+function isErrorTarget(value: unknown): value is FactoryValidationTarget {
+  return (
+    isAPIRecord(value) &&
+    typeof value.code === "string" &&
+    typeof value.message === "string" &&
+    typeof value.severity === "string" &&
+    isAPIRecord(value.subject) &&
+    typeof value.subject.type === "string" &&
+    typeof value.subject.id === "string" &&
+    typeof value.subject.location === "string"
+  );
 }

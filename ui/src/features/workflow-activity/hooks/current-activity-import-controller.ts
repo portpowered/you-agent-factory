@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 
-import type { FactoryValue } from "../../../api/named-factory";
-import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
+import type { FactoryImportSaveChoice, FactoryValue } from "../../../api/named-factory";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import {
   type FactoryImportActivationState,
@@ -18,7 +17,10 @@ import {
 } from "../../import/hooks/use-factory-png-drop";
 
 export interface CurrentActivityImportController {
-  activateImport: (input: FactoryImportConfirmInput) => Promise<void>;
+  activateImport: (
+    value: FactoryPngImportValue,
+    choice?: FactoryImportSaveChoice,
+  ) => Promise<void>;
   activationState: FactoryImportActivationState;
   clearActivationError: () => void;
   clearError: () => void;
@@ -32,7 +34,7 @@ export interface CurrentActivityImportController {
 }
 
 export interface UseCurrentActivityImportControllerOptions {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
+  activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   locale?: string | null;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;

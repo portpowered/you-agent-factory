@@ -1,4 +1,7 @@
 ## Codebase Patterns
+- UI coverage sharding: set `UI_COVERAGE_SHARD=index/total` (for example `3/10`) so `ui/scripts/ui-coverage-runner.mjs` runs only the main covered Vitest pass with `--shard=index/total`, writes `.vitest-reports/main-shard-<index>.json`, and skips merge, isolated React Flow, standalone script, and replay; unset `UI_COVERAGE_SHARD` keeps full `make test-ui-coverage` (Makefile skips `ui-replay-coverage-check` while the env var is set).
+- CI `ui-coverage-shard` matrix: `strategy.matrix.shard` 1–10 with `shard-total: 10`, job-level `if: run_ui_coverage`, `fail-fast: false`, each cell runs `UI_COVERAGE_SHARD=<index>/10 make ui-test-coverage` with logs at `.artifacts/ui-coverage-shard-<index>/command.log`, and on success uploads `ui/.vitest-reports/` plus the command log as artifact `ui-coverage-shard-<index>`; `ui-coverage-merge` (job name `UI Coverage` when the lane runs) downloads shard artifacts, fails with missing shard indices when blobs are absent, and runs `make test-ui-coverage-merge` (`UI_COVERAGE_MERGE=1` merge phases plus `ui-replay-coverage-check`); lightweight `ui-coverage` job (same display name) publishes skip routing only when classification skips coverage—local reruns stay on unsharded `make test-ui-coverage`.
+- Canonical validation-target test assertions for API-shaped targets live in `pkg/testutil/validationassert` (`HasTarget`, `HasTargetCode` on `[]factoryapi.FactoryValidationTarget`); `HasTargetCode` accepts an optional topology failure label to preserve service-test diagnostics—import only from `_test.go` files. API tests in `pkg/api/server_factory_test.go` and `pkg/api/servertests/server_factory_validation_test.go` use `validationassert` directly (no local `assertHasValidationTarget*` in `pkg/api`).
 - Batch upsert success responses expose per-work identifiers via `UpsertWorkRequestResponse.works` (`name`, `workTypeName`, `workId`); build domain metadata with `requests.WorkRequestSubmitResultFromNormalized` in the engine and mock factory (primary-work fields plus `Works` slice), then map through `upsertWorkRequestResponse` in `pkg/api/handlers.go` for default and session-scoped PUT routes.
 - Load filesystem-path `FACTORY_REQUEST_BATCH` JSON for CLI ingress through `pkg/cli/batchload.LoadFromFile`, which wraps `pkg/factory/requests.ParseCanonicalWorkRequestJSON`; keep `run.LoadWorkFile` as a thin delegate for existing callers and future `you submit batch` file modes.
 - Register `you submit batch` under `newSubmitCommand` via `pkg/cli/root_submit_batch.go`; unary flags stay on parent `submit` only; batch help documents ingress modes and `you docs batch-inputs`; wire `RunE` through injectable `submitBatch` → `submitcli.SubmitBatch`. File-path HTTP/dry-run lives in `pkg/cli/submit/batch.go` with `resolveBatchInput` in `batch_input.go` (inject `BatchConfig.Stdin` / `BatchConfig.StdinIsTTY` in tests; piped no-arg stdin and explicit `-` use `batchSource=stdin`; file path ignores stdin); inline JSON positionals use `looksLikeInlineJSON` (first non-whitespace `{`) with `batchSource=inline` and no `os.Stat`; `--file <path>` and `--file -` win over positional paths via `resolveBatchFileFlag`. Human `201` stdout belongs in `printBatchSuccessHuman` (`pkg/cli/submit/batch_output.go`): request/trace/work-count lines, optional `relationCount` from parsed request relations, up to ten per-work lines with `you work show` / `you work list --name` hints, truncation summary for longer lists—never print payloads; `--verbose` logs endpoint, batchSource (file, stdin, inline), byte size, requestId, and work count on stderr—never payload content. Structured `--json` success and dry-run payloads belong in `BatchSubmitJSONResult` via `printBatchSuccessJSON` / `printBatchDryRunJSON` in `batch_output.go`: include `requestId`, `traceId`, `workCount`, `relationCount`, `sessionId`, `endpointPath`, `batchSource`, and per-work `works` on HTTP success; dry-run adds `dryRun: true`, `workNames`, and omits `traceId` unless present in parsed input.
@@ -489,4 +492,58 @@
   - Patterns discovered: After `cli-submit-response-contract` merges to main, batch branches must extend `WorkRequestSubmitResultFromNormalized` rather than keeping a separate `SubmitResultFromNormalized` implementation—delegate the alias for tests.
   - Gotchas encountered: `prd.json`/`prd.md` conflicts during main merge should resolve to the feature-branch PRD (`git checkout --ours`), not main's unrelated Ralph PRD.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/481 — BLOCKING rebase item from review comment on head `dbe841e5`.
+---
+
+## 2026-05-30T15:04:15Z - consolidate-validation-target-test-asserts-001
+- What was implemented: Added `pkg/testutil/validationassert` with `HasTarget` and `HasTargetCode` for `[]factoryapi.FactoryValidationTarget`, preserving API and service match semantics (optional topology failure label on `HasTargetCode`); unit tests cover success paths; documented the seam in `factory-workstation-relevant-files.md`.
+- Files changed: `pkg/testutil/validationassert/api.go`, `pkg/testutil/validationassert/api_test.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Keep API `HasTarget` failure copy as `validation targets = %#v, want %s`; use unlabeled `HasTargetCode` for API tests (`targets = %#v, want code %q`) and pass a non-empty optional label for service topology tests (`topology targets = %#v, want %s`).
+  - Gotchas encountered: Subtests that call `t.Fatal` still fail the parent test in Go—use success-path-only unit tests for shared helpers or isolate failure cases in separate top-level tests.
+  - Useful context: Stories 002–004 retarget call sites and add domain `[]factoryvalidation.Target` helpers in story 004; no PR created until all PRD stories pass.
+---
+
+## 2026-05-30T16:30:00Z - consolidate-validation-target-test-asserts-002
+- What was implemented: Retargeted API validation topology tests to `pkg/testutil/validationassert` (`HasTarget`, `HasTargetCode`); removed duplicate local `assertHasValidationTarget` / `assertHasValidationTargetCode` from `server_test_helpers_test.go`, `server_factory_test.go`, and `servertests/server_factory_validation_test.go`.
+- Files changed: `pkg/api/server_test_helpers_test.go`, `pkg/api/server_factory_test.go`, `pkg/api/servertests/server_factory_validation_test.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: `apiserver_test` package imports `validationassert` like `api` tests; use targeted replacements for call sites—`replace_all` on `assertHasValidationTargetCode` will corrupt local function definitions if helpers remain in the same file.
+  - Gotchas encountered: After `replace_all`, delete leftover `func assertHasValidationTarget*` blocks manually before committing.
+  - Useful context: Story 003 retargets `pkg/service/factory_test.go`; story 004 adds domain helpers and retargets `pkg/factory/validation/validation_test.go`.
+---
+
+## 2026-05-30T16:35:31Z - ci-coverage-test-sharding-001
+- What was implemented: Added `UI_COVERAGE_SHARD` parsing and shard-only main covered Vitest pass in `ui-coverage-runner.mjs` (`--shard=index/total`, per-shard blob `.vitest-reports/main-shard-<index>.json`, shard elapsed timing and slow-file summary); full phased lane unchanged when unset; `make test-ui-coverage` skips replay while `UI_COVERAGE_SHARD` is set.
+- Files changed: `ui/scripts/ui-coverage-runner.mjs`, `ui/scripts/ui-coverage-runner.test.mjs`, `Makefile`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Extract `buildMainCoveredVitestArgs` for shared exclusions, coverage flags, and blob paths; tag main phases with `kind: "main-covered"` so slow-file capture works for both full and shard phase names.
+  - Gotchas encountered: `runUiCoverage` tests need injectable `spawn` via options because shard mode bypasses `cleanCoverageArtifacts` and only runs one phase.
+  - Useful context: Story 002 wires CI matrix jobs to `UI_COVERAGE_SHARD=<index>/10` via `make ui-test-coverage`; story 003 owns merge job and serial follow-on phases.
+---
+
+## 2026-05-30T17:45:00Z - ci-coverage-test-sharding-002
+- What was implemented: Added `ui-coverage-shard` GitHub Actions matrix job (shards 1–10, `shard-total: 10`, `fail-fast: false`) gated by `run_ui_coverage`; each cell installs deps, runs `UI_COVERAGE_SHARD=<index>/10 make ui-test-coverage` with tee to `.artifacts/ui-coverage-shard-<index>/command.log`, and uploads `ui/.vitest-reports/` plus command log on success.
+- Files changed: `.github/workflows/ci.yml`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Shard blobs live under `ui/.vitest-reports/main-shard-<index>.json` because `make ui-test-coverage` runs from the `ui/` workspace; artifact paths must include the `ui/` prefix from the repo root.
+  - Gotchas encountered: Job-level `if: run_ui_coverage` skips the entire matrix when classification skips coverage—unlike monolithic `ui-coverage`, which still emits a routing summary while steps no-op.
+  - Useful context: Story 003 adds `ui-coverage-merge` to download shard artifacts; story 004 removes the monolithic `ui-coverage` job from required checks.
+---
+
+## 2026-05-30T18:00:00Z - ci-coverage-test-sharding-003
+- What was implemented: Added `UI_COVERAGE_MERGE=1` merge mode in `ui-coverage-runner.mjs` (shard blob validation via `UI_COVERAGE_SHARD_TOTAL`, then isolated React Flow, `vitest --mergeReports`, and standalone script phases), `make test-ui-coverage-merge` / `ui-test-coverage-merge`, and `ui-coverage-merge` CI job that downloads shard artifacts, reports missing shard indices, runs the merge lane plus replay check, and retains `.artifacts/ui-coverage-merge/` failure logs for 14 days.
+- Files changed: `ui/scripts/ui-coverage-runner.mjs`, `ui/scripts/ui-coverage-runner.test.mjs`, `Makefile`, `.github/workflows/ci.yml`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Merge mode must not call `cleanCoverageArtifacts()` (that deletes `.vitest-reports/`); validate `main-shard-<index>.json` before follow-on phases; CI uses `actions/download-artifact` with `pattern: ui-coverage-shard-*` and `merge-multiple: true` into the repo root so `ui/.vitest-reports/` paths align with shard uploads.
+  - Gotchas encountered: Mocking `process.exit` without throwing lets merge tests continue into Vitest phases; use a throwing mock when asserting pre-phase failure. `ui-coverage-merge` needs `if: always()` plus `needs.ui-coverage-shard.result != 'skipped'` so it still runs when shard matrix legs fail and can list missing indices.
+  - Useful context: Story 004 removes monolithic `ui-coverage` from required checks; story 005 adds richer shard failure artifact uploads.
+---
+
+## 2026-05-30T19:30:00Z - ci-coverage-test-sharding-004
+- What was implemented: Removed monolithic `ui-coverage` test execution from `.github/workflows/ci.yml`; added skip-only `ui-coverage` routing job (display name `UI Coverage`) when classification skips the lane; renamed `ui-coverage-merge` display name to `UI Coverage` when the lane runs; updated shard/merge step summaries and `development.md` / `development-guide-relevant-files.md` for CI shard+merge vs local `make test-ui-coverage`.
+- Files changed: `.github/workflows/ci.yml`, `docs/internal/development/development.md`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Use mutually exclusive `if` on `ui-coverage` (skip routing only) and `ui-coverage-merge` (both named `UI Coverage`) so branch protection keeps one check name; keep `development.md` lane table local rerun column exactly `` `make test-ui-coverage` `` because `TestDevelopmentGuideMatchesObservableCIRoutingContract` asserts it against `cmd/ciclassify` lane plans.
+  - Gotchas encountered: Putting CI debug commands in the markdown table's "Local rerun command" column breaks the ciclassify↔guide contract test—document shard/merge debug paths in Owned checks or Why columns instead.
+  - Useful context: Story 005 adds richer failed-shard artifact uploads and step summaries; story 006 records timing evidence in `ui-coverage-speed-closeout.md`.
 ---

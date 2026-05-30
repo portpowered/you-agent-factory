@@ -178,7 +178,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 		},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
@@ -235,7 +235,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 		},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
@@ -327,7 +327,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			runtimeCfg: runtimeCfg,
 			factory:    submitted,
 		},
@@ -412,7 +412,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			runtimeCfg: runtimeCfg,
 			factory:    &aggregateSnapshotFactory{},
 		},
@@ -464,7 +464,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			runtimeCfg: runtimeCfg,
 			factory:    &aggregateSnapshotFactory{},
 		},
@@ -517,7 +517,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 		},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
@@ -562,7 +562,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 		},
 	)
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
@@ -735,7 +735,7 @@ func newScriptPollerRuntimeHandleForWorkstation(
 	t.Helper()
 
 	return &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory: activeFactory,
 			runtimeCfg: newScriptPollerLoadedRuntimeConfigForServiceTest(
 				t,
@@ -1008,11 +1008,11 @@ func TestFactoryService_CronTickTimeoutFailureIsClassifiedAndBounded(t *testing.
 			return ctx.Err()
 		},
 	}
-	svc := &FactoryService{
-		factory:    mock,
-		logger:     zap.New(logCore),
+	svc := &FactoryService{logger: zap.New(logCore)}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		factory: mock,
 		runtimeCfg: newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{Workstations: []interfaces.FactoryWorkstationConfig{{Name: "poll-for-work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "1ms"}}}}, nil, nil),
-	}
+	})
 
 	err := svc.submitCronTick(context.Background(), cronWorkstationConfigForTest("poll-for-work"), time.Now())
 	if err == nil {
@@ -1097,10 +1097,8 @@ func TestFactoryService_CronTickRetryableFailureRetriesBeforeSuccess(t *testing.
 		return nil
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
-	svc := &FactoryService{
-		factory: mock,
-		logger:  zap.New(logCore),
-	}
+	svc := &FactoryService{logger: zap.New(logCore)}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: mock})
 
 	if err := svc.submitCronTick(context.Background(), cronWorkstationConfigForTest("poll-for-work"), time.Now()); err != nil {
 		t.Fatalf("cron tick should succeed after retryable failures: %v", err)
@@ -1376,13 +1374,12 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 		return nil
 	}
 	svc := &FactoryService{
-		cfg:     &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
-		factory: currentFactory,
-		logger:  zap.New(logCore),
-		clock:   fakeClock,
+		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		logger: zap.New(logCore),
+		clock:  fakeClock,
 	}
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    replacementFactory,
 			runtimeCfg: runtimeCfg,
 		},
@@ -1637,14 +1634,12 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 	currentFactory := &aggregateSnapshotFactory{}
 	replacementFactory := &aggregateSnapshotFactory{}
 	svc := &FactoryService{
-		cfg:        &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
-		factory:    currentFactory,
-		runtimeCfg: cronLoadedFactoryConfigForServiceTest(t, "alpha", true),
-		logger:     zap.NewNop(),
-		clock:      fakeClock,
+		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		logger: zap.NewNop(),
+		clock:  fakeClock,
 	}
 	handle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
+		runtime: &factoryRuntimeBundle{
 			factory:    replacementFactory,
 			runtimeCfg: cronLoadedFactoryConfigForServiceTest(t, "beta", true),
 		},
@@ -1933,10 +1928,11 @@ func matchedTokenSnapshotTokensInPlace(t *testing.T, svc *FactoryService, placeI
 
 func configuredCronWorkstationForServiceTest(t *testing.T, svc *FactoryService, name string) interfaces.FactoryWorkstationConfig {
 	t.Helper()
-	if svc == nil || svc.runtimeCfg == nil {
+	runtimeCfg := svc.currentRuntimeConfig()
+	if svc == nil || runtimeCfg == nil {
 		t.Fatal("expected loaded service runtime config")
 	}
-	ws, ok := svc.runtimeCfg.Workstation(name)
+	ws, ok := runtimeCfg.Workstation(name)
 	if !ok {
 		t.Fatalf("expected cron workstation config %q", name)
 	}
