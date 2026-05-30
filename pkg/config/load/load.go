@@ -14,10 +14,21 @@ var (
 	ErrFactoryLayoutNotFound = config.ErrFactoryLayoutNotFound
 )
 
+// LoadOptions configures canonical JSON load behavior.
+type LoadOptions struct {
+	WorkstationLoader config.WorkstationLoader
+}
+
 // LoadFromFactoryDir loads and validates a factory from a concrete on-disk
 // factory directory without following current-factory pointer indirection.
 func LoadFromFactoryDir(factoryDir string, workstationLoader config.WorkstationLoader) (*config.LoadedFactoryConfig, error) {
 	return config.LoadFromFactoryDir(factoryDir, workstationLoader)
+}
+
+// LoadFromCanonicalJSON normalizes and validates canonical factory JSON without
+// requiring an on-disk factory directory.
+func LoadFromCanonicalJSON(payload []byte, opts LoadOptions) (*config.LoadedFactoryConfig, error) {
+	return config.LoadFromCanonicalJSON(payload, opts.WorkstationLoader)
 }
 
 // IsInvalidNamedFactory reports whether err wraps ErrInvalidNamedFactory.

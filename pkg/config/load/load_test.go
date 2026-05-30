@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -92,6 +93,137 @@ func TestIsInvalidNamedFactory_DetectsPersistValidationFailure(t *testing.T) {
 	}
 }
 
+func TestLoadFromCanonicalJSON_MatchesLoadFromFactoryDirForInlineFactory(t *testing.T) {
+	factoryDir := t.TempDir()
+	inlineCfg := map[string]any{
+		"name": "inline-load",
+		"id":   "inline-load",
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name": "executor",
+				"type": "MODEL_WORKER",
+				"body": "You are the executor.",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-inline",
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+				"type":    "MODEL_WORKSTATION",
+				"body":    "Implement {{ .WorkID }}.",
+			},
+		},
+	}
+	writeRuntimeFactoryJSON(t, factoryDir, inlineCfg)
+
+	payload, err := json.Marshal(inlineCfg)
+	if err != nil {
+		t.Fatalf("Marshal(inlineCfg): %v", err)
+	}
+
+	dirLoaded, err := load.LoadFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("load.LoadFromFactoryDir: %v", err)
+	}
+	jsonLoaded, err := load.LoadFromCanonicalJSON(payload, load.LoadOptions{})
+	if err != nil {
+		t.Fatalf("load.LoadFromCanonicalJSON: %v", err)
+	}
+
+	assertEquivalentLoadedFactoryConfigsIgnoreFactoryDir(t, dirLoaded, jsonLoaded)
+	if jsonLoaded.FactoryDir() != "" {
+		t.Fatalf("FactoryDir = %q, want empty for JSON load", jsonLoaded.FactoryDir())
+	}
+}
+
+func TestLoadFromCanonicalJSON_RejectsInvalidJSONWithStableMessage(t *testing.T) {
+	_, err := load.LoadFromCanonicalJSON([]byte(`{"name":"broken"`), load.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected invalid JSON to fail load")
+	}
+	if !load.IsInvalidNamedFactory(err) {
+		t.Fatalf("error = %v, want ErrInvalidNamedFactory", err)
+	}
+	if !strings.Contains(err.Error(), "parse factory") {
+		t.Fatalf("error = %v, want parse failure context", err)
+	}
+}
+
+func TestLoadFromCanonicalJSON_RejectsMissingFactoryName(t *testing.T) {
+	payload := []byte(`{
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers":[{"name":"executor"}],
+		"workstations":[{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	_, err := load.LoadFromCanonicalJSON(payload, load.LoadOptions{})
+	if err == nil {
+		t.Fatal("expected missing factory.name to fail load")
+	}
+	if !strings.Contains(err.Error(), "factory.name is required") {
+		t.Fatalf("error = %v, want factory.name boundary message", err)
+	}
+}
+
+func TestLoadFromCanonicalJSON_AcceptsOpenAPIFixture(t *testing.T) {
+	payload := []byte(`{
+		"name":"finish-chapter-factory",
+		"workTypes": [
+			{"name":"chapter","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
+			{"name":"page","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}
+		],
+		"resources": [{"name":"agent-slot","capacity":2}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER","modelProvider":"CLAUDE","stopToken":"COMPLETE"}],
+		"workstations": [{
+			"id":"finish-chapter-id",
+			"name":"finish-chapter",
+			"behavior":"STANDARD",
+			"worker":"executor",
+			"type":"LOGICAL_MOVE",
+			"body":"Finish {{ .WorkID }}.",
+			"inputs":[
+				{"workType":"chapter","state":"init"},
+				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"chapter","spawnedBy":"chapter-parser"}]}
+			],
+			"outputs":[{"workType":"chapter","state":"complete"}],
+			"resources":[{"name":"agent-slot","capacity":2}],
+			"guards":[{"type":"VISIT_COUNT","workstation":"review-story","maxVisits":3}],
+			"env":{"TEAM":"{{ index .Tags \"team\" }}"}
+		}]
+	}`)
+
+	loaded, err := load.LoadFromCanonicalJSON(payload, load.LoadOptions{})
+	if err != nil {
+		t.Fatalf("load.LoadFromCanonicalJSON: %v", err)
+	}
+	if loaded.FactoryConfig().Name != "finish-chapter-factory" {
+		t.Fatalf("name = %q, want finish-chapter-factory", loaded.FactoryConfig().Name)
+	}
+	workstation, ok := loaded.Workstation("finish-chapter")
+	if !ok {
+		t.Fatal("expected finish-chapter workstation to be loaded")
+	}
+	if workstation.Body == "" {
+		t.Fatal("expected workstation body from inline JSON load")
+	}
+}
+
 func TestLoadRuntimeConfig_PreservesFactoryLayoutNotFoundSemantics(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -104,12 +236,18 @@ func TestLoadRuntimeConfig_PreservesFactoryLayoutNotFoundSemantics(t *testing.T)
 	}
 }
 
-func assertEquivalentLoadedFactoryConfigs(t *testing.T, left, right *config.LoadedFactoryConfig) {
+func assertEquivalentLoadedFactoryConfigsIgnoreFactoryDir(t *testing.T, left, right *config.LoadedFactoryConfig) {
+	t.Helper()
+	assertEquivalentLoadedFactoryConfigs(t, left, right, true)
+}
+
+func assertEquivalentLoadedFactoryConfigs(t *testing.T, left, right *config.LoadedFactoryConfig, skipFactoryDir ...bool) {
 	t.Helper()
 	if left == nil || right == nil {
 		t.Fatalf("loaded configs must be non-nil: left=%v right=%v", left, right)
 	}
-	if left.FactoryDir() != right.FactoryDir() {
+	ignoreFactoryDir := len(skipFactoryDir) > 0 && skipFactoryDir[0]
+	if !ignoreFactoryDir && left.FactoryDir() != right.FactoryDir() {
 		t.Fatalf("FactoryDir = %q vs %q", left.FactoryDir(), right.FactoryDir())
 	}
 	if left.FactoryConfig().Name != right.FactoryConfig().Name {
