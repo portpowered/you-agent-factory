@@ -81,6 +81,7 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 	if err := applyMutations(e.runtimeState.Marking, e.state.Places, []interfaces.MarkingMutation{mutation}); err != nil {
 		return interfaces.OperatorMoveResult{}, fmt.Errorf("apply operator move: %w", err)
 	}
+	e.wakeForOperatorControl()
 
 	return interfaces.OperatorMoveResult{
 		WorkID:      workID,

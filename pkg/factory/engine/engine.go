@@ -195,6 +195,13 @@ func (e *FactoryEngine) NotifyResult() {
 	}
 }
 
+func (e *FactoryEngine) wakeForOperatorControl() {
+	select {
+	case e.submitSignal <- struct{}{}:
+	default:
+	}
+}
+
 // SubmitWorkRequest validates and enqueues a canonical work request batch.
 // Repeated request IDs are treated as idempotent no-ops.
 func (e *FactoryEngine) SubmitWorkRequest(context context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {

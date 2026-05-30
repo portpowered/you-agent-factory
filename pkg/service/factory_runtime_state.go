@@ -640,6 +640,18 @@ func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request interfa
 	return activeFactory.SubmitWorkRequest(ctx, request)
 }
 
+// MoveWork applies a synchronous operator relocation on the current service-owned runtime.
+func (fs *FactoryService) MoveWork(ctx context.Context, workID, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+	fs.activationMu.RLock()
+	defer fs.activationMu.RUnlock()
+
+	activeFactory := fs.currentFactory()
+	if activeFactory == nil {
+		return interfaces.OperatorMoveResult{}, fmt.Errorf("factory service runtime is not available")
+	}
+	return activeFactory.MoveWork(ctx, workID, stateName, source, requestID)
+}
+
 // SubscribeFactoryEvents returns canonical factory event history followed by
 // live events from the current service-owned runtime.
 func (fs *FactoryService) SubscribeFactoryEvents(ctx context.Context) (*interfaces.FactoryEventStream, error) {
