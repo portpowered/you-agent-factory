@@ -11,6 +11,12 @@ import type {
   FactoryWorkstation,
 } from "./factory-graph-draft-types";
 import { edgeChangeId } from "./factory-graph-draft-types";
+import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "./factory-graph-progress-outcome-connection-anchors";
+
+export {
+  mergeAuthoredProgressOutcomeConnectionAnchors,
+  PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
+} from "./factory-graph-progress-outcome-connection-anchors";
 
 export interface FactoryGraphConnectionAnchor {
   description: string;
@@ -36,11 +42,6 @@ export interface FactoryGraphConnectionResolver {
     workstationName: string,
   ) => WorkstationProgressOutcomeRouteContext | undefined;
 }
-
-export const PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS = new Set([
-  "workstation-on-continue-source",
-  "workstation-on-rejection-source",
-]);
 
 const ANCHORS_BY_KIND: Record<
   FactoryGraphNodeKind,
@@ -199,27 +200,6 @@ function filterWorkstationConnectionAnchors(
   return anchors.filter(
     (anchor) => !PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id),
   );
-}
-
-export function mergeAuthoredProgressOutcomeConnectionAnchors<
-  T extends FactoryGraphConnectionAnchor,
->(
-  anchors: readonly T[],
-  requiredSourceHandleIds: ReadonlySet<string> | undefined,
-): T[] {
-  if (!requiredSourceHandleIds?.size) {
-    return [...anchors];
-  }
-
-  const presentIds = new Set(anchors.map((anchor) => anchor.id));
-  const extras = ANCHORS_BY_KIND.workstation.filter(
-    (anchor) =>
-      PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id) &&
-      requiredSourceHandleIds.has(anchor.id) &&
-      !presentIds.has(anchor.id),
-  ) as T[];
-
-  return extras.length === 0 ? [...anchors] : [...anchors, ...extras];
 }
 
 export function getFactoryGraphConnectionAnchors(
