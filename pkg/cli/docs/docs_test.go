@@ -232,6 +232,14 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"## Planner vs Executor",
 		"## Topic Router",
 		"`you docs agents`",
+		"`you docs templates`",
+		"`you docs resources`",
+		"`you docs models`",
+		"`you docs mock-workers`",
+		"`you docs record-replay`",
+		"`you docs guards`",
+		"`you docs workstations`",
+		"`you docs workers`",
 		"`you docs batch-inputs`",
 		"## Factory-Local Docs Discovery",
 		"[Config](config.md)",
@@ -281,6 +289,7 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you run --dir ./factory --with-mock-workers",
 		"you docs mock-workers",
 		"you docs record-replay",
+		"[Agents](agents.md)",
 		"docs/examples/mock-workers.json",
 		"requestId",
 		"workTypeName",
@@ -304,6 +313,27 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	} {
 		if strings.Contains(got, wrapper) {
 			t.Fatalf("Markdown(authoring-factories) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
+func TestMarkdown_ConfigReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("config")
+	if err != nil {
+		t.Fatalf("Markdown(config) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Config",
+		"## Related",
+		"you docs agents",
+		"you docs work",
+		"you docs authoring-factories",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(config) missing %q:\n%s", want, got)
 		}
 	}
 }
@@ -372,6 +402,7 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 		"sourceWorkName",
 		"targetWorkName",
 		"requiredState",
+		"[Agents](agents.md)",
 	} {
 		if !strings.Contains(canonical, want) {
 			t.Fatalf("Markdown(batch-inputs) missing %q:\n%s", want, canonical)

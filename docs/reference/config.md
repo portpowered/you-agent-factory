@@ -314,6 +314,7 @@ see [Author factories](authoring-factories.md).
 
 ## Related
 
+- [Agents](agents.md)
 - [Guards](guards.md)
 - [Relationships](relationships.md)
 - [Mock workers](mock-workers.md)

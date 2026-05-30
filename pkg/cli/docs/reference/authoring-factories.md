@@ -672,6 +672,7 @@ review-loop workflow.
 
 ## Related
 
+- [Agents](agents.md)
 - [Mock workers](mock-workers.md)
 - [Record and replay](record-replay.md)
 - [Config](config.md)
