@@ -219,7 +219,7 @@ jobs:
 
       - name: Run factory composition Wire verification
         timeout-minutes: 10
-        run: make factory-composition-smoke
+        run: make wire-smoke
 
   ui-coverage:
     name: UI Coverage

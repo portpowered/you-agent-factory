@@ -315,21 +315,36 @@ Review any generated diff together with the authored OpenAPI change. Do not hand
 
 ## Factory CLI Wire Composition
 
-The `you` factory binary uses Google Wire only under `cmd/factory/composition`. `cmd/factory/main.go` registers the generated `composition.BuildFactoryService` builder through `pkg/cli/run` before CLI execution; `pkg/service`, `pkg/api`, and `pkg/cli` stay free of `wireinject` tags and Wire struct tags.
+`google/wire` is limited to `cmd/factory/compose/`. Production `you run` builds
+`*service.FactoryService` through the generated `InjectFactoryService` entry;
+`cmd/factory/main.go` may register that builder through `pkg/cli/run` before
+CLI execution. HTTP serving uses the same wired instance via
+`compose.ServeAPIServer`. See [cmd-factory-wire-composition.md](cmd-factory-wire-composition.md)
+and [factory-cli-wire-composition.md](factory-cli-wire-composition.md) for the full
+workflow.
 
-After changing providers in `cmd/factory/composition/wire.go` or exported assembly helpers in `pkg/service/factory_build.go`:
+From a clean checkout, after editing `wire.go` or `providers.go`:
 
-1. Regenerate the checked-in injector from the repository root:
+1. Regenerate the checked-in injector:
 
 ```bash
-go generate ./cmd/factory/composition/...
+go generate ./cmd/factory/compose/...
 ```
 
-2. Commit `cmd/factory/composition/wire_gen.go` together with `wire.go` and any provider changes. Never hand-edit `wire_gen.go`.
+2. Commit `wire_gen.go` with the provider changes. Do not hand-edit
+   `wire_gen.go`.
 
-3. Verify with `make factory-composition-smoke` (regenerates `wire_gen.go`, fails on drift, and runs composition tests) or `go test ./cmd/factory/composition/... ./pkg/cli/run/... ./pkg/service/...`, plus `go build -o /tmp/you-factory ./cmd/factory` (use an explicit output path when a sibling `factory/` directory exists in the working directory).
+3. Verify the factory binary and composition tests:
 
-Install Wire with `go install github.com/google/wire/cmd/wire@v0.6.0`, or rely on the `go.mod` `tool` entry via the `go generate` directive in `wire.go`. CI runs the same stale-generation guard via `make factory-composition-smoke` in the Build, Lint, and API job. See [Factory CLI Wire Composition](factory-cli-wire-composition.md) for layout, boundaries, and maintainer rules.
+```bash
+go build ./cmd/factory/...
+go test ./cmd/factory/compose/... ./pkg/cli/run/... -count=1
+```
+
+CI and `make verify-build-contracts` also run `make wire-smoke`, which
+regenerates `wire_gen.go` and fails when the checked-in file is stale. Fix
+drift with `go generate ./cmd/factory/compose/...` and commit the generated
+file.
 
 ## Factory Sharing Contract
 
@@ -528,6 +543,7 @@ The config validator checks workstation scheduling values against a known set of
 
 ## Related Docs
 
+- [Factory CLI wire composition](cmd-factory-wire-composition.md)
 - [CLI release policy](cli-release-policy.md)
 - [Agent Factory README](../../README.md)
 - [Internal Architecture](architecture.md)
