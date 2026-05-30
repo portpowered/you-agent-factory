@@ -5,7 +5,7 @@ import { getCurrentSelectionShellMessages } from "../../current-selection/base/p
 import type { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
 import type { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
 import { CurrentSelectionWidget } from "../../current-selection/public";
-import type { useSelectedProviderSessionState } from "../../current-selection/work-selection/public";
+import type { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";

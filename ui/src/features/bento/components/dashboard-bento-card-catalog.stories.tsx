@@ -14,7 +14,7 @@ import { expectNoPageHorizontalOverflow } from "../../../stories/dashboardStoryS
 import { CurrentSelectionWidget } from "../../current-selection/public";
 import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
-import { useSelectedProviderSessionState } from "../../current-selection/work-selection/public";
+import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import {

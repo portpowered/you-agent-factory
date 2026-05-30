@@ -5,7 +5,7 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useAppLocale } from "../../../i18n";
 import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
-import { useSelectedProviderSessionState } from "../../current-selection/work-selection/public";
+import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { DashboardImportPreviewDialog } from "../../import/public";
