@@ -3,6 +3,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import {
+  staleFactoryVersionTarget,
+} from "../../../../testing/factory-validation-target-fixtures";
 import * as currentFactoryFeature from "../../../current-factory-definition/public";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
@@ -197,7 +200,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       new CurrentFactoryDefinitionError("Current factory definition is stale. Refresh the graph before saving.", {
         code: "STALE_FACTORY_VERSION",
         status: 409,
-        targets: [{ id: "stale-version", kind: "save" }],
+        targets: [staleFactoryVersionTarget()],
       }),
     );
     vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
@@ -238,8 +241,14 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         status: 400,
         targets: [
           {
-            field: "factory.workstations[0].worker",
-            kind: "field",
+            code: "factory.worker.danglingReference",
+            message: "Worker selection must reference a configured worker.",
+            severity: "error",
+            subject: {
+              id: "worker",
+              location: "DEFINITION",
+              type: "WORKSTATION",
+            },
           },
         ],
       }),

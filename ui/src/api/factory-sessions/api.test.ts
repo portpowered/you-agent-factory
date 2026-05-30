@@ -1,3 +1,4 @@
+import { factorySessionFieldTarget } from "../../testing/factory-validation-target-fixtures";
 import {
   closeFactorySession,
   FactorySessionsAPIError,
@@ -336,11 +337,11 @@ describe("factory sessions API", () => {
           code: "BAD_REQUEST",
           message: "folder validation failed",
           targets: [
-            {
-              kind: "factory-session-validation",
-              id: "missing",
-              field: "folderPath",
-            },
+            factorySessionFieldTarget(
+              "missing",
+              "folderPath",
+              "folder validation failed",
+            ),
           ],
         }),
         {
@@ -366,21 +367,21 @@ describe("factory sessions API", () => {
           code: "BAD_REQUEST",
           message: "folder validation failed",
           targets: [
-            {
-              kind: "factory-session-validation",
-              id: "missing",
-              field: "folderPath",
-            },
+            factorySessionFieldTarget(
+              "missing",
+              "folderPath",
+              "folder validation failed",
+            ),
           ],
         },
         status: 400,
         statusText: "Bad Request",
         targets: [
-          {
-            kind: "factory-session-validation",
-            id: "missing",
-            field: "folderPath",
-          },
+          factorySessionFieldTarget(
+            "missing",
+            "folderPath",
+            "folder validation failed",
+          ),
         ],
       }),
     );

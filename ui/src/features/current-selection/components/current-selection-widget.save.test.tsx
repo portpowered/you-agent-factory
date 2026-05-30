@@ -6,6 +6,9 @@ import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
+import {
+  staleFactoryVersionTarget,
+} from "../../../testing/factory-validation-target-fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
   useCurrentFactoryDocument,
@@ -277,12 +280,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
         {
           code: "STALE_FACTORY_VERSION",
           status: 409,
-          targets: [
-            {
-              id: "stale-version",
-              kind: "save",
-            },
-          ],
+          targets: [staleFactoryVersionTarget()],
         },
       ),
     );
@@ -327,8 +325,14 @@ describe("CurrentSelectionWidget workstation save flow", () => {
           status: 400,
           targets: [
             {
-              field: "factory.workstations[0].worker",
-              kind: "field",
+              code: "factory.worker.danglingReference",
+              message: "Worker selection must reference a configured worker.",
+              severity: "error",
+              subject: {
+                id: "worker",
+                location: "DEFINITION",
+                type: "WORKSTATION",
+              },
             },
           ],
         },
