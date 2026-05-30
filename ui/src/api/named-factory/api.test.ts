@@ -440,6 +440,69 @@ describe("factory API", () => {
     );
   });
 
+  it("loads current factory before create-new-named UPSERT when the resolved name already exists", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockGetSessionFactory({
+          responseDocument: {
+            name: "",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: defaultSessionFactoryVersion,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockPutSessionFactory({
+          responseDocument: {
+            name: "",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "2",
+              physical: "2026-05-18T14:42:00Z",
+            },
+          },
+        }),
+      );
+
+    await activateImportedFactoryAsNewNamedForSession(
+      {
+        name: "",
+        workTypes: [],
+        workers: [],
+        workstations: [],
+      },
+      {
+        existingNamedFactoryNames: [""],
+        fetch: fetchMock,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({ method: "GET" }),
+    );
+    const putBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body),
+    ) as {
+      mode: string;
+      factory: { name: string; version?: { logical: string; physical: string } };
+    };
+
+    expect(putBody.mode).toBe("UPSERT_NAMED_AND_ACTIVATE");
+    expect(putBody.factory).toEqual({
+      name: "",
+      workTypes: [],
+      workers: [],
+      workstations: [],
+    });
+  });
+
   it("rejects retired named-factory wrapper responses from the current factory endpoint", async () => {
     await expect(
       getCurrentFactory({
