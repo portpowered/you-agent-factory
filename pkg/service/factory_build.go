@@ -73,8 +73,8 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	if err != nil {
 		return nil, err
 	}
-	runtimeBuild := newRuntimeBuildService(cfg, clock, baseLogger)
-	runtimeBundleAny, err := runtimeBuild.BuildFromLoadedConfig(ctx, runtimebuild.BuildInput{
+	collaborators := newFactoryServiceCollaborators(cfg, clock, baseLogger)
+	runtimeBundleAny, err := collaborators.runtimeBuild.BuildFromLoadedConfig(ctx, runtimebuild.BuildInput{
 		Dir:                   cfg.Dir,
 		FolderPath:            factoryRootDir,
 		SessionID:             defaultFactorySessionID,
@@ -97,18 +97,44 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	serviceBuilt = true
 	fs := &FactoryService{
 		factoryRootDir: factoryRootDir,
-		sessions:       factorysessions.NewRegistry(),
+		sessions:       collaborators.sessions,
 		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, clock),
 		startupBundle:  runtimeBundle,
 		cfg:            cfg,
-		modelAssets:    runtimeBundle.modelAssets,
+		modelAssets:    wireModelAssetPuller(cfg, collaborators.localModels.assets),
 		baseLogger:     baseLogger,
 		logger:         runtimeBundle.logger,
 		clock:          clock,
-		runtimeBuild:   runtimeBuild,
+		runtimeBuild:   collaborators.runtimeBuild,
 	}
 	fs.factorySave = wireFactorySaveCollaborator(fs, cfg)
 	return fs, nil
+}
+
+type factoryServiceCollaborators struct {
+	sessions     *factorysessions.Registry
+	localModels  localModelDomain
+	runtimeBuild *runtimebuild.Service
+}
+
+func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
+	if cfg != nil && cfg.ModelAssets != nil {
+		return cfg.ModelAssets
+	}
+	return production
+}
+
+func newFactoryServiceCollaborators(
+	cfg *FactoryServiceConfig,
+	clock factory.Clock,
+	baseLogger *zap.Logger,
+) factoryServiceCollaborators {
+	startupLocalModels := newRuntimeLocalModelDependencies(cfg)
+	return factoryServiceCollaborators{
+		sessions:     factorysessions.NewRegistry(),
+		localModels:  startupLocalModels,
+		runtimeBuild: newRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels),
+	}
 }
 
 func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {
@@ -239,7 +265,10 @@ func buildRuntimeBundle(
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
 	eventHistory := factoryevents.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
-	localModels := newRuntimeLocalModelDependencies(input.cfg)
+	localModels := input.prefetchedLocalModels
+	if localModels.manager == nil {
+		localModels = newRuntimeLocalModelDependencies(input.cfg)
+	}
 	workerOpts, err := loadRuntimeBundleWorkerOptions(input, logger, effectiveFactoryRunnerID, eventHistory, localModels)
 	if err != nil {
 		return nil, err
@@ -847,13 +876,18 @@ func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Confi
 	}
 }
 
-func newRuntimeBuildService(cfg *FactoryServiceConfig, clock factory.Clock, baseLogger *zap.Logger) *runtimebuild.Service {
+func newRuntimeBuildService(
+	cfg *FactoryServiceConfig,
+	clock factory.Clock,
+	baseLogger *zap.Logger,
+	startupLocalModels *localModelDomain,
+) *runtimebuild.Service {
 	return runtimebuild.New(
 		runtimeBuildConfigFromService(cfg),
 		clock,
 		baseLogger,
 		func(ctx context.Context, input runtimebuild.BuildInput) (any, error) {
-			return buildRuntimeBundle(ctx, runtimeBundleBuildInput{
+			bundleInput := runtimeBundleBuildInput{
 				dir:                   input.Dir,
 				folderPath:            input.FolderPath,
 				sessionID:             input.SessionID,
@@ -868,7 +902,12 @@ func newRuntimeBuildService(cfg *FactoryServiceConfig, clock factory.Clock, base
 				providerCommandRunner: input.ProviderCommandRunner,
 				commandRunnerOverride: input.CommandRunnerOverride,
 				additionalFactoryOpts: input.AdditionalFactoryOpts,
-			})
+			}
+			if startupLocalModels != nil && startupLocalModels.manager != nil {
+				bundleInput.prefetchedLocalModels = *startupLocalModels
+				*startupLocalModels = localModelDomain{}
+			}
+			return buildRuntimeBundle(ctx, bundleInput)
 		},
 	)
 }

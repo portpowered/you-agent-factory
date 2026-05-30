@@ -127,6 +127,7 @@ type runtimeBundleBuildInput struct {
 	providerCommandRunner workers.CommandRunner
 	commandRunnerOverride workers.CommandRunner
 	additionalFactoryOpts []factory.FactoryOption
+	prefetchedLocalModels localModelDomain
 }
 
 // FactoryService is an instantiation of a factory along with its runtime
@@ -278,6 +279,10 @@ type FactoryServiceConfig struct {
 	// collaborator. Tests use this to assert SaveFactoryForSession delegates
 	// without running the full save orchestration pipeline.
 	FactorySave factorySaveSaver
+	// ModelAssets, when non-nil, replaces the default localmodels.AssetPuller
+	// collaborator wired at service construction. Tests use this to assert
+	// PullModel delegates without running managed asset downloads.
+	ModelAssets modelAssetPuller
 }
 
 const serviceModeStartupWorkReadabilityDelay = 250 * time.Millisecond

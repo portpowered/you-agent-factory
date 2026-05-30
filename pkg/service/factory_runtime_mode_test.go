@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"go.uber.org/zap"
 )
 
@@ -758,6 +759,104 @@ func TestBuildFactoryService_PreservesSessionsRegistryAcrossRuntimeReplacement(t
 	if svc.cfg.Dir != alphaDir {
 		t.Fatalf("service cfg.Dir = %q, want unchanged %q until activation", svc.cfg.Dir, alphaDir)
 	}
+}
+
+func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.sessions == nil {
+		t.Fatal("expected explicit factorysessions.Registry collaborator")
+	}
+	if svc.runtimeBuild == nil {
+		t.Fatal("expected explicit runtimebuild.Service collaborator")
+	}
+	if svc.factorySave == nil {
+		t.Fatal("expected explicit factorysave collaborator")
+	}
+	if _, ok := svc.factorySave.(*factorysave.Service); !ok {
+		t.Fatalf("factorySave type = %T, want *factorysave.Service for production wiring", svc.factorySave)
+	}
+	if svc.hostedWorkers.Logger == nil {
+		t.Fatal("expected explicit hostedworkers.Config collaborator with logger")
+	}
+	if svc.modelAssets == nil {
+		t.Fatal("expected explicit localmodels asset puller collaborator")
+	}
+	bundle := svc.startupBundle
+	if bundle == nil {
+		t.Fatal("expected startup runtime bundle")
+	}
+	if bundle.modelAssets != svc.modelAssets {
+		t.Fatal("startup bundle modelAssets should reuse BuildFactoryService localmodels collaborator")
+	}
+	if svc.cfg.Dir != alphaDir {
+		t.Fatalf("service cfg.Dir = %q, want %q", svc.cfg.Dir, alphaDir)
+	}
+}
+
+func TestFactoryService_SaveFactoryForSession_DelegatesToInjectedFactorySave(t *testing.T) {
+	t.Parallel()
+
+	stub := &recordingFactorySaveSaver{}
+	svc := &FactoryService{factorySave: stub}
+	request := factoryapi.Factory{
+		Name: factoryapi.FactoryName("story-save"),
+	}
+	mode := factoryapi.FactorySaveModeReplaceCurrent
+	sessionID := "session-collaborator-proof"
+
+	got, err := svc.SaveFactoryForSession(context.Background(), sessionID, mode, request)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession: %v", err)
+	}
+	if got.Name != request.Name {
+		t.Fatalf("saved factory name = %q, want %q", got.Name, request.Name)
+	}
+	if stub.calls != 1 {
+		t.Fatalf("factory save calls = %d, want 1", stub.calls)
+	}
+	if stub.sessionID != sessionID {
+		t.Fatalf("factory save sessionID = %q, want %q", stub.sessionID, sessionID)
+	}
+	if stub.mode != mode {
+		t.Fatalf("factory save mode = %q, want %q", stub.mode, mode)
+	}
+	if stub.request.Name != request.Name {
+		t.Fatalf("factory save request name = %q, want %q", stub.request.Name, request.Name)
+	}
+}
+
+type recordingFactorySaveSaver struct {
+	sessionID string
+	mode      factoryapi.FactorySaveMode
+	request   factoryapi.Factory
+	calls     int
+}
+
+func (s *recordingFactorySaveSaver) Save(
+	_ context.Context,
+	sessionID string,
+	mode factoryapi.FactorySaveMode,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	s.calls++
+	s.sessionID = sessionID
+	s.mode = mode
+	s.request = request
+	return request, nil
 }
 
 func TestBuildFactoryService_InitializesFactorySessionsRegistry(t *testing.T) {
