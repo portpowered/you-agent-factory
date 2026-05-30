@@ -60,7 +60,11 @@ and run backend checks:
 ```bash
 go build ./cmd/factory/...
 go test ./cmd/factory/compose/... ./pkg/cli/run/... -count=1
+make wire-smoke
 ```
+
+`make wire-smoke` runs `go generate ./cmd/factory/compose/...` and fails when
+`wire_gen.go` is out of date, printing the exact regenerate command to run.
 
 ## Rules
 

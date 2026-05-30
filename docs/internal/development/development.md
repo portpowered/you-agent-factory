@@ -339,6 +339,11 @@ go build ./cmd/factory/...
 go test ./cmd/factory/compose/... ./pkg/cli/run/... -count=1
 ```
 
+CI and `make verify-build-contracts` also run `make wire-smoke`, which
+regenerates `wire_gen.go` and fails when the checked-in file is stale. Fix
+drift with `go generate ./cmd/factory/compose/...` and commit the generated
+file.
+
 ## Factory Sharing Contract
 
 The canonical export/import sharing boundary is the generated OpenAPI
