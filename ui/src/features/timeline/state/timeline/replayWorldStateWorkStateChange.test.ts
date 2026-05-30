@@ -59,7 +59,7 @@ function replayStateWithWork(
   };
 }
 
-describe("applyWorkStateChange", () => {
+describe("applyWorkStateChange guards", () => {
   it("no-ops when workId is missing", () => {
     const state = replayStateWithWork("work-1", "task:init", "PROCESSING");
     applyWorkStateChange(state, workStateChangeEvent({
@@ -74,6 +74,23 @@ describe("applyWorkStateChange", () => {
     expect(state.occupancyByID["task:init"]?.workItemIDs).toEqual(["work-1"]);
   });
 
+  it("skips removeWorkTokenFromPlace when fromPlaceId equals toPlaceId", () => {
+    const state = replayStateWithWork("work-same-place", "task:init", "PROCESSING");
+    applyWorkStateChange(state, workStateChangeEvent({
+      fromPlaceId: "task:init",
+      fromState: "init",
+      source: "cli",
+      toPlaceId: "task:init",
+      toState: "init",
+      workId: "work-same-place",
+      workTypeName: "task",
+    }));
+    expect(state.occupancyByID["task:init"]?.workItemIDs).toEqual(["work-same-place"]);
+    expect(state.workItemsByID["work-same-place"]?.place_id).toBe("task:init");
+  });
+});
+
+describe("applyWorkStateChange failed and terminal indexes", () => {
   it("clears failed and terminal indexes when leaving those places", () => {
     const failedState = replayStateWithWork("work-failed", "task:failed", "FAILED");
     applyWorkStateChange(failedState, workStateChangeEvent({
@@ -133,7 +150,9 @@ describe("applyWorkStateChange", () => {
     expect(state.failedWorkItemsByID["work-move"]).toBeUndefined();
     expect(state.terminalWorkByID["work-move"]).toBeDefined();
   });
+});
 
+describe("applyWorkStateChange occupancy", () => {
   it("removes work tokens when fromPlaceId is omitted", () => {
     const state = replayStateWithWork("work-orphan", "task:init", "PROCESSING");
     state.topology.places = [
@@ -151,7 +170,9 @@ describe("applyWorkStateChange", () => {
     expect(state.occupancyByID["task:init"]?.workItemIDs ?? []).toEqual([]);
     expect(state.occupancyByID["task:review"]?.workItemIDs).toEqual(["work-orphan"]);
   });
+});
 
+describe("applyWorkStateChange work item metadata", () => {
   it("creates work item and fills work_type_id when absent from workItemsByID", () => {
     const state = replayStateWithWork("work-new", "task:init", "PROCESSING");
     delete state.workItemsByID["work-new"];
@@ -197,20 +218,5 @@ describe("applyWorkStateChange", () => {
       workTypeName: "task",
     }));
     expect(state.workItemsByID["work-type-fill"]?.work_type_id).toBe("task");
-  });
-
-  it("skips removeWorkTokenFromPlace when fromPlaceId equals toPlaceId", () => {
-    const state = replayStateWithWork("work-same-place", "task:init", "PROCESSING");
-    applyWorkStateChange(state, workStateChangeEvent({
-      fromPlaceId: "task:init",
-      fromState: "init",
-      source: "cli",
-      toPlaceId: "task:init",
-      toState: "init",
-      workId: "work-same-place",
-      workTypeName: "task",
-    }));
-    expect(state.occupancyByID["task:init"]?.workItemIDs).toEqual(["work-same-place"]);
-    expect(state.workItemsByID["work-same-place"]?.place_id).toBe("task:init");
   });
 });
