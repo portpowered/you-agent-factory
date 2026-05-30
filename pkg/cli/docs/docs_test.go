@@ -295,6 +295,11 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 	}
 	for _, want := range []string{
 		"# Batch Inputs",
+		"## Quick Reference",
+		"## Before You Submit",
+		"factory.json",
+		"factory/docs/overview.md",
+		"you docs batch-work",
 		"FACTORY_REQUEST_BATCH",
 		"DEPENDS_ON",
 		"PARENT_CHILD",
