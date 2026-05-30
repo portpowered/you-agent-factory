@@ -14,9 +14,6 @@ import {
   type ProjectTraceRelationsToFactoryGraphOptions,
 } from "./trace-relation-factory-graph";
 
-const RELATION_NODE_WIDTH = 220;
-const RELATION_NODE_HEIGHT = 112;
-
 export type TraceRelationFlowNodeData = FactoryGraphReactFlowNode["data"] &
   TraceRelationNodeOverlay & {
     factoryNodeId: string;
@@ -34,7 +31,6 @@ export type TraceRelationFlowNode = Node<
 export interface TraceRelationFactoryGraphFlow {
   edges: FactoryGraphReactFlowEdge[];
   endpointKeyByNodeId: ReadonlyMap<string, string>;
-  graphDimensions: Map<string, { height: number; id: string; width: number }>;
   nodes: TraceRelationFlowNode[];
   topology: FactoryGraphTopology;
 }
@@ -56,10 +52,6 @@ export function buildTraceRelationFactoryGraphFlow(
     topology: traceProjection.topology,
   });
   const nodes: TraceRelationFlowNode[] = [];
-  const graphDimensions = new Map<
-    string,
-    { height: number; id: string; width: number }
-  >();
 
   for (const node of factoryProjection.nodes) {
     const overlay = traceProjection.overlaysByNodeId.get(node.id);
@@ -82,11 +74,6 @@ export function buildTraceRelationFactoryGraphFlow(
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       type: "factoryEntity",
-    });
-    graphDimensions.set(endpointKey, {
-      height: RELATION_NODE_HEIGHT,
-      id: endpointKey,
-      width: RELATION_NODE_WIDTH,
     });
   }
 
@@ -120,7 +107,6 @@ export function buildTraceRelationFactoryGraphFlow(
   return {
     edges,
     endpointKeyByNodeId: traceProjection.endpointKeyByNodeId,
-    graphDimensions,
     nodes,
     topology: traceProjection.topology,
   };
