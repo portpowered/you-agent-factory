@@ -11,6 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
@@ -82,11 +84,38 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 
 	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- svc.Run(runCtx)
+	}()
+	t.Cleanup(func() {
+		cancelRun()
+		select {
+		case err := <-runDone:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Fatalf("factory service run: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for factory service run to stop")
+		}
+	})
+
+	waitDeadline := time.Now().Add(time.Second)
+	for time.Now().Before(waitDeadline) {
+		snap, snapErr := svc.GetEngineStateSnapshotForSession(context.Background(), factorysessions.DefaultSessionID)
+		if snapErr == nil && snap.RuntimeStatus == interfaces.RuntimeStatusIdle {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	current, err := svc.GetCurrentFactory(context.Background())
@@ -103,10 +132,15 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 		Physical: current.Version.Physical.Add(time.Second),
 	}
 
-	_, err = svc.SaveCurrentFactory(context.Background(), invalid)
+	_, err = svc.SaveFactoryForSession(
+		context.Background(),
+		factorysessions.DefaultSessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		invalid,
+	)
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(err, &topologyErr) {
-		t.Fatalf("SaveCurrentFactory error = %v, want topology validation error", err)
+		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
 	}
 	return factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
 }
