@@ -143,6 +143,7 @@ type FactoryService struct {
 	runState      *serviceRunState
 	apiServerExit <-chan error
 	sessions      *factorysessions.Registry
+	factorySave   factorySaveSaver
 	runtimeBuild  *runtimebuild.Service
 	hostedWorkers hostedworkers.Config
 	factoryRootDir string
@@ -273,6 +274,10 @@ type FactoryServiceConfig struct {
 	// supported LOCAL model workers. Package tests use this to exercise the
 	// load/invoke/reuse path without a live embedded backend.
 	LocalModelRuntimeOverride localModelRuntime
+	// FactorySave, when non-nil, replaces the default factorysave.Service
+	// collaborator. Tests use this to assert SaveFactoryForSession delegates
+	// without running the full save orchestration pipeline.
+	FactorySave factorySaveSaver
 }
 
 const serviceModeStartupWorkReadabilityDelay = 250 * time.Millisecond
