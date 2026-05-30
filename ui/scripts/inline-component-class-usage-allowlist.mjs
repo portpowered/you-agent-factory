@@ -43,7 +43,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/import/components/dashboard-import-preview-dialog.tsx#IMPORT_DIALOG_CONTENT_CLASS",
   "src/features/import/components/dashboard-import-preview-dialog.tsx#IMPORT_DIALOG_TITLE_CLASS",
   "src/features/import/components/dashboard-import-preview-dialog.tsx#IMPORT_DIALOG_DESCRIPTION_CLASS",
-  "src/features/import/components/dashboard-import-preview-dialog.tsx#IMPORT_DIALOG_HINT_CLASS",
   "src/features/submit-work/components/submit-work-card.tsx#FORM_CLASS",
   "src/features/submit-work/components/submit-work-card.tsx#FORM_FIELDS_CLASS",
   "src/features/submit-work/components/submit-work-card.tsx#ACTION_ROW_CLASS",
