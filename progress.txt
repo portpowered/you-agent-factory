@@ -721,3 +721,21 @@
   - Gotchas encountered: Default stream store starts `connecting`, so hook tests with a selected session see `isInitialLoading: true` before any EventSource opens.
   - Useful context: Story 004 next (thin `useDashboardSnapshot` composer ≤80 LOC and `useDashboardSnapshot.test.tsx`).
 ---
+
+## 2026-05-30T20:51:39Z - ui-dashboard-stream-timeline-split-recovery-v2-004
+- What was implemented: Verified thin `useDashboardSnapshot` composer (62 LOC) wires `useDashboardSessionLifecycle`, `useFactoryEventStream` (`enabled: rawSessionID != null && !isPaused`), `useDashboardWorldView`, queued timeline append, and opt-in `useDashboardTimelineMemoryDebug`; `DashboardScreen` still drives loading/error/empty/success from snapshot shell flags with `locale` and `refreshToken` from `useDashboardBentoStore`; `DashboardBento` keeps timeline ownership via `useDashboardBentoSnapshot` / timeline store (no stream transport in bento). `bun run tsc`, 11 targeted vitest cases (`useDashboardSnapshot`, `dashboard-screen`, public smoke), and `App.session-switching.stories.tsx` Storybook pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: Composer returns only `{ snapshot, streamState, isInitialLoading, error }` from world view—screen gates bento on `snapshot` truthiness for empty state; refresh proof needs seeded `worldViewCache` plus `rerender({ refreshToken: 1 })` and `replayHarness.emitSnapshot` after lifecycle reset.
+  - Gotchas encountered: Dev-browser skill was not available in this environment; Storybook `App.session-switching` plus hook replay harness are the automated cross-session/refresh proof for story 004 browser AC.
+  - Useful context: Story 005 next (`useDashboardTimelineMemoryDebug` isolation and `?afMemoryDebug=1` on/off tests).
+---
+
+## 2026-05-31T03:54:00Z - ui-dashboard-stream-timeline-split-recovery-v2-005
+- What was implemented: Verified `useDashboardTimelineMemoryDebug` isolation on branch head: hook no-ops unless `readFactoryTimelineDebugOptions().memoryDebug` is true (`?afMemoryDebug=1` or `true` via `parseBooleanFlag`); default sessions skip `window.__agentFactoryTimelineDebug__` and `agentFactory.timelineDebugSummary` localStorage; `useDashboardSnapshot` is the sole composer caller; `useDashboardTimelineMemoryDebug.test.tsx` (off/on/zero-events) and `useDashboardSnapshot.test.tsx` streamed-events case prove default-user safety. `bun run tsc` and 6 targeted vitest cases pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: Timeline memory debug is opt-in only through `debugOptions.memoryDebug` gates in `useDashboardTimelineMemoryDebug`—transport (`useFactoryEventStream`) reads the same `readFactoryTimelineDebugOptions()` for compaction but does not install globals or persist summaries.
+  - Gotchas encountered: Memory summary persistence waits for `eventCount > 0` even when globals install immediately with `memoryDebug` on—assert localStorage separately from global install in tests.
+  - Useful context: Story 006 next (dashboard stream/timeline shell regression: session tab switch, pause/resume, loading-after-first-event via `App.session-switching.stories.tsx` or app-shell tests).
+---
