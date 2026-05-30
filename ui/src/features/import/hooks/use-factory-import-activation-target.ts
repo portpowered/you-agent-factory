@@ -5,21 +5,12 @@ import {
   discoverSessionNamedFactoryNames,
   getCurrentFactory,
   resolveImportCreateFactoryName,
-  type FactoryImportSaveChoice,
 } from "../../../api/named-factory";
 
 export interface UseFactoryImportActivationTargetOptions {
   enabled?: boolean;
   preferredFactoryName?: string | null;
   sessionID?: string | null;
-}
-
-export interface FactoryImportActivationTarget {
-  createTargetFactoryName: string | null;
-  currentFactoryName: string | null;
-  existingNamedFactoryNames: string[];
-  importSaveChoice: FactoryImportSaveChoice;
-  replacesExistingCreateTarget: boolean;
 }
 
 export function useFactoryImportActivationTarget({
