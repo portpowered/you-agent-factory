@@ -1,55 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
-import {
-  installFactoryTimelineDebugGlobal,
-  persistFactoryTimelineMemorySummary,
-  readFactoryTimelineDebugOptions,
-  summarizeFactoryTimelineMemory,
-} from "../../timeline/state/factoryTimelineDebug";
+import { readFactoryTimelineDebugOptions } from "../../timeline/state/factoryTimelineDebug";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
+import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
 import { useFactoryEventStream } from "./useFactoryEventStream";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;
   refreshToken?: number;
-}
-
-function useDashboardTimelineMemoryDebug({
-  debugOptions,
-  eventCount,
-}: {
-  debugOptions: ReturnType<typeof readFactoryTimelineDebugOptions>;
-  eventCount: number;
-}) {
-  useEffect(() => {
-    if (typeof window === "undefined" || !debugOptions.memoryDebug) {
-      return;
-    }
-
-    installFactoryTimelineDebugGlobal(
-      window,
-      () => useFactoryTimelineStore.getState(),
-      debugOptions,
-    );
-  }, [debugOptions]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !debugOptions.memoryDebug || eventCount === 0) {
-      return;
-    }
-
-    const state = useFactoryTimelineStore.getState();
-    const summary = summarizeFactoryTimelineMemory(
-      state.events,
-      state.selectedTick,
-      window,
-    );
-    persistFactoryTimelineMemorySummary(window.localStorage, summary);
-  }, [debugOptions, eventCount]);
 }
 
 export function useDashboardSnapshot({
