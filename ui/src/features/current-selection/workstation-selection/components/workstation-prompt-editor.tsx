@@ -46,11 +46,7 @@ const PROMPT_EDITOR_OPTIONS = {
     useShadows: false,
     verticalScrollbarSize: 8,
   },
-  quickSuggestions: {
-    comments: false,
-    other: true,
-    strings: true,
-  },
+  quickSuggestions: false,
   scrollBeyondLastLine: false,
   suggestOnTriggerCharacters: true,
   tabSize: 2,

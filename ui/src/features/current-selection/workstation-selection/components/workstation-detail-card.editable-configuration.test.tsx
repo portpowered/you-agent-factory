@@ -753,7 +753,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
+        "Suggestions appear only while typing inside {{ ... }}.",
       ),
     ).toBeTruthy();
     expect(screen.getByText("Available variables")).toBeTruthy();

@@ -505,7 +505,7 @@ describe("registerWorkstationPromptMonaco", () => {
     ]);
   });
 
-  it("only returns completion items outside template expressions for manual invocation", () => {
+  it("returns no completion items outside template expressions including manual invocation", () => {
     const registerCompletionItemProvider = vi.fn();
     const completionProvider = {
       dispose: vi.fn(),
@@ -572,14 +572,7 @@ describe("registerWorkstationPromptMonaco", () => {
         { column: 5, lineNumber: 1 },
         { triggerKind: 0 },
       ),
-    ).toMatchObject({
-      suggestions: [
-        expect.objectContaining({
-          insertText: "{{ .WorkID }}",
-          label: ".WorkID",
-        }),
-      ],
-    });
+    ).toEqual({ suggestions: [] });
   });
 
   it("uses cursor and expression ranges for contextual Monaco completions", () => {
