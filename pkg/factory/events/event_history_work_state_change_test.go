@@ -13,23 +13,33 @@ func TestFactoryEventHistory_RecordWorkStateChange_OperatorMoveShape(t *testing.
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return eventTime })
 
 	history.RecordWorkStateChange(3, interfaces.WorkStateChangeRecord{
-		WorkID:       "work-1",
-		WorkTypeID:   "task",
-		FromState:    "failed",
-		ToState:      "in-progress",
-		FromPlaceID:  "task:failed",
-		ToPlaceID:    "task:in-progress",
-		Source:       interfaces.WorkStateChangeSourceCLI,
-		RequestID:    "move-request-1",
+		WorkID:        "work-1",
+		WorkTypeID:    "task",
+		FromState:     "failed",
+		ToState:       "in-progress",
+		FromPlaceID:   "task:failed",
+		ToPlaceID:     "task:in-progress",
+		Source:        interfaces.WorkStateChangeSourceCLI,
+		RequestID:     "move-request-1",
 		TriggerWorkID: "work-parent",
-		Reason:       "operator recovery",
+		Reason:        "operator recovery",
 	}, eventTime)
 
 	events := history.Events()
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
-	event := events[0]
+	assertWorkStateChangeOperatorEvent(t, events[0])
+}
+
+func assertWorkStateChangeOperatorEvent(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	assertWorkStateChangeEventEnvelope(t, event)
+	assertWorkStateChangeOperatorPayload(t, event)
+}
+
+func assertWorkStateChangeEventEnvelope(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
 	if event.Type != factoryapi.FactoryEventTypeWorkStateChange {
 		t.Fatalf("event type = %q, want WORK_STATE_CHANGE", event.Type)
 	}
@@ -45,7 +55,10 @@ func TestFactoryEventHistory_RecordWorkStateChange_OperatorMoveShape(t *testing.
 	if event.Context.WorkIds == nil || len(*event.Context.WorkIds) != 1 || (*event.Context.WorkIds)[0] != "work-1" {
 		t.Fatalf("workIds = %#v, want [work-1]", event.Context.WorkIds)
 	}
+}
 
+func assertWorkStateChangeOperatorPayload(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
 	payload, err := event.Payload.AsWorkStateChangeEventPayload()
 	if err != nil {
 		t.Fatalf("payload: %v", err)

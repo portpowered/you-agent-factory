@@ -11,6 +11,29 @@ import (
 )
 
 func TestTickWhilePaused_SkipsCascadeButOperatorMoveUpdatesMarking(t *testing.T) {
+	f, ctx := setupPausedParentFailedChildInit(t)
+	assertChildRemainsInInitAfterPausedTick(t, f, ctx)
+
+	result, err := f.MoveWork(ctx, "child-work", "complete", interfaces.WorkStateChangeSourceCLI, "")
+	if err != nil {
+		t.Fatalf("MoveWork while paused: %v", err)
+	}
+	if result.FromState != "init" || result.ToState != "complete" {
+		t.Fatalf("move result = %#v, want init -> complete", result)
+	}
+	assertOperatorWorkStateChangeEvent(t, f, "child-work", "init", "complete", factoryapi.WorkStateChangeSourceCLI)
+
+	afterMove, err := f.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot after move: %v", err)
+	}
+	if !markingContainsWorkAtPlace(&afterMove.Marking, "child-work", "task:complete") {
+		t.Fatalf("marking = %#v, want child-work at task:complete after operator move", afterMove.Marking.Tokens)
+	}
+}
+
+func setupPausedParentFailedChildInit(t *testing.T) (factory.Factory, context.Context) {
+	t.Helper()
 	f, err := New(
 		factory.WithNet(buildMoveControlNet()),
 		factory.WithInlineDispatch(),
@@ -46,7 +69,11 @@ func TestTickWhilePaused_SkipsCascadeButOperatorMoveUpdatesMarking(t *testing.T)
 	if err := f.Pause(ctx); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
+	return f, ctx
+}
 
+func assertChildRemainsInInitAfterPausedTick(t *testing.T, f factory.Factory, ctx context.Context) {
+	t.Helper()
 	before, err := f.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot before tick: %v", err)
@@ -63,22 +90,5 @@ func TestTickWhilePaused_SkipsCascadeButOperatorMoveUpdatesMarking(t *testing.T)
 	}
 	if !markingContainsWorkAtPlace(&afterTick.Marking, "child-work", "task:init") {
 		t.Fatalf("post-tick marking = %#v, want child-work still in task:init (no cascade)", afterTick.Marking.Tokens)
-	}
-
-	result, err := f.MoveWork(ctx, "child-work", "complete", interfaces.WorkStateChangeSourceCLI, "")
-	if err != nil {
-		t.Fatalf("MoveWork while paused: %v", err)
-	}
-	if result.FromState != "init" || result.ToState != "complete" {
-		t.Fatalf("move result = %#v, want init -> complete", result)
-	}
-	assertOperatorWorkStateChangeEvent(t, f, "child-work", "init", "complete", factoryapi.WorkStateChangeSourceCLI)
-
-	afterMove, err := f.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot after move: %v", err)
-	}
-	if !markingContainsWorkAtPlace(&afterMove.Marking, "child-work", "task:complete") {
-		t.Fatalf("marking = %#v, want child-work at task:complete after operator move", afterMove.Marking.Tokens)
 	}
 }
