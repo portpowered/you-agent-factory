@@ -749,6 +749,88 @@ func TestBuildFactoryService_InitializesFactorySessionsRegistry(t *testing.T) {
 	}
 }
 
+func TestFactoryService_Run_RegistersDefaultSessionInRegistry(t *testing.T) {
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.sessions.Count() != 0 {
+		t.Fatalf("sessions.Count() = %d before Run, want 0 until default registers", svc.sessions.Count())
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+	t.Cleanup(func() {
+		cancelRun()
+		select {
+		case err := <-runErrCh:
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for service shutdown")
+		}
+	})
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+
+	defaultSession := svc.defaultSession()
+	if defaultSession == nil {
+		t.Fatal("defaultSession = nil after Run, want ~default registry entry")
+	}
+	if defaultSession.ID != defaultFactorySessionID {
+		t.Fatalf("default session id = %q, want %q", defaultSession.ID, defaultFactorySessionID)
+	}
+	if !defaultSession.IsDefault {
+		t.Fatal("default session IsDefault = false, want true")
+	}
+	if got := cleanResolvedPath(defaultSession.FactoryDir); got != cleanResolvedPath(alphaDir) {
+		t.Fatalf("default session factoryDir = %q, want %q", defaultSession.FactoryDir, alphaDir)
+	}
+	if got := cleanResolvedPath(defaultSession.FolderPath); got != cleanResolvedPath(rootDir) {
+		t.Fatalf("default session folderPath = %q, want %q", defaultSession.FolderPath, rootDir)
+	}
+
+	defaultHandle := liveSessionHandle(defaultSession)
+	if defaultHandle == nil || defaultHandle.runtime == nil {
+		t.Fatal("default session live handle is required after Run")
+	}
+	if got := cleanResolvedPath(defaultHandle.runtime.dir); got != cleanResolvedPath(alphaDir) {
+		t.Fatalf("default live handle runtime dir = %q, want %q", defaultHandle.runtime.dir, alphaDir)
+	}
+
+	runState := svc.currentRunState()
+	if runState == nil {
+		t.Fatal("runState = nil after Run, want default session run state")
+	}
+	if runState.sessionID != defaultFactorySessionID {
+		t.Fatalf("runState.sessionID = %q, want %q", runState.sessionID, defaultFactorySessionID)
+	}
+	if runState.runtime != defaultHandle {
+		t.Fatal("runState.runtime != default session live handle")
+	}
+	if current := svc.currentSession(); current == nil || current.ID != defaultFactorySessionID {
+		t.Fatalf("currentSession = %#v, want selected %q", current, defaultFactorySessionID)
+	}
+	if bundle := svc.currentRuntimeBundle(); bundle != defaultHandle.runtime {
+		t.Fatal("currentRuntimeBundle should resolve through the default session registry handle after Run")
+	}
+}
+
 func createReplacementWatchChannel(t *testing.T, factoryDir, workType, channel string) {
 	t.Helper()
 
