@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 )
 
 func TestSessionScopedRecordPath_ReplacesGeneratedSessionTokenPerSession(t *testing.T) {
@@ -450,6 +451,18 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	}
 	assertPersistedFactoryVersionMatchesAPI(t, betaConfig.FactoryConfig().Version, betaCurrent.Version, "persisted beta version after save")
 
+	harness.waitIdle(t, betaSessionID, "beta runtime after replace-current save")
+	betaSession := harness.requireSession(t, betaSessionID)
+	submitSessionWorkWithType(t, betaSession, "story", "beta-after-replace-work", "trace-beta-after-replace")
+	waitForSessionEventsToContain(t, betaSession, "beta-after-replace-work", time.Second)
+	stream, err := liveSessionHandle(betaSession).runtime.factory.SubscribeFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("SubscribeFactoryEvents after replace save: %v", err)
+	}
+	if stream == nil || stream.Events == nil {
+		t.Fatal("SubscribeFactoryEvents after replace save returned nil stream")
+	}
+
 	legacyCurrent, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentFactory after beta save: %v", err)
@@ -457,6 +470,28 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	assertFactoryName(t, legacyCurrent.Name, "alpha", "legacy current factory name after beta save")
 	if _, err := harness.svc.GetCurrentFactoryForSession(context.Background(), "missing-session"); !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 		t.Fatalf("GetCurrentFactoryForSession(missing) error = %v, want factory session not found", err)
+	}
+}
+
+func TestFactoryService_OpenFactorySession_SubmitsWorkAndServesModelCatalogReads(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	betaSession := harness.requireSession(t, betaSessionID)
+	harness.waitIdle(t, betaSessionID, "opened beta runtime")
+
+	submitSessionWork(t, betaSession, "beta-open-session-work", "trace-beta-open-session")
+	waitForSessionEventsToContain(t, betaSession, "beta-open-session-work", time.Second)
+
+	if liveSessionHandle(betaSession).runtime.localModels == nil {
+		t.Fatal("opened session runtime localModels = nil, want model catalog seam")
+	}
+	if _, err := localmodels.ListModels(liveSessionHandle(betaSession).runtime.runtimeCfg); err != nil {
+		t.Fatalf("ListModels on opened session runtime config: %v", err)
 	}
 }
 

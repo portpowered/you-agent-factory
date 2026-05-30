@@ -25,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -34,76 +35,28 @@ import (
 
 // BuildFactoryService loads factory.json from the config directory, constructs
 // the petri net, factory runtime, file watcher, and session metrics.
-// portos:func-length-exception owner=agent-factory reason=legacy-service-wiring review=2026-07-18 removal=split-replay-recording-worker-and-listener-builders-before-next-service-wiring-change
 func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {
 	if err := validateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
-	factoryRootDir, baseLogger, err := resolveFactoryServiceRoot(cfg)
+	root, err := ResolveFactoryServiceRoot(cfg)
 	if err != nil {
 		return nil, err
 	}
-	serviceBuilt := false
-	var runtimeBundle *factoryRuntimeBundle
-	defer func() {
-		if !serviceBuilt && runtimeBundle != nil && runtimeBundle.logSink != nil {
-			_ = runtimeBundle.logSink.Close()
-		}
-	}()
-	if cfg.ReplayPath == "" {
-		resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(cfg.Dir)
-		if err != nil {
-			return nil, fmt.Errorf("resolve factory dir: %w", err)
-		}
-		resolvedDir, err = factorysessions.AbsolutizeFactoryDirectory(resolvedDir)
-		if err != nil {
-			return nil, fmt.Errorf("resolve factory dir: %w", err)
-		}
-		cfg.Dir = resolvedDir
+	load, err := LoadFactoryConfigForCompose(cfg, root)
+	if err != nil {
+		return nil, err
 	}
+	clock := ServiceClockForCompose(cfg, load)
+	collaborators := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	return ComposeFactoryService(ctx, cfg, root, collaborators, load, clock)
+}
 
-	logger := newSessionLogger(baseLogger, defaultFactorySessionID, factoryRootDir, cfg.Dir)
-	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForService(cfg, logger)
-	if err != nil {
-		return nil, err
+func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
+	if cfg != nil && cfg.ModelAssets != nil {
+		return cfg.ModelAssets
 	}
-	clock := serviceClockForMode(cfg.Clock, replayArtifact)
-	replaySideEffects, replayFactoryOpts, err := replayFactoryModeOptions(replayArtifact)
-	if err != nil {
-		return nil, err
-	}
-	runtimeBundle, err = buildRuntimeBundle(ctx, runtimeBundleBuildInput{
-		dir:                   cfg.Dir,
-		folderPath:            factoryRootDir,
-		sessionID:             defaultFactorySessionID,
-		cfg:                   cfg,
-		loadedFactoryCfg:      loadedFactoryCfg,
-		baseLogger:            baseLogger,
-		runtimeInstanceID:     cfg.RuntimeInstanceID,
-		clock:                 clock,
-		recordPath:            sessionScopedRecordPath(cfg.RecordPath, defaultFactorySessionID),
-		workflowID:            cfg.WorkflowID,
-		providerOverride:      providerOverrideForMode(cfg, replaySideEffects),
-		providerCommandRunner: providerCommandRunnerForMode(cfg, loadedFactoryCfg),
-		commandRunnerOverride: commandRunnerOverrideForMode(cfg, loadedFactoryCfg, replaySideEffects),
-		additionalFactoryOpts: replayFactoryOpts,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	serviceBuilt = true
-	return &FactoryService{
-		factoryRootDir: factoryRootDir,
-		sessions:       factorysessions.NewRegistry(),
-		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, clock),
-		startupBundle:  runtimeBundle,
-		cfg:            cfg,
-		modelAssets:    runtimeBundle.modelAssets,
-		baseLogger:     baseLogger,
-		logger:         runtimeBundle.logger,
-		clock:          clock,
-	}, nil
+	return production
 }
 
 func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {
@@ -162,7 +115,7 @@ func loadFactoryConfigForService(
 		logger.Error("failed to load factory config", zap.Error(err))
 		return nil, nil, fmt.Errorf("load factory config: %w", err)
 	}
-	warnPortableBundledReplacementReport(logger, "runtime config load replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
+	runtimebuild.WarnPortableBundledReplacementReport(logger, "runtime config load replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
 	warnReplayMetadataMismatches(cfg, replayArtifact, logger)
 	return loadedFactoryCfg, replayArtifact, nil
 }
@@ -222,7 +175,7 @@ func buildRuntimeBundle(
 	if sessionID == "" {
 		sessionID = defaultFactorySessionID
 	}
-	logger := newSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
+	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
 
 	mapper := factoryconfig.ConfigMapper{}
 	net, err := mapper.Map(ctx, input.loadedFactoryCfg.FactoryConfig())
@@ -234,7 +187,10 @@ func buildRuntimeBundle(
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
 	eventHistory := factoryevents.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
-	localModels := newRuntimeLocalModelDependencies(input.cfg)
+	localModels := input.prefetchedLocalModels
+	if localModels.manager == nil {
+		localModels = newRuntimeLocalModelDependencies(input.cfg)
+	}
 	workerOpts, err := loadRuntimeBundleWorkerOptions(input, logger, effectiveFactoryRunnerID, eventHistory, localModels)
 	if err != nil {
 		return nil, err
@@ -813,4 +769,74 @@ func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelectio
 		}
 	}
 	return nil
+}
+
+func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Config {
+	if cfg == nil {
+		return runtimebuild.Config{}
+	}
+	return runtimebuild.Config{
+		ExecutionBaseDir:                        cfg.ExecutionBaseDir,
+		RunnerID:                                cfg.RunnerID,
+		RuntimeMode:                             cfg.RuntimeMode,
+		Verbose:                                 cfg.Verbose,
+		RuntimeInstanceID:                       cfg.RuntimeInstanceID,
+		RuntimeLogDir:                           cfg.RuntimeLogDir,
+		RuntimeLogConfig:                        cfg.RuntimeLogConfig,
+		RecordPath:                              cfg.RecordPath,
+		WorkflowID:                              cfg.WorkflowID,
+		MockWorkersConfig:                       cfg.MockWorkersConfig,
+		RecordFlushInterval:                     cfg.RecordFlushInterval,
+		ModelCacheDir:                           cfg.ModelCacheDir,
+		SkipBuiltInRunnerPrerequisiteValidation: cfg.SkipBuiltInRunnerPrerequisiteValidation,
+		WorkstationLoader:                       cfg.WorkstationLoader,
+		ProviderOverride:                        cfg.ProviderOverride,
+		ProviderCommandRunnerOverride:           cfg.ProviderCommandRunnerOverride,
+		CommandRunnerOverride:                   cfg.CommandRunnerOverride,
+		LocalModelRuntimeOverride:               cfg.LocalModelRuntimeOverride,
+		ExtraOptions:                            cfg.ExtraOptions,
+	}
+}
+
+func newRuntimeBuildService(
+	cfg *FactoryServiceConfig,
+	clock factory.Clock,
+	baseLogger *zap.Logger,
+	startupLocalModels *localModelDomain,
+) *runtimebuild.Service {
+	return runtimebuild.New(
+		runtimeBuildConfigFromService(cfg),
+		clock,
+		baseLogger,
+		func(ctx context.Context, input runtimebuild.BuildInput) (any, error) {
+			bundleInput := runtimeBundleBuildInput{
+				dir:                   input.Dir,
+				folderPath:            input.FolderPath,
+				sessionID:             input.SessionID,
+				cfg:                   cfg,
+				loadedFactoryCfg:      input.LoadedFactoryCfg,
+				baseLogger:            input.BaseLogger,
+				runtimeInstanceID:     input.RuntimeInstanceID,
+				clock:                 input.Clock,
+				recordPath:            input.RecordPath,
+				workflowID:            input.WorkflowID,
+				providerOverride:      input.ProviderOverride,
+				providerCommandRunner: input.ProviderCommandRunner,
+				commandRunnerOverride: input.CommandRunnerOverride,
+				additionalFactoryOpts: input.AdditionalFactoryOpts,
+			}
+			if startupLocalModels != nil && startupLocalModels.manager != nil {
+				bundleInput.prefetchedLocalModels = *startupLocalModels
+				*startupLocalModels = localModelDomain{}
+			}
+			return buildRuntimeBundle(ctx, bundleInput)
+		},
+	)
+}
+
+func asRuntimeBundle(bundle any) *factoryRuntimeBundle {
+	if bundle == nil {
+		return nil
+	}
+	return bundle.(*factoryRuntimeBundle)
 }
