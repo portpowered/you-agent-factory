@@ -60,7 +60,7 @@ func TestList_SendsStateFilters(t *testing.T) {
 	if gotPath != "/factory-sessions/~default/work" {
 		t.Fatalf("path = %q, want /factory-sessions/~default/work", gotPath)
 	}
-	if got := out.String(); got != "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\nwork-1\tReview PRD\treview\tPROCESSING\tnone\n" {
+	if got := out.String(); got != "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\nwork-1\tReview PRD\tstory\treview\tPROCESSING\tnone\n" {
 		t.Fatalf("output = %q", got)
 	}
 }
@@ -147,8 +147,42 @@ func TestList_HumanOutputShowsOneWorkItemIdentityAndState(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tReview PRD\treview\tPROCESSING\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tReview PRD\tstory\treview\tPROCESSING\tnone\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestList_HumanOutputLeavesWorkTypeEmptyWhenAbsent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:   "Legacy work",
+				WorkId: stringPtr("work-legacy"),
+				State: &factoryapi.WorkState{
+					Name: "init",
+					Type: factoryapi.WorkStateTypeINITIAL,
+				},
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Server: serverBase(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-legacy\tLegacy work\t\tinit\tINITIAL\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -193,9 +227,9 @@ func TestList_HumanOutputShowsManyWorkItems(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tPlan feature\tinit\tINITIAL\tnone\n" +
-		"work-2\tReview PRD\treview\tPROCESSING\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tPlan feature\tstory\tinit\tINITIAL\tnone\n" +
+		"work-2\tReview PRD\tstory\treview\tPROCESSING\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -241,9 +275,9 @@ func TestList_HumanOutputOmitsRuntimeResourcesWhenMixedResponseContainsOnlyVisib
 	}
 
 	got := out.String()
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tPlan feature\tinit\tINITIAL\tnone\n" +
-		"work-2\tReview PRD\treview\tPROCESSING\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tPlan feature\tstory\tinit\tINITIAL\tnone\n" +
+		"work-2\tReview PRD\tstory\treview\tPROCESSING\tnone\n"
 	if got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -288,8 +322,8 @@ func TestList_HumanOutputShowsRelationSummaryForOneRelation(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tReview PRD\treview\tPROCESSING\tDEPENDS_ON: Draft PRD [work-draft] (requires complete)\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tReview PRD\tstory\treview\tPROCESSING\tDEPENDS_ON: Draft PRD [work-draft] (requires complete)\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -345,8 +379,8 @@ func TestList_HumanOutputShowsDeterministicSummaryForMultipleRelations(t *testin
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-3\tPublish Release\tblocked\tFAILED\tDEPENDS_ON: Review PRD [work-review] (requires reviewed); PARENT_CHILD: Epic Release [work-epic]; SPAWNED_BY: Release Train [work-parent]\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-3\tPublish Release\tstory\tblocked\tFAILED\tDEPENDS_ON: Review PRD [work-review] (requires reviewed); PARENT_CHILD: Epic Release [work-epic]; SPAWNED_BY: Release Train [work-parent]\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}

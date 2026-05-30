@@ -162,16 +162,17 @@ func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) erro
 		return err
 	}
 
-	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
+	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
 		return err
 	}
 	for _, work := range result.Results {
 		stateName, stateType := workStateColumns(work.State)
 		if _, err := fmt.Fprintf(
 			output,
-			"%s\t%s\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\n",
 			stringValue(work.WorkId),
 			work.Name,
+			stringValue(work.WorkTypeName),
 			stateName,
 			stateType,
 			formatWorkRelations(work.Relations),
