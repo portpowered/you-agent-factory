@@ -1,20 +1,16 @@
-import type { ReactNode } from "react";
-
-import {
-  DashboardIconButtonShell,
-  Textarea,
-} from "../../../components/ui";
+import { DashboardIconButtonShell, Textarea } from "../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
+import { WorkContentItemShell } from "../../work-content/public";
+import { submitWorkItemRowTypeLabel } from "../lib/submit-work-item-type-label";
 import type { getSubmitWorkMessages } from "../messages/submit-work";
 import type {
   SubmitWorkDraft,
   SubmitWorkDraftFileItem,
-  SubmitWorkDraftItemType,
   SubmitWorkDraftTextItem,
 } from "./submit-work-card";
 import { FileSubmissionItemEditor } from "./submit-work-file-input";
@@ -31,6 +27,7 @@ const VALIDATION_TEXT_CLASS = cn(
 export function SubmissionItemsList({
   controlsDisabled,
   draft,
+  locale,
   messages,
   onItemTextChange,
   onRemoveItem,
@@ -40,6 +37,7 @@ export function SubmissionItemsList({
 }: {
   controlsDisabled: boolean;
   draft: SubmitWorkDraft;
+  locale?: string;
   messages: ReturnType<typeof getSubmitWorkMessages>;
   onItemTextChange: (itemId: string, value: string) => void;
   onRemoveItem: (itemId: string) => void;
@@ -51,15 +49,42 @@ export function SubmissionItemsList({
     <ol aria-labelledby={submissionItemsID} className="grid gap-3">
       {draft.items.map((item, index) => {
         const requestItemLabel = messages.requestItemLabel(index + 1);
-        const typeLabel = itemTypeLabel(messages, item.type);
+        const typeLabel = submitWorkItemRowTypeLabel(item.type, locale);
 
         return (
-          <SubmitWorkItemShell
-            disabled={controlsDisabled}
+          <WorkContentItemShell
+            headerActions={
+              <DashboardIconButtonShell
+                aria-label={messages.removeItemLabel(typeLabel, index + 1)}
+                className="text-af-text-subtle hover:border-af-danger-border hover:bg-af-danger-surface hover:text-af-danger-text"
+                disabled={controlsDisabled}
+                onClick={() => {
+                  if (controlsDisabled) {
+                    return;
+                  }
+                  onRemoveItem(item.id);
+                }}
+              >
+                <svg
+                  aria-hidden="true"
+                  fill="none"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  width="16"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="m4 4 8 8M12 4 4 12"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.7"
+                  />
+                </svg>
+              </DashboardIconButtonShell>
+            }
             itemTypeLabel={typeLabel}
             key={item.id}
-            onRemove={() => onRemoveItem(item.id)}
-            removeLabel={messages.removeItemLabel(typeLabel, index + 1)}
           >
             {item.type === "text" ? (
               <TextSubmissionItemEditor
@@ -74,68 +99,16 @@ export function SubmissionItemsList({
               <FileSubmissionItemEditorShell
                 disabled={controlsDisabled}
                 item={item}
+                locale={locale}
                 messages={messages}
                 onStageFileItems={onStageFileItems}
                 widgetId={widgetId}
               />
             )}
-          </SubmitWorkItemShell>
+          </WorkContentItemShell>
         );
       })}
     </ol>
-  );
-}
-
-function SubmitWorkItemShell({
-  children,
-  disabled = false,
-  itemTypeLabel,
-  onRemove,
-  removeLabel,
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-  itemTypeLabel: string;
-  onRemove: () => void;
-  removeLabel: string;
-}) {
-  return (
-    <li className="grid gap-3 rounded-lg border-af-border border bg-af-panel p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid gap-1">
-          <span className={FIELD_LABEL_CLASS}>{itemTypeLabel}</span>
-        </div>
-        <DashboardIconButtonShell
-          aria-label={removeLabel}
-          className="text-af-text-subtle hover:border-af-danger-border hover:bg-af-danger-surface hover:text-af-danger-text"
-          disabled={disabled}
-          onClick={() => {
-            if (disabled) {
-              return;
-            }
-            onRemove();
-          }}
-        >
-          <svg
-            aria-hidden="true"
-            fill="none"
-            height="16"
-            viewBox="0 0 16 16"
-            width="16"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="m4 4 8 8M12 4 4 12"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.7"
-            />
-          </svg>
-        </DashboardIconButtonShell>
-      </div>
-      {children}
-    </li>
   );
 }
 
@@ -182,12 +155,14 @@ function TextSubmissionItemEditor({
 function FileSubmissionItemEditorShell({
   disabled,
   item,
+  locale,
   messages,
   onStageFileItems,
   widgetId,
 }: {
   disabled: boolean;
   item: SubmitWorkDraftFileItem;
+  locale?: string;
   messages: ReturnType<typeof getSubmitWorkMessages>;
   onStageFileItems: (itemId: string, files: File[]) => void;
   widgetId: string;
@@ -199,16 +174,10 @@ function FileSubmissionItemEditorShell({
       helpTextClassName={HELP_TEXT_CLASS}
       inputID={`${widgetId}-${item.id}-file`}
       item={item}
+      locale={locale}
       messages={messages}
       onStageFileItems={(files: File[]) => onStageFileItems(item.id, files)}
       validationTextClassName={VALIDATION_TEXT_CLASS}
     />
   );
-}
-
-function itemTypeLabel(
-  messages: ReturnType<typeof getSubmitWorkMessages>,
-  itemType: SubmitWorkDraftItemType,
-): string {
-  return messages.addItemOptionLabel(itemType);
 }

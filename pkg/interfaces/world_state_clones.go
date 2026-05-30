@@ -134,6 +134,7 @@ func CloneFactoryWorldProviderSessionRecord(record FactoryWorldProviderSessionRe
 	clone.ProviderSession = *CloneProviderSessionMetadata(&record.ProviderSession)
 	clone.Diagnostics = CloneSafeWorkDiagnostics(record.Diagnostics)
 	clone.WorkItemIDs = cloneStringSlice(record.WorkItemIDs)
+	clone.WorkItems = cloneFactoryWorldWorkItemRefs(record.WorkItems)
 	clone.ConsumedInputs = cloneWorkstationInputs(record.ConsumedInputs)
 	clone.PreviousChainingTraceIDs = cloneStringSlice(record.PreviousChainingTraceIDs)
 	clone.TraceIDs = cloneStringSlice(record.TraceIDs)
@@ -309,4 +310,23 @@ func cloneIntPtr(value *int) *int {
 	}
 	clone := *value
 	return &clone
+}
+
+func cloneFactoryWorldWorkItemRef(ref FactoryWorldWorkItemRef) FactoryWorldWorkItemRef {
+	clone := ref
+	clone.PreviousChainingTraceIDs = cloneStringSlice(ref.PreviousChainingTraceIDs)
+	clone.LineageParentWorkIDs = cloneStringSlice(ref.LineageParentWorkIDs)
+	clone.Content = CloneWorkContentParts(ref.Content)
+	return clone
+}
+
+func cloneFactoryWorldWorkItemRefs(refs []FactoryWorldWorkItemRef) []FactoryWorldWorkItemRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	clones := make([]FactoryWorldWorkItemRef, len(refs))
+	for i := range refs {
+		clones[i] = cloneFactoryWorldWorkItemRef(refs[i])
+	}
+	return clones
 }

@@ -5,8 +5,36 @@ import {
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import type {
   DashboardInferenceAttempt,
+  DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
+import type { components } from "../../../../api/generated/openapi";
+
+export type MultimodalSelectedWorkPayloadContent =
+  components["schemas"]["WorkContent"];
+
+export const MULTIMODAL_SELECTED_WORK_PAYLOAD_CONTENT: MultimodalSelectedWorkPayloadContent =
+  [
+    { text: "Primary selected-work payload text", type: "text" },
+    { json: { priority: 1 }, type: "JSON" },
+    { file: "screenshot.png", type: "image" },
+  ];
+
+export function multimodalSelectedWorkPayloadOverrides(): Partial<DashboardWorkItemRef> {
+  return {
+    content: MULTIMODAL_SELECTED_WORK_PAYLOAD_CONTENT,
+    payload_status: "RESOLVED",
+  };
+}
+
+export function withMultimodalSelectedWorkPayload(
+  workItem: DashboardWorkItemRef,
+): DashboardWorkItemRef {
+  return {
+    ...workItem,
+    ...multimodalSelectedWorkPayloadOverrides(),
+  };
+}
 
 export const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 

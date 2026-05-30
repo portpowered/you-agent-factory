@@ -1,17 +1,10 @@
-import type { ReactNode } from "react";
 import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
+import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import { formatWorkItemLabel } from "../../../../components/ui/formatters";
-import {
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
-import {
-  AuthoredBodyText,
-  REQUEST_AUTHORED_TEXT_CLASS,
-  WORK_SELECTION_BUTTON_CLASS,
-} from "../../base/components/detail-card-shared";
+import { WorkContentReadOnlyList } from "../../../work-content/public";
 import { useCurrentSelectionDetailMessages } from "../../base/components/current-selection-locale";
+import { WORK_SELECTION_BUTTON_CLASS } from "../../base/components/detail-card-shared";
 
 interface WorkItemPayloadMessages {
   consumedPayloadEmpty: string;
@@ -90,7 +83,8 @@ export function WorkItemPayloadList({
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
-                    {resolvedMessages.workTypeLabel}: {resolveWorkTypeID(workItem)}
+                    {resolvedMessages.workTypeLabel}:{" "}
+                    {resolveWorkTypeID(workItem)}
                   </span>
                 ) : null}
               </div>
@@ -119,131 +113,22 @@ function WorkItemPayloadDetails({
     workItem.payloadStatus ?? workItem.payload_status ?? undefined;
   const payloadReason =
     workItem.payloadUnavailableReason ?? workItem.payload_unavailable_reason;
-  const content = workItem.content ?? [];
-
-  let body: ReactNode = null;
-  switch (payloadStatus) {
-    case "ERROR":
-      body = (
-        <p
-          className={cn(
-            "m-0 text-af-warning-text",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
-          {messages.consumedPayloadError}
-          {payloadReason ? ` ${payloadReason}` : ""}
-        </p>
-      );
-      break;
-    case "LOADING":
-      body = (
-        <p
-          className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}
-        >
-          {messages.consumedPayloadLoading}
-        </p>
-      );
-      break;
-    case "UNAVAILABLE":
-      body = (
-        <p
-          className={cn(
-            "m-0 text-af-warning-text",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
-          {messages.consumedPayloadUnavailable}
-          {payloadReason ? ` ${payloadReason}` : ""}
-        </p>
-      );
-      break;
-    default:
-      if (content.length === 0) {
-        body = (
-          <p
-            className={cn(
-              "m-0 text-af-text-muted",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-          >
-            {messages.consumedPayloadEmpty}
-          </p>
-        );
-      } else {
-        body = (
-          <div className="grid gap-2">
-            {content.map((part, index) => renderContentPart(part, index))}
-          </div>
-        );
-      }
-      break;
-  }
 
   return (
-    <section
-      aria-label={messages.consumedPayloadHeading}
-      className="grid gap-2"
-    >
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-        {messages.consumedPayloadHeading}
-      </span>
-      {body}
-    </section>
+    <WorkContentReadOnlyList
+      ariaLabel={messages.consumedPayloadHeading}
+      content={workItem.content ?? []}
+      messages={{
+        empty: messages.consumedPayloadEmpty,
+        error: messages.consumedPayloadError,
+        heading: messages.consumedPayloadHeading,
+        loading: messages.consumedPayloadLoading,
+        unavailable: messages.consumedPayloadUnavailable,
+      }}
+      payloadStatus={payloadStatus}
+      reason={payloadReason}
+    />
   );
-}
-
-function renderContentPart(
-  part: NonNullable<PayloadAwareWorkItem["content"]>[number],
-  index: number,
-) {
-  if (part.type === "text" || part.type === "TEXT") {
-    return typeof part.text === "string" ? (
-      <AuthoredBodyText key={`content-${index}`} value={part.text} />
-    ) : null;
-  }
-
-  if (part.type === "JSON") {
-    const value =
-      typeof part.json === "string"
-        ? part.json
-        : JSON.stringify(part.json ?? null, null, 2);
-    return (
-      <pre className={REQUEST_AUTHORED_TEXT_CLASS} key={`content-${index}`}>
-        <code>{value}</code>
-      </pre>
-    );
-  }
-
-  return (
-      <div
-        className={cn(
-        "rounded-lg border border-af-border bg-af-surface-raised p-3 text-af-text-muted",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
-      key={`content-${index}`}
-    >
-      {describeNonTextContentPart(part)}
-    </div>
-  );
-}
-
-function describeNonTextContentPart(
-  part: NonNullable<PayloadAwareWorkItem["content"]>[number],
-) {
-  const file = "file" in part ? part.file : undefined;
-  if (typeof file === "string" && file) {
-    return `${String(part.type)}: ${file}`;
-  }
-  const label = "label" in part ? part.label : undefined;
-  if (typeof label === "string" && label) {
-    return `${String(part.type)}: ${label}`;
-  }
-  const contentType = "contentType" in part ? part.contentType : undefined;
-  if (typeof contentType === "string" && contentType) {
-    return `${String(part.type)} (${contentType})`;
-  }
-  return `${String(part.type)}`;
 }
 
 function resolveWorkTypeID(workItem: PayloadAwareWorkItem) {
