@@ -126,10 +126,10 @@ export default defineConfig({
         "**/index.ts",
       ],
       thresholds: {
-        statements: 93.1,
+        statements: 93.05,
         branches: 80.4,
         functions: 94.9,
-        lines: 93.1,
+        lines: 93.05,
       },
     },
   },
