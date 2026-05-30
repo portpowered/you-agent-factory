@@ -166,6 +166,8 @@ see [Author factories](authoring-factories.md).
 
 ## Related
 
+- [Guards](guards.md)
+- [Relationships](relationships.md)
 - [Mock workers](mock-workers.md)
 - [Record and replay](record-replay.md)
 - [CLI reference landing page](README.md)

@@ -108,7 +108,8 @@ end-to-end authoring walkthrough and reusable files under `docs/examples/`, use
 - Built-in runner selection expects the corresponding local CLI and auth/setup
   to already be available before execution starts.
 - Keep guarded `LOGICAL_MOVE` workstations explicit instead of relying on
-  retired top-level loop-breaking fields.
+  retired top-level loop-breaking fields. See `you docs guards` for guard
+  types and loop-breaker patterns.
 - Prefer split `AGENTS.md` files for long prompts and inline runtime fields for
   portable or recorded single-file configs.
 
@@ -134,6 +135,8 @@ end-to-end authoring walkthrough and reusable files under `docs/examples/`, use
 
 - `you docs mock-workers`
 - `you docs record-replay`
+- `you docs guards`
+- `you docs relationships`
 - `you docs authoring-factories`
 - `you docs workstations`
 - `you docs workers`
