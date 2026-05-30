@@ -59,7 +59,6 @@ const CURRENT_ACTIVITY_CARD_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "relative flex h-full min-h-0 min-w-0 flex-col",
 );
-const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
 const CURRENT_ACTIVITY_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 export type CurrentActivitySelection =
@@ -439,7 +438,7 @@ export function ReactFlowCurrentActivityCardView(
       className={CURRENT_ACTIVITY_CARD_CLASS}
     >
       {showHeaderActions ? (
-        <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
+        <div className="mb-4">
           <CurrentActivityGraphHeaderActions
             editorMode={editor.editorMode}
             editorUnavailableClassifierWorkstationName={
