@@ -341,6 +341,39 @@ projections, or export-only field aliases.
 10. Run `make ui-test-storybook` after `make ui-storybook` when Storybook play functions, dashboard Storybook runtime mocks, or browser-backed interaction behavior change.
 11. Run replay-focused smoke tests when changing `pkg/replay`, record/replay CLI flags, worker side-effect matching, or artifact promotion behavior.
 
+## Frontend Testing Layers
+
+Place new dashboard UI regressions at the shallowest layer that still observes the customer-visible contract. Prefer behavioral assertions on rendered text, accessible names, network bodies, and emitted events—not source inventories, route lists, or doc-link topology checks.
+
+| Layer | Scope | Example path |
+| --- | --- | --- |
+| Unit | Pure helpers, fixtures, and harness builders without mounting production React trees | `ui/src/testing/session-factory-mocks.test.ts` |
+| Component | One widget or hook under jsdom with Testing Library | `ui/src/features/submit-work/components/submit-work-widget.test.tsx` |
+| App shell (`App.*.test`) | Full `App` mount with shared fetch, stream, and layout seams | `ui/src/App.import.test.tsx` |
+| Browser integration (`ui/integration/`) | Real Chromium flows across session tabs, import/export, or replay fixtures | `ui/integration/factory-import-second-session.integration.test.mjs` |
+| Storybook | Visual states, play functions, and dashboard runtime mocks on built `storybook-static` | `ui/src/features/bento/components/dashboard-bento-metrics-workflow-catalog.stories.tsx` |
+
+### App shell vs card-level harnesses
+
+Use **`renderApp(...)`** from `ui/src/testing/app-shell-test-utils.tsx` when the regression needs the dashboard shell together: session tab bootstrap, event stream wiring, bento layout, cross-card navigation, locale switching, or end-to-end import/export/submit flows that start from the mounted `App`. Pass optional `sessionID` so `DashboardSessionTestProvider` pins `useDashboardSessionStore` without per-file store seeding.
+
+Use **card-level `render(...)`** (or a feature-local test helper) when the behavior is owned by one card, hook, or graph surface and does not depend on shell routing. Combine focused renders with the shared harness modules below instead of duplicating inline `vi.fn()` fetch or mutation stubs.
+
+| Concern | Harness module | Typical consumers |
+| --- | --- | --- |
+| Editable factory graph mocks and fixtures | `ui/src/testing/graph-editor-harness.ts` | `react-flow-current-activity-card.test.tsx`, `use-editable-factory-graph.test.tsx` |
+| Session factory GET/PUT fetch doubles | `ui/src/testing/session-factory-mocks.ts` | `App.import.test.tsx`, `ui/src/api/named-factory/api.test.ts` |
+| Dashboard session store pinning | `ui/src/testing/dashboard-session-test-provider.tsx` | `renderApp({ sessionID })`, `ui/.storybook/dashboard-story-runtime.tsx` |
+| Bento catalog Storybook fixtures | `ui/src/features/bento/components/dashboard-bento-story-shared.tsx` | `dashboard-bento-*-catalog.stories.tsx` |
+| Factory document save mutation states | `ui/src/testing/factory-document-save-mocks.ts` | `current-selection-widget.save.test.tsx`, worker save hook tests |
+| Detail-card selection fixtures and time pins | `ui/src/features/current-selection/base/components/detail-card-test-helpers.tsx` | `work-item-card.test.tsx`, `workstation-detail-card.test.tsx` |
+
+Harness modules under `ui/src/testing/` must import only types, fixtures, and test doubles—no production React components—and must not create import cycles with feature code.
+
+For Storybook-only dashboard API mocking, keep fetch and session install logic in `ui/.storybook/dashboard-story-runtime.tsx` and prove session reset between story installs in `ui/.storybook/dashboard-story-runtime.test.ts`. After changing stories or runtime mocks, run `make ui-storybook` then `make ui-test-storybook` (or the targeted Storybook Vitest lane described under **Local Gotchas** when the full suite is blocked).
+
+For jsdom coverage of app and component tests, use `make ui-test` or the `UI Coverage` lane (`make test-ui-coverage`) as appropriate for the touched surface.
+
 ### Cron Workstation Changes
 
 Cron behavior crosses service tick production, Petri-net guards, dispatcher identity, event history, API read models, and dashboard projections. Keep [Workstation Kinds and Parameterized Fields](../reference/workstations.md#cron-kind) as the canonical authoring and migration guide instead of duplicating the full cron model in local notes.
