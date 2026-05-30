@@ -64,6 +64,7 @@ vi.mock("../features/current-factory-definition/public", async () => {
 export class MockEventSource {
   public static instances: MockEventSource[] = [];
 
+  public closed = false;
   public onerror: ((event: Event) => void) | null = null;
   public onopen: ((event: Event) => void) | null = null;
 
@@ -79,7 +80,9 @@ export class MockEventSource {
     this.listeners.set(type, existing);
   }
 
-  public close(): void {}
+  public close(): void {
+    this.closed = true;
+  }
 
   public emit(type: string, data: unknown): void {
     if (type === "snapshot") {
@@ -102,9 +105,11 @@ export class MockEventSource {
 interface RenderAppOptions {
   browserLanguage?: string | null;
   browserLanguages?: readonly string[] | null;
+  factorySessions?: FactorySessionSummary[];
   initialLocale?: string | null;
   locationSearch?: string | null;
   sessionID?: string | null;
+  seedTimelineFromSnapshot?: boolean;
   snapshot: DashboardSnapshot;
   timelineEvents?: FactoryEvent[];
   timelineSnapshots?: DashboardSnapshot[];
@@ -278,6 +283,20 @@ function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
   });
 }
 
+function fetchRequestPath(input: RequestInfo | URL): string {
+  if (typeof input === "string") {
+    return input.startsWith("http") ? new URL(input).pathname : input;
+  }
+
+  if (input instanceof URL) {
+    return `${input.pathname}${input.search}`;
+  }
+
+  return input.url.startsWith("http")
+    ? new URL(input.url).pathname
+    : input.url;
+}
+
 export async function waitForDashboardShell(): Promise<void> {
   await screen.findByRole("heading", { name: "U" });
 }
@@ -285,8 +304,10 @@ export async function waitForDashboardShell(): Promise<void> {
 export function renderApp({
   browserLanguage,
   browserLanguages,
+  factorySessions,
   initialLocale,
   locationSearch,
+  seedTimelineFromSnapshot = true,
   sessionID,
   snapshot,
   timelineEvents,
@@ -307,16 +328,11 @@ export function renderApp({
   const fetchMock: FetchMock = vi
     .fn()
     .mockImplementation(async (input: RequestInfo | URL) => {
-      const path =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? `${input.pathname}${input.search}`
-            : input.url;
+      const path = fetchRequestPath(input);
 
       if (path === "/factory-sessions") {
         return jsonResponse({
-          sessions: [defaultFactorySessionSummary],
+          sessions: factorySessions ?? [defaultFactorySessionSummary],
         });
       }
 
@@ -330,7 +346,7 @@ export function renderApp({
     useFactoryTimelineStore.getState().replaceEvents(timelineEvents);
   } else if (timelineSnapshots) {
     seedTimelineSnapshots(timelineSnapshots);
-  } else {
+  } else if (seedTimelineFromSnapshot) {
     seedTimelineSnapshot(
       snapshot,
       traceFixtures,
