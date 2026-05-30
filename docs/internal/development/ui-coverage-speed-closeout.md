@@ -150,60 +150,68 @@ cd ui && /usr/bin/time -p bunx vitest run --coverage --coverage.clean=false --ma
 
 ## UI Browser Integration lane (US-007, 2026-05-30 UTC)
 
-This lane is **separate** from UI Coverage (`make test-ui-coverage`). Canonical command: `make ui-integration-test` → `ui/package.json` `test:integration` (`vitest run integration --no-file-parallelism --maxWorkers 1`). Orchestration, mock API, production `bun run build`, `vite preview`, and Playwright live in `ui/integration/browser-test-harness.mjs`.
+This lane is **separate** from UI Coverage (`make test-ui-coverage`). Canonical command: `make ui-integration-test` → `ui/package.json` `test:integration` (`vitest run integration --no-file-parallelism --maxWorkers 1`). The shared harness (`ui/integration/browser-test-harness.mjs`) owns a **self-built** production `bun run build` with lane-specific `VITE_AGENT_FACTORY_API_ORIGIN`, `vite preview` startup, stub API servers, Playwright traces/screenshots when `AGENT_FACTORY_BROWSER_ARTIFACT_DIR` is set, and failure diagnostics beside those artifacts.
 
-Reproduce per-file durations locally:
+Reproduce per-file timings:
 
 ```bash
-cd ui && bunx vitest run integration --no-file-parallelism --maxWorkers 1 --reporter=default
+make ui-integration-test 2>&1 | rg '✓ integration/|✓ src/.*integration|Test Files|Duration'
 ```
 
-### CI reference (`ubuntu-latest`, run [`26654493647`](https://github.com/portpowered/you-agent-factory/actions/runs/26654493647))
+### CI reference (`UI Browser Integration` job)
 
 | Field | Value |
 | --- | --- |
-| `UI Browser Integration` job wall | **~2m53s** (2026-05-29T18:23:45Z → 2026-05-29T18:26:38Z, includes checkout/setup/install) |
-| `Run dashboard browser integration suite` step | **~2m11s** (2026-05-29T18:24:22Z → 2026-05-29T18:26:33Z) |
-| Vitest `Duration` (lane command only) | **130.39s** (tests **123.20s**) |
+| Workflow run | [`26677025093`](https://github.com/portpowered/you-agent-factory/actions/runs/26677025093) |
+| Head SHA | `decaa2ef3edc74d080d30ce22829964a3e72194d` (`main`, 2026-05-30 UTC) |
+| Job | [`78630895141`](https://github.com/portpowered/you-agent-factory/actions/runs/26677025093/job/78630895141) (`ubuntu-latest`) |
+| Job wall | **2m55s** (2026-05-30T06:39:38Z → 2026-05-30T06:42:33Z; checkout, setup, `make ui-deps`, Playwright install) |
+| `Run dashboard browser integration suite` step | **~2m19s** (2026-05-30T06:40:11Z → 2026-05-30T06:42:30Z) |
+| Vitest `Duration` (lane command only) | **138.69s** (tests **131.20s**) |
 
-| Integration file | Tests | CI Vitest file elapsed |
-| --- | ---: | ---: |
-| `integration/factory-graph-editor.integration.test.mjs` | 3 | **51.01s** |
-| `integration/event-stream-replay.integration.test.mjs` | 3 | **35.88s** |
-| `integration/dashboard-session-tabs.integration.test.mjs` | 1 | **31.33s** |
-| `integration/browser-test-harness.artifacts.integration.test.mjs` | 1 | **0.00s** |
+Earlier comparable run on the same runner class (UI Coverage baseline night): [`26654493647`](https://github.com/portpowered/you-agent-factory/actions/runs/26654493647) — lane step **~2m11s**, Vitest **130.39s** (three Playwright files only).
 
-**Build and preview (inside harness, not separate log lines):** the first call to `startBrowserPreview()` runs `bun run build` once per Vitest process (`globalThis.__agentFactoryBrowserIntegrationBuildComplete`), then spawns `vite preview` and blocks on `waitForURL` (up to **90s**). On the same CI runner class, the dashboard production build alone is **~25s** when cold (`Build, Lint, and API` logged `built in 25.42s`). That build cost is **included in the first integration file’s elapsed time** above (~51s total for factory-graph-editor).
+| Integration file | Tests | CI Vitest file elapsed | Notes |
+| --- | ---: | ---: | --- |
+| `integration/factory-graph-editor.integration.test.mjs` | 3 | **55.01s** | First in run order; includes one-time `bun run build` + preview ready wait |
+| `src/features/workflow-activity/components/react-flow-current-activity-card-edit-integration.test.tsx` | 11 | **5.26s** | jsdom (not Playwright); included because `vitest run integration` matches paths containing `integration` |
+| `integration/event-stream-replay.integration.test.mjs` | 3 | **38.48s** | Replay smoke + browser-visible timeline |
+| `integration/dashboard-session-tabs.integration.test.mjs` | 1 | **32.45s** | Session tab open flow |
+| `integration/browser-test-harness.artifacts.integration.test.mjs` | 1 | **0.00s** | Path-resolution only |
+
+**Build and preview (harness, not separate Vitest log lines):** `startBrowserPreview()` runs `bun run build` once per Vitest process (`globalThis.__agentFactoryBrowserIntegrationBuildComplete`), then spawns `vite preview` and blocks on `waitForURL` (up to **90s**). Each Playwright file still calls `startBrowserPreview()` / `stop()` in its own `beforeAll` / `afterAll`, so later files pay another preview startup even though build is cached. Playwright scenario bodies are sub-second to ~10s each on CI; most file-level wall time is harness startup/teardown.
 
 ### Local reference (maintainer workstation)
 
 | Field | Value |
 | --- | --- |
 | Date (UTC) | 2026-05-30 |
-| Environment | macOS Darwin arm64, 10 logical CPUs, `bun install` in `ui/` |
-| Cold `bun run build` (`VITE_AGENT_FACTORY_API_ORIGIN=http://127.0.0.1:43117`, `NODE_ENV=production`) | **23.99s** `real` |
-| `make ui-integration-test` Vitest `Duration` | **62.94–76.38s** (warm in-process build cache after first `startBrowserPreview`) |
+| Environment | macOS Darwin arm64, `bun install` in `ui/` |
+| Cold `bun run build` (`VITE_AGENT_FACTORY_API_ORIGIN=http://127.0.0.1:43117`) | **~14–24s** `real` |
+| `make ui-integration-test` wall (cold `dist/`, first run in session) | **~171s** |
+| Same command warm (`dist/` present, in-process build cache) | **~67s** Vitest `Duration` |
 
-| Integration file | Tests | Local Vitest file elapsed (warm build) |
+| Integration file | Tests | Local Vitest file elapsed (warm) |
 | --- | ---: | ---: |
-| `integration/factory-graph-editor.integration.test.mjs` | 3 | **30.90s** |
-| `integration/event-stream-replay.integration.test.mjs` | 3 | **21.44s** |
-| `integration/dashboard-session-tabs.integration.test.mjs` | 1 | **16.76s** |
-| `integration/browser-test-harness.artifacts.integration.test.mjs` | 1 | **0.00s** |
+| `integration/factory-graph-editor.integration.test.mjs` | 3 | **~25–31s** |
+| `integration/event-stream-replay.integration.test.mjs` | 3 | **~19–21s** |
+| `integration/dashboard-session-tabs.integration.test.mjs` | 1 | **~16s** |
+| `integration/browser-test-harness.artifacts.integration.test.mjs` | 1 | **~0s** |
 
-Local wall time is **much lower** than CI (~2m11s step) because the maintainer machine finished Playwright work faster; use the CI table when estimating PR lane cost.
+Prefer the **CI** table when estimating PR lane cost; local warm runs understate build + first-preview cost.
 
 ### Browser lane proposals (ranked)
 
-**Guardrails:** keep the lane **self-building** (`browser-test-harness.mjs` runs `bun run build` + `vite preview` with test-owned `VITE_AGENT_FACTORY_API_ORIGIN`); keep failure artifacts via `AGENT_FACTORY_BROWSER_ARTIFACT_DIR` and the harness helpers (Playwright trace, screenshot, HTML snapshot, diagnostics JSON)—do not drop them for speed.
+**Guardrails:** keep the lane **self-building** with test-owned API origin; keep failure artifacts via `AGENT_FACTORY_BROWSER_ARTIFACT_DIR` and harness helpers (Playwright trace, screenshot, HTML snapshot, diagnostics JSON).
 
 | Rank | Proposal | Est. impact on CI lane | Risk | Owned command / files |
 | ---: | --- | --- | --- | --- |
-| 1 | **Reuse `ui/dist` from Build/Lint** — upload `dist` as a workflow artifact keyed by lockfile + API-origin env; skip harness `bun run build` when the artifact matches | **~20–25s** (one fewer production build) | Low–medium (stale artifact if build inputs drift) | `.github/workflows/ci.yml`, `ui/integration/browser-test-harness.mjs` |
-| 2 | **Trim longest replay/graph Playwright paths** — reduce tick replay counts, avoid duplicate navigations, tighten `uiInteractionTimeoutMs` only where scenarios already assert quickly | **~10–20s** on `event-stream-replay` + `factory-graph-editor` | Medium (less replay coverage per scenario) | `ui/integration/event-stream-replay.integration.test.mjs`, `ui/integration/factory-graph-editor.integration.test.mjs`, `ui/integration/fixtures/` |
-| 3 | **Optional:** parallelize integration files in CI with distinct preview/API ports (one Vitest worker per shard) | Up to **~40–50%** job wall if shards run in parallel | High (flake, ports, artifact collisions) | `ci.yml` matrix + harness port env |
+| 1 | Narrow `test:integration` to `integration/*.integration.test.mjs` (move jsdom `*edit-integration.test.tsx` back to `make ui-test` only) | **~5s**; clearer lane boundary | Low | `ui/package.json` `test:integration` |
+| 2 | Share one preview (+ optional shared stub API) across browser files via Vitest `globalSetup` or a single orchestrator | **~20–60s** if redundant preview startups removed | Medium (ports, artifact labels, isolation) | `browser-test-harness.mjs`, `ui/integration/*.integration.test.mjs` |
+| 3 | Cache `ui/dist` / Vite build cache in the browser CI job (same API-origin env key) | **~10–15s** on warm hits | Low–medium (stale assets) | `.github/workflows/ci.yml` |
+| 4 | Trim longest replay/graph Playwright paths (fewer ticks, avoid duplicate navigations) | **~10–20s** on hottest files | Medium (coverage depth) | `event-stream-replay.integration.test.mjs`, `factory-graph-editor.integration.test.mjs` |
 
-**Not recommended:** serve `vite dev` instead of preview build (changes the lane contract); disable Playwright traces/screenshots on failure; move `integration/*.integration.test.mjs` into the jsdom coverage corpus (confuses the eight-minute UI Coverage figure with browser cost).
+**Not recommended:** downloading `ui/dist` from `verify-build-contracts` without the lane’s `VITE_AGENT_FACTORY_API_ORIGIN` (breaks contract in `ci.yml`); `vite dev` instead of preview; disabling Playwright failure artifacts; moving `integration/*.integration.test.mjs` into the jsdom coverage corpus.
 
 ## Root-cause analysis (why ~8–9 minutes on CI)
 
@@ -256,72 +264,6 @@ Prioritized for follow-up stories in this initiative. **Impact** is qualitative 
 **Suggested execution order:** US-004 (workers) and US-006 (App slimming) first—they touch existing phases without new workflow. US-005 only after US-002 slow-file and trial totals prove benefit. US-008 only if single-job main pass remains >~6–7 minutes after (1)–(3). US-007 stays separate so coverage work is not confused with Playwright timing.
 
 At least one implemented optimization from ranks 1–4 must show **≥15%** total lane improvement versus the baseline table with stable CI or documented local proof before the initiative’s optimization acceptance criterion is satisfied (**US-004** / **US-005** / **US-006** / **US-008**).
-
-## UI Browser Integration lane (US-007, 2026-05-30 UTC)
-
-This lane is **separate** from UI Coverage (`make test-ui-coverage`). It runs real Chromium scenarios through `make ui-integration-test` → `ui/package.json` `test:integration` → `vitest run integration --no-file-parallelism --maxWorkers 1`. The shared harness (`ui/integration/browser-test-harness.mjs`) owns a **self-built** production `bun run build` with lane-specific `VITE_AGENT_FACTORY_API_ORIGIN`, `vite preview` startup, stub API servers, Playwright traces/screenshots when `AGENT_FACTORY_BROWSER_ARTIFACT_DIR` is set, and failure diagnostics beside those artifacts.
-
-### CI reference (`UI Browser Integration` job)
-
-| Field | Value |
-| --- | --- |
-| Workflow run | [`26677025093`](https://github.com/portpowered/you-agent-factory/actions/runs/26677025093) |
-| Head SHA | `decaa2ef3edc74d080d30ce22829964a3e72194d` (`main`, 2026-05-30 UTC) |
-| Job | [`78630895141`](https://github.com/portpowered/you-agent-factory/actions/runs/26677025093/job/78630895141) (`ubuntu-latest`) |
-| Job wall | **2m55s** (2026-05-30T06:39:38Z → 2026-05-30T06:42:33Z; includes checkout, Go/Bun/Node setup, `make ui-deps`, Playwright install) |
-| `Run dashboard browser integration suite` step (`make ui-integration-test`) | **~2m19s** (2026-05-30T06:40:11Z → 2026-05-30T06:42:30Z) |
-| Vitest-reported lane duration | **138.69s** (transform/setup/import overhead **~7.5s**; tests **131.20s**) |
-
-Reproduce per-file timings from CI or local logs:
-
-```bash
-make ui-integration-test 2>&1 | rg '✓ integration/|✓ src/.*integration|Test Files|Duration'
-```
-
-### Per integration file (Vitest file duration, CI)
-
-Vitest file durations include each file’s `beforeAll` / `afterAll` harness work (preview start/stop, API stub). The **first** Playwright-backed file pays the one-time `bun run build` cost via `startBrowserPreview()`’s `globalThis` build cache; later files reuse the build but still start their own preview process.
-
-| File | Tests | CI file duration | Notes |
-| --- | ---: | ---: | --- |
-| `integration/factory-graph-editor.integration.test.mjs` | 3 | **55.01s** | First in run order; includes production build + preview ready wait |
-| `src/features/workflow-activity/components/react-flow-current-activity-card-edit-integration.test.tsx` | 11 | **5.26s** | jsdom Testing Library (not Playwright); picked up because `vitest run integration` matches paths containing `integration` |
-| `integration/event-stream-replay.integration.test.mjs` | 3 | **38.48s** | Replay smoke + browser-visible timeline |
-| `integration/dashboard-session-tabs.integration.test.mjs` | 1 | **32.45s** | Session tab open flow |
-| `integration/browser-test-harness.artifacts.integration.test.mjs` | 1 | **0.00s** | Path-resolution only |
-
-Playwright scenario bodies inside the browser files are sub-second to ~10s each on CI; most file-level wall time is harness startup/teardown between files, not assertion bodies.
-
-### Build and preview (local spot, same harness contract)
-
-| Phase | Local cold spot (`rm -rf ui/dist` then `bun run build` with lane API origin) | Notes |
-| --- | ---: | --- |
-| Production build (`tsc -b && vite build && normalize-dist`) | **~14s** real | Matches harness `run build` with `VITE_AGENT_FACTORY_API_ORIGIN` |
-| Preview ready (`vite preview` + `waitForURL`) | Included in first file’s Vitest duration | Each browser file calls `startBrowserPreview()` / `stop()` in its own `beforeAll` / `afterAll` |
-
-### Local reference (maintainer workstation, warm `ui/dist`)
-
-| Field | Value |
-| --- | --- |
-| Environment | macOS Darwin arm64, Bun `ui/` workspace |
-| `/usr/bin/time -p` wall (`make ui-integration-test`, warm dist) | **~67s** |
-| Same command after prior run in session (cached build in-process + warm dist) | **~66–68s** Vitest duration |
-| Cold local wall (no prior `dist/`, first run in session) | **~171s** |
-
-Prefer the **CI** table when estimating PR lane cost; local warm runs understate build + first-preview cost.
-
-### Ranked browser-lane proposals
-
-Preserves **self-built preview**, **`browser-test-harness.mjs` artifact seams**, and lane ownership documented in `development.md` / `ci.yml`.
-
-| Rank | Proposal | Est. impact | Risk | Owned command |
-| ---: | --- | --- | --- | --- |
-| B1 | Narrow `test:integration` to `integration/*.integration.test.mjs` only (stop matching `*edit-integration.test.tsx` under `src/`) | **~5s** CI; clearer lane boundary | Low (ensure file stays in `make ui-test`) | `ui/package.json` `test:integration`, `test:unit` exclude glob |
-| B2 | Share one preview (+ optional shared stub API) across browser integration files via Vitest `globalSetup` / single orchestrator | **~20–60s** CI if 2× redundant preview startups removed | Medium (port ownership, per-file artifact labels, failure isolation) | `browser-test-harness.mjs`, `ui/integration/*.integration.test.mjs` |
-| B3 | Cache `ui/dist` or Vite build cache in CI browser job only | **~10–15s** on warm cache hits | Low–medium (stale asset risk if cache key wrong) | `.github/workflows/ci.yml` `ui-browser-integration` job |
-| B4 | Split browser integration into parallel CI jobs by file | Wall time ↓ if jobs run in parallel | High (duplicate builds/previews, flake, artifact merge) | `ci.yml`; defer unless B1–B3 insufficient |
-
-**Not recommended for this lane:** downloading `ui/dist` from `verify-build-contracts` (breaks lane-specific API origin contract documented in `ci.yml`); disabling Playwright traces/screenshots in CI (regresses failure artifacts); running browser specs inside the jsdom coverage lane.
 
 ## Approaches not recommended
 
