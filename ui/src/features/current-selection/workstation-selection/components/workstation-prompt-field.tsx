@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 
 import { DisclosureButton } from "../../../../components/ui/disclosure-button";
 import {
@@ -125,7 +125,6 @@ function EditableConfigurationPromptAutocompleteFeedback({
     <EditableConfigurationReadyPromptHelp
       messages={messages}
       promptHelpState={state.promptHelpState}
-      workstationSelectionKey={state.initialValues.workstationName}
     />
   );
 }
@@ -133,19 +132,13 @@ function EditableConfigurationPromptAutocompleteFeedback({
 function EditableConfigurationReadyPromptHelp({
   messages,
   promptHelpState,
-  workstationSelectionKey,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   promptHelpState: Extract<EditableWorkstationPromptHelpState, { status: "ready" }>;
-  workstationSelectionKey: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const sectionId = useId();
   const contentId = `${sectionId}-prompt-help-content`;
-
-  useEffect(() => {
-    setExpanded(false);
-  }, [workstationSelectionKey]);
 
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
