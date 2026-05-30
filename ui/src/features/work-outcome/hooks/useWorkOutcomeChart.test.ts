@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
 import { buildWorkOutcomeTimelineSamplesFromEvents } from "./useWorkOutcomeChart";

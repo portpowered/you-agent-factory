@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import {
   DASHBOARD_RETIRED_TEXT_SIZE_LITERALS,
   DASHBOARD_TYPOGRAPHY_CONTRACT,

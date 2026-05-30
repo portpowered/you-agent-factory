@@ -32,9 +32,13 @@ import {
   workstationKindParityExpectations,
 } from "../../../components/dashboard/test-fixtures";
 import {
-  useCurrentFactoryDocument,
-  useSaveCurrentFactory,
-} from "../../current-factory-definition/public";
+  useCurrentFactoryDocumentMock,
+  useSaveCurrentFactoryMock,
+} from "../../../../testing/bun-current-factory-definition-public-mocks";
+import {
+  useEditableFactoryGraphMock,
+  useFactoryGraphDraftStateMock,
+} from "../../../../testing/bun-factory-graph-editor-public-mocks";
 import {
   addFactoryGraphNode,
   connectFactoryGraphNodes,
@@ -63,28 +67,6 @@ import {
   currentActivityTopologyKey,
   ReactFlowCurrentActivityCard,
 } from "./react-flow-current-activity-card";
-
-vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/public",
-  );
-
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
-  };
-});
-
-vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual("../../factory-graph-editor/public");
-
-  return {
-    ...actual,
-    useEditableFactoryGraph: vi.fn(),
-    useFactoryGraphDraftState: vi.fn(),
-  };
-});
 
 const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
 
@@ -546,7 +528,7 @@ function renderWithQueryClient(view: ReactElement) {
 function createEditableGraphTestViewModel(
   options: Parameters<typeof useEditableFactoryGraph>[0],
 ): ReturnType<typeof useEditableFactoryGraph> {
-  const draftState = vi.mocked(useFactoryGraphDraftState)();
+  const draftState = useFactoryGraphDraftStateMock();
   const baseFactoryDefinition =
     draftState.latestDocument ?? draftState.baseDocument ?? null;
   const activeWorkCount = options.activeWorkCount ?? 0;
@@ -1041,20 +1023,20 @@ function registerCurrentActivityCardTestLifecycle(): void {
     window.localStorage.clear();
     useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
     restoreBrowserTestShims = installDashboardBrowserTestShims();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: undefined,
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
+    useSaveCurrentFactoryMock.mockReturnValue({
       mutateAsync: vi.fn(),
       reset: vi.fn(),
       status: "idle",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue(
+    useFactoryGraphDraftStateMock.mockReturnValue(
       defaultDraftState as never,
     );
-    vi.mocked(useEditableFactoryGraph).mockImplementation((options) =>
+    useEditableFactoryGraphMock.mockImplementation((options) =>
       createEditableGraphTestViewModel(options as never),
     );
   });
@@ -1081,7 +1063,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("shows the add, delete, and connect toolbar in editor mode", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
@@ -1157,12 +1139,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("lists the supported add-entity options and validates duplicate worker names before mutating the draft", async () => {
     const replaceDraft = vi.fn();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       replaceDraft,
     } as never);
@@ -1198,12 +1180,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("submits valid add-entity forms into the pending graph draft", async () => {
     const replaceDraft = vi.fn();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       replaceDraft,
     } as never);
@@ -1244,12 +1226,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("distinguishes work-state creation from work-type creation and blocks missing work-type association", async () => {
     const replaceDraft = vi.fn();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       replaceDraft,
     } as never);
@@ -1298,12 +1280,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("submits valid work-state add-entity forms into the pending graph draft", async () => {
     const replaceDraft = vi.fn();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       replaceDraft,
     } as never);
@@ -1342,12 +1324,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
   }, 30_000);
 
   it("keeps editor mode on the shared observer graph surface", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       graph: {
         edges: [],
@@ -1403,12 +1385,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("renders worker and resource nodes from the canonical snapshot factory in observer mode", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       latestDocument: workerDenseFactoryDefinitionDocument,
       pendingFactoryDefinition: workerDenseFactoryDefinitionDocument,
@@ -1439,12 +1421,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("does not render the editor-only visibility preset controls in embedded editor mode", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       latestDocument: workerDenseFactoryDefinitionDocument,
       pendingFactoryDefinition: workerDenseFactoryDefinitionDocument,
@@ -1472,7 +1454,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("renders supported workstation and work-state editor handles on the shared observer graph", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
@@ -1561,12 +1543,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("keeps removed server-backed workstations visible with a pending-removal badge", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       draft: {
         ...defaultDraftState.draft,
@@ -1599,7 +1581,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("shows a loading editor state while the editable definition is still fetching", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: undefined,
       error: null,
       status: "pending",
@@ -1636,12 +1618,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("requires save, discard, or keep editing before leaving editor mode with unsaved changes", async () => {
     const resetDraft = vi.fn();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       hasChanges: true,
       resetDraft,
@@ -1679,12 +1661,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("shows explicit save and discard actions for pending graph changes", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       draft: {
         ...defaultDraftState.draft,
@@ -1728,17 +1710,17 @@ function registerCurrentActivityCardTestLifecycle(): void {
     const mutateAsync = vi
       .fn()
       .mockResolvedValue(editableFactoryDefinitionDocument);
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
+    useSaveCurrentFactoryMock.mockReturnValue({
       mutateAsync,
       reset: vi.fn(),
       status: "idle",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       draft: {
         ...defaultDraftState.draft,
@@ -1791,12 +1773,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("warns when a newer editable-definition version arrives during a dirty draft", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       baseDocument: editableFactoryDefinitionDocument,
       draft: {
@@ -1846,12 +1828,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("blocks topology save while active work is still running", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       draft: {
         ...defaultDraftState.draft,
@@ -1895,17 +1877,17 @@ function registerCurrentActivityCardTestLifecycle(): void {
       .fn()
       .mockResolvedValue(editableFactoryDefinitionDocument);
     const replaceDraft = vi.fn();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
+    useSaveCurrentFactoryMock.mockReturnValue({
       mutateAsync,
       reset: vi.fn(),
       status: "idle",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       hasChanges: true,
       replaceDraft,
@@ -2537,7 +2519,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const reactFlowErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
@@ -2575,12 +2557,12 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       .mockImplementation(() => {});
     const idleSnapshot = dashboardSnapshotWithActiveWorkItemCount(0);
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    useFactoryGraphDraftStateMock.mockReturnValue({
       ...defaultDraftState,
       draft: {
         ...defaultDraftState.draft,

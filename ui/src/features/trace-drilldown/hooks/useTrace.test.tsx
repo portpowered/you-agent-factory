@@ -1,6 +1,6 @@
 import { expandTraceWithCausalPredecessors } from "./useTrace";
 import type { DashboardTrace } from "../../../api/dashboard/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 function buildTrace(
   traceID: string,

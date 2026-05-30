@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { currentSelectionDetailMessagesByLocale } from "../features/current-selection/messages/current-selection-detail";
 import { currentSelectionDispatchHistoryMessagesByLocale } from "../features/current-selection/messages/current-selection-dispatch-history";
 import { currentSelectionShellMessagesByLocale } from "../features/current-selection/messages/current-selection-shell";

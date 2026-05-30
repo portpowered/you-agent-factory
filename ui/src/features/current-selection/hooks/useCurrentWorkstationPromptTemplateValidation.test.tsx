@@ -1,11 +1,11 @@
+import "../../../../testing/bun-current-factory-prompt-template-api-mocks";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import {
-  type PromptTemplateValidationResult,
-  validateCurrentFactoryWorkstationPromptTemplate,
-} from "../../../api/current-factory-prompt-template";
+import { type PromptTemplateValidationResult } from "../../../api/current-factory-prompt-template";
+import { validateCurrentFactoryWorkstationPromptTemplateMock } from "../../../../testing/bun-current-factory-prompt-template-api-mocks";
 import {
   resetDashboardSessionStore,
   useDashboardSessionStore,
@@ -15,17 +15,6 @@ import {
   useCurrentWorkstationPromptTemplateValidation,
 } from "./useCurrentWorkstationPromptTemplateValidation";
 
-vi.mock("../../../api/current-factory-prompt-template", async () => {
-  const actual = await vi.importActual(
-    "../../../api/current-factory-prompt-template",
-  );
-
-  return {
-    ...actual,
-    validateCurrentFactoryWorkstationPromptTemplate: vi.fn(),
-  };
-});
-
 const promptTemplateValidationResult: PromptTemplateValidationResult = {
   diagnostics: [],
   valid: true,
@@ -34,7 +23,7 @@ const promptTemplateValidationResult: PromptTemplateValidationResult = {
 describe("useCurrentWorkstationPromptTemplateValidation", () => {
   beforeEach(() => {
     resetDashboardSessionStore();
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockReset();
+    validateCurrentFactoryWorkstationPromptTemplateMock.mockReset();
   });
 
   it("builds a stable query key for one prompt draft", () => {
@@ -58,7 +47,9 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    expect(validateCurrentFactoryWorkstationPromptTemplate).not.toHaveBeenCalled();
+    expect(
+      validateCurrentFactoryWorkstationPromptTemplateMock,
+    ).not.toHaveBeenCalled();
     expect(result.current).toMatchObject({
       data: undefined,
       error: null,
@@ -89,7 +80,7 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
   });
 
   it("loads authoritative prompt validation for the active draft", async () => {
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockResolvedValue(
+    validateCurrentFactoryWorkstationPromptTemplateMock.mockResolvedValue(
       promptTemplateValidationResult,
     );
 
@@ -111,7 +102,7 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       });
     });
 
-    expect(validateCurrentFactoryWorkstationPromptTemplate).toHaveBeenCalledWith(
+    expect(validateCurrentFactoryWorkstationPromptTemplateMock).toHaveBeenCalledWith(
       "Review",
       "Use {{ .Prompt }}",
       { sessionID: "~default" },
@@ -120,7 +111,7 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
 
   it("validates the active prompt draft through the selected session", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockResolvedValue(
+    validateCurrentFactoryWorkstationPromptTemplateMock.mockResolvedValue(
       promptTemplateValidationResult,
     );
 
@@ -137,7 +128,7 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       expect(result.current.status).toBe("success");
     });
 
-    expect(validateCurrentFactoryWorkstationPromptTemplate).toHaveBeenCalledWith(
+    expect(validateCurrentFactoryWorkstationPromptTemplateMock).toHaveBeenCalledWith(
       "Review",
       "Use {{ .Prompt }}",
       { sessionID: "session-beta" },
@@ -145,13 +136,11 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
   });
 
   it("surfaces typed validation API failures for the active draft", async () => {
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockRejectedValue(
-      {
-        code: "BAD_REQUEST",
-        message: "Prompt validation request was rejected.",
-        name: "CurrentFactoryPromptTemplateAPIError",
-      },
-    );
+    validateCurrentFactoryWorkstationPromptTemplateMock.mockRejectedValue({
+      code: "BAD_REQUEST",
+      message: "Prompt validation request was rejected.",
+      name: "CurrentFactoryPromptTemplateAPIError",
+    });
 
     const { result } = renderHook(
       () =>

@@ -1,11 +1,11 @@
+import "../../../../testing/bun-current-factory-prompt-template-api-mocks";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import {
-  getCurrentFactoryWorkstationPromptTemplateContract,
-  type PromptTemplateContract,
-} from "../../../api/current-factory-prompt-template";
+import { type PromptTemplateContract } from "../../../api/current-factory-prompt-template";
+import { getCurrentFactoryWorkstationPromptTemplateContractMock } from "../../../../testing/bun-current-factory-prompt-template-api-mocks";
 import {
   resetDashboardSessionStore,
   useDashboardSessionStore,
@@ -14,17 +14,6 @@ import {
   buildCurrentWorkstationPromptTemplateContractQueryKey,
   useCurrentWorkstationPromptTemplateContract,
 } from "./useCurrentWorkstationPromptTemplateContract";
-
-vi.mock("../../../api/current-factory-prompt-template", async () => {
-  const actual = await vi.importActual(
-    "../../../api/current-factory-prompt-template",
-  );
-
-  return {
-    ...actual,
-    getCurrentFactoryWorkstationPromptTemplateContract: vi.fn(),
-  };
-});
 
 const promptTemplateContract: PromptTemplateContract = {
   availableVariables: [
@@ -42,7 +31,7 @@ const promptTemplateContract: PromptTemplateContract = {
 describe("useCurrentWorkstationPromptTemplateContract", () => {
   beforeEach(() => {
     resetDashboardSessionStore();
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockReset();
+    getCurrentFactoryWorkstationPromptTemplateContractMock.mockReset();
   });
 
   it("builds a stable query key for the selected workstation", () => {
@@ -61,7 +50,9 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    expect(getCurrentFactoryWorkstationPromptTemplateContract).not.toHaveBeenCalled();
+    expect(
+      getCurrentFactoryWorkstationPromptTemplateContractMock,
+    ).not.toHaveBeenCalled();
     expect(result.current).toMatchObject({
       data: undefined,
       error: null,
@@ -84,7 +75,7 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
   });
 
   it("loads the prompt-template contract for the selected workstation", async () => {
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockResolvedValue(
+    getCurrentFactoryWorkstationPromptTemplateContractMock.mockResolvedValue(
       promptTemplateContract,
     );
 
@@ -102,15 +93,14 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
       });
     });
 
-    expect(getCurrentFactoryWorkstationPromptTemplateContract).toHaveBeenCalledWith(
-      "Review",
-      { sessionID: "~default" },
-    );
+    expect(
+      getCurrentFactoryWorkstationPromptTemplateContractMock,
+    ).toHaveBeenCalledWith("Review", { sessionID: "~default" });
   });
 
   it("loads prompt-template contract data through the selected session", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockResolvedValue(
+    getCurrentFactoryWorkstationPromptTemplateContractMock.mockResolvedValue(
       promptTemplateContract,
     );
 
@@ -123,21 +113,18 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
       expect(result.current.status).toBe("success");
     });
 
-    expect(getCurrentFactoryWorkstationPromptTemplateContract).toHaveBeenCalledWith(
-      "Review",
-      { sessionID: "session-beta" },
-    );
+    expect(
+      getCurrentFactoryWorkstationPromptTemplateContractMock,
+    ).toHaveBeenCalledWith("Review", { sessionID: "session-beta" });
     expect(result.current.data).toBe(promptTemplateContract);
   });
 
   it("surfaces typed API failures from the prompt-template contract query", async () => {
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockRejectedValue(
-      {
-        code: "NOT_FOUND",
-        message: "Current factory workstation not found.",
-        name: "CurrentFactoryPromptTemplateAPIError",
-      },
-    );
+    getCurrentFactoryWorkstationPromptTemplateContractMock.mockRejectedValue({
+      code: "NOT_FOUND",
+      message: "Current factory workstation not found.",
+      name: "CurrentFactoryPromptTemplateAPIError",
+    });
 
     const { result } = renderHook(
       () => useCurrentWorkstationPromptTemplateContract("Review"),

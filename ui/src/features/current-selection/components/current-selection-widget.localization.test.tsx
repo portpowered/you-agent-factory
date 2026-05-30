@@ -1,33 +1,21 @@
+import "../../../../testing/bun-current-selection-widget-chrome-mocks";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
+import { useCurrentFactoryDefinitionMock } from "../../../../testing/bun-current-factory-definition-public-mocks";
+import {
+  useCurrentWorkstationPromptTemplateContractMock,
+  useCurrentWorkstationPromptTemplateValidationMock,
+  useSaveEditableWorkstationConfigurationMock,
+} from "../../../../testing/bun-current-selection-widget-chrome-mocks";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { DashboardSelection } from "../state/selection-types";
-import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
-
-vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../current-factory-definition/public");
-
-  return {
-    ...actual,
-    useCurrentFactoryDefinition: vi.fn(),
-  };
-});
-
-vi.mock("../hooks/use-save-editable-workstation-configuration", () => ({
-  useSaveEditableWorkstationConfiguration: vi.fn(),
-}));
-
-vi.mock("../hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -121,7 +109,19 @@ function setupCurrentSelectionLocalizationTest() {
   beforeEach(() => {
     resetSelectionHistoryStore();
     vi.stubGlobal("fetch", vi.fn());
-    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+    useCurrentWorkstationPromptTemplateContractMock.mockReturnValue({
+      data: {
+        availableVariables: [],
+        inputCount: 0,
+        unavailableAccessPatterns: [],
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+    useCurrentWorkstationPromptTemplateValidationMock.mockReturnValue({
       data: {
         diagnostics: [],
         valid: true,
@@ -132,12 +132,12 @@ function setupCurrentSelectionLocalizationTest() {
       isSuccess: true,
       status: "success",
     } as never);
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+    useCurrentFactoryDefinitionMock.mockReturnValue({
       data: undefined,
       isPending: true,
       status: "pending",
     } as never);
-    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue({
+    useSaveEditableWorkstationConfigurationMock.mockReturnValue({
       beginSaveConfirmation: vi.fn(),
       canSave: false,
       cancelSaveConfirmation: vi.fn(),
@@ -170,7 +170,7 @@ describe("CurrentSelectionWidget localization", () => {
       defaultOptions: { queries: { retry: false } },
     });
 
-    vi.mocked(globalThis.fetch).mockReturnValue(
+    vi.mocked(globalThis.fetch as ReturnType<typeof vi.fn>).mockReturnValue(
       new Promise<Response>(() => undefined),
     );
 
@@ -259,7 +259,7 @@ describe("CurrentSelectionWidget workstation localization", () => {
       defaultOptions: { queries: { retry: false } },
     });
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+    useCurrentFactoryDefinitionMock.mockReturnValue({
       data: {
         name: "Current Factory",
         version: {

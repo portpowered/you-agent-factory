@@ -1,34 +1,9 @@
 import { renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "bun:test";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import type { GraphLayout } from "../../flowchart/lib/layout";
+import { mockBuildGraphLayout } from "../../../../testing/bun-flowchart-layout-mocks";
 import { useCurrentActivityGraphLayout } from "./react-flow-current-activity-card-graph-layout";
-
-type BuildGraphLayout = (
-  topology: typeof singleNodeDashboardSnapshot.topology,
-) => Promise<GraphLayout>;
-
-const { actualBuildGraphLayoutRef, mockBuildGraphLayout } = vi.hoisted(() => ({
-  actualBuildGraphLayoutRef: { current: null as BuildGraphLayout | null },
-  mockBuildGraphLayout: vi.fn(),
-}));
-
-vi.mock("../../flowchart/lib/layout", async () => {
-  const actual = await vi.importActual("../../flowchart/lib/layout");
-  actualBuildGraphLayoutRef.current = actual.buildGraphLayout;
-
-  return {
-    ...actual,
-    buildGraphLayout: (...args: Parameters<typeof actual.buildGraphLayout>) => {
-      const implementation = mockBuildGraphLayout.getMockImplementation();
-      if (implementation) {
-        return mockBuildGraphLayout(...args);
-      }
-
-      return actual.buildGraphLayout(...args);
-    },
-  };
-});
 
 describe("useCurrentActivityGraphLayout", () => {
   beforeEach(() => {

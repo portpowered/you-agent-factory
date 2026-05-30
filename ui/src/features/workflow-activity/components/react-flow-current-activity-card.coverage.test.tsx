@@ -14,15 +14,15 @@ import {
   singleNodeDashboardSnapshot,
 } from "../../../components/dashboard/test-fixtures";
 import {
-  useCurrentFactoryDocument,
-  useSaveCurrentFactory,
-} from "../../current-factory-definition/public";
+  useCurrentFactoryDocumentMock,
+  useSaveCurrentFactoryMock,
+} from "../../../../testing/bun-current-factory-definition-public-mocks";
+import { useFactoryGraphDraftStateMock } from "../../../../testing/bun-factory-graph-editor-public-mocks";
+import { mockBuildGraphLayout } from "../../../../testing/bun-flowchart-layout-mocks";
 import {
   createEmptyFactoryGraphDraft,
   type EditableFactoryGraphViewModel,
-  useFactoryGraphDraftState,
 } from "../../factory-graph-editor/public";
-import type { GraphLayout } from "../../flowchart/lib/layout";
 import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
 import {
   type CurrentActivitySelection,
@@ -31,18 +31,7 @@ import {
 } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
-type BuildGraphLayout = (
-  topology: typeof semanticWorkflowDashboardSnapshot.topology,
-) => Promise<GraphLayout>;
-
-const {
-  actualBuildGraphLayoutRef,
-  mockBuildGraphLayout,
-  mockImportController,
-  mockSetStoredNodePosition,
-} = vi.hoisted(() => ({
-  actualBuildGraphLayoutRef: { current: null as BuildGraphLayout | null },
-  mockBuildGraphLayout: vi.fn(),
+const { mockImportController, mockSetStoredNodePosition } = vi.hoisted(() => ({
   mockImportController: {
     activateImport: vi.fn().mockResolvedValue(undefined),
     activationState: { status: "idle" as const },
@@ -59,12 +48,8 @@ const {
   mockSetStoredNodePosition: vi.fn(),
 }));
 
-vi.mock("@xyflow/react", async () => {
-  const actual = await vi.importActual("@xyflow/react");
-
-  return {
-    ...actual,
-    Background: ({
+vi.mock("@xyflow/react", () => ({
+  Background: ({
       color,
       gap,
       size,
@@ -184,8 +169,7 @@ vi.mock("@xyflow/react", async () => {
         {children}
       </div>
     ),
-  };
-});
+}));
 
 vi.mock("../hooks/current-activity-import-controller", () => ({
   useCurrentActivityImportController: () => mockImportController,
@@ -204,44 +188,6 @@ vi.mock("./react-flow-current-activity-card-import", () => ({
   GraphImportErrorPanel: () => <div data-testid="graph-import-error-panel" />,
   graphDropStateAttribute: () => "idle",
 }));
-
-vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/public",
-  );
-
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
-  };
-});
-
-vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual("../../factory-graph-editor/public");
-
-  return {
-    ...actual,
-    useFactoryGraphDraftState: vi.fn(),
-  };
-});
-
-vi.mock("../../flowchart/lib/layout", async () => {
-  const actual = await vi.importActual("../../flowchart/lib/layout");
-  actualBuildGraphLayoutRef.current = actual.buildGraphLayout;
-
-  return {
-    ...actual,
-    buildGraphLayout: (...args: Parameters<typeof actual.buildGraphLayout>) => {
-      const implementation = mockBuildGraphLayout.getMockImplementation();
-      if (implementation) {
-        return mockBuildGraphLayout(...args);
-      }
-
-      return actual.buildGraphLayout(...args);
-    },
-  };
-});
 
 const defaultDraftState = {
   baseDocument: null,
@@ -306,17 +252,17 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
   beforeEach(() => {
     mockBuildGraphLayout.mockReset();
     mockSetStoredNodePosition.mockReset();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: undefined,
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
+    useSaveCurrentFactoryMock.mockReturnValue({
       mutateAsync: vi.fn(),
       reset: vi.fn(),
       status: "idle",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue(
+    useFactoryGraphDraftStateMock.mockReturnValue(
       defaultDraftState as never,
     );
   });

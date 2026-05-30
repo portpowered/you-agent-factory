@@ -5,14 +5,10 @@ import type { ReactNode } from "react";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
-vi.mock("@xyflow/react", async () => {
-  const actual = await vi.importActual("@xyflow/react");
-
-  return {
-    ...actual,
-    Background: () => <div data-testid="graph-background" />,
-    Controls: () => <div data-testid="graph-controls" />,
-    ReactFlow: ({
+vi.mock("@xyflow/react", () => ({
+  Background: () => <div data-testid="graph-background" />,
+  Controls: () => <div data-testid="graph-controls" />,
+  ReactFlow: ({
       children,
       edges,
       nodes,
@@ -47,8 +43,7 @@ vi.mock("@xyflow/react", async () => {
         {children}
       </div>
     ),
-  };
-});
+}));
 
 const importController: CurrentActivityImportController = {
   activateImport: vi.fn().mockResolvedValue(undefined),

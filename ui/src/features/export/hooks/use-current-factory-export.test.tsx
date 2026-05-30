@@ -1,19 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "bun:test";
 
-import { getCurrentFactory, NamedFactoryAPIError, type FactoryValue } from "../../../api/named-factory";
+import { getCurrentFactoryMock } from "../../../../testing/bun-named-factory-api-mocks";
+import {
+  NamedFactoryAPIError,
+  type FactoryValue,
+  getCurrentFactory,
+} from "../../../api/named-factory";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useCurrentFactoryExport } from "./use-current-factory-export";
-
-vi.mock("../../../api/named-factory", async () => {
-  const actual = await vi.importActual("../../../api/named-factory");
-
-  return {
-    ...actual,
-    getCurrentFactory: vi.fn(),
-  };
-});
 
 const factory: FactoryValue = {
   id: "factory-aurora",
@@ -25,7 +22,7 @@ const factory: FactoryValue = {
 
 describe("useCurrentFactoryExport", () => {
   beforeEach(() => {
-    vi.mocked(getCurrentFactory).mockReset();
+    getCurrentFactoryMock.mockReset();
     useDashboardSessionStore.setState({ selectedSessionID: "~default" });
   });
 
@@ -48,7 +45,7 @@ describe("useCurrentFactoryExport", () => {
 
   it("reports a visible preparing state until the current factory loads", async () => {
     const pending = createDeferred<FactoryValue>();
-    vi.mocked(getCurrentFactory).mockReturnValue(pending.promise);
+    getCurrentFactoryMock.mockReturnValue(pending.promise);
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
       wrapper: createQueryClientWrapper(),
     });
@@ -83,7 +80,7 @@ describe("useCurrentFactoryExport", () => {
 
   it("loads export data from the selected non-default session route", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
-    vi.mocked(getCurrentFactory).mockResolvedValue(factory);
+    getCurrentFactoryMock.mockResolvedValue(factory);
 
     renderHook(() => useCurrentFactoryExport(true), {
       wrapper: createQueryClientWrapper(),
@@ -116,7 +113,7 @@ describe("useCurrentFactoryExport", () => {
   });
 
   it("maps current-factory not-found errors to the unavailable export copy", async () => {
-    vi.mocked(getCurrentFactory).mockRejectedValue(
+    getCurrentFactoryMock.mockRejectedValue(
       new NamedFactoryAPIError("Factory definition missing", { code: "NOT_FOUND" }),
     );
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
@@ -137,7 +134,7 @@ describe("useCurrentFactoryExport", () => {
   });
 
   it("includes generic transport error messages in the export preparation failure", async () => {
-    vi.mocked(getCurrentFactory).mockRejectedValue(new Error("Gateway timeout"));
+    getCurrentFactoryMock.mockRejectedValue(new Error("Gateway timeout"));
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
       wrapper: createQueryClientWrapper(),
     });

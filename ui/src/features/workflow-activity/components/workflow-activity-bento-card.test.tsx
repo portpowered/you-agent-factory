@@ -2,40 +2,19 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
-  useCurrentFactoryDocument,
-  useSaveCurrentFactory,
-} from "../../current-factory-definition/public";
+  useCurrentFactoryDocumentMock,
+  useSaveCurrentFactoryMock,
+} from "../../../../testing/bun-current-factory-definition-public-mocks";
+import { useFactoryGraphDraftStateMock } from "../../../../testing/bun-factory-graph-editor-public-mocks";
 import type { DashboardSelection } from "../../current-selection/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
-
-vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/public",
-  );
-
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
-  };
-});
-
-vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual("../../factory-graph-editor/public");
-
-  return {
-    ...actual,
-    useFactoryGraphDraftState: vi.fn(),
-  };
-});
 
 const defaultDraftState = {
   baseDocument: null,
@@ -182,17 +161,17 @@ function registerWorkflowActivityBentoCardTestSetup() {
 
   beforeEach(() => {
     restoreBrowserTestShims = installDashboardBrowserTestShims();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: undefined,
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
+    useSaveCurrentFactoryMock.mockReturnValue({
       mutateAsync: vi.fn(),
       reset: vi.fn(),
       status: "idle",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue(
+    useFactoryGraphDraftStateMock.mockReturnValue(
       defaultDraftState as never,
     );
   });

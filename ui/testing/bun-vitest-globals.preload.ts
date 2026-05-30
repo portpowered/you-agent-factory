@@ -86,14 +86,9 @@ Object.assign(runnerVi, {
     typeof vitestVi.hoisted === "function"
       ? vitestVi.hoisted.bind(vitestVi)
       : <T>(factory: () => T) => factory(),
-  importActual:
-    typeof vitestVi.importActual === "function"
-      ? vitestVi.importActual.bind(vitestVi)
-      : async (path: string) => import(path),
-  importMock:
-    typeof vitestVi.importMock === "function"
-      ? vitestVi.importMock.bind(vitestVi)
-      : async (path: string) => import(path),
+  // Vitest's importActual deadlocks inside Bun vi.mock factories; use dynamic import.
+  importActual: async (path: string) => import(path),
+  importMock: async (path: string) => import(path),
   mocked:
     typeof vitestVi.mocked === "function"
       ? vitestVi.mocked.bind(vitestVi)

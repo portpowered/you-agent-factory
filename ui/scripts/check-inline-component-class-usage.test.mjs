@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { expect, test } from "vitest";
+import { expect, test } from "bun:test";
 
 import { scanInlineComponentClassUsage } from "./check-inline-component-class-usage.mjs";
 

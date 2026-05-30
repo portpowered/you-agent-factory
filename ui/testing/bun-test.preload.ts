@@ -10,8 +10,8 @@ import {
   it,
   mock,
   test,
+  vi,
 } from "bun:test";
-import { vi } from "vitest";
 
 const isNodeLane = process.env.BUN_TEST_NODE_LANE === "1";
 

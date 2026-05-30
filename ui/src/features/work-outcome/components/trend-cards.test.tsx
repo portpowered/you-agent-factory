@@ -9,7 +9,7 @@ import {
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import type { FailureTrendModel, ReworkTrendModel, TimingTrendModel } from "../lib/trends";
-import { describe, it, vi, expect } from "vitest";
+import { describe, it, vi, expect } from "bun:test";
 
 const failureTrend: FailureTrendModel = {
   currentFailed: 3,

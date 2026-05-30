@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "bun:test";
 
 import { projectRuntime } from "./projectRuntime";
 import type { ReplayWorldState } from "./types";

@@ -5,7 +5,7 @@ import {
   oneNodeDashboardTopology,
 } from "../../../components/dashboard/fixtures";
 import { buildGraphLayout } from "./layout";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 describe("buildGraphLayout", () => {
   it("keeps a single-node graph readable without edges", async () => {

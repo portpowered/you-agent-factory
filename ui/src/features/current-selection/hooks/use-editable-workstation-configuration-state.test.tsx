@@ -1,32 +1,19 @@
+import "../../../../testing/bun-current-selection-isolated-hook-mocks";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
-import { useCurrentFactoryDocument } from "../../current-factory-definition/public";
+import { useCurrentFactoryDocumentMock } from "../../../../testing/bun-current-factory-definition-public-mocks";
+import {
+  useCurrentWorkstationPromptTemplateContractMock,
+  useCurrentWorkstationPromptTemplateValidationMock,
+} from "../../../../testing/bun-current-selection-isolated-hook-mocks";
 import type { DashboardSelection } from "../state/selection-types";
 import {
   useEditableWorkstationConfigurationState,
   validateEditableWorkstationDraft,
 } from "./use-editable-workstation-configuration-state";
-import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
-import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
-
-vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../current-factory-definition/public");
-
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
-
-vi.mock("./useCurrentWorkstationPromptTemplateContract", () => ({
-  useCurrentWorkstationPromptTemplateContract: vi.fn(),
-}));
-
-vi.mock("./useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
 
 const selectedNode =
   semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
@@ -43,13 +30,13 @@ const planSelection: DashboardSelection = {
 
 describe("useEditableWorkstationConfigurationState", () => {
   beforeEach(() => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
-    vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue(
+    useCurrentWorkstationPromptTemplateContractMock.mockReturnValue(
       buildPromptTemplateContractResult(),
     );
-    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue(
+    useCurrentWorkstationPromptTemplateValidationMock.mockReturnValue(
       buildPromptTemplateValidationResult(),
     );
   });
@@ -125,7 +112,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       },
     });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(undefined),
     );
     rerender({ locale: "zh-CN" });
@@ -140,7 +127,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("surfaces editable-definition load failures directly in the form state", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: undefined,
       error: { message: "Current factory definition failed to load." },
       isError: true,
@@ -170,7 +157,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       expect(result.current?.status).toBe("ready");
     });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           prompt: "Server refreshed prompt before local edits.",
@@ -209,7 +196,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       result.current.onPromptChange("Keep this local prompt draft.");
     });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           prompt: "Server refreshed prompt before local save.",
@@ -253,7 +240,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       result.current.onPromptChange("Keep this local prompt draft.");
     });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           prompt: "Server refreshed prompt before local save.",
@@ -295,7 +282,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("resets the editable draft when the selected workstation changes", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(
         buildMultiWorkstationEditableFactoryDefinition(),
       ),
@@ -389,7 +376,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       status: "ready",
     });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(buildFactoryDefinitionWithoutReview()),
     );
 
@@ -405,7 +392,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("surfaces an unavailable worker selection when the selected worker falls out of the current worker list", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           workerName: "missing-worker",
@@ -441,7 +428,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("surfaces an empty worker-options state when the workstation currently exposes no workers", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           workerName: "reviewer",
@@ -470,7 +457,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("maps prompt variable help query states into the editable workstation form state", async () => {
-    vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue({
+    useCurrentWorkstationPromptTemplateContractMock.mockReturnValue({
       data: undefined,
       error: {
         message: "Current named factory workstation not found.",
@@ -503,7 +490,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       transition_id: "review-transition",
       workstation_name: "Runtime Review Alias",
     };
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult({
         ...buildEditableFactoryDefinition(),
         workstations: [
@@ -527,12 +514,12 @@ describe("useEditableWorkstationConfigurationState", () => {
     );
 
     await waitFor(() => {
-      expect(useCurrentWorkstationPromptTemplateContract).toHaveBeenLastCalledWith(
+      expect(useCurrentWorkstationPromptTemplateContractMock).toHaveBeenLastCalledWith(
         "Canonical Review",
         true,
       );
       expect(
-        useCurrentWorkstationPromptTemplateValidation,
+        useCurrentWorkstationPromptTemplateValidationMock,
       ).toHaveBeenLastCalledWith(
         "Canonical Review",
         "Review the latest story changes before approval.",
@@ -542,7 +529,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("surfaces authoritative prompt diagnostics and blocks saving until the draft is fixed", async () => {
-    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+    useCurrentWorkstationPromptTemplateValidationMock.mockReturnValue({
       data: {
         diagnostics: [
           {
@@ -688,7 +675,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("keeps empty-body pollers saveable in the current-selection editor", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           behavior: "POLLER",

@@ -1,6 +1,6 @@
 import "../testing/bun-app-shell-module-mocks";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "bun:test";
 import type {
   DashboardSnapshot,
   DashboardTrace,

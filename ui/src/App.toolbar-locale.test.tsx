@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { DASHBOARD_PAGE_HEADING_CLASS } from "./components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStreamStore";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";

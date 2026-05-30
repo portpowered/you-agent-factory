@@ -1,5 +1,5 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing dispatch-history regression coverage stayed intact during feature-family migration.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   DashboardRuntimeWorkstationRequest,

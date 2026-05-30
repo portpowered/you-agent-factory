@@ -1,7 +1,7 @@
 import "../testing/bun-app-shell-module-mocks";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { DashboardTrace } from "./api/dashboard";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import {
   activeSnapshot,
   nonPromptTemplateFetchPaths,

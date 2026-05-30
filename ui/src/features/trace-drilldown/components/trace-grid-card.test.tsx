@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { vi } from "vitest";
+import { vi } from "bun:test";
 
 vi.mock("../lib/trace-elk-layout", () => ({
   getCachedTraceGraphLayout: () => null,

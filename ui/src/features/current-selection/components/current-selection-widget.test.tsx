@@ -1,3 +1,5 @@
+import "../../../../testing/bun-current-selection-widget-chrome-mocks";
+import { beforeEach, describe, expect, it, vi } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -10,31 +12,17 @@ import {
   buildDashboardWorkstationRequestFixture,
 } from "../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentFactoryDocument } from "../../current-factory-definition/public";
+import { useCurrentFactoryDocumentMock } from "../../../../testing/bun-current-factory-definition-public-mocks";
+import {
+  useCurrentWorkstationPromptTemplateContractMock,
+  useCurrentWorkstationPromptTemplateValidationMock,
+  useSaveEditableWorkstationConfigurationMock,
+} from "../../../../testing/bun-current-selection-widget-chrome-mocks";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
-import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
-
-vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../current-factory-definition/public");
-
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
-
-vi.mock("../hooks/use-save-editable-workstation-configuration", () => ({
-  useSaveEditableWorkstationConfiguration: vi.fn(),
-}));
-
-vi.mock("../hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -134,7 +122,19 @@ describe("CurrentSelectionWidget", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     vi.stubGlobal("fetch", vi.fn());
-    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+    useCurrentWorkstationPromptTemplateContractMock.mockReturnValue({
+      data: {
+        availableVariables: [],
+        inputCount: 0,
+        unavailableAccessPatterns: [],
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+    useCurrentWorkstationPromptTemplateValidationMock.mockReturnValue({
       data: {
         diagnostics: [],
         valid: true,
@@ -145,7 +145,7 @@ describe("CurrentSelectionWidget", () => {
       isSuccess: true,
       status: "success",
     } as never);
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: undefined,
       error: null,
       failureCount: 0,
@@ -169,7 +169,7 @@ describe("CurrentSelectionWidget", () => {
       refetch: vi.fn(),
       status: "pending",
     } as never);
-    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue({
+    useSaveEditableWorkstationConfigurationMock.mockReturnValue({
       beginSaveConfirmation: vi.fn(),
       canSave: false,
       cancelSaveConfirmation: vi.fn(),
@@ -672,7 +672,7 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
+    expect(useCurrentFactoryDocumentMock).toHaveBeenCalledWith(
       true,
     );
     expect(
@@ -692,7 +692,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
+    expect(useCurrentFactoryDocumentMock).toHaveBeenCalledWith(
       false,
     );
   });
@@ -720,14 +720,14 @@ describe("CurrentSelectionWidget", () => {
     );
 
     expect(
-      vi.mocked(useCurrentFactoryDocument),
+      useCurrentFactoryDocumentMock,
     ).toHaveBeenLastCalledWith(true);
   });
 
   it("loads editable workstation inputs when a workstation is already selected on mount", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
@@ -742,7 +742,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
+    expect(useCurrentFactoryDocumentMock).toHaveBeenCalledWith(
       true,
     );
 
@@ -759,7 +759,7 @@ describe("CurrentSelectionWidget", () => {
   it("initializes editable workstation inputs from the canonical factory definition and allows worker edits", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
@@ -803,7 +803,7 @@ describe("CurrentSelectionWidget", () => {
   it("preserves unsaved editable workstation input when the server definition refreshes", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
@@ -832,7 +832,7 @@ describe("CurrentSelectionWidget", () => {
       target: { value: "Keep my local edit." },
     });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           prompt: "Server changed prompt",

@@ -6,7 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import traceWorkstationPathRegressionReplayText from "../../../../integration/fixtures/trace-workstation-path-regression-replay.jsonl?raw";
 
 vi.mock("../lib/trace-elk-layout", () => ({

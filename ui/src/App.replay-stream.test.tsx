@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import {
   failureAnalysisTimelineEvents,
   graphStateSmokeTimelineEvents,

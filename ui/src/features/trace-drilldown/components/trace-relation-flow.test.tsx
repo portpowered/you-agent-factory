@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import type { DashboardWorkRelation } from "../../api/dashboard/types";

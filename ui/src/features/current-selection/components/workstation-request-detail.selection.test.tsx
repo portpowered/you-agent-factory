@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { vi } from "vitest";
+import { vi } from "bun:test";
 import { workstationRequest } from "./detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 

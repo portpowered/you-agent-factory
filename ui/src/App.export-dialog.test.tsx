@@ -1,6 +1,6 @@
 import "../testing/bun-app-shell-module-mocks";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import type { FactoryValue } from "./api/named-factory";

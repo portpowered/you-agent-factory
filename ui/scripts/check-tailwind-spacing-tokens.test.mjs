@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { expect, test } from "vitest";
+import { expect, test } from "bun:test";
 
 import { scanTailwindSpacingTokens } from "./check-tailwind-spacing-tokens.mjs";
 

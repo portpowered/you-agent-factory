@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
 import type { FactoryGraphTopology } from "./factory-graph-draft-types";

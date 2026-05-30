@@ -20,14 +20,10 @@ import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card
 
 let reactFlowErrorToReport: { errorId: string; message: string } | null = null;
 
-vi.mock("@xyflow/react", async () => {
-  const actual = await vi.importActual("@xyflow/react");
-
-  return {
-    ...actual,
-    Background: () => <div data-testid="graph-background" />,
-    Controls: () => <div data-testid="graph-controls" />,
-    ReactFlow: ({
+vi.mock("@xyflow/react", () => ({
+  Background: () => <div data-testid="graph-background" />,
+  Controls: () => <div data-testid="graph-controls" />,
+  ReactFlow: ({
       children,
       edges,
       nodes,
@@ -61,8 +57,7 @@ vi.mock("@xyflow/react", async () => {
         </div>
       );
     },
-  };
-});
+}));
 
 function reportMissingEdgeHandles({
   edges,

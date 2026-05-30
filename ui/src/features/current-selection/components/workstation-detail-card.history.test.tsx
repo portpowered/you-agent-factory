@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { vi } from "vitest";
+import { vi } from "bun:test";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
   buildDashboardWorkstationRequestFixture,

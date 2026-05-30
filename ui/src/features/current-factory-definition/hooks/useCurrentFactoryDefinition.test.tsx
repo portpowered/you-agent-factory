@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -5,31 +6,37 @@ import type { ReactNode } from "react";
 import {
   type CanonicalFactoryDefinition,
   type CurrentFactoryDocument,
-  getCurrentFactoryDefinition,
-  getCurrentFactoryDocument,
-  saveCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import {
+
+const CURRENT_FACTORY_API_MODULE = "../../../api/current-factory-definition";
+
+const currentFactoryApiActual = await import(CURRENT_FACTORY_API_MODULE);
+
+export const getCurrentFactoryDefinitionMock = mock(() => {
+  throw new Error("getCurrentFactoryDefinitionMock not configured");
+});
+export const getCurrentFactoryDocumentMock = mock(() => {
+  throw new Error("getCurrentFactoryDocumentMock not configured");
+});
+export const saveCurrentFactoryDocumentMock = mock(() => {
+  throw new Error("saveCurrentFactoryDocumentMock not configured");
+});
+
+mock.module(CURRENT_FACTORY_API_MODULE, () => ({
+  ...currentFactoryApiActual,
+  getCurrentFactoryDefinition: getCurrentFactoryDefinitionMock,
+  getCurrentFactoryDocument: getCurrentFactoryDocumentMock,
+  saveCurrentFactoryDocument: saveCurrentFactoryDocumentMock,
+}));
+
+const {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
   useCurrentFactoryDefinition,
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
-} from "./useCurrentFactoryDefinition";
-
-vi.mock("../../../api/current-factory-definition", async () => {
-  const actual = await vi.importActual(
-    "../../../api/current-factory-definition",
-  );
-
-  return {
-    ...actual,
-    getCurrentFactoryDefinition: vi.fn(),
-    getCurrentFactoryDocument: vi.fn(),
-    saveCurrentFactoryDocument: vi.fn(),
-  };
-});
+} = await import("./useCurrentFactoryDefinition");
 
 const editableFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -65,9 +72,9 @@ const editableFactoryDefinition: CanonicalFactoryDefinition = {
 };
 
 beforeEach(() => {
-  vi.mocked(getCurrentFactoryDefinition).mockReset();
-  vi.mocked(getCurrentFactoryDocument).mockReset();
-  vi.mocked(saveCurrentFactoryDocument).mockReset();
+  getCurrentFactoryDefinitionMock.mockReset();
+  getCurrentFactoryDocumentMock.mockReset();
+  saveCurrentFactoryDocumentMock.mockReset();
   useDashboardSessionStore.setState({ selectedSessionID: "~default" });
 });
 
@@ -77,7 +84,7 @@ describe("useCurrentFactoryDefinition", () => {
       wrapper: createQueryClientWrapper(),
     });
 
-    expect(getCurrentFactoryDefinition).not.toHaveBeenCalled();
+    expect(getCurrentFactoryDefinitionMock).not.toHaveBeenCalled();
     expect(result.current).toMatchObject({
       data: undefined,
       error: null,
@@ -88,9 +95,7 @@ describe("useCurrentFactoryDefinition", () => {
   });
 
   it("returns the validated editable current factory definition on success", async () => {
-    vi.mocked(getCurrentFactoryDefinition).mockResolvedValue(
-      editableFactoryDefinition,
-    );
+    getCurrentFactoryDefinitionMock.mockResolvedValue(editableFactoryDefinition);
 
     const { result } = renderHook(() => useCurrentFactoryDefinition(), {
       wrapper: createQueryClientWrapper(),
@@ -108,23 +113,21 @@ describe("useCurrentFactoryDefinition", () => {
 
   it("loads the selected non-default session definition instead of the default alias", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
-    vi.mocked(getCurrentFactoryDefinition).mockResolvedValue(
-      editableFactoryDefinition,
-    );
+    getCurrentFactoryDefinitionMock.mockResolvedValue(editableFactoryDefinition);
 
     renderHook(() => useCurrentFactoryDefinition(), {
       wrapper: createQueryClientWrapper(),
     });
 
     await waitFor(() => {
-      expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDefinitionMock).toHaveBeenCalledWith({
         sessionID: "session-2",
       });
     });
   });
 
   it("exposes actionable typed errors when the current definition is not editable", async () => {
-    vi.mocked(getCurrentFactoryDefinition).mockRejectedValue({
+    getCurrentFactoryDefinitionMock.mockRejectedValue({
       code: "INVALID_FACTORY_DEFINITION",
       message: "The current factory definition is malformed.",
       name: "CurrentFactoryDefinitionError",
@@ -155,7 +158,7 @@ describe("useCurrentFactoryDefinition", () => {
         physical: "2026-05-18T14:48:00Z",
       },
     };
-    vi.mocked(getCurrentFactoryDocument).mockResolvedValue(
+    getCurrentFactoryDocumentMock.mockResolvedValue(
       editableFactoryDefinitionDocument,
     );
 
@@ -175,7 +178,7 @@ describe("useCurrentFactoryDefinition", () => {
 
   it("loads the editable document for the selected non-default session", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
-    vi.mocked(getCurrentFactoryDocument).mockResolvedValue({
+    getCurrentFactoryDocumentMock.mockResolvedValue({
       ...editableFactoryDefinition,
       version: {
         logical: "5",
@@ -188,7 +191,7 @@ describe("useCurrentFactoryDefinition", () => {
     });
 
     await waitFor(() => {
-      expect(getCurrentFactoryDocument).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDocumentMock).toHaveBeenCalledWith({
         sessionID: "session-2",
       });
     });
@@ -215,7 +218,7 @@ describe("useSaveCurrentFactory", () => {
         physical: "2026-05-27T08:00:00Z",
       },
     };
-    vi.mocked(saveCurrentFactoryDocument).mockResolvedValue(savedDocument);
+    saveCurrentFactoryDocumentMock.mockResolvedValue(savedDocument);
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
 
     const { result } = renderHook(
@@ -237,7 +240,7 @@ describe("useSaveCurrentFactory", () => {
       factoryDefinition: editableFactoryDefinition,
     });
 
-    expect(saveCurrentFactoryDocument).toHaveBeenCalledWith(
+    expect(saveCurrentFactoryDocumentMock).toHaveBeenCalledWith(
       {
         baseVersion: {
           logical: "7",
@@ -263,7 +266,7 @@ describe("useSaveCurrentFactory", () => {
       message: "The editable definition is stale.",
       name: "CurrentFactoryDefinitionError",
     };
-    vi.mocked(saveCurrentFactoryDocument).mockRejectedValue(error);
+    saveCurrentFactoryDocumentMock.mockRejectedValue(error);
 
     const { result } = renderHook(() => useSaveCurrentFactory(), {
       wrapper: createQueryClientWrapper(),

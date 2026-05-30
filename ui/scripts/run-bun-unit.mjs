@@ -15,6 +15,17 @@ const NODE_LANE_PATHS = [
   "./scripts/verify-test-output-cleanup.test.mjs",
 ];
 
+/** Bun unit script lane: static guards only; Storybook verifiers stay on Vitest. */
+const BUN_UNIT_SCRIPT_PATHS = [
+  "./scripts/check-button-usage.test.mjs",
+  "./scripts/check-feature-root-files.test.mjs",
+  "./scripts/check-inline-component-class-usage.test.mjs",
+  "./scripts/check-semantic-color-tokens.test.ts",
+  "./scripts/check-tailwind-spacing-tokens.test.mjs",
+  "./scripts/normalize-dist-output.test.mjs",
+  "./scripts/verify-current-selection-workstation-detail-order.test.mjs",
+];
+
 const WORKFLOW_ACTIVITY_LANE = "./src/features/workflow-activity";
 const WORKFLOW_ACTIVITY_TIMEOUT_MS = 120_000;
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -115,7 +126,10 @@ function buildBrowserLaneBatches() {
     });
   }
 
-  batches.push({ label: "./scripts", paths: ["./scripts"] });
+  batches.push({
+    label: "./scripts (bun unit)",
+    paths: BUN_UNIT_SCRIPT_PATHS,
+  });
   return batches;
 }
 
