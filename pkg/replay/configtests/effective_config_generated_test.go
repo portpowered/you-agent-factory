@@ -9,12 +9,13 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
 
 func writeEmbeddedFactoryFixture(t *testing.T, factoryDir string) {
 	t.Helper()
 
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "customer-facing-name",
 		"id":   "internal-id",
 		"workTypes": []map[string]any{{
@@ -132,7 +133,7 @@ func assertEmbeddedRuntimeConfig(t *testing.T, runtimeCfg interfaces.RuntimeConf
 func writeRebuildGeneratedFactoryFixture(t *testing.T, factoryDir string) {
 	t.Helper()
 
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
