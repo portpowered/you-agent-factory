@@ -3,6 +3,7 @@ package submit
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -515,6 +516,117 @@ func TestSubmitBatch_VerboseLogsMetadataWithoutPayload(t *testing.T) {
 	}
 	if strings.Contains(got, "do-not-log") {
 		t.Fatalf("diagnostics leaked payload content:\n%s", got)
+	}
+}
+
+func TestSubmitBatch_HumanSuccessOutputIncludesWorkDetailsAndHints(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(factoryapi.UpsertWorkRequestResponse{
+			RequestId: "batch-human-1",
+			TraceId:   "trace-human-1",
+			Works: []factoryapi.UpsertWorkRequestSubmittedWork{
+				{Name: "alpha", WorkTypeName: "task", WorkId: "work-alpha"},
+				{Name: "beta", WorkTypeName: "review", WorkId: ""},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, `{
+		"requestId": "batch-human-1",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "alpha", "workTypeName": "task", "payload": {"secret": "hidden"}},
+			{"name": "beta", "workTypeName": "review", "payload": {"secret": "hidden"}}
+		],
+		"relations": [{"type": "DEPENDS_ON", "sourceWorkName": "alpha", "targetWorkName": "beta"}]
+	}`)
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"requestId: batch-human-1",
+		"traceId: trace-human-1",
+		"work count: 2",
+		"relationCount: 1",
+		"  alpha (task) workId=work-alpha",
+		"you work show work-alpha",
+		"  beta (review)",
+		"you work list --name beta",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "hidden") || strings.Contains(got, `"payload"`) {
+		t.Fatalf("output leaked batch payload:\n%s", got)
+	}
+}
+
+func TestSubmitBatch_HumanSuccessOutputTruncatesLongWorkLists(t *testing.T) {
+	works := make([]factoryapi.UpsertWorkRequestSubmittedWork, 0, 12)
+	batchWorks := make([]string, 0, 12)
+	for i := 1; i <= 12; i++ {
+		name := fmt.Sprintf("work-%02d", i)
+		works = append(works, factoryapi.UpsertWorkRequestSubmittedWork{
+			Name: name, WorkTypeName: "task", WorkId: "id-" + name,
+		})
+		batchWorks = append(batchWorks, fmt.Sprintf(`{"name": %q, "workTypeName": "task", "payload": {"n": %d}}`, name, i))
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(factoryapi.UpsertWorkRequestResponse{
+			RequestId: "batch-truncate",
+			TraceId:   "trace-truncate",
+			Works:     works,
+		})
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, `{
+		"requestId": "batch-truncate",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [`+strings.Join(batchWorks, ",")+`]
+	}`)
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "work count: 12") {
+		t.Fatalf("output missing work count:\n%s", got)
+	}
+	if !strings.Contains(got, "  work-01 (task) workId=id-work-01") {
+		t.Fatalf("output missing first work line:\n%s", got)
+	}
+	if !strings.Contains(got, "  work-10 (task) workId=id-work-10") {
+		t.Fatalf("output missing tenth work line:\n%s", got)
+	}
+	if strings.Contains(got, "  work-11 (task)") {
+		t.Fatalf("output should truncate after ten work lines:\n%s", got)
+	}
+	if !strings.Contains(got, "... and 2 more work(s)") {
+		t.Fatalf("output missing truncation summary:\n%s", got)
 	}
 }
 

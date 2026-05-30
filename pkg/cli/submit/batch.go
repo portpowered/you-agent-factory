@@ -189,6 +189,5 @@ func upsertBatchHTTP(cfg BatchConfig, req interfaces.WorkRequest, body []byte, b
 		return json.NewEncoder(cfg.Output).Encode(result)
 	}
 
-	_, err = fmt.Fprintf(cfg.Output, "Upserted batch %s (trace %s, %d works)\n", result.RequestId, result.TraceId, len(result.Works))
-	return err
+	return printBatchSuccessHuman(cfg.Output, req, result)
 }
