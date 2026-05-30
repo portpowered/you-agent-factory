@@ -235,7 +235,7 @@ describe("saveSessionFactory errors", () => {
   });
 });
 
-describe("getSessionFactory errors", () => {
+describe("getSessionFactory transport errors", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -282,6 +282,12 @@ describe("getSessionFactory errors", () => {
       message: "Something went wrong.",
       status: 400,
     });
+  });
+});
+
+describe("getSessionFactory document validation errors", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("rejects successful responses that are not session factory documents", async () => {
