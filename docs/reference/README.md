@@ -11,6 +11,7 @@ complete customer-facing contract.
 
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
+| `agents` | Agent orientation, read order, submission ingress, command matrix, and topic routing | [Agents](agents.md) |
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
 | `config` | `factory.json` topology, split layout, and portability | [Config](config.md) and [Author factories](authoring-factories.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |

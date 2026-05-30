@@ -2,14 +2,38 @@ This is the table of contents for the Agent Factory documentation.
 
 The installed CLI also packages a fixed reference surface under
 `you docs`. Run `you docs` to list the packaged topics, or
-run `you docs <topic>` for one of `authoring-factories`, `config`, `work`,
-`workstations`, `workers`, `resources`, `models`, `batch-inputs`, or
+run `you docs <topic>` for one of `agents`, `authoring-factories`, `config`,
+`work`, `workstations`, `workers`, `resources`, `models`, `batch-inputs`, or
 `templates`.
+
+## For agents
+
+Autonomous agents and human operators coordinating factory work should start
+here before diving into topic-specific reference pages.
+
+- Run **`you docs agents`** for cross-factory orientation: read order, work
+  submission ingress, command matrix, planner versus executor roles, and the
+  packaged topic router.
+- When working inside a checked-in factory, prefer instance-specific walkthrough
+  in **`factory/docs/overview.md`** or **`factory/docs/README.md`** when those
+  files exist. They describe that factory's pipeline, work types, and
+  read-before-submit guidance without duplicating portable contracts here.
+- Use the [CLI reference](reference/README.md) index for the full packaged
+  topic table, canonical concept owners, and links to every `you docs <topic>`
+  page.
+
+Packaged **`you docs config`** owns `factory.json` topology (work types, states,
+routing, resources, and portability). Packaged **`you docs work`** owns
+submitted-work contracts only (`POST /work`, tags, tokens, and batch
+cross-links).
 
 ## Packaged CLI Reference Topics
 
 These are the fixed topic names accepted by `you docs <topic>`.
 
+- `agents` is the packaged agent orientation guide. Use
+  [Agents](reference/agents.md) for read order, submission ingress, command
+  matrix, and topic routing (start here for autonomous agents).
 - `authoring-factories` is the packaged practical factory authoring guide. Use
   [Author factories](reference/authoring-factories.md) for workflow sequencing,
   runnable examples, mock-worker checks, and replay recording.
@@ -41,7 +65,7 @@ These are the fixed topic names accepted by `you docs <topic>`.
 
 ## Customer Guides
 
-- [CLI reference](reference/README.md) is the package-owned topic index for the stable `authoring-factories`, `config`, `work`, `workstations`, `workers`, `resources`, `models`, `batch-inputs`, and `templates` reference pages.
+- [CLI reference](reference/README.md) is the package-owned topic index for the stable `agents`, `authoring-factories`, `config`, `work`, `workstations`, `workers`, `resources`, `models`, `batch-inputs`, and `templates` reference pages.
 - Canonical concept guides:
   - [Config](reference/config.md) owns work types, work states, top-level `factory.json`, routing, resources, and portability fields.
   - [Submitted work](reference/work.md) owns `POST /work`, batch submission cross-links, tags, and token flow after acceptance.
