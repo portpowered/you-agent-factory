@@ -42,6 +42,7 @@
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
 - When trimming `authoring-factories` after new topics land, point readers at `you docs mock-workers` and `you docs record-replay` and update `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` markers away from removed deep-dive strings.
 - U8 dashboard stream/timeline split hooks (`useFactoryEventStream`, `useDashboardSessionLifecycle`, `useDashboardWorldView`, thin `useDashboardSnapshot`) largely landed on `main` from `ralph/ui-dashboard-stream-timeline-split`—recovery v2 is verify targeted hook tests (`useFactoryEventStream.test.tsx`, etc.) and flip PRD unless regression found.
+- `App.session-stream.test.tsx` proves shell stream/timeline outcomes via `MockEventSource` (`message` events, not `snapshot` type), `fetchRequestPath` for `/factory-sessions` list mocks, pause on non-default sessions only (`~default` ignores pause), and `setSelectedSessionID` for tab retarget when the loading shell hides tabs mid-switch.
 - `deriveDashboardWorldViewShellState` in `ui/src/features/dashboard/lib/dashboard-world-view.ts` owns shell `isInitialLoading` (session set, tick 0, zero events, stream not `offline`) and `error` (offline-before-first-event only); `useDashboardWorldView` exposes `worldViewCache[selectedTick]` as `snapshot` plus `selectedTick`, `hasEvents`, and `streamState`.
 - Register `relationships` at `displayOrder` 28 immediately after `guards` (27); relationships content adapts `batch-inputs.md` relation sections and `parent-aware-fan-in.md` with `SPAWNED_BY` called out as runtime/template-only, not batch-authored.
 - Story 003 index assertions belong in `root_docs_test.go` and `cli_docs_smoke_test.go` immediately after `record-replay` lines; smoke topic tests can use `absent` for `../internal/development/...` paths when replacing packaged cross-links.
@@ -738,4 +739,13 @@
   - Patterns discovered: Timeline memory debug is opt-in only through `debugOptions.memoryDebug` gates in `useDashboardTimelineMemoryDebug`—transport (`useFactoryEventStream`) reads the same `readFactoryTimelineDebugOptions()` for compaction but does not install globals or persist summaries.
   - Gotchas encountered: Memory summary persistence waits for `eventCount > 0` even when globals install immediately with `memoryDebug` on—assert localStorage separately from global install in tests.
   - Useful context: Story 006 next (dashboard stream/timeline shell regression: session tab switch, pause/resume, loading-after-first-event via `App.session-switching.stories.tsx` or app-shell tests).
+---
+
+## 2026-05-31T04:05:00Z - ui-dashboard-stream-timeline-split-recovery-v2-006
+- What was implemented: Added `App.session-stream.test.tsx` app-shell regression for loading shell before first `message` event, session-scoped stream URL retarget with prior `MockEventSource` closed and timeline reset on `setSelectedSessionID`, and non-default session pause/resume stream toggles; extended `app-shell-test-utils` with `fetchRequestPath`, `factorySessions`, `seedTimelineFromSnapshot`, and `MockEventSource.closed` tracking.
+- Files changed: `ui/src/App.session-stream.test.tsx`, `ui/src/testing/app-shell-test-utils.tsx`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: `openFactoryEventStream` only listens for SSE `message` events—`MockEventSource.emit("snapshot", …)` seeds the timeline store directly but does not increment `events.length`, so shell loading may clear while scrubber progress still looks empty until a `message` event arrives.
+  - Gotchas encountered: Default/`~default` sessions ignore pause in `buildSessionScope`—pause/resume stream proofs must select a non-default tab first; after session switch the shell can return to loading until the new session’s first event, so retarget assertions should use store/stream hooks rather than querying tabs during loading.
+  - Useful context: `App.session-switching.stories.tsx` remains the Storybook cross-session selection/submit-draft proof; story 006 adds Vitest app-shell stream/timeline/scrubber coverage alongside it.
 ---

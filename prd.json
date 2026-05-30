@@ -106,7 +106,7 @@
         "Verify in browser using dev-browser skill when the regression surface is Storybook-backed"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]
