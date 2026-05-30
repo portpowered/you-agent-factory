@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+required:
+  - targets
+properties:
+  targets:
+    type: array
+    description: Canonical validation targets for the submitted factory definition.
+    items:
+      $ref: './FactoryValidationTarget.yaml'
+example:
+  targets:
+    - code: factory.workstation.missingRejectionRoute
+      severity: error
+      message: Workstation repeater must define a reject route.
+      subject:
+        type: WORKSTATION
+        id: repeater
+        location: ON_REJECTION
+    - code: factory.workType.missingCompletionState
+      severity: error
+      message: Work type task must declare a completion state.
+      subject:
+        type: WORK_TYPE
+        id: task
+        location: STATES

@@ -32,6 +32,6 @@ properties:
       - The server failed while handling an otherwise valid request.
   targets:
     type: array
-    description: Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
+    description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
     items:
-      $ref: './ErrorTarget.yaml'
+      $ref: './FactoryValidationTarget.yaml'

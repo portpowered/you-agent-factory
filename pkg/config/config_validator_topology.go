@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/timework"
 )
@@ -51,83 +52,6 @@ func ruleInputTypes(cfg *interfaces.FactoryConfig) []Finding {
 				Message: fmt.Sprintf("unknown input type %q (supported: %q)", it.Type, interfaces.InputKindDefault),
 				Rule:    "input-type-type",
 			})
-		}
-	}
-	return findings
-}
-
-// --- Rule: place reference validation ---
-
-func rulePlaceReferences(cfg *interfaces.FactoryConfig) []Finding {
-	var findings []Finding
-	validPlaces := buildValidPlaces(cfg)
-
-	for wi, ws := range cfg.Workstations {
-		for ii, input := range ws.Inputs {
-			if !validPlaces[mapToID(input)] {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     fmt.Sprintf("workstations[%d](%s).inputs[%d]", wi, ws.Name, ii),
-					Message:  fmt.Sprintf("references non-existent state %q of work type %q", input.StateName, input.WorkTypeName),
-					Rule:     "workstation-input-ref",
-				})
-			}
-		}
-		for oi, output := range ws.Outputs {
-			if !validPlaces[mapToID(output)] {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     fmt.Sprintf("workstations[%d](%s).outputs[%d]", wi, ws.Name, oi),
-					Message:  fmt.Sprintf("references non-existent state %q of work type %q", output.StateName, output.WorkTypeName),
-					Rule:     "workstation-output-ref",
-				})
-			}
-		}
-		for oi, route := range ws.OnContinue {
-			if validPlaces[mapToID(route)] {
-				continue
-			}
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     fmt.Sprintf("workstations[%d](%s).on_continue[%d]", wi, ws.Name, oi),
-				Message:  fmt.Sprintf("references non-existent state %q of work type %q", route.StateName, route.WorkTypeName),
-				Rule:     "workstation-on-continue-ref",
-			})
-		}
-		for oi, route := range ws.OnRejection {
-			if validPlaces[mapToID(route)] {
-				continue
-			}
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     fmt.Sprintf("workstations[%d](%s).on_rejection[%d]", wi, ws.Name, oi),
-				Message:  fmt.Sprintf("references non-existent state %q of work type %q", route.StateName, route.WorkTypeName),
-				Rule:     "workstation-on-rejection-ref",
-			})
-		}
-		for oi, route := range ws.OnFailure {
-			if validPlaces[mapToID(route)] {
-				continue
-			}
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     fmt.Sprintf("workstations[%d](%s).on_failure[%d]", wi, ws.Name, oi),
-				Message:  fmt.Sprintf("references non-existent state %q of work type %q", route.StateName, route.WorkTypeName),
-				Rule:     "workstation-on-failure-ref",
-			})
-		}
-		for ri, route := range ws.ClassificationRoutes {
-			for oi, output := range route.Outputs {
-				if validPlaces[mapToID(output)] {
-					continue
-				}
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     fmt.Sprintf("workstations[%d](%s).classification_routes[%d](%s).outputs[%d]", wi, ws.Name, ri, route.Label, oi),
-					Message:  fmt.Sprintf("references non-existent state %q of work type %q", output.StateName, output.WorkTypeName),
-					Rule:     "workstation-classification-route-ref",
-				})
-			}
 		}
 	}
 	return findings
@@ -847,6 +771,39 @@ func (cv *ConfigValidator) ruleWorkTypeHandlingBehavior(cfg *interfaces.FactoryC
 		})
 	}
 	return findings
+}
+
+// CanonicalStructuralFindings returns structural validation findings for a factory
+// definition through the canonical pkg/factory/validation entrypoint.
+func CanonicalStructuralFindings(cfg *interfaces.FactoryConfig) []Finding {
+	if cfg == nil {
+		return nil
+	}
+	return canonicalTargetsToFindings(validation.Validate(cfg).Targets)
+}
+
+func canonicalTargetsToFindings(targets []validation.Target) []Finding {
+	if len(targets) == 0 {
+		return nil
+	}
+	findings := make([]Finding, 0, len(targets))
+	for _, target := range targets {
+		path := target.Path
+		if path == "" {
+			path = target.Subject.ID
+		}
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     path,
+			Message:  target.Message,
+			Rule:     target.Code,
+		})
+	}
+	return findings
+}
+
+func ruleCanonicalStructuralValidation(cfg *interfaces.FactoryConfig) []Finding {
+	return CanonicalStructuralFindings(cfg)
 }
 
 // --- Rule: resource usage validation ---

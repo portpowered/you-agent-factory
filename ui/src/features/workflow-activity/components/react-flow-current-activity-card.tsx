@@ -172,6 +172,7 @@ function useCurrentActivityBaseNodes({
           editorMode: editor.editorMode,
           onConnectionAnchorClick: editor.handleConnectionAnchorClick,
           pendingConnectionSource: editor.pendingConnectionSource,
+          validationProjection: editor.structuralValidation.projection,
         },
         factoryDefinition,
         graphLayout,
@@ -472,6 +473,7 @@ export function ReactFlowCurrentActivityCardView(
         headingID={headingID}
         imports={imports}
         locale={props.locale}
+        selection={props.selection}
         snapshot={props.snapshot}
       />
       <CurrentActivityGraphSaveNotifications

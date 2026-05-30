@@ -744,7 +744,7 @@ func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason st
 	t.Helper()
 
 	var targetedErr interface {
-		ErrorTargets() []factoryapi.ErrorTarget
+		ErrorTargets() []factoryapi.FactoryValidationTarget
 	}
 	if !errors.As(err, &targetedErr) {
 		t.Fatalf("validation error %v did not expose structured targets", err)
@@ -755,14 +755,12 @@ func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason st
 		t.Fatalf("validation error targets = %#v, want one target", targets)
 	}
 	target := targets[0]
-	if target.Kind != factorysessions.ValidationTargetKind {
-		t.Fatalf("validation target kind = %q, want %q", target.Kind, factorysessions.ValidationTargetKind)
+	wantCode := "factory.session.field." + wantReason
+	if target.Code != wantCode {
+		t.Fatalf("validation target code = %q, want %q", target.Code, wantCode)
 	}
-	if target.Id == nil || *target.Id != wantReason {
-		t.Fatalf("validation target id = %#v, want %q", target.Id, wantReason)
-	}
-	if target.Field == nil || *target.Field != wantField {
-		t.Fatalf("validation target field = %#v, want %q", target.Field, wantField)
+	if target.Subject.Id != wantField {
+		t.Fatalf("validation target subject id = %q, want %q", target.Subject.Id, wantField)
 	}
 }
 

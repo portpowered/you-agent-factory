@@ -320,11 +320,14 @@ func TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets(t *testing.
 	if errResp.Targets == nil || len(*errResp.Targets) == 0 {
 		t.Fatalf("error targets = %#v, want canonical topology validation targets", errResp.Targets)
 	}
-	if !hasErrorField(*errResp.Targets, "factory.workstations[0].outputs[0]") {
-		t.Fatalf("error targets = %#v, want canonical factory field target", errResp.Targets)
-	}
-	if hasErrorField(*errResp.Targets, "factoryDefinition.workstations[0].outputs[0]") {
-		t.Fatalf("error targets = %#v, should not expose retired factoryDefinition field targets", errResp.Targets)
+	if !hasValidationTarget(
+		*errResp.Targets,
+		"factory.route.danglingPlaceReference",
+		factoryapi.FactoryValidationSubjectTypeRoute,
+		"process->story:missing-state",
+		factoryapi.FactoryValidationSubjectLocationOutputs,
+	) {
+		t.Fatalf("error targets = %#v, want dangling output workstation target", errResp.Targets)
 	}
 }
 
@@ -388,8 +391,14 @@ func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFacto
 	if errResp.Code != factoryapi.INVALIDFACTORY {
 		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
 	}
-	if errResp.Targets == nil || !hasErrorField(*errResp.Targets, "factory.workstations[0].outputs[1]") {
-		t.Fatalf("error targets = %#v, want second same-type output target", errResp.Targets)
+	if errResp.Targets == nil || !hasValidationTarget(
+		*errResp.Targets,
+		"factory.workstation.conflictingWorkStateOutputs",
+		factoryapi.FactoryValidationSubjectTypeWorkstation,
+		"process",
+		factoryapi.FactoryValidationSubjectLocationOutputs,
+	) {
+		t.Fatalf("error targets = %#v, want conflicting output workstation target", errResp.Targets)
 	}
 
 	reloaded := getCurrentFactory(t, server.URL())
@@ -738,9 +747,18 @@ func requireFactoryChangeAfter(t *testing.T, before []factoryapi.FactoryEvent, a
 	return factoryapi.FactoryEvent{}
 }
 
-func hasErrorField(targets []factoryapi.ErrorTarget, want string) bool {
+func hasValidationTarget(
+	targets []factoryapi.FactoryValidationTarget,
+	code string,
+	subjectType factoryapi.FactoryValidationSubjectType,
+	subjectID string,
+	location factoryapi.FactoryValidationSubjectLocation,
+) bool {
 	for _, target := range targets {
-		if target.Field != nil && *target.Field == want {
+		if target.Code != code {
+			continue
+		}
+		if target.Subject.Type == subjectType && target.Subject.Id == subjectID && target.Subject.Location == location {
 			return true
 		}
 	}

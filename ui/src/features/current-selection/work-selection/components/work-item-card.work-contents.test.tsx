@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
 import {
   getSelectedWorkItemFixture,
-  MULTIMODAL_SELECTED_WORK_PAYLOAD_CONTENT,
   multimodalSelectedWorkPayloadOverrides,
   workstationRequest,
 } from "../../base/components/detail-card-test-helpers";

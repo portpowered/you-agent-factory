@@ -1006,6 +1006,7 @@ func requiredInputCronFactoryConfigWithExpiry(schedule, expiryWindow string) map
 				"cron":     cron,
 				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
 				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"onContinue": []map[string]string{{"workType": "signal", "state": "complete"}},
 			},
 		},
 	}

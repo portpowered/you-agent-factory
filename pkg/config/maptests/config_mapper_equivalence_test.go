@@ -3,7 +3,6 @@ package maptests
 import (
 	"context"
 	"fmt"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"strings"
 	"testing"
 
@@ -54,7 +53,7 @@ func TestConfigMapper_BuilderEquivalence(t *testing.T) {
 		},
 	}
 
-	mapper := ConfigMapper{}
+	mapper := testConfigMapper{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			builderNet, err := tt.buildNet()

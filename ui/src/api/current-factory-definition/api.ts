@@ -18,7 +18,7 @@ export type { CanonicalFactoryDefinition } from "../factory-definition";
 type CanonicalFactory = components["schemas"]["Factory"];
 export type CurrentFactoryVersion =
   components["schemas"]["HybridLogicalTimestamp"];
-type ErrorTarget = components["schemas"]["ErrorTarget"];
+type FactoryValidationTarget = components["schemas"]["FactoryValidationTarget"];
 
 export type CurrentFactoryDocument = CanonicalFactoryDefinition & {
   version: CurrentFactoryVersion;
@@ -39,7 +39,7 @@ export interface CurrentFactoryDefinitionErrorDetails {
   responseBody?: unknown;
   status?: number;
   statusText?: string;
-  targets?: ErrorTarget[];
+  targets?: FactoryValidationTarget[];
 }
 
 export interface GetCurrentFactoryDefinitionOptions {
@@ -77,7 +77,7 @@ export class CurrentFactoryDefinitionError extends Error {
   public readonly responseBody?: unknown;
   public readonly status?: number;
   public readonly statusText?: string;
-  public readonly targets?: ErrorTarget[];
+  public readonly targets?: FactoryValidationTarget[];
 
   public constructor(
     message: string,
@@ -326,6 +326,15 @@ function isEditableFactoryDefinitionValue(
   return value.name !== undefined;
 }
 
-function isErrorTarget(value: unknown): value is ErrorTarget {
-  return isAPIRecord(value) && typeof value.kind === "string";
+function isErrorTarget(value: unknown): value is FactoryValidationTarget {
+  return (
+    isAPIRecord(value) &&
+    typeof value.code === "string" &&
+    typeof value.message === "string" &&
+    typeof value.severity === "string" &&
+    isAPIRecord(value.subject) &&
+    typeof value.subject.type === "string" &&
+    typeof value.subject.id === "string" &&
+    typeof value.subject.location === "string"
+  );
 }

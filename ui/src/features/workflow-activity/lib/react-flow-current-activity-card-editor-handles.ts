@@ -14,6 +14,8 @@ import {
   PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import type { ActivityGraphNodeHandle } from "../../flowchart/components/current-activity-node-shell";
+import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+import { validationHandleErrorsForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type {
   PositionedEdge,
   PositionedNode,
@@ -25,6 +27,7 @@ export interface CurrentActivityEditorState {
   editorMode: boolean;
   onConnectionAnchorClick: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
+  validationProjection?: FactoryValidationGraphProjection;
 }
 
 type CurrentActivityEndpointKind = Extract<
@@ -124,7 +127,12 @@ export function buildSemanticGraphHandles(args: {
   locale?: string | null;
   nodeId: string;
   nodeKind: FactoryGraphNodeKind;
+  validationProjection?: FactoryValidationGraphProjection;
 }) {
+  const validationHandleErrors =
+    args.nodeKind === "workstation" && args.validationProjection
+      ? validationHandleErrorsForNode(args.validationProjection, args.nodeId)
+      : undefined;
   const connectable =
     args.editor?.editorMode === true &&
     args.editor.canInteractWithEditor &&
@@ -154,6 +162,7 @@ export function buildSemanticGraphHandles(args: {
       args.nodeKind === "workstation" &&
       !supportsProgressOutcomeRoutes &&
       PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id);
+    const handleValidation = validationHandleErrors?.get(anchor.id);
     const selected =
       args.editor?.pendingConnectionSource?.nodeId === args.nodeId &&
       args.editor.pendingConnectionSource.anchorId === anchor.id;
@@ -166,11 +175,13 @@ export function buildSemanticGraphHandles(args: {
     const visible = args.editor?.editorMode === true;
 
     return {
-      buttonAriaLabel: anchor.description,
+      buttonAriaLabel: handleValidation
+        ? handleValidation.message
+        : anchor.description,
       buttonPressed: selected || undefined,
       buttonDisabled:
         !visible || isAuthoredOnlyProgressOutcomeHandle || undefined,
-      buttonTitle: anchor.description,
+      buttonTitle: handleValidation?.message ?? anchor.description,
       connectable: connectable && !isAuthoredOnlyProgressOutcomeHandle,
       hidden:
         !visible || isAuthoredOnlyProgressOutcomeHandle || undefined,
@@ -183,7 +194,15 @@ export function buildSemanticGraphHandles(args: {
         }),
       side: anchor.side,
       type: anchor.role,
-      variant: selected ? "selected" : validTarget ? "valid-target" : "default",
+      validationError: handleValidation !== undefined,
+      validationMessage: handleValidation?.message,
+      variant: handleValidation
+        ? "error"
+        : selected
+          ? "selected"
+          : validTarget
+            ? "valid-target"
+            : "default",
     } satisfies ActivityGraphNodeHandle;
   });
 

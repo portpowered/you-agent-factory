@@ -173,23 +173,21 @@ export function classifyFactorySessionFolderValidationError(
 function classifyFactorySessionFolderValidationTarget(
   targets: FactorySessionsAPIErrorTarget[] | undefined,
 ): FolderValidationErrorReason | null {
-  const validationTarget = targets?.find(
-    (target) =>
-      target.kind === "factory-session-validation" &&
-      typeof target.id === "string",
+  const validationTarget = targets?.find((target) =>
+    target.code.startsWith("factory.session.field."),
   );
-  if (!validationTarget?.id) {
+  if (!validationTarget?.code) {
     return null;
   }
 
-  switch (validationTarget.id) {
+  switch (validationTarget.code.replace("factory.session.field.", "")) {
     case "required":
     case "missing":
     case "not_directory":
     case "not_runnable":
     case "target_not_found":
     case "unreadable":
-      return validationTarget.id;
+      return validationTarget.code.replace("factory.session.field.", "") as FolderValidationErrorReason;
     default:
       return "unknown";
   }

@@ -4,7 +4,11 @@ import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messag
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
-import type { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card";
+import { validationMessagesForGraphSelection } from "../lib/react-flow-current-activity-card-validation";
+import type {
+  CurrentActivitySelection,
+  useCurrentActivityGraphViewModel,
+} from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 export function CurrentActivityGraphSurface({
@@ -13,6 +17,7 @@ export function CurrentActivityGraphSurface({
   headingID,
   imports,
   locale,
+  selection,
   snapshot,
 }: {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
@@ -20,15 +25,41 @@ export function CurrentActivityGraphSurface({
   headingID: string;
   imports: CurrentActivityImportController;
   locale?: string;
+  selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
+  const validationSelectionMessages = editor.editorMode
+    ? validationMessagesForGraphSelection({
+        factoryDefinition:
+          editor.draftState.pendingFactoryDefinition ??
+          editor.currentFactoryDefinition ??
+          snapshot.factory,
+        projection: editor.structuralValidation.projection,
+        selectionNodeId:
+          selection?.kind === "node" ? selection.nodeId : undefined,
+        selectionPlaceId:
+          selection?.kind === "state-node" ? selection.placeId : undefined,
+      })
+    : [];
   if (!snapshotHasObserverGraph(snapshot) && !editor.editorMode) {
     return <EmptyCurrentActivityState locale={locale} />;
   }
 
   return (
     <div className="grid min-h-0 flex-1 gap-3">
+      {validationSelectionMessages.length > 0 ? (
+        <FactoryGraphEditorNotice
+          title={messages.noticeValidationFailureTitle}
+          tone="danger"
+        >
+          <ul className="m-0 grid list-disc gap-1 pl-5">
+            {validationSelectionMessages.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        </FactoryGraphEditorNotice>
+      ) : null}
       {editor.blockedRemovalReason ? (
         <FactoryGraphEditorNotice
           title={messages.noticeRemovalBlockedTitle}

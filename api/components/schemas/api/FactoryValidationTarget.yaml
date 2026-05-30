@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - code
+  - severity
+  - message
+  - subject
+properties:
+  code:
+    type: string
+    description: Stable machine-readable validation rule identifier.
+  severity:
+    $ref: './FactoryValidationSeverity.yaml'
+  message:
+    type: string
+    description: Human-readable explanation suitable for dialogs and summaries.
+  subject:
+    $ref: './FactoryValidationSubject.yaml'

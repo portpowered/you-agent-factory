@@ -254,6 +254,7 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/models/{model_name}/invocations":       {"post"},
 		"/models/{model_name}/pull":              {"post"},
 		"/provider-sessions/detail":              {"get"},
+		"/factory-validations":                   {"post"},
 		"/factories":                             {"post"},
 		"/factory-sessions/{session_id}/factory": {"get", "put"},
 	}
@@ -300,7 +301,7 @@ func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	for _, schema := range []string{
 		"SubmitWorkRequest", "SubmitWorkResponse", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "WorkRequest", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
-		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "Workstation", "WorkstationKind",
+		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)

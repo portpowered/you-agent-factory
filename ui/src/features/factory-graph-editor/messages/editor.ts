@@ -91,6 +91,7 @@ export interface FactoryGraphEditorMessages {
   noticeStaleTitle: string;
   noticeTopologyBlockedDescription: string;
   noticeTopologyBlockedTitle: string;
+  noticeValidationFailureTitle: string;
   operationConnectionInvalid: string;
   operationEdgeNotFound: (edgeId: string) => string;
   operationGraphEditsInvalid: string;
@@ -481,6 +482,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeTopologyBlockedDescription:
         "Save is unavailable while active work is still running in the current factory.",
       noticeTopologyBlockedTitle: "Topology edits are blocked",
+      noticeValidationFailureTitle: "Factory validation issue",
       operationConnectionInvalid: "Graph connection is invalid.",
       operationEdgeNotFound: (edgeId) =>
         `Graph edge "${edgeId}" was not found.`,
@@ -827,6 +829,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeTopologyBlockedDescription:
         "当前工厂仍有活动工作在运行，因此无法保存。",
       noticeTopologyBlockedTitle: "拓扑编辑被阻止",
+      noticeValidationFailureTitle: "工厂验证问题",
       operationConnectionInvalid: "图连接无效。",
       operationEdgeNotFound: (edgeId) => `未找到图边“${edgeId}”。`,
       operationGraphEditsInvalid: "图编辑必须有效后才能应用。",

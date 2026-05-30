@@ -9,6 +9,10 @@
           "type": "INITIAL"
         },
         {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
           "name": "failed",
           "type": "FAILED"
         }
@@ -20,6 +24,10 @@
         {
           "name": "init",
           "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
         },
         {
           "name": "failed",
