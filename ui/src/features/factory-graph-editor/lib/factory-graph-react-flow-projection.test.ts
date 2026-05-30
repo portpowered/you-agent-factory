@@ -285,7 +285,9 @@ describe("factory graph React Flow projection", () => {
       ]),
     );
 
-    const projection = projectFactoryGraphToReactFlow({ topology: rawTopology });
+    const projection = projectFactoryGraphToReactFlow({
+      topology: rawTopology,
+    });
     const projectedNodeIds = projection.nodes.map((node) => node.id);
 
     expect(rawTopology).toEqual(originalTopology);
@@ -352,6 +354,57 @@ describe("factory graph React Flow projection", () => {
     expect(anchorIds).not.toContain("workstation-on-rejection-source");
   });
 
+  it("omits worker-assignment handles on LOGICAL_MOVE workstations", () => {
+    const factoryWithLogicalMove = {
+      ...baseFactoryDefinition,
+      workstations: [
+        ...(baseFactoryDefinition.workstations ?? []),
+        {
+          body: "Move work downstream.",
+          inputs: [
+            {
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "router",
+          outputs: [
+            {
+              state: "done",
+              workType: "story",
+            },
+          ],
+          type: "LOGICAL_MOVE",
+          worker: "",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      factoryWithLogicalMove,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      topology,
+      workstationResolver: {
+        resolveWorkstation: (name) =>
+          factoryWithLogicalMove.workstations?.find(
+            (workstation) => workstation.name === name,
+          ),
+      },
+    });
+    const logicalMoveAnchorIds =
+      projection.nodes
+        .find((node) => node.id === "workstation:router")
+        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+    const modelWorkstationAnchorIds =
+      projection.nodes
+        .find((node) => node.id === "workstation:draft")
+        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+
+    expect(logicalMoveAnchorIds).not.toContain("worker-assignment-target");
+    expect(modelWorkstationAnchorIds).toContain("worker-assignment-target");
+  });
+
   it("exposes continue and reject handles when stopWords is configured", () => {
     const factoryWithStopWords = {
       ...baseFactoryDefinition,
@@ -363,9 +416,8 @@ describe("factory graph React Flow projection", () => {
         },
       ],
     } satisfies CanonicalFactoryDefinition;
-    const topology = buildFactoryGraphTopologyFromDefinition(
-      factoryWithStopWords,
-    );
+    const topology =
+      buildFactoryGraphTopologyFromDefinition(factoryWithStopWords);
 
     const projection = projectFactoryGraphToReactFlow({
       topology,

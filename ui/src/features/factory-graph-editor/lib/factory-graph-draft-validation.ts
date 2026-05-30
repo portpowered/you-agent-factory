@@ -1,3 +1,7 @@
+import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
+import { buildDraftAppliedFactoryDefinition } from "./factory-graph-draft-apply";
+import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -7,11 +11,23 @@ import type {
   FactoryGraphNodeKind,
 } from "./factory-graph-draft-types";
 import { buildNode, nodeKeyId } from "./factory-graph-draft-types";
-import { buildDraftAppliedFactoryDefinition } from "./factory-graph-draft-apply";
-import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export function validateFactoryGraphDraft(
+  baseFactoryDefinition: CanonicalFactoryDefinition,
+  draft: FactoryGraphDraft,
+  locale?: string | null,
+): FactoryGraphDraftValidationError[] {
+  return dedupeValidationErrors([
+    ...validateFactoryGraphDraftStructural(
+      baseFactoryDefinition,
+      draft,
+      locale,
+    ),
+    ...validateFactoryGraphDraftSave(baseFactoryDefinition, draft, locale),
+  ]);
+}
+
+export function validateFactoryGraphDraftStructural(
   baseFactoryDefinition: CanonicalFactoryDefinition,
   draft: FactoryGraphDraft,
   locale?: string | null,
@@ -39,9 +55,6 @@ export function validateFactoryGraphDraft(
   }
   for (const workstation of draft.additions.workstations) {
     validateRequiredName(workstation.name, "workstation", errors, locale);
-    if (workstation.worker.trim().length === 0) {
-      errors.push(missingWorkerError(workstation.name, locale));
-    }
   }
   for (const workState of draft.additions.workStates) {
     validateRequiredName(workState.state.name, "work-state", errors, locale);
@@ -50,9 +63,33 @@ export function validateFactoryGraphDraft(
 
   validateDuplicateIdentifiers(pendingFactoryDefinition, errors, locale);
   validateEdgeChanges(draft, nodeIndex, errors, locale);
+
+  return errors;
+}
+
+export function validateFactoryGraphDraftSave(
+  baseFactoryDefinition: CanonicalFactoryDefinition,
+  draft: FactoryGraphDraft,
+  locale?: string | null,
+): FactoryGraphDraftValidationError[] {
+  const errors: FactoryGraphDraftValidationError[] = [];
+  const pendingFactoryDefinition = buildDraftAppliedFactoryDefinition(
+    baseFactoryDefinition,
+    draft,
+  );
+
+  for (const workstation of draft.additions.workstations) {
+    if (
+      workstationRequiresWorkerAssignment(workstation) &&
+      workstation.worker.trim().length === 0
+    ) {
+      errors.push(missingWorkerError(workstation.name, locale));
+    }
+  }
+
   validateFinalWorkerAssignments(pendingFactoryDefinition, errors, locale);
 
-  return dedupeValidationErrors(errors);
+  return errors;
 }
 
 function validateDuplicateIdentifiers(
@@ -118,7 +155,10 @@ function validateFinalWorkerAssignments(
   locale?: string | null,
 ) {
   for (const workstation of pendingFactoryDefinition.workstations ?? []) {
-    if (workstation.worker.trim().length === 0) {
+    if (
+      workstationRequiresWorkerAssignment(workstation) &&
+      workstation.worker.trim().length === 0
+    ) {
       errors.push(missingWorkerError(workstation.name, locale));
     }
   }

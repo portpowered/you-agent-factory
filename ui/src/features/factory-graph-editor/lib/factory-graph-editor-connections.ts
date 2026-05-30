@@ -1,5 +1,6 @@
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {
   FactoryGraphDraft,
@@ -190,14 +191,17 @@ function filterWorkstationConnectionAnchors(
   anchors: FactoryGraphConnectionAnchor[],
   context?: FactoryGraphConnectionAnchorContext,
 ) {
+  const filtered =
+    context && !workstationRequiresWorkerAssignment(context.workstation)
+      ? anchors.filter((anchor) => anchor.id !== "worker-assignment-target")
+      : anchors;
   if (
     !context ||
     workstationSupportsProgressOutcomeRoutes(context.workstation)
   ) {
-    return anchors;
+    return filtered;
   }
-
-  return anchors.filter(
+  return filtered.filter(
     (anchor) => !PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id),
   );
 }
@@ -248,7 +252,9 @@ export function resolveFactoryGraphConnectionAnchorContext(
   }
 
   const workstation = resolver?.resolveWorkstation?.(node.key.name);
-  return workstation ? factoryGraphConnectionAnchorContext(workstation) : undefined;
+  return workstation
+    ? factoryGraphConnectionAnchorContext(workstation)
+    : undefined;
 }
 
 export function buildFactoryGraphEdgeChangeFromConnection(
