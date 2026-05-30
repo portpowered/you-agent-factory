@@ -270,6 +270,38 @@ func buildRuntimeBundle(
 		return nil, err
 	}
 
+	activeFactory, listener, err := instantiateRuntimeBundleFactory(input, net, logger, eventHistory, workerOpts, recording)
+	if err != nil {
+		return nil, err
+	}
+
+	bundleBuilt = true
+	return &factoryRuntimeBundle{
+		dir:            input.dir,
+		folderPath:     input.folderPath,
+		eventHistory:   eventHistory,
+		factory:        activeFactory,
+		listener:       listener,
+		net:            net,
+		runtimeCfg:     input.loadedFactoryCfg,
+		modelResources: localModels.resources,
+		modelAssets:    localModels.assets,
+		localModels:    localModels.manager,
+		logger:         logger,
+		logSink:        logSink,
+		recording:      recording,
+		recordPath:     input.recordPath,
+	}, nil
+}
+
+func instantiateRuntimeBundleFactory(
+	input runtimeBundleBuildInput,
+	net *state.Net,
+	logger *zap.Logger,
+	eventHistory *factoryevents.FactoryEventHistory,
+	workerOpts []factory.FactoryOption,
+	recording *replay.Recorder,
+) (factory.Factory, *ingest.FileWatcher, error) {
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
 		factory.WithRuntimeMode(input.cfg.RuntimeMode),
@@ -292,30 +324,13 @@ func buildRuntimeBundle(
 
 	activeFactory, err := runtime.New(opts...)
 	if err != nil {
-		return nil, fmt.Errorf("create factory: %w", err)
+		return nil, nil, fmt.Errorf("create factory: %w", err)
 	}
 	listener, err := buildRuntimeListener(input.dir, activeFactory, logger, net)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	bundleBuilt = true
-	return &factoryRuntimeBundle{
-		dir:            input.dir,
-		folderPath:     input.folderPath,
-		eventHistory:   eventHistory,
-		factory:        activeFactory,
-		listener:       listener,
-		net:            net,
-		runtimeCfg:     input.loadedFactoryCfg,
-		modelResources: localModels.resources,
-		modelAssets:    localModels.assets,
-		localModels:    localModels.manager,
-		logger:         logger,
-		logSink:        logSink,
-		recording:      recording,
-		recordPath:     input.recordPath,
-	}, nil
+	return activeFactory, listener, nil
 }
 
 func buildRuntimeLogSink(
