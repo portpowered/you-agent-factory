@@ -128,11 +128,11 @@ export default defineConfig({
         "**/index.ts",
       ],
       thresholds: {
-        // Mergeability: threshold matches measured post-main-merge baseline (~93.01–93.04%).
-        statements: 93.0,
+        // Mergeability: sharded mergeReports on ubuntu-latest measured ~93.04% lines (run 26690572468).
+        statements: 93.05,
         branches: 80.4,
         functions: 94.9,
-        lines: 93.0,
+        lines: 93.04,
       },
     },
   },

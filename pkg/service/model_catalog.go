@@ -164,6 +164,13 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		return nil, fmt.Errorf("runtime config is required")
 	}
 	logger := logging.NewZapLogger(fs.logger, fs.cfg != nil && fs.cfg.Verbose)
+	bundle := fs.currentRuntimeBundle()
+	var modelResources *localModelResourceLimiter
+	var localModels *managedLocalModelManager
+	if bundle != nil {
+		modelResources = bundle.modelResources
+		localModels = bundle.localModels
+	}
 	executor := buildWorkerExecutor(
 		runtimeCfg,
 		factoryCfg,
@@ -177,8 +184,8 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		nil,
 		nil,
 		time.Now,
-		fs.modelResources,
-		fs.localModels,
+		modelResources,
+		localModels,
 	)
 	workstationExecutor, ok := executor.(*workerexecutor.WorkstationExecutor)
 	if !ok || workstationExecutor.Executor == nil {

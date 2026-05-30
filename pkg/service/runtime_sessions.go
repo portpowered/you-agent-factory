@@ -44,39 +44,69 @@ func liveSessionHandle(session *factorysessions.LiveSession) *liveRuntimeHandle 
 	return handle
 }
 
-func (fs *FactoryService) activeFactoryDirectory() string {
-	if fs == nil {
-		return ""
-	}
-	if fs.cfg != nil {
-		if dir := strings.TrimSpace(fs.cfg.Dir); dir != "" {
-			return dir
-		}
-	}
-	return fs.factoryRootDir
-}
-
-func (fs *FactoryService) registerLiveSession(sessionID string, handle *liveRuntimeHandle, selectSession bool) {
+func (fs *FactoryService) registerLiveSession(
+	sessionID string,
+	handle *liveRuntimeHandle,
+	target FactorySessionTarget,
+	selectSession bool,
+) {
 	if fs == nil || fs.sessions == nil || sessionID == "" || handle == nil {
 		return
 	}
-	factoryDir := fs.activeFactoryDirectory()
-	folderPath := fs.factoryRootDir
+	factoryDir := strings.TrimSpace(target.FactoryDir)
+	if factoryDir == "" && handle.runtime != nil {
+		factoryDir = handle.runtime.dir
+	}
+	folderPath := strings.TrimSpace(target.FolderPath)
+	if folderPath == "" {
+		folderPath = fs.factoryRootDir
+	}
 	if folderPath == "" {
 		folderPath = factoryDir
+	}
+	targetRef := target.Ref
+	if targetRef.Kind == "" {
+		targetRef = FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault}
+	}
+	project := strings.TrimSpace(target.Project)
+	if project == "" {
+		project = filepath.Base(folderPath)
 	}
 	fs.sessions.Upsert(factorysessions.NewLiveSession(
 		sessionID,
 		factoryDir,
 		folderPath,
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		targetRef,
 		handle,
 		sessionID == defaultFactorySessionID,
-		filepath.Base(folderPath),
+		project,
 	), selectSession)
 	if selectSession && handle.runtime != nil {
-		fs.swapActiveRuntime(handle.runtime)
+		fs.syncActiveSessionDir(handle.runtime)
+		if sessionID == defaultFactorySessionID {
+			fs.clearStartupBundle()
+		}
 	}
+}
+
+func defaultSessionTargetFromRuntimeBundle(
+	runtimeBundle *factoryRuntimeBundle,
+	factoryRootDir string,
+) FactorySessionTarget {
+	target := FactorySessionTarget{
+		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
+	}
+	if runtimeBundle != nil {
+		target.FactoryDir = runtimeBundle.dir
+		target.FolderPath = runtimeBundle.folderPath
+	}
+	if strings.TrimSpace(target.FolderPath) == "" {
+		target.FolderPath = factoryRootDir
+	}
+	if strings.TrimSpace(target.Project) == "" && target.FolderPath != "" {
+		target.Project = filepath.Base(target.FolderPath)
+	}
+	return target
 }
 
 func (fs *FactoryService) unregisterLiveSession(sessionID string) {
@@ -86,14 +116,14 @@ func (fs *FactoryService) unregisterLiveSession(sessionID string) {
 	fs.sessions.Remove(sessionID)
 	current := fs.sessions.Current()
 	if current == nil {
-		fs.clearActiveRuntime()
+		fs.resetActiveSessionDir()
 		return
 	}
 	if handle := liveSessionHandle(current); handle != nil && handle.runtime != nil {
-		fs.swapActiveRuntime(handle.runtime)
+		fs.syncActiveSessionDir(handle.runtime)
 		return
 	}
-	fs.clearActiveRuntime()
+	fs.resetActiveSessionDir()
 }
 
 func (fs *FactoryService) currentSession() *factorysessions.LiveSession {
@@ -420,7 +450,7 @@ func (fs *FactoryService) openFactorySessionForTarget(ctx context.Context, targe
 	return sessionID, nil
 }
 
-func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle *replacementFactoryRuntime) error {
+func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle *factoryRuntimeBundle) error {
 	return fs.startBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{
 			Kind: FactorySessionTargetKindDefault,
@@ -435,7 +465,7 @@ func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID 
 func (fs *FactoryService) startBackgroundSessionWithMetadata(
 	ctx context.Context,
 	sessionID string,
-	runtimeBundle *replacementFactoryRuntime,
+	runtimeBundle *factoryRuntimeBundle,
 	target FactorySessionTarget,
 ) error {
 	if fs == nil {
@@ -459,15 +489,7 @@ func (fs *FactoryService) startBackgroundSessionWithMetadata(
 			return fmt.Errorf("start runtime session sidecars: %w", err)
 		}
 	}
-	fs.sessions.Upsert(factorysessions.NewLiveSession(
-		sessionID,
-		target.FactoryDir,
-		target.FolderPath,
-		target.Ref,
-		handle,
-		false,
-		target.Project,
-	), false)
+	fs.registerLiveSession(sessionID, handle, target, false)
 	return nil
 }
 
@@ -487,10 +509,10 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 		if successor != nil {
 			successorHandle := liveSessionHandle(successor)
 			fs.setRunState(runState.ctx, successor.ID, successorHandle)
-			fs.swapActiveRuntime(successorHandle.runtime)
+			fs.syncActiveSessionDir(successorHandle.runtime)
 		} else {
 			fs.clearRunState()
-			fs.clearActiveRuntime()
+			fs.resetActiveSessionDir()
 		}
 	}
 
@@ -499,6 +521,16 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 		return err
 	}
 	return nil
+}
+
+func (fs *FactoryService) runSessionID() string {
+	if fs == nil {
+		return defaultFactorySessionID
+	}
+	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
+		return runState.sessionID
+	}
+	return defaultFactorySessionID
 }
 
 func (fs *FactoryService) requireIdleRuntimeForSession(
@@ -523,7 +555,7 @@ func (fs *FactoryService) replaceSessionRuntime(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
 	name string,
-	replacement *replacementFactoryRuntime,
+	replacement *factoryRuntimeBundle,
 ) error {
 	if session == nil {
 		return fmt.Errorf("%w: session handle is unavailable", apisurface.ErrFactorySessionNotFound)
@@ -575,7 +607,7 @@ func (fs *FactoryService) replaceSessionRuntime(
 		session.Project,
 	), isActiveSession)
 	if isActiveSession {
-		fs.swapActiveRuntime(replacement)
+		fs.syncActiveSessionDir(replacement)
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
 	}
 	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
