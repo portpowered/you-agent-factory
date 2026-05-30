@@ -4,7 +4,7 @@ import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messag
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
-import { validationMessagesForSelectedWorkstation } from "../lib/react-flow-current-activity-card-validation";
+import { validationMessagesForGraphSelection } from "../lib/react-flow-current-activity-card-validation";
 import type {
   CurrentActivitySelection,
   useCurrentActivityGraphViewModel,
@@ -30,7 +30,7 @@ export function CurrentActivityGraphSurface({
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
   const validationSelectionMessages = editor.editorMode
-    ? validationMessagesForSelectedWorkstation({
+    ? validationMessagesForGraphSelection({
         factoryDefinition:
           editor.draftState.pendingFactoryDefinition ??
           editor.currentFactoryDefinition ??
@@ -38,6 +38,8 @@ export function CurrentActivityGraphSurface({
         projection: editor.structuralValidation.projection,
         selectionNodeId:
           selection?.kind === "node" ? selection.nodeId : undefined,
+        selectionPlaceId:
+          selection?.kind === "state-node" ? selection.placeId : undefined,
       })
     : [];
   if (!snapshotHasObserverGraph(snapshot) && !editor.editorMode) {

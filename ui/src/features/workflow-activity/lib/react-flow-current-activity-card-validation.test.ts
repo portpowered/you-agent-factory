@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
-import { validationMessagesForSelectedWorkstation } from "./react-flow-current-activity-card-validation";
+import {
+  validationMessagesForGraphSelection,
+  validationMessagesForSelectedWorkstation,
+} from "./react-flow-current-activity-card-validation";
 
 describe("validationMessagesForSelectedWorkstation", () => {
   it("returns workstation validation messages for the selected graph node", () => {
@@ -40,6 +43,56 @@ describe("validationMessagesForSelectedWorkstation", () => {
 
     expect(messages).toEqual([
       'Workstation "review" must define a failure route.',
+    ]);
+  });
+});
+
+describe("validationMessagesForGraphSelection", () => {
+  it("returns work type validation messages for the selected graph node", () => {
+    const targets = [
+      {
+        code: "factory.workType.missingFailureState",
+        message: 'work type "story" must declare a failure state.',
+        severity: "error" as const,
+        subject: {
+          id: "story",
+          location: "STATES" as const,
+          type: "WORK_TYPE" as const,
+        },
+      },
+    ];
+
+    const messages = validationMessagesForGraphSelection({
+      projection: projectFactoryValidationTargets(targets),
+      selectionNodeId: "work-type:story",
+    });
+
+    expect(messages).toEqual([
+      'work type "story" must declare a failure state.',
+    ]);
+  });
+
+  it("returns work state validation messages for the selected place", () => {
+    const targets = [
+      {
+        code: "factory.workState.missingTerminalCompletionPath",
+        message: 'work state "story:queued" has no terminal completion path.',
+        severity: "error" as const,
+        subject: {
+          id: "story:queued",
+          location: "TERMINAL" as const,
+          type: "WORK_STATE" as const,
+        },
+      },
+    ];
+
+    const messages = validationMessagesForGraphSelection({
+      projection: projectFactoryValidationTargets(targets),
+      selectionPlaceId: "story:queued",
+    });
+
+    expect(messages).toEqual([
+      'work state "story:queued" has no terminal completion path.',
     ]);
   });
 });

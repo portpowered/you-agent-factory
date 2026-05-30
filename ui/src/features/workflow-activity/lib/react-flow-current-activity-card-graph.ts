@@ -3,6 +3,8 @@ import type {
   DashboardActiveExecution,
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import { validationNodeErrorForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type {
   GraphLayout,
   PositionedEdge,
@@ -25,8 +27,6 @@ import {
   resolveWorkstationConnectionAnchorContext,
   supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
-import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
-import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 
 export const EMPTY_GRAPH_LAYOUT: GraphLayout = {
   edges: [],
@@ -350,17 +350,11 @@ interface BuildCurrentActivityNodesInput {
   storedNodePositions: GraphNodePositions;
 }
 
-function buildPlaceNode(
+function buildPlaceNodeShell(
   positionedNode: PositionedPlaceNode,
   input: BuildCurrentActivityNodesInput,
-): CurrentActivityNode {
-  const place = positionedNode.place;
-  const position = nodePosition(
-    positionedNode.nodeId,
-    { x: positionedNode.x, y: positionedNode.y },
-    input.storedNodePositions,
-  );
-  const basePlaceNode = {
+) {
+  return {
     className: "border-0 bg-transparent p-0 text-af-text",
     draggable: true,
     height: positionedNode.height,
@@ -368,16 +362,38 @@ function buildPlaceNode(
     initialHeight: positionedNode.height,
     initialWidth: positionedNode.width,
     measured: { height: positionedNode.height, width: positionedNode.width },
-    position,
+    position: nodePosition(
+      positionedNode.nodeId,
+      { x: positionedNode.x, y: positionedNode.y },
+      input.storedNodePositions,
+    ),
     width: positionedNode.width,
   };
-    const factoryGraphNode = resolveFactoryGraphPlaceNode(place);
-    const basePlaceData = {
+}
+
+function buildPlaceNodeData(
+  positionedNode: PositionedPlaceNode,
+  input: BuildCurrentActivityNodesInput,
+  factoryGraphNode: ReturnType<typeof resolveFactoryGraphPlaceNode>,
+) {
+  const place = positionedNode.place;
+  const factoryGraphNodeId = factoryGraphNode?.nodeId ?? positionedNode.nodeId;
+  const validationNodeError = input.editor?.validationProjection
+    ? validationNodeErrorForNode(
+        input.editor.validationProjection,
+        factoryGraphNodeId,
+      )
+    : undefined;
+
+  return {
+    factoryGraphNodeId,
+    basePlaceData: {
       activeFlow: input.activeGraphHighlights.activePlaceNodeIds.has(
         positionedNode.nodeId,
       ),
-      activeItemLabels: input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
-      factoryGraphNodeId: factoryGraphNode?.nodeId ?? positionedNode.nodeId,
+      activeItemLabels:
+        input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
+      factoryGraphNodeId,
       handles: factoryGraphNode
         ? buildSemanticGraphHandles({
             editor: input.editor,
@@ -387,17 +403,34 @@ function buildPlaceNode(
             validationProjection: input.editor?.validationProjection,
           })
         : [],
-    locale: input.locale,
-    muted:
-      place.kind !== "resource" &&
-      input.activeGraphHighlights.hasActiveFlow &&
-      !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
-    selectedStateNode:
-      input.selection?.kind === "state-node" &&
-      input.selection.placeId === place.place_id,
-    tokenCount:
-      input.snapshot.runtime.place_token_counts?.[place.place_id] ?? 0,
+      locale: input.locale,
+      muted:
+        place.kind !== "resource" &&
+        input.activeGraphHighlights.hasActiveFlow &&
+        !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
+      selectedStateNode:
+        input.selection?.kind === "state-node" &&
+        input.selection.placeId === place.place_id,
+      tokenCount:
+        input.snapshot.runtime.place_token_counts?.[place.place_id] ?? 0,
+      validationError: validationNodeError !== undefined,
+      validationMessage: validationNodeError?.message,
+    },
+    place,
   };
+}
+
+function buildPlaceNode(
+  positionedNode: PositionedPlaceNode,
+  input: BuildCurrentActivityNodesInput,
+): CurrentActivityNode {
+  const factoryGraphNode = resolveFactoryGraphPlaceNode(positionedNode.place);
+  const basePlaceNode = buildPlaceNodeShell(positionedNode, input);
+  const { basePlaceData, factoryGraphNodeId, place } = buildPlaceNodeData(
+    positionedNode,
+    input,
+    factoryGraphNode,
+  );
 
   if (place.kind === "work_state") {
     return {
@@ -423,7 +456,8 @@ function buildPlaceNode(
   }
 
   if (factoryGraphNode?.kind === "worker") {
-    const workerName = place.state_value ?? factoryGraphNode.nodeId.replace(/^worker:/, "");
+    const workerName =
+      place.state_value ?? factoryGraphNode.nodeId.replace(/^worker:/, "");
     return {
       ...basePlaceNode,
       data: {
@@ -446,7 +480,15 @@ function buildPlaceNode(
       data: {
         ...basePlaceData,
         kind: "work-type" as const,
+        onSelectGraphNode: input.editor?.editorMode
+          ? input.onSelectWorkstation
+          : undefined,
         place,
+        selectedGraphNode:
+          input.editor?.editorMode === true &&
+          input.selection?.kind === "node" &&
+          (input.selection.nodeId === factoryGraphNodeId ||
+            input.selection.nodeId === place.state_value),
       },
       selectable: false,
       type: "workType",
@@ -487,8 +529,9 @@ function buildWorkstationNode(
     factory,
     positionedNode.nodeId,
   );
-  const progressOutcomeRouteWorkstation: WorkstationProgressOutcomeRouteContext | undefined =
-    connectionAnchorContext?.workstation;
+  const progressOutcomeRouteWorkstation:
+    | WorkstationProgressOutcomeRouteContext
+    | undefined = connectionAnchorContext?.workstation;
 
   const executions =
     input.activeExecutionsByWorkstationNodeID[workstation.node_id] ?? [];

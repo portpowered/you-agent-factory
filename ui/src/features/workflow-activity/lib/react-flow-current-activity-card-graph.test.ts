@@ -507,7 +507,9 @@ describe("current activity graph editor handles", () => {
       storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
-    expect(nodes.find((node) => node.id === "worker:writer")?.data).toMatchObject({
+    expect(
+      nodes.find((node) => node.id === "worker:writer")?.data,
+    ).toMatchObject({
       kind: "worker",
       selectedWorker: true,
     });
@@ -999,9 +1001,75 @@ describe("current activity graph active item labels", () => {
     expect(labelsByPlaceId.get("story:blocked")).toEqual(["token-4"]);
   });
 
+  it("marks work type and work state nodes with validation error treatment from canonical targets", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workType.missingCompletionState",
+        message: 'work type "task" must declare a completion state.',
+        severity: "error",
+        subject: {
+          id: "task",
+          location: "STATES",
+          type: "WORK_TYPE",
+        },
+      },
+      {
+        code: "factory.workState.missingTerminalCompletionPath",
+        message: 'work state "task:init" has no terminal completion path.',
+        severity: "error",
+        subject: {
+          id: "task:init",
+          location: "TERMINAL",
+          type: "WORK_STATE",
+        },
+      },
+    ]);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], graphLayout.edges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: null,
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+        validationProjection,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: buildSampleFactorySnapshot(factory),
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(
+      nodes.find((node) => node.id === "work-type:task")?.data,
+    ).toMatchObject({
+      validationError: true,
+      validationMessage: 'work type "task" must declare a completion state.',
+    });
+    expect(
+      nodes.find((node) => node.id === "work-state:task:init")?.data,
+    ).toMatchObject({
+      validationError: true,
+      validationMessage:
+        'work state "task:init" has no terminal completion path.',
+    });
+  });
+
   it("marks workstation handles with validation error treatment from canonical targets", async () => {
     const factory = loadSampleFactoryDefinition();
-    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
     const validationProjection = projectFactoryValidationTargets([
       {
         code: "factory.workstation.missingFailureRoute",
@@ -1037,14 +1105,17 @@ describe("current activity graph active item labels", () => {
       snapshot: buildSampleFactorySnapshot(factory),
       storedNodePositions: EMPTY_NODE_POSITIONS,
     });
-    const workstationNode = nodes.find((node) => node.id === "workstation:review");
+    const workstationNode = nodes.find(
+      (node) => node.id === "workstation:review",
+    );
 
     expect(workstationNode?.data.handles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: "workstation-on-failure-source",
           validationError: true,
-          validationMessage: 'Workstation "review" must define a failure route.',
+          validationMessage:
+            'Workstation "review" must define a failure route.',
           variant: "error",
         }),
       ]),

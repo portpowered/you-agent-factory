@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import {
+  factoryGraphNodeIdForWorkState,
   factoryGraphNodeIdForWorkstation,
+  factoryGraphNodeIdForWorkType,
   projectFactoryValidationTargets,
   validationHandleErrorsForNode,
+  validationNodeErrorForNode,
   workstationHandleIdForValidationLocation,
 } from "./factory-validation-graph-projection";
 
@@ -20,6 +23,14 @@ describe("factory-validation-graph-projection", () => {
       "workstation-output-source",
     );
     expect(workstationHandleIdForValidationLocation("STATES")).toBeNull();
+    expect(workstationHandleIdForValidationLocation("TERMINAL")).toBeNull();
+  });
+
+  it("maps work type and work state subject ids to graph node ids", () => {
+    expect(factoryGraphNodeIdForWorkType("story")).toBe("work-type:story");
+    expect(factoryGraphNodeIdForWorkState("story:queued")).toBe(
+      "work-state:story:queued",
+    );
   });
 
   it("projects workstation validation targets onto graph node handles", () => {
@@ -80,5 +91,43 @@ describe("factory-validation-graph-projection", () => {
         factoryGraphNodeIdForWorkstation("process"),
       )?.get("workstation-output-source")?.code,
     ).toBe("factory.workstation.conflictingWorkStateOutputs");
+  });
+
+  it("projects work type and work state validation targets onto graph nodes", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.workType.missingCompletionState",
+        message: 'work type "story" must declare a completion state.',
+        severity: "error",
+        subject: {
+          id: "story",
+          location: "STATES",
+          type: "WORK_TYPE",
+        },
+      },
+      {
+        code: "factory.workState.missingTerminalCompletionPath",
+        message: 'work state "story:queued" has no terminal completion path.',
+        severity: "error",
+        subject: {
+          id: "story:queued",
+          location: "TERMINAL",
+          type: "WORK_STATE",
+        },
+      },
+    ];
+
+    const projection = projectFactoryValidationTargets(targets);
+
+    expect(validationNodeErrorForNode(projection, "work-type:story")).toEqual({
+      code: "factory.workType.missingCompletionState",
+      message: 'work type "story" must declare a completion state.',
+    });
+    expect(
+      validationNodeErrorForNode(projection, "work-state:story:queued"),
+    ).toEqual({
+      code: "factory.workState.missingTerminalCompletionPath",
+      message: 'work state "story:queued" has no terminal completion path.',
+    });
   });
 });
