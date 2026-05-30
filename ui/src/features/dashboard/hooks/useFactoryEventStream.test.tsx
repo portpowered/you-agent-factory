@@ -9,7 +9,7 @@ import { createReplayHarness } from "../../../testing/replay-harness";
 import {
   CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
   CURRENT_FACTORY_DEFINITION_QUERY_KEY,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
