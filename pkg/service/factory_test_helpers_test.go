@@ -1,3 +1,4 @@
+// backendsizecheck:ignore-file shared service test fixtures and helpers remain together until dedicated service test seams split.
 // pkgmaintcheck:ignore-file-lines shared service test fixtures and helpers remain together until dedicated service test seams split.
 package service
 

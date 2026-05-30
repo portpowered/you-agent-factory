@@ -1,3 +1,4 @@
+// backendsizecheck:ignore-file consolidated runtime-mode and session-registry tests remain together until dedicated service test seams split.
 // pkgmaintcheck:ignore-file-lines consolidated runtime-mode and session-registry tests remain together until dedicated service test seams split.
 package service
 
