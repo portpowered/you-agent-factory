@@ -6,7 +6,7 @@ import {
   validateCurrentFactoryWorkstationPromptTemplate,
 } from "../../../../api/current-factory-prompt-template";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
-import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
+import { useDashboardSession } from "../../../dashboard/session/dashboard-session-provider";
 
 export function buildCurrentWorkstationPromptTemplateValidationQueryKey(
   workstationName: string,
@@ -26,7 +26,7 @@ export function useCurrentWorkstationPromptTemplateValidation(
   prompt: string | undefined,
   isEnabled = true,
 ) {
-  const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
+  const { sessionID } = useDashboardSession();
 
   return useQuery<
     PromptTemplateValidationResult,

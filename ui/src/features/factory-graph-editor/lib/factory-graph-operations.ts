@@ -351,11 +351,3 @@ export function applyFactoryGraphPendingEdits(options: {
     ),
   };
 }
-
-export function buildFactoryGraphSaveInput(options: {
-  baseFactoryDefinition: CanonicalFactoryDefinition;
-  draft: FactoryGraphDraft;
-  locale?: string | null;
-}): FactoryGraphOperationResult<CanonicalFactoryDefinition> {
-  return applyFactoryGraphPendingEdits(options);
-}

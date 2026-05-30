@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import {
@@ -9,6 +9,7 @@ import {
   getCurrentFactoryDocument,
   saveCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
+import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
   currentFactoryDefinitionQueryKey,
@@ -115,6 +116,36 @@ describe("useCurrentFactoryDefinition", () => {
     renderHook(() => useCurrentFactoryDefinition(), {
       wrapper: createQueryClientWrapper(),
     });
+
+    await waitFor(() => {
+      expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
+        sessionID: "session-2",
+      });
+    });
+  });
+
+  it("refetches when the selected session tab changes", async () => {
+    vi.mocked(getCurrentFactoryDefinition).mockResolvedValue(
+      editableFactoryDefinition,
+    );
+
+    const { rerender } = renderHook(() => useCurrentFactoryDefinition(), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
+        sessionID: "~default",
+      });
+    });
+
+    vi.mocked(getCurrentFactoryDefinition).mockClear();
+
+    act(() => {
+      useDashboardSessionStore.getState().setSelectedSessionID("session-2");
+    });
+
+    rerender();
 
     await waitFor(() => {
       expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
@@ -316,7 +347,9 @@ function createQueryClientWrapper(
     children: ReactNode;
   }): ReactNode {
     return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+      </QueryClientProvider>
     );
   };
 }

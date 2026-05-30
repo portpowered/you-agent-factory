@@ -46,15 +46,14 @@ import {
   disconnectFactoryGraphEdge,
   removeFactoryGraphNode,
 } from "../../factory-graph-editor/lib/factory-graph-operations";
-import {
-  useEditableFactoryGraph,
-  useFactoryGraphDraftState,
-} from "../../factory-graph-editor/public";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart/lib/workstation-icon-metadata";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
+import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import {
@@ -84,12 +83,24 @@ vi.mock("../../current-factory-definition/public", async () => {
   };
 });
 
-vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual("../../factory-graph-editor/public");
+vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", async () => {
+  const actual = await vi.importActual(
+    "../../factory-graph-editor/hooks/use-editable-factory-graph",
+  );
 
   return {
     ...actual,
     useEditableFactoryGraph: vi.fn(),
+  };
+});
+
+vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () => {
+  const actual = await vi.importActual(
+    "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+  );
+
+  return {
+    ...actual,
     useFactoryGraphDraftState: vi.fn(),
   };
 });
@@ -97,7 +108,7 @@ vi.mock("../../factory-graph-editor/public", async () => {
 const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
 
 interface RenderCurrentActivityOptions {
-  activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
+  activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
   importController?: CurrentActivityImportController;
   locale?: string;
   onFactoryActivated?: () => void;
@@ -2125,7 +2136,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(previewDialog.textContent).toContain("Dropped Factory");
     expect(previewDialog.textContent).toContain("factory-import.png");
     expect(previewDialog.textContent).toContain(
-      "Review the dropped factory before activation.",
+      "Review the dropped factory before confirming import.",
     );
     expect(
       within(previewDialog)
@@ -2312,7 +2323,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const importValue = createFactoryImportValue();
     let resolveActivation: ((value: FactoryValue) => void) | null = null;
     const activateFactory = vi
-      .fn<(value: FactoryValue) => Promise<FactoryValue>>()
+      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
       .mockImplementation(
         () =>
           new Promise<FactoryValue>((resolve) => {
@@ -2345,11 +2356,18 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     });
 
     fireEvent.click(
-      within(previewDialog).getByRole("button", { name: "Activate factory" }),
+      within(previewDialog).getByRole("button", { name: "Confirm import" }),
     );
 
     await waitFor(() => {
-      expect(activateFactory).toHaveBeenCalledWith(importValue.factory);
+      expect(activateFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          choice: "replace_current",
+          createFactoryName: "Dropped Factory-2",
+          existingFactoryNames: ["dashboard-fixture", "Dropped Factory"],
+          value: importValue,
+        }),
+      );
     });
     const activateButton = within(previewDialog).getByRole<HTMLButtonElement>(
       "button",
@@ -2392,7 +2410,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const activateFactory = vi
-      .fn<(value: FactoryValue) => Promise<FactoryValue>>()
+      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
       .mockRejectedValue(
         new NamedFactoryAPIError("Named factory already exists.", {
           code: "FACTORY_ALREADY_EXISTS",
@@ -2425,7 +2443,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     });
 
     fireEvent.click(
-      within(previewDialog).getByRole("button", { name: "Activate factory" }),
+      within(previewDialog).getByRole("button", { name: "Confirm import" }),
     );
 
     const alert = await within(previewDialog).findByRole("alert");
@@ -2445,7 +2463,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const activateFactory = vi
-      .fn<(value: FactoryValue) => Promise<FactoryValue>>()
+      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
       .mockRejectedValue(
         new NamedFactoryAPIError(
           "Current factory runtime must be idle before activation.",
@@ -2481,7 +2499,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     });
 
     fireEvent.click(
-      within(previewDialog).getByRole("button", { name: "Activate factory" }),
+      within(previewDialog).getByRole("button", { name: "Confirm import" }),
     );
 
     const alert = await within(previewDialog).findByRole("alert");
@@ -3952,7 +3970,7 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const activateFactory = vi
-      .fn<(value: FactoryValue) => Promise<FactoryValue>>()
+      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
       .mockRejectedValue(
         new NamedFactoryAPIError("Named factory already exists.", {
           code: "FACTORY_ALREADY_EXISTS",

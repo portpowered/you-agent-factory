@@ -4,12 +4,12 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { FactoryValidationResult } from "../../../api/factory-validation";
+import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
 import {
   connectFactoryGraphNodes,
-  createEmptyFactoryGraphDraft,
   disconnectFactoryGraphEdge,
   removeFactoryGraphNode,
-} from "../public";
+} from "../lib/factory-graph-operations";
 import { baseFactoryDefinition } from "../lib/factory-graph-draft.test-helpers";
 import { buildDraftAppliedFactoryDefinition } from "../lib/factory-graph-draft-apply";
 import { useFactoryValidation } from "./use-factory-validation";

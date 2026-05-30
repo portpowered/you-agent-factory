@@ -1,12 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 
+import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
 import {
-  buildPendingFactoryDefinition,
-  createEmptyFactoryGraphDraft,
   syncFactoryGraphDraftSession,
   useFactoryGraphDraftState,
-  validateFactoryGraphDraft,
-} from "../public";
+} from "../hooks/factory-graph-draft-hook";
 import {
   baseFactoryDefinition,
   currentFactoryDocument,

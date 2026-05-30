@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -86,7 +87,7 @@ func TestRuntimeConfigFromGeneratedFactory_RebuildsWithoutOriginalFiles(t *testi
 
 func TestRuntimeConfigFromGeneratedFactory_KeepsCanonicalRelativeExecutionPath(t *testing.T) {
 	factoryDir := t.TempDir()
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "agent-factory",
 		"id":   "agent-factory",
 		"workTypes": []map[string]any{{
@@ -177,7 +178,7 @@ func TestRuntimeConfigFromGeneratedFactory_ProjectsReplayInitialTopologyFromFact
 
 func writeReplayInitialTopologyFixture(t *testing.T, factoryDir string) {
 	t.Helper()
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "factory",
 		"workTypes": []map[string]any{
 			{
@@ -333,7 +334,7 @@ func assertReplayInitialTopologyProjection(t *testing.T, replayProjection interf
 // pkgmaintcheck:ignore-cyclomatic-complexity this generated-factory contract test keeps the canonical workstation projection assertions in one readable flow.
 func TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind(t *testing.T) {
 	factoryDir := t.TempDir()
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
@@ -487,7 +488,7 @@ func TestRuntimeConfigFromGeneratedFactory_PreservesGuardedLoopBreakerRoundTrip(
 
 func writeGuardedLoopBreakerFactoryJSON(t *testing.T, factoryDir string) {
 	t.Helper()
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
@@ -789,7 +790,7 @@ func assertCanonicalRuntimeDefinitionLookupByName(
 
 func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 	t.Helper()
-	writeFactoryJSON(t, factoryDir, map[string]any{
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, map[string]any{
 		"name": "factory",
 		"workTypes": []map[string]any{
 			{
@@ -858,17 +859,6 @@ func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 			},
 		},
 	})
-}
-
-func writeFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any) {
-	t.Helper()
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("MarshalIndent: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
-	}
 }
 
 func writeAgentsMD(t *testing.T, dir, content string) {

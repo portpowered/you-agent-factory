@@ -1,12 +1,11 @@
 import { useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useAppLocale } from "../../../i18n";
 import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
-import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import { DashboardImportPreviewDialog } from "../../import/public";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
@@ -80,9 +79,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     selectedTraceID,
     setSelectedTraceID,
   } = useDashboardBentoSelectionState();
-  const selectedSessionID = useDashboardSessionStore(
-    (state) => state.selectedSessionID,
-  );
+  const { rawSessionID, sessionID } = useDashboardSession();
   const timelineEvents = useFactoryTimelineStore((state) => state.events);
   const selectedTimelineTick = useFactoryTimelineStore(
     (state) => state.selectedTick,
@@ -100,14 +97,14 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const snapshot = selectedSnapshot ?? EMPTY_DASHBOARD_SNAPSHOT;
 
   const currentSelection = useCurrentSelection({
-    sessionID: selectedSessionID ?? DEFAULT_FACTORY_SESSION_ID,
+    sessionID,
     snapshot,
     workstationRequestsByDispatchID,
   });
   const importController = useCurrentActivityImportController({
     locale: resolvedLocale,
     onFactoryActivated: incrementRefreshToken,
-    sessionID: selectedSessionID,
+    sessionID: rawSessionID,
   });
 
   useEffect(() => {

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import {
   addFactoryGraphNode,
-  buildFactoryGraphSaveInput,
+  applyFactoryGraphPendingEdits,
   connectFactoryGraphNodes,
-  createEmptyFactoryGraphDraft,
   disconnectFactoryGraphEdge,
-} from "../public";
+} from "./factory-graph-operations";
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 
 describe("factory graph operations worker assignment", () => {
@@ -32,7 +32,7 @@ describe("factory graph operations worker assignment", () => {
       return;
     }
 
-    const saveAfterDisconnect = buildFactoryGraphSaveInput({
+    const saveAfterDisconnect = applyFactoryGraphPendingEdits({
       baseFactoryDefinition,
       draft: disconnected.value,
     });

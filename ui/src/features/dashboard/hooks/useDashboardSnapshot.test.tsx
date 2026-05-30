@@ -11,6 +11,7 @@ import {
   CURRENT_FACTORY_DEFINITION_QUERY_KEY,
 } from "../../current-factory-definition/public";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
+import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { FACTORY_TIMELINE_DEBUG_STORAGE_KEY } from "../../timeline/state/factoryTimelineDebug";
 import {
   type WorldState,
@@ -744,7 +745,9 @@ describe("useDashboardSnapshot", () => {
 function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: PropsWithChildren) {
     return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+      </QueryClientProvider>
     );
   };
 }

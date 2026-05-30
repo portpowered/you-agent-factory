@@ -7,6 +7,7 @@ import {
   staleFactoryVersionTarget,
 } from "../../../../testing/factory-validation-target-fixtures";
 import * as currentFactoryFeature from "../../../current-factory-definition/public";
+import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
@@ -297,7 +298,9 @@ function createQueryClientWrapper() {
 
   return function QueryClientWrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+      </QueryClientProvider>
     );
   };
 }

@@ -3,7 +3,8 @@ import {
   createFactoryGraphAddEntityDraft,
   validateFactoryGraphAddEntityDraft,
 } from "./factory-graph-editor-additions";
-import { createEmptyFactoryGraphDraft, type CanonicalFactoryDefinition } from "../public";
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 
 const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",

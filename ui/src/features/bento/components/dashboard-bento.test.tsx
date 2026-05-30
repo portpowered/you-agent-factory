@@ -134,10 +134,16 @@ vi.mock("../../terminal-work/public", () => ({
   }) => <section>{headerAction}Terminal work card</section>,
 }));
 
-vi.mock("../../dashboard/state/dashboardSessionStore", () => ({
-  useDashboardSessionStore: (
-    selector: (state: { selectedSessionID: string }) => unknown,
-  ) => selector({ selectedSessionID: "session-1" }),
+vi.mock("../../dashboard/session/dashboard-session-provider", () => ({
+  useDashboardSession: () => ({
+    eventsPath: "/factory-sessions/session-1/events",
+    factoryPath: "/factory-sessions/session-1/factory",
+    isDefault: false,
+    isPaused: false,
+    rawSessionID: "session-1",
+    sessionID: "session-1",
+    workPath: "/factory-sessions/session-1/work",
+  }),
 }));
 
 vi.mock("../../timeline/state/factoryTimelineStore", () => ({

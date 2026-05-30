@@ -2,10 +2,7 @@ package modeltests
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -13,6 +10,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
 )
 
@@ -72,7 +70,7 @@ func buildModelCatalogService(t *testing.T, cfg map[string]any) *service.Factory
 	t.Helper()
 
 	dir := t.TempDir()
-	writeFactoryJSON(t, dir, cfg)
+	factoryfixtures.WriteFactoryJSON(t, dir, cfg)
 
 	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               dir,
@@ -83,18 +81,6 @@ func buildModelCatalogService(t *testing.T, cfg map[string]any) *service.Factory
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 	return svc
-}
-
-func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
-	t.Helper()
-
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal factory config: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
-	}
 }
 
 func modelCatalogConfig(includeResource bool) map[string]any {

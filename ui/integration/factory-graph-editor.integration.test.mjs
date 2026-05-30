@@ -484,11 +484,11 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(await importDialog.textContent()).toContain(exportName);
         expect(await importDialog.textContent()).toContain(download.filename);
         expect(await importDialog.textContent()).toContain(
-          "Activating the import switches the current dashboard factory to the embedded authored definition from this PNG.",
+          "Review the dropped factory before confirming import",
         );
 
         await importDialog
-          .getByRole("button", { name: "Activate factory" })
+          .getByRole("button", { name: "Confirm import" })
           .click();
         await expect
           .poll(async () => sessionFactoryPutRequests.length, {
@@ -504,6 +504,7 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
           defaultFactorySessionID,
         );
+        expect(sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
         expect(sessionFactoryPutRequests[0]?.body).toMatchObject({
           ...exportFactoryDefinition,
           name: exportFactoryDefinition.name,

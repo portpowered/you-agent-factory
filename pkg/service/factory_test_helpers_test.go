@@ -15,9 +15,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
+
+func minimalFactoryConfig() map[string]any {
+	return factoryfixtures.MinimalFactoryConfig()
+}
+
+func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
+	t.Helper()
+	factoryfixtures.WriteFactoryJSON(t, dir, cfg)
+}
 
 type recordingDiagnosticsProvider struct{}
 
