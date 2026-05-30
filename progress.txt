@@ -387,3 +387,12 @@
   - Gotchas encountered: `you run` needs `--continuously` and mock-workers config path as the final positional arg like factory-prompt smoke; skip under `testing.Short()` because the test builds the CLI and runs a live server.
   - Useful context: httptest coverage in `pkg/cli/submit/batch_test.go` remains the fast default; this smoke is the slow E2E proof when the harness can start a factory and accept work-request upserts.
 ---
+
+## 2026-05-30T15:45:00Z - mergeability (PR #481)
+- What was implemented: Fixed CI `pkg-maint` failures by extracting JSON output tests to `pkg/cli/submit/batch_json_test.go` and moving field assertions into helpers to satisfy cyclomatic-complexity and file-line limits on `batch_test.go`.
+- Files changed: `pkg/cli/submit/batch_test.go`, `pkg/cli/submit/batch_json_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: When `batch_test.go` nears 1000 lines or a single test exceeds cyclomatic complexity 15, split `--json` regressions into `batch_json_test.go` in the same package rather than adding more branches to one test function.
+  - Gotchas encountered: Extracting assertion helpers inside the same oversized test file does not reduce file-line count; move tests and helpers together.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/481 — mergeability-only follow-up after story 012 smoke landed.
+---
