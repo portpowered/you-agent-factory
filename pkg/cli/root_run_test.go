@@ -712,7 +712,6 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 		"--dir", "custom-factory",
 		"--workflow", "workflow-1",
 		"--work", "work.json",
-		"--port", "0",
 	})
 
 	if err := root.Execute(); err != nil {
@@ -737,11 +736,14 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 	if got.RecordPath != "" {
 		t.Errorf("record path = %q, want empty", got.RecordPath)
 	}
-	if got.Port != 0 {
-		t.Errorf("port = %d, want %d", got.Port, 0)
+	if got.Port != 7437 {
+		t.Errorf("port = %d, want %d", got.Port, 7437)
 	}
-	if got.AutoPort {
-		t.Fatal("expected explicit --port to disable automatic port resolution")
+	if !got.AutoPort {
+		t.Fatal("expected default --server to enable automatic port resolution")
+	}
+	if got.BindHost != "localhost" {
+		t.Fatalf("bind host = %q, want localhost", got.BindHost)
 	}
 	if got.Logger == nil {
 		t.Fatal("expected run command to set logger")
@@ -937,5 +939,93 @@ func TestRunCommand_VerboseDiagnosticsUseStderr(t *testing.T) {
 	}
 	if got := stderr.String(); !strings.Contains(got, "diagnostic: run startup") {
 		t.Fatalf("stderr = %q, want run diagnostics", got)
+	}
+}
+
+func TestRunCommand_DefaultServerEnablesAutoPortAndLocalBind(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run: %v", err)
+	}
+	if got.Port != 7437 {
+		t.Fatalf("port = %d, want 7437", got.Port)
+	}
+	if got.BindHost != "localhost" {
+		t.Fatalf("bind host = %q, want localhost", got.BindHost)
+	}
+	if !got.AutoPort {
+		t.Fatal("expected default --server to enable automatic port resolution")
+	}
+}
+
+func TestRunCommand_ExplicitServerDerivesBindPortAndDisablesAutoPort(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--server", "http://127.0.0.1:9090"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --server: %v", err)
+	}
+	if got.Port != 9090 {
+		t.Fatalf("port = %d, want 9090", got.Port)
+	}
+	if got.BindHost != "127.0.0.1" {
+		t.Fatalf("bind host = %q, want 127.0.0.1", got.BindHost)
+	}
+	if got.AutoPort {
+		t.Fatal("expected explicit --server to disable automatic port resolution")
+	}
+}
+
+func TestRunCommand_NonLocalServerRejected(t *testing.T) {
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--server", "https://remote.example.com:7443"})
+
+	if execErr := root.Execute(); execErr == nil {
+		t.Fatal("expected non-local --server rejection")
+	} else if !strings.Contains(execErr.Error(), "not a local bind target") {
+		t.Fatalf("error = %v, want local bind guidance", execErr)
+	}
+}
+
+func TestRunCommand_PortFlagRejected(t *testing.T) {
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--port", "7437"})
+
+	if execErr := root.Execute(); execErr == nil {
+		t.Fatal("expected --port rejection")
+	} else if !strings.Contains(execErr.Error(), "--server") {
+		t.Fatalf("error = %v, want --server guidance", execErr)
 	}
 }

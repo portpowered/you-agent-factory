@@ -87,12 +87,12 @@ func NewRootCommand() *cobra.Command {
 			"  # Explicit batch-style runs are still available when you need them.\n" +
 			"  " + cliBinaryName + " run --dir factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, diagnostics.verboseEnabled(), diagnostics.debug)
+			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, globals, diagnostics.verboseEnabled(), diagnostics.debug)
 		},
 	}
 	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
 	root.PersistentFlags().BoolVarP(&diagnostics.debug, "debug", "d", false, "emit lower-level command diagnostics where supported (implies --verbose)")
-	root.PersistentFlags().StringVar(&globals.server, "server", cliserver.DefaultBaseURI, "factory API base URI for HTTP client commands (http:// or https://)")
+	root.PersistentFlags().StringVar(&globals.server, "server", cliserver.DefaultBaseURI, "factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port")
 
 	root.AddCommand(
 		newConfigCommand(diagnostics),
@@ -100,7 +100,7 @@ func NewRootCommand() *cobra.Command {
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(diagnostics),
 		newModelsCommand(globals, diagnostics),
-		newRunCommand(diagnostics),
+		newRunCommand(globals, diagnostics),
 		newSubmitCommand(globals, diagnostics),
 		newSessionCommand(diagnostics),
 		newWorkCommand(globals, diagnostics),
@@ -752,7 +752,7 @@ func newInitCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	return cmd
 }
 
-func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := defaultcmd.ExplicitRunConfig()
 
 	cmd := &cobra.Command{
@@ -779,11 +779,9 @@ func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 			"  " + cliBinaryName + " run --dir factory\n\n" +
 			"  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n" +
 			"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"",
+		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.MockWorkersEnabled = cmd.Flags().Changed("with-mock-workers")
-			if cmd.Flags().Changed("port") {
-				cfg.AutoPort = false
-			}
 			promptArgs := args
 			if cfg.MockWorkersConfigPath == defaultMockWorkersConfigPathSentinel {
 				if len(args) > 0 {
@@ -793,10 +791,11 @@ func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 					cfg.MockWorkersConfigPath = ""
 				}
 			}
-			return runFactory(cmd, cfg, promptArgs, diagnostics.verboseEnabled(), diagnostics.debug)
+			return runFactory(cmd, cfg, promptArgs, globals, diagnostics.verboseEnabled(), diagnostics.debug)
 		},
 	}
 
+	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().StringVar(&cfg.Workflow, "workflow", "", "workflow ID to run (default: all)")
 	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
@@ -809,7 +808,6 @@ func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		interfaces.RunnerIDCursorCLI,
 		interfaces.RunnerIDOpenCode,
 	}, ", ")))
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port; specifying this flag disables automatic fallback")
 	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used")
 	cmd.Flags().BoolVar(&cfg.DisableDefaultRecording, "no-record", false, "disable the default replay artifact for this invocation")
 	cmd.Flags().StringVar(&cfg.ReplayPath, "replay", "", "path to replay an existing sensitive replay artifact")
@@ -824,7 +822,10 @@ func newRunCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	return cmd
 }
 
-func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, verbose, debug bool) error {
+func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, verbose, debug bool) error {
+	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
+		return err
+	}
 	if err := resolveRunFactorySelection(cmd, &cfg); err != nil {
 		return err
 	}
@@ -857,6 +858,21 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, v
 	}()
 
 	return runCLI(ctx, cfg)
+}
+
+func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {
+	target, err := cliserver.LocalBindTargetFromServer(server)
+	if err != nil {
+		return err
+	}
+	cfg.BindHost = target.Host
+	cfg.Port = target.Port
+	if cmd.Root().PersistentFlags().Changed("server") {
+		cfg.AutoPort = false
+	} else {
+		cfg.AutoPort = true
+	}
+	return nil
 }
 
 func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error {

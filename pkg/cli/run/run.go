@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,7 +47,9 @@ type RunConfig struct {
 	// directory for CLI-style runs.
 	ExecutionBaseDir string
 	Bootstrap        bool
-	Port             int
+	// BindHost is the hostname from --server used in dashboard URLs (for example localhost or 127.0.0.1).
+	BindHost string
+	Port     int
 	// AutoPort resolves Port to the next available local TCP port when the
 	// preferred port is unavailable. Explicit port selections should leave this
 	// false so operator intent is preserved.
@@ -488,10 +491,24 @@ func renderSimpleDashboard(input service.SimpleDashboardRenderInput) {
 	))
 }
 
+func bindDashboardHost(cfg RunConfig) string {
+	if strings.TrimSpace(cfg.BindHost) != "" {
+		return cfg.BindHost
+	}
+	return "localhost"
+}
+
 // DashboardURL returns the embedded browser dashboard URL for the configured
-// local factory server port.
-func DashboardURL(port int) string {
-	return fmt.Sprintf("http://localhost:%d/dashboard/ui", port)
+// local factory server host and port.
+func DashboardURL(host string, port int) string {
+	if port <= 0 {
+		return ""
+	}
+	if strings.TrimSpace(host) == "" {
+		host = "localhost"
+	}
+	authority := net.JoinHostPort(host, strconv.Itoa(port))
+	return "http://" + authority + "/dashboard/ui"
 }
 
 func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) service.RuntimeLogDiagnostics {
@@ -523,7 +540,7 @@ func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics
 		return false
 	}
 
-	url := DashboardURL(cfg.Port)
+	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
 	fmt.Fprintf(cfg.StartupOutput, "Dashboard URL: %s\n", url)
 	if !cfg.OpenDashboard || !interactiveOutput(cfg.StartupOutput) {
 		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open disabled; open %s\n", url)
@@ -547,7 +564,7 @@ func openDashboardWhenServerReady(ctx context.Context, cfg RunConfig, dashboardR
 		timer := time.NewTimer(dashboardReadyTimeout)
 		defer timer.Stop()
 
-		url := DashboardURL(cfg.Port)
+		url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
 		select {
 		case <-dashboardReady:
 			if err := dashboardOpener(ctx, url); err != nil {

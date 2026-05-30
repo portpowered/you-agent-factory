@@ -249,12 +249,12 @@ func TestRun_AutoPortResolvesBusyPreferredPortBeforeServiceBuildAndStartupOutput
 	}
 
 	output := out.String()
-	wantURL := DashboardURL(capturedPort)
+	wantURL := DashboardURL("localhost", capturedPort)
 	if !strings.Contains(output, "Dashboard URL: "+wantURL) {
 		t.Fatalf("startup output = %q, want resolved dashboard URL %q", output, wantURL)
 	}
-	if strings.Contains(output, DashboardURL(busyPort)) {
-		t.Fatalf("startup output = %q, should not report busy dashboard URL %q", output, DashboardURL(busyPort))
+	if strings.Contains(output, DashboardURL("localhost", busyPort)) {
+		t.Fatalf("startup output = %q, should not report busy dashboard URL %q", output, DashboardURL("localhost", busyPort))
 	}
 }
 
