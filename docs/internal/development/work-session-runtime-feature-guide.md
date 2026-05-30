@@ -2,7 +2,7 @@
 
 ---
 author: Codex
-last modified: 2026-05-31
+last modified: 2026-05-31T04:00:00Z
 doc-id: AGF-DEV-WSR-001
 status: active
 ---
@@ -36,6 +36,94 @@ ships, `CascadingFailureSubsystem` still applies `MutationMove` without an event
 **Paused factory:** operator control (`POST …/move`, submit) may be allowed while
 `PAUSED`; automatic subsystem ticks (dispatch, cascade, scheduling) must not
 advance marking. Audit the engine tick loop when touching pause behavior.
+
+**Operator manual recovery (shipped):** successful operator moves emit
+`WORK_STATE_CHANGE` with `source: api` or `cli` before SSE fanout and replay
+persistence. Cascade moves still use `MutationMove` without an event until
+[`prd-cascading-failure-events.md`](../../../tasks/prd-cascading-failure-events.md)
+ships (`source: cascading-failure`).
+
+## WORK_STATE_CHANGE (operator manual recovery)
+
+Each successful operator move appends **one** canonical `WORK_STATE_CHANGE` event.
+Do not relocate tokens with marking-only changes.
+
+### Ingress and recording
+
+| Surface | Path / command | `source` |
+| --- | --- | --- |
+| HTTP (default session) | `POST /work/{id}/move` | `api` |
+| HTTP (named session) | `POST /factory-sessions/{session_id}/work/{id}/move` | `api` |
+| CLI | `you work move <work-id> <state-name>` | `cli` |
+
+Request body (`MoveWorkRequest`): required `stateName` (authored state name resolved
+to a place ID); optional `requestId` for idempotency (duplicate → HTTP **409**,
+`MOVE_WORK_REQUEST_ALREADY_APPLIED`).
+
+Flow: API/CLI → `FactoryService` / `factoryImpl.MoveWork` →
+`FactoryEngine.MoveWork` (`MutationMove`) → `RecordWorkStateChange` when `source`
+is non-empty. Empty `source` skips history (engine-only tests).
+
+### Payload and context
+
+`WorkStateChangeEventPayload` fields: `workId`, `workTypeName`, `fromState`,
+`toState`, `fromPlaceId`, `toPlaceId`, `source`, optional `triggerWorkId`,
+`reason`.
+
+`FactoryEvent.context` carries `workIds`, `requestId`, `traceIds`, `tick`,
+`sequence`, and UTC `eventTime` (aligned with `RecordWorkRequest` via
+`interfaces.CanonicalEventTime`).
+
+### Validation and rejection
+
+| Condition | Result |
+| --- | --- |
+| Missing work or session | HTTP 404 |
+| Unknown / invalid target state | HTTP 400 |
+| Work in `ActiveDispatches` | HTTP 400 (in-flight dispatch) |
+| Terminated engine | Reject at engine |
+| Duplicate `requestId` | HTTP 409 (no second mutation) |
+| Factory `PAUSED` | Operator move **succeeds** (synchronous, not a subsystem tick) |
+
+After a successful move in service mode, `wakeForOperatorControl()` resumes idle
+run loops so recovered tokens can dispatch again.
+
+### Projections and replay
+
+| Layer | Owner |
+| --- | --- |
+| Backend world | `applyWorkStateChange` in `world_state_dispatch.go` |
+| UI timeline | `applyWorkStateChange` in `replayWorldState.ts` |
+| Replay playback | `WorkStateChangeHook` + `applyHookMarkingMutations` for `api`/`cli` sources |
+
+Functional proof: `tests/functional/runtime_api/api_manual_work_recovery_test.go`
+(cascade → API moves → resumed progress). CLI smoke:
+`tests/functional/smoke/cli_work_move_smoke_test.go`.
+
+Coordinate enum/payload changes with
+[`prd-cascading-failure-events.md`](../../../tasks/prd-cascading-failure-events.md)
+(`source: cascading-failure`).
+
+## Failure history versus guard-blocking fields
+
+Operator recovery from **FAILED** must **not** erase customer-visible failure
+history. Guards and occupancy indexes are separate concerns.
+
+| Concern | On leave FAILED (operator move) | Rationale |
+| --- | --- | --- |
+| Failure **history** | **Retain** `FailureLog`, `LastError` on token history; retain `FailureDetailsByWorkID` / UI `failedWorkDetailsByWorkID` in projections | Postmortems and trace drilldown stay truthful |
+| Guard **blocking** counters | **Clear** via `interfaces.ClearGuardBlockingFields` (`TotalVisits`, `ConsecutiveFailures`, `PlaceVisits`) | Lets guards re-arm without stale visit/failure counts |
+| Failed / terminal **occupancy** | **Clear** failed/terminal map entries for the work; relocate token to target place | Dashboard and `ListWork` match marking |
+
+Engine paths: `FactoryEngine.MoveWork` and replay `applyHookMarkingMutations`
+both call `ClearGuardBlockingFields` when the token leaves a `FAILED` place.
+
+**Do not:** delete failure records from events, wipe `FailureDetailsByWorkID` on
+operator moves, or simulate recovery with fake `DISPATCH_RESPONSE` events.
+
+**Cascade PRD:** same helper applies when
+[`prd-cascading-failure-events.md`](../../../tasks/prd-cascading-failure-events.md)
+emits `WORK_STATE_CHANGE` for cascade moves.
 
 ## Pause policy and subsystem ticks
 
@@ -190,8 +278,7 @@ Complete every row that applies. Skip only with an explicit note in the PR.
 - [ ] Update this guide if the feature introduced a new seam or invariant.
 - [ ] Add customer-facing notes only when user-visible (`docs/reference/`,
   `pkg/cli/docs/`).
-- [ ] **AGENTS.md:** add a standards bullet linking this guide — done in the
-  implementing PR's final story (see PRD US-011), not at PRD authoring time.
+- [x] **AGENTS.md:** standards bullet linking this guide (manual recovery US-011).
 
 ## Session-scoped routes (quick reference)
 
@@ -216,10 +303,9 @@ CLI: pass `--session <session_id>`; omit for default compatibility session.
 | `DISPATCH_RESPONSE` | Adds output work to output places |
 | `RELATIONSHIP_CHANGE_REQUEST` | Relations only; no place change |
 | Cascading failure (subsystem) | `MutationMove` to FAILED — **no event today** (fix: [`prd-cascading-failure-events.md`](../../../tasks/prd-cascading-failure-events.md)) |
-| `WORK_STATE_CHANGE` | Operator or cascade move between places; `source` distinguishes ingress |
+| `WORK_STATE_CHANGE` | **Shipped:** operator move between places (`source: api` \| `cli`); cascade will use `cascading-failure` when cascade PRD lands |
 
-Leaving **FAILED**: retain failure **history**; clear **guard-blocking** fields only
-(shared helper between manual recovery and cascade PRDs).
+See [Failure history versus guard-blocking fields](#failure-history-versus-guard-blocking-fields).
 
 ## Common mistakes
 
