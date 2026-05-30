@@ -11,18 +11,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import type { DashboardWorkRelation } from "../../api/dashboard/types";
+import { resetTraceRelationFactoryGraphLayoutCacheForTests } from "../hooks/use-trace-relation-factory-graph-layout";
+import { buildTraceFactoryGraphLayoutPositions } from "../lib/trace-factory-graph-layout";
+import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
 import { TraceRelationFlow } from "./trace-relation-flow";
-
-vi.mock("../lib/trace-elk-layout", () => ({
-  getCachedTraceGraphLayout: () => null,
-  async layoutTraceGraphWithElk<TNode>(nodes: TNode[]): Promise<TNode[]> {
-    return nodes.map((node, index) => ({
-      ...node,
-      position: { x: index * 260, y: index * 140 },
-    }));
-  },
-  traceGraphLayoutKey: () => "trace-relation-layout-test",
-}));
 
 vi.mock("@xyflow/react", async () => {
   return {
@@ -89,7 +81,12 @@ vi.mock("@xyflow/react", async () => {
       <div
         data-edge-payload={JSON.stringify(edges)}
         data-node-ids={JSON.stringify(nodes.map((node) => node.id))}
-        data-node-positions={JSON.stringify(nodes.map((node) => node.position))}
+        data-node-positions={JSON.stringify(
+          nodes.map((node) => ({
+            id: node.id,
+            position: node.position,
+          })),
+        )}
         data-testid="trace-relation-react-flow"
       >
         {nodes.map((node) => {
@@ -145,7 +142,7 @@ function renderedEdges() {
   }>;
 }
 
-function renderedNodePositions() {
+function renderedNodePositionsById(): Map<string, { x: number; y: number }> {
   const payload = screen
     .getByTestId("trace-relation-react-flow")
     .getAttribute("data-node-positions");
@@ -153,7 +150,14 @@ function renderedNodePositions() {
     throw new Error("Expected rendered node positions.");
   }
 
-  return JSON.parse(payload) as Array<{ x: number; y: number }>;
+  return new Map(
+    (
+      JSON.parse(payload) as Array<{
+        id: string;
+        position?: { x: number; y: number };
+      }>
+    ).map((node) => [node.id, node.position ?? { x: 0, y: 0 }]),
+  );
 }
 
 describe("TraceRelationFlow", () => {
@@ -263,6 +267,7 @@ describe("TraceRelationFlow layout", () => {
   let restoreBrowserShims: (() => void) | undefined;
 
   beforeEach(() => {
+    resetTraceRelationFactoryGraphLayoutCacheForTests();
     restoreBrowserShims = installDashboardBrowserTestShims();
   });
 
@@ -272,15 +277,20 @@ describe("TraceRelationFlow layout", () => {
     restoreBrowserShims = undefined;
   });
 
-  it("applies ELK positions after layout so relation nodes do not overlay", async () => {
+  it("applies async factory layout positions after layout resolves", async () => {
+    const graph = buildTraceRelationFactoryGraphFlow(RELATIONS);
+    const expectedPositions = await buildTraceFactoryGraphLayoutPositions(
+      graph.topology,
+      graph.endpointKeyByNodeId,
+    );
+
     render(<TraceRelationFlow relations={RELATIONS} />);
 
     await waitFor(() => {
-      expect(renderedNodePositions()).toEqual([
-        { x: 0, y: 0 },
-        { x: 260, y: 140 },
-        { x: 520, y: 280 },
-      ]);
+      const renderedPositions = renderedNodePositionsById();
+      for (const [nodeId, position] of expectedPositions) {
+        expect(renderedPositions.get(nodeId)).toEqual(position);
+      }
     });
   });
 });

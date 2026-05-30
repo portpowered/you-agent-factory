@@ -6,13 +6,11 @@ import {
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/factory-graph-react-flow-projection";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   projectTraceDispatchesToFactoryGraph,
   type TraceDispatchNodeOverlay,
 } from "./trace-dispatch-factory-graph";
-
-const DISPATCH_NODE_WIDTH = 240;
-const DISPATCH_NODE_HEIGHT = 124;
 
 export type TraceDispatchFlowNodeData = FactoryGraphReactFlowNode["data"] &
   TraceDispatchNodeOverlay & {
@@ -27,9 +25,10 @@ export type TraceDispatchFlowNode = Node<
 >;
 
 export interface TraceDispatchFactoryGraphFlow {
+  dispatchIdByNodeId: ReadonlyMap<string, string>;
   edges: FactoryGraphReactFlowEdge[];
-  graphDimensions: Map<string, { height: number; id: string; width: number }>;
   nodes: TraceDispatchFlowNode[];
+  topology: FactoryGraphTopology;
 }
 
 export function buildTraceDispatchFactoryGraphFlow(
@@ -46,10 +45,6 @@ export function buildTraceDispatchFactoryGraphFlow(
     topology: traceProjection.topology,
   });
   const nodes: TraceDispatchFlowNode[] = [];
-  const graphDimensions = new Map<
-    string,
-    { height: number; id: string; width: number }
-  >();
 
   for (const node of factoryProjection.nodes) {
     const overlay = traceProjection.overlaysByNodeId.get(node.id);
@@ -71,11 +66,6 @@ export function buildTraceDispatchFactoryGraphFlow(
       targetPosition: Position.Left,
       type: "factoryEntity",
     });
-    graphDimensions.set(dispatchId, {
-      height: DISPATCH_NODE_HEIGHT,
-      id: dispatchId,
-      width: DISPATCH_NODE_WIDTH,
-    });
   }
 
   const edges = factoryProjection.edges.map((edge) => ({
@@ -87,8 +77,9 @@ export function buildTraceDispatchFactoryGraphFlow(
   }));
 
   return {
+    dispatchIdByNodeId: traceProjection.dispatchIdByNodeId,
     edges,
-    graphDimensions,
     nodes,
+    topology: traceProjection.topology,
   };
 }

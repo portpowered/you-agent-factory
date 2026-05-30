@@ -5,7 +5,7 @@ import {
   type NodeChange,
   ReactFlow,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
 import {
   DashboardGraphBackground,
@@ -14,10 +14,9 @@ import {
 } from "../../../components/dashboard/dashboard-graph";
 import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "../../factory-graph-editor/components/factory-graph-editor-edge";
 import {
-  getCachedTraceGraphLayout,
-  layoutTraceGraphWithElk,
-  traceGraphLayoutKey,
-} from "../lib/trace-elk-layout";
+  traceDispatchTopologyLayoutKey,
+  useTraceDispatchFactoryGraphLayoutPositions,
+} from "../hooks/use-trace-dispatch-factory-graph-layout";
 import { buildTraceDispatchFactoryGraphFlow } from "../lib/trace-dispatch-factory-graph-flow";
 import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-flow";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
@@ -48,66 +47,61 @@ export function TraceWorkstationPath({
     () => buildTraceDispatchFactoryGraphFlow(dispatches, locale),
     [dispatches, locale],
   );
-  const layoutKey = useMemo(
-    () =>
-      traceGraphLayoutKey(graph.nodes, graph.edges, graph.graphDimensions),
-    [graph.edges, graph.graphDimensions, graph.nodes],
+  const topologyKey = useMemo(
+    () => traceDispatchTopologyLayoutKey(graph.topology),
+    [graph.topology],
   );
-  const [layoutedNodes, setLayoutedNodes] = useState<TraceDispatchFlowNode[]>(
-    () => getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes,
+  const positionsByTraceNodeId = useTraceDispatchFactoryGraphLayoutPositions(
+    graph.topology,
+    graph.dispatchIdByNodeId,
+    topologyKey,
   );
-
-  useEffect(() => {
-    setLayoutedNodes(
-      getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes,
-    );
-  }, [graph.nodes, layoutKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void layoutTraceGraphWithElk(
-      graph.nodes,
-      graph.edges,
-      graph.graphDimensions,
-    ).then((nextNodes) => {
-      if (!cancelled) {
-        setLayoutedNodes(nextNodes);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [graph.edges, graph.graphDimensions, graph.nodes]);
-
   const baseNodes = useMemo(() => {
-    const positionsByID = new Map(
-      layoutedNodes.map((node) => [node.id, node.position]),
-    );
-
     return graph.nodes.map((node) => ({
       ...node,
-      position: positionsByID.get(node.id) ?? node.position,
+      position: positionsByTraceNodeId.get(node.id) ?? node.position,
     }));
-  }, [graph.nodes, layoutedNodes]);
-  const [nodes, setNodes] = useState<TraceDispatchFlowNode[]>(baseNodes);
+  }, [graph.nodes, positionsByTraceNodeId]);
+  const [nodes, setNodes] = useState<TraceDispatchFlowNode[]>([]);
+  const draggedNodeIdsRef = useRef(new Set<string>());
+  const topologyKeyRef = useRef(topologyKey);
 
   useEffect(() => {
+    if (topologyKeyRef.current !== topologyKey) {
+      draggedNodeIdsRef.current.clear();
+      topologyKeyRef.current = topologyKey;
+    }
+
     setNodes((currentNodes) => {
       const currentPositions = new Map(
         currentNodes.map((node) => [node.id, node.position]),
       );
 
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
+      return baseNodes.map((node) => {
+        const draggedPosition = draggedNodeIdsRef.current.has(node.id)
+          ? currentPositions.get(node.id)
+          : undefined;
+
+        return {
+          ...node,
+          position: draggedPosition ?? node.position,
+        };
+      });
     });
-  }, [baseNodes]);
+  }, [baseNodes, topologyKey]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<TraceDispatchFlowNode>[]) => {
+      for (const change of changes) {
+        if (
+          change.type === "position" &&
+          change.dragging === false &&
+          change.id
+        ) {
+          draggedNodeIdsRef.current.add(change.id);
+        }
+      }
+
       setNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
     },
     [],

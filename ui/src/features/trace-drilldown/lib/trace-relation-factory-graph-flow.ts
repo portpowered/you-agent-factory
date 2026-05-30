@@ -1,6 +1,7 @@
 import { MarkerType, type Node, Position } from "@xyflow/react";
 
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   type FactoryGraphReactFlowEdge,
   type FactoryGraphReactFlowNode,
@@ -12,9 +13,6 @@ import {
   type TraceRelationNodeOverlay,
   type ProjectTraceRelationsToFactoryGraphOptions,
 } from "./trace-relation-factory-graph";
-
-const RELATION_NODE_WIDTH = 220;
-const RELATION_NODE_HEIGHT = 112;
 
 export type TraceRelationFlowNodeData = FactoryGraphReactFlowNode["data"] &
   TraceRelationNodeOverlay & {
@@ -32,8 +30,9 @@ export type TraceRelationFlowNode = Node<
 
 export interface TraceRelationFactoryGraphFlow {
   edges: FactoryGraphReactFlowEdge[];
-  graphDimensions: Map<string, { height: number; id: string; width: number }>;
+  endpointKeyByNodeId: ReadonlyMap<string, string>;
   nodes: TraceRelationFlowNode[];
+  topology: FactoryGraphTopology;
 }
 
 export function buildTraceRelationFactoryGraphFlow(
@@ -53,10 +52,6 @@ export function buildTraceRelationFactoryGraphFlow(
     topology: traceProjection.topology,
   });
   const nodes: TraceRelationFlowNode[] = [];
-  const graphDimensions = new Map<
-    string,
-    { height: number; id: string; width: number }
-  >();
 
   for (const node of factoryProjection.nodes) {
     const overlay = traceProjection.overlaysByNodeId.get(node.id);
@@ -79,11 +74,6 @@ export function buildTraceRelationFactoryGraphFlow(
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       type: "factoryEntity",
-    });
-    graphDimensions.set(endpointKey, {
-      height: RELATION_NODE_HEIGHT,
-      id: endpointKey,
-      width: RELATION_NODE_WIDTH,
     });
   }
 
@@ -116,8 +106,9 @@ export function buildTraceRelationFactoryGraphFlow(
 
   return {
     edges,
-    graphDimensions,
+    endpointKeyByNodeId: traceProjection.endpointKeyByNodeId,
     nodes,
+    topology: traceProjection.topology,
   };
 }
 

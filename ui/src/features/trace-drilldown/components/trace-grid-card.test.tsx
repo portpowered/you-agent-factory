@@ -10,12 +10,8 @@ import {
 import type { ReactNode } from "react";
 import { vi } from "vitest";
 
-vi.mock("../lib/trace-elk-layout", () => ({
-  getCachedTraceGraphLayout: () => null,
-  async layoutTraceGraphWithElk<TNode>(nodes: TNode[]): Promise<TNode[]> {
-    return nodes;
-  },
-  traceGraphLayoutKey: () => "trace-card-layout-test",
+vi.mock("../lib/trace-factory-graph-layout", () => ({
+  buildTraceFactoryGraphLayoutPositions: async () => new Map(),
 }));
 
 vi.mock("@xyflow/react", async () => ({

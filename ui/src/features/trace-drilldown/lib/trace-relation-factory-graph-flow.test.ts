@@ -31,6 +31,8 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
     const flow = buildTraceRelationFactoryGraphFlow(RELATIONS);
 
     expect(flow.nodes).toHaveLength(3);
+    expect(flow.topology.nodes.length).toBeGreaterThan(0);
+    expect(flow.endpointKeyByNodeId.size).toBe(flow.topology.nodes.length);
     expect(
       flow.nodes.find((node) => node.id === "work-implement"),
     ).toMatchObject({
