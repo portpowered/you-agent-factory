@@ -6,6 +6,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -15,12 +24,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
-	"testing"
-	"time"
 )
 
 const (
@@ -246,6 +249,248 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 	time.Sleep(50 * time.Millisecond)
 	if runner.callCount() != 0 {
 		t.Fatalf("poller runner calls = %d, want 0 in batch mode", runner.callCount())
+	}
+}
+
+func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [
+						{
+							"id": "issue-new",
+							"identifier": "ENG-101",
+							"title": "Newest issue",
+							"description": "First",
+							"updatedAt": "2026-05-22T07:10:00Z",
+							"url": "https://linear.app/example/issue/ENG-101",
+							"team": {"id": "team-1", "key": "ENG", "name": "Engineering"},
+							"state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+							"assignee": null
+						}
+					],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	factoryDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(factoryDir, "secrets"), 0o755); err != nil {
+		t.Fatalf("mkdir secrets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "secrets", "linear-api-key"), []byte("runtime-linear-key\n"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+
+	submitted := &aggregateSnapshotFactory{}
+	svcCfg := &FactoryServiceConfig{
+		RuntimeMode:            interfaces.RuntimeModeService,
+		HostedPollerHTTPClient: server.Client(),
+		HostedLinearEndpoint:   server.URL,
+	}
+	svc := &FactoryService{
+		cfg:           svcCfg,
+		logger:        zap.NewNop(),
+		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "linear-poller",
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		factoryDir,
+		&interfaces.FactoryConfig{
+			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{poller},
+		},
+		map[string]*interfaces.WorkerConfig{
+			"linear-poller": {
+				Name:     "linear-poller",
+				Type:     interfaces.WorkerTypeHosted,
+				Provider: interfaces.HostedWorkerProviderLinear,
+				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &interfaces.HostedLinearWorkerConfig{
+					PollInterval: "1h",
+					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+						WorkType: "story",
+						State:    "init",
+					},
+				},
+			},
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+	)
+	handle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			runtimeCfg: runtimeCfg,
+			factory:    submitted,
+		},
+	}
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+	defer svc.stopLiveRuntimeSidecars(handle)
+
+	waitForHostedPollerSubmission(t, submitted, 1, time.Second)
+	if submitted.submitCalls != 1 {
+		t.Fatalf("submit calls = %d, want 1", submitted.submitCalls)
+	}
+	if got := submitted.submissions[0].Works[0].WorkID; got != "linear:issue-new" {
+		t.Fatalf("submitted work id = %q, want linear:issue-new", got)
+	}
+}
+
+func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLifecycle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	factoryDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(factoryDir, "secrets"), 0o755); err != nil {
+		t.Fatalf("mkdir secrets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "secrets", "linear-api-key"), []byte("runtime-linear-key\n"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	svcCfg := &FactoryServiceConfig{
+		RuntimeMode:            interfaces.RuntimeModeService,
+		HostedPollerHTTPClient: server.Client(),
+		HostedLinearEndpoint:   server.URL,
+	}
+	svc := &FactoryService{
+		cfg:           svcCfg,
+		logger:        zap.New(logCore),
+		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "linear-poller",
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		factoryDir,
+		&interfaces.FactoryConfig{
+			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{poller},
+		},
+		map[string]*interfaces.WorkerConfig{
+			"linear-poller": {
+				Name:     "linear-poller",
+				Type:     interfaces.WorkerTypeHosted,
+				Provider: interfaces.HostedWorkerProviderLinear,
+				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &interfaces.HostedLinearWorkerConfig{
+					PollInterval: "1h",
+					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+						WorkType: "story",
+						State:    "init",
+					},
+				},
+			},
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+	)
+	handle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			runtimeCfg: runtimeCfg,
+			factory:    &aggregateSnapshotFactory{},
+		},
+	}
+
+	if err := svc.startLiveRuntimeSidecars(context.Background(), handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+
+	waitForObservedLogMessage(t, observedLogs, "hosted linear poller started", time.Second)
+	svc.stopLiveRuntimeSidecars(handle)
+
+	stopped := observedLogs.FilterMessage("hosted linear poller stopped").All()
+	if len(stopped) != 1 {
+		t.Fatalf("hosted linear poller stopped log count = %d, want 1", len(stopped))
+	}
+	if got := fieldString(stopped[0].ContextMap()["reason"]); got != "context canceled" {
+		t.Fatalf("hosted linear poller stop reason = %q, want context canceled", got)
+	}
+}
+
+func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvider(t *testing.T) {
+	logCore, observedLogs := observer.New(zap.WarnLevel)
+	svcCfg := &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}
+	svc := &FactoryService{
+		cfg:           svcCfg,
+		logger:        zap.New(logCore),
+		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "custom-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "custom-hosted",
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		t.TempDir(),
+		&interfaces.FactoryConfig{
+			Workers:      []interfaces.WorkerConfig{{Name: "custom-hosted"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{poller},
+		},
+		map[string]*interfaces.WorkerConfig{
+			"custom-hosted": {
+				Name:     "custom-hosted",
+				Type:     interfaces.WorkerTypeHosted,
+				Provider: "CUSTOM",
+			},
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+	)
+	handle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			runtimeCfg: runtimeCfg,
+			factory:    &aggregateSnapshotFactory{},
+		},
+	}
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+	defer svc.stopLiveRuntimeSidecars(handle)
+
+	time.Sleep(50 * time.Millisecond)
+	disabled := observedLogs.FilterMessage("hosted poller disabled").All()
+	if len(disabled) != 1 {
+		t.Fatalf("hosted poller disabled log count = %d, want 1", len(disabled))
+	}
+	fields := disabled[0].ContextMap()
+	if fieldString(fields["workstation"]) != "custom-ingress" {
+		t.Fatalf("disabled workstation = %#v, want custom-ingress", fields["workstation"])
+	}
+	if fieldString(fields["reason"]) != "unsupported hosted provider" {
+		t.Fatalf("disabled reason = %#v, want unsupported hosted provider", fields["reason"])
+	}
+	if fieldString(fields["provider"]) != "CUSTOM" {
+		t.Fatalf("disabled provider = %#v, want CUSTOM", fields["provider"])
 	}
 }
 
@@ -658,6 +903,30 @@ func fieldString(value any) string {
 	default:
 		return ""
 	}
+}
+
+func waitForHostedPollerSubmission(t *testing.T, submitted *aggregateSnapshotFactory, want int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if submitted.submitCalls >= want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d hosted poller submission(s); got %d", want, submitted.submitCalls)
+}
+
+func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, message string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if logs.FilterMessage(message).Len() > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for log message %q", message)
 }
 
 func TestParseScriptPollerOutput_RejectsMalformedStdout(t *testing.T) {
