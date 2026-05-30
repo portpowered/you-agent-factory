@@ -60,6 +60,10 @@ type MockFactory struct {
 
 var _ factory.APIFactory = (*MockFactory)(nil)
 var _ factory.Factory = (*MockFactory)(nil)
+var _ apisurface.ModelAPI = (*MockFactory)(nil)
+var _ apisurface.FactorySaveAPI = (*MockFactory)(nil)
+var _ apisurface.SessionAPI = (*MockFactory)(nil)
+var _ apisurface.WorkAPI = (*MockFactory)(nil)
 var _ apisurface.APISurface = (*MockFactory)(nil)
 var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
 
