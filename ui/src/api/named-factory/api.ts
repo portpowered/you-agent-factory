@@ -12,15 +12,28 @@ import {
   SessionFactoryAPIError,
 } from "../session-factory";
 import {
+  listFactorySessions,
+  openFactorySession,
+} from "../factory-sessions";
+import {
   DEFAULT_FACTORY_SESSION_ID,
   currentFactorySessionPath,
   isDefaultFactorySessionID,
 } from "../session-routing";
 import {
+  extractNamedFactoryNamesFromSessionTargets,
+} from "./import-save-mode";
+import {
   extractAPIErrorPayload,
   isAPIRecord,
   readAPIResponseBody,
 } from "../transport";
+
+export {
+  allocateFirstFreeSuffixedFactoryName,
+  extractNamedFactoryNamesFromSessionTargets,
+  resolveImportCreateFactoryName,
+} from "./import-save-mode";
 
 export type FactoryValue = components["schemas"]["Factory"];
 
@@ -53,6 +66,11 @@ export interface ActivateImportedFactoryForSessionOptions {
   choice?: FactoryImportSaveChoice;
   createFactoryName?: string;
   existingFactoryNames?: readonly string[];
+  fetch?: typeof globalThis.fetch;
+  sessionID?: string | null;
+}
+
+export interface DiscoverSessionNamedFactoryNamesOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
 }
@@ -123,6 +141,27 @@ export async function getCurrentFactory(
   }
 
   return responseBody;
+}
+
+export async function discoverSessionNamedFactoryNames(
+  options: DiscoverSessionNamedFactoryNamesOptions = {},
+): Promise<string[]> {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const sessions = await listFactorySessions({ fetch: fetchImplementation });
+  const session = sessions.find((entry) => entry.id === normalizeSessionID(options.sessionID));
+  if (!session?.folderPath) {
+    return [];
+  }
+
+  const response = await openFactorySession(
+    {
+      folderPath: session.folderPath,
+      validateOnly: true,
+    },
+    { fetch: fetchImplementation },
+  );
+
+  return extractNamedFactoryNamesFromSessionTargets(response.targets);
 }
 
 export async function activateImportedFactoryForSession(
@@ -216,6 +255,11 @@ async function activateImportedFactoryCreateNamedForSession(
   }
 
   return toActivatedFactoryValue(savedDocument);
+}
+
+function normalizeSessionID(sessionID: string | null | undefined): string {
+  const trimmed = sessionID?.trim();
+  return trimmed ? trimmed : "~default";
 }
 
 function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFactoryAPIErrorCode {

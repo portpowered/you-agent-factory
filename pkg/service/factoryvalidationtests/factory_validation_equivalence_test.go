@@ -59,46 +59,8 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 	t.Helper()
 
 	rootDir := t.TempDir()
-	initialVersion := factoryapi.HybridLogicalTimestamp{
-		Logical:  11,
-		Physical: time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC),
-	}
-	var validPayload map[string]any
-	if err := json.Unmarshal([]byte(factoryvalidation.CrossPathValidAlphaFactoryJSON), &validPayload); err != nil {
-		t.Fatalf("unmarshal valid alpha fixture: %v", err)
-	}
-	validPayload["version"] = map[string]any{
-		"logical":  initialVersion.Logical,
-		"physical": initialVersion.Physical.UTC().Format(time.RFC3339Nano),
-	}
-	payload, err := json.Marshal(validPayload)
-	if err != nil {
-		t.Fatalf("marshal valid alpha payload: %v", err)
-	}
-	if _, err := config.PersistNamedFactory(rootDir, "alpha", payload); err != nil {
-		t.Fatalf("PersistNamedFactory(alpha): %v", err)
-	}
-	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
-	}
-
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-		Dir:               rootDir,
-		RuntimeMode:       interfaces.RuntimeModeService,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-
-	runCtx, cancelRun := context.WithCancel(context.Background())
-	defer cancelRun()
-	runErrCh := make(chan error, 1)
-	go func() {
-		runErrCh <- svc.Run(runCtx)
-	}()
-	waitForDefaultSessionIdle(t, svc)
+	seedValidAlphaFactoryAtRoot(t, rootDir)
+	svc := startIdleFactoryServiceForValidation(t, rootDir)
 
 	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
@@ -122,26 +84,78 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 	)
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(err, &topologyErr) {
-		t.Fatalf("SaveFactoryForSession(replace current) error = %v, want topology validation error", err)
+		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
 	}
 	return factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
 }
 
-func waitForDefaultSessionIdle(t *testing.T, svc *service.FactoryService) {
+func seedValidAlphaFactoryAtRoot(t *testing.T, rootDir string) {
 	t.Helper()
 
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		snap, err := svc.GetEngineStateSnapshotForSession(
-			context.Background(),
-			factorysessions.DefaultSessionID,
-		)
-		if err == nil && snap.RuntimeStatus == interfaces.RuntimeStatusIdle {
-			return
+	initialVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  11,
+		Physical: time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC),
+	}
+	var validPayload map[string]any
+	if err := json.Unmarshal([]byte(factoryvalidation.CrossPathValidAlphaFactoryJSON), &validPayload); err != nil {
+		t.Fatalf("unmarshal valid alpha fixture: %v", err)
+	}
+	validPayload["version"] = map[string]any{
+		"logical":  initialVersion.Logical,
+		"physical": initialVersion.Physical.UTC().Format(time.RFC3339Nano),
+	}
+	payload, err := json.Marshal(validPayload)
+	if err != nil {
+		t.Fatalf("marshal valid alpha payload: %v", err)
+	}
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", payload); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+}
+
+func startIdleFactoryServiceForValidation(t *testing.T, rootDir string) *service.FactoryService {
+	t.Helper()
+
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- svc.Run(runCtx)
+	}()
+	t.Cleanup(func() {
+		cancelRun()
+		select {
+		case err := <-runDone:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Fatalf("factory service run: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for factory service run to stop")
+		}
+	})
+
+	waitDeadline := time.Now().Add(time.Second)
+	for time.Now().Before(waitDeadline) {
+		snap, snapErr := svc.GetEngineStateSnapshotForSession(context.Background(), factorysessions.DefaultSessionID)
+		if snapErr == nil && snap.RuntimeStatus == interfaces.RuntimeStatusIdle {
+			return svc
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for default session runtime to reach idle")
+	t.Fatal("timed out waiting for default session runtime to become idle")
+	return nil
 }
 
 func assertConfigFindingExists(t *testing.T, findings []config.Finding, rule string) {
