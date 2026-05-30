@@ -45,6 +45,36 @@ describe("getSessionFactory", () => {
     );
   });
 
+  it("normalizes numeric logical version values from GET responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...sessionFactoryFixture,
+          version: {
+            logical: 7,
+            physical: "2026-05-18T14:22:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    const document = await getSessionFactory("~default", {
+      fetch: fetchMock,
+    });
+
+    expect(document.version).toEqual({
+      logical: "7",
+      physical: "2026-05-18T14:22:00Z",
+    });
+  });
+
   it("GETs a non-default session factory through the session-scoped route", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(sessionFactoryFixture), {
@@ -204,6 +234,22 @@ describe("saveSessionFactory errors", () => {
     vi.unstubAllGlobals();
   });
 
+  it("throws NETWORK_ERROR when save fetch is unavailable", async () => {
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: sessionFactoryFixture,
+        },
+        {
+          fetch: undefined,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+    });
+  });
+
   it("maps transport failures to NETWORK_ERROR", async () => {
     await expect(
       saveSessionFactory(
@@ -217,6 +263,49 @@ describe("saveSessionFactory errors", () => {
       ),
     ).rejects.toMatchObject({
       code: "NETWORK_ERROR",
+    });
+  });
+
+  it("preserves validation targets on session factory save failures", async () => {
+    const validationTarget = {
+      code: "STALE_FACTORY_VERSION",
+      message: "The editable definition is stale.",
+      severity: "error",
+      subject: {
+        id: "factory.version",
+        location: "factory.version",
+        type: "field",
+      },
+    };
+
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: sessionFactoryFixture,
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code: "STALE_FACTORY_VERSION",
+                message: "Factory version is stale.",
+                targets: [validationTarget],
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 409,
+                statusText: "Conflict",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "STALE_FACTORY_VERSION",
+      targets: [validationTarget],
     });
   });
 
@@ -318,6 +407,33 @@ describe("getSessionFactory errors", () => {
       }),
     ).rejects.toMatchObject({
       code: "NETWORK_ERROR",
+    });
+  });
+
+  it("maps GET STALE_FACTORY_VERSION failures to canonical operator copy", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "STALE_FACTORY_VERSION",
+              message: "Factory version is stale.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 409,
+              statusText: "Conflict",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "STALE_FACTORY_VERSION",
+      message:
+        sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
+      status: 409,
     });
   });
 

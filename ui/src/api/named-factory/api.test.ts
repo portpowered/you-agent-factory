@@ -461,6 +461,86 @@ describe("factory API", () => {
     );
   });
 
+  it("includes version when create-new-named upserts a name listed in existingFactoryNames", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Session Current Name",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "9",
+              physical: "2026-05-18T14:25:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Known Existing Name",
+            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      );
+
+    await activateImportedFactoryForSession(
+      {
+        name: "Imported Payload",
+        workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+        workers: [],
+        workstations: [],
+      },
+      {
+        choice: "create_new_named",
+        createFactoryName: "Known Existing Name",
+        existingFactoryNames: ["Known Existing Name"],
+        fetch: fetchMock,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mode: "UPSERT_NAMED_AND_ACTIVATE",
+          factory: {
+            name: "Known Existing Name",
+            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
+            },
+          },
+        }),
+      }),
+    );
+  });
+
   it("includes version when create-new-named upserts the current session factory name", async () => {
     const fetchMock = vi
       .fn()
