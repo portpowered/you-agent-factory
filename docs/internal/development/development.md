@@ -538,6 +538,56 @@ registry.Register(&MyCustomType{})
 
 The config validator checks workstation scheduling values against a known set of kinds. To make a new kind available in `factory.json`, add the kind constant to `pkg/interfaces/factory_config.go` and update the validation in `pkg/config/config_validator.go`.
 
+## Factory document vs dashboard snapshot
+
+The dashboard keeps two separate factory-related data planes. Do not treat them as interchangeable sources of truth.
+
+| Concern | Authoritative plane | Primary hooks / owners |
+| --- | --- | --- |
+| Edit and save payloads | **Factory document** (React Query) | `useCurrentFactoryDocument`, `useSaveCurrentFactory`, `GET/PUT /factory-sessions/{session_id}/factory` |
+| Graph editor structure (nodes, edges, draft baseline) | **Factory document** | `useEditableFactoryGraph` bases `baseDocument` / `latestDocument` on `useCurrentFactoryDocument` only |
+| Runtime counts, in-flight dispatch, save-blocked while work runs | **Dashboard snapshot** | `DashboardSnapshot.runtime` (for example `in_flight_dispatch_count`, `activeWorkCount`) via `useDashboardSnapshot` |
+| Timeline selection and selected-tick world view | **Dashboard snapshot** | `useFactoryTimelineStore`, `useDashboardWorldView` |
+| Stale-save and version mismatch warnings | **Document version + snapshot runtime** | Compare document `version` from `useCurrentFactoryDocument`; use snapshot `in_flight_dispatch_count` for idle guards—not snapshot factory version alone |
+| Export download payload | **Factory document** | Session-scoped factory GET for `useDashboardSession().sessionID`, not `DashboardSnapshot.factory` alone |
+| Observe-mode live overlay (counts, selection hints) | **Dashboard snapshot** (display only) | Snapshot projection at the selected timeline tick; re-baseline on edit mode from the document plane |
+
+**Save rule:** `DashboardSnapshot.factory` must **not** be the sole source for save payloads when a document is loaded. Build saves from `latestDocument`, pending graph draft, or other document-plane state, then send `baseVersion` from the document query.
+
+### Data flow
+
+```mermaid
+flowchart LR
+  subgraph documentPlane ["Factory document plane (React Query)"]
+    GET["GET /factory-sessions/{session_id}/factory"]
+    RQ["useCurrentFactoryDocument"]
+    SAVE["useSaveCurrentFactory → PUT"]
+    GET --> RQ
+    RQ --> SAVE
+  end
+
+  subgraph snapshotPlane ["Dashboard snapshot plane (SSE + timeline)"]
+    SSE["GET /events SSE"]
+    TL["factoryTimelineStore"]
+    WV["useDashboardWorldView"]
+    SNAP["useDashboardSnapshot → DashboardSnapshot"]
+    SSE --> TL --> WV --> SNAP
+  end
+
+  documentPlane -.->|"structure for edit/save/export"| UI["Dashboard UI"]
+  snapshotPlane -.->|"runtime overlay, timeline, in-flight guards"| UI
+```
+
+ASCII equivalent:
+
+```text
+Factory document:  GET /factory-sessions/{id}/factory → React Query → edit / save / export
+Dashboard snapshot: GET /events (SSE) → timeline store → world view → runtime overlay + timeline
+```
+
+Full program spec: [UI Factory Document vs Snapshot Planes](../../../tasks/prd-ui-factory-document-snapshot-planes.md).
+
+Implementation hooks live under `ui/src/features/current-factory-definition/`, `ui/src/features/dashboard/hooks/useDashboardSnapshot.ts`, and `ui/src/features/timeline/`. Session-scoped query keys must include normalized `sessionID` from `useDashboardSession()`.
 
 ## Related Docs
 
@@ -555,6 +605,7 @@ The config validator checks workstation scheduling values against a known set of
 - [Simple Dashboard Render DTO Data Model](simple-dashboard-render-dto-data-model.md)
 - [Simple Dashboard World-View Field Inventory](simple-dashboard-world-view-field-inventory.md)
 - [World-View Contract Cleanup Data Model](world-view-contract-cleanup-data-model.md)
+- [Factory document vs dashboard snapshot](#factory-document-vs-dashboard-snapshot) (this guide)
 - [Live Dashboard](live-dashboard.md)
 - [Record and Replay](record-replay.md)
 - [Provider Error Corpus Audit](provider-error-corpus-audit.md)
