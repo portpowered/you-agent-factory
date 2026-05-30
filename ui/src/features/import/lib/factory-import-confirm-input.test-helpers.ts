@@ -8,7 +8,7 @@ export function createFactoryImportConfirmInput(
   const embeddedName = value.factory.name?.trim() ?? "";
 
   return {
-    choice: "replace_current",
+    choice: "REPLACE_CURRENT",
     createFactoryName: embeddedName.length > 0 ? `${embeddedName}-2` : embeddedName,
     existingFactoryNames: ["alpha", embeddedName],
     value,

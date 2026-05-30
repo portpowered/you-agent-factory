@@ -19,7 +19,6 @@ import { cn } from "../../../lib/cn";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
-import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import {
   type CurrentActivityImportController,
@@ -104,7 +103,7 @@ function useCurrentActivityAccessibilityIDs(widgetInstanceID?: string) {
   };
 }
 interface ReactFlowCurrentActivityCardProps {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
+  activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   importController?: CurrentActivityImportController;
   locale?: string;
   now: number;
@@ -482,7 +481,6 @@ export function ReactFlowCurrentActivityCardView(
         locale={props.locale}
       />
       <CurrentActivityGraphEditorDialogs
-        currentSessionFactoryName={props.snapshot.factory?.name ?? "factory"}
         editor={editor}
         imports={imports}
         locale={props.locale}
