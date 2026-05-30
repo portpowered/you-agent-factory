@@ -301,4 +301,177 @@ describe("getSessionFactory errors", () => {
       code: "INTERNAL_ERROR",
     });
   });
+
+  it("rejects successful responses with an invalid factory version", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              ...sessionFactoryFixture,
+              version: {
+                logical: 1.5,
+                physical: "2026-05-18T14:22:00Z",
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+    });
+  });
+
+  it("accepts numeric logical version values from the API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...sessionFactoryFixture,
+          version: {
+            logical: 7,
+            physical: "2026-05-18T14:22:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    const document = await getSessionFactory("~default", {
+      fetch: fetchMock,
+    });
+
+    expect(document.version).toEqual({
+      logical: "7",
+      physical: "2026-05-18T14:22:00Z",
+    });
+  });
+
+  it("maps invalid factory definitions to INVALID_FACTORY_DEFINITION", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              name: "Broken Factory",
+              workers: "not-an-array",
+              workstations: [],
+              workTypes: [],
+              version: {
+                logical: "1",
+                physical: "2026-05-18T14:22:00Z",
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY_DEFINITION",
+      message: expect.stringContaining("cannot use"),
+    });
+  });
+});
+
+describe("saveSessionFactory transport", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("throws SessionFactoryAPIError when fetch is unavailable", async () => {
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: sessionFactoryFixture,
+        },
+        {
+          fetch: undefined,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+    });
+  });
+
+  it("maps transport failures to NETWORK_ERROR when save fetch rejects", async () => {
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: sessionFactoryFixture,
+        },
+        {
+          fetch: vi.fn().mockRejectedValue(new Error("connection refused")),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+    });
+  });
+
+  it("includes validation targets from API error payloads", async () => {
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: sessionFactoryFixture,
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code: "INVALID_FACTORY",
+                message: "Factory definition failed validation.",
+                targets: [
+                  {
+                    code: "DUPLICATE_WORK_TYPE",
+                    message: "Duplicate work type name.",
+                    severity: "error",
+                    subject: {
+                      type: "workType",
+                      id: "alpha",
+                      location: "workTypes[0]",
+                    },
+                  },
+                ],
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 400,
+                statusText: "Bad Request",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY",
+      targets: [
+        expect.objectContaining({
+          code: "DUPLICATE_WORK_TYPE",
+        }),
+      ],
+    });
+  });
 });
