@@ -313,36 +313,105 @@ it("reports unknown edge nodes when a draft edge references a workstation outsid
   ).toBeNull();
 });
 
-it("uses the projected canonical factory until the editable definition is available", () => {
+it("keeps an empty graph until the factory document is available", () => {
   const { result, rerender } = renderHook(
-    (props: {
-      currentFactoryDocument?: typeof currentFactoryDocument;
-      projectedFactory?: typeof baseFactoryDefinition;
-    }) => useFactoryGraphDraftState(props),
+    (props: { currentFactoryDocument?: typeof currentFactoryDocument }) =>
+      useFactoryGraphDraftState(props),
     {
-      initialProps: {
-        projectedFactory: baseFactoryDefinition,
-      },
+      initialProps: {},
     },
   );
 
   expect(result.current.source).toBe("projection");
-  expect(result.current.graph.nodes.map((node) => node.id)).toEqual([
-    "resource:gpu",
-    "work-state:story:done",
-    "work-state:story:queued",
-    "work-type:story",
-    "worker:writer",
-    "workstation:draft",
-  ]);
-
-  rerender({
-    currentFactoryDocument,
-    projectedFactory: baseFactoryDefinition,
+  expect(result.current.graph).toEqual({
+    edges: [],
+    nodes: [],
   });
+  expect(result.current.baseDocument).toBeNull();
+  expect(result.current.latestDocument).toBeNull();
+
+  rerender({ currentFactoryDocument });
 
   expect(result.current.source).toBe("current-factory");
   expect(result.current.baseDocument?.version.logical).toBe("5");
+  expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+    "workstation:draft",
+  );
+});
+
+it("bases editable graph topology on the factory document, not snapshot-only workstations", () => {
+  const documentFactory: typeof currentFactoryDocument = {
+    ...baseFactoryDefinition,
+    name: "Document Factory",
+    version: {
+      logical: "7",
+      physical: "2026-05-31T00:00:00Z",
+    },
+    workstations: [
+      {
+        body: "From the persisted document.",
+        inputs: [
+          {
+            state: "queued",
+            workType: "story",
+          },
+        ],
+        name: "document-only",
+        outputs: [
+          {
+            state: "done",
+            workType: "story",
+          },
+        ],
+        type: "MODEL_WORKSTATION",
+        worker: "writer",
+      },
+    ],
+  };
+  const snapshotFactory: typeof baseFactoryDefinition = {
+    ...baseFactoryDefinition,
+    name: "Snapshot Factory",
+    workstations: [
+      ...(documentFactory.workstations ?? []),
+      {
+        body: "Only present on the live snapshot plane.",
+        inputs: [
+          {
+            state: "queued",
+            workType: "story",
+          },
+        ],
+        name: "snapshot-only",
+        outputs: [
+          {
+            state: "done",
+            workType: "story",
+          },
+        ],
+        type: "MODEL_WORKSTATION",
+        worker: "writer",
+      },
+    ],
+  };
+
+  const { result } = renderHook(() =>
+    useFactoryGraphDraftState({
+      currentFactoryDocument: documentFactory,
+    }),
+  );
+
+  expect(snapshotFactory.workstations?.map((workstation) => workstation.name)).toEqual(
+    ["document-only", "snapshot-only"],
+  );
+  expect(result.current.source).toBe("current-factory");
+  expect(result.current.baseDocument).toEqual(documentFactory);
+  expect(result.current.latestDocument).toEqual(documentFactory);
+  expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+    "workstation:document-only",
+  );
+  expect(result.current.graph.nodes.map((node) => node.id)).not.toContain(
+    "workstation:snapshot-only",
+  );
 });
 
 it("returns an empty projection when no canonical factory is available", () => {

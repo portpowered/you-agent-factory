@@ -8,6 +8,8 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   CURRENT_FACTORY_DEFINITION_QUERY_KEY,
   CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
+  currentFactoryDefinitionQueryKey,
+  currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/public";
 import {
   useFactoryTimelineStore,
@@ -57,6 +59,29 @@ function createWrapper(queryClient: QueryClient) {
   };
 }
 
+function createQueryClient(): QueryClient {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      mutations: { retry: false },
+      queries: { retry: false },
+    },
+  });
+  queryClient.setQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY, {
+    workers: [],
+    workstations: [],
+    workTypes: [],
+  });
+  return queryClient;
+}
+
+function resetStores(): void {
+  useDashboardSessionStore.setState({
+    pausedSessionIDs: [],
+    selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+  });
+  useFactoryTimelineStore.getState().reset();
+}
+
 function seedTimelineAtTick(tick: number): void {
   act(() => {
     useFactoryTimelineStore.setState({
@@ -87,34 +112,72 @@ function renderLifecycleFromSessionStore(queryClient: QueryClient) {
   );
 }
 
-describe("useDashboardSessionLifecycle", () => {
+describe("useDashboardSessionLifecycle document cache", () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: {
-        mutations: { retry: false },
-        queries: { retry: false },
+    queryClient = createQueryClient();
+    resetStores();
+  });
+
+  afterEach(() => {
+    resetStores();
+  });
+
+  it("removes scoped factory document queries when switching to a different session", () => {
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID),
+      {
+        name: "Default Factory",
+        version: { logical: "1", physical: "2026-05-31T00:00:00Z" },
+        workers: [],
+        workstations: [],
+        workTypes: [],
       },
-    });
-    queryClient.setQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY, {
+    );
+    queryClient.setQueryData(currentFactoryDocumentQueryKey("session-beta"), {
+      name: "Beta Factory",
+      version: { logical: "2", physical: "2026-05-31T01:00:00Z" },
       workers: [],
       workstations: [],
       workTypes: [],
     });
-    useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
-      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+
+    renderLifecycleFromSessionStore(queryClient);
+
+    act(() => {
+      useDashboardSessionStore.getState().setSelectedSessionID("session-beta");
     });
-    useFactoryTimelineStore.getState().reset();
+
+    expect(
+      queryClient.getQueryData(
+        currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID),
+      ),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey("session-beta")),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData(
+        currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID),
+      ),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData(currentFactoryDefinitionQueryKey("session-beta")),
+    ).toBeUndefined();
+  });
+});
+
+describe("useDashboardSessionLifecycle", () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    queryClient = createQueryClient();
+    resetStores();
   });
 
   afterEach(() => {
-    useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
-      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
-    });
-    useFactoryTimelineStore.getState().reset();
+    resetStores();
   });
 
   describe("first mount and factory-definition cache", () => {
@@ -165,8 +228,7 @@ describe("useDashboardSessionLifecycle", () => {
           }),
         {
           initialProps: { refreshToken: 0 },
-          wrapper: createWrapper(queryClient),
-        },
+          wrapper: createWrapper(queryClient) },
       );
 
       act(() => {

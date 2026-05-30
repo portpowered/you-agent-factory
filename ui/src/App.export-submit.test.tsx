@@ -183,10 +183,13 @@ describe("App shell export submission flows", () => {
         within(dialog).getByRole("button", { name: "Export PNG" }),
       );
 
+      const { version: _exportVersion, ...exportFactoryWithoutVersion } =
+        currentNamedFactoryExportResponse;
+
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
           factory: {
-            ...currentNamedFactoryExportResponse,
+            ...exportFactoryWithoutVersion,
             name: "Factory Poster",
           },
           image: expect.any(File),
@@ -254,9 +257,12 @@ describe("App shell export submission flows", () => {
         within(dialog).getByRole("button", { name: "Export PNG" }),
       );
 
+      const { version: _bundledVersion, ...bundledFactoryWithoutVersion } =
+        currentFactoryWithBundledFiles;
+
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
-          factory: currentFactoryWithBundledFiles,
+          factory: bundledFactoryWithoutVersion,
           image: expect.any(File),
         });
       });

@@ -1,111 +1,114 @@
 {
-  "project": "UI API Module Cleanup (Recovery v2)",
-  "branchName": "ralph/ui-api-module-cleanup-recovery-v2",
-  "description": "Consolidate dashboard session factory GET/PUT into ui/src/api/session-factory/, retire legacy createFactory/POST /factories surfaces, thin current-factory-definition wrappers, and document normalization-only and prompt-template boundaries—without changing operator-visible editor, import, or export behavior.",
+  "project": "UI Factory Document vs Snapshot Planes (U4 Recovery v2)",
+  "branchName": "ralph/ui-factory-document-snapshot-planes-recovery-v2",
+  "description": "Recovery retrigger for U4: separate the session factory document plane (React Query, authoritative for edit/save/export) from the dashboard event snapshot plane (timeline, authoritative for live runtime overlay), with documented authority rules, graph editor alignment, session-switch cache policy, after-save convergence, and export on the document plane.",
   "context": {
-    "customerAsk": "Retrigger if ui-session-factory-client-recovery (v1) stalls. Full spec: tasks/prd-ui-api-module-cleanup.md (U7 UI API module cleanup).",
-    "problem": "Session factory HTTP is split across current-factory-definition and named-factory with overlapping GET/PUT, a misleading createFactory export, duplicate getCurrentFactory fetch logic, and unclear ownership for factory-definition normalization versus prompt-template routes.",
-    "solution": "Establish session-factory as the sole HTTP owner for session factory GET/PUT with typed errors and tests; delegate current-factory-definition; migrate import/export activation off createFactory; document factory-definition as normalization-only; group or cross-link prompt-template routes while preserving existing URL shapes and UX."
+    "customerAsk": "Retrigger; prior token blocked on failed U2 recovery plan. Program note: also requires ui-session-factory-client-recovery (v1) complete before implementation; backend S1 complete. Full spec: tasks/prd-ui-factory-document-snapshot-planes.md",
+    "problem": "The dashboard mixes React Query session factory documents with SSE DashboardSnapshot data. The graph editor, staleness checks, session switches, post-save refresh, and export can read or write the wrong plane, causing saves and displays to diverge when live runtime and editable definition differ.",
+    "solution": "Document a two-plane authority model, then enforce it: document plane owns edit/save/export structure; snapshot plane owns live runtime overlay and in-flight guards; session switch resets document queries; save success updates document cache and converges snapshot without fetch storms; export uses session factory GET."
   },
   "acceptanceCriteria": [
-    "All dashboard session factory GET/PUT uses ui/src/api/session-factory/ with { mode, factory } bodies and shared transport helpers.",
-    "Editor save and import confirm (replace current / create new named) behave as before, including stale-version and not-idle errors.",
-    "No production or integration test path issues POST /factories for factory activation.",
-    "factory-definition performs normalization only with no fetch-based network I/O.",
-    "Session-scoped prompt-template HTTP is discoverable under the session-factory family without changing route paths.",
-    "Quality gate: UI typecheck, lint, and targeted tests pass for all touched modules."
+    "Editing and saving in one session never uses another session's DashboardSnapshot.factory as the sole save payload source when a document is loaded.",
+    "Graph edit mode seeds draft structure from the session factory document GET, not snapshot topology alone.",
+    "Session tab switch does not show the previous session's factory definition after loading completes.",
+    "Successful graph save updates the document cache and converges with the timeline without manual reload or unbounded refetch loops.",
+    "Export uses session-scoped factory document GET, not snapshot-only payload.",
+    "Dev guide section documents factory document vs dashboard snapshot authority with diagram.",
+    "Typecheck, lint, and make ui-test pass."
   ],
   "userStories": [
     {
-      "id": "ui-api-module-cleanup-recovery-v2-001",
-      "title": "Session factory HTTP owner",
-      "description": "As a frontend maintainer, I want one module that performs session factory GET and PUT so transport, paths, and error codes are not duplicated.",
+      "id": "ui-factory-document-snapshot-planes-recovery-v2-001",
+      "title": "Document the two planes",
+      "description": "As a contributor, I want written rules for which data plane owns each dashboard concern so I do not wire new features to the wrong hook.",
       "acceptanceCriteria": [
-        "getSessionFactory(sessionID) issues GET to /factory-sessions/{session_id}/factory via factoryAPIURL and currentFactorySessionPath",
-        "saveSessionFactory({ sessionID, mode?, factory }) issues PUT with body { mode?: REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE, factory } and version rules matching current editor save behavior",
-        "Typed errors expose STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, INVALID_FACTORY, INVALID_FACTORY_NAME, and NOT_FOUND",
-        "Colocated unit tests assert method, path, and request body for default and non-default session IDs",
-        "Typecheck passes",
-        "Tests pass"
+        "Dev guide adds section Factory document vs dashboard snapshot with authority for edit/save, graph structure, runtime counts, timeline selection, export, and stale-save warnings.",
+        "Section includes a mermaid or ASCII diagram of SSE snapshot flow vs React Query document flow.",
+        "Section links to tasks/prd-ui-factory-document-snapshot-planes.md and states snapshot must not be the sole source for save payloads.",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ui-api-module-cleanup-recovery-v2-002",
-      "title": "Editor save and load use the session factory owner",
-      "description": "As a factory editor, I want saving and loading the current factory to behave exactly as today while the API layer delegates to the session factory module.",
+      "id": "ui-factory-document-snapshot-planes-recovery-v2-002",
+      "title": "Graph editor structure from document plane",
+      "description": "As a graph editor user, I want the editable graph structure to follow the loaded session factory document so my edits match what will be saved.",
       "acceptanceCriteria": [
-        "getCurrentFactoryDocument, saveCurrentFactoryDocument, and saveFactoryForSessionDocument delegate to session-factory without changing wire semantics",
-        "useCurrentFactoryDefinition and useSaveCurrentFactory keep existing React Query keys unless regression tests require a documented change",
-        "Stale-version and not-idle failures surface with the same user-visible messages in covered save-flow tests",
+        "Entering graph edit mode with a loaded document shows nodes and edges from that document; while document GET is pending, editor shows loading or unavailable—not snapshot topology as the editable baseline.",
+        "useEditableFactoryGraph sets draft baseDocument and latestDocument from useCurrentFactoryDocument only; snapshot.factory is not assigned into draft baseline fields.",
+        "Vitest proves divergent document vs snapshot fixtures: editing uses document workstations, not snapshot-only extras.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill: open graph editor and confirm structure matches persisted document after load"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ui-api-module-cleanup-recovery-v2-003",
-      "title": "Import activation uses session PUT only",
-      "description": "As a dashboard operator, I want factory PNG import confirm (replace current vs create new named) to keep working without any legacy factory-create endpoint.",
+      "id": "ui-factory-document-snapshot-planes-recovery-v2-003",
+      "title": "Snapshot limited to runtime overlay",
+      "description": "As an operator watching a live factory, I want observe mode to reflect runtime overlay signals without treating snapshot topology as the save source of truth.",
       "acceptanceCriteria": [
-        "Replace-current import issues GET then PUT REPLACE_CURRENT with the current session factory name preserved",
-        "Create-new-named import issues PUT UPSERT_NAMED_AND_ACTIVATE with suffixed naming on collision matching today's confirm dialog resolved name",
-        "createFactory is removed from the public API surface (or throws in development builds only until callers migrate—prefer full removal)",
-        "App.import.test.tsx and import hook tests complete without any mocked or real POST /factories activation call",
+        "Observe mode may render live snapshot projection for display; switching to edit mode re-baselines on the document plane.",
+        "Save-blocked and stale-draft messaging uses document version plus snapshot in_flight_dispatch_count, not snapshot factory version alone.",
+        "activeWorkCount and in-flight save guard come from snapshot runtime, not document GET.",
+        "Vitest proves save payload is built from latestDocument or pending draft, never DashboardSnapshot.factory alone when document is present.",
         "Typecheck passes",
         "Tests pass",
-        "Verify in browser: drop a factory PNG, confirm replace-current and create-new-named both activate on default and a non-default session tab"
+        "Verify in browser using dev-browser skill: with in-flight work save stays blocked; after idle save uses document version"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "ui-api-module-cleanup-recovery-v2-004",
-      "title": "Export and duplicate GET paths use session factory owner",
-      "description": "As a dashboard operator, I want exporting the current factory to keep working while the client stops maintaining a second raw GET implementation.",
+      "id": "ui-factory-document-snapshot-planes-recovery-v2-004",
+      "title": "Session switch document cache policy",
+      "description": "As an operator switching session tabs, I want factory document state for the new tab without seeing the previous session's definition in the editor.",
       "acceptanceCriteria": [
-        "getCurrentFactory for export reads through session-factory or current-factory-definition delegation with no standalone fetch duplicate in named-factory",
-        "Export error mapping remains consistent for network, not-found, and invalid-response cases covered by export hook tests",
+        "On sessionID change, timeline and selection reset remain; factory document queries are removed or refetched per documented policy aligned with resetDashboardSessionScopedState.",
+        "After switch from session A to B, graph editor and current-selection surfaces do not show session A factory name once loading completes.",
+        "Vitest covers document query keys scoped by normalized session ID on session lifecycle change.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill: two sessions with distinct factory names—switch tabs and confirm name matches active tab"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "ui-api-module-cleanup-recovery-v2-005",
-      "title": "Normalization-only factory-definition boundary",
-      "description": "As a contributor, I want it obvious that factory-definition shapes data but never performs HTTP.",
+      "id": "ui-factory-document-snapshot-planes-recovery-v2-005",
+      "title": "After-save document and snapshot convergence",
+      "description": "As a user saving factory edits, I want the graph and live view to converge without manual reload or a burst of duplicate GETs.",
       "acceptanceCriteria": [
-        "factory-definition/api.ts contains no fetch calls and no transport.ts imports used for network I/O",
-        "Module-level documentation states normalization lives here and session HTTP lives under session-factory",
-        "Existing normalization tests pass without behavior change",
+        "Successful graph save updates React Query document cache with returned version metadata.",
+        "Documented whether snapshot rebuild is immediate via FACTORY_CHANGE or refresh token or waits for event stream; implementation matches documentation.",
+        "Save success does not trigger unbounded document GET retries in unit tests.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "ui-api-module-cleanup-recovery-v2-006",
-      "title": "Session-scoped prompt template routes are discoverable",
-      "description": "As a maintainer, I want prompt-template HTTP grouped with session factory routes so I do not search unrelated API folders.",
+      "id": "ui-factory-document-snapshot-planes-recovery-v2-006",
+      "title": "Export uses document plane",
+      "description": "As an export user, I want the downloaded factory file to match the session document I would save, not a stale snapshot payload.",
       "acceptanceCriteria": [
-        "Prompt-template GET/PUT remains on currentFactorySessionPath plus workstation segment with no URL change",
-        "Either current-factory-prompt-template moves under session-factory/prompt-template/ or session-factory/index.ts documents and re-exports the sibling with stable feature import paths",
-        "Prompt-template hook tests pass for success, not-found, and network error cases",
+        "Export hook fetches via session factory GET for useDashboardSession().sessionID, not DashboardSnapshot.factory.",
+        "Export loading and error states follow document query status.",
+        "Vitest asserts export request uses active session id and matches document GET fixture.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill: export after edit returns updated content from document"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]
