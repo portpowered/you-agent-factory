@@ -64,12 +64,14 @@ export function TraceWorkstationPath({
   }, [graph.nodes, positionsByTraceNodeId]);
   const [nodes, setNodes] = useState<TraceDispatchFlowNode[]>([]);
   const draggedNodeIdsRef = useRef(new Set<string>());
+  const topologyKeyRef = useRef(topologyKey);
 
   useEffect(() => {
-    draggedNodeIdsRef.current.clear();
-  }, [topologyKey]);
+    if (topologyKeyRef.current !== topologyKey) {
+      draggedNodeIdsRef.current.clear();
+      topologyKeyRef.current = topologyKey;
+    }
 
-  useEffect(() => {
     setNodes((currentNodes) => {
       const currentPositions = new Map(
         currentNodes.map((node) => [node.id, node.position]),
@@ -86,7 +88,7 @@ export function TraceWorkstationPath({
         };
       });
     });
-  }, [baseNodes]);
+  }, [baseNodes, topologyKey]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<TraceDispatchFlowNode>[]) => {
