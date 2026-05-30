@@ -23,9 +23,16 @@ func BuildFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig)
 	localModelDomain := service.ProvideStartupLocalModelDomainPtr(cfg)
 	runtimebuildService := service.ProvideRuntimeBuildService(cfg, factoryServiceBuildContext, localModelDomain)
 	factoryServiceCollaborators := service.ProvideFactoryServiceCollaborators(registry, localModelDomain, runtimebuildService)
-	factoryService, err := service.BuildFactoryServiceFromCollaborators(ctx, cfg, factoryServiceBuildContext, factoryServiceCollaborators)
+	factoryRuntimeBundle, err := service.ProvideFactoryRuntimeBundle(ctx, cfg, factoryServiceBuildContext, factoryServiceCollaborators)
 	if err != nil {
 		return nil, err
 	}
+	config := service.ProvideHostedWorkersConfig(cfg, factoryRuntimeBundle, factoryServiceBuildContext)
+	factoryServiceShell, err := service.ProvideFactoryServiceShell(cfg, factoryServiceBuildContext, factoryServiceCollaborators, factoryRuntimeBundle, config)
+	if err != nil {
+		return nil, err
+	}
+	factorySaveSaver := service.ProvideFactorySaveCollaborator(factoryServiceShell, cfg)
+	factoryService := service.AttachFactorySaveCollaborator(factoryServiceShell, factorySaveSaver)
 	return factoryService, nil
 }

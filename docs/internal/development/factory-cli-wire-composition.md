@@ -9,7 +9,7 @@ The `you` factory binary (`cmd/factory`) uses [Google Wire](https://github.com/g
 | `cmd/factory/main.go` | Registers the generated builder with `pkg/cli/run` before `cli.Execute()`. |
 | `cmd/factory/composition/wire.go` | Authored injector (`//go:build wireinject`) and `//go:generate` directive. |
 | `cmd/factory/composition/wire_gen.go` | Generated injector checked into git; builds without the `wireinject` tag. |
-| `pkg/service/factory_build.go` | Plain Go provider functions Wire calls (`ProvideFactorySessionsRegistry`, `ProvideRuntimeBuildService`, `BuildFactoryServiceFromCollaborators`, and related S6 collaborators). |
+| `pkg/service/factory_build.go` | Plain Go provider functions Wire calls (`ProvideFactorySessionsRegistry`, `ProvideRuntimeBuildService`, `ProvideFactoryRuntimeBundle`, `ProvideHostedWorkersConfig`, `ProvideFactoryServiceShell`, `ProvideFactorySaveCollaborator`, `AttachFactorySaveCollaborator`, and related S6 collaborators). `BuildFactoryServiceFromCollaborators` delegates to the same provider chain for non-Wire callers. |
 | `pkg/cli/run/run.go` | Package-level `buildFactoryService` seam; tests override it directly without calling registration. |
 
 `pkg` cannot import `cmd`, so `main` registers `composition.BuildFactoryService` through `run.SetBuildFactoryService(run.FactoryServiceBuilderFromService(...))`. `service.BuildFactoryService` delegates to the same assembly path the generated injector uses.

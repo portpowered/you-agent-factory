@@ -23,7 +23,11 @@ func BuildFactoryService(
 		service.ProvideFactoryServiceBuildContext,
 		service.ProvideRuntimeBuildService,
 		service.ProvideFactoryServiceCollaborators,
-		service.BuildFactoryServiceFromCollaborators,
+		service.ProvideFactoryRuntimeBundle,
+		service.ProvideHostedWorkersConfig,
+		service.ProvideFactoryServiceShell,
+		service.ProvideFactorySaveCollaborator,
+		service.AttachFactorySaveCollaborator,
 	)
 	return nil, nil
 }

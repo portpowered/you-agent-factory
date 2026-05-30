@@ -35,31 +35,11 @@ import (
 	"go.uber.org/zap"
 )
 
-type factoryServiceCollaborators struct {
-	sessions     *factorysessions.Registry
-	localModels  localModelDomain
-	runtimeBuild *runtimebuild.Service
-}
-
 func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
 	if cfg != nil && cfg.ModelAssets != nil {
 		return cfg.ModelAssets
 	}
 	return production
-}
-
-func newFactoryServiceCollaborators(
-	cfg *FactoryServiceConfig,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-) factoryServiceCollaborators {
-	localModels := ProvideStartupLocalModelDomain(cfg)
-	buildCtx := FactoryServiceBuildContext{Clock: clock, BaseLogger: baseLogger}
-	return factoryServiceCollaborators{
-		sessions:     ProvideFactorySessionsRegistry(),
-		localModels:  localModels.toInternal(),
-		runtimeBuild: ProvideRuntimeBuildService(cfg, buildCtx, &localModels),
-	}
 }
 
 func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {
@@ -983,13 +963,86 @@ func ProvideFactoryServiceCollaborators(
 	}
 }
 
+// FactoryRuntimeBundle is the runtime wiring product used during FactoryService
+// assembly. Exported for cmd/factory/composition Wire providers.
+type FactoryRuntimeBundle struct {
+	bundle *factoryRuntimeBundle
+}
+
+// RuntimeLogger returns the session runtime logger from the built bundle.
+func (b FactoryRuntimeBundle) RuntimeLogger() *zap.Logger {
+	if b.bundle == nil || b.bundle.logger == nil {
+		return zap.NewNop()
+	}
+	return b.bundle.logger
+}
+
+// ProvideFactoryRuntimeBundle builds the live runtime bundle from explicit S6
+// collaborators and loaded factory config.
+func ProvideFactoryRuntimeBundle(
+	ctx context.Context,
+	cfg *FactoryServiceConfig,
+	buildCtx FactoryServiceBuildContext,
+	collaborators FactoryServiceCollaborators,
+) (FactoryRuntimeBundle, error) {
+	bundle, err := buildFactoryRuntimeBundle(ctx, cfg, buildCtx, collaborators)
+	if err != nil {
+		return FactoryRuntimeBundle{}, err
+	}
+	return FactoryRuntimeBundle{bundle: bundle}, nil
+}
+
 // ProvideHostedWorkersConfig constructs hosted-worker poller configuration.
 func ProvideHostedWorkersConfig(
 	cfg *FactoryServiceConfig,
-	runtimeLogger *zap.Logger,
-	clock factory.Clock,
+	runtimeBundle FactoryRuntimeBundle,
+	buildCtx FactoryServiceBuildContext,
 ) hostedworkers.Config {
-	return buildHostedWorkersConfig(cfg, runtimeLogger, clock)
+	return buildHostedWorkersConfig(cfg, runtimeBundle.RuntimeLogger(), buildCtx.Clock)
+}
+
+// FactoryServiceShell is the pre-factorysave FactoryService assembly product
+// for Wire composition.
+type FactoryServiceShell struct {
+	Service *FactoryService
+}
+
+// ProvideFactoryServiceShell constructs FactoryService with explicit S6
+// collaborators, runtime bundle, and hosted-worker config. Factory save is
+// attached separately via AttachFactorySaveCollaborator.
+func ProvideFactoryServiceShell(
+	cfg *FactoryServiceConfig,
+	buildCtx FactoryServiceBuildContext,
+	collaborators FactoryServiceCollaborators,
+	runtimeBundle FactoryRuntimeBundle,
+	hostedWorkers hostedworkers.Config,
+) (FactoryServiceShell, error) {
+	fs, err := newFactoryServiceShell(cfg, buildCtx, collaborators, runtimeBundle.bundle, hostedWorkers)
+	if err != nil {
+		return FactoryServiceShell{}, err
+	}
+	return FactoryServiceShell{Service: fs}, nil
+}
+
+// ProvideFactorySaveCollaborator constructs the factorysave collaborator for a
+// built FactoryService shell.
+func ProvideFactorySaveCollaborator(
+	shell FactoryServiceShell,
+	cfg *FactoryServiceConfig,
+) factorySaveSaver {
+	return wireFactorySaveCollaborator(shell.Service, cfg)
+}
+
+// AttachFactorySaveCollaborator assigns the factorysave collaborator on the
+// service shell and returns the assembled FactoryService for Wire composition.
+func AttachFactorySaveCollaborator(
+	shell FactoryServiceShell,
+	factorySave factorySaveSaver,
+) *FactoryService {
+	if shell.Service != nil {
+		shell.Service.factorySave = factorySave
+	}
+	return shell.Service
 }
 
 // BuildFactoryServiceFromCollaborators assembles FactoryService using explicit
@@ -1000,11 +1053,16 @@ func BuildFactoryServiceFromCollaborators(
 	buildCtx FactoryServiceBuildContext,
 	collaborators FactoryServiceCollaborators,
 ) (*FactoryService, error) {
-	return assembleFactoryService(ctx, cfg, buildCtx, factoryServiceCollaborators{
-		sessions:     collaborators.Sessions,
-		localModels:  collaborators.LocalModels.toInternal(),
-		runtimeBuild: collaborators.RuntimeBuild,
-	})
+	runtimeBundle, err := ProvideFactoryRuntimeBundle(ctx, cfg, buildCtx, collaborators)
+	if err != nil {
+		return nil, err
+	}
+	hostedWorkers := ProvideHostedWorkersConfig(cfg, runtimeBundle, buildCtx)
+	shell, err := ProvideFactoryServiceShell(cfg, buildCtx, collaborators, runtimeBundle, hostedWorkers)
+	if err != nil {
+		return nil, err
+	}
+	return AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg)), nil
 }
 
 // BuildFactoryService loads factory.json from the config directory, constructs
@@ -1023,21 +1081,13 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	return BuildFactoryServiceFromCollaborators(ctx, cfg, buildCtx, collaborators)
 }
 
-func assembleFactoryService(
+func buildFactoryRuntimeBundle(
 	ctx context.Context,
 	cfg *FactoryServiceConfig,
 	buildCtx FactoryServiceBuildContext,
-	collaborators factoryServiceCollaborators,
-) (*FactoryService, error) {
-	serviceBuilt := false
-	var runtimeBundle *factoryRuntimeBundle
-	defer func() {
-		if !serviceBuilt && runtimeBundle != nil && runtimeBundle.logSink != nil {
-			_ = runtimeBundle.logSink.Close()
-		}
-	}()
-
-	runtimeBundleAny, err := collaborators.runtimeBuild.BuildFromLoadedConfig(ctx, runtimebuild.BuildInput{
+	collaborators FactoryServiceCollaborators,
+) (*factoryRuntimeBundle, error) {
+	runtimeBundleAny, err := collaborators.RuntimeBuild.BuildFromLoadedConfig(ctx, runtimebuild.BuildInput{
 		Dir:                   cfg.Dir,
 		FolderPath:            buildCtx.FactoryRootDir,
 		SessionID:             defaultFactorySessionID,
@@ -1055,21 +1105,29 @@ func assembleFactoryService(
 	if err != nil {
 		return nil, err
 	}
-	runtimeBundle = asRuntimeBundle(runtimeBundleAny)
+	return asRuntimeBundle(runtimeBundleAny), nil
+}
 
-	serviceBuilt = true
-	fs := &FactoryService{
+func newFactoryServiceShell(
+	cfg *FactoryServiceConfig,
+	buildCtx FactoryServiceBuildContext,
+	collaborators FactoryServiceCollaborators,
+	runtimeBundle *factoryRuntimeBundle,
+	hostedWorkers hostedworkers.Config,
+) (*FactoryService, error) {
+	if runtimeBundle == nil {
+		return nil, fmt.Errorf("factory runtime bundle is required")
+	}
+	return &FactoryService{
 		factoryRootDir: buildCtx.FactoryRootDir,
-		sessions:       collaborators.sessions,
-		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, buildCtx.Clock),
+		sessions:       collaborators.Sessions,
+		hostedWorkers:  hostedWorkers,
 		startupBundle:  runtimeBundle,
 		cfg:            cfg,
-		modelAssets:    wireModelAssetPuller(cfg, collaborators.localModels.assets),
+		modelAssets:    wireModelAssetPuller(cfg, collaborators.LocalModels.toInternal().assets),
 		baseLogger:     buildCtx.BaseLogger,
 		logger:         runtimeBundle.logger,
 		clock:          buildCtx.Clock,
-		runtimeBuild:   collaborators.runtimeBuild,
-	}
-	fs.factorySave = wireFactorySaveCollaborator(fs, cfg)
-	return fs, nil
+		runtimeBuild:   collaborators.RuntimeBuild,
+	}, nil
 }
