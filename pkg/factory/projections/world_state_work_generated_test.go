@@ -127,7 +127,7 @@ func TestWorkItemRefsForProjectionOwners_FilterCustomerWorkAndPreserveLineage(t 
 		"time-1": {ID: "time-1", WorkTypeID: interfaces.SystemTimeWorkTypeID, DisplayName: "tick"},
 	}
 
-	refsByID := workItemRefsForIDs([]string{"work-2", "time-1", "work-1", "work-2"}, itemsByID)
+	refsByID := workItemRefsForIDs(interfaces.WorkPayloadLineageProjection{}, []string{"work-2", "time-1", "work-1", "work-2"}, itemsByID)
 	if len(refsByID) != 2 || refsByID[0].WorkID != "work-1" || refsByID[1].WorkID != "work-2" {
 		t.Fatalf("workItemRefsForIDs = %#v, want sorted customer refs", refsByID)
 	}
@@ -138,7 +138,7 @@ func TestWorkItemRefsForProjectionOwners_FilterCustomerWorkAndPreserveLineage(t 
 		t.Fatalf("workItemRefsForIDs unexpected implicit depth = %#v, want zero when source depth absent", refsByID)
 	}
 
-	refsForItems := workItemRefsForItems([]interfaces.FactoryWorkItem{
+	refsForItems := workItemRefsForItems(interfaces.WorkPayloadLineageProjection{}, []interfaces.FactoryWorkItem{
 		itemsByID["work-2"],
 		itemsByID["time-1"],
 		itemsByID["work-2"],
@@ -148,7 +148,7 @@ func TestWorkItemRefsForProjectionOwners_FilterCustomerWorkAndPreserveLineage(t 
 		t.Fatalf("workItemRefsForItems = %#v, want first-occurrence customer refs", refsForItems)
 	}
 
-	refsForInputs := workItemRefsForInputs([]interfaces.WorkstationInput{
+	refsForInputs := workItemRefsForInputs(interfaces.WorkPayloadLineageProjection{}, []interfaces.WorkstationInput{
 		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}}},
 		{WorkItem: &interfaces.FactoryWorkItem{ID: "time-1", WorkTypeID: interfaces.SystemTimeWorkTypeID, DisplayName: "tick"}},
 		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}}},

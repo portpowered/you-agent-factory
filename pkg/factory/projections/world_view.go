@@ -43,7 +43,7 @@ func customerActiveDispatchIDs(state interfaces.FactoryWorldState) []string {
 }
 
 func dispatchHasCustomerWork(ids []string, items map[string]interfaces.FactoryWorkItem) bool {
-	return len(workItemRefsForIDs(ids, items)) > 0
+	return len(workItemRefsForIDs(interfaces.WorkPayloadLineageProjection{}, ids, items)) > 0
 }
 
 func hasCustomerWorkItems(items map[string]interfaces.FactoryWorkItem) bool {
@@ -80,8 +80,12 @@ func countFailedByWorkType(failed map[string]interfaces.FactoryWorkItem) map[str
 	return nilIfEmpty(counts)
 }
 
-func workRefsForActiveIDs(ids []string, items map[string]interfaces.FactoryWorkItem) []interfaces.FactoryWorldWorkItemRef {
-	refs := workItemRefsForIDs(ids, items)
+func workRefsForActiveIDs(
+	lineage interfaces.WorkPayloadLineageProjection,
+	ids []string,
+	items map[string]interfaces.FactoryWorkItem,
+) []interfaces.FactoryWorldWorkItemRef {
+	refs := workItemRefsForIDs(lineage, ids, items)
 	if refs == nil {
 		return []interfaces.FactoryWorldWorkItemRef{}
 	}
