@@ -1050,3 +1050,12 @@ func writeNamedFactoryFixture(t *testing.T, rootDir, name string) string {
 	}
 	return factoryDir
 }
+
+func cleanResolvedPath(path string) string {
+	cleaned := filepath.Clean(path)
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		return cleaned
+	}
+	return filepath.Clean(resolved)
+}
