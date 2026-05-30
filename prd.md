@@ -1,158 +1,225 @@
-# PRD: Extract API Factory Strict JSON Decode Helper
+# PRD: UI Dashboard Stream and Timeline Split (U8 Recovery v2)
 
 ---
-author: Codex
+author: factory-agent
 last modified: 2026-05-31
 status: draft
+recovery: wave2-plan-failure (blocked on ui-session-scope-context-recovery-v2)
+baseline-spec: tasks/prd-ui-dashboard-stream-timeline-split.md
+graph: U8
+upstream-recovery: tasks/todo/ui-session-scope-context-recovery-v2.md
 ---
 
 ## Introduction
 
-Customer ask `11` (backend `pkg/` duplication cleanup) advanced when PR `#512` consolidated factory CLI save/update paths and PR `#508` extracted shared work-write handler cores. Factory HTTP handlers in `pkg/api` still repeat the same strict JSON body-decode skeleton across four request decoders.
+`useDashboardSnapshot` historically combined factory event SSE transport, session-switch lifecycle (timeline reset, stream reset, selection history, React Query invalidation), queued event flushing, optional timeline memory debug, and exposing `snapshot` from the timeline store. That coupling made the live dashboard shell hard to test and blurred **transport** with **derived dashboard state**.
 
-Each decoder reads the full body, constructs a `json.Decoder` with `DisallowUnknownFields`, decodes into a typed request, and enforces a single top-level JSON object. Two decoders already delegate trailing-decode enforcement to `ensureSingleJSONObject`; two still inline the same guard. `handlers_common.go` already owns `ensureSingleJSONObject` and `requestFieldValidationError`.
+U8 splits those concerns into focused hooks while preserving observable dashboard behavior: loading, offline-before-first-event errors, pause semantics, session/refresh resets, and the `snapshot` surface consumed by `DashboardScreen` and bento cards.
 
-This PRD introduces one generic strict JSON decode helper and routes all four factory decoders through it **without changing HTTP status codes, error messages, or request validation behavior**.
+This document is a **recovery v2** plan after the wave-2 program token blocked on a failed U2 recovery plan. The full product intent remains in [`tasks/prd-ui-dashboard-stream-timeline-split.md`](../prd-ui-dashboard-stream-timeline-split.md). Main may already contain partial or complete implementation (for example `ralph/ui-dashboard-stream-timeline-split` on current `main`); stories are written to **verify, complete gaps, and prove behavior** idempotently rather than assume a greenfield start.
+
+**Program dependency:** Do not start implementation until [`ui-session-scope-context-recovery-v2`](ui-session-scope-context-recovery-v2.md) is complete. Stream and composer wiring must consume `useDashboardSession()` for `rawSessionID` and `isPaused`, not `dashboardSessionStore`.
 
 ## Context
 
 ### Customer ask
 
-Consolidate duplicated strict JSON decode logic for factory handler request bodies so maintainers have one decode contract and factory endpoints keep identical validation behavior.
+Retrigger U8 (UI dashboard stream timeline split) after the prior recovery wave failed on U2. Deliver the split hook seams from [`tasks/prd-ui-dashboard-stream-timeline-split.md`](../prd-ui-dashboard-stream-timeline-split.md) so customers and maintainers get the same live dashboard behavior with isolated, testable ownership.
 
-### Problem
+### Concrete problem
 
-Four factory body decoders (`decodeNamedFactoryBody`, `decodeOpenFactorySessionBody`, `decodeSaveCurrentFactoryBody`, `decodePromptTemplateValidationRequestBody`) duplicate the same read-decode-validate skeleton. Inline trailing-decode blocks in two decoders drift from the shared `ensureSingleJSONObject` helper used by the other two, increasing review cost and regression risk whenever strict-decode rules change.
+- A monolithic snapshot hook mixed SSE connection management, session lifecycle side effects, timeline projection, and debug tooling.
+- Dashboard shell loading and error states were easy to derive incorrectly from `snapshot` truthiness instead of stream progress plus timeline event ownership.
+- Session switches risked duplicate React Query removals, stale EventSource connections, or timeline/stream state leaking across tabs.
+- Downstream snapshot-plane work depends on a single lifecycle owner for session-scoped resets.
 
-### Solution
+### High-level solution
 
-Add a generic `decodeStrictJSON[T any](body io.Reader) (T, error)` helper in `handlers_common.go` that reads the body, decodes with `DisallowUnknownFields`, calls `ensureSingleJSONObject`, and returns decode/validation errors unchanged for existing callers to map. Refactor the four factory decoders into thin typed wrappers. Lock behavior with direct HTTP response and validation-message assertions for the affected endpoints.
+Extract **`useFactoryEventStream`** (SSE transport + stream store updates + queued flush into timeline), **`useDashboardSessionLifecycle`** (session/`refreshToken` resets), and **`useDashboardWorldView`** (snapshot + shell loading/error derivation). Keep **`useDashboardSnapshot`** as a thin composer (≤80 LOC) used by `DashboardScreen`, or inline the three hooks at the screen if the composer adds no value. Gate **`useDashboardTimelineMemoryDebug`** behind existing debug flags only. Prove behavior with focused hook/unit tests and one browser-visible dashboard shell regression.
 
 ## Goals
 
-- Provide one reusable strict JSON decode path for factory handler request bodies.
-- Remove duplicated inline trailing-decode blocks from factory decoders.
-- Preserve identical HTTP outcomes for valid payloads, unknown fields, malformed JSON, empty bodies, and multi-object payloads across all four factory decode call sites.
-- Keep decode error mapping (`requestFieldValidationMessage` vs generic `"invalid request payload"`) unchanged at each handler.
+- Isolate factory event SSE transport from timeline projection and session lifecycle.
+- Derive dashboard shell `isInitialLoading` and `error` from stream state plus timeline event ownership, not `snapshot` truthiness alone.
+- Reset timeline, localized stream state, selection history, and current-factory definition queries exactly once per session or `refreshToken` transition.
+- Preserve pause semantics (`enabled: false` when the active session is paused).
+- Keep `DashboardScreen` / bento card APIs stable (`snapshot` prop or world-view hook).
+- Provide reviewer-verifiable tests at the hook and dashboard-shell layers without meta-inventory checks.
 
-## Project-Level Acceptance Criteria
+## Project-level acceptance criteria
 
-- [ ] A generic strict JSON decode helper in `handlers_common.go` reads the full body, uses `DisallowUnknownFields`, and enforces a single top-level JSON object via `ensureSingleJSONObject`.
-- [ ] All four factory decoders delegate to the shared helper and no longer duplicate the read-decode-trailing-guard skeleton inline.
-- [ ] `POST /factory-validations`, `POST /factory-sessions`, `PUT /factory-sessions/{sessionId}/factory`, and `POST /factory-sessions/{sessionId}/factory/workstations/{workstationName}/prompt-template-validation` return the same status codes and error messages as today for valid payloads, unknown fields, malformed JSON, empty bodies, and multi-object payloads.
-- [ ] Work submit/upsert decoders, model invocation decoders, and stage-submit decoders are untouched.
-- [ ] No OpenAPI schema or generated contract changes.
-- [ ] `go test ./pkg/api/...` passes with no weakened assertions.
-- [ ] Typecheck, lint, and tests pass for all touched backend areas.
+- [ ] `useFactoryEventStream({ sessionID, enabled, refreshToken, locale, onEvent, openStream? })` owns SSE open/close, stream status updates, queued flush into `onEvent`, and `FACTORY_CHANGE` sync into current-factory React Query keys; opens `/factory-sessions/{sessionID}/events` for the active session.
+- [ ] Paused sessions do not open a live stream and surface the existing paused offline message; resuming reconnects without losing the `onEvent` contract.
+- [ ] `useDashboardSessionLifecycle({ sessionID, refreshToken, locale })` resets timeline, localized stream state, selection history, and `CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX` queries once per qualifying session/`refreshToken` change (no duplicate `removeQueries`).
+- [ ] `useDashboardWorldView()` returns `{ snapshot, selectedTick, hasEvents, streamState, isInitialLoading, error }` with `deriveDashboardWorldViewShellState` enforcing `selectedTick === 0 && eventCount === 0` for initial loading and offline-before-first-event errors.
+- [ ] `useDashboardSnapshot` is a thin composer (≤80 LOC) that wires lifecycle, stream (via `useDashboardSession()` for `rawSessionID` / `isPaused`), world view, and optional debug; production stream modules do not import `dashboardSessionStore`.
+- [ ] `useDashboardTimelineMemoryDebug` runs only when `readFactoryTimelineDebugOptions().memoryDebug` is true; default sessions do not install `__agentFactoryTimelineDebug__` or persist debug summary to `localStorage`.
+- [ ] Dashboard shell regression proves loading → live snapshot, refresh reset, pause/resume stream behavior, and session-scoped stream URLs without EventSource leaks across tab switches.
+- [ ] Typecheck, lint, and targeted UI tests pass for all touched areas.
 
 ## User Stories
 
-### US-001: Shared strict JSON decode helper
+### US-001: Factory event stream transport hook
 
-**Description:** As an API maintainer, I want one strict JSON decode helper so factory handlers enforce the same body rules from a single implementation.
-
-**Acceptance Criteria:**
-
-- [ ] `decodeStrictJSON[T any](body io.Reader) (T, error)` lives in `handlers_common.go`, reads the full request body, decodes with `DisallowUnknownFields`, and calls `ensureSingleJSONObject` after the primary decode.
-- [ ] On success, the helper returns the decoded value with a nil error.
-- [ ] On unknown JSON fields, the helper returns the same `json: unknown field ...` decode error the inline decoders produce today (no new wrapper type).
-- [ ] On malformed JSON, empty body, or trailing non-EOF content after one object, the helper returns the same error shapes callers already map (including `requestFieldValidationError` with message `request payload must contain one JSON object` for multi-object payloads).
-- [ ] Unit tests in `handlers_common_test.go` (or equivalent) exercise valid object, unknown field, malformed JSON, empty body, and multi-object inputs directly against the helper.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-### US-002: Factory decoders delegate to shared helper
-
-**Description:** As a reviewer, I want all four factory body decoders to be thin typed wrappers so strict-decode logic is not duplicated across `handlers_factory.go`.
+**Description:** As a maintainer, I want SSE connection wiring isolated so I can test transport without mounting the full dashboard.
 
 **Acceptance Criteria:**
 
-- [ ] `decodeNamedFactoryBody`, `decodeOpenFactorySessionBody`, `decodeSaveCurrentFactoryBody`, and `decodePromptTemplateValidationRequestBody` each call `decodeStrictJSON` with their existing request type and return its result unchanged.
-- [ ] No factory decoder retains an inline trailing `decoder.Decode(&struct{}{})` block or duplicated read/decoder setup.
-- [ ] Existing factory handler tests (`server_factory_test.go`, `server_factory_sessions_test.go`, and related) pass without assertion changes except where new coverage is intentionally added in US-003.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+- [x] `useFactoryEventStream` opens the session-scoped events URL, updates `dashboardStreamStore` status messages, compacts events before `onEvent`, and syncs `FACTORY_CHANGE` payloads into current-factory query keys for the stream session.
+- [x] When `enabled` is false for a selected session, no new `EventSource` opens and stream state shows the paused offline copy; toggling `enabled` back to true opens a new connection.
+- [x] Changing `refreshToken` closes and reopens the stream for the same `sessionID`; `sessionID: null` never opens a stream.
+- [x] `useFactoryEventStream.test.tsx` covers open URL, paused/disabled, refresh reopen, resume-after-pause, offline-before-first-event, and factory-change query sync using the replay harness or injected `openStream`.
+- [x] Typecheck passes
+- [x] Tests pass
 
-### US-003: Lock factory endpoint decode behavior with HTTP regression tests
+### US-002: Dashboard session lifecycle hook
 
-**Description:** As an API consumer, I want factory endpoints to reject bad request bodies exactly as before so clients do not see silent validation drift after the refactor.
+**Description:** As an operator switching factory tabs or refreshing the dashboard, I want prior session timeline/stream/selection/factory-definition cache cleared once so I never see cross-session bleed.
 
 **Acceptance Criteria:**
 
-- [ ] Table-driven HTTP tests cover payload edge cases for:
-  - `POST /factory-validations` (factory validate)
-  - `POST /factory-sessions` (open session)
-  - `PUT /factory-sessions/~default/factory` (save current factory)
-  - `POST /factory-sessions/~default/factory/workstations/{workstation}/prompt-template-validation` (prompt template validation)
-- [ ] Each endpoint test matrix includes at minimum: valid minimal payload (success path where applicable), unknown top-level field (`400` with existing message behavior), malformed JSON (`400` + `"invalid request payload"` or field-specific message when applicable), empty body (`400`), and multi-object/array payload (`400` with `request payload must contain one JSON object` when that is today's behavior).
-- [ ] Assertions use HTTP status, response `code`, and `message` fields — not file-layout or registration inventories.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+- [x] `useDashboardSessionLifecycle` calls `resetDashboardSessionScopedState` on qualifying `sessionID` or `refreshToken` changes: timeline reset, localized stream reset, `resetSelectionHistoryStore`, and a single `queryClient.removeQueries` for `CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX`.
+- [x] `shouldResetDashboardSessionScopedState` skips the initial mount for `refreshToken === 0` but resets on later refresh increments and session key changes.
+- [x] `dashboard-session-lifecycle.test.ts` and `useDashboardSessionLifecycle.test.tsx` prove no duplicate removes and correct reset on session switch vs first mount.
+- [x] Typecheck passes
+- [x] Tests pass
 
-## High-Level Technical Design
+### US-003: Dashboard world view and shell state derivation
+
+**Description:** As a dashboard user, I want the shell loading spinner and connection error to reflect stream progress before the first timeline event, not whether a cached snapshot object exists.
+
+**Acceptance Criteria:**
+
+- [ ] `useDashboardWorldView()` selects `worldViewCache[selectedTick]` and exposes `selectedTick`, `hasEvents`, `streamState`, `isInitialLoading`, and `error`.
+- [ ] `deriveDashboardWorldViewShellState` sets `isInitialLoading` only while `rawSessionID != null`, `selectedTick === 0`, `eventCount === 0`, and stream status is not `offline`; sets `error` from stream message only in the offline-before-first-event case.
+- [ ] Unit tests for `deriveDashboardWorldViewShellState` cover connecting, offline-before-first-event, and post-first-event success paths.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-004: Thin dashboard snapshot composer and screen wiring
+
+**Description:** As a reader of `DashboardScreen`, I want stream, lifecycle, and world-view concerns composed in one obvious place without re-embedding transport logic.
+
+**Acceptance Criteria:**
+
+- [ ] `useDashboardSnapshot` composes `useDashboardSessionLifecycle`, `useFactoryEventStream` (with `enabled: rawSessionID != null && !isPaused` from `useDashboardSession()`), `useDashboardWorldView`, and queued append into the timeline store; file length ≤80 LOC.
+- [ ] `DashboardScreen` continues to drive loading/error/empty/success panels from `useDashboardSnapshot({ locale, refreshToken })`; `DashboardBento` still receives live snapshot data through the existing screen/bento contract without forking timeline ownership.
+- [ ] `useDashboardSnapshot.test.tsx` proves refresh resets timeline to tick 0 with loading, streamed events append to timeline state, and default sessions do not enable timeline memory debug side effects.
+- [ ] Typecheck passes
+- [ ] Tests pass
+- [ ] Verify in browser using dev-browser skill: dashboard loads live stream, shows loading before first event, and recovers after refresh without stale cross-session UI
+
+### US-005: Optional timeline memory debug isolation
+
+**Description:** As a maintainer debugging timeline memory, I want debug globals and persistence opt-in only so normal operators are unaffected.
+
+**Acceptance Criteria:**
+
+- [ ] `useDashboardTimelineMemoryDebug` receives `debugOptions` from `readFactoryTimelineDebugOptions()` and runs only when `memoryDebug` is true (`?afMemoryDebug=1`).
+- [ ] Default sessions do not set `window.__agentFactoryTimelineDebug__` or write `agentFactory.timelineDebugSummary` to `localStorage`; `useDashboardTimelineMemoryDebug.test.tsx` proves both off and on paths.
+- [ ] Composer invokes debug hook only from `useDashboardSnapshot`; no behavior change for default users.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-006: Dashboard stream/timeline shell regression proof
+
+**Description:** As an operator, I want confidence that session tab switches and pause/resume do not leak streams or show the wrong session’s timeline state.
+
+**Acceptance Criteria:**
+
+- [ ] Existing app-shell or Storybook regression (`App.replay-stream.test.tsx`, `App.session-switching.stories.tsx`, or `ui/integration/event-stream-replay.integration.test.mjs`) exercises session-scoped stream URLs and observable shell outcomes (loading clears after first event, pause stops live connection, tab switch resets timeline/stream targets).
+- [ ] Regression asserts observable timeline scrubber or shell status outcomes, not internal hook file names or module registration inventories.
+- [ ] Typecheck passes
+- [ ] Tests pass
+- [ ] Verify in browser using dev-browser skill when the regression surface is Storybook-backed
+
+## Functional Requirements
+
+- FR-1: Event stream URL is built from the active session identity supplied by `useDashboardSession()` / `session-routing`, not ad hoc store reads in transport modules.
+- FR-2: Session or `refreshToken` transition must close the previous session’s `EventSource` (no leak across tabs).
+- FR-3: `locale` is passed into stream reset for localized stream-state messages.
+- FR-4: `refreshToken` from `dashboardBentoStore` still triggers lifecycle reset and stream refresh through `DashboardScreen`.
+- FR-5: Dashboard shell panels use `isInitialLoading` and `error` from the world-view seam; empty snapshot without events follows existing empty-session copy.
+- FR-6: SSE protocol and event types are unchanged (no backend contract work).
+
+## Non-Goals
+
+- Changing SSE protocol, event schemas, or backend session APIs.
+- Moving the timeline store to React Query or redesigning snapshot planes (see [`prd-ui-factory-document-snapshot-planes.md`](../prd-ui-factory-document-snapshot-planes.md)).
+- Replacing `dashboardSessionStore` or implementing U2 session scope (upstream recovery owns that).
+- Real-time graph layout performance, bento layout persistence, or unrelated dashboard card refactors.
+- Broad test harness rewrites, file-motion-only stories, or lint allowlist churn unless required to satisfy a behavioral criterion above.
+
+## High-level technical design
 
 ```mermaid
-flowchart TD
-  A[HTTP request body] --> B[decodeStrictJSON T]
-  B --> C[io.ReadAll]
-  C --> D["json.Decoder + DisallowUnknownFields"]
-  D --> E[Decode into T]
-  E --> F[ensureSingleJSONObject]
-  F --> G{error?}
-  G -->|yes| H[Return zero T + err]
-  G -->|no| I[Return decoded T]
-  H --> J[Factory handler maps err to 400 response]
-  I --> K[Handler business logic unchanged]
+flowchart TB
+  subgraph scope [Session scope - U2 recovery]
+    DS[useDashboardSession]
+  end
+
+  subgraph composer [Dashboard shell]
+    Screen[DashboardScreen]
+    Snap[useDashboardSnapshot ≤80 LOC]
+    Screen --> Snap
+  end
+
+  subgraph hooks [Split hooks]
+    Life[useDashboardSessionLifecycle]
+    Stream[useFactoryEventStream]
+    View[useDashboardWorldView]
+    Dbg[useDashboardTimelineMemoryDebug]
+    Snap --> Life
+    Snap --> Stream
+    Snap --> View
+    Snap --> Dbg
+    DS --> Stream
+    DS --> View
+  end
+
+  subgraph stores [State owners]
+    TL[(factoryTimelineStore)]
+    ST[(dashboardStreamStore)]
+    RQ[(React Query factory definition)]
+    Stream --> ST
+    Stream --> TL
+    Life --> TL
+    Life --> ST
+    Life --> RQ
+    View --> TL
+    View --> ST
+  end
 ```
 
 **Package ownership**
 
-- `pkg/api/handlers_common.go`: generic decode helper, `ensureSingleJSONObject`, `requestFieldValidationError`, and error message extraction.
-- `pkg/api/handlers_factory.go`: typed decoder wrappers and handler error mapping only — no duplicated decode skeleton.
+| Concern | Owner |
+| --- | --- |
+| SSE transport + queued flush | `ui/src/features/dashboard/hooks/useFactoryEventStream.ts`, `lib/dashboard-event-stream.ts` |
+| Session/`refreshToken` resets | `ui/src/features/dashboard/hooks/useDashboardSessionLifecycle.ts`, `lib/dashboard-session-lifecycle.ts` |
+| Shell loading/error derivation | `ui/src/features/dashboard/hooks/useDashboardWorldView.ts`, `lib/dashboard-world-view.ts` |
+| Composer | `ui/src/features/dashboard/hooks/useDashboardSnapshot.ts` |
+| Debug-only memory tooling | `ui/src/features/dashboard/hooks/useDashboardTimelineMemoryDebug.ts` |
+| Screen wiring | `ui/src/features/dashboard/components/dashboard-screen.tsx` |
+| Session identity | `ui/src/features/dashboard/session/dashboard-session-provider.tsx` (U2) |
 
-**Error mapping (unchanged)**
+**Dependency fit:** Requires U2 recovery (`useDashboardSession`, `eventsPath`, pause projection). Soft coordination with factory document snapshot planes for query invalidation policy. No OpenAPI or Go changes.
 
-| Decode outcome | Handler mapping (unchanged) |
-|----------------|----------------------------|
-| `requestFieldValidationError` | `400 BAD_REQUEST` with validation message |
-| Other decode errors | `400 BAD_REQUEST` with `"invalid request payload"` |
-| Save-current decode errors | `400 BAD_REQUEST` with validation targets including form factory payload target |
+## Supporting technical and UX considerations
 
-**State and side effects**
+- **Loading / empty / error / success:** Shell uses `isInitialLoading` while connecting before the first event; `error` when stream is offline with no events; existing empty-session copy when `snapshot` is missing after load; success path renders header + bento.
+- **Accessibility:** Preserve existing localized stream status and scrubber semantics; this PRD does not change header copy contracts.
+- **Pause:** `enabled: false` when `isPaused`; paused offline message remains customer-visible.
+- **Tests:** Prefer replay harness / injected `openStream` over full `EventSource` mocks; keep `docs/internal/processes/development-guide-relevant-files.md` live dashboard seam paragraph accurate when behavior owners change.
+- **Idempotent recovery:** If a criterion already passes on `main`, add or tighten tests only where proof is missing; do not rewrite working hooks for style.
 
-- Pure decode: no server state mutation; handlers retain existing runtime/session calls after decode succeeds.
+## Success metrics
 
-## Functional Requirements
-
-- FR-1: `decodeStrictJSON` must read the entire body before decoding (matching current factory decoders).
-- FR-2: `decodeStrictJSON` must set `DisallowUnknownFields` on the decoder.
-- FR-3: `decodeStrictJSON` must call `ensureSingleJSONObject` after the primary decode.
-- FR-4: All four factory decoders must delegate to `decodeStrictJSON` without altering return types or error values.
-- FR-5: Factory handlers must continue mapping decode errors through existing `requestFieldValidationMessage` checks and generic bad-request responses.
-- FR-6: Regression tests must assert observable HTTP outcomes for the four factory endpoints listed above.
-
-## Non-Goals
-
-- Refactoring work submit/upsert decoders in `handlers_work_write.go`.
-- Refactoring model invocation or stage-submit decoders in `handlers_models.go` / `handlers_work_read.go`.
-- OpenAPI schema or generated API contract changes.
-- CLI or service-layer refactors.
-- Broad unrelated cleanup in `pkg/api` beyond the four factory decoders and their tests.
-
-## Supporting Technical Considerations
-
-- Prefer extending existing factory server tests over new test-file topology requirements.
-- Keep the helper generic (`decodeStrictJSON[T]`) so future factory decoders can reuse it without copy-paste.
-- Do not wrap JSON decode errors in new types; callers rely on `errors.As` against `requestFieldValidationError` and standard `json.SyntaxError` / unknown-field errors.
-- Follow `docs/internal/standards/code/general-backend-standards.md` for package boundaries and test placement.
-
-## Success Metrics
-
-- Zero behavioral diffs in factory endpoint HTTP responses for the defined payload matrix.
-- Four factory decoders reduced to single-expression wrappers around `decodeStrictJSON`.
-- `go test ./pkg/api/...` green with added regression coverage for decode edge cases.
-- No increase in duplicated strict-decode logic elsewhere in `handlers_factory.go`.
+- `useDashboardSnapshot.ts` stays ≤80 LOC (or is removed in favor of explicit screen composition with no behavior change).
+- Stream and lifecycle hooks are unit-testable without mounting `DashboardScreen`.
+- Session switch and refresh do not leak `EventSource` instances or show the previous session’s timeline tick.
+- No user-visible regression in live stream, pause, refresh, or timeline scrubbing.
 
 ## Open Questions
 
-None — scope and behavioral preservation requirements are explicit in the customer ask.
+None for recovery v2—the baseline U8 spec is authoritative. Treat current `main` as the implementation baseline and extend only what fails the acceptance criteria above.

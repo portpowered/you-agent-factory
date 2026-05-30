@@ -1,29 +1,31 @@
 {
-  "project": "Extract API Factory Strict JSON Decode Helper",
-  "branchName": "ralph/extract-api-factory-strict-json-decode-helper",
-  "description": "Consolidate duplicated strict JSON body-decode logic for four factory HTTP handlers into one generic decodeStrictJSON helper in pkg/api, routing all factory decoders through it without changing HTTP status codes, error messages, or request validation behavior.",
+  "project": "UI Dashboard Stream and Timeline Split (U8 Recovery v2)",
+  "branchName": "ralph/ui-dashboard-stream-timeline-split-recovery-v2",
+  "description": "Recovery implementation of the dashboard stream/timeline split (U8): isolate factory SSE transport, session lifecycle resets, and world-view shell derivation behind focused hooks while preserving DashboardScreen loading, error, pause, refresh, and snapshot behavior. Retriggers after wave-2 plan failure on U2; baseline spec at tasks/prd-ui-dashboard-stream-timeline-split.md. Requires ui-session-scope-context-recovery-v2 complete first.",
   "context": {
-    "customerAsk": "Extract a shared strict JSON decode helper for factory handler bodies so pkg/api stops duplicating the read-decode-ensureSingleJSONObject skeleton across decodeNamedFactoryBody, decodeOpenFactorySessionBody, decodeSaveCurrentFactoryBody, and decodePromptTemplateValidationRequestBody.",
-    "problem": "Four factory body decoders in handlers_factory.go repeat the same strict JSON decode skeleton. Two inline the trailing single-object guard while two call ensureSingleJSONObject in handlers_common.go, creating drift risk and unnecessary review surface during backend duplication cleanup (customer ask 11).",
-    "solution": "Add decodeStrictJSON[T any](body io.Reader) (T, error) to handlers_common.go that reads the body, decodes with DisallowUnknownFields, calls ensureSingleJSONObject, and returns errors unchanged. Refactor the four factory decoders into thin typed wrappers. Lock behavior with direct HTTP status and message assertions for valid, unknown-field, malformed, empty, and multi-object payloads."
+    "customerAsk": "Retrigger U8 (UI dashboard stream timeline split) after the prior recovery token blocked on failed U2 recovery. Deliver the split hook seams from tasks/prd-ui-dashboard-stream-timeline-split.md so live dashboard stream, timeline, and shell states remain correct with testable ownership.",
+    "problem": "useDashboardSnapshot combined SSE transport, session-switch resets, queued timeline appends, debug memory hooks, and snapshot projection, making the dashboard shell hard to test and causing fragile loading/error derivation from snapshot truthiness instead of stream plus timeline event ownership.",
+    "solution": "Extract useFactoryEventStream, useDashboardSessionLifecycle, and useDashboardWorldView; keep useDashboardSnapshot as a thin composer wired through useDashboardSession for rawSessionID and isPaused; gate timeline memory debug behind existing flags; prove behavior with focused hook tests and dashboard shell stream/timeline regressions."
   },
   "acceptanceCriteria": [
-    "decodeStrictJSON in handlers_common.go reads the full body, uses DisallowUnknownFields, and enforces a single top-level JSON object via ensureSingleJSONObject",
-    "All four factory decoders delegate to decodeStrictJSON and no longer duplicate inline read-decode-trailing-guard logic",
-    "POST /factory-validations, POST /factory-sessions, PUT /factory-sessions/{sessionId}/factory, and POST prompt-template-validation endpoints preserve today's status codes and error messages for valid, unknown-field, malformed, empty, and multi-object payloads",
-    "Work submit/upsert, model invocation, and stage-submit decoders remain unchanged; no OpenAPI or generated contract changes",
-    "go test ./pkg/api/... passes with behavioral HTTP assertions and no weakened tests",
-    "Typecheck, lint, and tests pass for all touched backend areas"
+    "useFactoryEventStream owns session-scoped SSE open/close, stream status, queued onEvent delivery, and FACTORY_CHANGE query sync; pause disables live connection with existing offline copy",
+    "useDashboardSessionLifecycle resets timeline, localized stream state, selection history, and current-factory definition queries once per qualifying session or refreshToken change without duplicate removeQueries",
+    "useDashboardWorldView derives isInitialLoading and error from stream state plus selectedTick===0 and eventCount===0, not snapshot truthiness alone",
+    "useDashboardSnapshot composes lifecycle, stream, world view, and optional debug in ≤80 LOC using useDashboardSession in production without dashboardSessionStore imports in stream modules",
+    "useDashboardTimelineMemoryDebug runs only when memoryDebug is enabled; default sessions install no debug globals or localStorage persistence",
+    "Dashboard shell regression proves loading, refresh reset, pause/resume, and session-scoped stream behavior without cross-session EventSource leaks",
+    "Typecheck, lint, and targeted UI tests pass for all touched areas"
   ],
   "userStories": [
     {
-      "id": "extract-api-factory-strict-json-decode-helper-001",
-      "title": "Shared strict JSON decode helper",
-      "description": "As an API maintainer, I want one strict JSON decode helper so factory handlers enforce the same body rules from a single implementation.",
+      "id": "ui-dashboard-stream-timeline-split-recovery-v2-001",
+      "title": "Factory event stream transport hook",
+      "description": "As a maintainer, I want SSE connection wiring isolated so I can test transport without mounting the full dashboard.",
       "acceptanceCriteria": [
-        "decodeStrictJSON[T any](body io.Reader) (T, error) lives in handlers_common.go, reads the full body, decodes with DisallowUnknownFields, and calls ensureSingleJSONObject after the primary decode",
-        "Helper returns decoded value on success; returns json unknown-field errors, malformed JSON errors, and requestFieldValidationError with message 'request payload must contain one JSON object' for multi-object payloads without wrapping in new error types",
-        "Unit tests exercise valid object, unknown field, malformed JSON, empty body, and multi-object inputs directly against the helper",
+        "useFactoryEventStream opens the session-scoped events URL, updates dashboardStreamStore status, compacts events before onEvent, and syncs FACTORY_CHANGE into current-factory React Query keys",
+        "When enabled is false for a selected session, no EventSource opens and stream state shows the paused offline message; re-enabling opens a new connection",
+        "refreshToken change closes and reopens the stream for the same sessionID; sessionID null never opens a stream",
+        "useFactoryEventStream.test.tsx covers open URL, paused/disabled, refresh reopen, resume-after-pause, offline-before-first-event, and factory-change query sync via replay harness or injected openStream",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -32,13 +34,13 @@
       "notes": ""
     },
     {
-      "id": "extract-api-factory-strict-json-decode-helper-002",
-      "title": "Factory decoders delegate to shared helper",
-      "description": "As a reviewer, I want all four factory body decoders to be thin typed wrappers so strict-decode logic is not duplicated across handlers_factory.go.",
+      "id": "ui-dashboard-stream-timeline-split-recovery-v2-002",
+      "title": "Dashboard session lifecycle hook",
+      "description": "As an operator switching factory tabs or refreshing the dashboard, I want prior session timeline, stream, selection, and factory-definition cache cleared once so I never see cross-session bleed.",
       "acceptanceCriteria": [
-        "decodeNamedFactoryBody, decodeOpenFactorySessionBody, decodeSaveCurrentFactoryBody, and decodePromptTemplateValidationRequestBody each call decodeStrictJSON with their existing request type and return its result unchanged",
-        "No factory decoder retains inline trailing decoder.Decode guard blocks or duplicated read/decoder setup",
-        "Existing factory handler tests pass without weakened assertions",
+        "useDashboardSessionLifecycle calls resetDashboardSessionScopedState on qualifying sessionID or refreshToken changes: timeline reset, localized stream reset, resetSelectionHistoryStore, and one removeQueries for CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX",
+        "shouldResetDashboardSessionScopedState skips initial mount for refreshToken 0 but resets on later refresh increments and session key changes",
+        "dashboard-session-lifecycle.test.ts and useDashboardSessionLifecycle.test.tsx prove no duplicate removes and correct reset on session switch versus first mount",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -47,17 +49,64 @@
       "notes": ""
     },
     {
-      "id": "extract-api-factory-strict-json-decode-helper-003",
-      "title": "Lock factory endpoint decode behavior with HTTP regression tests",
-      "description": "As an API consumer, I want factory endpoints to reject bad request bodies exactly as before so clients do not see silent validation drift after the refactor.",
+      "id": "ui-dashboard-stream-timeline-split-recovery-v2-003",
+      "title": "Dashboard world view and shell state derivation",
+      "description": "As a dashboard user, I want the shell loading spinner and connection error to reflect stream progress before the first timeline event, not whether a cached snapshot object exists.",
       "acceptanceCriteria": [
-        "Table-driven HTTP tests cover valid, unknown-field, malformed JSON, empty body, and multi-object payloads for POST /factory-validations, POST /factory-sessions, PUT /factory-sessions/~default/factory, and POST prompt-template-validation",
-        "Assertions verify HTTP status, response code, and message fields match pre-refactor behavior for each case",
+        "useDashboardWorldView selects worldViewCache[selectedTick] and exposes selectedTick, hasEvents, streamState, isInitialLoading, and error",
+        "deriveDashboardWorldViewShellState sets isInitialLoading only while rawSessionID is set, selectedTick is 0, eventCount is 0, and stream status is not offline; sets error from stream message only in the offline-before-first-event case",
+        "Unit tests for deriveDashboardWorldViewShellState cover connecting, offline-before-first-event, and post-first-event success paths",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-dashboard-stream-timeline-split-recovery-v2-004",
+      "title": "Thin dashboard snapshot composer and screen wiring",
+      "description": "As a reader of DashboardScreen, I want stream, lifecycle, and world-view concerns composed in one obvious place without re-embedding transport logic.",
+      "acceptanceCriteria": [
+        "useDashboardSnapshot composes useDashboardSessionLifecycle, useFactoryEventStream with enabled from useDashboardSession rawSessionID and isPaused, useDashboardWorldView, and queued timeline append; file length is at most 80 lines",
+        "DashboardScreen continues to drive loading, error, empty, and success panels from useDashboardSnapshot with locale and refreshToken; DashboardBento keeps the existing snapshot contract without forking timeline ownership",
+        "useDashboardSnapshot.test.tsx proves refresh resets timeline to tick 0 with loading, streamed events append to timeline state, and default sessions do not enable timeline memory debug side effects",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: dashboard loads live stream, shows loading before first event, and recovers after refresh without stale cross-session UI"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-dashboard-stream-timeline-split-recovery-v2-005",
+      "title": "Optional timeline memory debug isolation",
+      "description": "As a maintainer debugging timeline memory, I want debug globals and persistence opt-in only so normal operators are unaffected.",
+      "acceptanceCriteria": [
+        "useDashboardTimelineMemoryDebug runs only when readFactoryTimelineDebugOptions().memoryDebug is true (?afMemoryDebug=1)",
+        "Default sessions do not set window __agentFactoryTimelineDebug__ or write agentFactory.timelineDebugSummary to localStorage; useDashboardTimelineMemoryDebug.test.tsx proves off and on paths",
+        "useDashboardSnapshot invokes the debug hook only from the composer; no behavior change for default users",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-dashboard-stream-timeline-split-recovery-v2-006",
+      "title": "Dashboard stream/timeline shell regression proof",
+      "description": "As an operator, I want confidence that session tab switches and pause/resume do not leak streams or show the wrong session timeline state.",
+      "acceptanceCriteria": [
+        "Existing app-shell, Storybook, or integration regression exercises session-scoped stream URLs and observable shell outcomes: loading clears after first event, pause stops live connection, tab switch resets timeline and stream targets",
+        "Regression asserts observable timeline scrubber or shell status outcomes, not internal hook file names or module registration inventories",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill when the regression surface is Storybook-backed"
+      ],
+      "priority": 6,
+      "passes": true,
       "notes": ""
     }
   ]

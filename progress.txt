@@ -42,6 +42,9 @@
 - When extending `batch-inputs.md`, add the ingress comparison table and `## CLI batch submit` examples to both trees together; guard new CLI markers in `TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown` and `cli_docs_smoke_test.go` `batch-inputs` topic markers.
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
 - When trimming `authoring-factories` after new topics land, point readers at `you docs mock-workers` and `you docs record-replay` and update `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` markers away from removed deep-dive strings.
+- U8 dashboard stream/timeline split hooks (`useFactoryEventStream`, `useDashboardSessionLifecycle`, `useDashboardWorldView`, thin `useDashboardSnapshot`) largely landed on `main` from `ralph/ui-dashboard-stream-timeline-split`—recovery v2 is verify targeted hook tests (`useFactoryEventStream.test.tsx`, etc.) and flip PRD unless regression found.
+- `App.session-stream.test.tsx` proves shell stream/timeline outcomes via `MockEventSource` (`message` events, not `snapshot` type), `fetchRequestPath` for `/factory-sessions` list mocks, pause on non-default sessions only (`~default` ignores pause), and `setSelectedSessionID` for tab retarget when the loading shell hides tabs mid-switch; session-stream harness lives in `app-shell-session-stream-test-utils.ts` and timeline seeding in `app-shell-timeline-seed-utils.ts` so `app-shell-test-utils.tsx` stays under Biome’s 450-line cap.
+- `deriveDashboardWorldViewShellState` in `ui/src/features/dashboard/lib/dashboard-world-view.ts` owns shell `isInitialLoading` (session set, tick 0, zero events, stream not `offline`) and `error` (offline-before-first-event only); `useDashboardWorldView` exposes `worldViewCache[selectedTick]` as `snapshot` plus `selectedTick`, `hasEvents`, and `streamState`.
 - Register `relationships` at `displayOrder` 28 immediately after `guards` (27); relationships content adapts `batch-inputs.md` relation sections and `parent-aware-fan-in.md` with `SPAWNED_BY` called out as runtime/template-only, not batch-authored.
 - Story 003 index assertions belong in `root_docs_test.go` and `cli_docs_smoke_test.go` immediately after `record-replay` lines; smoke topic tests can use `absent` for `../internal/development/...` paths when replacing packaged cross-links.
 - Do not `cp` `pkg/cli/docs/reference/config.md` or `templates.md` onto `docs/reference/` — the layout-tree guides diverge from embedded packaged topics; apply cross-link edits to both trees separately.
@@ -692,6 +695,78 @@
   - Patterns discovered: `mergeStateStatus: DIRTY` on an otherwise green PR usually means main advanced—re-merge before `<COMPLETE>` even when all stories pass.
   - Gotchas encountered: Main may land unrelated Ralph `prd.json`/`progress.txt` edits; always keep branch PRD (`--ours`) during merge conflict resolution.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/514 — push merge commit and await CI before `<COMPLETE>`.
+---
+
+## 2026-05-30T20:43:56Z - ui-dashboard-stream-timeline-split-recovery-v2-001
+- What was implemented: Verified `useFactoryEventStream` and `dashboard-event-stream` on recovery branch head (`origin/main`): session-scoped `/factory-sessions/{id}/events` URL, paused offline copy when `enabled` is false, `refreshToken` reopen, resume-after-pause, null `sessionID` guard, `FACTORY_CHANGE` query sync, and offline-before-first-event; `bun run tsc` and 17 targeted vitest cases pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: U8 transport seam already merged on `main`—recovery v2 story 001 is verify-and-flip-PRD like session-scope recovery v2.
+  - Gotchas encountered: Worktree may lack `ui/node_modules` until `bun install`; use `bun run vitest run` from `ui/` not `bunx vitest` without install.
+  - Useful context: Branch `ralph/ui-dashboard-stream-timeline-split-recovery-v2` tracks `origin/main` at start; story 002 next (`useDashboardSessionLifecycle`).
+---
+
+## 2026-05-30T20:47:04Z - ui-dashboard-stream-timeline-split-recovery-v2-002
+- What was implemented: Verified `useDashboardSessionLifecycle` and `dashboard-session-lifecycle` on `main`; strengthened tests for first-mount skip (`refreshToken` 0), single `removeQueries` per session switch, unchanged session-key no-op, and `resetDashboardSessionScopedState` one-shot reset of timeline/stream/selection/factory-definition cache.
+- Files changed: `ui/src/features/dashboard/lib/dashboard-session-lifecycle.test.ts`, `ui/src/features/dashboard/hooks/useDashboardSessionLifecycle.test.tsx`
+- **Learnings for future iterations:**
+  - Patterns discovered: `shouldResetDashboardSessionScopedState` gates the hook effect—first mount with `previousSessionKey === null` and `refreshToken === 0` skips reset; spy `queryClient.removeQueries` after `mockClear()` post-mount to prove duplicate-free invalidation.
+  - Gotchas encountered: Biome `noExcessiveLinesPerFunction` caps `describe` at 100 lines—split hook tests into nested describes and shared `seedTimelineAtTick` / `renderLifecycleFromSessionStore` helpers.
+  - Useful context: Story 003 next (`useDashboardWorldView` / `deriveDashboardWorldViewShellState`).
+---
+
+## 2026-05-30T20:49:11Z - ui-dashboard-stream-timeline-split-recovery-v2-003
+- What was implemented: Verified `useDashboardWorldView` and `deriveDashboardWorldViewShellState` on branch head: `worldViewCache[selectedTick]` snapshot projection, shell flags from stream status + tick 0 + `eventCount` (not snapshot truthiness), and unit/hook tests for connecting, offline-before-first-event, and post-first-event paths; `bun run tsc` and 6 targeted vitest cases pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: Pure shell derivation stays in `dashboard-world-view.ts`; hook only wires timeline/stream/session stores—prove transitions in `deriveDashboardWorldViewShellState` tests, integration smoke in `useDashboardWorldView.test.tsx`.
+  - Gotchas encountered: Default stream store starts `connecting`, so hook tests with a selected session see `isInitialLoading: true` before any EventSource opens.
+  - Useful context: Story 004 next (thin `useDashboardSnapshot` composer ≤80 LOC and `useDashboardSnapshot.test.tsx`).
+---
+
+## 2026-05-30T20:51:39Z - ui-dashboard-stream-timeline-split-recovery-v2-004
+- What was implemented: Verified thin `useDashboardSnapshot` composer (62 LOC) wires `useDashboardSessionLifecycle`, `useFactoryEventStream` (`enabled: rawSessionID != null && !isPaused`), `useDashboardWorldView`, queued timeline append, and opt-in `useDashboardTimelineMemoryDebug`; `DashboardScreen` still drives loading/error/empty/success from snapshot shell flags with `locale` and `refreshToken` from `useDashboardBentoStore`; `DashboardBento` keeps timeline ownership via `useDashboardBentoSnapshot` / timeline store (no stream transport in bento). `bun run tsc`, 11 targeted vitest cases (`useDashboardSnapshot`, `dashboard-screen`, public smoke), and `App.session-switching.stories.tsx` Storybook pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: Composer returns only `{ snapshot, streamState, isInitialLoading, error }` from world view—screen gates bento on `snapshot` truthiness for empty state; refresh proof needs seeded `worldViewCache` plus `rerender({ refreshToken: 1 })` and `replayHarness.emitSnapshot` after lifecycle reset.
+  - Gotchas encountered: Dev-browser skill was not available in this environment; Storybook `App.session-switching` plus hook replay harness are the automated cross-session/refresh proof for story 004 browser AC.
+  - Useful context: Story 005 next (`useDashboardTimelineMemoryDebug` isolation and `?afMemoryDebug=1` on/off tests).
+---
+
+## 2026-05-31T03:54:00Z - ui-dashboard-stream-timeline-split-recovery-v2-005
+- What was implemented: Verified `useDashboardTimelineMemoryDebug` isolation on branch head: hook no-ops unless `readFactoryTimelineDebugOptions().memoryDebug` is true (`?afMemoryDebug=1` or `true` via `parseBooleanFlag`); default sessions skip `window.__agentFactoryTimelineDebug__` and `agentFactory.timelineDebugSummary` localStorage; `useDashboardSnapshot` is the sole composer caller; `useDashboardTimelineMemoryDebug.test.tsx` (off/on/zero-events) and `useDashboardSnapshot.test.tsx` streamed-events case prove default-user safety. `bun run tsc` and 6 targeted vitest cases pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: Timeline memory debug is opt-in only through `debugOptions.memoryDebug` gates in `useDashboardTimelineMemoryDebug`—transport (`useFactoryEventStream`) reads the same `readFactoryTimelineDebugOptions()` for compaction but does not install globals or persist summaries.
+  - Gotchas encountered: Memory summary persistence waits for `eventCount > 0` even when globals install immediately with `memoryDebug` on—assert localStorage separately from global install in tests.
+  - Useful context: Story 006 next (dashboard stream/timeline shell regression: session tab switch, pause/resume, loading-after-first-event via `App.session-switching.stories.tsx` or app-shell tests).
+---
+
+## 2026-05-31T04:05:00Z - ui-dashboard-stream-timeline-split-recovery-v2-006
+- What was implemented: Added `App.session-stream.test.tsx` app-shell regression for loading shell before first `message` event, session-scoped stream URL retarget with prior `MockEventSource` closed and timeline reset on `setSelectedSessionID`, and non-default session pause/resume stream toggles; extended `app-shell-test-utils` with `fetchRequestPath`, `factorySessions`, `seedTimelineFromSnapshot`, and `MockEventSource.closed` tracking.
+- Files changed: `ui/src/App.session-stream.test.tsx`, `ui/src/testing/app-shell-test-utils.tsx`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: `openFactoryEventStream` only listens for SSE `message` events—`MockEventSource.emit("snapshot", …)` seeds the timeline store directly but does not increment `events.length`, so shell loading may clear while scrubber progress still looks empty until a `message` event arrives.
+  - Gotchas encountered: Default/`~default` sessions ignore pause in `buildSessionScope`—pause/resume stream proofs must select a non-default tab first; after session switch the shell can return to loading until the new session’s first event, so retarget assertions should use store/stream hooks rather than querying tabs during loading.
+  - Useful context: `App.session-switching.stories.tsx` remains the Storybook cross-session selection/submit-draft proof; story 006 adds Vitest app-shell stream/timeline/scrubber coverage alongside it.
+---
+
+## 2026-05-30T21:25:46Z - PR mergeability (blocking review on #515)
+- What was implemented: Addressed BLOCKING PR feedback—split `app-shell-test-utils.tsx` (390 lines) into `app-shell-session-stream-test-utils.ts` and `app-shell-timeline-seed-utils.ts`; added app-shell refresh regression via `useDashboardBentoStore.incrementRefreshToken()`; extracted shared helpers to `App.session-stream.test-helpers.ts`.
+- Files changed: `ui/src/testing/app-shell-test-utils.tsx`, `ui/src/testing/app-shell-session-stream-test-utils.ts`, `ui/src/testing/app-shell-timeline-seed-utils.ts`, `ui/src/App.session-stream.test.tsx`, `ui/src/App.session-stream.test-helpers.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: When extending `app-shell-test-utils.tsx`, add session-stream or timeline seed code to the focused modules first—Biome `noExcessiveLinesPerFile` applies at 450 lines for that file.
+  - Gotchas encountered: Bento `incrementRefreshToken` is the production path that bumps `refreshToken` into `useDashboardSnapshot`.
+  - Useful context: PR #515 blocking review; commit `ffad4393`.
+---
+
+## 2026-05-31T04:38:00Z - PR mergeability (main reconcile on #515)
+- What was implemented: Merged `origin/main` into the branch to clear `mergeable: CONFLICTING`; resolved `prd.json` / `prd.md` / `progress.txt` conflicts keeping U8 recovery metadata and combined progress logs; re-validated `App.session-stream.test.tsx` (4 tests).
+- Files changed: merge commits `06283bc5` and follow-up second-pass merge
+- **Learnings for future iterations:**
+  - Patterns discovered: `mergeStateStatus: DIRTY` / `CONFLICTING` after green CI usually means `main` advanced—re-merge before `<COMPLETE>`.
+  - Gotchas encountered: Prefer `git merge origin/main` over rebase when chore commits touch `prd.json`.
+  - Useful context: PR #515 head after second merge push.
 ---
 
 ## 2026-05-30T21:06:27Z - extract-api-factory-strict-json-decode-helper-001
