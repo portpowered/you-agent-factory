@@ -112,10 +112,7 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 	if fs == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
 	}
-	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
-		return factoryapi.Factory{}, err
-	}
-	if err := validateEditableFactoryTopology(request); err != nil {
+	if err := validateUpsertNamedFactoryRequest(request); err != nil {
 		return factoryapi.Factory{}, err
 	}
 
@@ -137,16 +134,9 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 		return factoryapi.Factory{}, err
 	}
 
-	var currentVersion *factoryapi.HybridLogicalTimestamp
-	if replaceExisting {
-		version, versionErr := fs.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
-		if versionErr != nil {
-			return factoryapi.Factory{}, versionErr
-		}
-		currentVersion = &version
-		if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, request.Name); err != nil {
-			return factoryapi.Factory{}, err
-		}
+	currentVersion, err := fs.upsertCurrentVersionAtSessionRoot(sessionRootDir, request, replaceExisting)
+	if err != nil {
+		return factoryapi.Factory{}, err
 	}
 
 	nextVersion := nextEditableFactoryVersion(currentVersion, factory.EnsureClock(fs.clock).Now().UTC())
@@ -157,16 +147,63 @@ func (fs *FactoryService) saveUpsertNamedAndActivateForSession(
 		replaceExisting,
 	)
 	if err != nil {
-		switch {
-		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
-			return factoryapi.Factory{}, factoryconfig.ErrNamedFactoryAlreadyExists
-		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
-			return factoryapi.Factory{}, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
-		default:
-			return factoryapi.Factory{}, err
-		}
+		return factoryapi.Factory{}, mapUpsertNamedFactoryPersistError(err)
 	}
 
+	return fs.finalizeUpsertNamedAndActivateForSession(
+		ctx,
+		session,
+		sessionID,
+		sessionRootDir,
+		factoryDir,
+		request,
+	)
+}
+
+func validateUpsertNamedFactoryRequest(request factoryapi.Factory) error {
+	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
+		return err
+	}
+	return validateEditableFactoryTopology(request)
+}
+
+func mapUpsertNamedFactoryPersistError(err error) error {
+	switch {
+	case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
+		return factoryconfig.ErrNamedFactoryAlreadyExists
+	case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
+		return fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
+	default:
+		return err
+	}
+}
+
+func (fs *FactoryService) upsertCurrentVersionAtSessionRoot(
+	sessionRootDir string,
+	request factoryapi.Factory,
+	replaceExisting bool,
+) (*factoryapi.HybridLogicalTimestamp, error) {
+	if !replaceExisting {
+		return nil, nil
+	}
+	version, err := fs.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
+	if err != nil {
+		return nil, err
+	}
+	if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, request.Name); err != nil {
+		return nil, err
+	}
+	return &version, nil
+}
+
+func (fs *FactoryService) finalizeUpsertNamedAndActivateForSession(
+	ctx context.Context,
+	session *factorysessions.LiveSession,
+	sessionID string,
+	sessionRootDir string,
+	factoryDir string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
 	if err := factoryconfig.WriteCurrentFactoryPointer(sessionRootDir, string(request.Name)); err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("write session current factory pointer: %w", err)
 	}
