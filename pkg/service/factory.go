@@ -293,31 +293,54 @@ func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string)
 	fs.activationMu.Lock()
 	defer fs.activationMu.Unlock()
 
-	if err := fs.requireIdleRuntime(ctx); err != nil {
+	sessionID := fs.runSessionID()
+	session := fs.sessionByID(sessionID)
+
+	persistRoot := fs.factoryRootDir
+	if persistRoot == "" && fs.cfg != nil {
+		persistRoot = fs.cfg.Dir
+	}
+	folderPath := persistRoot
+	if session != nil {
+		persistRoot = sessionFactoryPersistRoot(fs.factoryRootDir, session)
+		if trimmed := strings.TrimSpace(session.FolderPath); trimmed != "" {
+			folderPath = trimmed
+		} else {
+			folderPath = persistRoot
+		}
+	}
+
+	if session != nil && liveSessionHandle(session) != nil {
+		if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+			return err
+		}
+	} else if err := fs.requireIdleRuntime(ctx); err != nil {
 		return err
 	}
 
-	rootDir := fs.factoryRootDir
-	if rootDir == "" && fs.cfg != nil {
-		rootDir = fs.cfg.Dir
-	}
-	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(rootDir, name)
+	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(persistRoot, name)
 	if err != nil {
 		return err
 	}
 
-	sessionID := defaultFactorySessionID
-	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
-		sessionID = runState.sessionID
-	}
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, folderPath, factoryDir, sessionID)
 	if err != nil {
 		return fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
 	}
+
+	if session != nil && liveSessionHandle(session) != nil {
+		if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+			return err
+		}
+		if err := factoryconfig.WriteCurrentFactoryPointer(persistRoot, name); err != nil {
+			return err
+		}
+		return fs.replaceSessionRuntime(ctx, session, name, replacement)
+	}
 	if err := fs.requireIdleRuntime(ctx); err != nil {
 		return err
 	}
-	return fs.activateReplacementRuntime(ctx, rootDir, name, replacement)
+	return fs.activateReplacementWithoutLiveRuntime(persistRoot, name, replacement)
 }
 
 func (fs *FactoryService) buildReplacementFactoryRuntime(
@@ -586,55 +609,6 @@ func (fs *FactoryService) logServiceStartup() {
 	)
 }
 
-func (fs *FactoryService) activateReplacementRuntime(
-	ctx context.Context,
-	rootDir string,
-	name string,
-	replacement *factoryRuntimeBundle,
-) error {
-	runState := fs.currentRunState()
-	if runState == nil || runState.runtime == nil || runState.ctx == nil {
-		return fs.activateReplacementWithoutLiveRuntime(rootDir, name, replacement)
-	}
-
-	restoreCurrentSidecars := false
-	serviceMode := fs.cfg != nil && runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
-	if serviceMode {
-		fs.stopLiveRuntimeSidecars(runState.runtime)
-		restoreCurrentSidecars = true
-		defer func() {
-			if restoreCurrentSidecars {
-				fs.restoreLiveRuntimeSidecars(runState)
-			}
-		}()
-	}
-	if err := fs.requireIdleRuntime(ctx); err != nil {
-		return err
-	}
-
-	replacementHandle, err := fs.startReplacementRuntime(ctx, runState.ctx, replacement, serviceMode)
-	if err != nil {
-		return err
-	}
-	if err := fs.persistReplacementRuntime(rootDir, name, replacementHandle, serviceMode); err != nil {
-		return err
-	}
-	fs.publishFactoryChangeEvent(ctx, runState.runtime, replacement)
-	restoreCurrentSidecars = false
-	replacementTarget := defaultSessionTargetFromRuntimeBundle(replacement, fs.factoryRootDir)
-	if existing := fs.sessionByID(runState.sessionID); existing != nil {
-		replacementTarget.Ref = existing.Target
-		replacementTarget.FolderPath = existing.FolderPath
-		replacementTarget.Project = existing.Project
-	}
-	fs.registerLiveSession(runState.sessionID, replacementHandle, replacementTarget, true)
-	fs.setRunState(runState.ctx, runState.sessionID, replacementHandle)
-	if err := fs.stopLiveRuntime(runState.runtime); err != nil && !errors.Is(err, context.Canceled) {
-		fs.logger.Warn("prior runtime shutdown failed", zap.Error(err))
-	}
-	return nil
-}
-
 func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
 	rootDir string,
 	name string,
@@ -644,42 +618,6 @@ func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
 		return err
 	}
 	fs.swapActiveRuntime(replacement)
-	return nil
-}
-
-func (fs *FactoryService) startReplacementRuntime(
-	ctx context.Context,
-	runCtx context.Context,
-	replacement *factoryRuntimeBundle,
-	serviceMode bool,
-) (*liveRuntimeHandle, error) {
-	replacementHandle := fs.startLiveRuntime(runCtx, replacement)
-	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
-		_ = fs.stopLiveRuntime(replacementHandle)
-		return nil, fmt.Errorf("start replacement runtime: %w", err)
-	}
-	if serviceMode {
-		if err := fs.startLiveRuntimeSidecars(runCtx, replacementHandle); err != nil {
-			_ = fs.stopLiveRuntime(replacementHandle)
-			return nil, fmt.Errorf("start replacement runtime sidecars: %w", err)
-		}
-	}
-	return replacementHandle, nil
-}
-
-func (fs *FactoryService) persistReplacementRuntime(
-	rootDir string,
-	name string,
-	replacementHandle *liveRuntimeHandle,
-	serviceMode bool,
-) error {
-	if err := configpersist.WriteCurrentFactoryPointer(rootDir, name); err != nil {
-		if serviceMode {
-			fs.stopLiveRuntimeSidecars(replacementHandle)
-		}
-		_ = fs.stopLiveRuntime(replacementHandle)
-		return err
-	}
 	return nil
 }
 
