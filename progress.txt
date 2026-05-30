@@ -35,6 +35,8 @@
 - Keep `docs/reference/*.md` and `pkg/cli/docs/reference/*.md` synchronized when adding customer-facing packaged topics; embedded markdown is loaded from `pkg/cli/docs/reference/` via `//go:embed`.
 - When extending `batch-inputs.md`, add the ingress comparison table and `## CLI batch submit` examples to both trees together; guard new CLI markers in `TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown` and `cli_docs_smoke_test.go` `batch-inputs` topic markers.
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
+- Factory CLI Wire maintainer workflow is documented in `docs/internal/development/factory-cli-wire-composition.md` with a short section in `docs/internal/development/development.md`; regenerate with `go generate ./cmd/factory/composition/...`, commit `wire_gen.go`, never hand-edit generated output, and keep Wire confined to `cmd/factory/composition` (no `wireinject` or Wire struct tags in `pkg/service`, `pkg/api`, or `pkg/cli`).
+- CI stale Wire guard: `make factory-composition-smoke` runs `generate-factory-composition` twice then `scripts/check-factory-composition-drift.js` on `cmd/factory/composition/wire_gen.go`; wired into `verify-build-contracts`, `verify-pr`, and the CI Build/Lint/API job beside `api-smoke`.
 - When trimming `authoring-factories` after new topics land, point readers at `you docs mock-workers` and `you docs record-replay` and update `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` markers away from removed deep-dive strings.
 - Register `relationships` at `displayOrder` 28 immediately after `guards` (27); relationships content adapts `batch-inputs.md` relation sections and `parent-aware-fan-in.md` with `SPAWNED_BY` called out as runtime/template-only, not batch-authored.
 - Story 003 index assertions belong in `root_docs_test.go` and `cli_docs_smoke_test.go` immediately after `record-replay` lines; smoke topic tests can use `absent` for `../internal/development/...` paths when replacing packaged cross-links.
@@ -632,4 +634,22 @@
   - Patterns discovered: Wire needs `ProvideStartupLocalModelDomainPtr` because `ProvideRuntimeBuildService` mutates local-model domain state; `ProvideFactoryServiceCollaborators` should accept `*LocalModelDomain` after runtime build runs.
   - Gotchas encountered: Adding `factory_composition.go` trips `pkg-file-count` (15-file cap)—colocate wire exports in `factory_build.go` and use paired `backendsizecheck:ignore-file` / `pkgmaintcheck:ignore-file-lines` waivers until build helpers split out.
   - Useful context: `factorysave` and `hostedworkers` remain assembled inside `assembleFactoryService` (`wireFactorySaveCollaborator`, `buildHostedWorkersConfig`); stories 005–006 document regeneration and optional CI stale-gen guard.
+---
+
+## 2026-05-31T02:00:00Z - cmd-wire-composition-005
+- What was implemented: Added `docs/internal/development/factory-cli-wire-composition.md` covering Wire CLI install (`go install` and `go.mod` tool), `go generate ./cmd/factory/composition/...`, commit rules for `wire_gen.go`, and the `cmd/`-only / tag-free `pkg/` boundary; linked from a new Factory CLI Wire Composition section in `development.md` and the development-guide relevant-files inventory row.
+- Files changed: `docs/internal/development/factory-cli-wire-composition.md`, `docs/internal/development/development.md`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Mirror other maintainer deep-dives (`openapi-component-authoring.md`) as a focused `docs/internal/development/*.md` file plus a short procedural section in `development.md` for discoverability.
+  - Gotchas encountered: No PR exists on `ralph/cmd-wire-composition` yet—story 006 adds optional CI stale-gen guard before PR creation when all stories pass.
+  - Useful context: Commit `f9c0757e`; story 006 should add `make` or CI check that fails when `wire_gen.go` drifts after `go generate`.
+---
+
+## 2026-05-31T03:00:00Z - cmd-wire-composition-006
+- What was implemented: Added `make generate-factory-composition` and `make factory-composition-smoke` (double `go generate`, `scripts/check-factory-composition-drift.js`, composition tests); wired into `verify-build-contracts`, `ci-verify-build-contracts`, and CI Build/Lint/API; updated Wire maintainer docs and development-guide relevant-files inventory.
+- Files changed: `Makefile`, `Makefile-test`, `.github/workflows/ci.yml`, `scripts/check-factory-composition-drift.js`, `docs/internal/development/factory-cli-wire-composition.md`, `docs/internal/development/development.md`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Mirror `api-smoke` / `check-api-generated-drift.js` for Wire—dedicated drift script plus make target keeps CI and local `verify-pr` aligned without hand-editing `wire_gen.go`.
+  - Gotchas encountered: `go generate ./cmd/factory/composition/...` is idempotent on a clean tree; the drift check only fails when committed `wire_gen.go` lags `wire.go` or provider signatures.
+  - Useful context: All six PRD stories now pass; create PR `cmd-wire-composition` with `prd.json` description when pushing the code commit.
 ---
