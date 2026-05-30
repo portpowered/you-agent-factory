@@ -1,11 +1,10 @@
 import { expect, it } from "vitest";
 
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import {
   applyFactoryGraphPendingEdits,
-  buildFactoryGraphSaveInput,
   buildFactoryGraphState,
-  createEmptyFactoryGraphDraft,
-} from "../public";
+} from "./factory-graph-operations";
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 
 it("projects draft-applied topology while save validation blocks missing worker assignments", () => {
@@ -48,7 +47,7 @@ it("projects draft-applied topology while save validation blocks missing worker 
     "worker-assignment:worker:writer->workstation:draft",
   );
 
-  const saveInput = buildFactoryGraphSaveInput({
+  const saveInput = applyFactoryGraphPendingEdits({
     baseFactoryDefinition,
     draft,
   });

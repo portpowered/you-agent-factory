@@ -1,14 +1,53 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing factory-graph removal coverage stayed intact during feature-root migration.
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
+import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
+import {
+  createEmptyFactoryGraphDraft,
+  edgeChangeId,
+  type FactoryGraphDraft,
+  type FactoryGraphDraftEdgeChange,
+  type FactoryGraphEdge,
+} from "./factory-graph-draft-types";
 import {
   applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
-  buildPendingFactoryDefinition,
-  collectPendingRemovalEdgeIds,
   collectPendingRemovalNodeIds,
-  createEmptyFactoryGraphDraft,
-} from "../public";
+} from "./factory-graph-editor-removals";
+
+function matchesExplicitEdgeRemoval(
+  edge: FactoryGraphEdge,
+  removals: FactoryGraphDraftEdgeChange[],
+) {
+  return removals.some((removal) => edgeChangeId(removal) === edge.id);
+}
+
+function collectPendingRemovalEdgeIds(
+  baseFactoryDefinition: CanonicalFactoryDefinition,
+  draft: FactoryGraphDraft,
+): Set<string> {
+  const pendingNodeIds = collectPendingRemovalNodeIds(
+    baseFactoryDefinition,
+    draft,
+  );
+  const pendingEdgeIds = new Set<string>();
+  const baseTopology = buildFactoryGraphTopologyFromDefinition(
+    baseFactoryDefinition,
+  );
+
+  for (const edge of baseTopology.edges) {
+    if (
+      pendingNodeIds.has(edge.sourceId) ||
+      pendingNodeIds.has(edge.targetId) ||
+      matchesExplicitEdgeRemoval(edge, draft.edgeChanges.removals)
+    ) {
+      pendingEdgeIds.add(edge.id);
+    }
+  }
+
+  return pendingEdgeIds;
+}
 
 const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
