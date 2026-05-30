@@ -73,6 +73,11 @@ func NewRootCommand() *cobra.Command {
 			"it prepares ./factory when needed, keeps the runtime alive in continuous mode, " +
 			"watches factory/inputs/task/default for Markdown or JSON task files, and reports " +
 			"the local dashboard at the first available port, preferring http://localhost:7437/dashboard/ui.\n\n" +
+			"Global --server selects the factory API base URI for HTTP client commands (default " +
+			cliserver.DefaultBaseURI + "); you run binds locally to the host and port encoded in --server. " +
+			"Global --json emits structured JSON on stdout for supported commands while diagnostics remain on stderr. " +
+			"Place both flags before the subcommand (for example, " + cliBinaryName +
+			" --server http://localhost:9090 --json factory query).\n\n" +
 			"Default command output is customer-facing. Use --verbose for concise troubleshooting context; " +
 			"--debug enables lower-level diagnostics where supported and implies --verbose. Diagnostics " +
 			"use stderr so JSON stdout remains parseable, and must not include full prompts, " +
@@ -155,7 +160,7 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 			"  delete  remove an unused named factory from disk\n\n" +
 			"Use query against a running service. Use list, save, update, and delete for on-disk " +
 			"named factories under --dir (default factory/). Live save with no name argument uses " +
-			"--port and --session like query.",
+			"global --server and --session like query.",
 		Example: "  # Show the active factory from the running service.\n" +
 			"  " + cliBinaryName + " factory query\n\n" +
 			"  # List persisted named factories and which one is current.\n" +
@@ -220,7 +225,7 @@ func newFactoryUpdateFromFileCommand(globals *cliGlobalOptions, _ *cliDiagnostic
 		Example: "  # Replace an existing named factory from a config file.\n" +
 			"  " + cliBinaryName + " factory update staging --from ./factory.json\n\n" +
 			"  # Emit structured confirmation for scripting.\n" +
-			"  " + cliBinaryName + " factory update staging --from ./factory.json --json",
+			"  " + cliBinaryName + " --json factory update staging --from ./factory.json",
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -255,7 +260,7 @@ func newFactorySaveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 			"  # Persist the live current factory from the running service.\n" +
 			"  " + cliBinaryName + " factory save\n\n" +
 			"  # Persist the live current factory for one session as JSON.\n" +
-			"  " + cliBinaryName + " factory save --session session-beta --json",
+			"  " + cliBinaryName + " --json factory save --session session-beta",
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		PreRunE: rejectDeprecatedPortFlag,
@@ -292,11 +297,11 @@ func newFactoryListCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) 
 		Long: "List persisted named factories stored under a factory root.\n\n" +
 			"By default the command writes a human-readable table with each factory name, " +
 			"on-disk directory, and whether it is selected by .current-factory. " +
-			"Use --dir to scope discovery to a different factory root and --json for scripting output.",
+			"Use --dir to scope discovery to a different factory root. Use global --json for scripting output.",
 		Example: "  # List named factories under the default factory root.\n" +
 			"  " + cliBinaryName + " factory list\n\n" +
 			"  # List factories from a custom root as JSON.\n" +
-			"  " + cliBinaryName + " factory list --dir my-factory --json",
+			"  " + cliBinaryName + " --json factory list --dir my-factory",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.JSON = globals.json
@@ -317,15 +322,15 @@ func newFactoryQueryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 		Short: "Show the current active factory",
 		Long: "Show the current active factory from a running you-agent-factory service.\n\n" +
 			"By default the command writes a human-readable table with the current factory name and " +
-			"runtime-identifying fields. Use --json for the API-shaped current-factory payload, and " +
-			"use --port to target the same server-port selection pattern as work list. Run " +
+			"runtime-identifying fields. Use global --json for the API-shaped current-factory payload, and " +
+			"use global --server to target the same factory API base URI as work list and submit. Run " +
 			cliBinaryName + " session list to discover live session ids when routing other commands with --session.",
-		Example: "  # Show the current factory from the running service on the default port.\n" +
+		Example: "  # Show the current factory from the default local service.\n" +
 			"  " + cliBinaryName + " factory query\n\n" +
 			"  # Emit API-shaped JSON for automation from the default local service.\n" +
-			"  " + cliBinaryName + " factory query --json\n\n" +
-			"  # Query a different service port when your runtime is not on the default port.\n" +
-			"  " + cliBinaryName + " factory query --port 9090 --json",
+			"  " + cliBinaryName + " --json factory query\n\n" +
+			"  # Query a factory API on a non-default host or port.\n" +
+			"  " + cliBinaryName + " --server http://localhost:9090 --json factory query",
 		SilenceUsage: true,
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {

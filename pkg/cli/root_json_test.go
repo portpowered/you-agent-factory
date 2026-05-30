@@ -30,6 +30,58 @@ func TestRootCommand_HelpDocumentsGlobalJSONFlag(t *testing.T) {
 	}
 }
 
+func TestRootCommand_HelpDocumentsGlobalServerFlag(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute root --help: %v", err)
+	}
+	help := out.String()
+	for _, want := range []string{
+		"--server",
+		"factory API base URI",
+		"Global --server",
+		"--server http://localhost:9090 --json factory query",
+	} {
+		if !bytes.Contains([]byte(help), []byte(want)) {
+			t.Fatalf("root help missing %q:\n%s", want, help)
+		}
+	}
+	if bytes.Contains([]byte(help), []byte("--port")) {
+		t.Fatalf("root help must not advertise --port:\n%s", help)
+	}
+}
+
+func TestFactoryQueryCommand_HelpUsesGlobalFlags(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "query", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory query --help: %v", err)
+	}
+	help := out.String()
+	for _, want := range []string{
+		"global --json",
+		"global --server",
+		"you --server http://localhost:9090 --json factory query",
+		"you --json factory query",
+	} {
+		if !bytes.Contains([]byte(help), []byte(want)) {
+			t.Fatalf("factory query help missing %q:\n%s", want, help)
+		}
+	}
+	if bytes.Contains([]byte(help), []byte("--port")) {
+		t.Fatalf("factory query help must not advertise --port:\n%s", help)
+	}
+}
+
 func TestSupportedCommands_DoNotRegisterLocalJSONFlag(t *testing.T) {
 	root := NewRootCommand()
 	for _, path := range [][]string{

@@ -40,6 +40,7 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"save",
 		"update",
 		"delete",
+		"global --server",
 		"you factory query",
 		"you factory list",
 		"you factory save staging --from ./factory.json",
@@ -50,5 +51,8 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		if !strings.Contains(help, want) {
 			t.Fatalf("factory help missing %q:\n%s", want, help)
 		}
+	}
+	if strings.Contains(help, "--port") {
+		t.Fatalf("factory help must not advertise --port:\n%s", help)
 	}
 }
