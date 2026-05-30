@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -282,45 +283,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := generatedPayloadToRawMessage(req.Payload)
-	if err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-	content, err := submitWorkContent(req)
-	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-			return
-		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-
-	submitReq := interfaces.SubmitRequest{
-		Name:                   strings.TrimSpace(req.Name),
-		WorkTypeID:             req.WorkTypeName,
-		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		TraceID:                factoryrequests.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
-		Content:                content,
-		Payload:                payload,
-		Tags:                   generatedStringMap(req.Tags),
-		Relations:              generatedSubmitRelations(req.Relations),
-	}
-	workRequest := factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
-
-	result, err := s.runtime.SubmitWorkRequest(r.Context(), workRequest)
-	if err != nil {
-		if message, ok := submitWorkBadRequestMessage(err); ok {
-			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-			return
-		}
-		s.logger.Error("submit work failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to submit work", "INTERNAL_ERROR")
-		return
-	}
-
-	s.writeJSON(w, http.StatusCreated, submitWorkResponseFromResult(result, factorysessions.DefaultSessionID))
+	s.submitWorkCore(w, r, req, factorysessions.DefaultSessionID, s.runtime.SubmitWorkRequest)
 }
 
 func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
@@ -344,19 +307,19 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
+	s.submitWorkCore(w, r, req, string(sessionID), func(ctx context.Context, workRequest interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+		return sessionRuntime.SubmitWorkRequestForSession(ctx, string(sessionID), workRequest)
+	})
+}
+
+func submitWorkRequestFromDecoded(req factoryapi.SubmitWorkJSONRequestBody) (interfaces.WorkRequest, error) {
 	payload, err := generatedPayloadToRawMessage(req.Payload)
 	if err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
+		return interfaces.WorkRequest{}, err
 	}
 	content, err := submitWorkContent(req)
 	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-			return
-		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
+		return interfaces.WorkRequest{}, err
 	}
 
 	submitReq := interfaces.SubmitRequest{
@@ -369,9 +332,27 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
 	}
-	workRequest := factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
+	return factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq}), nil
+}
 
-	result, err := sessionRuntime.SubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
+func (s *Server) submitWorkCore(
+	w http.ResponseWriter,
+	r *http.Request,
+	req factoryapi.SubmitWorkJSONRequestBody,
+	sessionID string,
+	submit func(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error),
+) {
+	workRequest, err := submitWorkRequestFromDecoded(req)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	result, err := submit(r.Context(), workRequest)
 	if err != nil {
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
@@ -381,12 +362,16 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 			return
 		}
-		s.logger.Error("submit work failed", zap.Error(err), zap.String("session_id", string(sessionID)))
+		logFields := []zap.Field{zap.Error(err)}
+		if sessionID != "" && sessionID != factorysessions.DefaultSessionID {
+			logFields = append(logFields, zap.String("session_id", sessionID))
+		}
+		s.logger.Error("submit work failed", logFields...)
 		s.writeError(w, http.StatusInternalServerError, "failed to submit work", "INTERNAL_ERROR")
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, submitWorkResponseFromResult(result, string(sessionID)))
+	s.writeJSON(w, http.StatusCreated, submitWorkResponseFromResult(result, sessionID))
 }
 
 func (s *Server) UpsertWorkRequest(w http.ResponseWriter, r *http.Request, requestID string) {
