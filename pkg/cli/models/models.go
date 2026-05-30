@@ -3,6 +3,7 @@ package models
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 )
 
@@ -264,6 +266,8 @@ func invokeModelMetadata(cfg invokeOptions) (factoryapi.ModelInvocationResponse,
 	return response, nil
 }
 
+// invokeModelAudio streams non-JSON audio on HTTP 200. It intentionally avoids
+// clihttp.PostJSON because success bodies are raw bytes, not JSON payloads.
 func invokeModelAudio(cfg invokeOptions) error {
 	mode := factoryapi.ModelInvocationResponseMode("AUDIO_STREAM")
 	request := factoryapi.ModelInvocationRequest{
@@ -376,26 +380,41 @@ func doModelsPOST(server, path string, payload any, out any, diagnostics request
 	}
 	diagnostics.RequestBytes = len(body)
 	logModelsRequest(diagnostics, endpoint)
+
 	client := &http.Client{Timeout: modelsRequestTimeout}
 	started := time.Now()
-	resp, err := client.Post(endpoint.String(), "application/json", bytes.NewReader(body))
+	resp, err := clihttp.PostJSON(
+		context.Background(),
+		client,
+		endpoint.String(),
+		bytes.NewReader(body),
+		out,
+		clihttp.RequestOptions{
+			Diagnostics:  diagnostics.Output,
+			Verbose:      diagnostics.Enabled,
+			EndpointPath: endpoint.Path,
+			LogLabel:     diagnostics.Command,
+		},
+	)
 	if err != nil {
 		logModelsResponse(diagnostics, endpoint, 0, time.Since(started), "error=unreachable")
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read models response: %w", err)
-	}
+
 	if resp.StatusCode != http.StatusOK {
+		responseBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("read models response: %w", readErr)
+		}
 		logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d", len(responseBody)))
 		return modelsRequestError(resp.StatusCode, responseBody)
 	}
-	if err := json.Unmarshal(responseBody, out); err != nil {
-		return fmt.Errorf("parse models response: %w", err)
+	responseBytes, err := modelsResponseBytes(out)
+	if err != nil {
+		return err
 	}
-	logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d %s", len(responseBody), diagnostics.summary()))
+	logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d %s", responseBytes, diagnostics.summary()))
 	return nil
 }
 
@@ -403,26 +422,46 @@ func doModelsGET(endpoint url.URL, out any, diagnostics requestDiagnostics) erro
 	logModelsRequest(diagnostics, endpoint)
 	client := &http.Client{Timeout: modelsRequestTimeout}
 	started := time.Now()
-	resp, err := client.Get(endpoint.String())
+	resp, err := clihttp.GetJSON(
+		context.Background(),
+		client,
+		endpoint.String(),
+		out,
+		clihttp.RequestOptions{
+			Diagnostics:  diagnostics.Output,
+			Verbose:      diagnostics.Enabled,
+			EndpointPath: endpoint.Path,
+			LogLabel:     diagnostics.Command,
+		},
+	)
 	if err != nil {
 		logModelsResponse(diagnostics, endpoint, 0, time.Since(started), "error=unreachable")
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read models response: %w", err)
-	}
 	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("read models response: %w", err)
+		}
 		logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d", len(body)))
 		return modelsRequestError(resp.StatusCode, body)
 	}
-	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("parse models response: %w", err)
+	responseBytes, err := modelsResponseBytes(out)
+	if err != nil {
+		return err
 	}
-	logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d %s", len(body), diagnostics.summary()))
+	logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d %s", responseBytes, diagnostics.summary()))
 	return nil
+}
+
+func modelsResponseBytes(out any) (int, error) {
+	body, err := json.Marshal(out)
+	if err != nil {
+		return 0, fmt.Errorf("marshal models response: %w", err)
+	}
+	return len(body), nil
 }
 
 func (diagnostics requestDiagnostics) summary() string {

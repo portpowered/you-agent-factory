@@ -2,6 +2,7 @@
 package factory
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
@@ -100,29 +102,47 @@ func queryCurrent(cfg queryCurrentOptions) (factoryapi.Factory, error) {
 
 	client := &http.Client{Timeout: queryCurrentRequestTimeout}
 	started := time.Now()
-	resp, err := client.Get(endpoint.String())
+	var result factoryapi.Factory
+	resp, err := clihttp.GetJSON(
+		context.Background(),
+		client,
+		endpoint.String(),
+		&result,
+		clihttp.RequestOptions{
+			Diagnostics:  cfg.Diagnostics,
+			Verbose:      cfg.Verbose,
+			EndpointPath: endpoint.Path,
+			LogLabel:     "factory query",
+		},
+	)
 	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, time.Since(started).Milliseconds())
 		return factoryapi.Factory{}, fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("read current factory response: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("read current factory response: %w", err)
+		}
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds(), len(body))
 		return factoryapi.Factory{}, queryCurrentError(resp.StatusCode, body)
 	}
 
-	var result factoryapi.Factory
-	if err := json.Unmarshal(body, &result); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("parse current factory response: %w", err)
+	responseBytes, err := currentFactoryResponseBytes(result)
+	if err != nil {
+		return factoryapi.Factory{}, err
 	}
-	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s status=%d durationMillis=%d responseBytes=%d factoryKind=%s factoryName=%q", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds(), len(body), currentFactoryKind(result), result.Name)
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s status=%d durationMillis=%d responseBytes=%d factoryKind=%s factoryName=%q", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds(), responseBytes, currentFactoryKind(result), result.Name)
 	return result, nil
+}
+
+func currentFactoryResponseBytes(result factoryapi.Factory) (int, error) {
+	body, err := json.Marshal(result)
+	if err != nil {
+		return 0, fmt.Errorf("marshal current factory response: %w", err)
+	}
+	return len(body), nil
 }
 
 // RenderCurrentFactory writes a concise human-readable current-factory result.

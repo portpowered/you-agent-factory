@@ -35,6 +35,12 @@ func PostJSON(ctx context.Context, client *http.Client, url string, body io.Read
 	return doJSON(ctx, client, http.MethodPost, url, body, dst, http.StatusOK, opts)
 }
 
+// PutJSON executes an HTTP PUT with an optional JSON body and decodes JSON into dst when the
+// response status is 200 OK.
+func PutJSON(ctx context.Context, client *http.Client, url string, body io.Reader, dst any, opts RequestOptions) (*http.Response, error) {
+	return doJSON(ctx, client, http.MethodPut, url, body, dst, http.StatusOK, opts)
+}
+
 func doJSON(
 	ctx context.Context,
 	client *http.Client,
@@ -50,7 +56,7 @@ func doJSON(
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
-	if method == http.MethodPost {
+	if method == http.MethodPost || method == http.MethodPut {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
