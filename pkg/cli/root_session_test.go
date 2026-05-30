@@ -96,6 +96,32 @@ func TestWorkListCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
 	}
 }
 
+func TestWorkMoveCommand_HelpDocumentsOperatorMove(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"work", "move", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work move --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"work move <work-id> <state-name>",
+		"you session list",
+		"--session",
+		"--request-id",
+		"active dispatch",
+		"409",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("work move help missing %q:\n%s", want, help)
+		}
+	}
+}
+
 func TestWorkShowCommand_HelpDocumentsVerifyFlow(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()
