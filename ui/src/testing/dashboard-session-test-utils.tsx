@@ -24,6 +24,9 @@ export function renderWithDashboardSessionTest(
 ): ReturnType<typeof render> {
   const queryClient = new QueryClient({
     defaultOptions: {
+      mutations: {
+        retry: false,
+      },
       queries: {
         gcTime: Infinity,
         retry: false,

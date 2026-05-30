@@ -10,7 +10,10 @@ import {
 } from "@testing-library/react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+import {
+  DashboardSessionTestProvider,
+  renderWithDashboardSessionTest,
+} from "../../../testing";
 import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
@@ -1536,25 +1539,7 @@ function renderSubmitWorkWidget(
   element: React.ReactElement,
   sessionOptions: { paused?: boolean; sessionID?: string | null } = {},
 ) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      mutations: {
-        retry: false,
-      },
-      queries: {
-        gcTime: Infinity,
-        retry: false,
-      },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <DashboardSessionTestProvider {...sessionOptions}>
-        {element}
-      </DashboardSessionTestProvider>
-    </QueryClientProvider>,
-  );
+  return renderWithDashboardSessionTest(element, sessionOptions);
 }
 
 function renderSubmitWorkWidgetWithStore(element: React.ReactElement) {

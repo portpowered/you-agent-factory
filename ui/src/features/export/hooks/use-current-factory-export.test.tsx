@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { getCurrentFactory, NamedFactoryAPIError, type FactoryValue } from "../../../api/named-factory";
-import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+import { wrapWithDashboardSessionTest } from "../../../testing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useCurrentFactoryExport } from "./use-current-factory-export";
 
@@ -169,9 +169,7 @@ function createQueryClientWrapper(
   return function QueryClientWrapper({ children }: { children: ReactNode }): ReactNode {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionTestProvider sessionID={sessionID}>
-          {children}
-        </DashboardSessionTestProvider>
+        {wrapWithDashboardSessionTest(children, { sessionID })}
       </QueryClientProvider>
     );
   };
