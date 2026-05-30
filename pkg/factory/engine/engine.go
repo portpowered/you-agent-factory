@@ -39,12 +39,13 @@ type FactoryEngine struct {
 	recordDispatch    func(interfaces.FactoryDispatchRecord)
 	recordCompletion  func(interfaces.FactoryCompletionRecord)
 	recordResponse    func(int, interfaces.WorkResult, interfaces.CompletedDispatch)
-	dispatchHandler   func(interfaces.WorkDispatch)
-	dispatchHook      factory.DispatchResultHook
-	resultHandler     func() // called when a result event is processed (e.g. decrement in-flight counter)
-	mu                sync.Mutex
-	transformer       *token_transformer.Transformer
-	acceptingSubmits  bool
+	dispatchHandler        func(interfaces.WorkDispatch)
+	dispatchHook           factory.DispatchResultHook
+	resultHandler          func() // called when a result event is processed (e.g. decrement in-flight counter)
+	automaticTicksPaused   func() bool
+	mu                     sync.Mutex
+	transformer            *token_transformer.Transformer
+	acceptingSubmits       bool
 }
 
 // NewFactoryEngine creates a new engine for the given net and marking.
@@ -467,6 +468,11 @@ func (e *FactoryEngine) RunningDispatches() map[string][]interfaces.MarkingMutat
 // mutated is true if any mutations were applied (another tick may be needed).
 // shouldTerminate is true if the TerminationCheck subsystem signaled completion.
 func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
+	if e.automaticTicksPaused != nil && e.automaticTicksPaused() {
+		e.logger.Debug("engine: skipping automatic tick while factory is paused")
+		return false, false, nil
+	}
+
 	rtSnapshot, mutated, keepAlive, err := e.beginTick(ctx)
 	if err != nil {
 		return false, false, err

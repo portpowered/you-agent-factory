@@ -94,8 +94,10 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 	engineOpts := buildRuntimeEngineOptions(cfg, logger, sharedTransformer, resultBuffer, eventHistory)
 	usePool := !cfg.IsInlineDispatch()
 	pool, dispatchHook, engineOpts := configureRuntimeDispatch(cfg, logger, resultBuffer, usePool, engineOpts)
-	eng := engine.NewFactoryEngine(cfg.GetNet(), marking, subs, engineOpts...)
-	return newFactoryImpl(cfg, eng, pool, logger, resultBuffer, dispatchHook, eventHistory, usePool), nil
+	impl := newFactoryImpl(cfg, nil, pool, logger, resultBuffer, dispatchHook, eventHistory, usePool)
+	engineOpts = append(engineOpts, engine.WithAutomaticTicksPaused(impl.automaticTicksPaused))
+	impl.engine = engine.NewFactoryEngine(cfg.GetNet(), marking, subs, engineOpts...)
+	return impl, nil
 }
 
 func buildRuntimeScheduler(cfg *factory.FactoryConfig) scheduler.Scheduler {
@@ -382,6 +384,12 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 	f.mu.Unlock()
 	f.recordStateChange(previousState, interfaces.FactoryStatePaused, "pause requested")
 	return nil
+}
+
+func (f *factoryImpl) automaticTicksPaused() bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.state == interfaces.FactoryStatePaused
 }
 
 // GetEngineStateSnapshot returns the aggregate observability snapshot for

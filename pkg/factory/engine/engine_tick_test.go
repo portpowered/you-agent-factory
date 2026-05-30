@@ -126,6 +126,83 @@ func TestSubsystemsSortedByTickGroup(t *testing.T) {
 	}
 }
 
+func TestTickWhileAutomaticTicksPaused_SkipsSubsystemExecution(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+
+	sub := &mockSubsystem{group: subsystems.Scheduler}
+	paused := true
+	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{sub}, WithAutomaticTicksPaused(func() bool {
+		return paused
+	}))
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+	if sub.callCount != 0 {
+		t.Fatalf("subsystem callCount = %d, want 0 while automatic ticks are paused", sub.callCount)
+	}
+
+	paused = false
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() after resume error: %v", err)
+	}
+	if sub.callCount != 1 {
+		t.Fatalf("subsystem callCount = %d, want 1 after automatic ticks resume", sub.callCount)
+	}
+}
+
+func TestTickWhileAutomaticTicksPaused_SkipsCascadeMutations(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	marking.AddToken(&interfaces.Token{
+		ID:      "parent-tok",
+		PlaceID: "task:failed",
+		Color:   interfaces.TokenColor{WorkID: "parent-work", WorkTypeID: "task"},
+		History: newTestTokenHistory(),
+	})
+	marking.AddToken(&interfaces.Token{
+		ID:      "child-tok",
+		PlaceID: "task:init",
+		Color: interfaces.TokenColor{
+			WorkID:     "child-work",
+			WorkTypeID: "task",
+			Relations: []interfaces.Relation{{
+				Type:          interfaces.RelationDependsOn,
+				TargetWorkID:  "parent-work",
+				RequiredState: "complete",
+			}},
+		},
+		History: newTestTokenHistory(),
+	})
+
+	engine := NewFactoryEngine(
+		n,
+		marking,
+		[]subsystems.Subsystem{subsystems.NewCascadingFailure(n, nil)},
+		WithAutomaticTicksPaused(func() bool { return true }),
+	)
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+	child, ok := engine.GetMarking().Tokens["child-tok"]
+	if !ok {
+		t.Fatal("child token missing from marking")
+	}
+	if child.PlaceID != "task:init" {
+		t.Fatalf("child place = %q, want task:init while paused (no cascade)", child.PlaceID)
+	}
+}
+
+func newTestTokenHistory() interfaces.TokenHistory {
+	return interfaces.TokenHistory{
+		TotalVisits:         make(map[string]int),
+		ConsecutiveFailures: make(map[string]int),
+		PlaceVisits:         make(map[string]int),
+	}
+}
+
 func TestMutationsAppliedBetweenSubsystems(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
