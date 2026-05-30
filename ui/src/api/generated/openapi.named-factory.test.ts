@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { components, operations, paths } from "./openapi";
 
 describe("generated factory OpenAPI types", () => {
-  it("exposes typed operations, payloads, and machine-readable error codes", () => {
-    const request: operations["createFactory"]["requestBody"]["content"]["application/json"] = {
+  it("exposes typed session factory save payloads and machine-readable error codes", () => {
+    const factory: components["schemas"]["Factory"] = {
       name: "customer-support-triage",
       workTypes: [
         {
@@ -45,10 +45,13 @@ describe("generated factory OpenAPI types", () => {
         },
       ],
     };
-    const created: operations["createFactory"]["responses"][201]["content"]["application/json"] =
-      request;
+    const saveRequest: operations["saveCurrentFactoryBySessionId"]["requestBody"]["content"]["application/json"] =
+      {
+        mode: "REPLACE_CURRENT",
+        factory,
+      };
     const current: paths["/factory-sessions/{session_id}/factory"]["get"]["responses"][200]["content"]["application/json"] =
-      created;
+      factory;
     const invalidName: components["schemas"]["ErrorResponse"]["code"] =
       "INVALID_FACTORY_NAME";
     const invalidFactory: components["schemas"]["ErrorResponse"]["code"] =
@@ -70,6 +73,8 @@ describe("generated factory OpenAPI types", () => {
         message: "factory session not found",
       };
 
+    expect(saveRequest.mode).toBe("REPLACE_CURRENT");
+    expect(saveRequest.factory.name).toBe("customer-support-triage");
     expect(current.name).toBe("customer-support-triage");
     expect(current.workstations?.[0]?.worker).toBe("planner");
     expect(currentNotFound.code).toBe("NOT_FOUND");

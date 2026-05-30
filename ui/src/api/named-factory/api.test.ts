@@ -1,100 +1,10 @@
-import { sessionFactoryOperatorErrorMessages } from "../session-factory";
 import {
   activateImportedFactoryForSession,
-  createFactory,
   getCurrentFactory,
   NamedFactoryAPIError,
 } from "./api";
 
 describe("factory API", () => {
-  it("posts the direct canonical factory payload to /factories and returns the canonical response", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          name: "Dropped Factory",
-          workTypes: [],
-          workers: [],
-          workstations: [],
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          status: 200,
-        },
-      ),
-    );
-
-    await expect(
-      createFactory({
-        name: "Dropped Factory",
-        workTypes: [],
-        workers: [],
-        workstations: [],
-      }, { fetch: fetchMock }),
-    ).resolves.toEqual({
-      name: "Dropped Factory",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-    });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/factories",
-      expect.objectContaining({
-        body: JSON.stringify({
-          name: "Dropped Factory",
-          workTypes: [],
-          workers: [],
-          workstations: [],
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      }),
-    );
-  });
-
-  it("maps structured activation failures into a typed API error", async () => {
-    await expect(
-      createFactory(
-        {
-          name: "Dropped Factory",
-          workTypes: [],
-          workers: [],
-          workstations: [],
-        },
-        {
-          fetch: vi.fn().mockResolvedValue(
-            new Response(
-              JSON.stringify({
-                code: "FACTORY_NOT_IDLE",
-                message: "Current factory runtime must be idle before activation.",
-              }),
-              {
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                status: 409,
-                statusText: "Conflict",
-              },
-            ),
-          ),
-        },
-      ),
-    ).rejects.toEqual(
-      new NamedFactoryAPIError("Current factory runtime must be idle before activation.", {
-        code: "FACTORY_NOT_IDLE",
-        status: 409,
-        statusText: "Conflict",
-        responseBody: {
-          code: "FACTORY_NOT_IDLE",
-          message: "Current factory runtime must be idle before activation.",
-        },
-      }),
-    );
-  });
-
   it("reads the current factory as a direct canonical factory payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -331,7 +241,7 @@ describe("factory API", () => {
       "/factory-sessions/session-2/factory",
       expect.objectContaining({
         method: "PUT",
-        body: expect.stringContaining('"name":"Scoped Factory"'),
+        body: expect.stringContaining('"mode":"REPLACE_CURRENT"'),
       }),
     );
   });
@@ -386,15 +296,18 @@ describe("factory API", () => {
         { fetch: fetchMock },
       ),
     ).rejects.toEqual(
-      new NamedFactoryAPIError(sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE, {
-        code: "FACTORY_NOT_IDLE",
-        status: 409,
-        statusText: "Conflict",
-        responseBody: {
+      new NamedFactoryAPIError(
+        "The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
+        {
           code: "FACTORY_NOT_IDLE",
-          message: "Current factory runtime must be idle before activation.",
+          status: 409,
+          statusText: "Conflict",
+          responseBody: {
+            code: "FACTORY_NOT_IDLE",
+            message: "Current factory runtime must be idle before activation.",
+          },
         },
-      }),
+      ),
     );
   });
 
@@ -448,15 +361,18 @@ describe("factory API", () => {
         { fetch: fetchMock },
       ),
     ).rejects.toEqual(
-      new NamedFactoryAPIError(sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION, {
-        code: "STALE_FACTORY_VERSION",
-        status: 409,
-        statusText: "Conflict",
-        responseBody: {
+      new NamedFactoryAPIError(
+        "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
+        {
           code: "STALE_FACTORY_VERSION",
-          message: "The editable definition is stale.",
+          status: 409,
+          statusText: "Conflict",
+          responseBody: {
+            code: "STALE_FACTORY_VERSION",
+            message: "The editable definition is stale.",
+          },
         },
-      }),
+      ),
     );
   });
 

@@ -44,10 +44,6 @@ export interface NamedFactoryAPIErrorDetails {
   statusText?: string;
 }
 
-export interface CreateFactoryOptions {
-  fetch?: typeof globalThis.fetch;
-}
-
 export interface GetCurrentFactoryOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
@@ -60,8 +56,6 @@ export interface ActivateImportedFactoryForSessionOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
 }
-
-const CREATE_NAMED_FACTORY_ENDPOINT = "/factories";
 
 export class NamedFactoryAPIError extends Error {
   public readonly code: NamedFactoryAPIErrorCode;
@@ -77,60 +71,6 @@ export class NamedFactoryAPIError extends Error {
     this.status = details.status;
     this.statusText = details.statusText;
   }
-}
-
-export async function createFactory(
-  value: FactoryValue,
-  options: CreateFactoryOptions = {},
-): Promise<FactoryValue> {
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
-
-  if (typeof fetchImplementation !== "function") {
-    throw new NamedFactoryAPIError("Named factory activation is unavailable in this environment.", {
-      code: "NETWORK_ERROR",
-    });
-  }
-
-  let response: Response;
-  try {
-    response = await fetchImplementation(factoryAPIURL(CREATE_NAMED_FACTORY_ENDPOINT), {
-      body: JSON.stringify(value),
-      headers: {
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-    });
-  } catch (error) {
-    throw new NamedFactoryAPIError("The dashboard could not reach the factory activation API.", {
-      code: "NETWORK_ERROR",
-      responseBody: error,
-    });
-  }
-
-  const responseBody = await readAPIResponseBody(response);
-  if (!response.ok) {
-    const errorBody = extractAPIErrorPayload(responseBody);
-    throw new NamedFactoryAPIError(
-      errorBody?.message ?? "The factory activation API rejected the request.",
-      {
-        code: normalizeNamedFactoryAPIErrorCode(errorBody?.code),
-        responseBody,
-        status: response.status,
-        statusText: response.statusText,
-      },
-    );
-  }
-
-  if (!isFactoryValue(responseBody)) {
-    throw new NamedFactoryAPIError("The factory activation API returned an invalid response.", {
-      code: "INTERNAL_ERROR",
-      responseBody,
-      status: response.status,
-      statusText: response.statusText,
-    });
-  }
-
-  return responseBody;
 }
 
 export async function getCurrentFactory(
