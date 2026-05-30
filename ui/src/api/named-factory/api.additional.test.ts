@@ -183,7 +183,7 @@ describe("named factory API error handling", () => {
       activateImportedFactoryForSession(canonicalFactory, { fetch: fetchMock }),
     ).rejects.toEqual(
       new NamedFactoryAPIError(
-        "The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
+        "Current factory runtime must be idle before activation.",
         {
           code: "FACTORY_NOT_IDLE",
           status: 409,
