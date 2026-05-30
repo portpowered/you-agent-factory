@@ -4,9 +4,10 @@ import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import {
-  staleFactoryVersionTarget,
-  workerFieldValidationTarget,
-} from "../../../../testing/factory-validation-target-fixtures";
+  mockFactoryDocumentSave,
+  mockPendingFactoryDocumentSave,
+} from "../../../../testing/factory-document-save-mocks";
+import { workerFieldValidationTarget } from "../../../../testing/factory-validation-target-fixtures";
 import * as currentFactoryFeature from "../../../current-factory-definition/public";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
@@ -20,11 +21,14 @@ describe("useSaveEditableWorkerConfiguration", () => {
   });
 
   it("uses localized fallback copy for unknown save errors", async () => {
-    const mutateAsync = vi.fn().mockRejectedValue("network unavailable");
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
-      isPending: false,
-      mutateAsync,
-    } as never);
+    const saveMutation = mockFactoryDocumentSave({
+      mode: "error",
+      rejectedError: "network unavailable",
+    });
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue(
+      saveMutation as never,
+    );
+    const mutateAsync = saveMutation.mutateAsync;
 
     const { result } = renderHook(
       () =>
@@ -69,26 +73,30 @@ describe("useSaveEditableWorkerConfiguration", () => {
   it("saves worker edits through the selected session current-factory route", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
     const markChangesSaved = vi.fn();
-    const mutateAsync = vi.fn().mockResolvedValue({
-      name: "Current Factory",
-      version: {
-        logical: "8",
-        physical: "2026-05-23T15:52:00.001Z",
-      },
-      workers: [
-        {
-          model: "gpt-5.5",
-          modelProvider: "CODEX",
-          name: "reviewer",
-          type: "MODEL_WORKER",
+    const saveMutation = mockFactoryDocumentSave({
+      mode: "success",
+      resolvedDocument: {
+        name: "Current Factory",
+        version: {
+          logical: "8",
+          physical: "2026-05-23T15:52:00.001Z",
         },
-      ],
-      workstations: [],
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CODEX",
+            name: "reviewer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [],
+        workTypes: [],
+      },
     });
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
-      isPending: false,
-      mutateAsync,
-    } as never);
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue(
+      saveMutation as never,
+    );
+    const mutateAsync = saveMutation.mutateAsync;
 
     const { result } = renderHook(
       () =>
@@ -131,12 +139,12 @@ describe("useSaveEditableWorkerConfiguration", () => {
   });
 
   it("ignores repeated save requests while the current save is still in flight", async () => {
-    const deferredSave = createDeferredPromise<unknown>();
-    const mutateAsync = vi.fn().mockReturnValue(deferredSave.promise);
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
-      isPending: false,
-      mutateAsync,
-    } as never);
+    const pendingSave = mockPendingFactoryDocumentSave();
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue(
+      pendingSave.saveMutation as never,
+    );
+    const mutateAsync = pendingSave.mutateAsync;
+    const deferredSave = pendingSave.deferred;
 
     const { result } = renderHook(
       () =>
@@ -165,6 +173,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
       },
       workers: [],
       workstations: [],
+      workTypes: [],
     });
 
     await act(async () => {
@@ -177,20 +186,13 @@ describe("useSaveEditableWorkerConfiguration", () => {
   });
 
   it("keeps stale-version save failures recoverable as warnings", async () => {
-    const mutateAsync = vi.fn().mockRejectedValue(
-      new CurrentFactoryDefinitionError(
-        "Current factory definition is stale. Refresh the graph before saving.",
-        {
-          code: "STALE_FACTORY_VERSION",
-          status: 409,
-          targets: [staleFactoryVersionTarget()],
-        },
-      ),
+    const saveMutation = mockFactoryDocumentSave({
+      mode: "error",
+      errorMode: "stale_version",
+    });
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue(
+      saveMutation as never,
     );
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
-      isPending: false,
-      mutateAsync,
-    } as never);
 
     const { result } = renderHook(
       () =>
@@ -432,13 +434,4 @@ function buildReadyEditableConfigurationState(overrides?: {
     status: "ready",
     validationErrors: {},
   };
-}
-
-function createDeferredPromise<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-
-  return { promise, resolve };
 }

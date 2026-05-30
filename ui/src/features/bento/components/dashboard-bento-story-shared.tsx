@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: Keeps the PRD-required top-level bento card catalog in one Storybook sidebar group.
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: Shared fixtures and render helpers for split bento card catalog stories.
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
@@ -12,12 +12,15 @@ import {
   currentSelectionWorkContentsDashboardSnapshot,
   semanticWorkflowDashboardSnapshot,
 } from "../../../components/dashboard/test-fixtures";
-import "../../../styles.css";
-import { expectNoPageHorizontalOverflow } from "../../../stories/dashboardStorySupport";
-import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
-import { CurrentSelectionWidget } from "../../current-selection/public";
+
+export {
+  currentSelectionWorkContentsDashboardSnapshot,
+  semanticWorkflowDashboardSnapshot,
+} from "../../../components/dashboard/test-fixtures";
+
 import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
+import { CurrentSelectionWidget } from "../../current-selection/public";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
@@ -31,17 +34,10 @@ import { TerminalWorkWidget } from "../../terminal-work/public";
 import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { TraceDrilldownWidget } from "../../trace-drilldown/public";
 import type { WorkChartModel } from "../../work-outcome/lib/trends";
-import {
-  expectWorkChartAxisLabelsVisible,
-  expectWorkChartCompactLegendContract,
-  expectWorkChartLegendClearOfCardTitle,
-} from "../../work-outcome/lib/work-chart-legend-story-contract";
 import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { WorkTotalsWidget } from "../../work-totals/public";
 import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
-import {
-  WorkflowActivityWidget,
-} from "../../workflow-activity/public";
+import { WorkflowActivityWidget } from "../../workflow-activity/public";
 import {
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
@@ -57,31 +53,33 @@ import {
 } from "./agent-bento";
 import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
 
-function expectBentoHeaderDragSurface(card: HTMLElement, title: string) {
+export function expectBentoHeaderDragSurface(card: HTMLElement, title: string) {
   const header = card.querySelector("header");
   expect(header).toBeTruthy();
   expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
   expect(header?.className).toContain("cursor-grab");
-  expect(within(card).queryByRole("button", { name: `Move ${title}` })).toBeNull();
+  expect(
+    within(card).queryByRole("button", { name: `Move ${title}` }),
+  ).toBeNull();
   expect(
     within(card).getByRole("heading", { level: 3, name: title }),
   ).toBeVisible();
 }
 
-const STORY_NOW = Date.parse("2026-04-08T12:05:00Z");
-const providerSessionID = "sess-bento-card-catalog";
-const providerSessionLoadingID = "sess-bento-card-loading";
-const providerSessionEmptyID = "sess-bento-card-empty";
-const providerSessionErrorID = "sess-bento-card-error";
+export const STORY_NOW = Date.parse("2026-04-08T12:05:00Z");
+export const providerSessionID = "sess-bento-card-catalog";
+export const providerSessionLoadingID = "sess-bento-card-loading";
+export const providerSessionEmptyID = "sess-bento-card-empty";
+export const providerSessionErrorID = "sess-bento-card-error";
 
-const populatedProviderSession = {
+export const populatedProviderSession = {
   dispatchID: "dispatch-review-active",
   id: providerSessionID,
   kind: "session_id",
   provider: "codex",
 } as const;
 
-const storyTrace: DashboardTrace = {
+export const storyTrace: DashboardTrace = {
   trace_id: "trace-active-story",
   work_ids: ["work-active-story"],
   transition_ids: ["plan", "implement"],
@@ -125,7 +123,7 @@ const storyTrace: DashboardTrace = {
   ],
 };
 
-const completedAttempt: DashboardProviderSessionAttempt = {
+export const completedAttempt: DashboardProviderSessionAttempt = {
   dispatch_id: "dispatch-complete-story",
   outcome: "ACCEPTED",
   provider_session: {
@@ -138,7 +136,7 @@ const completedAttempt: DashboardProviderSessionAttempt = {
   work_items: [{ display_name: "Done Story", work_id: "work-done-story" }],
 };
 
-const failedAttempt: DashboardProviderSessionAttempt = {
+export const failedAttempt: DashboardProviderSessionAttempt = {
   dispatch_id: "dispatch-repair-story",
   failure_message: "Provider returned a repair failure.",
   outcome: "FAILED",
@@ -152,7 +150,7 @@ const failedAttempt: DashboardProviderSessionAttempt = {
   work_items: [{ display_name: "Failed Story", work_id: "work-failed-story" }],
 };
 
-const workOutcomeModel: WorkChartModel = {
+export const workOutcomeModel: WorkChartModel = {
   delta: {
     completed: 4,
     failed: 2,
@@ -246,7 +244,7 @@ const workOutcomeModel: WorkChartModel = {
   ],
 };
 
-const emptyWorkOutcomeModel: WorkChartModel = {
+export const emptyWorkOutcomeModel: WorkChartModel = {
   delta: {
     completed: 0,
     failed: 0,
@@ -261,7 +259,7 @@ const emptyWorkOutcomeModel: WorkChartModel = {
   series: [],
 };
 
-const emptyDashboardSnapshot: DashboardSnapshot = {
+export const emptyDashboardSnapshot: DashboardSnapshot = {
   ...semanticWorkflowDashboardSnapshot,
   runtime: {
     ...semanticWorkflowDashboardSnapshot.runtime,
@@ -275,7 +273,7 @@ const emptyDashboardSnapshot: DashboardSnapshot = {
   },
 };
 
-const providerSessionFetchMock = {
+export const providerSessionFetchMock = {
   method: "GET",
   path: `/provider-sessions/detail?id=${providerSessionID}&kind=session_id&provider=codex`,
   response: {
@@ -348,13 +346,13 @@ function providerSessionRef(sessionID: string) {
   } as const;
 }
 
-const providerSessionLoadingFetchMock = {
+export const providerSessionLoadingFetchMock = {
   method: "GET",
   path: providerSessionDetailPath(providerSessionLoadingID),
   response: () => new Promise<never>(() => undefined),
 };
 
-const providerSessionEmptyFetchMock = {
+export const providerSessionEmptyFetchMock = {
   method: "GET",
   path: providerSessionDetailPath(providerSessionEmptyID),
   response: {
@@ -386,7 +384,7 @@ const providerSessionEmptyFetchMock = {
   },
 };
 
-const providerSessionErrorFetchMock = {
+export const providerSessionErrorFetchMock = {
   method: "GET",
   path: providerSessionDetailPath(providerSessionErrorID),
   response: {
@@ -399,7 +397,7 @@ const providerSessionErrorFetchMock = {
   },
 };
 
-const editableConfigurationPromptTemplateContract = {
+export const editableConfigurationPromptTemplateContract = {
   availableVariables: [
     {
       category: "ROOT",
@@ -424,7 +422,9 @@ const editableConfigurationPromptTemplateContract = {
   ],
 };
 
-function buildEditableConfigurationDocument(prompt = "Review the latest story changes before approval.") {
+export function buildEditableConfigurationDocument(
+  prompt = "Review the latest story changes before approval.",
+) {
   return {
     name: "Current Factory",
     version: {
@@ -458,7 +458,7 @@ function buildEditableConfigurationDocument(prompt = "Review the latest story ch
   };
 }
 
-function promptTemplateValidationResponse(init?: RequestInit) {
+export function promptTemplateValidationResponse(init?: RequestInit) {
   if (typeof init?.body !== "string") {
     return {
       diagnostics: [],
@@ -492,7 +492,7 @@ function promptTemplateValidationResponse(init?: RequestInit) {
   };
 }
 
-function layoutFor(
+export function layoutFor(
   widgetType: string,
   overrides: Partial<AgentBentoLayoutItem> = {},
 ): AgentBentoLayoutItem {
@@ -513,18 +513,16 @@ function layoutFor(
   };
 }
 
-function renderCardFrame({
+export function renderCardFrame({
   children,
   initialWidth = 960,
   layout,
-  sessionID,
 }: {
   children: ReactNode;
   initialWidth?: number;
   layout: AgentBentoLayoutItem;
-  sessionID?: string | null;
 }) {
-  const card = (
+  return (
     <div
       style={{ maxWidth: `${initialWidth}px`, padding: "1rem", width: "100%" }}
     >
@@ -542,21 +540,9 @@ function renderCardFrame({
       />
     </div>
   );
-
-  if (sessionID === undefined) {
-    return (
-      <DashboardSessionTestProvider>{card}</DashboardSessionTestProvider>
-    );
-  }
-
-  return (
-    <DashboardSessionTestProvider sessionID={sessionID}>
-      {card}
-    </DashboardSessionTestProvider>
-  );
 }
 
-function WorkflowGraphCardStory() {
+export function WorkflowGraphCardStory() {
   const currentSelection = useCurrentSelection({
     sessionID: DEFAULT_FACTORY_SESSION_ID,
     snapshot: semanticWorkflowDashboardSnapshot,
@@ -591,7 +577,7 @@ function WorkflowGraphCardStory() {
   });
 }
 
-function CurrentSelectionWorkContentsCardStory() {
+export function CurrentSelectionWorkContentsCardStory() {
   const currentSelection = useCurrentSelection({
     sessionID: DEFAULT_FACTORY_SESSION_ID,
     snapshot: currentSelectionWorkContentsDashboardSnapshot,
@@ -645,7 +631,7 @@ function CurrentSelectionWorkContentsCardStory() {
   });
 }
 
-function CurrentSelectionCardStory() {
+export function CurrentSelectionCardStory() {
   const currentSelection = useCurrentSelection({
     sessionID: DEFAULT_FACTORY_SESSION_ID,
     snapshot: semanticWorkflowDashboardSnapshot,
@@ -699,7 +685,7 @@ function CurrentSelectionCardStory() {
   });
 }
 
-function CurrentSelectionEditableConfigurationStory({
+export function CurrentSelectionEditableConfigurationStory({
   width,
 }: {
   width: number;
@@ -734,11 +720,24 @@ function CurrentSelectionEditableConfigurationStory({
 
   return (
     <div style={{ maxWidth: `${width}px`, padding: "1rem", width: "100%" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1rem" }}>
-        <button onClick={() => currentSelection.selectWorkstation("review")} type="button">
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.75rem",
+          marginBottom: "1rem",
+        }}
+      >
+        <button
+          onClick={() => currentSelection.selectWorkstation("review")}
+          type="button"
+        >
           Select Review workstation
         </button>
-        <button onClick={() => currentSelection.selectWorkstation("plan")} type="button">
+        <button
+          onClick={() => currentSelection.selectWorkstation("plan")}
+          type="button"
+        >
           Select Plan workstation
         </button>
       </div>
@@ -762,8 +761,12 @@ function CurrentSelectionEditableConfigurationStory({
                   providerSessionState.selectedProviderSessionKey
                 }
                 selectedTrace={storyTrace}
-                selectedWorkExecutionDetails={details.selectedWorkExecutionDetails}
-                selectedWorkRelationshipGraph={details.selectedWorkRelationshipGraph}
+                selectedWorkExecutionDetails={
+                  details.selectedWorkExecutionDetails
+                }
+                selectedWorkRelationshipGraph={
+                  details.selectedWorkRelationshipGraph
+                }
                 widgetId="current-selection-editable-configuration::story"
               />
             ),
@@ -785,7 +788,7 @@ function CurrentSelectionEditableConfigurationStory({
   );
 }
 
-async function expectEditableConfigurationStoryFlow(
+export async function expectEditableConfigurationStoryFlow(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
@@ -804,9 +807,7 @@ async function expectEditableConfigurationStoryFlow(
     name: "Prompt",
   });
   await expect(promptField).toBeVisible();
-  await expect(
-    within(card).getByText("Available variables"),
-  ).toBeVisible();
+  await expect(within(card).getByText("Available variables")).toBeVisible();
 
   await userEvent.click(promptField, { pointerEventsCheck: 0 });
   await userEvent.keyboard("{Control>}{KeyA}{/Control}");
@@ -837,7 +838,9 @@ async function expectEditableConfigurationStoryFlow(
     within(card).getByRole("button", { name: "Save changes" }),
   ).toBeDisabled();
   expect(
-    within(card).queryByDisplayValue("Use {{ .WorkID }} for browser verification."),
+    within(card).queryByDisplayValue(
+      "Use {{ .WorkID }} for browser verification.",
+    ),
   ).toBeNull();
 
   await userEvent.click(
@@ -854,7 +857,7 @@ async function expectEditableConfigurationStoryFlow(
   ).toHaveValue("Review the latest story changes before approval.");
 }
 
-function InlineAddWidgetCardStory() {
+export function InlineAddWidgetCardStory() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedWidgetType, setSelectedWidgetType] =
     useState<DashboardWidgetPickerWidgetType | null>(null);
@@ -888,7 +891,7 @@ function InlineAddWidgetCardStory() {
   );
 }
 
-function SubmitWorkInteractiveStory() {
+export function SubmitWorkInteractiveStory() {
   const [draft, setDraft] = useState<SubmitWorkDraft>({
     items: [
       {
@@ -976,7 +979,7 @@ function SubmitWorkInteractiveStory() {
   });
 }
 
-function TraceDrilldownInteractiveStory() {
+export function TraceDrilldownInteractiveStory() {
   const [selectedWorkID, setSelectedWorkID] = useState<string | null>(null);
 
   return (
@@ -1009,7 +1012,7 @@ function TraceDrilldownInteractiveStory() {
   );
 }
 
-function renderProviderSessionStateCard({
+export function renderProviderSessionStateCard({
   fetchMock,
   sessionID,
 }: {
@@ -1040,7 +1043,7 @@ function renderProviderSessionStateCard({
   };
 }
 
-function renderTraceStateCard(
+export function renderTraceStateCard(
   state: ReturnType<typeof useTraceDrilldown>["traceGridState"],
 ) {
   return renderCardFrame({
@@ -1058,7 +1061,7 @@ function renderTraceStateCard(
   });
 }
 
-function renderWorkOutcomeStateCard({
+export function renderWorkOutcomeStateCard({
   chartState,
   model,
   storyID,
@@ -1087,7 +1090,7 @@ function renderWorkOutcomeStateCard({
   });
 }
 
-function renderSubmitWorkStatusCard({
+export function renderSubmitWorkStatusCard({
   isSubmitting = false,
   status,
   storyID,
@@ -1399,7 +1402,11 @@ function responsiveCatalogDetailCards({
   ];
 }
 
-function HeaderConsistencyStory({ initialWidth }: { initialWidth: number }) {
+export function HeaderConsistencyStory({
+  initialWidth,
+}: {
+  initialWidth: number;
+}) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const layout: AgentBentoLayoutItem[] = [
     layoutFor(DASHBOARD_WIDGET_IDS.workTotals, {
@@ -1433,7 +1440,9 @@ function HeaderConsistencyStory({ initialWidth }: { initialWidth: number }) {
   ];
 
   return (
-    <div style={{ maxWidth: `${initialWidth}px`, padding: "1rem", width: "100%" }}>
+    <div
+      style={{ maxWidth: `${initialWidth}px`, padding: "1rem", width: "100%" }}
+    >
       <AgentBentoLayout
         cards={[
           {
@@ -1458,7 +1467,9 @@ function HeaderConsistencyStory({ initialWidth }: { initialWidth: number }) {
               <InlineAddWidgetCard
                 onPickerOpenChange={setPickerOpen}
                 onSelectWidget={() => undefined}
-                pickerAvailability={getDashboardWidgetPickerAvailability(layout)}
+                pickerAvailability={getDashboardWidgetPickerAvailability(
+                  layout,
+                )}
                 pickerOpen={pickerOpen}
               />
             ),
@@ -1512,7 +1523,7 @@ function HeaderConsistencyStory({ initialWidth }: { initialWidth: number }) {
   );
 }
 
-function DashboardBentoResponsiveStory() {
+export function DashboardBentoResponsiveStory() {
   const currentSelection = useCurrentSelection({
     sessionID: DEFAULT_FACTORY_SESSION_ID,
     snapshot: semanticWorkflowDashboardSnapshot,
@@ -1564,882 +1575,3 @@ function DashboardBentoResponsiveStory() {
     </div>
   );
 }
-
-export default {
-  title: "you-agent-factory/Dashboard/Bento Cards",
-  tags: ["test"],
-};
-
-export const WorkTotals = {
-  render: () =>
-    renderCardFrame({
-      children: (
-        <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />
-      ),
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.workTotals, {
-        h: 2,
-        id: "work-totals::story",
-        w: 6,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Work totals" });
-
-    await expect(within(card).getByText("Completed")).toBeVisible();
-    expectBentoHeaderDragSurface(card, "Work totals");
-  },
-};
-
-export const WorkTotalsEmpty = {
-  render: () =>
-    renderCardFrame({
-      children: <WorkTotalsWidget snapshot={emptyDashboardSnapshot} />,
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.workTotals, {
-        h: 2,
-        id: "work-totals-empty::story",
-        w: 6,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Work totals" });
-
-    await expect(within(card).getByLabelText("Completed: 0")).toBeVisible();
-    await expect(within(card).getByLabelText("Failed: 0")).toBeVisible();
-  },
-};
-
-export const WorkflowGraph = {
-  render: () => <WorkflowGraphCardStory />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Factory graph" });
-
-    await expect(
-      await within(card).findByRole("button", {
-        name: "Select Implement workstation",
-      }),
-    ).toBeVisible();
-    await userEvent.click(
-      await within(card).findByRole("button", {
-        name: "Select Implement workstation",
-      }),
-    );
-    await expect(
-      await within(card).findByRole("button", {
-        name: "Select Implement workstation",
-      }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expectBentoHeaderDragSurface(card, "Factory graph");
-  },
-};
-
-export const CurrentSelection = {
-  render: () => <CurrentSelectionCardStory />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Current selection",
-    });
-
-    await expect(within(card).getByText("Implement")).toBeVisible();
-    expectBentoHeaderDragSurface(card, "Current selection");
-  },
-};
-
-export const CurrentSelectionWorkContents = {
-  render: () => <CurrentSelectionWorkContentsCardStory />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Current selection",
-    });
-    const workContents = await within(card).findByRole("region", {
-      name: "Work contents",
-    });
-
-    await expect(
-      within(workContents).getByText("Primary selected-work payload text"),
-    ).toBeVisible();
-    await expect(within(workContents).getByText(/"priority": 1/)).toBeVisible();
-    await expect(
-      within(workContents).getByText("Image: screenshot.png"),
-    ).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: "Move Current selection" }),
-    ).toBeVisible();
-  },
-};
-
-export const CurrentSelectionEditableConfigurationDesktop = {
-  parameters: {
-    dashboardApi: {
-      fetchMocks: [
-        {
-          method: "GET",
-          path: "/factory-sessions/~default/factory",
-          response: {
-            body: buildEditableConfigurationDocument(),
-          },
-        },
-        {
-          method: "GET",
-          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract",
-          response: {
-            body: editableConfigurationPromptTemplateContract,
-          },
-        },
-        {
-          method: "POST",
-          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
-          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: promptTemplateValidationResponse(init),
-          }),
-        },
-      ],
-      snapshot: semanticWorkflowDashboardSnapshot,
-    },
-  },
-  render: () => <CurrentSelectionEditableConfigurationStory width={960} />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectEditableConfigurationStoryFlow(canvasElement);
-  },
-};
-
-export const CurrentSelectionEditableConfigurationNarrow = {
-  parameters: {
-    dashboardApi: {
-      fetchMocks: [
-        {
-          method: "GET",
-          path: "/factory-sessions/~default/factory",
-          response: {
-            body: buildEditableConfigurationDocument(),
-          },
-        },
-        {
-          method: "GET",
-          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract",
-          response: {
-            body: editableConfigurationPromptTemplateContract,
-          },
-        },
-        {
-          method: "POST",
-          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
-          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: promptTemplateValidationResponse(init),
-          }),
-        },
-      ],
-      snapshot: semanticWorkflowDashboardSnapshot,
-    },
-  },
-  render: () => <CurrentSelectionEditableConfigurationStory width={360} />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectEditableConfigurationStoryFlow(canvasElement);
-    expectNoPageHorizontalOverflow(canvasElement);
-  },
-};
-
-export const ProviderSession = {
-  parameters: {
-    dashboardApi: {
-      fetchMocks: [providerSessionFetchMock],
-      snapshot: semanticWorkflowDashboardSnapshot,
-    },
-  },
-  render: () =>
-    renderCardFrame({
-      children: (
-        <ProviderSessionWidget
-          selectedProviderSession={populatedProviderSession}
-          widgetId="provider-session::story"
-        />
-      ),
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.providerSession, {
-        h: 6,
-        id: "provider-session::story",
-        w: 6,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Provider session",
-    });
-
-    await expect(await within(card).findByText("Transcript")).toBeVisible();
-    expectBentoHeaderDragSurface(card, "Provider session");
-  },
-};
-
-export const ProviderSessionLoading = {
-  ...renderProviderSessionStateCard({
-    fetchMock: providerSessionLoadingFetchMock,
-    sessionID: providerSessionLoadingID,
-  }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Provider session",
-    });
-
-    await expect(await within(card).findByRole("status")).toHaveTextContent(
-      "Loading session details...",
-    );
-  },
-};
-
-export const ProviderSessionEmpty = {
-  render: () =>
-    renderCardFrame({
-      children: (
-        <ProviderSessionWidget
-          selectedProviderSession={null}
-          widgetId="provider-session-empty::story"
-        />
-      ),
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.providerSession, {
-        h: 6,
-        id: "provider-session-empty::story",
-        w: 6,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Provider session",
-    });
-
-    await expect(
-      within(card).getByText(
-        "Select a provider session from work-item or workstation history to inspect session details.",
-      ),
-    ).toBeVisible();
-  },
-};
-
-export const ProviderSessionEmptyFile = {
-  ...renderProviderSessionStateCard({
-    fetchMock: providerSessionEmptyFetchMock,
-    sessionID: providerSessionEmptyID,
-  }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Provider session",
-    });
-
-    await waitFor(() => {
-      expect(within(card).getByRole("status")).toHaveTextContent(
-        "The selected session file did not contain any Codex event records.",
-      );
-    });
-  },
-};
-
-export const ProviderSessionError = {
-  ...renderProviderSessionStateCard({
-    fetchMock: providerSessionErrorFetchMock,
-    sessionID: providerSessionErrorID,
-  }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Provider session",
-    });
-
-    await expect(await within(card).findByRole("alert")).toHaveTextContent(
-      "Storybook provider-session failure",
-    );
-  },
-};
-
-export const TerminalWork = {
-  render: () =>
-    renderCardFrame({
-      children: (
-        <TerminalWorkWidget
-          completedItems={[
-            {
-              attempts: [completedAttempt],
-              label: "Done Story",
-              traceWorkID: "work-done-story",
-            },
-          ]}
-          failedItems={[
-            {
-              attempts: [failedAttempt],
-              label: "Failed Story",
-              traceWorkID: "work-failed-story",
-            },
-          ]}
-          onSelectItem={() => undefined}
-          selectedItem={{ label: "Failed Story", status: "failed" }}
-          widgetId="terminal-work::story"
-        />
-      ),
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.terminalWork, {
-        h: 5,
-        id: "terminal-work::story",
-        w: 5,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Completed and failed work",
-    });
-
-    await expect(
-      within(card).getByRole("button", { name: "Failed Story" }),
-    ).toBeVisible();
-    expectBentoHeaderDragSurface(card, "Completed and failed work");
-  },
-};
-
-export const TerminalWorkEmpty = {
-  render: () =>
-    renderCardFrame({
-      children: (
-        <TerminalWorkWidget
-          completedItems={[]}
-          failedItems={[]}
-          onSelectItem={() => undefined}
-          selectedItem={null}
-          widgetId="terminal-work-empty::story"
-        />
-      ),
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.terminalWork, {
-        h: 5,
-        id: "terminal-work-empty::story",
-        w: 5,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Completed and failed work",
-    });
-
-    await expect(
-      within(card).getByText("No completed work recorded yet."),
-    ).toBeVisible();
-    await expect(
-      within(card).getByText("No failed work recorded yet."),
-    ).toBeVisible();
-  },
-};
-
-export const WorkOutcomeChart = {
-  render: () =>
-    renderCardFrame({
-      children: (
-        <WorkOutcomeWidget
-          model={workOutcomeModel}
-          widgetId="work-outcome-chart::story"
-        />
-      ),
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.workOutcomeChart, {
-        h: 6,
-        id: "work-outcome-chart::story",
-        w: 6,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Work outcome chart",
-    });
-    const chart = within(card).getByRole("img", {
-      name: "Work outcome chart for Session",
-    });
-
-    await expect(chart).toBeVisible();
-    expectBentoHeaderDragSurface(card, "Work outcome chart");
-    expectWorkChartCompactLegendContract(chart);
-    expectWorkChartAxisLabelsVisible(chart);
-    expectWorkChartLegendClearOfCardTitle(card);
-  },
-};
-
-export const WorkOutcomeChartNarrow = {
-  render: () =>
-    renderCardFrame({
-      children: (
-        <WorkOutcomeWidget
-          model={workOutcomeModel}
-          widgetId="work-outcome-chart-narrow::story"
-        />
-      ),
-      initialWidth: 360,
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.workOutcomeChart, {
-        h: 6,
-        id: "work-outcome-chart-narrow::story",
-        w: 6,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Work outcome chart",
-    });
-    const chart = within(card).getByRole("img", {
-      name: "Work outcome chart for Session",
-    });
-
-    expectWorkChartCompactLegendContract(chart);
-    expectWorkChartAxisLabelsVisible(chart);
-    expectWorkChartLegendClearOfCardTitle(card);
-
-    const frame = canvasElement.firstElementChild;
-    if (!(frame instanceof HTMLElement)) {
-      throw new Error("expected catalog story frame");
-    }
-    expect(frame.getBoundingClientRect().width).toBeLessThanOrEqual(360);
-    expect(frame.scrollWidth <= frame.clientWidth + 1).toBe(true);
-  },
-};
-
-export const WorkOutcomeChartLoading = {
-  render: () =>
-    renderWorkOutcomeStateCard({
-      chartState: { status: "loading" },
-      model: emptyWorkOutcomeModel,
-      storyID: "work-outcome-chart-loading::story",
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Work outcome chart",
-    });
-
-    await expect(await within(card).findByRole("status")).toHaveTextContent(
-      "Loading work outcome samples",
-    );
-  },
-};
-
-export const WorkOutcomeChartEmpty = {
-  render: () =>
-    renderWorkOutcomeStateCard({
-      model: emptyWorkOutcomeModel,
-      storyID: "work-outcome-chart-empty::story",
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Work outcome chart",
-    });
-
-    await expect(await within(card).findByRole("status")).toHaveTextContent(
-      "No work outcome samples",
-    );
-  },
-};
-
-export const WorkOutcomeChartError = {
-  render: () =>
-    renderWorkOutcomeStateCard({
-      chartState: { status: "error" },
-      model: emptyWorkOutcomeModel,
-      storyID: "work-outcome-chart-error::story",
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Work outcome chart",
-    });
-
-    await expect(await within(card).findByRole("alert")).toHaveTextContent(
-      "Work outcome chart unavailable",
-    );
-  },
-};
-
-export const SubmitWork = {
-  render: () =>
-    renderCardFrame({
-      children: (
-        <SubmitWorkWidget
-          submitWorkTypes={
-            semanticWorkflowDashboardSnapshot.topology.submit_work_types
-          }
-        />
-      ),
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.submitWork, {
-        h: 6,
-        id: "submit-work::story",
-        w: 5,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Submit work" });
-
-    await expect(
-      within(card).getByRole("combobox", { name: "Work type" }),
-    ).toBeVisible();
-    expectBentoHeaderDragSurface(card, "Submit work");
-  },
-};
-
-export const SubmitWorkSessionBeta = {
-  render: () =>
-    renderCardFrame({
-      children: (
-        <SubmitWorkWidget
-          submitWorkTypes={
-            semanticWorkflowDashboardSnapshot.topology.submit_work_types
-          }
-        />
-      ),
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.submitWork, {
-        h: 6,
-        id: "submit-work-session-beta::story",
-        w: 5,
-      }),
-      sessionID: "session-beta",
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Submit work" });
-
-    await expect(
-      within(card).getByRole("combobox", { name: "Work type" }),
-    ).toBeVisible();
-    expectBentoHeaderDragSurface(card, "Submit work");
-  },
-};
-
-export const SubmitWorkInteractive = {
-  render: () => <SubmitWorkInteractiveStory />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Submit work" });
-
-    await expect(
-      within(card).getByRole("button", {
-        name: "Remove Submit work widget from dashboard",
-      }),
-    ).toBeVisible();
-    await userEvent.selectOptions(
-      within(card).getByRole("combobox", { name: "Work type" }),
-      "story",
-    );
-    await userEvent.type(
-      within(card).getByRole("textbox", { name: "Request name" }),
-      "Interactive coverage",
-    );
-    await userEvent.type(
-      within(card).getByRole("textbox", { name: "Text item 1" }),
-      "Verify the bento card interaction path.",
-    );
-    await userEvent.click(
-      within(card).getByRole("button", { name: "Submit work" }),
-    );
-
-    await expect(await within(card).findByRole("status")).toHaveTextContent(
-      "Submitted Interactive coverage as story.",
-    );
-  },
-};
-
-export const SubmitWorkEmpty = {
-  render: () =>
-    renderSubmitWorkStatusCard({
-      status: "empty",
-      storyID: "submit-work-empty::story",
-      submitWorkTypeNames: [],
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Submit work" });
-
-    await expect(
-      within(card).getByText(
-        "No work types are available to submit right now.",
-      ),
-    ).toBeVisible();
-    await expect(
-      within(card).getByRole("button", { name: "Submit work" }),
-    ).toBeDisabled();
-  },
-};
-
-export const SubmitWorkSubmitting = {
-  render: () =>
-    renderSubmitWorkStatusCard({
-      isSubmitting: true,
-      status: "submitting",
-      storyID: "submit-work-submitting::story",
-      submitWorkTypeNames: ["story"],
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Submit work" });
-
-    await expect(
-      within(card).getByRole("button", { name: "Submitting..." }),
-    ).toHaveAttribute("aria-busy", "true");
-    await expect(
-      within(card).getByText("Submitting work to the selected factory."),
-    ).toBeVisible();
-  },
-};
-
-export const SubmitWorkError = {
-  render: () =>
-    renderSubmitWorkStatusCard({
-      status: "error",
-      storyID: "submit-work-error::story",
-      submitWorkTypeNames: ["story"],
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Submit work" });
-
-    await expect(await within(card).findByRole("alert")).toHaveTextContent(
-      "Submission failed because the factory rejected the request.",
-    );
-    await expect(
-      within(card).getByText("At least one text or file item is required."),
-    ).toBeVisible();
-  },
-};
-
-export const TraceDrilldown = {
-  render: () =>
-    renderCardFrame({
-      children: (
-        <TraceDrilldownWidget
-          state={
-            {
-              status: "ready",
-              trace: storyTrace,
-            } satisfies ReturnType<typeof useTraceDrilldown>["traceGridState"]
-          }
-          widgetId="trace::story"
-        />
-      ),
-      layout: layoutFor(DASHBOARD_WIDGET_IDS.trace, {
-        h: 8,
-        id: "trace::story",
-        w: 8,
-      }),
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Trace drill-down",
-    });
-
-    await expect(within(card).getByText("trace-active-story")).toBeVisible();
-    expectBentoHeaderDragSurface(card, "Trace drill-down");
-  },
-};
-
-export const TraceDrilldownInteractive = {
-  render: () => <TraceDrilldownInteractiveStory />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Trace drill-down",
-    });
-
-    await userEvent.click(within(card).getByRole("button", { name: "Expand" }));
-    await userEvent.click(
-      within(card).getAllByRole("button", { name: /Active Story/ })[0],
-    );
-
-    await expect(await canvas.findByRole("status")).toHaveTextContent(
-      "Selected trace work item: work-active-story",
-    );
-  },
-};
-
-export const TraceDrilldownLoading = {
-  render: () =>
-    renderTraceStateCard({
-      status: "loading",
-      workID: "work-loading-story",
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Trace drill-down",
-    });
-
-    await expect(within(card).getByText("Loading trace")).toBeVisible();
-    await expect(
-      within(card).getByText(
-        "Reconstructing dispatch history for work-loading-story.",
-      ),
-    ).toBeVisible();
-  },
-};
-
-export const TraceDrilldownEmpty = {
-  render: () =>
-    renderTraceStateCard({
-      status: "empty",
-      workID: "work-empty-story",
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Trace drill-down",
-    });
-
-    await expect(
-      within(card).getByText("Trace history unavailable"),
-    ).toBeVisible();
-    await expect(
-      within(card).getByText(
-        "No retained dispatch history is currently available for this work item.",
-      ),
-    ).toBeVisible();
-  },
-};
-
-export const TraceDrilldownError = {
-  render: () =>
-    renderTraceStateCard({
-      message: "Trace history request failed.",
-      status: "error",
-    }),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Trace drill-down",
-    });
-
-    await expect(within(card).getByText("Trace lookup failed")).toBeVisible();
-    await expect(
-      within(card).getByText("Trace history request failed."),
-    ).toBeVisible();
-  },
-};
-
-export const InlineAddWidget = {
-  render: () => <InlineAddWidgetCardStory />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const page = within(canvasElement.ownerDocument.body);
-    const card = await canvas.findByRole("article", { name: "Add widget" });
-    const addWidgetButton = within(card).getByRole("button", {
-      name: "Add widget",
-    });
-
-    await expect(addWidgetButton).toBeVisible();
-    addWidgetButton.focus();
-    await expect(addWidgetButton).toHaveFocus();
-    await userEvent.keyboard("{Enter}");
-    const dialog = await page.findByRole("dialog", {
-      name: "Add dashboard widget",
-    });
-
-    await expect(dialog).toBeVisible();
-    await expect(
-      within(dialog).getByRole("button", {
-        name: "Browse widgets: Current selection",
-      }),
-    ).toBeDisabled();
-    await userEvent.click(
-      within(dialog).getByRole("button", {
-        name: "Browse widgets: Work totals",
-      }),
-    );
-    await expect(await canvas.findByRole("status")).toHaveTextContent(
-      "Selected widget: work-totals",
-    );
-    expectBentoHeaderDragSurface(card, "Add widget");
-  },
-};
-
-export const HeaderConsistencyVerification = {
-  parameters: {
-    dashboardApi: {
-      fetchMocks: [providerSessionFetchMock],
-      snapshot: semanticWorkflowDashboardSnapshot,
-    },
-  },
-  render: () => <HeaderConsistencyStory initialWidth={1180} />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-
-    for (const cardName of [
-      "Work totals",
-      "Provider session",
-      "Add widget",
-      "Submit work",
-    ] as const) {
-      const card = await canvas.findByRole("article", { name: cardName });
-      expectBentoHeaderDragSurface(card, cardName);
-    }
-
-    const submitWorkCard = await canvas.findByRole("article", {
-      name: "Submit work",
-    });
-    await expect(
-      within(submitWorkCard).getByRole("button", {
-        name: "Remove Submit work widget from dashboard",
-      }),
-    ).toBeVisible();
-  },
-};
-
-export const ResponsiveVerification = {
-  parameters: {
-    dashboardApi: {
-      fetchMocks: [providerSessionFetchMock],
-      snapshot: semanticWorkflowDashboardSnapshot,
-    },
-  },
-  render: () => <DashboardBentoResponsiveStory />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-
-    await expect(
-      await canvas.findByRole("article", { name: "Work totals" }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("article", { name: "Factory graph" }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("article", { name: "Current selection" }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("article", { name: "Provider session" }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("article", { name: "Submit work" }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("article", { name: "Work outcome chart" }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("article", { name: "Trace drill-down" }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("article", {
-        name: "Completed and failed work",
-      }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("article", { name: "Add widget" }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("button", { name: "Submit work" }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("img", {
-        name: "Work outcome chart for Session",
-      }),
-    ).toBeVisible();
-    await expect(await canvas.findByText("trace-active-story")).toBeVisible();
-    await expect(await canvas.findByText("Transcript")).toBeVisible();
-  },
-};

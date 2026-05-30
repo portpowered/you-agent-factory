@@ -15,7 +15,10 @@ const uiDir = path.dirname(sourceDir);
 const sourceExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const skippedFileSuffixes = [".test.js", ".test.jsx", ".test.ts", ".test.tsx", ".stories.tsx"];
 const skippedDirectoryNames = new Set(["generated"]);
-const skippedPathFragments = [`${path.sep}api${path.sep}generated${path.sep}`];
+const skippedPathFragments = [
+  `${path.sep}api${path.sep}generated${path.sep}`,
+  `${path.sep}features${path.sep}bento${path.sep}components${path.sep}dashboard-bento-story-shared.tsx`,
+];
 const allowlistOverride = process.env.AGENT_FACTORY_UI_BUTTON_USAGE_ALLOWLIST;
 
 function getConfiguredAllowlist() {
