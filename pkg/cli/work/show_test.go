@@ -3,7 +3,6 @@ package work
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,17 +13,19 @@ import (
 
 func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/factory-sessions/~default/work/tok-review-1" {
-			t.Fatalf("path = %q, want /factory-sessions/~default/work/tok-review-1", r.URL.Path)
+		if r.URL.Path != "/factory-sessions/~default/work/work-review-1" {
+			t.Fatalf("path = %q, want /factory-sessions/~default/work/work-review-1", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.TokenResponse{
-			Id:                     "tok-review-1",
-			PlaceId:                "story:review",
-			WorkId:                 "work-review-1",
-			WorkType:               "story",
-			Name:                   stringPtr("Review PRD"),
-			TraceId:                "trace-legacy",
+		if err := json.NewEncoder(w).Encode(factoryapi.Work{
+			Name:         "Review PRD",
+			WorkId:       stringPtr("work-review-1"),
+			WorkTypeName: stringPtr("story"),
+			State: &factoryapi.WorkState{
+				Name: "review",
+				Type: factoryapi.WorkStateTypePROCESSING,
+			},
+			TraceId:                stringPtr("trace-legacy"),
 			CurrentChainingTraceId: stringPtr("trace-chain-1"),
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -35,7 +36,7 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 	var out bytes.Buffer
 	err := Show(ShowConfig{
 		Server: serverBase(t, srv),
-		WorkID: "tok-review-1",
+		WorkID: "work-review-1",
 		Output: &out,
 	})
 	if err != nil {
@@ -43,13 +44,13 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 	}
 
 	want := "" +
-		"WORK ID:\twork-review-1\n" +
-		"NAME:\tReview PRD\n" +
-		"WORK TYPE:\tstory\n" +
-		"STATE NAME:\treview\n" +
-		"STATE TYPE:\tPROCESSING\n" +
-		"TRACE:\ttrace-chain-1\n" +
-		"RELATIONS:\tnone\n"
+		"Work ID:\twork-review-1\n" +
+		"Name:\tReview PRD\n" +
+		"Work type:\tstory\n" +
+		"State name:\treview\n" +
+		"State type:\tPROCESSING\n" +
+		"Trace:\ttrace-chain-1\n" +
+		"Relations:\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -58,13 +59,15 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 func TestShow_JSONOutputEmitsWorkObject(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.TokenResponse{
-			Id:       "tok-1",
-			PlaceId:  "story:init",
-			WorkId:   "work-1",
-			WorkType: "story",
-			Name:     stringPtr("Plan feature"),
-			TraceId:  "trace-1",
+		if err := json.NewEncoder(w).Encode(factoryapi.Work{
+			Name:         "Plan feature",
+			WorkId:       stringPtr("work-1"),
+			WorkTypeName: stringPtr("story"),
+			State: &factoryapi.WorkState{
+				Name: "init",
+				Type: factoryapi.WorkStateTypeINITIAL,
+			},
+			TraceId: stringPtr("trace-1"),
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -74,7 +77,7 @@ func TestShow_JSONOutputEmitsWorkObject(t *testing.T) {
 	var out bytes.Buffer
 	err := Show(ShowConfig{
 		Server: serverBase(t, srv),
-		WorkID: "tok-1",
+		WorkID: "work-1",
 		JSON:   true,
 		Output: &out,
 	})
@@ -103,7 +106,7 @@ func TestShow_NotFoundExitsWithClearError(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
 			Code:    factoryapi.NOTFOUND,
-			Message: "token not found",
+			Message: "work not found",
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -122,8 +125,8 @@ func TestShow_NotFoundExitsWithClearError(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty on failure", out.String())
 	}
-	if !errors.Is(err, ErrWorkNotFound) {
-		t.Fatalf("error = %v, want ErrWorkNotFound", err)
+	if !strings.Contains(err.Error(), `work "missing-work" not found`) {
+		t.Fatalf("error = %q, want not-found message", err.Error())
 	}
 }
 
@@ -132,12 +135,11 @@ func TestShow_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.TokenResponse{
-			Id:       "tok-1",
-			PlaceId:  "story:init",
-			WorkId:   "work-1",
-			WorkType: "story",
-			TraceId:  "trace-1",
+		if err := json.NewEncoder(w).Encode(factoryapi.Work{
+			Name:         "Plan feature",
+			WorkId:       stringPtr("work-1"),
+			WorkTypeName: stringPtr("story"),
+			TraceId:      stringPtr("trace-1"),
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -148,26 +150,25 @@ func TestShow_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	err := Show(ShowConfig{
 		Server:    serverBase(t, srv),
 		SessionID: "session-beta",
-		WorkID:    "tok-1",
+		WorkID:    "work-1",
 		Output:    &out,
 	})
 	if err != nil {
 		t.Fatalf("Show: %v", err)
 	}
-	if gotPath != "/factory-sessions/session-beta/work/tok-1" {
-		t.Fatalf("path = %q, want /factory-sessions/session-beta/work/tok-1", gotPath)
+	if gotPath != "/factory-sessions/session-beta/work/work-1" {
+		t.Fatalf("path = %q, want /factory-sessions/session-beta/work/work-1", gotPath)
 	}
 }
 
 func TestShow_PrimaryTraceFallsBackToTraceId(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.TokenResponse{
-			Id:       "tok-1",
-			PlaceId:  "story:init",
-			WorkId:   "work-1",
-			WorkType: "story",
-			TraceId:  "trace-only",
+		if err := json.NewEncoder(w).Encode(factoryapi.Work{
+			Name:         "Plan feature",
+			WorkId:       stringPtr("work-1"),
+			WorkTypeName: stringPtr("story"),
+			TraceId:      stringPtr("trace-only"),
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -177,13 +178,13 @@ func TestShow_PrimaryTraceFallsBackToTraceId(t *testing.T) {
 	var out bytes.Buffer
 	err := Show(ShowConfig{
 		Server: serverBase(t, srv),
-		WorkID: "tok-1",
+		WorkID: "work-1",
 		Output: &out,
 	})
 	if err != nil {
 		t.Fatalf("Show: %v", err)
 	}
-	if !strings.Contains(out.String(), "TRACE:\ttrace-only\n") {
+	if !strings.Contains(out.String(), "Trace:\ttrace-only\n") {
 		t.Fatalf("output = %q, want trace-only primary trace", out.String())
 	}
 }

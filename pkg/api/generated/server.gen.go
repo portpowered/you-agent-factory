@@ -3543,7 +3543,7 @@ type ServerInterface interface {
 	// Stage one submit-work file for one session
 	// (POST /factory-sessions/{session_id}/work/staged-files)
 	StageSubmitWorkFileBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Get work token for one session
+	// Get work for one session
 	// (GET /factory-sessions/{session_id}/work/{id})
 	GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, id WorkOrTokenID)
 	// List discovered models
@@ -3576,7 +3576,7 @@ type ServerInterface interface {
 	// Stage one submit-work file
 	// (POST /work/staged-files)
 	StageSubmitWorkFile(w http.ResponseWriter, r *http.Request)
-	// Get work token
+	// Get work
 	// (GET /work/{id})
 	GetWork(w http.ResponseWriter, r *http.Request, id WorkOrTokenID)
 }

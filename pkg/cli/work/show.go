@@ -1,8 +1,8 @@
+// Package work implements work inspection command behavior.
 package work
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,12 +15,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
 )
 
 const showRequestTimeout = 10 * time.Second
-
-var ErrWorkNotFound = errors.New("work not found")
 
 // ShowConfig holds parameters for the work show command.
 type ShowConfig struct {
@@ -43,8 +40,9 @@ func Show(cfg ShowConfig) error {
 	if workID == "" {
 		return fmt.Errorf("work id is required")
 	}
+	cfg.WorkID = workID
 
-	endpoint, err := showEndpoint(cfg, workID)
+	endpoint, err := showEndpoint(cfg)
 	if err != nil {
 		return err
 	}
@@ -56,7 +54,7 @@ func Show(cfg ShowConfig) error {
 		endpoint.String(),
 		cfg.Server,
 		clidiag.SessionLabel(cfg.SessionID),
-		workID,
+		cfg.WorkID,
 	)
 
 	client := &http.Client{Timeout: showRequestTimeout}
@@ -68,16 +66,27 @@ func Show(cfg ShowConfig) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds())
+		var errResp factoryapi.ErrorResponse
+		if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
+			return fmt.Errorf("work %q not found: %s", cfg.WorkID, errResp.Message)
+		}
+		return fmt.Errorf("work %q not found", cfg.WorkID)
+	}
 	if resp.StatusCode != http.StatusOK {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds())
-		return showRequestError(resp, workID)
+		var errResp factoryapi.ErrorResponse
+		if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
+			return fmt.Errorf("get work failed (%d): %s", resp.StatusCode, errResp.Message)
+		}
+		return fmt.Errorf("get work failed (%d)", resp.StatusCode)
 	}
 
-	var token factoryapi.TokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+	var work factoryapi.Work
+	if err := json.NewDecoder(resp.Body).Decode(&work); err != nil {
 		return fmt.Errorf("parse response: %w", err)
 	}
-	work := workFromTokenResponse(token)
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -94,8 +103,8 @@ func Show(cfg ShowConfig) error {
 	return renderShowResult(cfg.Output, work)
 }
 
-func showEndpoint(cfg ShowConfig, workID string) (url.URL, error) {
-	endpointPath := sessionpath.ScopedPath("/work/"+url.PathEscape(workID), cfg.SessionID)
+func showEndpoint(cfg ShowConfig) (url.URL, error) {
+	endpointPath := sessionpath.ScopedPath("/work/"+url.PathEscape(cfg.WorkID), cfg.SessionID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
 	if err != nil {
 		return url.URL{}, err
@@ -107,96 +116,34 @@ func showEndpoint(cfg ShowConfig, workID string) (url.URL, error) {
 	return *endpoint, nil
 }
 
-func showRequestError(resp *http.Response, workID string) error {
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("get work failed (%d)", resp.StatusCode)
-	}
-	var errResp factoryapi.ErrorResponse
-	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
-		if resp.StatusCode == http.StatusNotFound && errResp.Code == factoryapi.NOTFOUND {
-			return fmt.Errorf("%w: %s", ErrWorkNotFound, errResp.Message)
-		}
-		return fmt.Errorf("get work failed (%d): %s", resp.StatusCode, errResp.Message)
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("%w: work %q not found", ErrWorkNotFound, workID)
-	}
-	return fmt.Errorf("get work failed (%d)", resp.StatusCode)
-}
-
-func workFromTokenResponse(token factoryapi.TokenResponse) factoryapi.Work {
-	workTypeID, stateName := state.SplitPlaceID(token.PlaceId)
-	if token.WorkType != "" {
-		workTypeID = token.WorkType
-	}
-	name := stringValue(token.Name)
-	if name == "" {
-		name = firstNonEmptyString(token.WorkId, token.Id)
-	}
-	work := factoryapi.Work{
-		Name:                     name,
-		WorkId:                   stringPtrIfNotEmpty(token.WorkId),
-		WorkTypeName:             stringPtrIfNotEmpty(token.WorkType),
-		ChainingTraceDepth:       token.ChainingTraceDepth,
-		CurrentChainingTraceId:   token.CurrentChainingTraceId,
-		PreviousChainingTraceIds: token.PreviousChainingTraceIds,
-		Content:                  token.Content,
-		Tags:                     token.Tags,
-	}
-	if token.TraceId != "" {
-		work.TraceId = &token.TraceId
-	}
-	if stateName != "" {
-		work.State = &factoryapi.WorkState{
-			Name: stateName,
-			Type: factoryapi.WorkStateType(state.CategoryForState(nil, workTypeID, stateName)),
-		}
-	}
-	return work
-}
-
 func renderShowResult(output io.Writer, work factoryapi.Work) error {
 	stateName, stateType := workStateColumns(work.State)
-	lines := []struct {
+	rows := []struct {
 		label string
 		value string
 	}{
-		{"WORK ID", stringValue(work.WorkId)},
-		{"NAME", work.Name},
-		{"WORK TYPE", stringValue(work.WorkTypeName)},
-		{"STATE NAME", stateName},
-		{"STATE TYPE", stateType},
-		{"TRACE", primaryTraceID(work)},
-		{"RELATIONS", formatWorkRelations(work.Relations)},
+		{label: "Work ID", value: stringValue(work.WorkId)},
+		{label: "Name", value: work.Name},
+		{label: "Work type", value: stringValue(work.WorkTypeName)},
+		{label: "State name", value: stateName},
+		{label: "State type", value: stateType},
+		{label: "Trace", value: primaryWorkTrace(work)},
+		{label: "Relations", value: formatWorkRelations(work.Relations)},
 	}
-	for _, line := range lines {
-		if _, err := fmt.Fprintf(output, "%s:\t%s\n", line.label, line.value); err != nil {
+	for _, row := range rows {
+		if _, err := fmt.Fprintf(output, "%s:\t%s\n", row.label, row.value); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func primaryTraceID(work factoryapi.Work) string {
-	if work.CurrentChainingTraceId != nil && *work.CurrentChainingTraceId != "" {
-		return *work.CurrentChainingTraceId
+func primaryWorkTrace(work factoryapi.Work) string {
+	if work.CurrentChainingTraceId != nil && strings.TrimSpace(*work.CurrentChainingTraceId) != "" {
+		return strings.TrimSpace(*work.CurrentChainingTraceId)
 	}
-	return stringValue(work.TraceId)
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
+	if work.TraceId != nil && strings.TrimSpace(*work.TraceId) != "" {
+		return strings.TrimSpace(*work.TraceId)
 	}
 	return ""
-}
-
-func stringPtrIfNotEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
 }

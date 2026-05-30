@@ -150,9 +150,9 @@ func TestGetWork(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	resp := decodeJSONResponse[factoryapi.TokenResponse](t, rec)
-	if resp.Id != "tok-prd-1" || resp.PlaceId != "prd:init" {
-		t.Fatalf("token response = %#v, want tok-prd-1 at prd:init", resp)
+	resp := decodeJSONResponse[factoryapi.Work](t, rec)
+	if stringValue(resp.WorkId) != "work-prd-1" || stringValue(resp.WorkTypeName) != "prd" {
+		t.Fatalf("work response = %#v, want work-prd-1 prd type", resp)
 	}
 	if resp.ChainingTraceDepth == nil || *resp.ChainingTraceDepth != 4 || resp.CurrentChainingTraceId == nil || *resp.CurrentChainingTraceId != "chain-1" || resp.PreviousChainingTraceIds == nil || len(*resp.PreviousChainingTraceIds) != 2 {
 		t.Fatalf("chaining trace fields = %#v, want preserved trace lineage", resp)
@@ -161,8 +161,36 @@ func TestGetWork(t *testing.T) {
 		{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"},
 		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
 	})
-	if resp.History == nil || resp.History.TotalVisits == nil || (*resp.History.TotalVisits)["execute"] != 1 {
-		t.Error("expected history in single token response")
+}
+
+func TestGetWork_ByWorkID(t *testing.T) {
+	now := time.Now()
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+			"tok-prd-1": {
+				ID:      "tok-prd-1",
+				PlaceID: "prd:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-prd-1",
+					WorkTypeID: "prd",
+					TraceID:    "trace-1",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+		}},
+	})
+
+	req := httptest.NewRequest("GET", "/work/work-prd-1", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.Work](t, rec)
+	if stringValue(resp.WorkId) != "work-prd-1" {
+		t.Fatalf("work response = %#v, want work-prd-1", resp)
 	}
 }
 
@@ -191,7 +219,7 @@ func TestGetWork_OmitsEmptyOptionalCollections(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	resp := decodeJSONResponse[factoryapi.TokenResponse](t, rec)
+	resp := decodeJSONResponse[factoryapi.Work](t, rec)
 	if resp.CurrentChainingTraceId == nil || *resp.CurrentChainingTraceId != "trace-2" {
 		t.Fatalf("current chaining trace ID = %#v, want trace fallback", resp.CurrentChainingTraceId)
 	}
@@ -253,7 +281,7 @@ func TestGetWorkNotFound(t *testing.T) {
 	req := httptest.NewRequest("GET", "/work/nonexistent", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "token not found")
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "work not found")
 }
 
 func TestGetStatus_ReturnsAggregateSnapshotStatus(t *testing.T) {
@@ -362,7 +390,7 @@ func TestGetWork_HidesInternalTimeWorkToken(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/work/tok-time", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "token not found")
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "work not found")
 }
 
 func TestListWork_HidesResourceTokens(t *testing.T) {
@@ -393,7 +421,7 @@ func TestGetWork_HidesResourceToken(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/work/agent-slot:resource", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "token not found")
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "work not found")
 }
 
 func TestListWork(t *testing.T) {

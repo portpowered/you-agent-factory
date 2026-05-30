@@ -962,13 +962,31 @@ func (s *Server) getWork(
 		return
 	}
 
-	token, ok := snapshot.Marking.Tokens[id]
-	if !ok || !publicWorkToken(token) {
-		s.writeError(w, http.StatusNotFound, "token not found", "NOT_FOUND")
+	token, ok := findPublicWorkToken(snapshot.Marking.Tokens, string(id))
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, tokenToResponse(token, true))
+	workNamesByID := publicWorkNamesByID(snapshot.Marking.Tokens)
+	work := tokenToWork(token, snapshot.Topology)
+	work.Relations = generatedWorkRelations(token, work.Name, workNamesByID)
+	s.writeJSON(w, http.StatusOK, work)
+}
+
+func findPublicWorkToken(tokens map[string]*interfaces.Token, id string) (*interfaces.Token, bool) {
+	if token, ok := tokens[id]; ok && publicWorkToken(token) {
+		return token, true
+	}
+	for _, token := range tokens {
+		if !publicWorkToken(token) {
+			continue
+		}
+		if token.Color.WorkID == id {
+			return token, true
+		}
+	}
+	return nil, false
 }
 
 // GetStatus handles GET /status as the supported runtime status read model.
