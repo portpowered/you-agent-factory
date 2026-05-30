@@ -536,22 +536,7 @@ func TestValidateFactory_ReturnsEmptyTargetsForValidFactory(t *testing.T) {
 func TestValidateFactory_ReturnsMultipleTargetsForInvalidFactory(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 
-	body := `{
-		"name":"alpha",
-		"workTypes":[{"name":"story","states":[
-			{"name":"queued","type":"INITIAL"},
-			{"name":"queued-dup","type":"PROCESSING"}
-		]}],
-		"workers":[{"name":"worker-a"},{"name":"worker-a"}],
-		"workstations":[{
-			"name":"process",
-			"worker":"missing-worker",
-			"inputs":[{"workType":"story","state":"queued"}],
-			"outputs":[{"workType":"story","state":"missing-state"}]
-		}]
-	}`
-
-	req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(factoryvalidation.CrossPathInvalidFactoryJSON))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

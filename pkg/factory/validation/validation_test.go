@@ -3,7 +3,6 @@ package validation_test
 import (
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -12,25 +11,9 @@ import (
 func TestValidate_EquivalentTargetsForInvalidFactoryThroughConfigAndPackageValidation(t *testing.T) {
 	t.Parallel()
 
-	apiFactory := factoryapi.Factory{
-		Name: "alpha",
-		WorkTypes: &[]factoryapi.WorkType{{
-			Name: "story",
-			States: []factoryapi.WorkState{
-				{Name: "queued", Type: factoryapi.WorkStateTypeINITIAL},
-				{Name: "queued-dup", Type: factoryapi.WorkStateTypePROCESSING},
-			},
-		}},
-		Workers: &[]factoryapi.Worker{{Name: "worker-a"}, {Name: "worker-a"}},
-		Workstations: &[]factoryapi.Workstation{{
-			Name:   "process",
-			Worker: "missing-worker",
-			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "queued"}},
-			Outputs: &[]factoryapi.WorkstationIO{{
-				WorkType: "story",
-				State:    "missing-state",
-			}},
-		}},
+	apiFactory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
 
 	cfg, err := config.FactoryConfigFromOpenAPI(apiFactory)
