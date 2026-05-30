@@ -164,6 +164,87 @@ func TestSubmitBatch_FilePathIgnoresStdinContent(t *testing.T) {
 	}
 }
 
+func TestSubmitBatch_DryRunInlineJSONPositional(t *testing.T) {
+	json := validBatchJSON("batch-inline-dry", "alpha")
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{json},
+		DryRun: true,
+		Server: "http://127.0.0.1:1",
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"requestId: batch-inline-dry",
+		"batchSource: inline",
+		"dry-run: no request sent",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestSubmitBatch_NonexistentPathWithoutJSONPrefixFailsAsMissingFile(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{"/no/such/batch-file.json"},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected missing file error")
+	}
+	if !strings.Contains(err.Error(), "batch file not found") {
+		t.Fatalf("error = %v, want missing file message", err)
+	}
+	if strings.Contains(err.Error(), "invalid character") {
+		t.Fatalf("error treated path as JSON: %v", err)
+	}
+	if called {
+		t.Fatal("expected no HTTP call for missing file")
+	}
+}
+
+func TestSubmitBatch_PUTFromInlineJSONUsesRequestIdFromBody(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(factoryapi.UpsertWorkRequestResponse{
+			RequestId: "batch-inline-put",
+			TraceId:   "trace-inline-put",
+			Works:     []factoryapi.UpsertWorkRequestSubmittedWork{{Name: "alpha", WorkTypeName: "task", WorkId: "work-1"}},
+		})
+	}))
+	defer srv.Close()
+
+	inline := validBatchJSON("batch-inline-put", "alpha")
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{inline},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch: %v", err)
+	}
+	if !strings.Contains(gotBody, "batch-inline-put") {
+		t.Fatalf("request body = %q, want inline batch requestId", gotBody)
+	}
+}
+
 func TestSubmitBatch_DryRunValidFileExitsWithoutHTTP(t *testing.T) {
 	path := writeBatchFile(t, `{
 		"requestId": "batch-dry-run-1",

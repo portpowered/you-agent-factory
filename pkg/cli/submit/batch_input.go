@@ -20,8 +20,8 @@ type batchResolvedInput struct {
 	label  string
 }
 
-// resolveBatchInput selects batch JSON bytes from file path or stdin.
-// Inline JSON and --file are implemented in later stories.
+// resolveBatchInput selects batch JSON bytes from file path, stdin, or inline JSON.
+// --file is implemented in a later story.
 func resolveBatchInput(cfg BatchConfig) (batchResolvedInput, error) {
 	if strings.TrimSpace(cfg.FileFlag) != "" {
 		return batchResolvedInput{}, fmt.Errorf("batch --file is not yet supported; use a positional file path or stdin")
@@ -47,7 +47,11 @@ func resolveBatchInput(cfg BatchConfig) (batchResolvedInput, error) {
 			return batchResolvedInput{data: data, source: batchSourceStdin, label: "stdin"}, nil
 		}
 		if looksLikeInlineJSON(arg) {
-			return batchResolvedInput{}, fmt.Errorf("batch inline JSON is not yet supported; use a file path or stdin")
+			return batchResolvedInput{
+				data:   []byte(arg),
+				source: batchSourceInline,
+				label:  "inline JSON",
+			}, nil
 		}
 		if _, err := os.Stat(arg); err != nil {
 			if os.IsNotExist(err) {

@@ -22,6 +22,7 @@ func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 			"  (no args)       when stdin is not a TTY, read the full piped document from stdin\n\n" +
 			"When both --file and a positional path are provided, --file wins.\n" +
 			"When a file path or --file is set, stdin is ignored.\n\n" +
+			"Inline JSON is convenient for small batches; shell argument length limits apply—use a file or pipe for large documents.\n\n" +
 			"Use --dry-run to parse and validate locally, print a summary, and perform no HTTP. " +
 			"Valid --dry-run exits 0 even when the factory is unreachable.\n\n" +
 			"By default the command targets the default compatibility session (~default). " +

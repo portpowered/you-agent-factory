@@ -22,9 +22,9 @@ func TestResolveBatchInput_RejectsUnsupportedModes(t *testing.T) {
 			want: "batch input required",
 		},
 		{
-			name: "inline json",
-			cfg:  BatchConfig{Args: []string{`{"requestId":"x"}`}},
-			want: "inline JSON is not yet supported",
+			name: "nonexistent path without json prefix",
+			cfg:  BatchConfig{Args: []string{"/no/such/batch.json"}},
+			want: "batch file not found",
 		},
 		{
 			name: "file flag",
@@ -105,6 +105,57 @@ func TestResolveBatchInput_ReadsExplicitStdinDash(t *testing.T) {
 	}
 	if resolved.source != batchSourceStdin {
 		t.Fatalf("source = %q, want %q", resolved.source, batchSourceStdin)
+	}
+}
+
+func TestResolveBatchInput_ReadsInlineJSONPositional(t *testing.T) {
+	t.Parallel()
+
+	json := validBatchJSON("batch-inline", "alpha")
+	cfg := BatchConfig{Args: []string{json}}
+
+	resolved, err := resolveBatchInput(cfg)
+	if err != nil {
+		t.Fatalf("resolveBatchInput: %v", err)
+	}
+	if resolved.source != batchSourceInline {
+		t.Fatalf("source = %q, want %q", resolved.source, batchSourceInline)
+	}
+	if resolved.label != "inline JSON" {
+		t.Fatalf("label = %q, want inline JSON", resolved.label)
+	}
+	if !bytes.Contains(resolved.data, []byte("batch-inline")) {
+		t.Fatalf("data = %q, want inline batch JSON", resolved.data)
+	}
+}
+
+func TestResolveBatchInput_InlineJSONIgnoresLeadingWhitespace(t *testing.T) {
+	t.Parallel()
+
+	json := "  \t\n" + validBatchJSON("batch-inline-ws", "alpha")
+	cfg := BatchConfig{Args: []string{json}}
+
+	resolved, err := resolveBatchInput(cfg)
+	if err != nil {
+		t.Fatalf("resolveBatchInput: %v", err)
+	}
+	if resolved.source != batchSourceInline {
+		t.Fatalf("source = %q, want %q", resolved.source, batchSourceInline)
+	}
+}
+
+func TestResolveBatchInput_NonexistentJSONLookingPathParsesInlineNotFile(t *testing.T) {
+	t.Parallel()
+
+	json := validBatchJSON("batch-inline-not-a-file", "alpha")
+	cfg := BatchConfig{Args: []string{json}}
+
+	resolved, err := resolveBatchInput(cfg)
+	if err != nil {
+		t.Fatalf("resolveBatchInput: %v", err)
+	}
+	if resolved.source != batchSourceInline {
+		t.Fatalf("source = %q, want inline not filesystem", resolved.source)
 	}
 }
 

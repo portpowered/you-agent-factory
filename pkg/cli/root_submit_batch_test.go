@@ -50,6 +50,8 @@ func TestSubmitBatchCommand_HelpDocumentsBatchIngressModes(t *testing.T) {
 		"--json",
 		"--verbose",
 		"pipe",
+		"shell argument length",
+		"file or pipe",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("submit batch help missing %q:\n%s", want, help)
