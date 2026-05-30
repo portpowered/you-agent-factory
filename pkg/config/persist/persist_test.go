@@ -80,6 +80,39 @@ func TestPersistNamedFactoryWithReport_MatchesConfigPackage(t *testing.T) {
 	}
 }
 
+func TestReplaceNamedFactoryWithReport_MatchesConfigPackage(t *testing.T) {
+	rootDir := t.TempDir()
+	payload := namedFactoryPayloadWithBundledFiles(t, "alpha")
+
+	if _, err := persist.PersistNamedFactory(rootDir, "alpha", payload); err != nil {
+		t.Fatalf("persist.PersistNamedFactory: %v", err)
+	}
+
+	facadeResult, err := persist.ReplaceNamedFactoryWithReport(rootDir, "alpha", payload)
+	if err != nil {
+		t.Fatalf("persist.ReplaceNamedFactoryWithReport: %v", err)
+	}
+
+	rootDir2 := t.TempDir()
+	if _, err := config.PersistNamedFactory(rootDir2, "alpha", payload); err != nil {
+		t.Fatalf("config.PersistNamedFactory: %v", err)
+	}
+	configResult, err := config.ReplaceNamedFactoryWithReport(rootDir2, "alpha", payload)
+	if err != nil {
+		t.Fatalf("config.ReplaceNamedFactoryWithReport: %v", err)
+	}
+
+	if facadeResult.FactoryDir != filepath.Join(rootDir, "alpha") {
+		t.Fatalf("facade factory dir = %q, want %q", facadeResult.FactoryDir, filepath.Join(rootDir, "alpha"))
+	}
+	if configResult.FactoryDir != filepath.Join(rootDir2, "alpha") {
+		t.Fatalf("config factory dir = %q, want %q", configResult.FactoryDir, filepath.Join(rootDir2, "alpha"))
+	}
+	if _, err := os.Stat(filepath.Join(facadeResult.FactoryDir, "Makefile")); err != nil {
+		t.Fatalf("expected bundled Makefile on disk: %v", err)
+	}
+}
+
 func TestReadWriteCurrentFactoryPointer_RoundTrip(t *testing.T) {
 	rootDir := t.TempDir()
 	payload := namedFactoryPayload(t, "alpha")
