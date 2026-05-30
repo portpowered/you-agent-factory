@@ -665,6 +665,7 @@ describe.sequential("factory graph editor browser integration", () => {
                 },
               ],
             },
+            mode: "REPLACE_CURRENT",
             sessionID: "~default",
           },
         ]);
