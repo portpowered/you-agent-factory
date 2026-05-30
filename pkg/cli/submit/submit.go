@@ -99,11 +99,7 @@ func Submit(cfg SubmitConfig) error {
 
 	if resp.StatusCode != http.StatusCreated {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody))
-		var errResp factoryapi.ErrorResponse
-		if json.Unmarshal(respBody, &errResp) == nil && errResp.Message != "" {
-			return fmt.Errorf("submission failed (%d): %s", resp.StatusCode, errResp.Message)
-		}
-		return fmt.Errorf("submission failed (%d): %s", resp.StatusCode, string(respBody))
+		return submitFailureError(resp.StatusCode, respBody)
 	}
 
 	var result factoryapi.SubmitWorkResponse

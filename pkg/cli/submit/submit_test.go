@@ -668,15 +668,135 @@ func TestSubmit_FactoryNotRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Use a port that nothing is listening on.
+	var out bytes.Buffer
 	err := Submit(SubmitConfig{
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Server:       "http://127.0.0.1:19999",
+		Output:       &out,
 	})
 	if err == nil {
 		t.Fatal("expected error when factory is not running")
+	}
+	if got := err.Error(); !strings.Contains(got, "factory not reachable at http://127.0.0.1:19999") {
+		t.Fatalf("error = %q, want factory not reachable at resolved URL", got)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on transport failure", out.String())
+	}
+}
+
+func TestSubmit_NonJSONErrorBodyUsesBoundedPreview(t *testing.T) {
+	longBody := strings.Repeat("x", submitErrorBodyPreviewLimit+30)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(longBody))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "task-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	})
+	if err == nil {
+		t.Fatal("expected error for non-JSON failure body")
+	}
+	wantPreview := longBody[:submitErrorBodyPreviewLimit] + "..."
+	if got := err.Error(); got != "submission failed (500): "+wantPreview {
+		t.Fatalf("error = %q, want bounded preview %q", got, wantPreview)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on API failure", out.String())
+	}
+}
+
+func TestSubmit_ErrorIncludesWorkIdWhenPresent(t *testing.T) {
+	workID := "batch-req-duplicate-submit"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		if err := json.NewEncoder(w).Encode(map[string]string{
+			"message": "work already accepted",
+			"family":  "client",
+			"code":    "BAD_REQUEST",
+			"workId":  workID,
+		}); err != nil {
+			t.Errorf("encode error response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "task-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	})
+	if err == nil {
+		t.Fatal("expected error when API returns workId")
+	}
+	if got := err.Error(); got != "submission failed (409): work already accepted workId="+workID {
+		t.Fatalf("error = %q, want stable workId suffix", got)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on API failure", out.String())
+	}
+}
+
+func TestSubmit_JSONModeDoesNotEmitSuccessOnFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Message: "invalid payload",
+			Code:    factoryapi.BADREQUEST,
+			Family:  factoryapi.ErrorFamilyBadRequest,
+		}); err != nil {
+			t.Errorf("encode error response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "task-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		JSON:         true,
+		Output:       &out,
+	})
+	if err == nil {
+		t.Fatal("expected error for JSON-mode failure")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty JSON success envelope on failure", out.String())
 	}
 }
 
