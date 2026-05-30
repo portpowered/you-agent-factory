@@ -29,8 +29,6 @@ interface WorkflowActivityBentoCardProps {
   widgetInstanceID?: string;
 }
 
-const GRAPH_PANEL_SHELL_CLASS = "relative h-full min-h-0 min-w-0";
-
 export function WorkflowActivityBentoCard({
   headerAction,
   importController,
@@ -69,7 +67,7 @@ export function WorkflowActivityBentoCard({
       }
       title={messages.widgetTitle}
     >
-      <section className={GRAPH_PANEL_SHELL_CLASS}>
+      <section className="relative h-full min-h-0 min-w-0">
         <ReactFlowCurrentActivityCardView
           editor={editor}
           importController={importController}

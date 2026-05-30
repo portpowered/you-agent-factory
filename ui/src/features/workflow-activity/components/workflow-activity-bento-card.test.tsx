@@ -210,6 +210,26 @@ function registerWorkflowActivityBentoCardTestSetup() {
 describe("WorkflowActivityBentoCard", () => {
   registerWorkflowActivityBentoCardTestSetup();
 
+  it("keeps flex-safe layout classes on the graph panel shell around the viewport", async () => {
+    const locale = "zh-CN";
+    const messages = getWorkflowActivityShellMessages(locale);
+    renderWorkflowActivityBentoCard({ locale });
+
+    const viewport = await screen.findByRole("region", {
+      name: messages.viewportLabel,
+    });
+    const workflowSection = viewport.closest<HTMLElement>(
+      "section[aria-labelledby]",
+    );
+    const graphPanelShell = workflowSection?.parentElement;
+
+    expect(graphPanelShell?.tagName).toBe("SECTION");
+    expect(graphPanelShell?.className).toContain("relative");
+    expect(graphPanelShell?.className).toContain("h-full");
+    expect(graphPanelShell?.className).toContain("min-h-0");
+    expect(graphPanelShell?.className).toContain("min-w-0");
+  });
+
   it("wraps the React Flow graph without a floating inspector", async () => {
     const locale = "zh-CN";
     const messages = getWorkflowActivityShellMessages(locale);
