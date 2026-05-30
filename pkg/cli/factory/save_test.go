@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
 
 func TestSaveFromFile_WritesHumanReadableConfirmation(t *testing.T) {
@@ -114,6 +115,27 @@ func TestSaveFromFile_RejectsInvalidPayload(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid factory config") {
 		t.Fatalf("error = %v, want invalid-config message", err)
+	}
+}
+
+func TestSaveFromFile_RejectsInvalidTopologyBeforePersist(t *testing.T) {
+	rootDir := t.TempDir()
+	from := writeFactoryConfigFile(t, rootDir, "invalid", []byte(factoryvalidation.CrossPathInvalidFactoryJSON))
+
+	err := SaveFromFile(SaveFromFileConfig{
+		Name:   "invalid",
+		From:   from,
+		Dir:    rootDir,
+		Output: ioDiscard(t),
+	})
+	if err == nil {
+		t.Fatal("expected invalid factory topology to fail")
+	}
+	if !strings.Contains(err.Error(), "invalid factory config") {
+		t.Fatalf("error = %v, want invalid-config message", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(rootDir, "invalid")); !os.IsNotExist(statErr) {
+		t.Fatalf("named factory directory should not be created, stat err = %v", statErr)
 	}
 }
 
