@@ -27,6 +27,7 @@ import {
 } from "./testing/app-shell-test-utils";
 import {
   buildSessionFactoryActivationPutBody,
+  defaultSessionFactoryVersion,
   incrementedSessionFactoryVersion,
   isSessionFactoryRequest,
   mergeImportedFactoryIntoSessionDocument,
@@ -226,19 +227,25 @@ describe("App shell import flows", () => {
         const path = resolveFetchPath(input);
         const method = resolveFetchMethod(input, init);
 
-        if (path === "/factory-sessions/~default/factory" && method === "GET") {
-          return jsonResponse(currentSessionFactory);
-        }
+        if (isSessionFactoryRequest(path, method)) {
+          if (method === "GET") {
+            return mockGetSessionFactory({
+              document: currentSessionFactory,
+            });
+          }
 
-        if (path === "/factory-sessions/~default/factory" && method === "PUT") {
-          return jsonResponse({
-            name: "Dropped Factory",
-            ...importValue.factory,
-            version: {
-              logical: "1",
-              physical: "2026-05-18T14:41:00Z",
-            },
-          });
+          if (method === "PUT") {
+            return mockPutSessionFactory({
+              responseDocument: {
+                name: "Dropped Factory-2",
+                ...importValue.factory,
+                version: {
+                  logical: "1",
+                  physical: "2026-05-18T14:41:00Z",
+                },
+              },
+            });
+          }
         }
 
         throw new Error(`unexpected fetch for ${path} (${method})`);
