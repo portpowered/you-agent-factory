@@ -1,30 +1,30 @@
 {
-  "project": "Session Factory Save Modes (S1 Recovery)",
-  "branchName": "ralph/session-factory-save-modes-recovery",
-  "description": "Recovery implementation of approved S1: unify live factory submission behind PUT /factory-sessions/{session_id}/factory with explicit save modes (REPLACE_CURRENT default, UPSERT_NAMED_AND_ACTIVATE for named create/replace+activate), remove POST /factories, consolidate backend save pipeline, and migrate dashboard editor, import, CLI, and tests.",
+  "project": "API Handlers Decomposition (S5 Recovery)",
+  "branchName": "ralph/api-handlers-decomposition-recovery",
+  "description": "Recovery implementation of approved S5: mechanically split monolithic pkg/api/handlers.go into route-family handlers_*.go files with centralized shared HTTP helpers, preserve all HTTP semantics and pkg/api test coverage after completed S1 factory save modes, satisfy backend size gates, and document handler ownership for maintainers.",
   "context": {
-    "customerAsk": "Retry after network outage. Manual fix may apply to legacy token; this is a fresh idea. Full spec: tasks/prd-session-factory-save-modes.md — Session factory save modes (S1 recovery).",
-    "problem": "Two overlapping factory submission APIs (POST /factories vs session PUT) cause inconsistent validation, persistence roots, and activation. The prior autonomous batch did not complete; the codebase still has POST /factories and bare Factory bodies on session PUT with no save-mode enum.",
-    "solution": "Implement the approved S1 spec: one session PUT with { mode, factory }, default REPLACE_CURRENT, UPSERT_NAMED_AND_ACTIVATE for named upsert+activate, unified backend SaveFactoryForSession pipeline with session-scoped activation only, remove POST /factories, and migrate dashboard editor (replace only), import confirm dialog, CLI live save, and functional tests."
+    "customerAsk": "Downstream of S1 recovery. Retry after network outage interrupted batch-program-net-recovery-batch-api-handlers-decomposition-recovery. Full spec: tasks/prd-api-handlers-decomposition.md — API handlers decomposition (S5 recovery).",
+    "problem": "pkg/api/handlers.go remains a ~2,100-line monolith with backendsizecheck ignore, mixing work, factory, session, model, and events/status transport. Review cost is high and helper duplication is likely. The prior autonomous batch did not complete the split.",
+    "solution": "Move-only decomposition inside package api: handlers_common.go for shared writers/decoders, handlers_work.go, handlers_factory.go, handlers_factory_sessions.go, handlers_models.go, handlers_events.go for route families, retire or slim handlers.go, keep provider_session_details.go separate, preserve S1 session PUT decode, run full pkg/api tests, and update development-guide-relevant-files.md with a route-family map."
   },
   "acceptanceCriteria": [
-    "PUT /factory-sessions/{session_id}/factory accepts { mode?, factory } with default REPLACE_CURRENT and both enum values operational.",
-    "POST /factories is removed from OpenAPI, generated clients, UI, CLI live paths, and functional tests.",
-    "Backend uses one SaveFactoryForSession pipeline with mode handlers and replaceSessionRuntime-only activation; multi-session tests prove isolation.",
-    "Dashboard editor save uses REPLACE_CURRENT only; import confirm offers replace-current vs create-new-named with suffixed name allocation on conflict, session PUT only.",
-    "Version rules per mode match approved S1 (REPLACE_CURRENT requires version; UPSERT create may omit; UPSERT replace detects stale on-disk version).",
-    "Existing error codes remain mappable for operators (FACTORY_NOT_IDLE, STALE_FACTORY_VERSION, INVALID_FACTORY, etc.).",
-    "Quality gate: typecheck, lint, and targeted tests for all changed behavior pass."
+    "All existing HTTP routes remain registered with unchanged methods, paths, status codes, and response shapes.",
+    "Shared JSON/error writers and decode helpers live in one common handlers file with no duplicates across route-family files.",
+    "Factory session PUT keeps S1 { mode, factory } decoding and SaveFactoryForSession-only delegation in the factory/session handler file.",
+    "Handlers continue to use apisurface interfaces only; no new concrete service coupling.",
+    "Monolithic handlers.go is removed or wiring-only; per-file backend size policy is satisfied without unjustified file-level waivers.",
+    "development-guide-relevant-files.md maps each handlers_*.go file to its route families.",
+    "Quality gate: typecheck, lint, and go test ./pkg/api/... pass for all changed behavior."
   ],
   "userStories": [
     {
-      "id": "session-factory-save-modes-recovery-001",
-      "title": "Session factory PUT contract and client regeneration",
-      "description": "As an API consumer, I need OpenAPI and generated clients to describe save modes on session PUT so all callers share one typed contract.",
+      "id": "api-handlers-decomposition-recovery-001",
+      "title": "Centralize shared HTTP helpers",
+      "description": "As a maintainer, I want one shared place for JSON responses, error writing, and common decode utilities so route-family files do not fork transport behavior.",
       "acceptanceCriteria": [
-        "PUT /factory-sessions/{session_id}/factory request body includes optional mode enum (REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE) and required factory; omitted mode defaults to REPLACE_CURRENT.",
-        "POST /factories is removed from api/openapi.yaml; contract test forbids paths./factories.post.",
-        "Bundled spec and generated Go and TypeScript clients are regenerated and compile.",
+        "handlers_common.go owns writeJSON, writeError, writeErrorWithTargets, writeSSEDataJSON, errorFamilyForStatus, and shared body-decode helpers used by multiple route families.",
+        "No duplicate writeError or writeJSON implementations remain in other handler files after extraction.",
+        "Existing pkg/api tests that assert error JSON shape for bad requests still pass unchanged.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,14 +33,13 @@
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-002",
-      "title": "Unified backend save pipeline and mode handlers",
-      "description": "As a maintainer, I need one orchestrated session save pipeline so session-scoped saves never fork through global activation paths.",
+      "id": "api-handlers-decomposition-recovery-002",
+      "title": "Extract work route handlers",
+      "description": "As a reviewer, I want work submission and query handlers isolated so work-transport changes do not touch factory or model routes.",
       "acceptanceCriteria": [
-        "FactoryService SaveFactoryForSession implements resolve scope → validate → persist (mode handler) → activate session runtime → readback.",
-        "REPLACE_CURRENT requires factory.name to match session current and overwrites current slot; UPSERT_NAMED_AND_ACTIVATE persists under session root, updates current-factory pointer, activates via replaceSessionRuntime only.",
-        "HTTP session PUT decodes { mode, factory } and calls only the unified entrypoint; POST /factories handler and CreateNamedFactory / unscoped HTTP SaveCurrentFactory parallel trees are removed.",
-        "Service test proves saving session B does not mutate session A for at least one save mode path.",
+        "handlers_work.go owns SubmitWork, SubmitWorkBySessionId, UpsertWorkRequest, UpsertWorkRequestBySessionId, ListWork, ListWorkBySessionId, GetWork, GetWorkBySessionId, and work-list projection helpers.",
+        "POST /work still rejects missing or empty name with BAD_REQUEST before domain normalization; canonical work-request validation still routes through pkg/factory.ValidateCanonicalWorkRequestJSON with API-owned message translation.",
+        "go test ./pkg/api/... -run 'SubmitWork|UpsertWork|ListWork|GetWork' passes with no assertion changes.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -49,15 +48,14 @@
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-003",
-      "title": "Version rules and error mapping per mode",
-      "description": "As a client author, I need deterministic version requirements and response versioning for each save mode.",
+      "id": "api-handlers-decomposition-recovery-003",
+      "title": "Extract factory and session route handlers",
+      "description": "As a reviewer, I want factory validation, session lifecycle, and current-factory routes in dedicated files with S1 save-mode decode preserved.",
       "acceptanceCriteria": [
-        "REPLACE_CURRENT rejects missing or stale factory.version relative to session current definition.",
-        "UPSERT_NAMED_AND_ACTIVATE on create allows omitted factory.version and returns server-minted version in response factory object.",
-        "UPSERT_NAMED_AND_ACTIVATE on replace detects stale on-disk version and returns incremented version on success.",
-        "UPSERT_NAMED_AND_ACTIVATE does not return FACTORY_ALREADY_EXISTS when replacing an existing named factory while idle.",
-        "FACTORY_NOT_IDLE and INVALID_FACTORY still surface for unsafe or invalid payloads.",
+        "handlers_factory.go owns ValidateFactory and factory-definition validation response helpers.",
+        "handlers_factory_sessions.go owns ListFactorySessions, OpenFactorySession, CloseFactorySession, GetCurrentFactory, GetCurrentFactoryBySessionId, SaveCurrentFactoryBySessionId, workstation prompt-template handlers, and writeCurrentFactoryError / load helpers.",
+        "SaveCurrentFactoryBySessionId decodes { mode?, factory } and calls only SaveFactoryForSession; S1 error codes remain mappable.",
+        "go test ./pkg/api/... -run 'Factory|FactorySession|ValidateFactory|SaveCurrent|PromptTemplate' passes with no assertion changes.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -66,47 +64,43 @@
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-004",
-      "title": "Dashboard editor save uses REPLACE_CURRENT",
-      "description": "As a factory editor, I want Save to update the factory I am editing in the active tab without renaming or switching named factories.",
+      "id": "api-handlers-decomposition-recovery-004",
+      "title": "Extract model route handlers",
+      "description": "As a reviewer, I want model catalog and invocation handlers isolated from work and factory transport.",
       "acceptanceCriteria": [
-        "saveCurrentFactoryDocument and editor save hooks send session PUT with REPLACE_CURRENT (or omitted mode) and factory.version from latest GET.",
-        "No editor save path calls UPSERT_NAMED_AND_ACTIVATE or POST /factories.",
-        "Stale-version and not-idle errors preserve existing operator-facing messages.",
+        "handlers_models.go owns ListModels, GetModel, InvokeModel, PullModel, and model-invocation body decode helpers.",
+        "Model routes return the same status codes and response bodies as before the move for existing pkg/api model tests.",
         "Typecheck passes",
-        "Tests pass",
-        "Verify in browser: editor Save succeeds; stale version shows existing error UX"
+        "Tests pass"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-005",
-      "title": "Dashboard import confirm dialog and mode selection",
-      "description": "As a dashboard operator, I want import to offer replace-current vs create-new-named with safe naming when a conflict exists.",
+      "id": "api-handlers-decomposition-recovery-005",
+      "title": "Extract events and status route handlers",
+      "description": "As a maintainer, I want status and events handlers and their token projection helpers separated from other route families.",
       "acceptanceCriteria": [
-        "Import activation uses session-scoped PUT only; confirm dialog defaults to Replace current factory.",
-        "Replace path sends REPLACE_CURRENT with factory.name from session GET and factory.version from GET; PNG embedded name is ignored.",
-        "Create path sends UPSERT_NAMED_AND_ACTIVATE with validated PNG name; allocates first free suffixed name on conflict and shows resolved name before PUT.",
-        "Create path omits factory.version for new names; includes version when upserting an existing chosen name.",
-        "Replace path never changes the session active factory name including UNDEFINED default root.",
+        "handlers_events.go owns GetStatus, GetStatusBySessionId, GetEvents, GetEventsBySessionId, and projection helpers used only by those routes.",
+        "Work readback helpers shared between list and get remain compilable from handlers_work.go without import cycles.",
+        "go test ./pkg/api/... -run 'GetStatus|GetEvents' passes with no assertion changes.",
         "Typecheck passes",
-        "Tests pass",
-        "Verify in browser: import on default and non-default session tabs with both dialog choices"
+        "Tests pass"
       ],
       "priority": 5,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-006",
-      "title": "Remove legacy create-factory callers in tests and UI",
-      "description": "As a maintainer, I want no remaining dependencies on POST /factories after migration.",
+      "id": "api-handlers-decomposition-recovery-006",
+      "title": "Retire monolithic handlers.go and satisfy size gates",
+      "description": "As a contributor, I want the monolithic handlers file removed so backend size checks apply per route-family file.",
       "acceptanceCriteria": [
-        "ui/src/api/named-factory/api.ts removes createFactory POST usage; named create uses session PUT with UPSERT_NAMED_AND_ACTIVATE.",
-        "Functional tests in tests/functional/runtime_api/factory_transformation and tests/functional/bootstrap_portability use session PUT with explicit mode.",
-        "Generated client no longer exposes CreateFactory for POST /factories.",
+        "handlers.go is deleted or contains only wiring or ServerInterface compile assertion with no route handler bodies.",
+        "Server still implements factoryapi.ServerInterface; go build ./pkg/api/... succeeds.",
+        "File-level backendsizecheck:ignore-file on the former monolith is removed; each handlers_*.go file passes make backend-size or has justified function-scoped waivers only.",
+        "Full go test ./pkg/api/... passes with no intentional OpenAPI contract test diffs.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -115,17 +109,29 @@
       "notes": ""
     },
     {
-      "id": "session-factory-save-modes-recovery-007",
-      "title": "Live CLI uses session PUT with REPLACE_CURRENT",
-      "description": "As a CLI user, I want live you factory save to use the unified session PUT while offline filesystem save stays unchanged.",
+      "id": "api-handlers-decomposition-recovery-007",
+      "title": "Split oversized server tests when file-count gate requires",
+      "description": "As a maintainer, I want server tests organized by concern if handler splits push pkg/api over package file-count limits.",
       "acceptanceCriteria": [
-        "Live you factory save PUTs factory with version from prior GET to sessionpath.CurrentFactoryPath using default REPLACE_CURRENT body shape.",
-        "Offline SaveFromFile and WriteCurrentFactoryPointer behavior unchanged.",
-        "CLI help and examples remain accurate for live vs offline save.",
+        "If pkgmaintcheck fails on pkg/api file count after handler splits, reorganize tests into server_*_test.go files with shared helpers in server_test_helpers_test.go following existing patterns.",
+        "No test assertions weakened or deleted to greenwash the move.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 7,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "api-handlers-decomposition-recovery-008",
+      "title": "Document handler ownership in development guide",
+      "description": "As a contributor, I want a route-family to file map so new endpoints land in the correct handler file during review.",
+      "acceptanceCriteria": [
+        "docs/internal/processes/development-guide-relevant-files.md lists each handlers_*.go file and the route families it owns, noting provider_session_details.go stays separate.",
+        "Doc states work-request JSON compatibility checks continue through pkg/factory/requests and ValidateCanonicalWorkRequestJSON, not reimplemented in handlers.",
+        "Typecheck passes"
+      ],
+      "priority": 8,
       "passes": true,
       "notes": ""
     }

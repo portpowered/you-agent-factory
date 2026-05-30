@@ -1,212 +1,317 @@
-# PRD: Session Factory Save Modes (S1 Recovery)
+# PRD: CLI Batch Work Submission (`you submit batch`)
 
-## Introduction
+## Context
 
-**Customer ask:** Retry implementation of **Session factory save modes (S1 recovery)** after a network outage interrupted the original program batch. Deliver the approved S1 behavior so customers can submit factory definitions through one session-scoped save endpoint with explicit save modes.
+### Customer ask
 
-**Concrete problem:** The runtime still exposes two overlapping submission paths: `POST /factories` (create named factory + activate under the service root) and `PUT /factory-sessions/{session_id}/factory` (replace the current factory for one live session). They differ in validation, concurrency, persistence roots, and activation. Dashboard import and editor saves cannot express “replace what I am editing” vs “create/upsert a named factory and make it current for this session” through one predictable contract. A prior autonomous batch did not land; this recovery batch starts from the current tree with **no save-mode implementation present**.
+Implement CLI batch work submission so operators and agents can submit a
+`FACTORY_REQUEST_BATCH` to a **running** factory via file path, stdin, or inline
+JSON—without hand-written `curl` boilerplate.
 
-**High-level solution:** Unify factory submission behind `PUT /factory-sessions/{session_id}/factory` with a capital-cased **`mode`** enum (`REPLACE_CURRENT` default, `UPSERT_NAMED_AND_ACTIVATE` optional). Request body is `{ mode?, factory }` where `factory.version` lives inside `Factory`. Remove `POST /factories`. Backend implements one **scope → validate → persist → activate → readback** pipeline with mode handlers, always activating via session-scoped `replaceSessionRuntime`. Dashboard editor uses `REPLACE_CURRENT` only; import confirm dialog chooses mode per operator intent.
+### Problem
 
-**Authoritative spec:** [`tasks/prd-session-factory-save-modes.md`](../prd-session-factory-save-modes.md) — when this recovery plan and that document differ, the approved PRD wins.
+Today, batch ingress to a live factory is only practical through:
 
-**Recovery note:** If a legacy Ralph/program token still references the aborted batch, operators may manually retire it; this recovery work item uses fresh story ids and does not assume partial commits from the failed run.
+- `curl -X PUT …/factory-sessions/{session}/work-requests/{request_id}` with a
+  JSON body, or
+- Dropping files under `factory/inputs/BATCH/` for the watcher.
 
-## Project-level acceptance criteria
+Unary `you submit` handles one work item. `you run --work` submits a batch only
+at factory startup. There is no first-class CLI that mirrors the documented HTTP
+upsert path for an already-running session.
 
-- [ ] `PUT /factory-sessions/{session_id}/factory` is the **only** HTTP API for submitting a full factory definition to a live session, with `mode` + `factory` body and default `REPLACE_CURRENT`.
-- [ ] `POST /factories` is removed from OpenAPI, generated Go/TS clients, UI, CLI live-server paths, and functional tests.
-- [ ] Both save modes persist under the correct session root and swap only the targeted session runtime when idle; multi-session tests prove isolation.
-- [ ] Dashboard editor Save and import confirm flows use session PUT with correct mode selection; no `POST /factories` callers remain.
-- [ ] Version rules per mode match the approved PRD (`REPLACE_CURRENT` requires version; UPSERT create may omit version; UPSERT replace detects stale on-disk version).
-- [ ] Existing error families remain mappable (`FACTORY_NOT_IDLE`, `STALE_FACTORY_VERSION`, `INVALID_FACTORY`, etc.).
-- [ ] Quality gate: repository typecheck, lint, and targeted tests for changed behavior pass.
+### Solution
+
+Add `you submit batch` under `you submit`. It reads the same canonical
+`FACTORY_REQUEST_BATCH` JSON as watched inputs and `you run --work`, validates it
+locally, and upserts via `PUT /factory-sessions/{session}/work-requests/{requestId}`.
+Support file path, piped stdin, explicit `-`, optional `--file`, inline JSON, and
+`--dry-run` for validate-only runs. Success output (human and `--json`) aligns
+with the unary submit response contract, including per-work identifiers when the
+API returns them.
 
 ## Goals
 
-- Route all live factory definition submission through session PUT with explicit save modes.
-- Remove `POST /factories` and parallel backend save trees (`CreateNamedFactory`, unscoped `SaveCurrentFactory` on HTTP paths).
-- Consolidate backend saves into one readable `SaveFactoryForSession` pipeline with two mode handlers and one session activation path.
-- Keep graph/editor Save on `REPLACE_CURRENT` only.
-- Give dashboard import a confirm dialog: replace current vs create new named (with suffixed name allocation on conflict).
-- Preserve CLI offline filesystem save behavior; live CLI uses session PUT with default mode and `factory.version` on the body.
+- Operators discover batch submit next to unary `you submit`.
+- Scripts and agents submit multi-work batches to a running factory in one command.
+- All ingress modes (file, pipe, inline) produce the same validated HTTP body.
+- Invalid batch JSON fails locally before any network call.
+- `--dry-run` confirms shape and summarizes work without contacting the server.
+- Packaged and reference docs describe CLI batch submit alongside `curl` and
+  watched-folder ingress.
 
-## User Stories
+## Project-level acceptance criteria
 
-### session-factory-save-modes-recovery-001: Session factory PUT contract and client regeneration
+- [ ] `you submit batch` is registered under `you submit` (not a separate top-level verb).
+- [ ] Running `you submit batch` with valid `FACTORY_REQUEST_BATCH` JSON results in
+  HTTP `201` and accepted work on a reachable factory (default session `~default`
+  when `--session` is omitted).
+- [ ] Batch JSON is accepted from: filesystem path (positional or `--file`), piped
+  stdin or positional `-`, and inline `{…}` positional when the argument is JSON.
+- [ ] `--dry-run` validates input, prints a summary, performs no HTTP, and exits `0`
+  on valid input even when the factory is unreachable.
+- [ ] Human stdout and `--json` on success include `requestId`, `traceId`, work
+  count, and per-work `name`, `workTypeName`, and `workId` when the API provides them.
+- [ ] Reference and packaged docs (`you docs batch-inputs`) include CLI examples
+  for file, pipe, inline, and dry-run alongside existing `curl` guidance.
+- [ ] Typecheck, lint, and project tests pass.
 
-**Description:** As an API consumer, I need OpenAPI and generated clients to describe save modes on session PUT so all callers share one typed contract.
+## User stories
 
-**Acceptance Criteria:**
+### cli-submit-batch-001: Shared canonical batch loader (file path)
 
-- [ ] `PUT /factory-sessions/{session_id}/factory` request body schema includes optional `mode` enum (`REPLACE_CURRENT` | `UPSERT_NAMED_AND_ACTIVATE`) and required `factory` (`Factory` with embedded `version` when applicable); omitted `mode` means `REPLACE_CURRENT`.
-- [ ] `POST /factories` is removed from `api/openapi.yaml`; contract test forbids `paths./factories.post`.
-- [ ] Bundled spec and generated Go (`pkg/api/generated`, `pkg/generatedclient`) and TS (`ui/src/api/generated`) clients are regenerated and compile.
-- [ ] Typecheck passes
-- [ ] Tests pass (OpenAPI contract / regeneration smoke as applicable)
+**Description:** As a maintainer, I want one canonical batch JSON loader used by
+`you run --work` and `you submit batch` so parsing rules never diverge.
 
-### session-factory-save-modes-recovery-002: Unified backend save pipeline and mode handlers
+**Acceptance criteria:**
 
-**Description:** As a maintainer, I need one orchestrated session save pipeline so session-scoped saves never fork through global activation paths.
+- [ ] Reading batch JSON from an existing filesystem path returns a validated
+  `FACTORY_REQUEST_BATCH` work request (same semantics as today’s `you run --work`
+  file load).
+- [ ] Retired field aliases and conflicting trace fields are rejected with the same
+  error guidance as today’s run loader tests.
+- [ ] `you run --work` behavior is unchanged for file-based batches (regression tests pass).
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-002: Upsert API returns per-work identifiers
 
-- [ ] `FactoryService` exposes a single entrypoint (e.g. `SaveFactoryForSession(ctx, sessionID, mode, factory)`) implementing: resolve scope → validate → persist (mode handler) → activate session runtime → readback.
-- [ ] `REPLACE_CURRENT` requires `factory.name` to match session current name; overwrites current slot (default root or named); stale/missing `factory.version` → `STALE_FACTORY_VERSION` when replacing a versioned definition.
-- [ ] `UPSERT_NAMED_AND_ACTIVATE` persists under session root for `factory.name` (create or replace), updates current-factory pointer, activates via `replaceSessionRuntime` for that session only.
-- [ ] Activation always uses `requireIdleRuntimeForSession` + `replaceSessionRuntime`; session saves do not call `activateReplacementRuntime` or infer session from global run state.
-- [ ] HTTP handler for session PUT decodes `{ mode, factory }` and calls only the unified entrypoint; `POST /factories` handler removed.
-- [ ] `CreateNamedFactory`, unscoped HTTP `SaveCurrentFactory`, and parallel save trees removed or inlined into the pipeline.
-- [ ] Service test demonstrates saving session B does not mutate session A (extend or mirror `SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession` for both modes).
-- [ ] Typecheck passes
-- [ ] Tests pass
+**Description:** As an agent, I want the batch upsert response to include work
+identifiers so I can verify submission without listing all work.
 
-### session-factory-save-modes-recovery-003: Version rules and error mapping per mode
+**Acceptance criteria:**
 
-**Description:** As a client author, I need deterministic version requirements and response versioning for each save mode.
+- [ ] Successful `PUT /work-requests/{request_id}` (session-scoped variant included)
+  returns `201` with `requestId`, `traceId`, and a `works` array where each item
+  includes `name`, `workTypeName`, and `workId`.
+- [ ] Multi-work batch upsert populates `works` for every accepted item in API tests.
+- [ ] OpenAPI schema and generated types reflect optional `works` on upsert response.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-003: Command discovery and help
 
-- [ ] `REPLACE_CURRENT` rejects when `factory.version` is missing or stale relative to the current definition for that session.
-- [ ] `UPSERT_NAMED_AND_ACTIVATE` on create (name absent under session root): `factory.version` may be omitted; response returns server-minted initial version inside `factory`.
-- [ ] `UPSERT_NAMED_AND_ACTIVATE` on replace of existing named factory: stale detection uses on-disk version for that name; success returns incremented `factory.version`.
-- [ ] `UPSERT_NAMED_AND_ACTIVATE` does not return `FACTORY_ALREADY_EXISTS`; it replaces when idle.
-- [ ] `FACTORY_NOT_IDLE` and `INVALID_FACTORY` still surface for unsafe or invalid payloads in either mode.
-- [ ] Typecheck passes
-- [ ] Tests pass
+**Description:** As an operator, I want to discover batch submit next to unary
+submit so I know which command to use for multi-work ingress.
 
-### session-factory-save-modes-recovery-004: Dashboard editor save uses REPLACE_CURRENT
+**Acceptance criteria:**
 
-**Description:** As a factory editor, I want Save to update the factory I am editing in the active tab without renaming or switching named factories.
+- [ ] `you submit batch --help` documents batch input modes (positional path,
+  optional `--file`, `-`/stdin, pipe-with-no-args, inline JSON), `--dry-run`,
+  `--session`, and global `--server` / `--json` / `--verbose`.
+- [ ] Help states the command expects `FACTORY_REQUEST_BATCH` and points to
+  `you docs batch-inputs`.
+- [ ] Help does not advertise unary-only flags (`--name`, `--work-type-name`,
+  `--payload`, `--work-type-id`).
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-004: Submit batch to running factory (HTTP + dry-run)
 
-- [ ] `saveCurrentFactoryDocument` / editor save hooks send session PUT with `mode: "REPLACE_CURRENT"` (or omitted mode) and include `version` on the `factory` payload from the latest GET.
-- [ ] No editor save path calls `UPSERT_NAMED_AND_ACTIVATE` or `POST /factories`.
-- [ ] Stale-version and not-idle errors present the same operator-facing messages as before (mapped from existing error codes).
-- [ ] Typecheck passes
-- [ ] Tests pass (API module / hook unit tests)
-- [ ] Verify in browser: edit graph, Save succeeds; forced stale version shows existing stale error UX
+**Description:** As an operator, I want to upsert a canonical batch to a running
+factory session, or validate locally without sending traffic.
 
-### session-factory-save-modes-recovery-005: Dashboard import confirm dialog and mode selection
+**Acceptance criteria:**
 
-**Description:** As a dashboard operator, I want import to offer replace-current vs create-new-named with safe naming when a conflict exists.
+- [ ] With valid batch JSON from a file, the CLI issues `PUT` to
+  `/factory-sessions/{session}/work-requests/{requestId}` where `requestId` in
+  the path matches the body; `Content-Type` is `application/json`.
+- [ ] Body `type` must be `FACTORY_REQUEST_BATCH` with at least one `works` entry;
+  violations fail locally with a clear message before HTTP.
+- [ ] HTTP `201` is treated as success; other statuses surface API error message when
+  present; unreachable factory errors match unary submit transport style.
+- [ ] `--session` scopes the request like unary submit.
+- [ ] `--dry-run` parses and validates only, prints summary including `requestId`,
+  work count, work names, `relationCount`, `batchSource`, and
+  `dry-run: no request sent`; performs zero HTTP calls; exits `0` on valid input
+  even when the server is down.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-005: Piped stdin and explicit `-`
 
-- [ ] Import activation uses session-scoped PUT only (no `POST /factories`).
-- [ ] Confirm dialog on import for any session tab with default **Replace current factory**:
-  - Replace → `REPLACE_CURRENT` with `factory.name` from session GET (PNG embedded name ignored); includes `factory.version` from GET.
-  - Create new named → `UPSERT_NAMED_AND_ACTIVATE` with name from PNG metadata (validated writable segment).
-- [ ] Create path: if preferred name exists under session root, client picks first free suffixed name (`name`, `name-2`, `name-3`, …) and shows resolved name in dialog before PUT.
-- [ ] Create path: omit `factory.version` when target name is new; include version when upserting an existing name the operator chose.
-- [ ] Replace path never changes the session’s active factory name (including `UNDEFINED` default root overwrite).
-- [ ] Typecheck passes
-- [ ] Tests pass (dialog choice, suffix allocation, PUT body/mode per session; at least one non-default session tab scenario)
-- [ ] Verify in browser: import on default and non-default tabs; both dialog choices reach success or expected error states
+**Description:** As an agent, I want to pipe batch JSON so I can submit without a
+temp file.
 
-### session-factory-save-modes-recovery-006: Remove legacy create-factory callers in tests and UI
+**Acceptance criteria:**
 
-**Description:** As a maintainer, I want no remaining dependencies on `POST /factories` after migration.
+- [ ] `cat batch.json | you submit batch` submits when stdin is not a TTY.
+- [ ] `you submit batch -` reads batch JSON from stdin.
+- [ ] `you submit batch` with no args and interactive TTY stdin fails immediately
+  with usage guidance (does not hang waiting for input).
+- [ ] Empty piped stdin fails with a clear empty-input error.
+- [ ] When a file path or `--file` is provided, stdin is ignored.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-006: Inline JSON positional
 
-- [ ] `ui/src/api/named-factory/api.ts` removes `createFactory` POST usage; named create flows use session PUT with `UPSERT_NAMED_AND_ACTIVATE`.
-- [ ] Functional tests in `tests/functional/runtime_api/factory_transformation/api_named_factory_test.go` and `tests/functional/bootstrap_portability/` use session PUT with explicit `mode`.
-- [ ] Generated client no longer exposes `CreateFactory` for `/factories` POST.
-- [ ] Typecheck passes
-- [ ] Tests pass
+**Description:** As a script author, I want to pass a small batch document as one
+positional argument.
 
-### session-factory-save-modes-recovery-007: Live CLI uses session PUT with REPLACE_CURRENT
+**Acceptance criteria:**
 
-**Description:** As a CLI user, I want live `you factory save` to use the unified session PUT while offline filesystem save stays unchanged.
+- [ ] Positional whose first non-whitespace byte is `{` is parsed as inline JSON,
+  not as a filesystem path.
+- [ ] A non-existent path that does not look like JSON errors as missing file/JSON,
+  not as JSON parse of the path string.
+- [ ] Inline JSON uses the same canonical validation as file and stdin input.
+- [ ] Help notes shell length limits; large batches should use file or pipe.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-**Acceptance Criteria:**
+### cli-submit-batch-007: Optional `--file` flag
 
-- [ ] Live `you factory save` (no name argument) PUTs `{ factory }` (default `REPLACE_CURRENT`) to `sessionpath.CurrentFactoryPath` with `version` echoed from prior GET inside `factory`.
-- [ ] Offline `SaveFromFile` / `WriteCurrentFactoryPointer` behavior unchanged.
-- [ ] CLI help/examples remain accurate for live vs offline save.
-- [ ] Typecheck passes
-- [ ] Tests pass (`pkg/cli` factory save tests)
+**Description:** As a script author, I want an explicit file flag when positional
+arguments are awkward.
 
-## Functional Requirements
+**Acceptance criteria:**
 
-- FR-1: Session PUT is the sole HTTP submit path for full factory definitions.
-- FR-2: Body shape `{ mode?, factory }`; enum values SCREAMING_SNAKE; default `REPLACE_CURRENT`.
-- FR-3: `REPLACE_CURRENT` requires name match to session current; does not change active factory name.
-- FR-4: `UPSERT_NAMED_AND_ACTIVATE` persists under `SessionFactoryRootDir`, sets current-factory pointer, activates in-session only.
-- FR-5: All modes require idle targeted session before persist/activate.
-- FR-6: Shared validation runs before disk write (topology + normalization; may delegate to validation consolidation PRD when available).
-- FR-7: `POST /factories` hard-removed (no deprecation shim).
-- FR-8: Editor saves `REPLACE_CURRENT` only.
-- FR-9: Import dialog per approved PRD US-005 decisions (default replace; suffixed names on conflict).
-- FR-10: Error responses remain compatible with existing dashboard mapping where codes overlap.
+- [ ] `--file <path>` reads batch JSON; `--file -` reads stdin.
+- [ ] When both `--file` and a positional path are set, `--file` wins (documented in help).
+- [ ] Positional path remains the primary documented form.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-## Non-Goals
+### cli-submit-batch-008: Human success output
 
-- `ACTIVATE_ONLY` mode (pointer switch without new definition).
-- Changing `POST /factory-sessions` open-session semantics.
-- Offline CLI named-factory create gaining HTTP UPSERT in this recovery batch.
-- Broad handler-file splits (`prd-api-handlers-decomposition`) or service composition refactors unless required for save pipeline extraction.
-- Replacing `REPLACE_CURRENT` to change active factory name (use UPSERT instead).
+**Description:** As an operator, I want confirmation that lists what was submitted
+and what to run next.
+
+**Acceptance criteria:**
+
+- [ ] On `201`, stdout includes `requestId`, `traceId`, work count, and each accepted
+  work’s `name` and `workTypeName`.
+- [ ] When the API returns `workId`, each work line includes it and a hint
+  `you work show <work-id>`; otherwise hints use `you work list --name <name>`.
+- [ ] Long name lists truncate (at most ten lines); `relationCount` shown when
+  relations are non-empty.
+- [ ] Full batch JSON and per-work payloads are not printed on stdout.
+- [ ] `--verbose` logs endpoint, `batchSource` (`file`, `stdin`, `inline`), byte size,
+  `requestId`, and work count on stderr—never payload content.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-009: JSON success output
+
+**Description:** As a script, I want machine-readable batch submit confirmation.
+
+**Acceptance criteria:**
+
+- [ ] Global `--json` emits one object with at minimum: `requestId`, `traceId`,
+  `workCount`, `relationCount`, `sessionId`, `endpointPath`, `batchSource`, and
+  `works` (each with `name`, `workTypeName`, `workId` when returned).
+- [ ] `--json` with `--dry-run` emits `dryRun: true` and summary fields without
+  `traceId` unless present in input.
+- [ ] Exit code `0` on success; non-zero on validation or HTTP errors.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-010: Error surfaces
+
+**Description:** As an agent, I want validation failures before HTTP and API
+failures after HTTP to be distinguishable.
+
+**Acceptance criteria:**
+
+- [x] Canonical validation errors include retired-field guidance where applicable.
+- [x] Missing or empty `requestId`, empty `works`, and invalid JSON fail locally.
+- [x] HTTP `400`/`404` (and `409` if applicable) print status and bounded API message;
+  no success JSON on failure.
+- [x] Tests cover invalid JSON, empty works, mocked `400`, and mocked `404`.
+- [x] Typecheck passes.
+- [x] Tests pass.
+
+### cli-submit-batch-011: Reference and packaged documentation
+
+**Description:** As a new contributor, I want docs to show CLI batch submit
+alongside curl and watched-folder ingress.
+
+**Acceptance criteria:**
+
+- [ ] `docs/reference/batch-inputs.md` adds a CLI subsection with examples for
+  file, `--file`, pipe, inline JSON, and `--dry-run`; keeps existing `curl` example.
+- [ ] Ingress comparison covers: `you submit` (single), `you submit batch` (running
+  factory), `you run --work` (startup), watched `factory/inputs/BATCH/`.
+- [ ] Packaged `you docs batch-inputs` content matches reference updates.
+- [ ] Doc tests guard `you submit batch` and `FACTORY_REQUEST_BATCH` markers where
+  other CLI examples are guarded.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### cli-submit-batch-012: End-to-end smoke (optional)
+
+**Description:** As a maintainer, I want one functional smoke proving batch CLI
+reaches a running factory when the harness supports it.
+
+**Acceptance criteria:**
+
+- [x] If the existing smoke harness can start a factory and accept work-request
+  upserts, one smoke runs `you submit batch` with a minimal checked-in batch file
+  and asserts success markers in output.
+- [x] If harness cost is prohibitive, implementation notes document deferral and
+  httptest coverage from earlier stories is cited as the verification substitute.
+- [x] Typecheck passes.
+- [x] Tests pass (or smoke story cancelled with documented justification).
+
+## Functional requirements
+
+- FR-1: Register `you submit batch` under `you submit`.
+- FR-2: Input precedence: `--file` (including `-`) → positional `-` → existing file
+  path → inline `{…}` → piped stdin when no positional/`--file` → usage error on TTY
+  with no input.
+- FR-3: Validate with canonical batch parser before HTTP; `--dry-run` skips HTTP.
+- FR-4: Upsert via `PUT` to session-scoped `/work-requests/{requestId}` only (not
+  `POST /work`).
+- FR-5: Preserve unary `you submit` behavior and flag surface on the parent command.
+- FR-6: Success output field names align with unary submit response contract
+  (`workId`, `workTypeName`, `name`, `traceId`, `sessionId`, `endpointPath`).
+- FR-7: Reuse existing CLI HTTP, session path, and diagnostic patterns from unary submit.
+
+## Non-goals
+
+- Extending unary `you submit` with batch flags or multiple payloads.
+- Replacing `you run --work` or watched-folder ingestion.
+- Staging multimodal files from the CLI in v1.
+- Top-level `you batch submit` verb.
+- Pipe or inline input for unary `you submit` in this feature.
 
 ## High-level technical design
 
-### Backend pipeline (required shape)
+1. **Shared loader** — Extract file-path batch loading from the run command into a
+   shared CLI package; run delegates without behavior change. Extend with stdin,
+   inline JSON, and `--file` resolution for batch submit only.
+2. **Command** — New batch subcommand on submit with config mirroring unary HTTP
+   fields (`Server`, `SessionID`, `JSON`, diagnostics). Wire test injection hook
+   like unary submit.
+3. **API** — Extend `UpsertWorkRequestResponse` with `works[]` populated from
+   accepted batch items; regenerate OpenAPI types before CLI success output stories.
+4. **Output** — Human and JSON formatters share identifier vocabulary with unary
+   submit; dry-run uses a distinct JSON shape with `dryRun: true`.
+5. **Docs** — Update reference and embedded packaged topic together; extend doc
+   tests and optional smoke.
 
-```text
-SaveFactoryForSession(ctx, sessionID, mode, factory)
-  → resolveSessionFactoryScope
-  → validateFactorySave
-  → persistFactorySave        // mode handler
-  → activatePersistedFactory  // replaceSessionRuntime only
-  → readbackFactory
-```
+**Dependencies:** Coordinate field naming with CLI submit response contract PRD;
+post-submit inspection (`you work show` / `you work list`) is the documented verify loop.
 
-**Scope object** (resolve once): `SessionID`, `Session`, `RootDir`, `Current`, `CurrentName`, `IsDefaultRoot`.
+## Supporting considerations
 
-**Mode handlers:**
-
-| Mode | Persist |
-|------|---------|
-| `REPLACE_CURRENT` | Overwrite current slot (root `factory.json` or `ReplaceNamedFactory` for current name) |
-| `UPSERT_NAMED_AND_ACTIVATE` | `PersistNamedFactory` or `ReplaceNamedFactory` under session root; set current-factory pointer |
-
-Suggested package: `pkg/service/factorysave/` with `save.go`, `scope.go`, `validate.go`, `persist.go`, `modes.go`, `activate.go`, `readback.go`. `FactoryService` stays thin.
-
-### Incremental refactor order
-
-1. Extract scope + readback (no behavior change).
-2. Route existing session save through shared validate + activate.
-3. Add mode handlers + HTTP body decode; wire PUT.
-4. Delete `CreateNamedFactory`, unscoped save HTTP paths, save-path `activateReplacementRuntime`.
-
-### UI transport
-
-- Extend `saveCurrentFactoryDocument` (or successor) to send `{ mode, factory }`.
-- Import: `activateImportedFactoryForSession` and confirm UI choose mode; remove `/factories` POST constant.
-
-### Dependencies
-
-- **Soft:** [`tasks/prd-factory-validation-consolidation.md`](../prd-factory-validation-consolidation.md) — do not block; interim topology validation acceptable.
-- **Downstream:** S7 UI client PRD may further consolidate transport after S1 lands.
-- **Do not** add new `POST /factories` callers during implementation.
-
-## Supporting technical and UX considerations
-
-- Reuse disk helpers: `marshalPersistedFactoryPayload`, `replaceDefaultFactoryDefinition`, `factoryconfig.PersistNamedFactory`, `ReplaceNamedFactory`, `buildSessionEditableFactoryReplacement`, `replaceSessionRuntime`.
-- UI `SaveCurrentFactoryInput.baseVersion` may remain an adapter writing into `factory.version` on the wire.
-- Contract tests: drop `/factories` post; assert save mode on session PUT.
-- Accessible import dialog: radio or equivalent with visible labels, keyboard operable, focus trap in modal.
-- Loading/error states on import confirm should not double-submit PUT.
+- **Idempotency:** `requestId` is the stable upsert key; re-submit behavior follows
+  server rules—no client-side dedupe beyond the document’s id.
+- **Diagnostics:** No payload bodies, tokens, or prompts in verbose stderr lines.
+- **Security:** Same trust model as unary submit (local factory URL, no new auth).
 
 ## Success metrics
 
-- Zero `POST /factories` references in production UI/CLI paths and functional tests after closeout.
-- Multi-session functional tests pass for both modes without cross-session disk or runtime mutation.
-- Editor save and import share one client shape (`mode` + `factory`).
-- Invalid payloads rejected consistently regardless of mode.
+- An agent submits a multi-work batch to a running factory in one command without `curl`.
+- Pipe and file paths produce identical HTTP bodies for the same JSON document.
+- Invalid batch JSON fails locally with zero network calls in automated tests.
+- `you docs batch-inputs` examples match implemented CLI behavior.
 
-## Open questions
+## Decisions (resolved)
 
-None — decisions are recorded in the approved S1 PRD (2026-05-30).
+| ID | Decision |
+|----|----------|
+| D-1 | `--file` is optional; positional path is primary; `--file` wins when both set. |
+| D-2 | Ship API `works[]` on upsert response together with CLI success output when possible. |
+| D-3 | `--dry-run` is in v1: validate locally, summarize, no HTTP, exit `0` on valid input. |
