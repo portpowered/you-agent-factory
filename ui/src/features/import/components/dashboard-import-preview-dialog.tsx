@@ -19,7 +19,6 @@ import {
   DialogTitle,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
-import type { FactoryPngImportValue } from "../lib/factory-png-import";
 import { allocateImportCreateFactoryName } from "../lib/allocate-import-create-factory-name";
 import type {
   FactoryImportConfirmInput,
