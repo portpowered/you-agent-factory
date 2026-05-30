@@ -8,9 +8,6 @@ export { InferenceAttemptCard } from "../components/inference-attempt";
 export { WorkItemPayloadList } from "../components/work-item-payload-details";
 export { WorkRelationshipsSection } from "../components/work-item-relationship-graph";
 
-export { useSelectedProviderSessionState } from "../hooks/useSelectedProviderSessionState";
-export type { SelectedProviderSessionState } from "../hooks/useSelectedProviderSessionState";
-
 export {
   selectWorkItemExecutionDetails,
 } from "../state/executionDetails";

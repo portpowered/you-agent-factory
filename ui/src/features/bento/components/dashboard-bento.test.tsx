@@ -81,7 +81,9 @@ vi.mock("../../current-selection/hooks/useCurrentSelectionDetails", () => ({
   }),
 }));
 
-vi.mock("../../current-selection/work-selection/public", async () => {
+vi.mock(
+  "../../current-selection/work-selection/hooks/useSelectedProviderSessionState",
+  async () => {
   const React = await vi.importActual<typeof import("react")>("react");
 
   return {
