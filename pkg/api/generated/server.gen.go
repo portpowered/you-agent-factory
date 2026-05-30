@@ -2148,7 +2148,26 @@ type SubmitWorkRequest struct {
 
 // SubmitWorkResponse defines model for SubmitWorkResponse.
 type SubmitWorkResponse struct {
+	// Accepted False when the same requestId was already accepted (idempotent replay).
+	Accepted bool `json:"accepted"`
+
+	// Name Submitted work display name.
+	Name *string `json:"name,omitempty"`
+
+	// RequestId Stable request identifier assigned during normalization.
+	RequestId string `json:"requestId"`
+
+	// SessionId Factory session that accepted the submit (~default for POST /work).
+	SessionId *string `json:"sessionId,omitempty"`
+
+	// TraceId Trace identifier for the submitted work request batch.
 	TraceId string `json:"traceId"`
+
+	// WorkId Primary work identifier for single-work submits (batch-<requestId>-<name> when omitted).
+	WorkId *string `json:"workId,omitempty"`
+
+	// WorkTypeName Configured work type name for the submitted work.
+	WorkTypeName *string `json:"workTypeName,omitempty"`
 }
 
 // SubmitWorkTextItem Ordered inline text submission item.

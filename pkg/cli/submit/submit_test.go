@@ -280,11 +280,19 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	}
 }
 
-func TestSubmit_JSONStdoutEmitsSubmitWorkResponse(t *testing.T) {
+func TestSubmit_JSONStdoutEmitsStableSuccessEnvelope(t *testing.T) {
+	workID := "batch-req-1-json-submit"
+	name := "json-submit"
+	workType := "task"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "json-trace-1"}); err != nil {
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{
+			TraceId:      "json-trace-1",
+			WorkId:       &workID,
+			Name:         &name,
+			WorkTypeName: &workType,
+		}); err != nil {
 			t.Errorf("encode submit response: %v", err)
 		}
 	}))
@@ -308,20 +316,147 @@ func TestSubmit_JSONStdoutEmitsSubmitWorkResponse(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	var result factoryapi.SubmitWorkResponse
-	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
-		t.Fatalf("stdout is not valid SubmitWorkResponse JSON: %v\n%s", err, out.String())
+	var envelope SubmitSuccessResult
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatalf("stdout is not valid submit success JSON: %v\n%s", err, out.String())
 	}
-	if result.TraceId != "json-trace-1" {
-		t.Fatalf("traceId = %q, want json-trace-1", result.TraceId)
+	if envelope.WorkID == nil || *envelope.WorkID != workID {
+		t.Fatalf("workId = %v, want %q", envelope.WorkID, workID)
+	}
+	if envelope.Name != name {
+		t.Fatalf("name = %q, want %q", envelope.Name, name)
+	}
+	if envelope.WorkTypeName != workType {
+		t.Fatalf("workTypeName = %q, want %q", envelope.WorkTypeName, workType)
+	}
+	if envelope.TraceID != "json-trace-1" {
+		t.Fatalf("traceId = %q, want json-trace-1", envelope.TraceID)
+	}
+	if envelope.SessionID != "~default" {
+		t.Fatalf("sessionId = %q, want ~default", envelope.SessionID)
+	}
+	if envelope.EndpointPath != "/factory-sessions/~default/work" {
+		t.Fatalf("endpointPath = %q, want /factory-sessions/~default/work", envelope.EndpointPath)
+	}
+	for _, forbidden := range []string{"requestId", "accepted"} {
+		if strings.Contains(out.String(), forbidden) {
+			t.Fatalf("stdout leaked API field %q:\n%s", forbidden, out.String())
+		}
 	}
 }
 
-func TestSubmit_HumanReadableStdoutUnchanged(t *testing.T) {
+func TestSubmit_JSONStdoutEmitsSessionScopedEndpointPath(t *testing.T) {
+	sessionID := "session-beta"
+	traceID := "scoped-json-trace"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/session-beta/work" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{
+			TraceId:   traceID,
+			SessionId: &sessionID,
+		}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"scoped json task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Submit(SubmitConfig{
+		Name:         "scoped-json-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		SessionID:    sessionID,
+		JSON:         true,
+		Output:       &out,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	var envelope SubmitSuccessResult
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatalf("stdout is not valid submit success JSON: %v\n%s", err, out.String())
+	}
+	if envelope.TraceID != traceID {
+		t.Fatalf("traceId = %q, want %q", envelope.TraceID, traceID)
+	}
+	if envelope.SessionID != sessionID {
+		t.Fatalf("sessionId = %q, want %q", envelope.SessionID, sessionID)
+	}
+	if envelope.EndpointPath != "/factory-sessions/session-beta/work" {
+		t.Fatalf("endpointPath = %q, want /factory-sessions/session-beta/work", envelope.EndpointPath)
+	}
+	if envelope.Name != "scoped-json-submit" {
+		t.Fatalf("name = %q, want scoped-json-submit", envelope.Name)
+	}
+	if envelope.WorkTypeName != "task" {
+		t.Fatalf("workTypeName = %q, want task", envelope.WorkTypeName)
+	}
+}
+
+func TestSubmit_JSONStdoutEncodesNullWorkIdWhenAbsent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "human-trace-1"}); err != nil {
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "json-trace-no-work-id"}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"json stdout task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Submit(SubmitConfig{
+		Name:         "json-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		JSON:         true,
+		Output:       &out,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(out.Bytes(), &raw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if _, ok := raw["workId"]; !ok {
+		t.Fatalf("stdout missing workId key: %s", out.String())
+	}
+	if string(raw["workId"]) != "null" {
+		t.Fatalf("workId = %s, want null", raw["workId"])
+	}
+}
+
+func TestSubmit_HumanStdoutIncludesWorkMetadataAndShowHint(t *testing.T) {
+	workID := "batch-req-1-human-submit"
+	name := "human-submit"
+	workType := "task"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{
+			TraceId:      "human-trace-1",
+			WorkId:       &workID,
+			Name:         &name,
+			WorkTypeName: &workType,
+		}); err != nil {
 			t.Errorf("encode submit response: %v", err)
 		}
 	}))
@@ -343,8 +478,71 @@ func TestSubmit_HumanReadableStdoutUnchanged(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	if got := out.String(); got != "Submitted work: human-trace-1\n" {
-		t.Fatalf("stdout = %q, want human confirmation", got)
+
+	got := out.String()
+	for _, want := range []string{
+		"Submitted: human-submit (task)\n",
+		"traceId: human-trace-1\n",
+		"workId: batch-req-1-human-submit\n",
+		"Verify: you work show batch-req-1-human-submit\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{
+		"workId was not returned",
+		"you work list --name",
+		`{"title":"human stdout task"}`,
+		"requestId",
+		"accepted",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("stdout leaked %q:\n%s", forbidden, got)
+		}
+	}
+}
+
+func TestSubmit_HumanStdoutFallsBackToWorkListWithoutWorkId(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "human-trace-2"}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"human stdout task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Submit(SubmitConfig{
+		Name:         "human-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"Submitted: human-submit (task)\n",
+		"traceId: human-trace-2\n",
+		"workId was not returned; verify with:\n",
+		"you work list --name human-submit\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "you work show") {
+		t.Fatalf("stdout should not suggest work show without workId:\n%s", got)
 	}
 }
 
@@ -470,15 +668,135 @@ func TestSubmit_FactoryNotRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Use a port that nothing is listening on.
+	var out bytes.Buffer
 	err := Submit(SubmitConfig{
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Server:       "http://127.0.0.1:19999",
+		Output:       &out,
 	})
 	if err == nil {
 		t.Fatal("expected error when factory is not running")
+	}
+	if got := err.Error(); !strings.Contains(got, "factory not reachable at http://127.0.0.1:19999") {
+		t.Fatalf("error = %q, want factory not reachable at resolved URL", got)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on transport failure", out.String())
+	}
+}
+
+func TestSubmit_NonJSONErrorBodyUsesBoundedPreview(t *testing.T) {
+	longBody := strings.Repeat("x", submitErrorBodyPreviewLimit+30)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(longBody))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "task-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	})
+	if err == nil {
+		t.Fatal("expected error for non-JSON failure body")
+	}
+	wantPreview := longBody[:submitErrorBodyPreviewLimit] + "..."
+	if got := err.Error(); got != "submission failed (500): "+wantPreview {
+		t.Fatalf("error = %q, want bounded preview %q", got, wantPreview)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on API failure", out.String())
+	}
+}
+
+func TestSubmit_ErrorIncludesWorkIdWhenPresent(t *testing.T) {
+	workID := "batch-req-duplicate-submit"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		if err := json.NewEncoder(w).Encode(map[string]string{
+			"message": "work already accepted",
+			"family":  "client",
+			"code":    "BAD_REQUEST",
+			"workId":  workID,
+		}); err != nil {
+			t.Errorf("encode error response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "task-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	})
+	if err == nil {
+		t.Fatal("expected error when API returns workId")
+	}
+	if got := err.Error(); got != "submission failed (409): work already accepted workId="+workID {
+		t.Fatalf("error = %q, want stable workId suffix", got)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on API failure", out.String())
+	}
+}
+
+func TestSubmit_JSONModeDoesNotEmitSuccessOnFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Message: "invalid payload",
+			Code:    factoryapi.BADREQUEST,
+			Family:  factoryapi.ErrorFamilyBadRequest,
+		}); err != nil {
+			t.Errorf("encode error response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "task-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		JSON:         true,
+		Output:       &out,
+	})
+	if err == nil {
+		t.Fatal("expected error for JSON-mode failure")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty JSON success envelope on failure", out.String())
 	}
 }
 

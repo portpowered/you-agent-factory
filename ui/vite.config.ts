@@ -118,6 +118,7 @@ export default defineConfig({
       provider: "v8",
       exclude: [
         ...coverageConfigDefaults.exclude,
+        "src/api/generated/**",
         "**/*.jsonl",
         "scripts/**",
         "src/testing/app-shell-test-graph-layout.ts",
@@ -126,6 +127,7 @@ export default defineConfig({
         "**/index.ts",
       ],
       thresholds: {
+        // Mergeability: keep thresholds at or below measured main/branch baseline (~93.05–93.08%).
         statements: 93.05,
         branches: 80.4,
         functions: 94.9,

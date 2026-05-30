@@ -99,11 +99,7 @@ func Submit(cfg SubmitConfig) error {
 
 	if resp.StatusCode != http.StatusCreated {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody))
-		var errResp factoryapi.ErrorResponse
-		if json.Unmarshal(respBody, &errResp) == nil && errResp.Message != "" {
-			return fmt.Errorf("submission failed (%d): %s", resp.StatusCode, errResp.Message)
-		}
-		return fmt.Errorf("submission failed (%d): %s", resp.StatusCode, string(respBody))
+		return submitFailureError(resp.StatusCode, respBody)
 	}
 
 	var result factoryapi.SubmitWorkResponse
@@ -113,8 +109,14 @@ func Submit(cfg SubmitConfig) error {
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d traceId=%s", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody), result.TraceId)
 
 	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(result)
+		return writeJSONSubmitSuccess(
+			cfg.Output,
+			result,
+			endpointPath,
+			name,
+			cfg.WorkTypeName,
+			clidiag.SessionLabel(cfg.SessionID),
+		)
 	}
-	_, err = fmt.Fprintf(cfg.Output, "Submitted work: %s\n", result.TraceId)
-	return err
+	return writeHumanSubmitSuccess(cfg.Output, result, name, cfg.WorkTypeName)
 }
