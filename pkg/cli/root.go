@@ -20,6 +20,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -33,6 +34,7 @@ var expandFactoryConfig = configcli.ExpandFactoryConfig
 var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
 var listWork = workcli.List
+var listSessions = sessioncli.List
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
 var saveFactoryFromFile = factorycli.SaveFromFile
@@ -91,6 +93,7 @@ func NewRootCommand() *cobra.Command {
 		newModelsCommand(diagnostics),
 		newRunCommand(diagnostics),
 		newSubmitCommand(diagnostics),
+		newSessionCommand(diagnostics),
 		newWorkCommand(diagnostics),
 	)
 
@@ -306,6 +309,75 @@ func newFactoryQueryCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API current-factory JSON response")
 	return cmd
+}
+
+func newSessionCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	sessionCmd := &cobra.Command{
+		Use:   "session",
+		Short: "List, open, and close live factory sessions on a running host",
+		Long: "Manage live factory sessions on a running you-agent-factory service.\n\n" +
+			"Subcommands:\n" +
+			"  list    list live factory sessions from GET /factory-sessions\n" +
+			"  create  open another live session from a folder path\n" +
+			"  delete  close a live session by session id\n\n" +
+			"Session commands use the same default --port as work list. Use --json to emit API-shaped " +
+			"responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+		Example: "  # List live sessions on the default local port.\n" +
+			"  " + cliBinaryName + " session list\n\n" +
+			"  # Emit API-shaped JSON for automation.\n" +
+			"  " + cliBinaryName + " session list --json\n\n" +
+			"  # Target a different service port.\n" +
+			"  " + cliBinaryName + " session list --port 9090",
+	}
+	sessionCmd.AddCommand(
+		newSessionListCommand(diagnostics),
+		newSessionCreateCommand(),
+		newSessionDeleteCommand(),
+	)
+	return sessionCmd
+}
+
+func newSessionListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := sessioncli.ListConfig{Port: defaultcmd.FactoryPort}
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List live factory sessions",
+		Long: "List every live factory session that the running host currently has open.\n\n" +
+			"Human output prints session id, project, folder path, factory dir, default marker, and " +
+			"target kind/name. Use --json to emit ListFactorySessionsResponse on stdout.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
+			return listSessions(cfg)
+		},
+	}
+
+	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API list-factory-sessions JSON response")
+	return cmd
+}
+
+func newSessionCreateCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "create",
+		Short: "Open a live factory session from a folder",
+		Long: "Open another live factory session from a folder path via POST /factory-sessions.\n\n" +
+			"Use --dir to provide the folder path. Optional --init-new-factory and --validate-only " +
+			"map to the API request fields. Use --target-kind and --target-name when the folder exposes " +
+			"multiple runnable targets.",
+	}
+}
+
+func newSessionDeleteCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete <session-id>",
+		Short: "Close a live factory session",
+		Long: "Close one live factory session via DELETE /factory-sessions/{session_id}.\n\n" +
+			"Use the same --port selection as session list.",
+	}
 }
 
 func newWorkCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
