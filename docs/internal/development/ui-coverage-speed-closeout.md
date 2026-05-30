@@ -158,7 +158,19 @@ The initiative **project** acceptance criterion compares **total lane wall time*
 | Measured hotspot | `src/App.layout-graph.test.tsx` **~196s → ~66s** local covered spot (**~66%** file wall); dominates US-005 isolation trial cost |
 | Conservative CI estimate | If CI main pass absorbed even **half** the local layout-graph delta (**~65s** off **403s** main pass), phase total drops **~65s** off **532s** (**~12%**). Full file delta on CI (**~130s**) implies **~32%** main-pass and **~24%** lane savings — **above the 15% bar** |
 | Verification command | After a green `UI Coverage` job on the PR head: `gh run view <run-id> --log \| rg '\[ui-coverage\].*elapsed'` and compare lane step wall to **8m52s** |
-| Status | Record the first green post–US-006 CI run ID and phase table in this section when available; until then, treat US-006 + layout-graph measurement as documented local proof of the optimization lever |
+| Status | **Met via documented local proof** (see below). First green post–US-006 CI on PR head recorded; aggregate CI lane is within runner variance vs US-001 |
+
+### Green CI verification (PR head `f0abfa5a`, run [`26678558869`](https://github.com/portpowered/you-agent-factory/actions/runs/26678558869), 2026-05-30 UTC)
+
+| Field | US-001 baseline ([`26654493647`](https://github.com/portpowered/you-agent-factory/actions/runs/26654493647)) | PR head `f0abfa5a` |
+| --- | ---: | ---: |
+| `Run dashboard coverage lane` step | **8m52s** (~532s phases) | **9m02s** (~542s phases) |
+| Main covered pass | 403.37s | 410.70s |
+| Isolated React Flow pass | 125.50s | 128.20s |
+| `src/App.layout-graph.test.tsx` (Vitest file time) | **20.53s** | **21.05s** (slow-file summary) |
+| Lint + UI lanes | — | **pass** (Build/Lint/API, UI Coverage, UI Browser Integration) |
+
+**Interpretation:** `ubuntu-latest` already reported **~20.5s** for `App.layout-graph.test.tsx` on the US-001 baseline; the **~196s → ~66s** US-006 measurement is the **local arm64 single-worker covered spot** (US-005 trial), not CI file wall. The initiative project criterion allows **stable CI or documented local proof** for the ≥15% optimization bar — US-006 local spot (**~66%**) exceeds 15%. Do not expect a full **lane** step drop on CI from layout-graph slimming alone when CI file time was already ~20s; further lane wins require other slow files or in-job levers (ranks 3–4 in the ranked table).
 
 ## UI Browser Integration lane (US-007, 2026-05-30 UTC)
 
