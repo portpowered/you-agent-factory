@@ -527,3 +527,12 @@
   - Gotchas encountered: Main’s `use-factory-import-save-choice` may still default to uppercase `REPLACE_CURRENT` while `named-factory/api.ts` exports lowercase `replace_current` | `create_new_named`.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await CI on `b8d23c6c`.
 ---
+
+## 2026-05-31T19:30:00Z - mergeability (PR #489 main merge)
+- What was implemented: Merged `origin/main` into `ralph/ui-session-factory-client` after BLOCKING review (`mergeable: CONFLICTING`, `mergeStateStatus: DIRTY`); resolved conflicts in `development-guide-relevant-files.md`, removed duplicate `pkg/api/server_session_scoping_test.go` (coverage lives in `server_factory_sessions_test.go` on main), kept ui-session-factory-client PRD/tracking files.
+- Files changed: merge from main (handler decomposition, `pkg/service/factorysave`, UI coverage sharding, dashboard hooks); conflict resolution in `docs/internal/processes/development-guide-relevant-files.md`; deleted `pkg/api/server_session_scoping_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: When `main` deletes `server_session_scoping_test.go` in favor of `server_factory_sessions_test.go`, drop the branch duplicate on merge—session PUT tests already use `saveFactoryForSessionRequestBody` on main.
+  - Gotchas encountered: `prd.json`/`progress.txt` conflicts with unrelated Ralph PRDs on `main`—restore branch PRD from pre-merge HEAD, not merge markers.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — BLOCKING merge-conflict feedback on head `6f31eb3f`.
+---

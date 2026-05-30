@@ -2,9 +2,18 @@ package api
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -13,10 +22,18 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )
 
-const defaultMaxResults = 50
+const (
+	defaultMaxResults                = 50
+	submitWorkStagedFileRefPrefix    = "submit-work-stage:v1:"
+	submitWorkStagedFileTokenDivider = "."
+	submitWorkStageDirPrefix         = "submit-work-stage-"
+)
+
+var submitWorkStagedFileRefSecret = mustReadSubmitWorkStagedFileRefSecret()
 
 func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factoryapi.ListWorkParams) {
 	s.listWork(w, r, params, s.runtime.GetEngineStateSnapshot)
@@ -330,73 +347,6 @@ func findPublicWorkToken(tokens map[string]*interfaces.Token, id string) (*inter
 	}
 	return nil, false
 }
-
-// GetStatus handles GET /status as the supported runtime status read model.
-func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
-	s.getStatus(w, r, s.runtime.GetEngineStateSnapshot)
-}
-
-func (s *Server) GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	sessionRuntime, ok := s.requireSessionRuntime(w)
-	if !ok {
-		return
-	}
-	s.getStatus(w, r, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-		return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(sessionID))
-	})
-}
-
-func (s *Server) getStatus(
-	w http.ResponseWriter,
-	r *http.Request,
-	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
-) {
-	snapshot, err := loadSnapshot(r.Context())
-	if err != nil {
-		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-			return
-		}
-		s.logger.Error("get engine state snapshot failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to get engine state snapshot", "INTERNAL_ERROR")
-		return
-	}
-
-	s.writeJSON(w, http.StatusOK, statusFromEngineStateSnapshot(*snapshot))
-}
-
-func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenResponse {
-	resp := factoryapi.TokenResponse{
-		Id:                       t.ID,
-		PlaceId:                  t.PlaceID,
-		WorkId:                   t.Color.WorkID,
-		WorkType:                 t.Color.WorkTypeID,
-		ChainingTraceDepth:       intPtrIfPositive(t.Color.ChainingTraceDepth),
-		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
-		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
-		TraceId:                  t.Color.TraceID,
-		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
-		Tags:                     stringMapPtr(t.Color.Tags),
-		CreatedAt:                t.CreatedAt,
-		EnteredAt:                t.EnteredAt,
-	}
-	if t.Color.Name != "" {
-		resp.Name = &t.Color.Name
-	}
-	if len(t.Color.Tags) == 0 {
-		resp.Tags = nil
-	}
-	if includeHistory {
-		resp.History = &factoryapi.TokenHistory{
-			TotalVisits:         integerMapPtr(t.History.TotalVisits),
-			ConsecutiveFailures: integerMapPtr(t.History.ConsecutiveFailures),
-			PlaceVisits:         integerMapPtr(t.History.PlaceVisits),
-			LastError:           stringPtrIfNotEmpty(t.History.LastError),
-		}
-	}
-	return resp
-}
-
 func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
 	name := firstNonEmptyString(t.Color.Name, t.Color.WorkID, t.ID)
 	return factoryapi.Work{
@@ -478,117 +428,291 @@ func publicWorkToken(token *interfaces.Token) bool {
 		token.Color.DataType != interfaces.DataTypeResource &&
 		!interfaces.IsSystemTimeToken(token)
 }
+func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+	return workcontent.GeneratedPtrFromParts(parts)
+}
 
-func statusFromEngineStateSnapshot(snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) factoryapi.StatusResponse {
-	categories, resources := categorizeStatusTokens(&snapshot.Marking, snapshot.Topology)
-	return factoryapi.StatusResponse{
-		Categories:    categories,
-		FactoryState:  snapshot.FactoryState,
-		Resources:     resourceUsagePtr(resources),
-		RuntimeStatus: string(snapshot.RuntimeStatus),
-		TotalTokens:   countPublicStatusTokens(&snapshot.Marking),
+func (s *Server) StageSubmitWorkFile(w http.ResponseWriter, r *http.Request) {
+	response, err := stageSubmitWorkFileRequest(r)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.logger.Error("stage submit-work file failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to stage submit-work file", "INTERNAL_ERROR")
+		return
+	}
+
+	s.writeJSON(w, http.StatusCreated, response)
+}
+
+func (s *Server) StageSubmitWorkFileBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	if _, err := sessionRuntime.GetCurrentFactoryForSession(r.Context(), string(sessionID)); err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
+		s.logger.Error("stage submit-work file failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to stage submit-work file", "INTERNAL_ERROR")
+		return
+	}
+
+	response, err := stageSubmitWorkFileRequest(r)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.logger.Error("stage submit-work file failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to stage submit-work file", "INTERNAL_ERROR")
+		return
+	}
+
+	s.writeJSON(w, http.StatusCreated, response)
+}
+
+func stageSubmitWorkFileRequest(r *http.Request) (factoryapi.StageSubmitWorkFileResponse, error) {
+	req, err := decodeStageSubmitWorkFileRequestBody(r.Body)
+	if err != nil {
+		return factoryapi.StageSubmitWorkFileResponse{}, err
+	}
+
+	content, err := base64.StdEncoding.DecodeString(req.ContentBase64)
+	if err != nil {
+		return factoryapi.StageSubmitWorkFileResponse{}, requestFieldValidationError{
+			message: "contentBase64 must be valid base64",
+		}
+	}
+	if len(content) == 0 {
+		return factoryapi.StageSubmitWorkFileResponse{}, requestFieldValidationError{
+			message: "contentBase64 must decode to a non-empty file payload",
+		}
+	}
+
+	stagedFileRef, err := writeStagedSubmitWorkFile(content, req.FileName)
+	if err != nil {
+		return factoryapi.StageSubmitWorkFileResponse{}, fmt.Errorf("write staged submit-work file: %w", err)
+	}
+
+	return factoryapi.StageSubmitWorkFileResponse{
+		FileName:      req.FileName,
+		MediaType:     req.MediaType,
+		StagedFileRef: stagedFileRef,
+	}, nil
+}
+
+func decodeStageSubmitWorkFileRequestBody(body io.Reader) (factoryapi.StageSubmitWorkFileRequest, error) {
+	var rawFields map[string]json.RawMessage
+	if err := json.NewDecoder(body).Decode(&rawFields); err != nil {
+		return factoryapi.StageSubmitWorkFileRequest{}, err
+	}
+	if err := validateStageSubmitWorkFileRequestFields(rawFields); err != nil {
+		return factoryapi.StageSubmitWorkFileRequest{}, err
+	}
+
+	payload, err := json.Marshal(rawFields)
+	if err != nil {
+		return factoryapi.StageSubmitWorkFileRequest{}, err
+	}
+	var req factoryapi.StageSubmitWorkFileRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return factoryapi.StageSubmitWorkFileRequest{}, err
+	}
+	return req, nil
+}
+
+func validateStageSubmitWorkFileRequestFields(fields map[string]json.RawMessage) error {
+	if err := requireOnlyFields(fields, "", "itemType", "fileName", "mediaType", "contentBase64"); err != nil {
+		return err
+	}
+
+	itemType, err := requiredStageSubmitWorkItemType(fields)
+	if err != nil {
+		return err
+	}
+	switch itemType {
+	case factoryapi.SubmitWorkItemTypeImage,
+		factoryapi.SubmitWorkItemTypeVideo,
+		factoryapi.SubmitWorkItemTypeAudio,
+		factoryapi.SubmitWorkItemTypeDocument:
+	default:
+		return requestFieldValidationError{message: "itemType must be one of image, video, audio, or document"}
+	}
+
+	fileName, err := requiredNonEmptyStringField(fields, "", "fileName", "submit-work staged files")
+	if err != nil {
+		return err
+	}
+	if filepath.Base(fileName) == "." {
+		return requestFieldValidationError{message: "fileName must identify a file"}
+	}
+
+	mediaType, err := requiredNonEmptyStringField(fields, "", "mediaType", "submit-work staged files")
+	if err != nil {
+		return err
+	}
+	if err := validateStageSubmitWorkMediaType(itemType, mediaType); err != nil {
+		return err
+	}
+
+	if _, err := requiredNonEmptyStringField(fields, "", "contentBase64", "submit-work staged files"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func requiredStageSubmitWorkItemType(
+	fields map[string]json.RawMessage,
+) (factoryapi.SubmitWorkItemType, error) {
+	itemTypeRaw, ok := fields["itemType"]
+	if !ok {
+		return "", requestFieldValidationError{message: "itemType is required"}
+	}
+
+	var itemType string
+	if err := json.Unmarshal(itemTypeRaw, &itemType); err != nil || itemType == "" {
+		return "", requestFieldValidationError{message: "itemType must be a non-empty string"}
+	}
+
+	switch factoryapi.SubmitWorkItemType(itemType) {
+	case factoryapi.SubmitWorkItemTypeImage,
+		factoryapi.SubmitWorkItemTypeVideo,
+		factoryapi.SubmitWorkItemTypeAudio,
+		factoryapi.SubmitWorkItemTypeDocument:
+		return factoryapi.SubmitWorkItemType(itemType), nil
+	case factoryapi.SubmitWorkItemTypeText:
+		return "", requestFieldValidationError{
+			message: "itemType must be one of image, video, audio, or document",
+		}
+	default:
+		return "", requestFieldValidationError{
+			message: "itemType must be one of image, video, audio, or document",
+		}
 	}
 }
 
-func categorizeStatusTokens(marking *petri.MarkingSnapshot, net *state.Net) (factoryapi.StatusCategories, []factoryapi.ResourceUsage) {
-	var categories factoryapi.StatusCategories
-	resourceCounts := make(map[string]int)
-	resourceTotals := resourceTotalsFromTopology(net)
-
-	if marking == nil {
-		return categories, resourceUsage(resourceCounts, resourceTotals)
-	}
-
-	for _, token := range marking.Tokens {
-		if token == nil {
-			continue
+func validateStageSubmitWorkMediaType(itemType factoryapi.SubmitWorkItemType, mediaType string) error {
+	switch itemType {
+	case factoryapi.SubmitWorkItemTypeImage:
+		if len(mediaType) >= len("image/") && mediaType[:len("image/")] == "image/" {
+			return nil
 		}
-		if interfaces.IsSystemTimeToken(token) {
-			continue
+		return requestFieldValidationError{message: "mediaType must start with image/ for image items"}
+	case factoryapi.SubmitWorkItemTypeVideo:
+		if len(mediaType) >= len("video/") && mediaType[:len("video/")] == "video/" {
+			return nil
 		}
-
-		if token.Color.DataType == interfaces.DataTypeResource {
-			resourceID, resourceState := state.SplitPlaceID(token.PlaceID)
-			if _, ok := resourceTotals[resourceID]; !ok {
-				resourceTotals[resourceID]++
-			}
-			if resourceState == interfaces.ResourceStateAvailable {
-				resourceCounts[resourceID]++
-			}
-			continue
+		return requestFieldValidationError{message: "mediaType must start with video/ for video items"}
+	case factoryapi.SubmitWorkItemTypeAudio:
+		if len(mediaType) >= len("audio/") && mediaType[:len("audio/")] == "audio/" {
+			return nil
 		}
-
-		switch statusStateCategory(net, token.PlaceID) {
-		case state.StateCategoryFailed:
-			categories.Failed++
-		case state.StateCategoryTerminal:
-			categories.Terminal++
-		case state.StateCategoryInitial:
-			categories.Initial++
-		default:
-			categories.Processing++
+		return requestFieldValidationError{message: "mediaType must start with audio/ for audio items"}
+	case factoryapi.SubmitWorkItemTypeDocument:
+		if mediaType == "" {
+			return requestFieldValidationError{message: "mediaType must be a non-empty string"}
 		}
-	}
-
-	return categories, resourceUsage(resourceCounts, resourceTotals)
-}
-
-func countPublicStatusTokens(marking *petri.MarkingSnapshot) int {
-	if marking == nil {
-		return 0
-	}
-	count := 0
-	for _, token := range marking.Tokens {
-		if token == nil || interfaces.IsSystemTimeToken(token) {
-			continue
-		}
-		count++
-	}
-	return count
-}
-
-func statusStateCategory(net *state.Net, placeID string) state.StateCategory {
-	if net == nil {
-		return state.StateCategoryProcessing
-	}
-	return net.StateCategoryForPlace(placeID)
-}
-
-func resourceTotalsFromTopology(net *state.Net) map[string]int {
-	totals := make(map[string]int)
-	if net == nil {
-		return totals
-	}
-	for id, resource := range net.Resources {
-		if resource == nil {
-			continue
-		}
-		totals[id] = resource.Capacity
-	}
-	return totals
-}
-
-func resourceUsage(counts map[string]int, totals map[string]int) []factoryapi.ResourceUsage {
-	ids := make([]string, 0, len(totals))
-	for id := range totals {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-
-	resources := make([]factoryapi.ResourceUsage, 0, len(ids))
-	for _, id := range ids {
-		resources = append(resources, factoryapi.ResourceUsage{
-			Available: counts[id],
-			Name:      id,
-			Total:     totals[id],
-		})
-	}
-	return resources
-}
-
-func resourceUsagePtr(values []factoryapi.ResourceUsage) *[]factoryapi.ResourceUsage {
-	if len(values) == 0 {
 		return nil
+	default:
+		return requestFieldValidationError{message: "itemType must be one of image, video, audio, or document"}
 	}
-	return &values
+}
+
+func writeStagedSubmitWorkFile(content []byte, fileName string) (string, error) {
+	stageDir, err := os.MkdirTemp("", submitWorkStageDirPrefix+"*")
+	if err != nil {
+		return "", err
+	}
+
+	targetPath := filepath.Join(stageDir, safeSubmitWorkFileName(fileName))
+	if err := os.WriteFile(targetPath, content, 0o600); err != nil {
+		return "", err
+	}
+	return encodeSubmitWorkStagedFileRef(targetPath), nil
+}
+
+func safeSubmitWorkFileName(fileName string) string {
+	base := filepath.Base(fileName)
+	if base == "." || base == string(filepath.Separator) || base == "" {
+		return randomSubmitWorkFileName()
+	}
+	return base
+}
+
+func randomSubmitWorkFileName() string {
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return "submit-work-file.bin"
+	}
+	return "submit-work-" + hex.EncodeToString(buf) + ".bin"
+}
+
+func mustReadSubmitWorkStagedFileRefSecret() []byte {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		panic(fmt.Sprintf("generate submit-work staged file secret: %v", err))
+	}
+	return buf
+}
+
+func encodeSubmitWorkStagedFileRef(path string) string {
+	cleanPath := filepath.Clean(path)
+	payload := base64.RawURLEncoding.EncodeToString([]byte(cleanPath))
+	signature := submitWorkStagedFileRefSignature(cleanPath)
+	return submitWorkStagedFileRefPrefix + payload + submitWorkStagedFileTokenDivider + signature
+}
+
+func resolveSubmitWorkStagedFileRef(ref string) (string, error) {
+	const invalidMessage = "stagedFileRef must be a backend-issued staged file reference"
+
+	if !strings.HasPrefix(ref, submitWorkStagedFileRefPrefix) {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+
+	unsignedRef := strings.TrimPrefix(ref, submitWorkStagedFileRefPrefix)
+	payload, signature, ok := strings.Cut(unsignedRef, submitWorkStagedFileTokenDivider)
+	if !ok || payload == "" || signature == "" {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+
+	pathBytes, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+	path := string(pathBytes)
+	if path == "" {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+	if signature != submitWorkStagedFileRefSignature(path) {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+
+	cleanPath := filepath.Clean(path)
+	if cleanPath != path || !filepath.IsAbs(cleanPath) {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+	if !strings.HasPrefix(filepath.Base(filepath.Dir(cleanPath)), submitWorkStageDirPrefix) {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+
+	info, err := os.Stat(cleanPath)
+	if err != nil || info.IsDir() {
+		return "", requestFieldValidationError{message: "stagedFileRef must reference an existing staged submit-work file"}
+	}
+	return cleanPath, nil
+}
+
+func submitWorkStagedFileRefSignature(path string) string {
+	mac := hmac.New(sha256.New, submitWorkStagedFileRefSecret)
+	_, _ = mac.Write([]byte(path))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

@@ -1,6 +1,7 @@
 package localmodels
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -69,6 +70,66 @@ func TestGetModel_ReturnsNotFoundForUnknownModel(t *testing.T) {
 	if !errors.Is(err, apisurface.ErrModelNotFound) {
 		t.Fatalf("GetModel error = %v, want ErrModelNotFound", err)
 	}
+}
+
+func TestPullModel_DelegatesToAssetPullerForLocalCatalogModel(t *testing.T) {
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	puller := &recordingCatalogAssetPuller{}
+
+	result, err := PullModel(puller, context.Background(), loaded, "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("PullModel: %v", err)
+	}
+	if puller.calls != 1 || puller.modelName != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("puller calls = %d modelName = %q, want 1 and OMNIVOICE_Q4_K_M", puller.calls, puller.modelName)
+	}
+	if result.ModelName != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("result.ModelName = %q, want OMNIVOICE_Q4_K_M", result.ModelName)
+	}
+}
+
+func TestPullModel_ReturnsNotFoundForUnknownModel(t *testing.T) {
+	loaded := mustLoadedCatalogConfig(t, &interfaces.FactoryConfig{Name: "factory"})
+	puller := &recordingCatalogAssetPuller{}
+
+	_, err := PullModel(puller, context.Background(), loaded, "missing")
+	if !errors.Is(err, apisurface.ErrModelNotFound) {
+		t.Fatalf("PullModel error = %v, want ErrModelNotFound", err)
+	}
+	if puller.calls != 0 {
+		t.Fatalf("puller calls = %d, want 0 before delegation", puller.calls)
+	}
+}
+
+func TestSelectInvocationWorker_ResolvesModelWorkerAndOperation(t *testing.T) {
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+
+	worker, operation, err := SelectInvocationWorker(loaded, "OMNIVOICE_Q4_K_M", "TTS")
+	if err != nil {
+		t.Fatalf("SelectInvocationWorker: %v", err)
+	}
+	if worker.Name != "voice-local" || operation.Name != "TTS" {
+		t.Fatalf("worker/operation = (%q, %q), want (voice-local, TTS)", worker.Name, operation.Name)
+	}
+}
+
+type recordingCatalogAssetPuller struct {
+	calls     int
+	modelName string
+}
+
+func (p *recordingCatalogAssetPuller) PullModel(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error) {
+	p.calls++
+	p.modelName = modelName
+	return apisurface.ModelPullResult{ModelName: modelName}, nil
+}
+
+func (p *recordingCatalogAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+	return nil
+}
+
+func (p *recordingCatalogAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (CacheLayout, error) {
+	return CacheLayout{}, nil
 }
 
 func mustLoadedCatalogConfig(t *testing.T, factoryCfg *interfaces.FactoryConfig) *factoryconfig.LoadedFactoryConfig {
