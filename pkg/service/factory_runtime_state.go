@@ -522,7 +522,7 @@ func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error
 	return nil
 }
 
-func (fs *FactoryService) swapActiveRuntime(runtimeBundle *replacementFactoryRuntime) {
+func (fs *FactoryService) swapActiveRuntime(runtimeBundle *factoryRuntimeBundle) {
 	if runtimeBundle == nil {
 		fs.clearActiveRuntime()
 		return
@@ -883,7 +883,7 @@ func newRecordingArtifact(
 	}, interfaces.ReplayDiagnostics{})
 }
 
-func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *replacementFactoryRuntime) error {
+func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntimeBundle) error {
 	if runtimeBundle == nil {
 		return nil
 	}
@@ -931,7 +931,7 @@ func sessionScopedRecordPath(basePath string, sessionID string) string {
 	return base + "." + sessionID + ext
 }
 
-func (r *replacementFactoryRuntime) runtimeLogger() *zap.Logger {
+func (r *factoryRuntimeBundle) runtimeLogger() *zap.Logger {
 	if r == nil || r.logger == nil {
 		return zap.NewNop()
 	}

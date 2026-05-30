@@ -158,7 +158,7 @@ func (fs *FactoryService) buildSessionEditableFactoryReplacement(
 	factoryDir string,
 	sessionID string,
 	name factoryapi.FactoryName,
-) (*replacementFactoryRuntime, error) {
+) (*factoryRuntimeBundle, error) {
 	replacement, err := fs.buildReplacementFactoryRuntime(ctx, sessionRootDir, factoryDir, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
