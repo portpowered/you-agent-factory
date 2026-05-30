@@ -23,6 +23,11 @@ import {
   useCurrentWorkstationPromptTemplateValidationMock,
 } from "../../../../testing/bun-current-selection-isolated-hook-mocks";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import {
+  createCurrentSelectionWidgetQueryClient,
+  renderWithExistingQueryClient,
+  renderWithQueryClient,
+} from "./current-selection-widget-test-utils";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 
@@ -36,14 +41,12 @@ const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
-    saveCurrentFactoryMutation.mockReset();
+    const saveMutation = mockFactoryDocumentSave();
+    saveCurrentFactoryMutation = saveMutation.mutateAsync;
     useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
-    useSaveCurrentFactoryMock.mockReturnValue({
-      isPending: false,
-      mutateAsync: saveCurrentFactoryMutation,
-    } as never);
+    useSaveCurrentFactoryMock.mockReturnValue(saveMutation as never);
     useCurrentWorkstationPromptTemplateContractMock.mockReturnValue({
       data: {
         availableVariables: [

@@ -702,7 +702,7 @@ describe("CurrentSelectionWidget", () => {
   });
 
   it("renders the worker detail card for worker selections", () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: buildEditableFactoryDefinition(),
       error: null,
       failureCount: 0,
@@ -747,11 +747,11 @@ describe("CurrentSelectionWidget", () => {
     expect(
       screen.queryByRole("heading", { name: "Configuration" }),
     ).toBeNull();
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
+    expect(useCurrentFactoryDocumentMock).toHaveBeenCalledWith(true);
   });
 
   it("initializes editable worker inputs from the canonical factory definition", () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 

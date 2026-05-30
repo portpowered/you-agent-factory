@@ -6,7 +6,10 @@ import userEvent from "@testing-library/user-event";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentFactoryDefinitionMock } from "../../../../testing/bun-current-factory-definition-public-mocks";
+import {
+  useCurrentFactoryDefinitionMock,
+  useCurrentFactoryDocumentMock,
+} from "../../../../testing/bun-current-factory-definition-public-mocks";
 import {
   useCurrentWorkstationPromptTemplateContractMock,
   useCurrentWorkstationPromptTemplateValidationMock,
@@ -308,7 +311,7 @@ describe("CurrentSelectionWidget workstation localization", () => {
       isPending: false,
       status: "success",
     } as never);
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: factoryDocument,
       error: null,
       isError: false,
