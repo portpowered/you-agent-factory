@@ -73,15 +73,8 @@ func TestSubmit_RejectsWhenSubmissionIngressClosed(t *testing.T) {
 	}
 }
 
-func TestSubmitWorkRequest_InjectsBatchAtomicallyAndIgnoresDuplicateRequestID(t *testing.T) {
-	n := buildTestNet()
-	marking := petri.NewMarking("test-wf")
-	var workInputs []interfaces.SubmitRequest
-
-	eng := NewFactoryEngine(n, marking, nil, WithWorkInputRecorder(func(_ int, req interfaces.SubmitRequest, _ interfaces.Token) {
-		workInputs = append(workInputs, req)
-	}))
-	request := interfaces.WorkRequest{
+func batchSubmitTestRequest() interfaces.WorkRequest {
+	return interfaces.WorkRequest{
 		RequestID: "request-batch-1",
 		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{
@@ -95,14 +88,49 @@ func TestSubmitWorkRequest_InjectsBatchAtomicallyAndIgnoresDuplicateRequestID(t 
 			RequiredState:  "complete",
 		}},
 	}
+}
+
+func assertAcceptedBatchSubmitResult(t *testing.T, result interfaces.WorkRequestSubmitResult) {
+	t.Helper()
+	if result.RequestID != "request-batch-1" || result.TraceID != "trace-batch" || !result.Accepted {
+		t.Fatalf("submit result = %#v, want accepted original request metadata", result)
+	}
+}
+
+func assertDuplicateBatchSubmitResult(t *testing.T, repeated, first interfaces.WorkRequestSubmitResult) {
+	t.Helper()
+	if repeated.RequestID != first.RequestID || repeated.TraceID != first.TraceID || repeated.Accepted {
+		t.Fatalf("duplicate submit result = %#v, want original metadata with Accepted=false", repeated)
+	}
+	if repeated.WorkID != "work-plan" || repeated.Name != "plan" || repeated.WorkTypeName != "task" {
+		t.Fatalf("duplicate submit identity = %#v, want preserved primary work metadata", repeated)
+	}
+}
+
+func assertWorkInputsShareRequestID(t *testing.T, workInputs []interfaces.SubmitRequest, want string) {
+	t.Helper()
+	for _, req := range workInputs {
+		if req.RequestID != want {
+			t.Fatalf("work input request ID = %q, want %s", req.RequestID, want)
+		}
+	}
+}
+
+func TestSubmitWorkRequest_InjectsBatchAtomicallyAndIgnoresDuplicateRequestID(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	var workInputs []interfaces.SubmitRequest
+
+	eng := NewFactoryEngine(n, marking, nil, WithWorkInputRecorder(func(_ int, req interfaces.SubmitRequest, _ interfaces.Token) {
+		workInputs = append(workInputs, req)
+	}))
+	request := batchSubmitTestRequest()
 
 	result, err := eng.SubmitWorkRequest(context.Background(), request)
 	if err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
-	if result.RequestID != "request-batch-1" || result.TraceID != "trace-batch" || !result.Accepted {
-		t.Fatalf("submit result = %#v, want accepted original request metadata", result)
-	}
+	assertAcceptedBatchSubmitResult(t, result)
 	if err := eng.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick: %v", err)
 	}
@@ -113,22 +141,13 @@ func TestSubmitWorkRequest_InjectsBatchAtomicallyAndIgnoresDuplicateRequestID(t 
 	if err != nil {
 		t.Fatalf("duplicate SubmitWorkRequest: %v", err)
 	}
-	if repeated.RequestID != result.RequestID || repeated.TraceID != result.TraceID || repeated.Accepted {
-		t.Fatalf("duplicate submit result = %#v, want original metadata with Accepted=false", repeated)
-	}
-	if repeated.WorkID != "work-plan" || repeated.Name != "plan" || repeated.WorkTypeName != "task" {
-		t.Fatalf("duplicate submit identity = %#v, want preserved primary work metadata", repeated)
-	}
+	assertDuplicateBatchSubmitResult(t, repeated, result)
 	if err := eng.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick after duplicate: %v", err)
 	}
 
 	assertSubmittedTokensAndInputs(t, eng, workInputs, 2)
-	for _, req := range workInputs {
-		if req.RequestID != "request-batch-1" {
-			t.Fatalf("work input request ID = %q, want request-batch-1", req.RequestID)
-		}
-	}
+	assertWorkInputsShareRequestID(t, workInputs, "request-batch-1")
 }
 
 func TestSubmitWorkRequest_ValidationFailureQueuesNoPartialWork(t *testing.T) {
