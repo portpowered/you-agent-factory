@@ -26,6 +26,7 @@ import {
   supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 
 export const EMPTY_GRAPH_LAYOUT: GraphLayout = {
   edges: [],
@@ -370,21 +371,22 @@ function buildPlaceNode(
     position,
     width: positionedNode.width,
   };
-  const factoryGraphNode = resolveFactoryGraphPlaceNode(place);
-  const basePlaceData = {
-    activeFlow: input.activeGraphHighlights.activePlaceNodeIds.has(
-      positionedNode.nodeId,
-    ),
-    activeItemLabels: input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
-    factoryGraphNodeId: factoryGraphNode?.nodeId ?? positionedNode.nodeId,
-    handles: factoryGraphNode
-      ? buildSemanticGraphHandles({
-          editor: input.editor,
-          locale: input.locale,
-          nodeId: factoryGraphNode.nodeId,
-          nodeKind: factoryGraphNode.kind,
-        })
-      : [],
+    const factoryGraphNode = resolveFactoryGraphPlaceNode(place);
+    const basePlaceData = {
+      activeFlow: input.activeGraphHighlights.activePlaceNodeIds.has(
+        positionedNode.nodeId,
+      ),
+      activeItemLabels: input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
+      factoryGraphNodeId: factoryGraphNode?.nodeId ?? positionedNode.nodeId,
+      handles: factoryGraphNode
+        ? buildSemanticGraphHandles({
+            editor: input.editor,
+            locale: input.locale,
+            nodeId: factoryGraphNode.nodeId,
+            nodeKind: factoryGraphNode.kind,
+            validationProjection: input.editor?.validationProjection,
+          })
+        : [],
     locale: input.locale,
     muted:
       place.kind !== "resource" &&
@@ -512,6 +514,7 @@ function buildWorkstationNode(
         locale: input.locale,
         nodeId: positionedNode.nodeId,
         nodeKind: "workstation",
+        validationProjection: input.editor?.validationProjection,
       }),
       kind: "workstation",
       progressOutcomeRouteWorkstation,

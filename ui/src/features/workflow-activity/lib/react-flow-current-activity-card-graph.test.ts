@@ -12,6 +12,7 @@ import {
 } from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
@@ -996,5 +997,57 @@ describe("current activity graph active item labels", () => {
       "work-3",
     ]);
     expect(labelsByPlaceId.get("story:blocked")).toEqual(["token-4"]);
+  });
+
+  it("marks workstation handles with validation error treatment from canonical targets", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workstation.missingFailureRoute",
+        message: 'Workstation "review" must define a failure route.',
+        severity: "error",
+        subject: {
+          id: "review",
+          location: "ON_FAILURE",
+          type: "WORKSTATION",
+        },
+      },
+    ]);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], graphLayout.edges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: null,
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+        validationProjection,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: buildSampleFactorySnapshot(factory),
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const workstationNode = nodes.find((node) => node.id === "workstation:review");
+
+    expect(workstationNode?.data.handles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-on-failure-source",
+          validationError: true,
+          validationMessage: 'Workstation "review" must define a failure route.',
+          variant: "error",
+        }),
+      ]),
+    );
   });
 });

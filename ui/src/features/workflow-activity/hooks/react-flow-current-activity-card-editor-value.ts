@@ -8,6 +8,7 @@ import type { useSaveCurrentFactory } from "../../current-factory-definition/pub
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
+import type { useFactoryValidation } from "../../factory-graph-editor/hooks/use-factory-validation";
 
 export function buildCurrentActivityGraphEditorValue(args: {
   activeTool: FactoryGraphEditorTool;
@@ -62,6 +63,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   setIsConfirmingLeaveEditor: (open: boolean) => void;
   setPendingRemovalEdgeId: (edgeId: string | null) => void;
   setPendingRemovalNodeId: (nodeId: string | null) => void;
+  structuralValidation: ReturnType<typeof useFactoryValidation>;
 }) {
   return {
     activeTool: args.activeTool,
@@ -111,5 +113,6 @@ export function buildCurrentActivityGraphEditorValue(args: {
     setIsConfirmingLeaveEditor: args.setIsConfirmingLeaveEditor,
     setPendingRemovalEdgeId: args.setPendingRemovalEdgeId,
     setPendingRemovalNodeId: args.setPendingRemovalNodeId,
+    structuralValidation: args.structuralValidation,
   };
 }
