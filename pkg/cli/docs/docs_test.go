@@ -295,6 +295,12 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 	}
 	for _, want := range []string{
 		"# Batch Inputs",
+		"## Quick reference",
+		"## Before you submit",
+		"factory.json",
+		"factory/docs/overview.md",
+		"factory/docs/README.md",
+		"`you docs batch-work` is a compatibility alias",
 		"FACTORY_REQUEST_BATCH",
 		"DEPENDS_ON",
 		"PARENT_CHILD",

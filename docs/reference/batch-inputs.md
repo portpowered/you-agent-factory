@@ -1,5 +1,6 @@
+---
 author: Agent Factory Team
-last-modified: 2026-04-21
+last-modified: 2026-05-30
 doc-id: agent-factory/guides/batch-inputs
 ---
 
@@ -9,12 +10,71 @@ Use a `FACTORY_REQUEST_BATCH` when one submission should create multiple work
 items together. A batch can describe independent work, `DEPENDS_ON`
 prerequisites, or parent-child membership for parent-aware fan-in.
 
+`you docs batch-work` is a compatibility alias for this guide; both commands
+print identical markdown.
+
 `you docs relationships` is the canonical guide for `DEPENDS_ON`,
 `PARENT_CHILD`, and parent-aware guard linkage. `you docs guards` covers
 parent-aware input guards such as `ALL_CHILDREN_COMPLETE`.
 
 This guide covers the public batch input shape used by watched input files,
 `you run --work`, and `PUT /work-requests/{request_id}`.
+
+## Quick reference
+
+- Use `FACTORY_REQUEST_BATCH` when one submission should create multiple work
+  items together.
+- Put mixed-work-type batches and submitted parent-child batches under
+  `factory/inputs/BATCH/default/<request_id>.json`.
+- Put single-work-type batches under
+  `factory/inputs/<work_type>/default/<request_id>.json`.
+- In `inputs/BATCH`, every work item must set `workTypeName`.
+- Submitted batch relations use `DEPENDS_ON` and `PARENT_CHILD`.
+
+| Path | Use |
+|------|-----|
+| `factory/inputs/BATCH/default/<request_id>.json` | Mixed-work-type batches and canonical parent-child file input. |
+| `factory/inputs/<work_type>/default/<request_id>.json` | Single-work-type watched batches. |
+| Any readable `.json` path passed to `you run --work <path>` | Startup batch submission before runtime start. |
+
+Minimal batch:
+
+```json
+{
+  "requestId": "release-story-set",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "story-auth",
+      "workTypeName": "story",
+      "payload": { "title": "Harden auth session handling" }
+    }
+  ]
+}
+```
+
+| Relation type | Meaning |
+|---------------|---------|
+| `DEPENDS_ON` | The source work waits for the target work to reach a required state. |
+| `PARENT_CHILD` | The source work becomes a child of the target work. |
+
+Use `DEPENDS_ON` for prerequisite ordering between siblings and `PARENT_CHILD`
+for explicit parent-aware lineage. See [Choose The Relation Type](#choose-the-relation-type)
+for examples and field tables.
+
+## Before you submit
+
+Read the checked-in factory topology before authoring batch files:
+
+- `factory.json` — work types, states, and routing context for valid
+  `workTypeName` and `state` values.
+- `factory/docs/overview.md` when present — instance walkthrough, pipeline, and
+  read-before-submit guidance for this factory.
+- `factory/docs/README.md` when `factory/docs/overview.md` is absent — factory-local
+  orientation before guessing `workTypeName` or input layout.
+
+Do not infer work types from unrelated examples when this factory defines its
+own topology.
 
 ## Quick Start
 
