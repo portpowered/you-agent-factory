@@ -21,6 +21,31 @@ func TestInjectFactoryService_RejectsMissingFactoryDir(t *testing.T) {
 	}
 }
 
+func TestInjectFactoryService_MatchesBuildFactoryServiceCollaborators(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(`{"name":"wire-compose","workTypes":[]}`), 0o600); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	ctx := context.Background()
+	cfg := &service.FactoryServiceConfig{Dir: dir}
+
+	wireBuilt, err := compose.InjectFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("InjectFactoryService: %v", err)
+	}
+	directBuilt, err := service.BuildFactoryService(ctx, &service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	if directBuilt.ComposeCollaboratorSnapshot() != wireBuilt.ComposeCollaboratorSnapshot() {
+		t.Fatalf("compose snapshot mismatch: direct=%+v wire=%+v", directBuilt.ComposeCollaboratorSnapshot(), wireBuilt.ComposeCollaboratorSnapshot())
+	}
+}
+
 func TestInjectFactoryService_BuildsMinimalFactory(t *testing.T) {
 	t.Parallel()
 

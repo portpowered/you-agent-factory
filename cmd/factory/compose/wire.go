@@ -10,14 +10,21 @@ import (
 )
 
 // InjectFactoryService is the wireinject entry for the factory composition root.
-// Bootstrap provider set delegates to service.BuildFactoryService; later stories
-// replace this with explicit S6 collaborator providers.
 func InjectFactoryService(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
 ) (*service.FactoryService, error) {
 	wire.Build(
-		service.BuildFactoryService,
+		provideFactoryServiceRoot,
+		provideBaseLogger,
+		provideFactorySessionsRegistry,
+		provideLocalModelDomain,
+		provideFactoryConfigLoad,
+		provideServiceClock,
+		provideRuntimeBuildService,
+		provideFactoryServiceCollaborators,
+		provideHostedWorkersConfig,
+		provideFactoryService,
 	)
 	return nil, nil
 }

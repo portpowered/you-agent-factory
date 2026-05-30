@@ -14,10 +14,23 @@ import (
 // Injectors from wire.go:
 
 // InjectFactoryService is the wireinject entry for the factory composition root.
-// Bootstrap provider set delegates to service.BuildFactoryService; later stories
-// replace this with explicit S6 collaborator providers.
 func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig) (*service.FactoryService, error) {
-	factoryService, err := service.BuildFactoryService(ctx, cfg)
+	factoryServiceRoot, err := provideFactoryServiceRoot(cfg)
+	if err != nil {
+		return nil, err
+	}
+	registry := provideFactorySessionsRegistry()
+	v := provideLocalModelDomain(cfg)
+	factoryConfigLoadResult, err := provideFactoryConfigLoad(cfg, factoryServiceRoot)
+	if err != nil {
+		return nil, err
+	}
+	clock := provideServiceClock(cfg, factoryConfigLoadResult)
+	logger := provideBaseLogger(factoryServiceRoot)
+	runtimebuildService := provideRuntimeBuildService(cfg, clock, logger, v)
+	factoryServiceCollaborators := provideFactoryServiceCollaborators(registry, v, runtimebuildService)
+	config := provideHostedWorkersConfig(cfg, logger, clock)
+	factoryService, err := provideFactoryService(ctx, cfg, factoryServiceRoot, factoryServiceCollaborators, factoryConfigLoadResult, clock, config)
 	if err != nil {
 		return nil, err
 	}
