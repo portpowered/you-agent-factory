@@ -1,164 +1,225 @@
-# PRD: Consolidate CLI Factory Save and Update From-File Commands
+# PRD: UI Dashboard Stream and Timeline Split (U8 Recovery v2)
 
 ---
-author: Codex
+author: factory-agent
 last modified: 2026-05-31
 status: draft
+recovery: wave2-plan-failure (blocked on ui-session-scope-context-recovery-v2)
+baseline-spec: tasks/prd-ui-dashboard-stream-timeline-split.md
+graph: U8
+upstream-recovery: tasks/todo/ui-session-scope-context-recovery-v2.md
 ---
 
 ## Introduction
 
-Customer ask `11` (backend `pkg/` duplication cleanup) advanced when PR `#508` extracted shared `submitWorkCore` and `upsertWorkRequestCore` in `pkg/api/handlers_work_write.go`. The offline CLI paths `you factory save --from` and `you factory update --from` still carry nearly identical logic in `pkg/cli/factory/save.go` and `pkg/cli/factory/update.go`: argument validation, payload read, canonical JSON validation, persist/replace, optional current-factory pointer write (save only), and success/error rendering.
+`useDashboardSnapshot` historically combined factory event SSE transport, session-switch lifecycle (timeline reset, stream reset, selection history, React Query invalidation), queued event flushing, optional timeline memory debug, and exposing `snapshot` from the timeline store. That coupling made the live dashboard shell hard to test and blurred **transport** with **derived dashboard state**.
 
-This PRD consolidates that flow into one internal implementation with a small save/update mode, while preserving every observable CLI outcome operators and scripts rely on today.
+U8 splits those concerns into focused hooks while preserving observable dashboard behavior: loading, offline-before-first-event errors, pause semantics, session/refresh resets, and the `snapshot` surface consumed by `DashboardScreen` and bento cards.
+
+This document is a **recovery v2** plan after the wave-2 program token blocked on a failed U2 recovery plan. The full product intent remains in [`tasks/prd-ui-dashboard-stream-timeline-split.md`](../prd-ui-dashboard-stream-timeline-split.md). Main may already contain partial or complete implementation (for example `ralph/ui-dashboard-stream-timeline-split` on current `main`); stories are written to **verify, complete gaps, and prove behavior** idempotently rather than assume a greenfield start.
+
+**Program dependency:** Do not start implementation until [`ui-session-scope-context-recovery-v2`](ui-session-scope-context-recovery-v2.md) is complete. Stream and composer wiring must consume `useDashboardSession()` for `rawSessionID` and `isPaused`, not `dashboardSessionStore`.
 
 ## Context
 
 ### Customer ask
 
-Reduce duplicated file-based factory persistence logic between `SaveFromFile` and `UpdateFromFile` without changing operator-visible behavior for `you factory save` or `you factory update`.
+Retrigger U8 (UI dashboard stream timeline split) after the prior recovery wave failed on U2. Deliver the split hook seams from [`tasks/prd-ui-dashboard-stream-timeline-split.md`](../prd-ui-dashboard-stream-timeline-split.md) so customers and maintainers get the same live dashboard behavior with isolated, testable ownership.
 
 ### Concrete problem
 
-`SaveFromFile` and `UpdateFromFile` each implement the same sequence independently. The only meaningful differences are which persist API runs (`PersistNamedFactory` vs `ReplaceNamedFactory`), whether `--set-current` writes the pointer (save only), success message text, and mode-specific error mapping (`factory already exists` vs `factory not found`). Duplication increases the risk that a fix or validation tweak lands in one command but not the other.
+- A monolithic snapshot hook mixed SSE connection management, session lifecycle side effects, timeline projection, and debug tooling.
+- Dashboard shell loading and error states were easy to derive incorrectly from `snapshot` truthiness instead of stream progress plus timeline event ownership.
+- Session switches risked duplicate React Query removals, stale EventSource connections, or timeline/stream state leaking across tabs.
+- Downstream snapshot-plane work depends on a single lifecycle owner for session-scoped resets.
 
 ### High-level solution
 
-Introduce a shared internal `persist from file` implementation in `pkg/cli/factory/` (for example `persist_from_file.go`) keyed by mode (`save` | `update`). Keep public `SaveFromFile` / `UpdateFromFile` entrypoints and their config/result types as thin wrappers that delegate to the shared core and apply mode-specific success strings. Centralize error rendering in one helper that preserves today's wording per mode. Lock behavior with existing CLI tests in `save_test.go` and `update_test.go`, adjusting only when needed to assert outcomes rather than file layout.
+Extract **`useFactoryEventStream`** (SSE transport + stream store updates + queued flush into timeline), **`useDashboardSessionLifecycle`** (session/`refreshToken` resets), and **`useDashboardWorldView`** (snapshot + shell loading/error derivation). Keep **`useDashboardSnapshot`** as a thin composer (≤80 LOC) used by `DashboardScreen`, or inline the three hooks at the screen if the composer adds no value. Gate **`useDashboardTimelineMemoryDebug`** behind existing debug flags only. Prove behavior with focused hook/unit tests and one browser-visible dashboard shell regression.
 
 ## Goals
 
-- One shared internal implementation for file-based named-factory persistence used by both commands.
-- Zero change to CLI flags, exit codes, human-readable stdout, stderr error text, or JSON field names.
-- Mode-specific persist semantics preserved: create on save, replace on update; pointer write only on save when `SetCurrent` is true.
-- Mode-specific error messages preserved for duplicate save, missing update, and invalid config cases.
-- Existing `pkg/cli/factory` tests remain the primary behavior lock; extend only when a gap appears.
+- Isolate factory event SSE transport from timeline projection and session lifecycle.
+- Derive dashboard shell `isInitialLoading` and `error` from stream state plus timeline event ownership, not `snapshot` truthiness alone.
+- Reset timeline, localized stream state, selection history, and current-factory definition queries exactly once per session or `refreshToken` transition.
+- Preserve pause semantics (`enabled: false` when the active session is paused).
+- Keep `DashboardScreen` / bento card APIs stable (`snapshot` prop or world-view hook).
+- Provide reviewer-verifiable tests at the hook and dashboard-shell layers without meta-inventory checks.
 
 ## Project-level acceptance criteria
 
-- [ ] `go test ./pkg/cli/factory/...` passes with no intentional behavior changes.
-- [ ] `you factory save <name> --from <path>` still creates a new named factory, rejects duplicates, validates before persist, supports `--set-current`, and emits the same human or `--json` output as before.
-- [ ] `you factory update <name> --from <path>` still replaces an existing named factory, rejects missing names with `factory not found`, validates before persist, and emits the same human or `--json` output as before.
-- [ ] Invalid JSON/topology still fails with `invalid factory config` and does not mutate on-disk layout on save or update failure paths covered by existing tests.
-- [ ] No changes to HTTP/API handlers, `config/persist` semantics, CLI command names, or flag surfaces in `pkg/cli/root.go`.
-- [ ] `SaveFromFile` and `UpdateFromFile` remain the public API used by CLI wiring; they become thin delegators to the shared helper.
-- [ ] Typecheck, lint, and project tests pass.
+- [ ] `useFactoryEventStream({ sessionID, enabled, refreshToken, locale, onEvent, openStream? })` owns SSE open/close, stream status updates, queued flush into `onEvent`, and `FACTORY_CHANGE` sync into current-factory React Query keys; opens `/factory-sessions/{sessionID}/events` for the active session.
+- [ ] Paused sessions do not open a live stream and surface the existing paused offline message; resuming reconnects without losing the `onEvent` contract.
+- [ ] `useDashboardSessionLifecycle({ sessionID, refreshToken, locale })` resets timeline, localized stream state, selection history, and `CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX` queries once per qualifying session/`refreshToken` change (no duplicate `removeQueries`).
+- [ ] `useDashboardWorldView()` returns `{ snapshot, selectedTick, hasEvents, streamState, isInitialLoading, error }` with `deriveDashboardWorldViewShellState` enforcing `selectedTick === 0 && eventCount === 0` for initial loading and offline-before-first-event errors.
+- [ ] `useDashboardSnapshot` is a thin composer (≤80 LOC) that wires lifecycle, stream (via `useDashboardSession()` for `rawSessionID` / `isPaused`), world view, and optional debug; production stream modules do not import `dashboardSessionStore`.
+- [ ] `useDashboardTimelineMemoryDebug` runs only when `readFactoryTimelineDebugOptions().memoryDebug` is true; default sessions do not install `__agentFactoryTimelineDebug__` or persist debug summary to `localStorage`.
+- [ ] Dashboard shell regression proves loading → live snapshot, refresh reset, pause/resume stream behavior, and session-scoped stream URLs without EventSource leaks across tab switches.
+- [ ] Typecheck, lint, and targeted UI tests pass for all touched areas.
 
 ## User Stories
 
-### US-001: Shared from-file persistence core for save mode
+### US-001: Factory event stream transport hook
 
-**Description:** As an operator running `you factory save --from`, I want the same create, validation, pointer, and output behavior after consolidation so existing scripts and docs stay valid.
-
-**Acceptance Criteria:**
-
-- [ ] A shared internal helper in `pkg/cli/factory/` performs trimmed name/`--from`/root validation, reads the payload, runs `configload.LoadFromCanonicalJSON`, calls `configpersist.PersistNamedFactory`, and optionally `configpersist.WriteCurrentFactoryPointer` when `SetCurrent` is true.
-- [ ] `SaveFromFile` delegates to the shared helper in save mode and still renders `Saved factory <name>\nDirectory: <dir>\n` for human output.
-- [ ] `--json` still emits `{"name":"...","factoryDir":"..."}` with the same field names as `SaveFromFileResult` today.
-- [ ] Save failure paths still surface `factory already exists` for duplicate names and `invalid factory config` for invalid payloads/topology; invalid topology still leaves no new named directory (per `TestSaveFromFile_RejectsInvalidTopologyBeforePersist`).
-- [ ] All `TestSaveFromFile_*` tests pass without relaxing assertions.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### US-002: Update command uses the same shared core in update mode
-
-**Description:** As an operator running `you factory update --from`, I want replace semantics and messaging unchanged so in-place factory upgrades remain predictable.
+**Description:** As a maintainer, I want SSE connection wiring isolated so I can test transport without mounting the full dashboard.
 
 **Acceptance Criteria:**
 
-- [ ] The shared helper's update mode calls `configpersist.ReplaceNamedFactory` instead of `PersistNamedFactory` and does not write the current-factory pointer.
-- [ ] `UpdateFromFile` delegates to the shared helper in update mode and still renders `Updated factory <name>\nDirectory: <dir>\n` for human output.
-- [ ] `--json` still emits `{"name":"...","factoryDir":"..."}` with the same field names as `UpdateFromFileResult` today.
-- [ ] Missing named factory still returns an error containing `factory not found`; invalid payload/topology still returns `invalid factory config`; failed invalid topology update preserves the prior on-disk factory body (per `TestUpdateFromFile_RejectsInvalidTopologyBeforePersist`).
-- [ ] All `TestUpdateFromFile_*` tests pass without relaxing assertions.
-- [ ] Typecheck passes
-- [ ] Tests pass
+- [x] `useFactoryEventStream` opens the session-scoped events URL, updates `dashboardStreamStore` status messages, compacts events before `onEvent`, and syncs `FACTORY_CHANGE` payloads into current-factory query keys for the stream session.
+- [x] When `enabled` is false for a selected session, no new `EventSource` opens and stream state shows the paused offline copy; toggling `enabled` back to true opens a new connection.
+- [x] Changing `refreshToken` closes and reopens the stream for the same `sessionID`; `sessionID: null` never opens a stream.
+- [x] `useFactoryEventStream.test.tsx` covers open URL, paused/disabled, refresh reopen, resume-after-pause, offline-before-first-event, and factory-change query sync using the replay harness or injected `openStream`.
+- [x] Typecheck passes
+- [x] Tests pass
 
-### US-003: Unified mode-aware error rendering
+### US-002: Dashboard session lifecycle hook
 
-**Description:** As a maintainer, I want one error-mapping path for from-file persistence so save and update stay aligned on invalid-config handling while keeping mode-specific not-found/duplicate wording.
-
-**Acceptance Criteria:**
-
-- [ ] One internal error renderer handles save vs update mapping: save maps `configpersist.ErrNamedFactoryAlreadyExists` to `factory already exists`; update maps `os.ErrNotExist` to `factory not found`; both map invalid named-factory errors to `invalid factory config`.
-- [ ] Read/persist errors not covered by the mappings pass through unchanged (for example read failures still mention `read factory config`).
-- [ ] `TestSaveFromFile_RejectsDuplicateName`, `TestUpdateFromFile_RejectsMissingName`, and invalid-payload tests for both commands continue to pass with the same error substrings.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### US-004: Thin public wrappers and duplication removed
-
-**Description:** As a reviewer, I want `save.go` and `update.go` to expose only mode-specific config/result types and thin delegators so future CLI changes have one implementation path.
+**Description:** As an operator switching factory tabs or refreshing the dashboard, I want prior session timeline/stream/selection/factory-definition cache cleared once so I never see cross-session bleed.
 
 **Acceptance Criteria:**
 
-- [ ] `save.go` and `update.go` contain no duplicated validation/read/load/persist/render logic beyond delegating to the shared helper and mode-specific success formatters.
-- [ ] Public types `SaveFromFileConfig`, `SaveFromFileResult`, `UpdateFromFileConfig`, and `UpdateFromFileResult` remain exported with unchanged JSON tags.
-- [ ] `pkg/cli/root.go` continues to wire `factory save` and `factory update` through `SaveFromFile` and `UpdateFromFile` without flag or help text changes.
-- [ ] `go test ./pkg/cli/factory/...` passes.
+- [x] `useDashboardSessionLifecycle` calls `resetDashboardSessionScopedState` on qualifying `sessionID` or `refreshToken` changes: timeline reset, localized stream reset, `resetSelectionHistoryStore`, and a single `queryClient.removeQueries` for `CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX`.
+- [x] `shouldResetDashboardSessionScopedState` skips the initial mount for `refreshToken === 0` but resets on later refresh increments and session key changes.
+- [x] `dashboard-session-lifecycle.test.ts` and `useDashboardSessionLifecycle.test.tsx` prove no duplicate removes and correct reset on session switch vs first mount.
+- [x] Typecheck passes
+- [x] Tests pass
+
+### US-003: Dashboard world view and shell state derivation
+
+**Description:** As a dashboard user, I want the shell loading spinner and connection error to reflect stream progress before the first timeline event, not whether a cached snapshot object exists.
+
+**Acceptance Criteria:**
+
+- [ ] `useDashboardWorldView()` selects `worldViewCache[selectedTick]` and exposes `selectedTick`, `hasEvents`, `streamState`, `isInitialLoading`, and `error`.
+- [ ] `deriveDashboardWorldViewShellState` sets `isInitialLoading` only while `rawSessionID != null`, `selectedTick === 0`, `eventCount === 0`, and stream status is not `offline`; sets `error` from stream message only in the offline-before-first-event case.
+- [ ] Unit tests for `deriveDashboardWorldViewShellState` cover connecting, offline-before-first-event, and post-first-event success paths.
 - [ ] Typecheck passes
 - [ ] Tests pass
+
+### US-004: Thin dashboard snapshot composer and screen wiring
+
+**Description:** As a reader of `DashboardScreen`, I want stream, lifecycle, and world-view concerns composed in one obvious place without re-embedding transport logic.
+
+**Acceptance Criteria:**
+
+- [ ] `useDashboardSnapshot` composes `useDashboardSessionLifecycle`, `useFactoryEventStream` (with `enabled: rawSessionID != null && !isPaused` from `useDashboardSession()`), `useDashboardWorldView`, and queued append into the timeline store; file length ≤80 LOC.
+- [ ] `DashboardScreen` continues to drive loading/error/empty/success panels from `useDashboardSnapshot({ locale, refreshToken })`; `DashboardBento` still receives live snapshot data through the existing screen/bento contract without forking timeline ownership.
+- [ ] `useDashboardSnapshot.test.tsx` proves refresh resets timeline to tick 0 with loading, streamed events append to timeline state, and default sessions do not enable timeline memory debug side effects.
+- [ ] Typecheck passes
+- [ ] Tests pass
+- [ ] Verify in browser using dev-browser skill: dashboard loads live stream, shows loading before first event, and recovers after refresh without stale cross-session UI
+
+### US-005: Optional timeline memory debug isolation
+
+**Description:** As a maintainer debugging timeline memory, I want debug globals and persistence opt-in only so normal operators are unaffected.
+
+**Acceptance Criteria:**
+
+- [ ] `useDashboardTimelineMemoryDebug` receives `debugOptions` from `readFactoryTimelineDebugOptions()` and runs only when `memoryDebug` is true (`?afMemoryDebug=1`).
+- [ ] Default sessions do not set `window.__agentFactoryTimelineDebug__` or write `agentFactory.timelineDebugSummary` to `localStorage`; `useDashboardTimelineMemoryDebug.test.tsx` proves both off and on paths.
+- [ ] Composer invokes debug hook only from `useDashboardSnapshot`; no behavior change for default users.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-006: Dashboard stream/timeline shell regression proof
+
+**Description:** As an operator, I want confidence that session tab switches and pause/resume do not leak streams or show the wrong session’s timeline state.
+
+**Acceptance Criteria:**
+
+- [ ] Existing app-shell or Storybook regression (`App.replay-stream.test.tsx`, `App.session-switching.stories.tsx`, or `ui/integration/event-stream-replay.integration.test.mjs`) exercises session-scoped stream URLs and observable shell outcomes (loading clears after first event, pause stops live connection, tab switch resets timeline/stream targets).
+- [ ] Regression asserts observable timeline scrubber or shell status outcomes, not internal hook file names or module registration inventories.
+- [ ] Typecheck passes
+- [ ] Tests pass
+- [ ] Verify in browser using dev-browser skill when the regression surface is Storybook-backed
 
 ## Functional Requirements
 
-- FR-1: Shared helper accepts mode `save` or `update`, name, from path, factory root dir, optional `SetCurrent` (save only), JSON flag, and output writer.
-- FR-2: Validation errors for empty name, missing `--from`, and missing factory root match today's exact error strings.
-- FR-3: Save mode persists with `PersistNamedFactory`; update mode persists with `ReplaceNamedFactory`.
-- FR-4: Save mode writes current-factory pointer only when `SetCurrent` is true; update mode never changes the pointer.
-- FR-5: Human success output uses mode-specific first line (`Saved factory` vs `Updated factory`) and shared directory line format.
-- FR-6: JSON success output encodes name and factoryDir only; no extra fields.
-- FR-7: Error renderer preserves mode-specific duplicate/not-found messages and shared invalid-config message.
+- FR-1: Event stream URL is built from the active session identity supplied by `useDashboardSession()` / `session-routing`, not ad hoc store reads in transport modules.
+- FR-2: Session or `refreshToken` transition must close the previous session’s `EventSource` (no leak across tabs).
+- FR-3: `locale` is passed into stream reset for localized stream-state messages.
+- FR-4: `refreshToken` from `dashboardBentoStore` still triggers lifecycle reset and stream refresh through `DashboardScreen`.
+- FR-5: Dashboard shell panels use `isInitialLoading` and `error` from the world-view seam; empty snapshot without events follows existing empty-session copy.
+- FR-6: SSE protocol and event types are unchanged (no backend contract work).
 
 ## Non-Goals
 
-- HTTP/API handler changes or `clihttp` migration for submit (`pkg/cli/submit/submit.go`).
-- Changes to `pkg/config/persist` or `pkg/config/load` semantics.
-- Renaming CLI commands, flags, or cobra help examples.
-- Consolidating `SaveCurrent` (session HTTP save) with offline from-file save.
-- Broad unrelated cleanup in `pkg/cli/factory` beyond this duplication lane.
+- Changing SSE protocol, event schemas, or backend session APIs.
+- Moving the timeline store to React Query or redesigning snapshot planes (see [`prd-ui-factory-document-snapshot-planes.md`](../prd-ui-factory-document-snapshot-planes.md)).
+- Replacing `dashboardSessionStore` or implementing U2 session scope (upstream recovery owns that).
+- Real-time graph layout performance, bento layout persistence, or unrelated dashboard card refactors.
+- Broad test harness rewrites, file-motion-only stories, or lint allowlist churn unless required to satisfy a behavioral criterion above.
 
 ## High-level technical design
 
 ```mermaid
-flowchart TD
-  subgraph public [Public CLI entrypoints]
-    SF[SaveFromFile]
-    UF[UpdateFromFile]
+flowchart TB
+  subgraph scope [Session scope - U2 recovery]
+    DS[useDashboardSession]
   end
-  subgraph shared [pkg/cli/factory shared core]
-    PF[persistNamedFactoryFromFile mode save or update]
-    VAL[validate inputs trim name from dir]
-    LOAD[ReadFile + LoadFromCanonicalJSON]
-    PERSIST[PersistNamedFactory or ReplaceNamedFactory]
-    PTR[WriteCurrentFactoryPointer save + SetCurrent only]
-    ERR[renderPersistFromFileError mode-aware]
-    OUT[human or JSON success render]
+
+  subgraph composer [Dashboard shell]
+    Screen[DashboardScreen]
+    Snap[useDashboardSnapshot ≤80 LOC]
+    Screen --> Snap
   end
-  SF --> PF
-  UF --> PF
-  PF --> VAL --> LOAD --> PERSIST
-  PERSIST --> PTR
-  PERSIST --> OUT
-  LOAD --> ERR
-  PERSIST --> ERR
-  PTR --> ERR
+
+  subgraph hooks [Split hooks]
+    Life[useDashboardSessionLifecycle]
+    Stream[useFactoryEventStream]
+    View[useDashboardWorldView]
+    Dbg[useDashboardTimelineMemoryDebug]
+    Snap --> Life
+    Snap --> Stream
+    Snap --> View
+    Snap --> Dbg
+    DS --> Stream
+    DS --> View
+  end
+
+  subgraph stores [State owners]
+    TL[(factoryTimelineStore)]
+    ST[(dashboardStreamStore)]
+    RQ[(React Query factory definition)]
+    Stream --> ST
+    Stream --> TL
+    Life --> TL
+    Life --> ST
+    Life --> RQ
+    View --> TL
+    View --> ST
+  end
 ```
 
-Package ownership stays in `pkg/cli/factory/`. The shared helper is unexported; tests continue to exercise behavior through `SaveFromFile` and `UpdateFromFile`. Side effects remain isolated to configured factory root directories via existing `configpersist` APIs.
+**Package ownership**
 
-## Supporting technical considerations
+| Concern | Owner |
+| --- | --- |
+| SSE transport + queued flush | `ui/src/features/dashboard/hooks/useFactoryEventStream.ts`, `lib/dashboard-event-stream.ts` |
+| Session/`refreshToken` resets | `ui/src/features/dashboard/hooks/useDashboardSessionLifecycle.ts`, `lib/dashboard-session-lifecycle.ts` |
+| Shell loading/error derivation | `ui/src/features/dashboard/hooks/useDashboardWorldView.ts`, `lib/dashboard-world-view.ts` |
+| Composer | `ui/src/features/dashboard/hooks/useDashboardSnapshot.ts` |
+| Debug-only memory tooling | `ui/src/features/dashboard/hooks/useDashboardTimelineMemoryDebug.ts` |
+| Screen wiring | `ui/src/features/dashboard/components/dashboard-screen.tsx` |
+| Session identity | `ui/src/features/dashboard/session/dashboard-session-provider.tsx` (U2) |
 
-- Follow [`docs/internal/standards/code/general-backend-standards.md`](../../docs/internal/standards/code/general-backend-standards.md) for Go structure and test style.
-- Prefer behavioral assertions on CLI output, exit errors, filesystem effects, and pointer state over inventories of which files exist in the package.
-- `writeFactoryConfigFile` and payload helpers in `save_test.go` may be reused by update tests; do not introduce meta-tests that only assert file names in the package directory.
-- Related prior art: `pkg/api/handlers_work_write.go` shared write cores; `pkg/config/load` and `pkg/config/persist` boundaries from `tasks/prd-config-load-persist-boundary.md`.
+**Dependency fit:** Requires U2 recovery (`useDashboardSession`, `eventsPath`, pause projection). Soft coordination with factory document snapshot planes for query invalidation policy. No OpenAPI or Go changes.
+
+## Supporting technical and UX considerations
+
+- **Loading / empty / error / success:** Shell uses `isInitialLoading` while connecting before the first event; `error` when stream is offline with no events; existing empty-session copy when `snapshot` is missing after load; success path renders header + bento.
+- **Accessibility:** Preserve existing localized stream status and scrubber semantics; this PRD does not change header copy contracts.
+- **Pause:** `enabled: false` when `isPaused`; paused offline message remains customer-visible.
+- **Tests:** Prefer replay harness / injected `openStream` over full `EventSource` mocks; keep `docs/internal/processes/development-guide-relevant-files.md` live dashboard seam paragraph accurate when behavior owners change.
+- **Idempotent recovery:** If a criterion already passes on `main`, add or tighten tests only where proof is missing; do not rewrite working hooks for style.
 
 ## Success metrics
 
-- `save.go` and `update.go` shrink to thin wrappers; duplicated logic lives in one shared file.
-- Full `pkg/cli/factory` test package green with no changed golden strings.
-- No operator-reported regression in offline save/update workflows after merge.
+- `useDashboardSnapshot.ts` stays ≤80 LOC (or is removed in favor of explicit screen composition with no behavior change).
+- Stream and lifecycle hooks are unit-testable without mounting `DashboardScreen`.
+- Session switch and refresh do not leak `EventSource` instances or show the previous session’s timeline tick.
+- No user-visible regression in live stream, pause, refresh, or timeline scrubbing.
 
 ## Open Questions
 
-None. Scope and behavioral preservation requirements are explicit in the customer ask.
+None for recovery v2—the baseline U8 spec is authoritative. Treat current `main` as the implementation baseline and extend only what fails the acceptance criteria above.

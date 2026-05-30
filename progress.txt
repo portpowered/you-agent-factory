@@ -41,6 +41,7 @@
 - When extending `batch-inputs.md`, add the ingress comparison table and `## CLI batch submit` examples to both trees together; guard new CLI markers in `TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown` and `cli_docs_smoke_test.go` `batch-inputs` topic markers.
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
 - When trimming `authoring-factories` after new topics land, point readers at `you docs mock-workers` and `you docs record-replay` and update `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` markers away from removed deep-dive strings.
+- U8 dashboard stream/timeline split hooks (`useFactoryEventStream`, `useDashboardSessionLifecycle`, `useDashboardWorldView`, thin `useDashboardSnapshot`) largely landed on `main` from `ralph/ui-dashboard-stream-timeline-split`—recovery v2 is verify targeted hook tests (`useFactoryEventStream.test.tsx`, etc.) and flip PRD unless regression found.
 - Register `relationships` at `displayOrder` 28 immediately after `guards` (27); relationships content adapts `batch-inputs.md` relation sections and `parent-aware-fan-in.md` with `SPAWNED_BY` called out as runtime/template-only, not batch-authored.
 - Story 003 index assertions belong in `root_docs_test.go` and `cli_docs_smoke_test.go` immediately after `record-replay` lines; smoke topic tests can use `absent` for `../internal/development/...` paths when replacing packaged cross-links.
 - Do not `cp` `pkg/cli/docs/reference/config.md` or `templates.md` onto `docs/reference/` — the layout-tree guides diverge from embedded packaged topics; apply cross-link edits to both trees separately.
@@ -691,4 +692,22 @@
   - Patterns discovered: `mergeStateStatus: DIRTY` on an otherwise green PR usually means main advanced—re-merge before `<COMPLETE>` even when all stories pass.
   - Gotchas encountered: Main may land unrelated Ralph `prd.json`/`progress.txt` edits; always keep branch PRD (`--ours`) during merge conflict resolution.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/514 — push merge commit and await CI before `<COMPLETE>`.
+---
+
+## 2026-05-30T20:43:56Z - ui-dashboard-stream-timeline-split-recovery-v2-001
+- What was implemented: Verified `useFactoryEventStream` and `dashboard-event-stream` on recovery branch head (`origin/main`): session-scoped `/factory-sessions/{id}/events` URL, paused offline copy when `enabled` is false, `refreshToken` reopen, resume-after-pause, null `sessionID` guard, `FACTORY_CHANGE` query sync, and offline-before-first-event; `bun run tsc` and 17 targeted vitest cases pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: U8 transport seam already merged on `main`—recovery v2 story 001 is verify-and-flip-PRD like session-scope recovery v2.
+  - Gotchas encountered: Worktree may lack `ui/node_modules` until `bun install`; use `bun run vitest run` from `ui/` not `bunx vitest` without install.
+  - Useful context: Branch `ralph/ui-dashboard-stream-timeline-split-recovery-v2` tracks `origin/main` at start; story 002 next (`useDashboardSessionLifecycle`).
+---
+
+## 2026-05-30T20:47:04Z - ui-dashboard-stream-timeline-split-recovery-v2-002
+- What was implemented: Verified `useDashboardSessionLifecycle` and `dashboard-session-lifecycle` on `main`; strengthened tests for first-mount skip (`refreshToken` 0), single `removeQueries` per session switch, unchanged session-key no-op, and `resetDashboardSessionScopedState` one-shot reset of timeline/stream/selection/factory-definition cache.
+- Files changed: `ui/src/features/dashboard/lib/dashboard-session-lifecycle.test.ts`, `ui/src/features/dashboard/hooks/useDashboardSessionLifecycle.test.tsx`
+- **Learnings for future iterations:**
+  - Patterns discovered: `shouldResetDashboardSessionScopedState` gates the hook effect—first mount with `previousSessionKey === null` and `refreshToken === 0` skips reset; spy `queryClient.removeQueries` after `mockClear()` post-mount to prove duplicate-free invalidation.
+  - Gotchas encountered: Biome `noExcessiveLinesPerFunction` caps `describe` at 100 lines—split hook tests into nested describes and shared `seedTimelineAtTick` / `renderLifecycleFromSessionStore` helpers.
+  - Useful context: Story 003 next (`useDashboardWorldView` / `deriveDashboardWorldViewShellState`).
 ---
