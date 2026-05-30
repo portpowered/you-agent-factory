@@ -19,10 +19,13 @@ import type {
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
 import {
+  authoredProgressOutcomeSourceHandlesByWorkstationNodeId,
   buildSemanticGraphHandles,
   type CurrentActivityEditorState,
+  resolveWorkstationConnectionAnchorContext,
   supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 
 export const EMPTY_GRAPH_LAYOUT: GraphLayout = {
   edges: [],
@@ -463,6 +466,7 @@ function buildPlaceNode(
 function buildWorkstationNode(
   positionedNode: PositionedWorkstationNode,
   input: BuildCurrentActivityNodesInput,
+  authoredProgressOutcomeSourceHandleIds?: ReadonlySet<string>,
 ): CurrentActivityNode | null {
   const workstation =
     input.snapshot.topology.workstation_nodes_by_id[
@@ -475,6 +479,14 @@ function buildWorkstationNode(
   if (!workstation) {
     return null;
   }
+
+  const factory = input.factoryDefinition ?? input.snapshot.factory;
+  const connectionAnchorContext = resolveWorkstationConnectionAnchorContext(
+    factory,
+    positionedNode.nodeId,
+  );
+  const progressOutcomeRouteWorkstation: WorkstationProgressOutcomeRouteContext | undefined =
+    connectionAnchorContext?.workstation;
 
   const executions =
     input.activeExecutionsByWorkstationNodeID[workstation.node_id] ?? [];
@@ -494,12 +506,15 @@ function buildWorkstationNode(
       executions,
       factoryGraphNodeId: positionedNode.nodeId,
       handles: buildSemanticGraphHandles({
+        authoredProgressOutcomeSourceHandleIds,
+        connectionAnchorContext,
         editor: input.editor,
         locale: input.locale,
         nodeId: positionedNode.nodeId,
         nodeKind: "workstation",
       }),
       kind: "workstation",
+      progressOutcomeRouteWorkstation,
       locale: input.locale,
       muted:
         input.activeGraphHighlights.hasActiveFlow &&
@@ -552,6 +567,12 @@ export function buildCurrentActivityNodes({
 }: BuildCurrentActivityNodesInput): CurrentActivityNode[] {
   const nextNodes: CurrentActivityNode[] = [];
   const resourceAliases = resourceAliasNodeIds(graphLayout.nodes);
+  const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+  const authoredProgressOutcomeSourceHandlesByNodeId =
+    authoredProgressOutcomeSourceHandlesByWorkstationNodeId(
+      visibleGraphEdges,
+      graphLayout.nodes,
+    );
   const input = {
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
@@ -585,6 +606,7 @@ export function buildCurrentActivityNodes({
     const workstationNode = buildWorkstationNode(
       positionedNode as PositionedWorkstationNode,
       input,
+      authoredProgressOutcomeSourceHandlesByNodeId.get(positionedNode.nodeId),
     );
     if (workstationNode) {
       nextNodes.push(workstationNode);

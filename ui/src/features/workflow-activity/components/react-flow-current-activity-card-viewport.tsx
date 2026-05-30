@@ -20,6 +20,7 @@ import {
   type FactoryGraphEditorMenuAction,
   FactoryGraphEditorToolbar,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
@@ -108,9 +109,16 @@ function buildCurrentActivityIsValidConnection({
       return false;
     }
 
+    const sourceProgressOutcomeWorkstation = (
+      sourceNode.data as {
+        progressOutcomeRouteWorkstation?: WorkstationProgressOutcomeRouteContext;
+      }
+    ).progressOutcomeRouteWorkstation;
+
     return isValidFactoryGraphConnection({
       sourceAnchorId: connection.sourceHandle,
       sourceNodeKind,
+      sourceWorkstation: sourceProgressOutcomeWorkstation,
       targetAnchorId: connection.targetHandle,
       targetNodeKind,
     });

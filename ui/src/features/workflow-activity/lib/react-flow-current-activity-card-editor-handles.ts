@@ -2,10 +2,16 @@ import type {
   FactoryGraphEdgeKind,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
+  type FactoryGraphConnectionAnchorContext,
   type FactoryGraphConnectionEndpoint,
+  factoryGraphConnectionAnchorContext,
   getFactoryGraphConnectionAnchors,
   getLocalizedFactoryGraphConnectionAnchors,
+  mergeAuthoredProgressOutcomeConnectionAnchors,
+  PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import type { ActivityGraphNodeHandle } from "../../flowchart/components/current-activity-node-shell";
 import type {
@@ -60,7 +66,60 @@ export function supportedSemanticHandleIdsForEdge(
 export const supportedEditorHandleIdsForEdge =
   supportedSemanticHandleIdsForEdge;
 
+export function authoredProgressOutcomeSourceHandlesByWorkstationNodeId(
+  edges: readonly PositionedEdge[],
+  nodes: readonly PositionedNode[],
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const nodeKindsById = new Map(
+    nodes.map((node) => [node.nodeId, node.nodeKind]),
+  );
+  const handlesByWorkstationNodeId = new Map<string, Set<string>>();
+
+  for (const edge of edges) {
+    const supportedHandles = supportedSemanticHandleIdsForEdge(
+      edge,
+      nodeKindsById,
+    );
+    if (
+      !supportedHandles ||
+      !PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(supportedHandles.sourceHandleId)
+    ) {
+      continue;
+    }
+
+    if (!edge.fromNodeId.startsWith("workstation:")) {
+      continue;
+    }
+
+    const handleIds =
+      handlesByWorkstationNodeId.get(edge.fromNodeId) ?? new Set<string>();
+    handleIds.add(supportedHandles.sourceHandleId);
+    handlesByWorkstationNodeId.set(edge.fromNodeId, handleIds);
+  }
+
+  return handlesByWorkstationNodeId;
+}
+
+export function resolveWorkstationConnectionAnchorContext(
+  factory: CanonicalFactoryDefinition | undefined,
+  factoryGraphNodeId: string,
+): FactoryGraphConnectionAnchorContext | undefined {
+  const workstationName = factoryGraphNodeId.startsWith("workstation:")
+    ? factoryGraphNodeId.slice("workstation:".length)
+    : factoryGraphNodeId;
+  const workstation = (factory?.workstations ?? []).find(
+    (candidate) =>
+      candidate.name === workstationName || candidate.id === workstationName,
+  );
+
+  return workstation
+    ? factoryGraphConnectionAnchorContext(workstation)
+    : undefined;
+}
+
 export function buildSemanticGraphHandles(args: {
+  authoredProgressOutcomeSourceHandleIds?: ReadonlySet<string>;
+  connectionAnchorContext?: FactoryGraphConnectionAnchorContext;
   editor?: CurrentActivityEditorState;
   locale?: string | null;
   nodeId: string;
@@ -71,16 +130,36 @@ export function buildSemanticGraphHandles(args: {
     args.editor.canInteractWithEditor &&
     args.editor.activeTool === "connect";
 
-  const anchors = getLocalizedFactoryGraphConnectionAnchors(
+  const supportsProgressOutcomeRoutes =
+    args.nodeKind !== "workstation" ||
+    !args.connectionAnchorContext ||
+    workstationSupportsProgressOutcomeRoutes(
+      args.connectionAnchorContext.workstation,
+    );
+
+  let anchors = getLocalizedFactoryGraphConnectionAnchors(
     args.nodeKind,
     args.locale,
+    args.nodeKind === "workstation" ? args.connectionAnchorContext : undefined,
   );
+  if (args.nodeKind === "workstation") {
+    anchors = mergeAuthoredProgressOutcomeConnectionAnchors(
+      anchors,
+      args.authoredProgressOutcomeSourceHandleIds,
+    );
+  }
+
   const handles: ActivityGraphNodeHandle[] = anchors.map((anchor) => {
+    const isAuthoredOnlyProgressOutcomeHandle =
+      args.nodeKind === "workstation" &&
+      !supportsProgressOutcomeRoutes &&
+      PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id);
     const selected =
       args.editor?.pendingConnectionSource?.nodeId === args.nodeId &&
       args.editor.pendingConnectionSource.anchorId === anchor.id;
     const validTarget =
       connectable &&
+      !isAuthoredOnlyProgressOutcomeHandle &&
       args.editor?.pendingConnectionSource !== null &&
       args.editor?.pendingConnectionSource?.nodeId !== args.nodeId &&
       anchor.role === "target";
@@ -89,10 +168,12 @@ export function buildSemanticGraphHandles(args: {
     return {
       buttonAriaLabel: anchor.description,
       buttonPressed: selected || undefined,
-      buttonDisabled: !visible || undefined,
+      buttonDisabled:
+        !visible || isAuthoredOnlyProgressOutcomeHandle || undefined,
       buttonTitle: anchor.description,
-      connectable,
-      hidden: !visible || undefined,
+      connectable: connectable && !isAuthoredOnlyProgressOutcomeHandle,
+      hidden:
+        !visible || isAuthoredOnlyProgressOutcomeHandle || undefined,
       id: anchor.id,
       label: anchor.label,
       onButtonClick: () =>
