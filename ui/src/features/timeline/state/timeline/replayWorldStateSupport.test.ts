@@ -38,7 +38,7 @@ function emptyState(): ReplayWorldState {
   };
 }
 
-describe("replayWorldStateSupport inference helpers", () => {
+describe("replayWorldStateSupport inferenceAttemptsForDispatch", () => {
   it("creates and reuses inference attempt maps per dispatch", () => {
     const state = emptyState();
     const first = inferenceAttemptsForDispatch(state, "dispatch-1");
@@ -53,7 +53,9 @@ describe("replayWorldStateSupport inference helpers", () => {
     };
     expect(state.inferenceAttemptsByDispatchID["dispatch-1"]).toBe(first);
   });
+});
 
+describe("replayWorldStateSupport resolveDispatchTransitionID", () => {
   it("resolves transition ids from active and completed dispatches", () => {
     const state = emptyState();
     state.activeDispatches["dispatch-active"] = {
@@ -76,7 +78,9 @@ describe("replayWorldStateSupport inference helpers", () => {
     );
     expect(resolveDispatchTransitionID(state, "missing")).toBeUndefined();
   });
+});
 
+describe("replayWorldStateSupport syncCompletedDispatchAttempt", () => {
   it("skips non-matching completed dispatches when syncing inference", () => {
     const state = emptyState();
     state.completedDispatches.push(
@@ -128,7 +132,9 @@ describe("replayWorldStateSupport inference helpers", () => {
     expect(state.completedDispatches[0]?.diagnostics).toEqual({});
     expect(state.completedDispatches[1]?.diagnostics).toEqual({ model: "after" });
   });
+});
 
+describe("replayWorldStateSupport syncCompletedDispatchAttempt provider sessions", () => {
   it("does not duplicate provider sessions already recorded on the state", () => {
     const state = emptyState();
     state.completedDispatches.push({
@@ -178,7 +184,9 @@ describe("replayWorldStateSupport inference helpers", () => {
     });
     expect(state.providerSessions).toHaveLength(1);
   });
+});
 
+describe("replayWorldStateSupport syncCompletedDispatchAttempt trace sync", () => {
   it("syncs completed dispatch diagnostics and provider sessions from inference", () => {
     const state = emptyState();
     state.completedDispatches.push({
@@ -233,7 +241,9 @@ describe("replayWorldStateSupport inference helpers", () => {
       transition_id: "review",
     });
   });
+});
 
+describe("replayWorldStateSupport syncCompletedDispatchAttempt missing trace", () => {
   it("ignores missing traces when syncing completed dispatch attempts", () => {
     const state = emptyState();
     state.completedDispatches.push({
