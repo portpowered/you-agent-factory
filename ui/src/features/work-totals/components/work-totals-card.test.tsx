@@ -27,16 +27,16 @@ describe("WorkTotalsCard", () => {
       .closest("article");
     const cardShell = screen.getByRole("article", { name: "Work totals" });
     const cardHeader = cardShell.querySelector("header");
-    const moveHandle = within(cardShell).getByRole("button", {
-      name: "Move Work totals",
-    });
 
     expect(screen.getByRole("heading", { name: "Work totals" })).toBeTruthy();
     expect(workTotals.className).toContain("grid-cols-4");
     expect(cardHeader?.className).toContain("min-h-11");
     expect(cardHeader?.className).toContain("px-3");
-    expect(moveHandle.className).toContain("h-10");
-    expect(moveHandle.className).toContain("w-10");
+    expect(cardHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(cardHeader?.className).toContain("cursor-grab");
+    expect(
+      within(cardShell).queryByRole("button", { name: "Move Work totals" }),
+    ).toBeNull();
     expect(screen.getByLabelText("In progress: 2")).toBeTruthy();
     expect(screen.getByLabelText("Completed: 3")).toBeTruthy();
     expect(screen.getByLabelText("Failed: 1")).toBeTruthy();

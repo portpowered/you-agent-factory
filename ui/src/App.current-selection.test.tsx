@@ -1440,8 +1440,8 @@ describe("App current selection layout", () => {
     const initialStyle = traceGridItem.getAttribute("style");
 
     fireEvent.mouseDown(
-      within(traceWidget).getByRole("button", {
-        name: "Move Trace drill-down",
+      within(traceWidget).getByRole("heading", {
+        name: "Trace drill-down",
       }),
       {
         button: 0,
@@ -1827,8 +1827,8 @@ describe("App current selection layout", () => {
     const initialOutcomeStyle = outcomeGridItem.getAttribute("style");
 
     fireEvent.mouseDown(
-      within(outcomeWidget).getByRole("button", {
-        name: "Move Work outcome chart",
+      within(outcomeWidget).getByRole("heading", {
+        name: "Work outcome chart",
       }),
       {
         button: 0,

@@ -30,12 +30,15 @@ describe("SelectionDetailLayout shell copy", () => {
       </SelectionDetailLayout>,
     );
 
+    const card = screen.getByRole("article", { name: "Current selection" });
+    const header = card.querySelector("header");
+
+    expect(card).toBeTruthy();
+    expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
+    expect(header?.className).toContain("cursor-grab");
     expect(
-      screen.getByRole("article", { name: "Current selection" }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Move Current selection" }),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "Move Current selection" }),
+    ).toBeNull();
     expect(
       screen.getByRole("button", { name: "Undo selection" }).textContent,
     ).toBe("");

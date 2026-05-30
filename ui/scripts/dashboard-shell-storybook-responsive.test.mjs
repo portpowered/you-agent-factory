@@ -72,11 +72,12 @@ describe("verifyDashboardShellConsolidation", () => {
     const currentButton = { isVisible: vi.fn().mockResolvedValue(false) };
     const timelineSlider = { isVisible: vi.fn().mockResolvedValue(true) };
     const timelineStatus = { isVisible: vi.fn().mockResolvedValue(true) };
-    const moveButton = { isVisible: vi.fn().mockResolvedValue(true) };
+    const workTotalsDragHeader = { isVisible: vi.fn().mockResolvedValue(true) };
     const retiredStreamStatus = { count: vi.fn().mockResolvedValue(0) };
     const workTotalsCard = {
       evaluate: vi.fn().mockResolvedValue({ ...shellStyle }),
       isVisible: vi.fn().mockResolvedValue(true),
+      locator: vi.fn(() => workTotalsDragHeader),
     };
     const toolbar = {
       evaluate: vi.fn().mockResolvedValue(shellStyle),
@@ -101,7 +102,7 @@ describe("verifyDashboardShellConsolidation", () => {
         if (role === "article" && options?.name === "Work totals") {
           return workTotalsCard;
         }
-        return moveButton;
+        return workTotalsDragHeader;
       }),
       waitFor: vi.fn().mockResolvedValue(undefined),
     };
@@ -132,10 +133,9 @@ describe("verifyDashboardShellConsolidation", () => {
     expect(board.getByRole).toHaveBeenCalledWith("article", {
       name: "Work totals",
     });
-    expect(board.getByRole).toHaveBeenCalledWith("button", {
-      exact: true,
-      name: "Move Work totals",
-    });
+    expect(workTotalsCard.locator).toHaveBeenCalledWith(
+      'header[data-bento-drag-handle="true"]',
+    );
     expect(toolbar.getByRole).toHaveBeenCalledWith("button", {
       name: "Export PNG",
     });
