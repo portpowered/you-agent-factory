@@ -111,6 +111,18 @@ func TestWorkMove_RealCLIMovesSubmittedWork(t *testing.T) {
 	}
 
 	output := string(moveOut)
+	assertWorkMoveSmokeHumanOutput(t, output, workID)
+
+	if err := waitForWorkMoveSmokeWorkAtState(ctx, baseURL, workID, "complete", 15*time.Second); err != nil {
+		t.Fatalf("verify moved work: %v\nmove output:\n%s", err, output)
+	}
+
+	cancel()
+	_ = <-runWait
+}
+
+func assertWorkMoveSmokeHumanOutput(t *testing.T, output, workID string) {
+	t.Helper()
 	for _, marker := range []string{
 		"Work ID:\t" + workID,
 		"Previous state:\tinit",
@@ -121,13 +133,6 @@ func TestWorkMove_RealCLIMovesSubmittedWork(t *testing.T) {
 			t.Fatalf("work move output missing %q:\n%s", marker, output)
 		}
 	}
-
-	if err := waitForWorkMoveSmokeWorkAtState(ctx, baseURL, workID, "complete", 15*time.Second); err != nil {
-		t.Fatalf("verify moved work: %v\nmove output:\n%s", err, output)
-	}
-
-	cancel()
-	_ = <-runWait
 }
 
 func workMoveSmokeFactoryConfig() map[string]any {
