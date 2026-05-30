@@ -280,11 +280,80 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	}
 }
 
-func TestSubmit_JSONStdoutEmitsSubmitWorkResponse(t *testing.T) {
+func TestSubmit_JSONStdoutEmitsConfirmationObject(t *testing.T) {
+	workID := "batch-req-json-1"
+	workTypeName := "code-change"
+	apiName := "json-submit"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/session-alpha/work" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "json-trace-1"}); err != nil {
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{
+			TraceId:      "json-trace-1",
+			WorkId:       &workID,
+			Name:         ptr(apiName),
+			WorkTypeName: &workTypeName,
+		}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"json stdout task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Submit(SubmitConfig{
+		Name:         "json-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Server:       mustServerBase(t, srv.URL),
+		SessionID:    "session-alpha",
+		JSON:         true,
+		Output:       &out,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	var confirmation SubmitConfirmation
+	if err := json.Unmarshal(out.Bytes(), &confirmation); err != nil {
+		t.Fatalf("stdout is not valid submit confirmation JSON: %v\n%s", err, out.String())
+	}
+	if confirmation.WorkID != workID {
+		t.Fatalf("workId = %q, want %q", confirmation.WorkID, workID)
+	}
+	if confirmation.Name != apiName {
+		t.Fatalf("name = %q, want %q", confirmation.Name, apiName)
+	}
+	if confirmation.WorkTypeName != workTypeName {
+		t.Fatalf("workTypeName = %q, want %q", confirmation.WorkTypeName, workTypeName)
+	}
+	if confirmation.TraceID != "json-trace-1" {
+		t.Fatalf("traceId = %q, want json-trace-1", confirmation.TraceID)
+	}
+	if confirmation.SessionID != "session-alpha" {
+		t.Fatalf("sessionId = %q, want session-alpha", confirmation.SessionID)
+	}
+	if confirmation.EndpointPath != "/factory-sessions/session-alpha/work" {
+		t.Fatalf("endpointPath = %q, want /factory-sessions/session-alpha/work", confirmation.EndpointPath)
+	}
+}
+
+func TestSubmit_JSONStdoutUsesDefaultSessionLabelAndEndpointPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/~default/work" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "json-trace-default"}); err != nil {
 			t.Errorf("encode submit response: %v", err)
 		}
 	}))
@@ -308,12 +377,24 @@ func TestSubmit_JSONStdoutEmitsSubmitWorkResponse(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	var result factoryapi.SubmitWorkResponse
-	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
-		t.Fatalf("stdout is not valid SubmitWorkResponse JSON: %v\n%s", err, out.String())
+	var confirmation SubmitConfirmation
+	if err := json.Unmarshal(out.Bytes(), &confirmation); err != nil {
+		t.Fatalf("stdout is not valid submit confirmation JSON: %v\n%s", err, out.String())
 	}
-	if result.TraceId != "json-trace-1" {
-		t.Fatalf("traceId = %q, want json-trace-1", result.TraceId)
+	if confirmation.SessionID != "~default" {
+		t.Fatalf("sessionId = %q, want ~default", confirmation.SessionID)
+	}
+	if confirmation.EndpointPath != "/factory-sessions/~default/work" {
+		t.Fatalf("endpointPath = %q, want /factory-sessions/~default/work", confirmation.EndpointPath)
+	}
+	if confirmation.Name != "json-submit" {
+		t.Fatalf("name = %q, want json-submit", confirmation.Name)
+	}
+	if confirmation.WorkTypeName != "task" {
+		t.Fatalf("workTypeName = %q, want task", confirmation.WorkTypeName)
+	}
+	if confirmation.TraceID != "json-trace-default" {
+		t.Fatalf("traceId = %q, want json-trace-default", confirmation.TraceID)
 	}
 }
 

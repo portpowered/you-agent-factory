@@ -17,6 +17,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
+// SubmitConfirmation is the CLI JSON object emitted after a successful submit.
+type SubmitConfirmation struct {
+	WorkID       string `json:"workId"`
+	Name         string `json:"name"`
+	WorkTypeName string `json:"workTypeName"`
+	TraceID      string `json:"traceId"`
+	SessionID    string `json:"sessionId"`
+	EndpointPath string `json:"endpointPath"`
+}
+
 // SubmitConfig holds parameters for the submit command.
 type SubmitConfig struct {
 	Name         string
@@ -113,9 +123,28 @@ func Submit(cfg SubmitConfig) error {
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d traceId=%s", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody), result.TraceId)
 
 	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(result)
+		return json.NewEncoder(cfg.Output).Encode(submitConfirmation(cfg, endpointPath, result))
 	}
 	return renderHumanSubmitConfirmation(cfg.Output, cfg, result)
+}
+
+func submitConfirmation(cfg SubmitConfig, endpointPath string, result factoryapi.SubmitWorkResponse) SubmitConfirmation {
+	name := optionalString(result.Name)
+	if name == "" {
+		name = strings.TrimSpace(cfg.Name)
+	}
+	workTypeName := optionalString(result.WorkTypeName)
+	if workTypeName == "" {
+		workTypeName = cfg.WorkTypeName
+	}
+	return SubmitConfirmation{
+		WorkID:       optionalString(result.WorkId),
+		Name:         name,
+		WorkTypeName: workTypeName,
+		TraceID:      result.TraceId,
+		SessionID:    clidiag.SessionLabel(cfg.SessionID),
+		EndpointPath: endpointPath,
+	}
 }
 
 func renderHumanSubmitConfirmation(output io.Writer, cfg SubmitConfig, result factoryapi.SubmitWorkResponse) error {
