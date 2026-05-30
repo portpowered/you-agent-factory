@@ -383,7 +383,8 @@ Before dropping a batch file into `factory/inputs/...`, confirm:
 
 ## Related
 
-- [Work](../reference/work.md)
+- `you docs config`
+- [Submitted work](work.md)
 - [Author factories](../reference/authoring-factories.md)
 - [Relationships](relationships.md)
 - [Guards](guards.md)

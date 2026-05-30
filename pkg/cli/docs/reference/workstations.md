@@ -7,7 +7,7 @@ This is the canonical customer-facing guide for workstations. Keep workstation
 kinds, route fields, runtime step behavior, prompt/runtime fields, and
 workstation-scoped execution settings here. Keep worker backend fields in
 [Workers](workers.md) and top-level `factory.json` work type and routing
-context in [Factory JSON and work configuration](work.md).
+context in `you docs config`.
 
 ## Split Layout And Ownership
 
@@ -629,7 +629,8 @@ See [Guards](guards.md) for guard types, attachment levels, and guarded
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
 - [Workers reference](workers.md)
-- [Factory JSON and work configuration](work.md)
+- `you docs config`
+- `you docs work`
 - [Templates](templates.md)
 - [Guards](guards.md)
 - [Relationships](relationships.md)

@@ -148,10 +148,10 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 	for _, want := range []string{
 		"# Docs",
 		"`authoring-factories` - Practical factory authoring workflow",
-		"`config` - Factory configuration",
+		"`config` - Factory.json topology: work types, states, routing, resources, and portability.",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
-		"`work` - Work types",
+		"`work` - Submitted work contracts: POST /work, tags, tokens, and batch cross-links.",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
@@ -247,6 +247,38 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_ConfigReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("config")
+	if err != nil {
+		t.Fatalf("Markdown(config) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Config",
+		"## Work Types",
+		"## Top-Level Fields",
+		"supportingFiles",
+		"handlingBehavior: [\"DEFAULT\"]",
+		"you run --factory",
+		"## Resources",
+		"Petri-net execution graph",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(config) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs config`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(config) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -256,16 +288,25 @@ func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"# Factory JSON And Work Configuration",
-		"work types, states, workers, workstations, resources, and routing",
-		"## Work Types",
-		"handlingBehavior: [\"DEFAULT\"]",
-		"you run --factory",
-		"## Resources",
-		"supportingFiles",
+		"# Submitted Work",
+		"POST /work",
+		"workTypeName",
+		"Token.Tags",
+		"FACTORY_REQUEST_BATCH",
+		"you docs config",
+		"[Batch Inputs](batch-inputs.md)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(work) missing %q:\n%s", want, got)
+		}
+	}
+	for _, absent := range []string{
+		"## Work Types",
+		"## Portability Resource Manifest",
+		"## Top-Level Fields",
+	} {
+		if strings.Contains(got, absent) {
+			t.Fatalf("Markdown(work) still contains topology section %q:\n%s", absent, got)
 		}
 	}
 	for _, wrapper := range []string{

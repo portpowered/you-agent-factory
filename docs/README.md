@@ -13,12 +13,12 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - `authoring-factories` is the packaged practical factory authoring guide. Use
   [Author factories](reference/authoring-factories.md) for workflow sequencing,
   runnable examples, mock-worker checks, and replay recording.
-- `config` is the packaged `factory.json` layout reference. Use
-  [Factory JSON and work configuration](reference/work.md) for the canonical
-  work and topology contract.
-- `work` is the packaged work configuration reference. Use
-  [Factory JSON and work configuration](reference/work.md) for work types,
-  states, routing, resources, and portability fields.
+- `config` is the packaged `factory.json` topology reference. Use
+  [Config](reference/config.md) for work types, states, routing, resources,
+  and portability fields.
+- `work` is the packaged submitted-work reference. Use
+  [Submitted work](reference/work.md) for `POST /work`, tags, tokens, and
+  batch submission cross-links.
 - `workstations` is the packaged workstation reference. `workstation` remains
   accepted as a compatibility alias for the same raw markdown. Use
   [Workstations](reference/workstations.md) for the canonical workstation
@@ -27,8 +27,7 @@ These are the fixed topic names accepted by `you docs <topic>`.
   [Workers](reference/workers.md) for the canonical worker guide.
 - `resources` is the packaged bounded-concurrency reference. Use
   [Resources](reference/resources.md) for the resource slice and
-  [Factory JSON and work configuration](reference/work.md) for top-level
-  topology.
+  [Config](reference/config.md) for top-level topology.
 - `models` is the packaged model operations quick reference. Use
   [Models and model operations](reference/models.md) for model discovery,
   invocation, and local or hosted model setup.
@@ -44,10 +43,11 @@ These are the fixed topic names accepted by `you docs <topic>`.
 
 - [CLI reference](reference/README.md) is the package-owned topic index for the stable `authoring-factories`, `config`, `work`, `workstations`, `workers`, `resources`, `models`, `batch-inputs`, and `templates` reference pages.
 - Canonical concept guides:
-  - [Factory JSON and work configuration](reference/work.md) owns work types, work states, top-level `factory.json`, routing, resources, and portability fields.
+  - [Config](reference/config.md) owns work types, work states, top-level `factory.json`, routing, resources, and portability fields.
+  - [Submitted work](reference/work.md) owns `POST /work`, batch submission cross-links, tags, and token flow after acceptance.
   - [Workstations reference](reference/workstations.md) owns workstation kinds, route fields, runtime step behavior, and workstation-scoped execution settings.
   - [Workers reference](reference/workers.md) owns worker types, worker-scoped runtime fields, and split `workers/<name>/AGENTS.md` placement.
-- [Config reference](reference/config.md) explains the canonical split layout, `factory.json`, and where worker, workstation, and input files live.
+- [Config reference](reference/config.md) explains `factory.json` topology and the canonical split layout for worker, workstation, and input files.
 - [Resources reference](reference/resources.md) explains top-level resource pools and workstation or worker resource requirements.
 - [Batch inputs](reference/batch-inputs.md) explains `FACTORY_REQUEST_BATCH`, watched-file placement, and authored relation types.
 - [Templates reference](reference/templates.md) explains supported Go-template surfaces, the complete variable inventory, and the JSON-versus-Markdown quoting rule.

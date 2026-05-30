@@ -1,9 +1,9 @@
 # Config Reference
 
 Use this page when you need the canonical factory directory layout and where
-each authored file lives. Use
-[Factory JSON and work configuration](work.md) for the field-by-field
-`factory.json` contract.
+each authored file lives. Use `you docs config` for the field-by-field
+`factory.json` topology contract and [Submitted work](work.md) for submission
+contracts.
 
 ## Current Contract
 
@@ -11,7 +11,7 @@ each authored file lives. Use
   topology such as `id`, `workTypes`, `workers`, `workstations`, routes,
   optional runtime `resources`, and the optional portability
   `supportingFiles`; the normative field contract lives in
-  [Factory JSON and work configuration](work.md).
+  `you docs config`.
 - Keep worker runtime instructions in `workers/<name>/AGENTS.md`.
 - Keep workstation runtime instructions in `workstations/<name>/AGENTS.md`.
 - Keep watched work inputs under `inputs/<work-type-or-BATCH>/<channel>/`.
@@ -51,14 +51,14 @@ factory/
   `inputs/BATCH/default/`.
 
 For a minimal `factory.json` example, use
-[Factory JSON and work configuration](work.md#minimal-factory).
+`you docs config` (Minimal Factory).
 
 ## Portability Manifest Placement
 
 Use `supportingFiles` in `factory.json` when the portable factory must declare
 external tools or carry bundled helper files beyond workflow topology. The
 manifest field contract belongs in
-[Factory JSON and work configuration](work.md#portability-resource-manifest);
+`you docs config` (Portability Resource Manifest);
 this page only records that bundled files are restored beside the expanded
 factory layout.
 
@@ -147,7 +147,7 @@ and record/replay flags:
 
 - `--factory <factory.json>` — load a portable `factory.json` by file path and,
   with a trailing positional prompt, submit raw text to the work type that
-  declares `handlingBehavior: ["DEFAULT"]` (see [Work types](work.md#default-handling-for-one-shot-cli-runs))
+  declares `handlingBehavior: ["DEFAULT"]` (see `you docs config`, Default handling for one-shot CLI runs)
 - `--with-mock-workers` — deterministic worker outcomes without live provider calls
 - `--record`, `--replay`, `--no-record` — control replay artifact capture and playback
 
@@ -173,7 +173,7 @@ see [Author factories](authoring-factories.md).
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
 - [Author factories](authoring-factories.md)
-- [Factory JSON and work configuration](work.md)
+- [Submitted work](work.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Author AGENTS.md](authoring-agents-md.md)

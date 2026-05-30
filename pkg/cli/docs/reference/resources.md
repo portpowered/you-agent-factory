@@ -64,5 +64,6 @@ workstations while a you-agent-factory dispatch is active.
 ## Related
 
 - `you docs config`
+- `you docs work`
 - `you docs workstations`
 - `you docs workers`

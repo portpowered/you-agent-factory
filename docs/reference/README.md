@@ -12,13 +12,13 @@ complete customer-facing contract.
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
-| `config` | Split layout and `factory.json` placement | [Factory JSON and work configuration](work.md) and [Author factories](authoring-factories.md) |
+| `config` | `factory.json` topology, split layout, and portability | [Config](config.md) and [Author factories](authoring-factories.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
-| `work` | Work types, states, routing, resources, and portability fields | [Factory JSON and work configuration](work.md) |
+| `work` | Submitted work: `POST /work`, tags, tokens, and batch cross-links | [Submitted work](work.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
-| `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Factory JSON and work configuration](work.md) |
+| `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
@@ -54,9 +54,10 @@ around that invocation.
 
 ## Canonical Concept Owners
 
-- [Factory JSON and work configuration](work.md) owns work types, work states,
-  top-level `factory.json`, routing behavior, runtime resources, and
-  portability fields.
+- [Config](config.md) owns work types, work states, top-level `factory.json`,
+  routing behavior, runtime resources, and portability fields.
+- [Submitted work](work.md) owns `POST /work`, batch submission cross-links,
+  tags, and token flow after acceptance.
 - [Workstations](workstations.md) owns workstation kinds, route fields, runtime
   step behavior, prompt/runtime fields, and workstation-scoped execution
   settings.
@@ -67,8 +68,8 @@ Use these canonical concept owners when you need the current contract.
 
 ## Customer Guide Structure
 
-- [Config](config.md) explains the canonical split factory layout around
-  `factory.json`, `workers/`, `workstations/`, and `inputs/`.
+- [Config](config.md) explains `factory.json` topology and the canonical split
+  factory layout around `workers/`, `workstations/`, and `inputs/`.
 - [Resources](resources.md) explains top-level resource pools and the
   `{name, capacity}` requirements consumed by workers or workstations.
 - [Models and model operations](models.md) explains `MODEL_INVOKE`,
@@ -92,7 +93,8 @@ Use these canonical concept owners when you need the current contract.
 ## Related
 
 - [Package docs index](../README.md)
-- [Factory JSON and work configuration](work.md)
+- [Config](config.md)
+- [Submitted work](work.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Resources](resources.md)

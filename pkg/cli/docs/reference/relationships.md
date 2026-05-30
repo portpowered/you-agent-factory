@@ -264,5 +264,6 @@ page for relation semantics and scheduling impact.
 - [Guards](guards.md)
 - [Batch Inputs](batch-inputs.md)
 - [Workstations](workstations.md)
-- [Work configuration](work.md)
+- `you docs work`
+- `you docs config`
 - [Templates](templates.md)
