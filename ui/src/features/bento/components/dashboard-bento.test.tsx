@@ -191,11 +191,14 @@ vi.mock("../../trace-drilldown/public", () => ({
   }) => <section>{headerAction}Trace card</section>,
 }));
 
+vi.mock("../../work-outcome/hooks/useWorkOutcomeChart", () => ({
+  useWorkOutcomeChart: () => ({ status: "empty" }),
+}));
+
 vi.mock("../../work-outcome/public", () => ({
   WorkOutcomeWidget: ({ headerAction }: { headerAction?: React.ReactNode }) => (
     <section>{headerAction}Work outcome card</section>
   ),
-  useWorkOutcomeChart: () => ({ status: "empty" }),
 }));
 
 vi.mock("../../work-totals/public", () => ({
@@ -220,15 +223,18 @@ vi.mock("../../workflow-activity/public", () => ({
   ),
 }));
 
-vi.mock("../../workflow-activity/hooks/current-activity-import-controller", () => ({
-  useCurrentActivityImportController: () => ({
-    activationState: { status: "idle" },
-    activateImport: vi.fn(),
-    clearActivationError: vi.fn(),
-    closeImportPreview: vi.fn(),
-    importPreviewState: { status: "idle" },
+vi.mock(
+  "../../workflow-activity/hooks/current-activity-import-controller",
+  () => ({
+    useCurrentActivityImportController: () => ({
+      activationState: { status: "idle" },
+      activateImport: vi.fn(),
+      clearActivationError: vi.fn(),
+      closeImportPreview: vi.fn(),
+      importPreviewState: { status: "idle" },
+    }),
   }),
-}));
+);
 
 vi.mock("../state/dashboardBentoStore", () => ({
   useDashboardBentoStore: (
