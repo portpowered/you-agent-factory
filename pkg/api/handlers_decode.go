@@ -10,11 +10,103 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/api/workstationprojection"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )
+
+var _ factoryapi.ServerInterface = (*Server)(nil)
+
+// BuildFactoryWorldWorkstationRequestProjectionSlice delegates to the
+// workstationprojection subpackage while preserving the historical pkg/api entrypoint.
+func BuildFactoryWorldWorkstationRequestProjectionSlice(
+	state interfaces.FactoryWorldState,
+) factoryapi.FactoryWorldWorkstationRequestProjectionSlice {
+	return workstationprojection.BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+}
+
+func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.SessionAPISurface, bool) {
+	if s.sessionRuntime == nil {
+		s.writeError(w, http.StatusInternalServerError, "session-scoped API is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return s.sessionRuntime, true
+}
+
+func stringValue(value *string) string {
+	return optional.StringValue(value)
+}
+
+func generatedWorkStateName(value *factoryapi.WorkState) string {
+	if value == nil {
+		return ""
+	}
+	return value.Name
+}
+
+func intValue(value *int) int {
+	return optional.IntValue(value)
+}
+
+func stringSliceValue(values *[]string) []string {
+	return optional.StringsValue(values)
+}
+
+func stringSlicePtrCopy(values []string) *[]string {
+	return optional.CopiedStringsPtr(values)
+}
+
+func stringPtrIfNotEmpty(value string) *string {
+	return optional.NonEmptyStringPtr(value)
+}
+
+func integerMapPtr(values map[string]int) *factoryapi.IntegerMap {
+	if len(values) == 0 {
+		return nil
+	}
+	converted := factoryapi.IntegerMap(values)
+	return &converted
+}
+
+func stringMapPtr(values map[string]string) *factoryapi.StringMap {
+	return optional.CopiedStringMapPtr(values)
+}
+
+func intPtrIfPositive(value int) *int {
+	return optional.PositiveIntPtr(value)
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func generatedStringMap(values *factoryapi.StringMap) map[string]string {
+	return optional.StringMapValue(values)
+}
+
+func generatedSubmitRelations(values *[]factoryapi.SubmitRelation) []interfaces.Relation {
+	if values == nil || len(*values) == 0 {
+		return nil
+	}
+	relations := make([]interfaces.Relation, 0, len(*values))
+	for _, relation := range *values {
+		relations = append(relations, interfaces.Relation{
+			Type:          interfaces.RelationType(relation.Type),
+			TargetWorkID:  relation.TargetWorkId,
+			RequiredState: stringValue(relation.RequiredState),
+		})
+	}
+	return relations
+}
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
