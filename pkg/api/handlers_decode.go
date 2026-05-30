@@ -12,6 +12,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )
 
@@ -494,4 +495,73 @@ func requireOnlyFields(fields map[string]json.RawMessage, prefix string, allowed
 		return requestFieldValidationError{message: fmt.Sprintf("%s%s is not supported", prefix, field)}
 	}
 	return nil
+}
+
+func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRequest, error) {
+	workRequest := interfaces.WorkRequest{
+		RequestID:              req.RequestId,
+		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
+		Type:                   interfaces.WorkRequestType(req.Type),
+	}
+	if req.Works != nil {
+		workRequest.Works = make([]interfaces.Work, 0, len(*req.Works))
+		for i, work := range *req.Works {
+			if err := validateGeneratedWorkContentAtPath(work.Content, fmt.Sprintf("works[%d].content", i)); err != nil {
+				return interfaces.WorkRequest{}, err
+			}
+			workRequest.Works = append(workRequest.Works, interfaces.Work{
+				Name:                     work.Name,
+				WorkID:                   stringValue(work.WorkId),
+				RequestID:                stringValue(work.RequestId),
+				WorkTypeID:               stringValue(work.WorkTypeName),
+				State:                    generatedWorkStateName(work.State),
+				ChainingTraceDepth:       intValue(work.ChainingTraceDepth),
+				CurrentChainingTraceID:   stringValue(work.CurrentChainingTraceId),
+				PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
+				TraceID:                  stringValue(work.TraceId),
+				Content:                  workcontent.PartsFromGenerated(work.Content),
+				Payload:                  work.Payload,
+				Tags:                     generatedStringMap(work.Tags),
+			})
+		}
+	}
+	if req.Relations != nil {
+		workRequest.Relations = make([]interfaces.WorkRelation, 0, len(*req.Relations))
+		for _, relation := range *req.Relations {
+			workRequest.Relations = append(workRequest.Relations, interfaces.WorkRelation{
+				Type:           interfaces.WorkRelationType(relation.Type),
+				SourceWorkName: relation.SourceWorkName,
+				TargetWorkName: relation.TargetWorkName,
+				RequiredState:  stringValue(relation.RequiredState),
+			})
+		}
+	}
+	return workRequest, nil
+}
+
+func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+	return workcontent.GeneratedPtrFromParts(parts)
+}
+
+func validateGeneratedWorkContentAtPath(content *factoryapi.WorkContent, fieldPath string) error {
+	if content == nil || len(*content) == 0 {
+		return nil
+	}
+
+	for i, part := range *content {
+		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
+		if _, ok := workcontent.PartFromGenerated(part); ok {
+			continue
+		}
+
+		return requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, TEXT, IMAGE, AUDIO, JSON, or BINARY", pathPrefix)}
+	}
+	return nil
+}
+
+func generatedPayloadToRawMessage(payload any) (json.RawMessage, error) {
+	if payload == nil {
+		return nil, nil
+	}
+	return json.Marshal(payload)
 }
