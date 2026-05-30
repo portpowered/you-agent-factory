@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { FactoryValidationResult } from "../../../api/factory-validation";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import { connectFactoryGraphNodes } from "../../factory-graph-editor/public";
+import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/factory-graph-operations";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-apply";
 import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
@@ -181,26 +181,19 @@ vi.mock("../../current-factory-definition/public", () => ({
   useSaveCurrentFactory: () => hookState.saveEditableDefinition,
 }));
 
-vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual<
-    typeof import("../../factory-graph-editor/public")
-  >("../../factory-graph-editor/public");
-
-  return {
-    ...actual,
-    useEditableFactoryGraph: () => ({
-      actions: {
-        discard: hookState.draftState.resetDraft,
-        save: vi.fn(async () => false),
-      },
-      draftState: hookState.draftState,
-      saveState: {
-        canSave: hookState.draftState.hasChanges,
-        isStale: false,
-      },
-    }),
-  };
-});
+vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
+  useEditableFactoryGraph: () => ({
+    actions: {
+      discard: hookState.draftState.resetDraft,
+      save: vi.fn(async () => false),
+    },
+    draftState: hookState.draftState,
+    saveState: {
+      canSave: hookState.draftState.hasChanges,
+      isStale: false,
+    },
+  }),
+}));
 
 vi.mock(
   "../../factory-graph-editor/lib/factory-graph-editor-additions",
