@@ -9,9 +9,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   buildTimeoutMs,
   browserScenarioTimeoutMs,
+  defaultFactorySessionID,
   exportCoverImagePath,
   expectNoBrowserErrors,
-  initialEditableFactoryDefinitionVersion,
   loadReplayLines,
   openBrowserPage,
   startBrowserPreview,
@@ -278,7 +278,8 @@ describe.sequential("factory graph editor browser integration", () => {
   it(
     "exports the current factory as a downloadable PNG without uncaught browser exceptions",
     async () => {
-      const activationRequests = [];
+      const postFactoryActivations = [];
+      const sessionFactoryPutRequests = [];
       const replayCoverageReport = buildReplayCoverageReport();
       const pngCoverageScenario = replayCoverageReport.scenarios.find(
         (scenario) => scenario.id === "pngRoundTrip",
@@ -288,7 +289,10 @@ describe.sequential("factory graph editor browser integration", () => {
         currentFactory: exportFactoryDefinition,
         eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
         onActivateFactory: async (value) => {
-          activationRequests.push(value);
+          postFactoryActivations.push(value);
+        },
+        onSaveCurrentFactory: async ({ body, sessionID }) => {
+          sessionFactoryPutRequests.push({ body, sessionID });
         },
       });
       const browserPage = await openBrowserPage({ acceptDownloads: true });
@@ -486,17 +490,27 @@ describe.sequential("factory graph editor browser integration", () => {
         await importDialog
           .getByRole("button", { name: "Activate factory" })
           .click();
+        await expect
+          .poll(async () => sessionFactoryPutRequests.length, {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe(1);
         await importDialog.waitFor({
           state: "hidden",
           timeout: uiInteractionTimeoutMs,
         });
-        expect(activationRequests).toEqual([
-          {
-            ...exportFactoryDefinition,
-            name: exportName,
-            version: initialEditableFactoryDefinitionVersion,
+        expect(postFactoryActivations).toEqual([]);
+        expect(sessionFactoryPutRequests).toHaveLength(1);
+        expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
+          defaultFactorySessionID,
+        );
+        expect(sessionFactoryPutRequests[0]?.body).toMatchObject({
+          ...exportFactoryDefinition,
+          name: exportFactoryDefinition.name,
+          version: {
+            logical: "2",
           },
-        ]);
+        });
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,

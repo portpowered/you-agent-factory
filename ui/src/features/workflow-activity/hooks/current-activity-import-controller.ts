@@ -36,6 +36,7 @@ export interface UseCurrentActivityImportControllerOptions {
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
+  sessionID?: string | null;
 }
 
 export function useCurrentActivityImportController({
@@ -44,6 +45,7 @@ export function useCurrentActivityImportController({
   onFactoryActivated,
   onFactoryImportReady,
   readFactoryImportFile,
+  sessionID,
 }: UseCurrentActivityImportControllerOptions = {}): CurrentActivityImportController {
   const {
     closePreview: closeImportPreview,
@@ -63,6 +65,7 @@ export function useCurrentActivityImportController({
   } = useFactoryImportActivation({
     activateFactory,
     onActivated: handleFactoryActivated,
+    sessionID,
   });
   const handleImportPreviewReady = useCallback((value: FactoryPngImportValue, file: File) => {
     clearActivationError();

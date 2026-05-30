@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
 import {
-  createFactory,
+  activateImportedFactoryForSession,
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
@@ -16,6 +16,7 @@ export type FactoryImportActivationState =
 export interface UseFactoryImportActivationOptions {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   onActivated?: (value: FactoryValue) => void;
+  sessionID?: string | null;
 }
 
 export interface UseFactoryImportActivationResult {
@@ -27,9 +28,17 @@ export interface UseFactoryImportActivationResult {
 const IDLE_ACTIVATION_STATE: FactoryImportActivationState = { status: "idle" };
 
 export function useFactoryImportActivation({
-  activateFactory = createFactory,
+  activateFactory: activateFactoryOverride,
   onActivated,
+  sessionID,
 }: UseFactoryImportActivationOptions = {}): UseFactoryImportActivationResult {
+  const activateFactory = useMemo(
+    () =>
+      activateFactoryOverride ??
+      ((value: FactoryValue) =>
+        activateImportedFactoryForSession(value, { sessionID })),
+    [activateFactoryOverride, sessionID],
+  );
   const [activationError, setActivationError] = useState<NamedFactoryAPIError | null>(null);
   const mutation = useMutation({
     mutationFn: (value: FactoryValue) => activateFactory(value),

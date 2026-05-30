@@ -107,6 +107,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const importController = useCurrentActivityImportController({
     locale: resolvedLocale,
     onFactoryActivated: incrementRefreshToken,
+    sessionID: selectedSessionID,
   });
 
   useEffect(() => {

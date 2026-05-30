@@ -1,5 +1,11 @@
 import type { components } from "../generated/openapi";
 import { factoryAPIURL } from "../baseUrl";
+import {
+  CurrentFactoryDefinitionError,
+  getCurrentFactoryDocument,
+  saveCurrentFactoryDocument,
+  type CurrentFactoryDocument,
+} from "../current-factory-definition";
 import { currentFactorySessionPath } from "../session-routing";
 import {
   extractAPIErrorPayload,
@@ -17,7 +23,8 @@ export type NamedFactoryAPIErrorCode =
   | "INVALID_FACTORY"
   | "INVALID_FACTORY_NAME"
   | "NETWORK_ERROR"
-  | "NOT_FOUND";
+  | "NOT_FOUND"
+  | "STALE_FACTORY_VERSION";
 
 export interface NamedFactoryAPIErrorDetails {
   code: NamedFactoryAPIErrorCode;
@@ -31,6 +38,11 @@ export interface CreateFactoryOptions {
 }
 
 export interface GetCurrentFactoryOptions {
+  fetch?: typeof globalThis.fetch;
+  sessionID?: string | null;
+}
+
+export interface ActivateImportedFactoryForSessionOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
 }
@@ -159,6 +171,42 @@ export async function getCurrentFactory(
   return responseBody;
 }
 
+export async function activateImportedFactoryForSession(
+  importedFactory: FactoryValue,
+  options: ActivateImportedFactoryForSessionOptions = {},
+): Promise<FactoryValue> {
+  let currentDocument: CurrentFactoryDocument;
+  try {
+    currentDocument = await getCurrentFactoryDocument({
+      fetch: options.fetch,
+      sessionID: options.sessionID,
+    });
+  } catch (error) {
+    throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
+  }
+
+  let savedDocument: CurrentFactoryDocument;
+  try {
+    savedDocument = await saveCurrentFactoryDocument(
+      {
+        baseVersion: currentDocument.version,
+        factoryDefinition: toImportedFactoryDefinition(
+          importedFactory,
+          currentDocument.name,
+        ),
+      },
+      {
+        fetch: options.fetch,
+        sessionID: options.sessionID,
+      },
+    );
+  } catch (error) {
+    throw toNamedFactoryAPIErrorFromCurrentFactoryDefinition(error);
+  }
+
+  return toActivatedFactoryValue(savedDocument);
+}
+
 function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFactoryAPIErrorCode {
   switch (code) {
     case "BAD_REQUEST":
@@ -168,6 +216,7 @@ function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFacto
     case "INVALID_FACTORY":
     case "INVALID_FACTORY_NAME":
     case "NOT_FOUND":
+    case "STALE_FACTORY_VERSION":
       return code;
     default:
       // hardcoded-ui-copy-exception: non-product-diagnostic
@@ -181,4 +230,62 @@ function isFactoryValue(value: unknown): value is FactoryValue {
     typeof value.name === "string" &&
     value.factory === undefined
   );
+}
+
+function toImportedFactoryDefinition(
+  importedFactory: FactoryValue,
+  sessionFactoryName: string,
+): FactoryValue {
+  const { version: _version, ...importedWithoutVersion } = importedFactory;
+  return {
+    ...importedWithoutVersion,
+    name: sessionFactoryName,
+  };
+}
+
+function toActivatedFactoryValue(document: CurrentFactoryDocument): FactoryValue {
+  const { version: _version, ...factoryValue } = document;
+  return factoryValue;
+}
+
+function toNamedFactoryAPIErrorFromCurrentFactoryDefinition(
+  error: unknown,
+): NamedFactoryAPIError {
+  if (error instanceof CurrentFactoryDefinitionError) {
+    return new NamedFactoryAPIError(error.message, {
+      code: normalizeNamedFactoryAPIErrorCodeFromCurrentFactoryDefinition(error.code),
+      responseBody: error.responseBody,
+      status: error.status,
+      statusText: error.statusText,
+    });
+  }
+
+  if (error instanceof NamedFactoryAPIError) {
+    return error;
+  }
+
+  if (error instanceof Error) {
+    return new NamedFactoryAPIError(error.message, { code: "INTERNAL_ERROR" });
+  }
+
+  return new NamedFactoryAPIError("Factory activation failed.", { code: "INTERNAL_ERROR" });
+}
+
+function normalizeNamedFactoryAPIErrorCodeFromCurrentFactoryDefinition(
+  code: CurrentFactoryDefinitionError["code"],
+): NamedFactoryAPIErrorCode {
+  switch (code) {
+    case "BAD_REQUEST":
+    case "FACTORY_NOT_IDLE":
+    case "NETWORK_ERROR":
+    case "NOT_FOUND":
+    case "STALE_FACTORY_VERSION":
+      return code;
+    case "INVALID_FACTORY_DEFINITION":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return "INVALID_FACTORY";
+    default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return "INTERNAL_ERROR";
+  }
 }
