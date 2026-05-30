@@ -823,14 +823,6 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 	}
 }
 
-func warnPortableBundledReplacementReport(
-	logger *zap.Logger,
-	message string,
-	replacements []factoryconfig.PortableBundledFileReplacement,
-) {
-	runtimebuild.WarnPortableBundledReplacementReport(logger, message, replacements)
-}
-
 func runtimeWorkflowContext(cfg *interfaces.FactoryConfig) *factory_context.FactoryContext {
 	projectID := factory_context.DefaultProjectID
 	if cfg != nil && cfg.Project != "" {
@@ -888,10 +880,6 @@ func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntime
 		}
 	}
 	return errors.Join(errs...)
-}
-
-func newSessionLogger(base *zap.Logger, sessionID string, folderPath string, factoryDir string) *zap.Logger {
-	return runtimebuild.NewSessionLogger(base, sessionID, folderPath, factoryDir)
 }
 
 func sessionScopedRecordPath(basePath string, sessionID string) string {
