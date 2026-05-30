@@ -279,6 +279,25 @@ describe("useSaveCurrentFactory", () => {
       }),
     ).rejects.toEqual(error);
   });
+
+  it("preserves FACTORY_NOT_IDLE save errors through the mutation", async () => {
+    const error = {
+      code: "FACTORY_NOT_IDLE",
+      message: "Current factory runtime must be idle before activation.",
+      name: "CurrentFactoryDefinitionError",
+    };
+    vi.mocked(saveCurrentFactoryDocument).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useSaveCurrentFactory(), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await expect(
+      result.current.mutateAsync({
+        factoryDefinition: editableFactoryDefinition,
+      }),
+    ).rejects.toEqual(error);
+  });
 });
 
 function createQueryClientWrapper(
