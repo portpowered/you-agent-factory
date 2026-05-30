@@ -8,6 +8,7 @@ import {
 } from "../../header/public";
 import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
+import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 
 const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
 
@@ -16,6 +17,14 @@ export interface DashboardScreenProps {
 }
 
 export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
+  return (
+    <DashboardSessionProvider>
+      <DashboardScreenContent locale={locale} />
+    </DashboardSessionProvider>
+  );
+}
+
+function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
   const refreshToken = useDashboardBentoStore((state) => state.refreshToken);
   const { snapshot, isInitialLoading, error } = useDashboardSnapshot({

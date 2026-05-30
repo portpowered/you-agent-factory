@@ -6,7 +6,7 @@ import {
   type PromptTemplateContract,
 } from "../../../../api/current-factory-prompt-template";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
-import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
+import { useDashboardSession } from "../../../dashboard/session/dashboard-session-provider";
 
 export function buildCurrentWorkstationPromptTemplateContractQueryKey(
   workstationName: string,
@@ -23,7 +23,7 @@ export function useCurrentWorkstationPromptTemplateContract(
   workstationName: string | undefined,
   isEnabled = true,
 ) {
-  const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
+  const { sessionID } = useDashboardSession();
 
   return useQuery<PromptTemplateContract, CurrentFactoryPromptTemplateAPIError>(
     {

@@ -1,4 +1,3 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -9,6 +8,10 @@ import {
   useCurrentFactoryDocument,
 } from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
+import {
+  createCurrentSelectionWidgetQueryClient,
+  wrapCurrentSelectionWidgetView,
+} from "./current-selection-widget-test-utils";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { DashboardSelection } from "../state/selection-types";
@@ -176,23 +179,19 @@ describe("CurrentSelectionWidget localization", () => {
       selectedWorkRequestHistory: fixture.selectedWorkRequestHistory,
       selection: fixture.selection,
     });
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
 
     vi.mocked(globalThis.fetch).mockReturnValue(
       new Promise<Response>(() => undefined),
     );
 
     const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="en"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={fixture.executionDetails}
-        />
-      </QueryClientProvider>,
+        />),
     );
 
     const englishSelection = screen.getByRole("article", {
@@ -218,14 +217,12 @@ describe("CurrentSelectionWidget localization", () => {
     ).toBeTruthy();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="zh-CN"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={fixture.executionDetails}
-        />
-      </QueryClientProvider>,
+        />),
     );
 
     const localizedSelection = screen.getByRole("article", {
@@ -265,9 +262,7 @@ describe("CurrentSelectionWidget workstation localization", () => {
       ...snapshot.topology.workstation_nodes_by_id.review,
       workstation_kind: "repeater",
     };
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const queryClient = createCurrentSelectionWidgetQueryClient();
     const factoryDocument: CurrentFactoryDocument = {
       name: "Current Factory",
       version: {
@@ -313,14 +308,12 @@ describe("CurrentSelectionWidget workstation localization", () => {
     });
 
     const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="en"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />),
     );
 
     expect(screen.getByRole("heading", { name: "Workstation summary" })).toBeTruthy();
@@ -328,14 +321,12 @@ describe("CurrentSelectionWidget workstation localization", () => {
     expect(screen.getByText("reviewer")).toBeTruthy();
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="zh-CN"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />
-      </QueryClientProvider>,
+        />),
     );
 
     expect(screen.getByRole("heading", { name: "工作站摘要" })).toBeTruthy();

@@ -1,19 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   resetDashboardSessionStore,
-  useDashboardSessionStore,
 } from "../../dashboard/state/dashboardSessionStore";
 import { SubmitWorkWidget } from "./index";
 
 describe("submit-work public barrel", () => {
   beforeEach(() => {
     resetDashboardSessionStore();
-    useDashboardSessionStore.setState({
-      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
-    });
   });
 
   it("keeps SubmitWorkWidget rendering the submit form through the public export", () => {
@@ -55,6 +51,8 @@ function renderSubmitWorkWidget(element: React.ReactElement) {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
+    <QueryClientProvider client={queryClient}>
+      <DashboardSessionTestProvider>{element}</DashboardSessionTestProvider>
+    </QueryClientProvider>,
   );
 }

@@ -14,6 +14,7 @@ import {
 } from "../../../components/dashboard/test-fixtures";
 import "../../../styles.css";
 import { expectNoPageHorizontalOverflow } from "../../../stories/dashboardStorySupport";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { CurrentSelectionWidget } from "../../current-selection/public";
 import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
@@ -516,12 +517,14 @@ function renderCardFrame({
   children,
   initialWidth = 960,
   layout,
+  sessionID,
 }: {
   children: ReactNode;
   initialWidth?: number;
   layout: AgentBentoLayoutItem;
+  sessionID?: string | null;
 }) {
-  return (
+  const card = (
     <div
       style={{ maxWidth: `${initialWidth}px`, padding: "1rem", width: "100%" }}
     >
@@ -538,6 +541,18 @@ function renderCardFrame({
         responsiveMode="interactive"
       />
     </div>
+  );
+
+  if (sessionID === undefined) {
+    return (
+      <DashboardSessionTestProvider>{card}</DashboardSessionTestProvider>
+    );
+  }
+
+  return (
+    <DashboardSessionTestProvider sessionID={sessionID}>
+      {card}
+    </DashboardSessionTestProvider>
   );
 }
 
@@ -2059,6 +2074,34 @@ export const SubmitWork = {
         id: "submit-work::story",
         w: 5,
       }),
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "Submit work" });
+
+    await expect(
+      within(card).getByRole("combobox", { name: "Work type" }),
+    ).toBeVisible();
+    expectBentoHeaderDragSurface(card, "Submit work");
+  },
+};
+
+export const SubmitWorkSessionBeta = {
+  render: () =>
+    renderCardFrame({
+      children: (
+        <SubmitWorkWidget
+          submitWorkTypes={
+            semanticWorkflowDashboardSnapshot.topology.submit_work_types
+          }
+        />
+      ),
+      layout: layoutFor(DASHBOARD_WIDGET_IDS.submitWork, {
+        h: 6,
+        id: "submit-work-session-beta::story",
+        w: 5,
+      }),
+      sessionID: "session-beta",
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
