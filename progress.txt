@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Shared Petri net transition exhaustion and guarded loop-breaker assertions live in `pkg/testutil/petriassert.go` (`AssertNoTransitionExhaustion` with `PetriTransitionAssertOptions.ExhaustionContext`, `AssertGuardedLoopBreakerTransition`); maptests use context `customer-authored mapping`, replay configtests use `replay-mapped customer config`; exhaustion checks skip nil transitions.
 - `decodeStrictJSON[T any](body io.Reader) (T, error)` in `pkg/api/handlers_common.go` is the shared strict factory body decode path: `io.ReadAll`, `json.Decoder` with `DisallowUnknownFields`, then `ensureSingleJSONObject`; multi-object payloads that trigger the single-object guard use a second decodable `{}` (e.g. `{"name":"a"}{}`), not a second typed object with unknown fields to `struct{}{}`. Factory decoders in `handlers_factory.go` (`decodeNamedFactoryBody`, `decodeOpenFactorySessionBody`, `decodeSaveCurrentFactoryBody`, `decodePromptTemplateValidationRequestBody`) are thin `return decodeStrictJSON[<type>](body)` wrappers—do not re-inline read/decode/guard logic there.
 - `buildSessionScope` in `ui/src/api/session-scope.ts` is the sole pure projection for dashboard session identity and API paths; `isPaused` is true only for a non-default `rawSessionID` listed in `pausedSessionIDs`—never for default/null/empty/`~default` selection even if the pause list includes `~default`.
 - Bento import threads `rawSessionID` from `useDashboardSession()` through `DashboardBento` → `useCurrentActivityImportController` / `useDashboardBentoImport`; prove scope-fed `sessionID` with a `vi.fn` spy on `useCurrentActivityImportController` in `dashboard-bento.test.tsx`—tab selection stays on `useDashboardSessionTabsState` → `dashboardSessionStore`.
@@ -785,4 +786,13 @@
   - Patterns discovered: All four factory decoders unify on `ensureSingleJSONObject` via the shared helper (previously `decodeSaveCurrentFactoryBody` and `decodeNamedFactoryBody` inlined the trailing `decoder.Decode` guard).
   - Gotchas encountered: No PR exists yet for this branch; story 003 adds HTTP regression tests for endpoint decode behavior.
   - Useful context: `go test ./pkg/api/...` passes with existing factory handler tests unchanged.
+---
+
+## 2026-05-31T00:00:00Z - consolidate-petri-net-test-assertions-001
+- What was implemented: Added `pkg/testutil/petriassert.go` with exported `AssertNoTransitionExhaustion`, `AssertGuardedLoopBreakerTransition`, and `PetriTransitionAssertOptions`; unit tests cover pass paths and nil-transition skipping for exhaustion checks.
+- Files changed: `pkg/testutil/petriassert.go`, `pkg/testutil/petriassert_test.go`
+- **Learnings for future iterations:**
+  - Patterns discovered: Exhaustion fatals use `unexpected TransitionExhaustion transition %q in %s` with caller-supplied context; loop-breaker assertions use maptests-style granular guard/place messages; replay’s combined guard fatalf is not replicated in the shared helper.
+  - Gotchas encountered: Go subtests that call `t.Fatal` still fail the parent test—prove failure paths via migrated maptests/replay tests rather than expect-failure subtests in `pkg/testutil`.
+  - Useful context: Stories 002/003 migrate `config_mapper_test.go` and `effective_config_test.go` call sites and delete local helpers in `config_mapper_resources_test.go` / `effective_config_test.go`.
 ---

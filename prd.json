@@ -1,112 +1,65 @@
 {
-  "project": "UI Dashboard Stream and Timeline Split (U8 Recovery v2)",
-  "branchName": "ralph/ui-dashboard-stream-timeline-split-recovery-v2",
-  "description": "Recovery implementation of the dashboard stream/timeline split (U8): isolate factory SSE transport, session lifecycle resets, and world-view shell derivation behind focused hooks while preserving DashboardScreen loading, error, pause, refresh, and snapshot behavior. Retriggers after wave-2 plan failure on U2; baseline spec at tasks/prd-ui-dashboard-stream-timeline-split.md. Requires ui-session-scope-context-recovery-v2 complete first.",
+  "project": "Consolidate Petri Net Test Assertions",
+  "branchName": "ralph/consolidate-petri-net-test-assertions",
+  "description": "Move duplicated Petri net transition exhaustion and guarded loop-breaker assertion helpers from pkg/config/maptests and pkg/replay/configtests into pkg/testutil, retarget call sites, and delete local copies without changing which transitions, guards, or places each test verifies.",
   "context": {
-    "customerAsk": "Retrigger U8 (UI dashboard stream timeline split) after the prior recovery token blocked on failed U2 recovery. Deliver the split hook seams from tasks/prd-ui-dashboard-stream-timeline-split.md so live dashboard stream, timeline, and shell states remain correct with testable ownership.",
-    "problem": "useDashboardSnapshot combined SSE transport, session-switch resets, queued timeline appends, debug memory hooks, and snapshot projection, making the dashboard shell hard to test and causing fragile loading/error derivation from snapshot truthiness instead of stream plus timeline event ownership.",
-    "solution": "Extract useFactoryEventStream, useDashboardSessionLifecycle, and useDashboardWorldView; keep useDashboardSnapshot as a thin composer wired through useDashboardSession for rawSessionID and isPaused; gate timeline memory debug behind existing flags; prove behavior with focused hook tests and dashboard shell stream/timeline regressions."
+    "customerAsk": "Consolidate duplicated Petri transition assertion helpers (no TransitionExhaustion, guarded loop-breaker VisitCountGuard wiring) from maptests and replay/configtests into pkg/testutil as part of backend pkg/ duplication cleanup.",
+    "problem": "assertNoTransitionExhaustion/assertGuardedLoopBreakerTransition in maptests and assertReplayHasNoTransitionExhaustion/assertReplayGuardedLoopBreakerTransition in replay/configtests are near-identical copies that differ only in failure-message wording and minor guard formatting, increasing drift risk during Petri mapping test maintenance.",
+    "solution": "Add exported AssertNoTransitionExhaustion and AssertGuardedLoopBreakerTransition helpers in pkg/testutil with a small options value for exhaustion-context phrasing, migrate both test packages to import them, delete local helpers, and verify with go test ./pkg/config/maptests/... and go test ./pkg/replay/configtests/... without changing production mapper or replay behavior."
   },
   "acceptanceCriteria": [
-    "useFactoryEventStream owns session-scoped SSE open/close, stream status, queued onEvent delivery, and FACTORY_CHANGE query sync; pause disables live connection with existing offline copy",
-    "useDashboardSessionLifecycle resets timeline, localized stream state, selection history, and current-factory definition queries once per qualifying session or refreshToken change without duplicate removeQueries",
-    "useDashboardWorldView derives isInitialLoading and error from stream state plus selectedTick===0 and eventCount===0, not snapshot truthiness alone",
-    "useDashboardSnapshot composes lifecycle, stream, world view, and optional debug in ≤80 LOC using useDashboardSession in production without dashboardSessionStore imports in stream modules",
-    "useDashboardTimelineMemoryDebug runs only when memoryDebug is enabled; default sessions install no debug globals or localStorage persistence",
-    "Dashboard shell regression proves loading, refresh reset, pause/resume, and session-scoped stream behavior without cross-session EventSource leaks",
-    "Typecheck, lint, and targeted UI tests pass for all touched areas"
+    "Exactly one implementation of AssertNoTransitionExhaustion and AssertGuardedLoopBreakerTransition lives under pkg/testutil",
+    "pkg/config/maptests and pkg/replay/configtests import the shared helpers and contain no duplicate local exhaustion or loop-breaker assertion definitions",
+    "Existing test expectations are unchanged: same transitions, guard transition/workstation IDs, max-visit counts, and place IDs at each call site",
+    "Maptests exhaustion failures still use customer-authored mapping context; replay exhaustion failures still use replay-mapped customer config context",
+    "go test ./pkg/config/maptests/... and go test ./pkg/replay/configtests/... pass",
+    "Typecheck, lint, and tests pass for all touched backend areas"
   ],
   "userStories": [
     {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-001",
-      "title": "Factory event stream transport hook",
-      "description": "As a maintainer, I want SSE connection wiring isolated so I can test transport without mounting the full dashboard.",
+      "id": "consolidate-petri-net-test-assertions-001",
+      "title": "Shared Petri transition assertion helpers in testutil",
+      "description": "As a backend maintainer, I want shared Petri transition assertion helpers in pkg/testutil so exhaustion and loop-breaker checks are defined once and reused across mapping and replay tests.",
       "acceptanceCriteria": [
-        "useFactoryEventStream opens the session-scoped events URL, updates dashboardStreamStore status, compacts events before onEvent, and syncs FACTORY_CHANGE into current-factory React Query keys",
-        "When enabled is false for a selected session, no EventSource opens and stream state shows the paused offline message; re-enabling opens a new connection",
-        "refreshToken change closes and reopens the stream for the same sessionID; sessionID null never opens a stream",
-        "useFactoryEventStream.test.tsx covers open URL, paused/disabled, refresh reopen, resume-after-pause, offline-before-first-event, and factory-change query sync via replay harness or injected openStream",
-        "Typecheck passes",
-        "Tests pass"
+        "AssertNoTransitionExhaustion(t, transitions, opts) fails on TransitionExhaustion transitions and embeds opts.ExhaustionContext (or equivalent) in the fatal message",
+        "AssertGuardedLoopBreakerTransition(t, transition, inputPlace, outputPlace, watchedTransitionID, maxVisits) asserts normal type, single input/output arcs, VisitCountGuard transition ID and max visits, and expected place IDs",
+        "Both helpers call t.Helper() and live in pkg/testutil (assertions.go or petriassert.go in the same package)",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-002",
-      "title": "Dashboard session lifecycle hook",
-      "description": "As an operator switching factory tabs or refreshing the dashboard, I want prior session timeline, stream, selection, and factory-definition cache cleared once so I never see cross-session bleed.",
+      "id": "consolidate-petri-net-test-assertions-002",
+      "title": "maptests use shared Petri transition assertions",
+      "description": "As a config-mapping test author, I want maptests to call shared testutil helpers so local duplicate definitions are removed without changing what the mapper tests verify.",
       "acceptanceCriteria": [
-        "useDashboardSessionLifecycle calls resetDashboardSessionScopedState on qualifying sessionID or refreshToken changes: timeline reset, localized stream reset, resetSelectionHistoryStore, and one removeQueries for CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX",
-        "shouldResetDashboardSessionScopedState skips initial mount for refreshToken 0 but resets on later refresh increments and session key changes",
-        "dashboard-session-lifecycle.test.ts and useDashboardSessionLifecycle.test.tsx prove no duplicate removes and correct reset on session switch versus first mount",
+        "config_mapper_test.go uses testutil.AssertNoTransitionExhaustion and testutil.AssertGuardedLoopBreakerTransition with customer-authored mapping exhaustion context and unchanged transition/place/guard arguments",
+        "Local assertNoTransitionExhaustion and assertGuardedLoopBreakerTransition are removed from config_mapper_resources_test.go",
+        "TestConfigMapping_RejectionLoopWithGuardedLoopBreaker and TestConfigMapping_GuardedLogicalMoveLoopBreaker still verify reviewer/process loop-breaker transitions with task:init, task:failed, watched transition IDs, and max visits 3",
+        "go test ./pkg/config/maptests/... passes",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-003",
-      "title": "Dashboard world view and shell state derivation",
-      "description": "As a dashboard user, I want the shell loading spinner and connection error to reflect stream progress before the first timeline event, not whether a cached snapshot object exists.",
+      "id": "consolidate-petri-net-test-assertions-003",
+      "title": "replay configtests use shared Petri transition assertions",
+      "description": "As a replay-mapping test author, I want replay/configtests to call the same shared helpers so effective-config tests stay aligned without duplicate assertion code.",
       "acceptanceCriteria": [
-        "useDashboardWorldView selects worldViewCache[selectedTick] and exposes selectedTick, hasEvents, streamState, isInitialLoading, and error",
-        "deriveDashboardWorldViewShellState sets isInitialLoading only while rawSessionID is set, selectedTick is 0, eventCount is 0, and stream status is not offline; sets error from stream message only in the offline-before-first-event case",
-        "Unit tests for deriveDashboardWorldViewShellState cover connecting, offline-before-first-event, and post-first-event success paths",
+        "effective_config_test.go uses testutil.AssertNoTransitionExhaustion and testutil.AssertGuardedLoopBreakerTransition with replay-mapped customer config exhaustion context and unchanged review-story-loop-breaker arguments (story:init, story:failed, review-story, max visits 3)",
+        "Local assertReplayHasNoTransitionExhaustion and assertReplayGuardedLoopBreakerTransition are deleted",
+        "Exhaustion assertion still ignores nil transitions and only fails on non-nil TransitionExhaustion transitions",
+        "go test ./pkg/replay/configtests/... passes",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-004",
-      "title": "Thin dashboard snapshot composer and screen wiring",
-      "description": "As a reader of DashboardScreen, I want stream, lifecycle, and world-view concerns composed in one obvious place without re-embedding transport logic.",
-      "acceptanceCriteria": [
-        "useDashboardSnapshot composes useDashboardSessionLifecycle, useFactoryEventStream with enabled from useDashboardSession rawSessionID and isPaused, useDashboardWorldView, and queued timeline append; file length is at most 80 lines",
-        "DashboardScreen continues to drive loading, error, empty, and success panels from useDashboardSnapshot with locale and refreshToken; DashboardBento keeps the existing snapshot contract without forking timeline ownership",
-        "useDashboardSnapshot.test.tsx proves refresh resets timeline to tick 0 with loading, streamed events append to timeline state, and default sessions do not enable timeline memory debug side effects",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill: dashboard loads live stream, shows loading before first event, and recovers after refresh without stale cross-session UI"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-005",
-      "title": "Optional timeline memory debug isolation",
-      "description": "As a maintainer debugging timeline memory, I want debug globals and persistence opt-in only so normal operators are unaffected.",
-      "acceptanceCriteria": [
-        "useDashboardTimelineMemoryDebug runs only when readFactoryTimelineDebugOptions().memoryDebug is true (?afMemoryDebug=1)",
-        "Default sessions do not set window __agentFactoryTimelineDebug__ or write agentFactory.timelineDebugSummary to localStorage; useDashboardTimelineMemoryDebug.test.tsx proves off and on paths",
-        "useDashboardSnapshot invokes the debug hook only from the composer; no behavior change for default users",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "ui-dashboard-stream-timeline-split-recovery-v2-006",
-      "title": "Dashboard stream/timeline shell regression proof",
-      "description": "As an operator, I want confidence that session tab switches and pause/resume do not leak streams or show the wrong session timeline state.",
-      "acceptanceCriteria": [
-        "Existing app-shell, Storybook, or integration regression exercises session-scoped stream URLs and observable shell outcomes: loading clears after first event, pause stops live connection, tab switch resets timeline and stream targets",
-        "Regression asserts observable timeline scrubber or shell status outcomes, not internal hook file names or module registration inventories",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill when the regression surface is Storybook-backed"
-      ],
-      "priority": 6,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]
