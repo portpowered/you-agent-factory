@@ -511,6 +511,33 @@ func (fs *FactoryService) ComposeCollaboratorSnapshot() ComposeCollaboratorSnaps
 	return snapshot
 }
 
+// FactoryServiceShell is the pre-factorysave FactoryService assembly product for
+// Wire composition.
+type FactoryServiceShell struct {
+	Service *FactoryService
+}
+
+// ProvideFactorySaveCollaborator constructs the factorysave collaborator for a
+// built FactoryService shell.
+func ProvideFactorySaveCollaborator(
+	shell FactoryServiceShell,
+	cfg *FactoryServiceConfig,
+) factorySaveSaver {
+	return wireFactorySaveCollaborator(shell.Service, cfg)
+}
+
+// AttachFactorySaveCollaborator assigns the factorysave collaborator on the
+// service shell and returns the assembled FactoryService.
+func AttachFactorySaveCollaborator(
+	shell FactoryServiceShell,
+	factorySave factorySaveSaver,
+) *FactoryService {
+	if shell.Service != nil {
+		shell.Service.factorySave = factorySave
+	}
+	return shell.Service
+}
+
 // ComposeFactoryService constructs *FactoryService using explicit S6 collaborators.
 func ComposeFactoryService(
 	ctx context.Context,
@@ -519,9 +546,10 @@ func ComposeFactoryService(
 	collaborators FactoryServiceCollaborators,
 	load FactoryConfigLoadResult,
 	clock factory.Clock,
-) (*FactoryService, error) {
+	hostedWorkers hostedworkers.Config,
+) (FactoryServiceShell, error) {
 	if err := validateReplayModeConfig(cfg); err != nil {
-		return nil, err
+		return FactoryServiceShell{}, err
 	}
 	serviceBuilt := false
 	var runtimeBundle *factoryRuntimeBundle
@@ -533,18 +561,18 @@ func ComposeFactoryService(
 	if cfg.ReplayPath == "" {
 		resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(cfg.Dir)
 		if err != nil {
-			return nil, fmt.Errorf("resolve factory dir: %w", err)
+			return FactoryServiceShell{}, fmt.Errorf("resolve factory dir: %w", err)
 		}
 		resolvedDir, err = factorysessions.AbsolutizeFactoryDirectory(resolvedDir)
 		if err != nil {
-			return nil, fmt.Errorf("resolve factory dir: %w", err)
+			return FactoryServiceShell{}, fmt.Errorf("resolve factory dir: %w", err)
 		}
 		cfg.Dir = resolvedDir
 	}
 
 	replaySideEffects, replayFactoryOpts, err := replayFactoryModeOptions(load.ReplayArtifact)
 	if err != nil {
-		return nil, err
+		return FactoryServiceShell{}, err
 	}
 	runtimeBundleAny, err := collaborators.RuntimeBuild.BuildFromLoadedConfig(ctx, runtimebuild.BuildInput{
 		Dir:                   cfg.Dir,
@@ -562,15 +590,15 @@ func ComposeFactoryService(
 		AdditionalFactoryOpts: replayFactoryOpts,
 	})
 	if err != nil {
-		return nil, err
+		return FactoryServiceShell{}, err
 	}
 	runtimeBundle = asRuntimeBundle(runtimeBundleAny)
 
 	serviceBuilt = true
-	fs := &FactoryService{
+	return FactoryServiceShell{Service: &FactoryService{
 		factoryRootDir: root.FactoryRootDir,
 		sessions:       collaborators.Sessions,
-		hostedWorkers:  buildHostedWorkersConfig(cfg, runtimeBundle.logger, clock),
+		hostedWorkers:  hostedWorkers,
 		startupBundle:  runtimeBundle,
 		cfg:            cfg,
 		modelAssets:    wireModelAssetPuller(cfg, collaborators.LocalModels.assets),
@@ -578,7 +606,5 @@ func ComposeFactoryService(
 		logger:         runtimeBundle.logger,
 		clock:          clock,
 		runtimeBuild:   collaborators.RuntimeBuild,
-	}
-	fs.factorySave = wireFactorySaveCollaborator(fs, cfg)
-	return fs, nil
+	}}, nil
 }

@@ -30,9 +30,10 @@ func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig
 	runtimebuildService := provideRuntimeBuildService(cfg, clock, logger, v)
 	factoryServiceCollaborators := provideFactoryServiceCollaborators(registry, v, runtimebuildService)
 	config := provideHostedWorkersConfig(cfg, logger, clock)
-	factoryService, err := provideFactoryService(ctx, cfg, factoryServiceRoot, factoryServiceCollaborators, factoryConfigLoadResult, clock, config)
+	factoryServiceShell, err := provideFactoryServiceShell(ctx, cfg, factoryServiceRoot, factoryServiceCollaborators, factoryConfigLoadResult, clock, config)
 	if err != nil {
 		return nil, err
 	}
+	factoryService := provideFactoryService(factoryServiceShell, cfg)
 	return factoryService, nil
 }
