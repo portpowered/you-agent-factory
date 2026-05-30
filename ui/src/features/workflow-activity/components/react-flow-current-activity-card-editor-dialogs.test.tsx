@@ -91,6 +91,16 @@ vi.mock(
   }),
 );
 
+vi.mock("../../import/hooks/use-factory-import-activation-target", () => ({
+  useFactoryImportActivationTarget: () => ({
+    createTargetFactoryName: "Dropped Factory",
+    currentFactoryName: "Current Session Factory",
+    existingNamedFactoryNames: [],
+    isLoading: false,
+    replacesExistingCreateTarget: false,
+  }),
+}));
+
 vi.mock("../../import/public", () => ({
   FactoryImportPreviewDialog: ({
     onCancel,
@@ -193,6 +203,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     );
     expect(imports.activateImport).toHaveBeenCalledWith(
       imports.importPreviewState.value,
+      "REPLACE_CURRENT",
     );
 
     fireEvent.click(

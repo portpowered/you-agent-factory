@@ -372,26 +372,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create factory
-         * @description Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory-sessions/~default/factory` readback only and cannot be activated as a customer-named factory.
-         */
-        post: operations["createFactory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/factory-sessions": {
         parameters: {
             query?: never;
@@ -449,8 +429,8 @@ export interface paths {
          */
         get: operations["getCurrentFactoryBySessionId"];
         /**
-         * Save current factory for one session
-         * @description Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+         * Save factory for one session
+         * @description Submits one complete factory definition to the explicitly selected live session using an explicit save mode. Omitted `mode` defaults to `REPLACE_CURRENT`, which replaces the factory already current in the session. `UPSERT_NAMED_AND_ACTIVATE` persists under the session factory root using `factory.name`, updates the session current-factory pointer, and activates that runtime when idle. Clients should echo the server-managed `factory.version` field from the latest current-factory read for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
         put: operations["saveCurrentFactoryBySessionId"];
         post?: never;
@@ -1589,6 +1569,74 @@ export interface components {
             startedAt?: string;
             /** Format: date-time */
             finishedAt?: string;
+        };
+        /**
+         * @description Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+         * @default REPLACE_CURRENT
+         * @enum {string}
+         */
+        FactorySaveMode: "REPLACE_CURRENT" | "UPSERT_NAMED_AND_ACTIVATE";
+        /**
+         * @description Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
+         * @example {
+         *       "mode": "REPLACE_CURRENT",
+         *       "factory": {
+         *         "name": "alpha",
+         *         "version": {
+         *           "logical": "2",
+         *           "physical": "2026-05-30T12:00:00.000000000Z"
+         *         },
+         *         "workTypes": [
+         *           {
+         *             "name": "task",
+         *             "states": [
+         *               {
+         *                 "name": "init",
+         *                 "type": "INITIAL"
+         *               },
+         *               {
+         *                 "name": "done",
+         *                 "type": "TERMINAL"
+         *               }
+         *             ]
+         *           }
+         *         ],
+         *         "workers": [
+         *           {
+         *             "name": "planner",
+         *             "type": "MODEL_WORKER",
+         *             "modelProvider": "CLAUDE",
+         *             "executorProvider": "SCRIPT_WRAP",
+         *             "model": "claude-sonnet-4-20250514"
+         *           }
+         *         ],
+         *         "workstations": [
+         *           {
+         *             "name": "plan-task",
+         *             "behavior": "STANDARD",
+         *             "type": "MODEL_WORKSTATION",
+         *             "worker": "planner",
+         *             "inputs": [
+         *               {
+         *                 "workType": "task",
+         *                 "state": "init"
+         *               }
+         *             ],
+         *             "outputs": [
+         *               {
+         *                 "workType": "task",
+         *                 "state": "done"
+         *               }
+         *             ]
+         *           }
+         *         ]
+         *       }
+         *     }
+         */
+        SaveFactoryForSessionRequest: {
+            /** @default REPLACE_CURRENT */
+            mode: components["schemas"]["FactorySaveMode"];
+            factory: components["schemas"]["Factory"];
         };
         /**
          * @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
@@ -3067,33 +3115,6 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    createFactory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Factory"];
-            };
-        };
-        responses: {
-            /** @description Factory was stored and activated. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Factory"];
-                };
-            };
-            400: components["responses"]["CreateFactoryBadRequest"];
-            409: components["responses"]["CreateFactoryConflict"];
-            500: components["responses"]["InternalError"];
-        };
-    };
     listFactorySessions: {
         parameters: {
             query?: never;
@@ -3201,7 +3222,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Factory"];
+                "application/json": components["schemas"]["SaveFactoryForSessionRequest"];
             };
         };
         responses: {
