@@ -1,4 +1,7 @@
 ## Codebase Patterns
+- `buildSessionScope` in `ui/src/api/session-scope.ts` is the sole pure projection for dashboard session identity and API paths; `isPaused` is true only for a non-default `rawSessionID` listed in `pausedSessionIDs`—never for default/null/empty/`~default` selection even if the pause list includes `~default`.
+- Bento import threads `rawSessionID` from `useDashboardSession()` through `DashboardBento` → `useCurrentActivityImportController` / `useDashboardBentoImport`; prove scope-fed `sessionID` with a `vi.fn` spy on `useCurrentActivityImportController` in `dashboard-bento.test.tsx`—tab selection stays on `useDashboardSessionTabsState` → `dashboardSessionStore`.
+- High-traffic dashboard hooks read `sessionID` / `rawSessionID` / `isPaused` from `useDashboardSession()`; `useDashboardSnapshot` passes scoped `rawSessionID` into `useFactoryEventStream` and `useDashboardSessionLifecycle`—prove tab retarget with `DashboardSessionProvider` + `setSelectedSessionID` in hook tests (factory definition refetch, submit-work route, snapshot stream URL).
 - `buildRuntimeBundle` in `pkg/service/factory_build.go` returns `factoryRuntimeBundle`, the single runtime wiring struct referenced from `liveRuntimeHandle`; add new runtime sidecars on `factoryRuntimeBundle` only—startup (`BuildFactoryService`) and `buildReplacementFactoryRuntime` both create `logSink` and session loggers inside `buildRuntimeBundle`, not after the fact.
 - Register every live session (including `~default` at `Run` startup and `OpenFactorySession` launches) through `registerLiveSession` in `pkg/service/runtime_sessions.go` with explicit `FactorySessionTarget` metadata; use `defaultSessionTargetFromRuntimeBundle` for default startup—do not call `sessions.Upsert` directly except in `replaceSessionRuntime` replacement updates.
 - Route session-scoped work, snapshots, idle guards, and record/replay paths through `SubmitWorkRequestForSession`, `GetEngineStateSnapshotForSession`, and `requireIdleRuntimeForSession` in `pkg/service/runtime_sessions.go`; use `sessionScopedRecordPath` for per-session replay artifacts—do not read `fs.currentFactory()` when `session_id` is explicit.
@@ -593,4 +596,49 @@
   - Patterns discovered: After `main` advances, re-merge can conflict only in `activateReplacementWithoutLiveRuntime` when main still has pre-consolidation replacement helpers—keep branch session-registry paths, not `swapActiveRuntime`.
   - Gotchas encountered: `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING` blocks CI even when local tests pass; push a conflict-free merge before waiting on checks.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories `passes: true`; prior BLOCKING merge-conflict + missing CI items addressed on head `77399175`.
+---
+
+## 2026-05-31T02:52:00Z - ui-session-scope-context-recovery-v2-001
+- What was implemented: Verified `SessionScope` / `buildSessionScope` contract on recovery branch; tightened `isPaused` to require non-default active `rawSessionID` per PRD; added regression test when `~default` appears in `pausedSessionIDs`.
+- Files changed: `ui/src/api/session-scope.ts`, `ui/src/api/session-scope.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Most U2 seam code already landed on `main`—recovery v2 starts from verifying contracts and flipping PRD per story rather than greenfield implementation.
+  - Gotchas encountered: `isPaused` must gate on `!isDefault`, not only `selectedSessionID != null`, or default-tab pause list entries incorrectly pause the stream.
+  - Useful context: Branch `ralph/ui-session-scope-context-recovery-v2`; story 002 provider/tests largely exist on `main`—verify head before re-implementing.
+---
+
+## 2026-05-31T03:00:00Z - ui-session-scope-context-recovery-v2-002
+- What was implemented: Verified `DashboardSessionProvider` / `useDashboardSession` / `DashboardScreen` shell wiring and provider tests on recovery branch head; `bun run tsc` and targeted provider + public smoke tests pass without code changes.
+- Files changed: none (verification iteration)
+- **Learnings for future iterations:**
+  - Patterns discovered: U2 provider seam already landed on `main` before recovery v2—story 002 is verify-and-flip-PRD unless regression found.
+  - Gotchas encountered: Local `prd.json` may show `passes: true` for story 002 while committed HEAD still carries an unrelated Ralph PRD until metadata is refreshed locally.
+  - Useful context: `DashboardScreen` wraps `DashboardScreenContent` inside `DashboardSessionProvider`; scope updates propagate when `setSelectedSessionID` runs under the provider.
+---
+
+## 2026-05-31T03:01:00Z - ui-session-scope-context-recovery-v2-003
+- What was implemented: Verified high-traffic hooks use `useDashboardSession()` in production (factory definition/document/save, export, submit-work, snapshot composer); added `useDashboardSnapshot` regression proving tab switch reopens `/factory-sessions/session-beta/events`; fixed `dashboard-screen.tsx` import order for Biome.
+- Files changed: `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx`, `ui/src/features/dashboard/components/dashboard-screen.tsx`
+- **Learnings for future iterations:**
+  - Patterns discovered: Session-switch stream proof belongs in `useDashboardSnapshot.test.tsx` with `createReplayHarness` + `DashboardSessionProvider`; factory query retarget already lives in `useCurrentFactoryDefinition.test.tsx` and submit routing in `submit-work-widget.test.tsx`.
+  - Gotchas encountered: `useFactoryEventStream` intentionally receives `sessionID` as a parameter from the snapshot composer—do not import `dashboardSessionStore` into the transport hook.
+  - Useful context: Story 004 migrates bento/import to scope-fed `rawSessionID`; story 005 formalizes `DashboardSessionTestProvider` pinning.
+---
+
+## 2026-05-31T02:55:00Z - ui-session-scope-context-recovery-v2-002
+- What was implemented: Verified `DashboardSessionProvider` subscribes to `selectedSessionID` and `pausedSessionIDs`, memoizes `buildSessionScope`, and wraps `DashboardScreen` inner content; confirmed `useDashboardSession` throws outside the provider; provider and screen tests pass with `make typecheck`.
+- Files changed: none (verification iteration; implementation already on `main` at head `cfb0e8bb`)
+- **Learnings for future iterations:**
+  - Patterns discovered: `DashboardSessionScopeProvider` accepts a prebuilt scope for tests/Storybook; production shell uses `DashboardSessionProvider` which owns the store subscription.
+  - Gotchas encountered: Recovery v2 story 002 needs no new commit when `main` already contains the provider seam—verify tests and flip PRD only.
+  - Useful context: Next story 003 should confirm high-traffic hooks use `useDashboardSession` in production (many already do on `main`).
+---
+
+## 2026-05-31T03:04:00Z - ui-session-scope-context-recovery-v2-004
+- What was implemented: Verified `DashboardBento` reads `rawSessionID` and `sessionID` from `useDashboardSession()` and passes `rawSessionID` into `useCurrentActivityImportController` and `useDashboardBentoImport`; confirmed bento/import/workflow-activity production modules do not import `dashboardSessionStore` (tabs remain store-backed via `useDashboardSessionTabsState`); added regression test spying import-controller options for scoped `sessionID`.
+- Files changed: `ui/src/features/bento/components/dashboard-bento.test.tsx`
+- **Learnings for future iterations:**
+  - Patterns discovered: U2 bento/import seam largely landed on `main` via factory-import-second-session—recovery v2 story 004 is verify-and-add-scope proof unless regression found.
+  - Gotchas encountered: Mock `useCurrentActivityImportController` as `vi.fn` when asserting call options from `DashboardBento`; static mock factories hide `sessionID` threading.
+  - Useful context: Story 005 formalizes `DashboardSessionTestProvider` pinning; story 006 adds Biome import boundaries.
 ---

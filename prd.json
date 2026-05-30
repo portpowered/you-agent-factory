@@ -1,29 +1,31 @@
 {
-  "project": "Service Runtime State Consolidation (S2)",
-  "branchName": "ralph/service-runtime-state-consolidation",
-  "description": "Make the factory session registry the sole source of truth for live runtimes: register ~default like other sessions, route reads and activation through session handles, share one runtime bundle type, and remove authoritative shadow runtime fields from FactoryService without changing API or session semantics.",
+  "project": "UI Session Scope Context (U2 Recovery v2)",
+  "branchName": "ralph/ui-session-scope-context-recovery-v2",
+  "description": "Recovery implementation of dashboard session scope context (U2): project Zustand tab selection into SessionScope at the dashboard shell so factory, export, submit-work, import, and stream hooks share useDashboardSession() instead of scattering dashboardSessionStore access. Retriggers after work-plan-85 failed; baseline spec at tasks/prd-ui-session-scope-context.md.",
   "context": {
-    "customerAsk": "Session registry as sole runtime truth; drop duplicate FactoryService fields. Full spec: tasks/prd-service-runtime-state-consolidation.md",
-    "problem": "FactoryService still mirrors the active runtime in top-level fields while multi-session work already lives in factorysessions.Registry handles. That duplication lets work submit, factory save, snapshots, and idle checks target the wrong session or update the service root when a non-default session is active.",
-    "solution": "Incrementally route all runtime access through the session registry and liveRuntimeHandle, unify activation on replaceSessionRuntime, collapse build and live bundle types, then remove authoritative top-level runtime fields while preserving API, CLI, and session open/close behavior."
+    "customerAsk": "Retrigger U2 (UI session scope context) after work-plan-85 failed on ui-session-scope-context-recovery. Deliver the session-scope seam from tasks/prd-ui-session-scope-context.md so dashboard features share one normalized session identity and API path surface.",
+    "problem": "Dashboard features read useDashboardSessionStore directly or duplicate sessionID and path normalization, so tab switches and pause state are easy to wire incorrectly across factory saves, export, submit-work, import, prompt templates, and the live event stream.",
+    "solution": "Keep dashboardSessionStore for selection and pause; project it through buildSessionScope and DashboardSessionProvider at the dashboard shell; migrate high-traffic hooks to useDashboardSession(); pin sessions in tests with DashboardSessionTestProvider; enforce store import boundaries with Biome and documentation; prove session-switch behavior with focused UI regression."
   },
   "acceptanceCriteria": [
-    "Every live runtime including ~default is registered in factorysessions.Registry with a liveRuntimeHandle; production code does not treat top-level FactoryService runtime fields as authoritative.",
-    "Work submission, engine snapshots, events, and idle checks scoped by session_id observe only that session's factory and artifacts; concurrent multi-session isolation is preserved.",
-    "Runtime replacement after persist uses session-scoped activation and writes the current-factory pointer under the targeted session root.",
-    "Process restart restores only ~default; additional live sessions remain ephemeral with no behavior change from today.",
-    "No OpenAPI request or response shape changes.",
-    "Typecheck, lint, and project tests pass."
+    "buildSessionScope is the single normalization point for sessionID, isDefault, factoryPath, workPath, eventsPath, and isPaused aligned with session-routing.ts",
+    "DashboardScreen wraps dashboard content in DashboardSessionProvider and useDashboardSession throws clearly outside the provider",
+    "High-traffic hooks (factory definition/document/save, export, submit-work, dashboard snapshot/stream) use useDashboardSession in production without importing dashboardSessionStore",
+    "Bento and import flows use session identity from scope consistent with factory saves; session tabs continue to mutate the store and refresh scope for children",
+    "DashboardSessionTestProvider and renderApp/renderWithDashboardSessionTest pin session scope for tests and Storybook",
+    "Biome noRestrictedImports and dashboard-session-scope-import-boundaries.md block store imports outside the documented allowlist",
+    "Session-switch regression (App.session-switching.stories.tsx or equivalent) proves tab changes retarget session-scoped behavior",
+    "Typecheck, lint, and targeted UI tests pass for all touched areas"
   ],
   "userStories": [
     {
-      "id": "service-runtime-state-consolidation-001",
-      "title": "One runtime bundle shape for build and live handles",
-      "description": "As a maintainer, I want a single runtime bundle type so build output and live session handles cannot drift when runtime wiring grows.",
+      "id": "ui-session-scope-context-recovery-v2-001",
+      "title": "Session scope contract and pure builder",
+      "description": "As a feature developer, I want a typed SessionScope and pure buildSessionScope helper so session normalization and API paths are defined once.",
       "acceptanceCriteria": [
-        "Building a runtime for service startup or session open returns one shared bundle type carrying factory, net, listener, loaded config, logger, event history, local models, recording, and related sidecars.",
-        "liveRuntimeHandle references that shared type; adding a new runtime sidecar requires updating one struct definition.",
-        "Existing service build and replay tests that start a runtime continue to pass without relaxed assertions.",
+        "ui/src/api/session-scope.ts exports SessionScope with sessionID, rawSessionID, isDefault, factoryPath, workPath, eventsPath, and isPaused",
+        "buildSessionScope maps null, empty, and ~default to the default session, encodes non-default paths per session-routing.ts, and sets isPaused only for the active raw session when listed in pausedSessionIDs",
+        "session-scope.test.ts covers default, encoded non-default, and pause cases",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -32,13 +34,14 @@
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-002",
-      "title": "Default session lives in the registry at startup",
-      "description": "As an operator running a single factory, I want the default session registered the same way as named sessions so session targeting is uniform from the first request.",
+      "id": "ui-session-scope-context-recovery-v2-002",
+      "title": "Dashboard session provider at shell boundary",
+      "description": "As a dashboard user, I want every widget under the dashboard shell to see the same active session projection when I change tabs.",
       "acceptanceCriteria": [
-        "After BuildFactoryService and service run, ~default is present in the session registry with a live handle pointing at the started factory directory.",
-        "Default session registration uses the same registerLiveSession path as OpenFactorySession, not a parallel service-only runtime slot.",
-        "runState.sessionID matches the registry entry used for ~default while the default runtime is active.",
+        "DashboardSessionProvider subscribes to selectedSessionID and pausedSessionIDs and supplies memoized SessionScope via context",
+        "useDashboardSession throws with message useDashboardSession must be used within DashboardSessionProvider when context is missing",
+        "DashboardScreen wraps inner dashboard content in DashboardSessionProvider",
+        "Provider tests prove scope updates when setSelectedSessionID changes",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -47,14 +50,13 @@
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-003",
-      "title": "Runtime operations target the requested session",
-      "description": "As a dashboard user with multiple factory tabs, I want work, snapshots, and idle checks for each session_id to use only that session's runtime so sessions cannot leak into one another.",
+      "id": "ui-session-scope-context-recovery-v2-003",
+      "title": "High-traffic hooks consume session scope",
+      "description": "As an operator switching factory tabs, I want saves, export, submit-work, factory queries, and the live stream to target the newly selected session without reloading the app.",
       "acceptanceCriteria": [
-        "Submitting work to session A records artifacts and dispatch identifiers only for session A; session B's replay and log artifacts do not contain session A work.",
-        "Engine snapshot and factory read APIs scoped by session_id return data from that session's factory directory, not another live session's directory.",
-        "Idle checks used before factory activation apply to the session being saved or opened, not whichever session was selected last on the service root.",
-        "pkg/api session-scoped routing tests continue to pass: mutations and reads for session-beta do not invoke default-session factories.",
+        "useCurrentFactoryDefinition, useCurrentFactoryDocument, useSaveCurrentFactory, use-current-factory-export, and submit-work-widget use useDashboardSession for sessionID in production code",
+        "useDashboardSnapshot and useFactoryEventStream use rawSessionID and isPaused from scope; production modules do not import dashboardSessionStore",
+        "Tests prove changing selected session retargets query keys or stream session keys",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -63,14 +65,13 @@
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-004",
-      "title": "Runtime replacement is always session-scoped",
-      "description": "As a maintainer, I want every runtime swap after persist to stop the prior handle for the same session and start the replacement under that session's root.",
+      "id": "ui-session-scope-context-recovery-v2-004",
+      "title": "Bento import uses the same session identity as saves",
+      "description": "As an operator importing a factory PNG, I want activation to apply to the same session tab I have selected for edits.",
       "acceptanceCriteria": [
-        "Factory definition save, OpenFactorySession, and named-factory activation call replaceSessionRuntime with the session idle guard, not the legacy global activation entry point.",
-        "When replacing the factory for a non-default session, the current-factory pointer is written under that session's SessionFactoryRootDir, not only the service host root.",
-        "A successful replacement stops the previous live handle for the same session before registering the successor; other live sessions keep running.",
-        "Service-mode sidecar start and stop behavior is unchanged (poller, cron, and related service tests still pass).",
+        "DashboardBento reads rawSessionID and sessionID from useDashboardSession and passes rawSessionID into import controller and bento import hooks",
+        "Import hooks accept optional sessionID for tests but dashboard production path uses scope-fed identity",
+        "DashboardSessionTabs mutates selection via header tabs state; bento and import production code do not import dashboardSessionStore",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -79,32 +80,48 @@
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-005",
-      "title": "FactoryService no longer mirrors live runtime state",
-      "description": "As a reviewer, I want FactoryService to hold wiring and session orchestration only, so there is one obvious place to find the live runtime for a session.",
+      "id": "ui-session-scope-context-recovery-v2-005",
+      "title": "Test and Storybook session pinning",
+      "description": "As a test author, I want to pin a session in one line so stories and hook tests do not reimplement store seeding when only session identity matters.",
       "acceptanceCriteria": [
-        "Top-level factory, net, listener, runtimeCfg, and related runtime fields are removed or reduced to thin delegators that read the selected or requested session handle.",
-        "Runtime swap for a session updates only that session's registry entry and runState for that session; no production path writes the same swap to both top-level fields and the session handle.",
-        "Default and named-session behavior for submit, pause, wait-for-complete, and model catalog APIs remains unchanged from the caller's perspective.",
+        "DashboardSessionTestProvider exports with default ~default and optional sessionID and paused props",
+        "renderWithDashboardSessionTest and renderApp sessionID wrap trees with the test provider; Storybook dashboard runtime applies dashboardApi.sessionID via the same provider",
+        "ui/src/testing/index.ts re-exports test provider utilities",
+        "Test provider tests assert normalized paths for a non-default sessionID",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "service-runtime-state-consolidation-006",
-      "title": "Restart behavior documented for operators",
-      "description": "As an operator running multiple UI tabs, I need clear documentation of which sessions survive a process restart so I do not assume ephemeral tabs are restored.",
+      "id": "ui-session-scope-context-recovery-v2-006",
+      "title": "Enforce dashboard session store import boundaries",
+      "description": "As a reviewer, I want new dashboard features blocked from importing the session store outside approved seams.",
       "acceptanceCriteria": [
-        "Internal maintainer documentation states that only ~default is restored when the service process restarts; additional live sessions opened before restart are ephemeral and must be reopened.",
-        "TestFactoryService_Run_RestartsOnlyDefaultSession continues to pass without changing expected session count or default runtime directory after restart.",
+        "dashboard-session-scope-import-boundaries.md documents allowed production importers and the default useDashboardSession rule",
+        "ui/biome.jsonc noRestrictedImports blocks dashboardSessionStore outside allowlisted production modules, Storybook runtime, app-shell test utilities, and test/story files",
+        "UI lint reports no violations in production feature modules outside the allowlist",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-scope-context-recovery-v2-007",
+      "title": "Session-switch regression proof",
+      "description": "As an operator, I want confidence that switching session tabs updates visible session-scoped data and network targets.",
+      "acceptanceCriteria": [
+        "App.session-switching.stories.tsx or focused replacement exercises default-to-named session switch and asserts session-scoped UI or network behavior changes with the tab",
+        "Story test passes in CI via the project UI test command",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 7,
+      "passes": false,
       "notes": ""
     }
   ]
