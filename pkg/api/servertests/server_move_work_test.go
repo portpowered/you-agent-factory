@@ -1,4 +1,4 @@
-package api
+package apiserver_test
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	api "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -24,14 +25,14 @@ import (
 func TestMoveWork_SucceedsAndReturnsUpdatedWork(t *testing.T) {
 	now := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
 	mf := moveWorkMockFactory(now, "work-move-1", "task", "init")
-	srv := newTestServer(mf)
+	srv := newAPITestServer(mf)
 
 	rec := postMoveWork(t, srv, "work-move-1", `{"stateName":"complete"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /work/work-move-1/move status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	work := decodeJSONResponse[factoryapi.Work](t, rec)
-	if stringValue(work.WorkId) != "work-move-1" || work.State == nil || work.State.Name != "complete" {
+	if moveWorkIDString(work.WorkId) != "work-move-1" || work.State == nil || work.State.Name != "complete" {
 		t.Fatalf("work = %#v, want work-move-1 at complete", work)
 	}
 }
@@ -40,7 +41,7 @@ func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
 	now := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
 	mf := moveWorkMockFactory(now, "work-move-paused", "task", "init")
 	mf.State = interfaces.FactoryStatePaused
-	srv := newTestServer(mf)
+	srv := newAPITestServer(mf)
 
 	rec := postMoveWork(t, srv, "work-move-paused", `{"stateName":"complete"}`)
 	if rec.Code != http.StatusOK {
@@ -53,7 +54,7 @@ func TestMoveWork_Returns404ForMissingWork(t *testing.T) {
 		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
 		Net:     moveWorkTestNet(),
 	}
-	srv := newTestServer(mf)
+	srv := newAPITestServer(mf)
 
 	rec := postMoveWork(t, srv, "missing-work", `{"stateName":"complete"}`)
 	if rec.Code != http.StatusNotFound {
@@ -64,7 +65,7 @@ func TestMoveWork_Returns404ForMissingWork(t *testing.T) {
 func TestMoveWork_Returns400ForInvalidState(t *testing.T) {
 	now := time.Now().UTC()
 	mf := moveWorkMockFactory(now, "work-move-invalid", "task", "init")
-	srv := newTestServer(mf)
+	srv := newAPITestServer(mf)
 
 	rec := postMoveWork(t, srv, "work-move-invalid", `{"stateName":"nowhere"}`)
 	if rec.Code != http.StatusBadRequest {
@@ -75,7 +76,7 @@ func TestMoveWork_Returns400ForInvalidState(t *testing.T) {
 func TestMoveWork_Returns409ForDuplicateRequestId(t *testing.T) {
 	now := time.Now().UTC()
 	mf := moveWorkMockFactory(now, "work-move-dup", "task", "init")
-	srv := newTestServer(mf)
+	srv := newAPITestServer(mf)
 
 	body := `{"stateName":"complete","requestId":"move-req-1"}`
 	rec := postMoveWork(t, srv, "work-move-dup", body)
@@ -103,7 +104,7 @@ func TestMoveWorkBySessionId_Returns404ForMissingSession(t *testing.T) {
 			},
 		},
 	}
-	srv := newTestServer(mf)
+	srv := newAPITestServer(mf)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/missing-session/work/work-1/move", bytes.NewBufferString(`{"stateName":"complete"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -128,7 +129,7 @@ func TestMoveWorkBySessionId_SucceedsForScopedSession(t *testing.T) {
 			"beta": beta,
 		},
 	}
-	srv := newTestServer(mf)
+	srv := newAPITestServer(mf)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/beta/work/work-beta-move/move", bytes.NewBufferString(`{"stateName":"complete"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -172,7 +173,7 @@ func TestMoveWork_IntegrationWithRuntimeFactoryWhilePaused(t *testing.T) {
 	}
 
 	logger, _ := zap.NewDevelopment()
-	srv := NewServer(newRuntimeMoveAPISurface(f), 8080, logger)
+	srv := api.NewServer(newRuntimeMoveAPISurface(f), 8080, logger)
 	rec := postMoveWork(t, srv, "work-runtime-paused", `{"stateName":"complete"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
@@ -199,13 +200,20 @@ func (r *runtimeMoveAPISurface) GetEngineStateSnapshot(ctx context.Context) (*in
 	return r.runtime.GetEngineStateSnapshot(ctx)
 }
 
-func postMoveWork(t *testing.T, srv *Server, workID, body string) *httptest.ResponseRecorder {
+func postMoveWork(t *testing.T, srv *api.Server, workID, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/work/"+workID+"/move", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	return rec
+}
+
+func moveWorkIDString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func moveWorkMockFactory(now time.Time, workID, workTypeID, stateName string) *testutil.MockFactory {
