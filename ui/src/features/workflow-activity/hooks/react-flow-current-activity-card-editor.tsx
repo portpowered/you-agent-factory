@@ -216,7 +216,6 @@ function useCurrentActivityEditableGraph({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     currentFactoryDocument: currentFactoryQuery.data,
     locale,
-    projectedFactory: snapshot.factory,
     saveFactoryDefinition: saveEditableDefinition.mutateAsync,
   });
 
@@ -292,8 +291,8 @@ function useFactoryGraphEditorSessionState({
   const editorUnavailableClassifierWorkstationName =
     findClassifierGraphEditorUnsupportedWorkstationName(
       editorMode
-        ? (currentFactoryDefinition ?? projectedFactory ?? null)
-        : (projectedFactory ?? currentFactoryDefinition),
+        ? (currentFactoryDefinition ?? null)
+        : (projectedFactory ?? currentFactoryDefinition ?? null),
     );
   const isStaleDraft = editableGraph.saveState.isStale;
   const canInteractWithEditor =

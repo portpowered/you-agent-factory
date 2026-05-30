@@ -22,7 +22,6 @@ export interface UseEditableFactoryGraphOptions {
   activeWorkCount?: number;
   currentFactoryDocument?: CurrentFactoryDocument;
   locale?: string | null;
-  projectedFactory?: CanonicalFactoryDefinition;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,
   ) => Promise<unknown>;

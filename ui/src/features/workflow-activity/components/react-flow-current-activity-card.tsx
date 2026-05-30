@@ -272,10 +272,7 @@ export function useCurrentActivityGraphViewModel({
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
     editor,
-    factoryDefinition:
-      editor.editorMode && hasPendingGraphEntityShapeChanges(editor)
-        ? (editor.draftState.pendingFactoryDefinition ?? undefined)
-        : snapshot.factory,
+    factoryDefinition: editorModeFactoryDefinition(editor) ?? snapshot.factory,
     graphLayout,
     locale,
     now,
@@ -371,27 +368,22 @@ function useEditorCurrentActivityGraphLayout(
 ) {
   return useCurrentActivityGraphLayoutForFactory(
     snapshot,
-    editor.editorMode && hasPendingGraphEntityShapeChanges(editor)
-      ? (editor.draftState.pendingFactoryDefinition ?? undefined)
-      : undefined,
+    editorModeFactoryDefinition(editor),
   );
 }
 
-function hasPendingGraphEntityShapeChanges(
+function editorModeFactoryDefinition(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
-  const { additions, removals } = editor.draftState.draft;
+  if (!editor.editorMode) {
+    return undefined;
+  }
+
   return (
-    additions.resources.length > 0 ||
-    additions.workers.length > 0 ||
-    additions.workStates.length > 0 ||
-    additions.workTypes.length > 0 ||
-    additions.workstations.length > 0 ||
-    removals.resources.length > 0 ||
-    removals.workers.length > 0 ||
-    removals.workStates.length > 0 ||
-    removals.workTypes.length > 0 ||
-    removals.workstations.length > 0
+    editor.draftState.pendingFactoryDefinition ??
+    editor.draftState.latestDocument ??
+    editor.draftState.baseDocument ??
+    undefined
   );
 }
 

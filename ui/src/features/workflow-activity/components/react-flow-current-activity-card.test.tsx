@@ -157,6 +157,19 @@ function refreshFactoryFromTopology(
   return snapshot;
 }
 
+function currentFactoryDocumentFromSnapshot(
+  snapshot: DashboardSnapshot,
+): typeof baseFactoryDefinitionDocument {
+  if (!snapshot.factory) {
+    return baseFactoryDefinitionDocument;
+  }
+
+  return {
+    ...snapshot.factory,
+    version: baseFactoryDefinitionDocument.version,
+  };
+}
+
 function dashboardSnapshotWithEditableFactory(): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
   snapshot.factory = structuredClone(baseFactoryDefinition);
@@ -1262,14 +1275,27 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("renders supported workstation and work-state editor handles on the shared observer graph", async () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const document = currentFactoryDocumentFromSnapshot(snapshot);
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: baseFactoryDefinitionDocument,
+      data: document,
       error: null,
       status: "success",
     } as never);
+    wireMockEditableFactoryGraph(
+      {
+        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
+        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
+      },
+      createMockGraphEditorDraftState({
+        baseDocument: document,
+        latestDocument: document,
+        pendingFactoryDefinition: document,
+      }),
+    );
 
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot,
     });
 
     fireEvent.click(

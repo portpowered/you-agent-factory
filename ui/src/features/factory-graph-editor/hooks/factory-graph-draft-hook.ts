@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildPendingFactoryDefinition } from "../lib/factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "../lib/factory-graph-draft-graph";
 import {
-  type CanonicalFactoryDefinition,
   type CurrentFactoryDocument,
   createEmptyFactoryGraphDraft,
   type FactoryGraphDraftDerivedState,
@@ -23,7 +22,6 @@ type FactoryGraphDraftCallbacks = Pick<
 interface UseFactoryGraphDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
   locale?: string | null;
-  projectedFactory?: CanonicalFactoryDefinition;
 }
 
 export function useFactoryGraphDraftState(
@@ -31,12 +29,9 @@ export function useFactoryGraphDraftState(
 ): FactoryGraphDraftDerivedState {
   const currentFactoryDocument = options.currentFactoryDocument;
   const emptyDraft = useMemo(() => createEmptyFactoryGraphDraft(), []);
-  const projectedGraph = useMemo(
-    () =>
-      options.projectedFactory
-        ? buildFactoryGraphTopologyFromDefinition(options.projectedFactory)
-        : { edges: [], nodes: [] },
-    [options.projectedFactory],
+  const emptyGraph = useMemo(
+    () => ({ edges: [], nodes: [] } as FactoryGraphDraftDerivedState["graph"]),
+    [],
   );
   const [sessionState, setSessionState] =
     useState<FactoryGraphDraftSessionState | null>(null);
@@ -130,21 +125,21 @@ export function useFactoryGraphDraftState(
     [options.locale, replaceDraft, resetDraft, sessionState, updateDraft],
   );
 
-  const projectionState = useMemo<FactoryGraphDraftDerivedState>(
+  const unavailableState = useMemo<FactoryGraphDraftDerivedState>(
     () =>
-      createProjectionFactoryGraphDraftState({
+      createUnavailableFactoryGraphDraftState({
         callbacks: {
           replaceDraft,
           resetDraft,
           updateDraft,
         },
         emptyDraft,
-        projectedGraph,
+        emptyGraph,
       }),
-    [emptyDraft, projectedGraph, replaceDraft, resetDraft, updateDraft],
+    [emptyDraft, emptyGraph, replaceDraft, resetDraft, updateDraft],
   );
 
-  return currentFactoryState ?? projectionState;
+  return currentFactoryState ?? unavailableState;
 }
 
 function createCurrentFactoryGraphDraftState({
@@ -184,19 +179,19 @@ function createCurrentFactoryGraphDraftState({
   };
 }
 
-function createProjectionFactoryGraphDraftState({
+function createUnavailableFactoryGraphDraftState({
   callbacks,
   emptyDraft,
-  projectedGraph,
+  emptyGraph,
 }: {
   callbacks: FactoryGraphDraftCallbacks;
   emptyDraft: FactoryGraphDraftDerivedState["draft"];
-  projectedGraph: FactoryGraphDraftDerivedState["graph"];
+  emptyGraph: FactoryGraphDraftDerivedState["graph"];
 }): FactoryGraphDraftDerivedState {
   return {
     baseDocument: null,
     draft: emptyDraft,
-    graph: projectedGraph,
+    graph: emptyGraph,
     hasChanges: false,
     latestDocument: null,
     pendingFactoryDefinition: null,
