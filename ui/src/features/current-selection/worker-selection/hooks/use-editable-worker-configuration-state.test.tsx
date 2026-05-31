@@ -1,12 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import { useEditableWorkerConfigurationState } from "./use-editable-worker-configuration-state";
 
-vi.mock("../../../current-factory-definition/public", async () => {
+vi.mock("../../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
   const actual = await vi.importActual(
-    "../../../current-factory-definition/public",
+    "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   );
 
   return {

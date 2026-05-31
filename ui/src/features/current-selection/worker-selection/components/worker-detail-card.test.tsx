@@ -1,12 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
 
-vi.mock("../../../current-factory-definition/public", async () => {
+vi.mock("../../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
   const actual = await vi.importActual(
-    "../../../current-factory-definition/public",
+    "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   );
 
   return {
