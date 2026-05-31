@@ -142,10 +142,35 @@ Action and copy density:
 
 Shared controls:
 
-- Feature code **SHOULD** use existing shared controls from `ui/src/components/ui/` before creating a bespoke action component. Current shared controls include `Button`, `DashboardActionButton`, `DashboardIconButtonShell`, `DashboardActionRow`, `DashboardStatusPill`, `Dialog`, `Popover`, `Input`, `Select`, `Textarea`, table/data-table primitives, and dashboard shell/typography helpers.
+- Feature code **SHOULD** use existing shared controls from `ui/src/components/ui/` before creating a bespoke action component. Current shared controls include `Button`, `DashboardActionButton`, `DashboardIconButtonShell`, `DashboardActionRow`, `DashboardStatusPill`, `Dialog`, `ExpandablePanelTrigger`, `Popover`, `Input`, `Select`, `Textarea`, table/data-table primitives, and dashboard shell/typography helpers.
 - New bespoke buttons, pills, toggles, segmented controls, dialogs, or toolbar shells **SHOULD NOT** be introduced inside a feature when an existing shared primitive can express the interaction with props or a small reusable extension.
 - If a new action/control pattern is needed in more than one place, authors **SHOULD** promote it to a shared component with tests and, where useful, a Storybook story instead of copying Tailwind class clusters across features.
 - New button tones or accent treatments **SHOULD NOT** be invented ad hoc. Use existing shared tones and reserve high-emphasis/default or accent styling for the primary action in a local region. Routine actions should generally use outline, secondary, or ghost treatments; destructive tone is only for destructive operations.
+
+Inline panel expand versus full-screen dialog expand:
+
+Dashboard surfaces use two different “expand” patterns. Pick the pattern that matches where the content should appear; do not use `ExpandablePanelTrigger` to open a modal or use a dialog trigger to toggle inline card body content.
+
+| Pattern | When to use | Shared primitive | Expand state |
+| --- | --- | --- | --- |
+| **Inline panel expand** | Reveal or hide content inside the same bento card, detail card, or list row without leaving the dashboard layout | `ExpandablePanelTrigger` (composes `DisclosureButton` + chevron icon) | Local `useState` (or feature state) in the owning component; `controlsID` **MUST** match the disclosed region `id` |
+| **Full-screen dialog expand** | Immersive reading, multi-field editing, import preview, export, or any flow that needs focus trap, overlay, and dismiss semantics | `Dialog` / `DialogContent` from shared UI, or feature shells such as `DashboardMutationDialog` | Dialog `open` / `onOpenChange` (or a feature store); primary actions use `Button`, not disclosure triggers |
+
+Rules:
+
+- Dashboard inline disclosure entry points **MUST** use `ExpandablePanelTrigger` (or `ExpandablePanelIcon` only when the surrounding chrome already owns the button shell, such as workflow-activity legend toggles). Do not add raw `<button aria-expanded>` or duplicate section-toggle disclosure markup in feature code.
+- Pass `expanded`, `controlsID`, and either `onClick` or `onToggle` to the trigger; keep one source of truth for expanded state in the feature. Use `variant` (`section`, `compact`, `outline`) for layout alignment instead of copying toggle class strings.
+- Icon-only triggers **MUST** supply `aria-label`; labeled triggers **MAY** pass visible expand/collapse text as `children` and still set `aria-label` when locale copy differs from visible text.
+- Full-screen or modal expand **MUST** use dialog shell primitives. Opening a dialog is not inline disclosure; do not route dialog open actions through `ExpandablePanelTrigger`.
+- Migrated dashboard inline expand paths are guarded by `ui/scripts/check-dashboard-expand-disclosure.mjs` (wired into `bun run lint` / `bun run check`); extend `dashboard-expand-disclosure-guard-paths.mjs` when adding new in-scope disclosure entry points.
+- Dialog footers and confirm/cancel rows **SHOULD** use ordinary `Button` actions per the website button policy.
+
+In-repo examples:
+
+- **Inline panel expand:** `ui/src/features/current-selection/workstation-selection/components/workstation-editable-configuration-section.tsx` — section header toggle reveals `id={contentId}` fields inside the current-selection card (`ExpandablePanelTrigger` with `variant="section"` is the target primitive for migrations).
+- **Inline panel expand (compact row):** `ui/src/features/terminal-work/components/terminal-work-card.tsx` — per-outcome row disclosure inside the terminal-work card (`variant="compact"` after migration).
+- **Full-screen dialog expand:** `ui/src/features/import/components/dashboard-import-preview-dialog.tsx` — `Dialog` + `DialogContent` for factory import preview; confirm/cancel use `Button` in `DialogFooter`.
+- **Full-screen dialog expand (mutation shell):** `ui/src/features/workflow-activity/components/mutation-dialog.tsx` — `DashboardMutationDialog` overlay for save/import flows such as `EditableWorkstationSaveDialog` in `workstation-save-controls.tsx`.
 
 Required UI state coverage for network-backed surfaces:
 

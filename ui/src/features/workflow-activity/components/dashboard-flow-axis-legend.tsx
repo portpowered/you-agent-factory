@@ -1,11 +1,13 @@
 import { useId, useState } from "react";
+import { DisclosureButton } from "../../../components/ui/disclosure-button";
+import { ExpandablePanelIcon } from "../../../components/ui/expandable-panel-icon";
 import { cn } from "../../../lib/cn";
-import type { GraphSemanticIconKind } from "../../flowchart/public";
-import { GraphSemanticIcon } from "../../flowchart/public";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart/lib/workstation-icon-metadata";
+import type { GraphSemanticIconKind } from "../../flowchart/public";
+import { GraphSemanticIcon } from "../../flowchart/public";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 
 export interface DashboardFlowAxisLegendEdgeItem {
@@ -235,17 +237,18 @@ export function DashboardFlowAxisLegend({
               <LegendToggleGlyph />
               <h3 className={PANEL_TITLE_CLASS}>{resolvedAriaLabel}</h3>
             </div>
-            <button
-              aria-controls={panelId}
-              aria-expanded="true"
+            <DisclosureButton
               aria-label={messages.collapseToggleLabel(actionTargetLabel)}
               className={COLLAPSE_BUTTON_CLASS}
+              controlsID={panelId}
               data-dashboard-flow-axis-legend-toggle=""
+              expanded={true}
               onClick={() => setExpanded(false)}
               type="button"
             >
+              <ExpandablePanelIcon expanded={true} />
               {messages.collapseLabel}
-            </button>
+            </DisclosureButton>
           </div>
           <DashboardFlowAxisLegendItems
             edgeItems={edgeItems}
@@ -254,18 +257,19 @@ export function DashboardFlowAxisLegend({
           />
         </aside>
       ) : (
-        <button
-          aria-controls={panelId}
-          aria-expanded="false"
+        <DisclosureButton
           aria-label={messages.expandToggleLabel(actionTargetLabel)}
           className={TOGGLE_BUTTON_CLASS}
+          controlsID={panelId}
           data-dashboard-flow-axis-legend-toggle=""
+          expanded={false}
           onClick={() => setExpanded(true)}
           type="button"
         >
+          <ExpandablePanelIcon expanded={false} />
           <LegendToggleGlyph />
           <span>{messages.minimizedLabel}</span>
-        </button>
+        </DisclosureButton>
       )}
     </div>
   );

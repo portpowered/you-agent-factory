@@ -1,6 +1,14 @@
 import { render, screen, within } from "@testing-library/react";
 import { WorkTotalsCard } from "./work-totals-card";
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 describe("WorkTotalsCard", () => {
   it("renders localized totals with semantic status borders and a neutral dispatched card", () => {
     render(
@@ -36,6 +44,16 @@ describe("WorkTotalsCard", () => {
     expect(cardHeader?.className).toContain("cursor-grab");
     expect(
       within(cardShell).queryByRole("button", { name: "Move Work totals" }),
+    ).toBeNull();
+    expect(
+      within(
+        requireValue(cardHeader, "expected work totals header"),
+      ).queryAllByRole("button", { hidden: true }),
+    ).toHaveLength(0);
+    expect(
+      cardHeader?.querySelector(
+        '[aria-expanded="true"], [aria-expanded="false"]',
+      ),
     ).toBeNull();
     expect(screen.getByLabelText("In progress: 2")).toBeTruthy();
     expect(screen.getByLabelText("Completed: 3")).toBeTruthy();

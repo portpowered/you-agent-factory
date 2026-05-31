@@ -6,9 +6,11 @@ import {
   buildEditableConfigurationDocument,
   CurrentSelectionCardStory,
   CurrentSelectionEditableConfigurationStory,
+  CurrentSelectionRunHistoryExpandStory,
   CurrentSelectionWorkContentsCardStory,
   editableConfigurationPromptTemplateContract,
   expectBentoHeaderDragSurface,
+  expectCurrentSelectionRunHistoryExpandFlow,
   expectEditableConfigurationStoryFlow,
   promptTemplateValidationResponse,
   semanticWorkflowDashboardSnapshot,
@@ -53,6 +55,13 @@ export const CurrentSelectionWorkContents = {
     await expect(
       canvas.getByRole("button", { name: "Move Current selection" }),
     ).toBeVisible();
+  },
+};
+
+export const CurrentSelectionRunHistoryExpand = {
+  render: () => <CurrentSelectionRunHistoryExpandStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectCurrentSelectionRunHistoryExpandFlow(canvasElement);
   },
 };
 

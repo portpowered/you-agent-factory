@@ -5,11 +5,11 @@ import type {
   DashboardTrace,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
+import { ExpandablePanelTrigger } from "../../../components/ui";
 import { Button } from "../../../components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
-  CollapsibleTrigger,
 } from "../../../components/ui/collapsible";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -47,7 +47,6 @@ import { TraceWorkstationPath } from "./trace-workstation-path";
 
 const TRACE_EXPANDER_HEADER_CLASS =
   "flex items-center justify-between gap-3  py-sm rounded-lg ";
-const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-2.5 py-2";
 const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-48";
 // tailwind-exception: intrinsic-sizing
 const TRACE_GRID_TABLE_CLASS = "min-w-[640px]";
@@ -225,20 +224,17 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                     >
                       {messages.workItemsSummary(workItems.length)}
                     </h3>
-                    <CollapsibleTrigger asChild>
-                      <Button
-                        aria-controls={workItemsID}
-                        aria-expanded={workItemsExpanded}
-                        className={cn(
-                          TRACE_EXPANDER_TOGGLE_CLASS,
-                          DASHBOARD_SUPPORTING_LABEL_CLASS,
-                        )}
-                        size="sm"
-                        tone="outline"
-                      >
-                        {messages.workItemsExpandLabel(workItemsExpanded)}
-                      </Button>
-                    </CollapsibleTrigger>
+                    <ExpandablePanelTrigger
+                      controlsID={workItemsID}
+                      expanded={workItemsExpanded}
+                      onClick={() =>
+                        setWorkItemsExpanded((current) => !current)
+                      }
+                      variant="outline"
+                      className="min-h-9 shrink-0 px-2.5 py-2"
+                    >
+                      {messages.workItemsExpandLabel(workItemsExpanded)}
+                    </ExpandablePanelTrigger>
                   </div>
                   <CollapsibleContent id={workItemsID}>
                     <SelectableWorkList

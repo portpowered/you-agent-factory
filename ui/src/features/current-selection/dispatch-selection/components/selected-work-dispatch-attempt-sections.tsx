@@ -1,5 +1,6 @@
 import { type ReactNode, useId, useState } from "react";
 
+import { ExpandablePanelTrigger } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -14,7 +15,6 @@ import type {
 import {
   EXECUTION_PILL_CLASS,
   HISTORY_HEADER_CLASS,
-  HISTORY_TOGGLE_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
   PROVIDER_SESSION_CARD_CLASS,
@@ -140,15 +140,15 @@ function CollapsibleDispatchAttemptSection({
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
           {title}
         </h4>
-        <button
-          aria-controls={panelId}
-          aria-expanded={expanded}
-          className={HISTORY_TOGGLE_CLASS}
+        <ExpandablePanelTrigger
+          controlsID={panelId}
+          expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
           type="button"
+          variant="section"
         >
           {expanded ? messages.collapseAction : messages.expandAction}
-        </button>
+        </ExpandablePanelTrigger>
       </div>
       {expanded ? <div id={panelId}>{children}</div> : null}
     </section>
