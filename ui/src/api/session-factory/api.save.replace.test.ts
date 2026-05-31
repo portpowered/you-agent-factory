@@ -1,7 +1,7 @@
 import { saveSessionFactory } from "./api";
 
 describe("saveSessionFactory replace-current", () => {
-  it("issues PUT with REPLACE_CURRENT mode and incremented version on the default session", async () => {
+  it("issues PUT with factory-only body and incremented version when mode is omitted", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -45,7 +45,6 @@ describe("saveSessionFactory replace-current", () => {
       "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
-          mode: "REPLACE_CURRENT",
           factory: {
             name: "Current Factory",
             workers: [],
