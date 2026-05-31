@@ -2,6 +2,7 @@ package factory
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 )
 
 func TestSaveFromFile_WritesHumanReadableConfirmation(t *testing.T) {
@@ -115,6 +117,41 @@ func TestSaveFromFile_RejectsInvalidPayload(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid factory config") {
 		t.Fatalf("error = %v, want invalid-config message", err)
+	}
+}
+
+func TestSaveFromFile_PreCheckMatchesValidateFactoryAPIPrePersist(t *testing.T) {
+	rootDir := t.TempDir()
+	from := writeFactoryConfigFile(t, rootDir, "invalid", []byte(factoryvalidation.CrossPathInvalidFactoryJSON))
+
+	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
+	}
+	apiResult, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
+		Profile: factoryvalidation.ProfilePrePersist,
+	})
+	if err != nil {
+		t.Fatalf("ValidateFactoryAPI: %v", err)
+	}
+	apiFailed := apiResult.HasTargets()
+
+	err = SaveFromFile(SaveFromFileConfig{
+		Name:   "invalid",
+		From:   from,
+		Dir:    rootDir,
+		Output: ioDiscard(t),
+	})
+	cliFailed := err != nil
+	if apiFailed != cliFailed {
+		t.Fatalf("ValidateFactoryAPI failed = %v, SaveFromFile failed = %v, want identical failure vs success",
+			apiFailed, cliFailed)
+	}
+	if !apiFailed {
+		return
+	}
+	if !strings.Contains(err.Error(), "invalid factory config") {
+		t.Fatalf("SaveFromFile error = %v, want invalid-config message", err)
 	}
 }
 
