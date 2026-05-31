@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { App } from "./App";
-import type { FactoryValue } from "./api/named-factory";
+import type { FactoryValue } from "./api/session-factory";
 import {
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,

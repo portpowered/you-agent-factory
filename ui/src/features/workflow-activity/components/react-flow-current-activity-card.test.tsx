@@ -14,7 +14,7 @@ import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import type { FactoryValue } from "../../../api/named-factory";
+import type { FactoryValue } from "../../../api/session-factory";
 import { SessionFactoryAPIError } from "../../../api/session-factory";
 import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";

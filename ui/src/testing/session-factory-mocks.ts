@@ -4,7 +4,7 @@ import type {
   CurrentFactoryVersion,
 } from "../api/current-factory-definition";
 import type { components } from "../api/generated/openapi";
-import type { FactoryValue } from "../api/named-factory";
+import type { FactoryValue } from "../api/session-factory";
 import { currentFactorySessionPath } from "../api/session-routing";
 import { baseFactoryDefinition } from "./graph-editor-harness";
 
