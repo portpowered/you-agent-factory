@@ -17,6 +17,8 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   mergeAuthoredProgressOutcomeConnectionAnchors,
   PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
+  workstationRendersProgressOutcomeHandleValidation,
+  workstationRendersProgressOutcomeZAxisHintAnchors,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { validationHandleErrorsForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
@@ -160,6 +162,9 @@ export function resolveZAxisIncompleteHints(args: {
   if (
     !workstationHasZAxisIncompleteForConnections(
       args.connectionAnchorContext.workstation,
+    ) ||
+    !workstationRendersProgressOutcomeZAxisHintAnchors(
+      args.connectionAnchorContext,
     )
   ) {
     return null;
@@ -217,6 +222,15 @@ export function buildSemanticGraphHandles(args: {
       !supportsProgressOutcomeRoutes &&
       PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id);
     const handleValidation = validationHandleErrors?.get(anchor.id);
+    const rendersHandleValidation =
+      args.nodeKind !== "workstation" ||
+      !args.connectionAnchorContext ||
+      workstationRendersProgressOutcomeHandleValidation(
+        args.connectionAnchorContext,
+        anchor.id,
+      );
+    const showHandleValidation =
+      handleValidation !== undefined && rendersHandleValidation;
     const selected =
       args.editor?.pendingConnectionSource?.nodeId === args.nodeId &&
       args.editor.pendingConnectionSource.anchorId === anchor.id;
@@ -229,13 +243,15 @@ export function buildSemanticGraphHandles(args: {
     const visible = args.editor?.editorMode === true;
 
     return {
-      buttonAriaLabel: handleValidation
+      buttonAriaLabel: showHandleValidation
         ? handleValidation.message
         : anchor.description,
       buttonPressed: selected || undefined,
       buttonDisabled:
         !visible || isAuthoredOnlyProgressOutcomeHandle || undefined,
-      buttonTitle: handleValidation?.message ?? anchor.description,
+      buttonTitle: showHandleValidation
+        ? handleValidation.message
+        : anchor.description,
       connectable: connectable && !isAuthoredOnlyProgressOutcomeHandle,
       hidden: !visible || isAuthoredOnlyProgressOutcomeHandle || undefined,
       id: anchor.id,
@@ -247,9 +263,11 @@ export function buildSemanticGraphHandles(args: {
         }),
       side: anchor.side,
       type: anchor.role,
-      validationError: handleValidation !== undefined,
-      validationMessage: handleValidation?.message,
-      variant: handleValidation
+      validationError: showHandleValidation,
+      validationMessage: showHandleValidation
+        ? handleValidation.message
+        : undefined,
+      variant: showHandleValidation
         ? "error"
         : selected
           ? "selected"

@@ -17,6 +17,7 @@ import type {
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
 import type {
+  FactoryGraphConnectionAnchor,
   FactoryGraphConnectionEndpoint,
   FactoryGraphConnectionResolver,
 } from "./factory-graph-editor-connections";
@@ -25,7 +26,14 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
   resolveFactoryGraphConnectionAnchorContext,
+  workstationRendersProgressOutcomeHandleValidation,
+  workstationRendersProgressOutcomeZAxisHintAnchors,
 } from "./factory-graph-editor-connections";
+import {
+  filterValidationHandleErrorsForWorkstation,
+  type FactoryValidationGraphProjection,
+  validationHandleErrorsForNode,
+} from "./factory-validation-graph-projection";
 import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
 import {
   type FactoryGraphWorkStateType,
@@ -94,6 +102,7 @@ export interface FactoryGraphReactFlowEditorOverlay {
   pendingRemovalEdgeIds: ReadonlySet<string>;
   pendingRemovalNodeIds: ReadonlySet<string>;
   validationErrors?: readonly FactoryGraphDraftValidationError[];
+  validationProjection?: FactoryValidationGraphProjection;
 }
 
 export interface ProjectFactoryGraphToReactFlowOptions {
@@ -474,7 +483,8 @@ export function resolveFactoryGraphZAxisIncompleteHints(input: {
     !input.anchorContext?.workstation ||
     !workstationHasZAxisIncompleteForConnections(
       input.anchorContext.workstation,
-    )
+    ) ||
+    !workstationRendersProgressOutcomeZAxisHintAnchors(input.anchorContext)
   ) {
     return null;
   }
@@ -486,6 +496,61 @@ export function resolveFactoryGraphZAxisIncompleteHints(input: {
     accessibleLabel: hint,
     title: hint,
   };
+}
+
+function projectEditorConnectionAnchorHandle(input: {
+  anchor: FactoryGraphConnectionAnchor;
+  canEditConnections: boolean;
+  compatible: boolean;
+  editor?: FactoryGraphReactFlowEditorOverlay;
+  handleValidation?: { message: string };
+  messages: ReturnType<typeof getFactoryGraphEditorMessages>;
+  node: FactoryGraphNode;
+  nodeIsPendingRemoval: boolean;
+  rendersHandleValidation: boolean;
+  selected: boolean;
+}): ActivityGraphNodeHandle {
+  const handleValidation = input.handleValidation;
+  const showHandleValidation =
+    handleValidation !== undefined && input.rendersHandleValidation;
+  const validationMessage = showHandleValidation
+    ? handleValidation.message
+    : undefined;
+
+  return {
+    buttonAriaLabel: showHandleValidation
+      ? validationMessage
+      : `${input.messages.toolbarConnectLabel}: ${input.node.label} ${input.anchor.label}`,
+    buttonDisabled: !input.canEditConnections || input.nodeIsPendingRemoval,
+    buttonPressed: input.selected || undefined,
+    buttonTitle: showHandleValidation ? validationMessage : input.anchor.description,
+    connectable: input.canEditConnections && !input.nodeIsPendingRemoval,
+    id: input.anchor.id,
+    label: input.anchor.label,
+    onButtonClick:
+      input.editor?.onConnectionAnchorClick &&
+      input.canEditConnections &&
+      !input.nodeIsPendingRemoval
+        ? () =>
+            input.editor?.onConnectionAnchorClick?.({
+              anchorId: input.anchor.id,
+              nodeId: input.node.id,
+            })
+        : undefined,
+    side: input.anchor.side,
+    type: input.anchor.role,
+    validationError: showHandleValidation || undefined,
+    validationMessage,
+    variant: showHandleValidation
+      ? "error"
+      : input.selected
+        ? "selected"
+        : input.compatible
+          ? "valid-target"
+          : input.canEditConnections
+            ? "default"
+            : "muted",
+  } satisfies ActivityGraphNodeHandle;
 }
 
 function buildNodeHandles(input: {
@@ -519,6 +584,20 @@ function buildNodeHandles(input: {
           pendingSourceNode,
           input.workstationResolver,
         )?.workstation;
+  const rawValidationHandleErrors =
+    input.node.kind === "workstation" && input.editor?.validationProjection
+      ? validationHandleErrorsForNode(
+          input.editor.validationProjection,
+          input.node.id,
+        )
+      : undefined;
+  const validationHandleErrors =
+    rawValidationHandleErrors === undefined
+      ? undefined
+      : filterValidationHandleErrorsForWorkstation(
+          rawValidationHandleErrors,
+          anchorContext?.workstation,
+        );
 
   return getLocalizedFactoryGraphConnectionAnchors(
     input.node.kind,
@@ -540,38 +619,27 @@ function buildNodeHandles(input: {
         targetNodeKind: input.node.kind,
         targetWorkstation: anchorContext?.workstation,
       });
+    const handleValidation = validationHandleErrors?.get(anchor.id);
+    const rendersHandleValidation =
+      input.node.kind !== "workstation" ||
+      !anchorContext ||
+      workstationRendersProgressOutcomeHandleValidation(
+        anchorContext,
+        anchor.id,
+      );
 
-    return {
-      buttonAriaLabel:
-        anchor.role === "source"
-          ? `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`
-          : `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`,
-      buttonDisabled: !canEditConnections || nodeIsPendingRemoval,
-      buttonPressed: selected || undefined,
-      buttonTitle: anchor.description,
-      connectable: canEditConnections && !nodeIsPendingRemoval,
-      id: anchor.id,
-      label: anchor.label,
-      onButtonClick:
-        input.editor?.onConnectionAnchorClick &&
-        canEditConnections &&
-        !nodeIsPendingRemoval
-          ? () =>
-              input.editor?.onConnectionAnchorClick?.({
-                anchorId: anchor.id,
-                nodeId: input.node.id,
-              })
-          : undefined,
-      side: anchor.side,
-      type: anchor.role,
-      variant: selected
-        ? "selected"
-        : compatible
-          ? "valid-target"
-          : canEditConnections
-            ? "default"
-            : "muted",
-    } satisfies ActivityGraphNodeHandle;
+    return projectEditorConnectionAnchorHandle({
+      anchor,
+      canEditConnections,
+      compatible,
+      editor: input.editor,
+      handleValidation,
+      messages,
+      node: input.node,
+      nodeIsPendingRemoval,
+      rendersHandleValidation,
+      selected,
+    });
   });
 }
 

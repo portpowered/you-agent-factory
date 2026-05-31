@@ -760,7 +760,7 @@ export const ProgressOutcomeRoutesWithoutStopWords = {
     await expectProgressOutcomeRouteHandles(canvas, {
       includeContinueAndReject: false,
     });
-    await expectZAxisIncompleteHints(canvasElement, { expectHints: true });
+    await expectZAxisIncompleteHints(canvasElement, { expectHints: false });
   },
 };
 

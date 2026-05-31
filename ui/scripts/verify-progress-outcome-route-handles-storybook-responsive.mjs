@@ -30,25 +30,11 @@ export async function verifyProgressOutcomeRoutesWithoutStopWords(
     );
   }
 
-  const hints = page.locator("[data-z-axis-incomplete-hint]");
-  const hintCount = await hints.count();
-  if (hintCount !== 2) {
+  const hintCount = await page.locator("[data-z-axis-incomplete-hint]").count();
+  if (hintCount !== 0) {
     throw new Error(
-      `Expected 2 z-axis incomplete hints without stopWords at ${viewport.label}, found ${hintCount}.`,
+      `Expected no z-axis incomplete hints without stopWords at ${viewport.label}, found ${hintCount}.`,
     );
-  }
-
-  for (const anchorId of [
-    "workstation-on-continue-source",
-    "workstation-on-rejection-source",
-  ]) {
-    const hint = page.locator(`[data-z-axis-incomplete-hint="${anchorId}"]`);
-    if ((await hint.count()) !== 1) {
-      throw new Error(
-        `Expected z-axis incomplete hint at ${anchorId} without stopWords at ${viewport.label}.`,
-      );
-    }
-    await expectVisible(hint, `Z-axis incomplete hint (${anchorId})`);
   }
 }
 

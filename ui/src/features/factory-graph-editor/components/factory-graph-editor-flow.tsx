@@ -19,6 +19,7 @@ import type {
 import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
 import type { FactoryGraphConnectionEndpoint } from "../lib/factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
+import type { FactoryValidationGraphProjection } from "../lib/factory-validation-graph-projection";
 import {
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
@@ -58,6 +59,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
   pendingRemovalEdgeIds: ReadonlySet<string>;
   pendingRemovalNodeIds: ReadonlySet<string>;
   topology: FactoryGraphTopology;
+  validationProjection?: FactoryValidationGraphProjection;
   workstations?: readonly FactoryWorkstation[];
   workerStatusByName?: ReadonlyMap<string, FactoryGraphWorkerRuntimeStatus>;
 }): {
@@ -75,6 +77,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
       pendingConnectionSource: input.pendingConnectionSource,
       pendingRemovalEdgeIds: input.pendingRemovalEdgeIds,
       pendingRemovalNodeIds: input.pendingRemovalNodeIds,
+      validationProjection: input.validationProjection,
     },
     layoutPositionsByNodeId: input.layoutPositionsByNodeId,
     locale: input.locale,

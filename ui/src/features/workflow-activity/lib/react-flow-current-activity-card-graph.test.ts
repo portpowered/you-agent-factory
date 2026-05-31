@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { resolveDashboardSelection } from "../../current-selection/base/public";
 import {
@@ -11,9 +12,9 @@ import {
   systemTimeGraphNodeId,
 } from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
-import type { FactoryValidationTarget } from "../../../api/factory-validation";
+import { factoryGraphConnectionAnchorContext } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
@@ -981,10 +982,7 @@ describe("current activity graph editor handles", () => {
     );
     expect(handleIds).not.toContain("workstation-on-continue-source");
     expect(handleIds).not.toContain("workstation-on-rejection-source");
-    expect(workstationNode?.data.zAxisIncompleteHints).toEqual({
-      accessibleLabel: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
-      title: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
-    });
+    expect(workstationNode?.data.zAxisIncompleteHints).toBeNull();
   });
 
   it("keeps hidden continue and reject handles for authored edges without stopWords", async () => {
@@ -1033,10 +1031,7 @@ describe("current activity graph editor handles", () => {
         id: "workstation-on-rejection-source",
       }),
     );
-    expect(reviewNode?.data.zAxisIncompleteHints).toEqual({
-      accessibleLabel: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
-      title: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
-    });
+    expect(reviewNode?.data.zAxisIncompleteHints).toBeNull();
   });
 
   it("includes continue and reject editor handles when stopWords are configured", async () => {
@@ -1605,6 +1600,157 @@ describe("current activity graph active item labels", () => {
           variant: "error",
         }),
       ]),
+    );
+  });
+
+  it("suppresses ON_REJECTION handle validation on standard processors without stopWords", () => {
+    const connectionAnchorContext = factoryGraphConnectionAnchorContext({
+      type: "MODEL_WORKSTATION",
+      behavior: "STANDARD",
+    });
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workstation.missingRejectionRoute",
+        message: "Workstation draft must define a reject route.",
+        severity: "error",
+        subject: {
+          id: "draft",
+          location: "ON_REJECTION",
+          type: "WORKSTATION",
+        },
+      },
+    ]);
+    const handles = buildEditorHandles({
+      connectionAnchorContext,
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      nodeId: "workstation:draft",
+      nodeKind: "workstation",
+      validationProjection,
+    });
+
+    expect(handles).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-on-rejection-source",
+          validationError: true,
+        }),
+        expect.objectContaining({
+          id: "workstation-on-continue-source",
+          validationError: true,
+        }),
+      ]),
+    );
+    expect(
+      handles.find((handle) => handle.id === "workstation-on-failure-source"),
+    ).toEqual(
+      expect.objectContaining({
+        validationError: false,
+        validationMessage: undefined,
+      }),
+    );
+  });
+
+  it("keeps ON_REJECTION handle validation when reject anchors are rendered", () => {
+    const connectionAnchorContext = factoryGraphConnectionAnchorContext({
+      type: "MODEL_WORKSTATION",
+      behavior: "REPEATER",
+    });
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workstation.missingRejectionRoute",
+        message: "Workstation process must define a reject route.",
+        severity: "error",
+        subject: {
+          id: "process",
+          location: "ON_REJECTION",
+          type: "WORKSTATION",
+        },
+      },
+    ]);
+    const handles = buildEditorHandles({
+      connectionAnchorContext,
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      nodeId: "workstation:process",
+      nodeKind: "workstation",
+      validationProjection,
+    });
+
+    expect(handles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-on-rejection-source",
+          validationError: true,
+          validationMessage: "Workstation process must define a reject route.",
+          variant: "error",
+        }),
+      ]),
+    );
+  });
+
+  it("suppresses ON_REJECTION validation on hidden authored reject handles without stopWords", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const validationTargets: FactoryValidationTarget[] = [
+      {
+        code: "factory.workstation.missingRejectionRoute",
+        message: 'Workstation "review" must define a reject route.',
+        severity: "error",
+        subject: {
+          id: "review",
+          location: "ON_REJECTION",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], graphLayout.edges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      validationTargets,
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: buildSampleFactorySnapshot(factory),
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const reviewNode = nodes.find((node) => node.id === "workstation:review");
+    const rejectionHandle = reviewNode?.data.handles?.find(
+      (handle) => handle.id === "workstation-on-rejection-source",
+    );
+
+    expect(rejectionHandle).toEqual(
+      expect.objectContaining({
+        hidden: true,
+        validationError: false,
+        validationMessage: undefined,
+        variant: "default",
+      }),
     );
   });
 });

@@ -48,12 +48,10 @@ describe("factory graph React Flow projection z-axis incomplete hints", () => {
     ).toBeNull();
   });
 
-  it("sets z-axis incomplete hints when connection editing is enabled without stopWords", () => {
+  it("omits z-axis incomplete hints when continue and reject handles are not rendered", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       factoryWithoutStopWords,
     );
-    const hintMessage =
-      getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint;
 
     const projection = projectFactoryGraphToReactFlow({
       editor: {
@@ -71,10 +69,7 @@ describe("factory graph React Flow projection z-axis incomplete hints", () => {
       (node) => node.id === "workstation:draft",
     );
 
-    expect(workstationNode?.data.zAxisIncompleteHints).toEqual({
-      accessibleLabel: hintMessage,
-      title: hintMessage,
-    });
+    expect(workstationNode?.data.zAxisIncompleteHints).toBeNull();
     expect(
       projection.nodes.find((node) => node.id === "work-state:story:queued")
         ?.data.zAxisIncompleteHints,

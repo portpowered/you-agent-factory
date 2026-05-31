@@ -218,6 +218,8 @@ export function getFactoryGraphConnectionAnchors(
   return filterWorkstationConnectionAnchors(anchors, context);
 }
 
+export { workstationRendersProgressOutcomeHandleValidation, workstationRendersProgressOutcomeZAxisHintAnchors } from "./factory-graph-progress-outcome-handle-visibility";
+
 export function getLocalizedFactoryGraphConnectionAnchors(
   kind: FactoryGraphNodeKind,
   locale?: string | null,

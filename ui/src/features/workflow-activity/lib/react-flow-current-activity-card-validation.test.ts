@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: selection validation scenarios stay grouped around shared projection fixtures.
 import { describe, expect, it } from "vitest";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
@@ -71,6 +72,94 @@ describe("validationMessagesForSelectedWorkstation", () => {
 
     expect(messages).toEqual([
       'Workstation "process" references missing place "story:missing-state".',
+    ]);
+  });
+
+  it("excludes ON_REJECTION selection messages when continue and reject handles are not rendered", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.workstation.missingRejectionRoute",
+        message: "Workstation draft must define a reject route.",
+        severity: "error",
+        subject: {
+          id: "draft",
+          location: "ON_REJECTION",
+          type: "WORKSTATION",
+        },
+      },
+      {
+        code: "factory.workstation.missingFailureRoute",
+        message: 'Workstation "draft" must define a failure route.',
+        severity: "error",
+        subject: {
+          id: "draft",
+          location: "ON_FAILURE",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+
+    const messages = validationMessagesForSelectedWorkstation({
+      factoryDefinition: {
+        name: "alpha",
+        workTypes: [],
+        workers: [{ name: "worker-a", type: "MODEL_WORKER" }],
+        workstations: [
+          {
+            behavior: "STANDARD",
+            inputs: [],
+            name: "draft",
+            outputs: [],
+            type: "MODEL_WORKSTATION",
+            worker: "worker-a",
+          },
+        ],
+      },
+      projection: projectFactoryValidationTargets(targets),
+      selectionNodeId: "workstation:draft",
+    });
+
+    expect(messages).toEqual([
+      'Workstation "draft" must define a failure route.',
+    ]);
+  });
+
+  it("keeps ON_REJECTION selection messages when reject handle is rendered", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.workstation.missingRejectionRoute",
+        message: "Workstation process must define a reject route.",
+        severity: "error",
+        subject: {
+          id: "process",
+          location: "ON_REJECTION",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+
+    const messages = validationMessagesForSelectedWorkstation({
+      factoryDefinition: {
+        name: "alpha",
+        workTypes: [],
+        workers: [{ name: "worker-a", type: "MODEL_WORKER" }],
+        workstations: [
+          {
+            behavior: "REPEATER",
+            inputs: [],
+            name: "process",
+            outputs: [],
+            type: "MODEL_WORKSTATION",
+            worker: "worker-a",
+          },
+        ],
+      },
+      projection: projectFactoryValidationTargets(targets),
+      selectionNodeId: "workstation:process",
+    });
+
+    expect(messages).toEqual([
+      "Workstation process must define a reject route.",
     ]);
   });
 });

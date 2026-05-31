@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: validation projection scenarios stay grouped around shared workstation fixtures.
 import { describe, expect, it } from "vitest";
 
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
@@ -5,11 +6,13 @@ import {
   factoryGraphNodeIdForWorkState,
   factoryGraphNodeIdForWorkstation,
   factoryGraphNodeIdForWorkType,
+  filterValidationHandleErrorsForWorkstation,
   parseFactoryGraphWorkStateNodeId,
   parseFactoryGraphWorkTypeNodeId,
   projectFactoryValidationTargets,
   validationHandleErrorsForNode,
   validationNodeErrorForNode,
+  validationTargetIsRenderedForWorkstation,
   workstationHandleIdForValidationLocation,
 } from "./factory-validation-graph-projection";
 
@@ -137,5 +140,75 @@ describe("factory-validation-graph-projection", () => {
       code: "factory.workState.missingTerminalCompletionPath",
       message: 'work state "story:queued" has no terminal completion path.',
     });
+  });
+
+  it("filters progress-outcome handle errors using rendered workstation anchors", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.workstation.missingRejectionRoute",
+        message: "Workstation draft must define a reject route.",
+        severity: "error",
+        subject: {
+          id: "draft",
+          location: "ON_REJECTION",
+          type: "WORKSTATION",
+        },
+      },
+      {
+        code: "factory.workstation.missingFailureRoute",
+        message: 'Workstation "draft" must define a failure route.',
+        severity: "error",
+        subject: {
+          id: "draft",
+          location: "ON_FAILURE",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+    const projection = projectFactoryValidationTargets(targets);
+    const draftNodeId = factoryGraphNodeIdForWorkstation("draft");
+    const handleErrors = validationHandleErrorsForNode(projection, draftNodeId);
+    expect(handleErrors).toBeDefined();
+
+    const standardProcessorWithoutStopWords = {
+      type: "MODEL_WORKSTATION" as const,
+      behavior: "STANDARD" as const,
+    };
+    const repeaterWorkstation = {
+      type: "MODEL_WORKSTATION" as const,
+      behavior: "REPEATER" as const,
+    };
+
+    const filteredWithoutStopWords = filterValidationHandleErrorsForWorkstation(
+      handleErrors!,
+      standardProcessorWithoutStopWords,
+    );
+    expect([...filteredWithoutStopWords.keys()]).toEqual([
+      "workstation-on-failure-source",
+    ]);
+    expect(
+      validationTargetIsRenderedForWorkstation(
+        targets[0],
+        standardProcessorWithoutStopWords,
+      ),
+    ).toBe(false);
+    expect(
+      validationTargetIsRenderedForWorkstation(
+        targets[1],
+        standardProcessorWithoutStopWords,
+      ),
+    ).toBe(true);
+
+    const filteredForRepeater = filterValidationHandleErrorsForWorkstation(
+      handleErrors!,
+      repeaterWorkstation,
+    );
+    expect([...filteredForRepeater.keys()]).toEqual([
+      "workstation-on-rejection-source",
+      "workstation-on-failure-source",
+    ]);
+    expect(
+      validationTargetIsRenderedForWorkstation(targets[0], repeaterWorkstation),
+    ).toBe(true);
   });
 });

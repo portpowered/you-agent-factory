@@ -13,7 +13,10 @@ import {
   factoryGraphConnectionAnchorContext,
   getLocalizedFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
+  workstationRendersProgressOutcomeZAxisHintAnchors,
 } from "./factory-graph-editor-connections";
+import { buildEditorHandles } from "../../workflow-activity/lib/react-flow-current-activity-card-editor-handles";
+import { projectFactoryValidationTargets } from "./factory-validation-graph-projection";
 
 const baseDraft: FactoryGraphDraft = {
   additions: {
@@ -334,5 +337,61 @@ describe("factory graph editor connections", () => {
 
     expect(nextDraft.edgeChanges.additions).toEqual([]);
     expect(nextDraft.edgeChanges.removals).toEqual([]);
+  });
+
+  it("does not render z-axis hint anchor slots when continue and reject handles are omitted", () => {
+    expect(
+      workstationRendersProgressOutcomeZAxisHintAnchors(
+        standardProcessorWithoutStopWords,
+      ),
+    ).toBe(false);
+    expect(
+      workstationRendersProgressOutcomeZAxisHintAnchors(
+        standardProcessorWithStopWords,
+      ),
+    ).toBe(true);
+  });
+
+  it("allows progress-outcome handle validation only on rendered continue and reject anchors", () => {
+    const validationProjection = projectFactoryValidationTargets([
+      {
+        code: "factory.workstation.missingRejectionRoute",
+        message: "missing reject route",
+        severity: "error",
+        subject: {
+          id: "draft",
+          location: "ON_REJECTION",
+          type: "WORKSTATION",
+        },
+      },
+    ]);
+    const withoutStopWordsHandles = buildEditorHandles({
+      connectionAnchorContext: standardProcessorWithoutStopWords,
+      nodeId: "workstation:draft",
+      nodeKind: "workstation",
+      validationProjection,
+    });
+    const withStopWordsHandles = buildEditorHandles({
+      connectionAnchorContext: standardProcessorWithStopWords,
+      nodeId: "workstation:draft",
+      nodeKind: "workstation",
+      validationProjection,
+    });
+
+    expect(
+      withoutStopWordsHandles.find(
+        (handle) => handle.id === "workstation-on-rejection-source",
+      ),
+    ).toBeUndefined();
+    expect(
+      withStopWordsHandles.find(
+        (handle) => handle.id === "workstation-on-rejection-source",
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        validationError: true,
+        validationMessage: "missing reject route",
+      }),
+    );
   });
 });

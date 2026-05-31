@@ -5,9 +5,12 @@ import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import "../../../styles.css";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { baseFactoryDefinition } from "../lib/factory-graph-draft.test-helpers";
-import type { FactoryGraphTopology } from "../lib/factory-graph-draft-types";
+import type {
+  FactoryGraphTopology,
+  FactoryWorkstation,
+} from "../lib/factory-graph-draft-types";
+import { projectFactoryValidationTargets } from "../lib/factory-validation-graph-projection";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
@@ -46,8 +49,38 @@ const PROGRESS_OUTCOME_ROUTE_TOPOLOGY: FactoryGraphTopology = {
   ],
 };
 
+const standardProcessorWithoutStopWords: FactoryWorkstation = {
+  ...baseFactoryDefinition.workstations[0],
+  behavior: "STANDARD",
+  name: "draft",
+  stopWords: undefined,
+};
+
+const standardProcessorWithStopWords: FactoryWorkstation = {
+  ...baseFactoryDefinition.workstations[0],
+  behavior: "STANDARD",
+  name: "draft",
+  stopWords: ["DONE"],
+};
+
+const onRejectionValidationProjection = projectFactoryValidationTargets([
+  {
+    code: "factory.workstation.missingRejectionRoute",
+    message: "missing reject route",
+    severity: "error",
+    subject: {
+      id: "draft",
+      location: "ON_REJECTION",
+      type: "WORKSTATION",
+    },
+  },
+]);
+
 function renderProgressOutcomeRouteFlow(
-  workstations: NonNullable<typeof baseFactoryDefinition.workstations>,
+  workstations: readonly FactoryWorkstation[],
+  options?: {
+    validationProjection?: typeof onRejectionValidationProjection;
+  },
 ) {
   const flow = buildFactoryGraphEditorFlowModel({
     canEditConnections: true,
@@ -57,6 +90,7 @@ function renderProgressOutcomeRouteFlow(
     pendingRemovalEdgeIds: new Set<string>(),
     pendingRemovalNodeIds: new Set<string>(),
     topology: PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+    validationProjection: options?.validationProjection,
     workstations,
   });
 
@@ -92,11 +126,7 @@ describe("factory graph editor progress outcome route handles", () => {
 
   it("hides continue and reject connect handles for standard processors without stopWords", async () => {
     const { container } = renderProgressOutcomeRouteFlow([
-      {
-        ...baseFactoryDefinition.workstations[0],
-        behavior: "STANDARD",
-        stopWords: undefined,
-      },
+      standardProcessorWithoutStopWords,
     ]);
 
     await screen.findByRole("button", { name: "Connect: draft Success" });
@@ -110,23 +140,14 @@ describe("factory graph editor progress outcome route handles", () => {
       screen.queryByRole("button", { name: "Connect: draft Reject" }),
     ).toBeNull();
 
-    const hints = container.querySelectorAll("[data-z-axis-incomplete-hint]");
-    expect(hints).toHaveLength(2);
-    const hintMessage =
-      getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint;
-    for (const hint of hints) {
-      expect(hint.getAttribute("aria-label")).toBe(hintMessage);
-      expect(hint.getAttribute("title")).toBe(hintMessage);
-    }
+    expect(
+      container.querySelectorAll("[data-z-axis-incomplete-hint]"),
+    ).toHaveLength(0);
   });
 
   it("shows continue and reject connect handles when stopWords are configured", async () => {
     const { container } = renderProgressOutcomeRouteFlow([
-      {
-        ...baseFactoryDefinition.workstations[0],
-        behavior: "STANDARD",
-        stopWords: ["DONE"],
-      },
+      standardProcessorWithStopWords,
     ]);
 
     await screen.findByRole("button", { name: "Connect: draft Continue" });
@@ -136,5 +157,49 @@ describe("factory graph editor progress outcome route handles", () => {
     expect(container.querySelectorAll("[data-z-axis-incomplete-hint]")).toHaveLength(
       0,
     );
+  });
+
+  it("does not show API validation or z-axis hints on omitted continue and reject handles without stopWords", async () => {
+    const { container } = renderProgressOutcomeRouteFlow(
+      [standardProcessorWithoutStopWords],
+      { validationProjection: onRejectionValidationProjection },
+    );
+
+    await screen.findByRole("button", { name: "Connect: draft Success" });
+    expect(
+      screen.queryByRole("button", { name: "Connect: draft Continue" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: draft Reject" }),
+    ).toBeNull();
+    expect(
+      container.querySelectorAll("[data-z-axis-incomplete-hint]"),
+    ).toHaveLength(0);
+    expect(
+      container.querySelectorAll(
+        '[data-z-axis-incomplete-hint="workstation-on-continue-source"], [data-z-axis-incomplete-hint="workstation-on-rejection-source"]',
+      ),
+    ).toHaveLength(0);
+    expect(
+      container.querySelectorAll(
+        '[aria-invalid="true"].ring-af-danger-border',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("shows API validation on rendered reject handle when stopWords are configured", async () => {
+    const { container } = renderProgressOutcomeRouteFlow(
+      [standardProcessorWithStopWords],
+      { validationProjection: onRejectionValidationProjection },
+    );
+
+    const rejectHandle = await screen.findByRole("button", {
+      name: "missing reject route",
+    });
+    expect(rejectHandle.className).toContain("ring-af-danger-border");
+    expect(rejectHandle.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      container.querySelectorAll("[data-z-axis-incomplete-hint]"),
+    ).toHaveLength(0);
   });
 });
