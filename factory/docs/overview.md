@@ -78,6 +78,27 @@ Planner workstations enqueue work; executor workstations run inference or
 scripts at bound workers. See `you docs agents` § Planner vs Executor and
 `docs/reference/authoring-agents-md.md` for prompt file shape.
 
+## Agent submission policy
+
+Use this policy when choosing `workTypeName` and ingress. It matches the
+pipeline and work-type tables above; the inbox table below lists paths.
+
+- **Default — `idea`:** Submit new maintainer work as **`idea`**: standalone
+  markdown under `factory/inputs/idea/default/` or
+  `you submit --work-type-name idea` (with `--name` and `--payload` as needed).
+- **`thoughts`:** Only for large, ambiguous customer asks that need **ideafy**
+  breakdown into multiple ideas — not routine features or docs.
+- **`task`:** Only to **unstick** stuck or failed work: failed tokens, review
+  loops that are not progressing, or recovery after **`executor-loop-breaker`**
+  or **`review-loop-breaker`** routes work to `task:failed`. Do **not** use
+  `task` for greenfield features, documentation, or normal pipeline progression.
+- **`plan`:** Rarely submit standalone plans; the pipeline normally spawns
+  **`plan`** work from accepted ideas.
+- **Batch JSON:** Use `factory/inputs/BATCH/default/{requestId}.json` only when
+  the request needs **`DEPENDS_ON`**, **`PARENT_CHILD`**, or multiple work types
+  in one `FACTORY_REQUEST_BATCH` (see `you docs batch-inputs` and
+  `you docs relationships`).
+
 ## Input layout
 
 Seed checked-in repository work under:
