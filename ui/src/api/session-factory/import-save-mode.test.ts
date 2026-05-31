@@ -5,7 +5,7 @@ import {
   resolveImportCreateFactoryName,
 } from "./import-save-mode";
 
-describe("named factory import save mode helpers", () => {
+describe("session factory import save mode helpers", () => {
   it("extracts sorted unique named factory names from session targets", () => {
     const targets: FactorySessionTarget[] = [
       {

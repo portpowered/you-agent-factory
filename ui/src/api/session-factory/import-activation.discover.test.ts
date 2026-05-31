@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { discoverSessionNamedFactoryNames } from "./api";
+import { discoverSessionNamedFactoryNames } from "./import-activation";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();

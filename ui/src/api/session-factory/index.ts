@@ -9,5 +9,6 @@ export {
   type SessionFactoryAPIErrorCode,
   type SessionFactoryAPIErrorDetails,
 } from "./errors";
+export * from "./import-activation";
 export * from "./operator-errors";
 export * from "./prompt-template";
