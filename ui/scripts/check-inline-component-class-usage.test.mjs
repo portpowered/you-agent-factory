@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
 import { scanInlineComponentClassUsage } from "./check-inline-component-class-usage.mjs";
+import { allowlistedInlineComponentClassUsage } from "./inline-component-class-usage-allowlist.mjs";
 
 const execFileAsync = promisify(execFile);
 const scriptPath = path.resolve(
@@ -237,4 +238,12 @@ test("package command wiring matches the direct guard result for the same violat
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
   }
+});
+
+test("does not allowlist removed export dialog DIALOG_FILE_INPUT_CLASS", () => {
+  expect(
+    allowlistedInlineComponentClassUsage.some((entry) =>
+      entry.endsWith("DIALOG_FILE_INPUT_CLASS"),
+    ),
+  ).toBe(false);
 });

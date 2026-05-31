@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, fireEvent, userEvent, within } from "storybook/test";
 
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { SubmitWorkCard } from "./submit-work-card";
+import { SubmitWorkCardImageChooseFileVerification } from "./submit-work-card-image-choose-file-verification";
 import { SubmitWorkWidget } from "./submit-work-widget";
 
 function SessionScopeProbe() {
@@ -217,6 +218,52 @@ function submitButton(card: HTMLElement): HTMLElement {
 
   return button;
 }
+
+export const ImageChooseFileVerification = {
+  tags: ["test"],
+  render: () => <SubmitWorkCardImageChooseFileVerification />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "Submit work" });
+    const scope = within(card);
+    const dropzoneLabel = scope.getByText("Image file");
+    const dropzone = dropzoneLabel.closest("label");
+
+    if (!(dropzone instanceof HTMLLabelElement)) {
+      throw new Error("expected image upload dropzone label");
+    }
+
+    await expect(dropzone.className).toContain("border-dashed");
+    await expect(dropzone.className).toContain("border-af-border-strong");
+    await expect(dropzone.className).toContain("bg-af-surface-subtle");
+    await expect(dropzone.className).not.toContain("bg-af-accent-surface");
+    await expect(dropzone.className).not.toContain("border-af-accent-border");
+
+    fireEvent.dragOver(dropzone, {
+      dataTransfer: {
+        dropEffect: "copy",
+        files: [],
+        types: ["Files"],
+      },
+    });
+    await expect(
+      scope.getByText("Drop the image file to stage it."),
+    ).toBeVisible();
+    await expect(dropzone.className).toContain("bg-af-overlay");
+    await expect(dropzone.className).not.toContain("bg-af-accent-surface");
+    await expect(dropzone.className).not.toContain("border-af-accent-border");
+
+    const fileInput = scope.getByLabelText("Image file", {
+      selector: "input",
+    });
+    const stagedImage = new File(["png"], "dashboard.png", {
+      type: "image/png",
+    });
+    await userEvent.upload(fileInput, stagedImage);
+    await expect(scope.getByText("dashboard.png (image/png)")).toBeVisible();
+    await expect(scope.getByText("Replace file")).toBeVisible();
+  },
+};
 
 export const SharedWorkContentRowChrome = {
   render: () => (

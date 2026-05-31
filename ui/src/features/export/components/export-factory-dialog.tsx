@@ -18,11 +18,12 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
+import type { CurrentFactoryExportFailure } from "../hooks/use-current-factory-export";
 import { downloadBlobAsFile } from "../lib/browser-download";
 import { buildFactoryExportFilename } from "../lib/build-factory-export-filename";
 import { writeFactoryExportPng } from "../lib/factory-png-export";
 import { getExportDialogMessages } from "../messages/export-dialog";
-import type { CurrentFactoryExportFailure } from "../hooks/use-current-factory-export";
+import { ExportFactoryDialogImageField } from "./export-factory-dialog-image-field";
 
 const DIALOG_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 const DIALOG_BODY_CLASS = cn("m-0 max-w-lg", DASHBOARD_BODY_TEXT_CLASS);
@@ -33,8 +34,6 @@ const DIALOG_FIELD_LABEL_CLASS = cn(
   "block text-sm font-semibold text-af-text",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
-const DIALOG_FILE_INPUT_CLASS =
-  "block w-full rounded-xl border border-dashed border-af-border-strong bg-af-surface-subtle px-3 py-3 text-sm text-af-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-af-accent-surface file:px-3 file:py-2 file:text-sm file:font-semibold file:text-af-accent hover:bg-af-overlay";
 const DIALOG_FIELD_DESCRIPTION_CLASS = cn(
   "m-0",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -98,7 +97,8 @@ export function ExportFactoryDialog({
   const formState = useExportFactoryDialogState({
     factory,
     initialFactoryName,
-    isOpen, locale,
+    isOpen,
+    locale,
     messages,
     onClose,
     preparationFailure,
@@ -214,50 +214,19 @@ function ExportFactoryDialogForm({
         ) : null}
       </div>
 
-      <div className={DIALOG_FIELD_GROUP_CLASS}>
-        <label
-          className={DIALOG_FIELD_LABEL_CLASS}
-          htmlFor="export-factory-image"
-        >
-          {messages.imageLabel}
-        </label>
-        <input
-          accept="image/*"
-          aria-describedby={
-            formState.imageValidationMessage
-              ? formState.imageValidationId
-              : undefined
-          }
-          aria-invalid={formState.imageValidationMessage ? "true" : undefined}
-          className={DIALOG_FILE_INPUT_CLASS}
-          disabled={formState.isExporting}
-          id="export-factory-image"
-          onChange={(event) => {
-            if (formState.isExporting) {
-              return;
-            }
-            formState.setDialogState({ status: "idle" });
-            formState.handleImageSelection(event.target.files);
-          }}
-          type="file"
-        />
-        <p className={DIALOG_FIELD_DESCRIPTION_CLASS}>
-          {messages.imageDescription}
-        </p>
-        {formState.selectedImage ? (
-          <p className={DIALOG_HINT_CLASS}>
-            {messages.selectedImageLabel(formState.selectedImage.name)}
-          </p>
-        ) : null}
-        {formState.imageValidationMessage ? (
-          <p
-            className={DIALOG_VALIDATION_CLASS}
-            id={formState.imageValidationId}
-          >
-            {formState.imageValidationMessage}
-          </p>
-        ) : null}
-      </div>
+      <ExportFactoryDialogImageField
+        imageDescription={messages.imageDescription}
+        imageLabel={messages.imageLabel}
+        imageValidationId={formState.imageValidationId}
+        imageValidationMessage={formState.imageValidationMessage}
+        isExporting={formState.isExporting}
+        onImageChange={formState.handleImageSelection}
+        onInteraction={() => {
+          formState.setDialogState({ status: "idle" });
+        }}
+        selectedImage={formState.selectedImage}
+        selectedImageLabel={messages.selectedImageLabel}
+      />
     </div>
   );
 }
@@ -310,7 +279,8 @@ function ExportFactoryDialogMessages({
 function useExportFactoryDialogState({
   factory,
   initialFactoryName,
-  isOpen, locale,
+  isOpen,
+  locale,
   messages,
   onClose,
   preparationFailure,
@@ -318,7 +288,8 @@ function useExportFactoryDialogState({
 }: {
   factory: ImportFactoryValue | null;
   initialFactoryName: string;
-  isOpen: boolean; locale?: string | null;
+  isOpen: boolean;
+  locale?: string | null;
   messages: ReturnType<typeof getExportDialogMessages>;
   onClose: () => void;
   preparationFailure?: CurrentFactoryExportFailure | null;
