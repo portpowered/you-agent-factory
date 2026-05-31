@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import {
   cleanup,
   fireEvent,
@@ -8,6 +9,11 @@ import {
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import type { WorkChartModel } from "../lib/trends";
+import {
+  expectWorkChartAxisLabelsVisible,
+  expectWorkChartCompactLegendContract,
+  expectWorkChartLegendClearOfCardTitle,
+} from "../lib/work-chart-legend-contract";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { D3CompletionInformationCard } from "./d3-information-card";
 
@@ -94,6 +100,95 @@ const populatedTrend: WorkChartModel = {
       points: [
         { label: "Failed: 1", observedAt: 1000, order: 0, value: 1 },
         { label: "Failed: 2", observedAt: 2000, order: 1, value: 2 },
+      ],
+    },
+  ],
+};
+
+const zoomableTrend: WorkChartModel = {
+  delta: {
+    queued: 1,
+    inFlight: 2,
+    completed: 3,
+    failed: 0,
+  },
+  failureGroups: [],
+  points: [
+    { label: "Tick 10", observedAt: 1000, order: 0, tick: 10 },
+    { label: "Tick 20", observedAt: 2000, order: 1, tick: 20 },
+    { label: "Tick 40", observedAt: 3000, order: 2, tick: 40 },
+  ],
+  rangeID: "15m",
+  rangeLabel: "15m",
+  samples: [
+    {
+      completedCount: 1,
+      dispatchedCount: 0,
+      failedByWorkType: {},
+      failedCount: 0,
+      failedWorkLabels: [],
+      inFlightCount: 1,
+      observedAt: 1000,
+      queuedCount: 3,
+      tick: 10,
+    },
+    {
+      completedCount: 3,
+      dispatchedCount: 1,
+      failedByWorkType: {},
+      failedCount: 0,
+      failedWorkLabels: [],
+      inFlightCount: 2,
+      observedAt: 2000,
+      queuedCount: 2,
+      tick: 20,
+    },
+    {
+      completedCount: 5,
+      dispatchedCount: 2,
+      failedByWorkType: {},
+      failedCount: 0,
+      failedWorkLabels: [],
+      inFlightCount: 2,
+      observedAt: 3000,
+      queuedCount: 1,
+      tick: 40,
+    },
+  ],
+  series: [
+    {
+      key: "queued",
+      label: "Queued",
+      unit: "count",
+      points: [
+        { label: "Queued: 3", observedAt: 1000, order: 0, value: 3 },
+        { label: "Queued: 1", observedAt: 3000, order: 2, value: 1 },
+      ],
+    },
+    {
+      key: "inFlight",
+      label: "In-flight",
+      unit: "count",
+      points: [
+        { label: "In-flight: 1", observedAt: 1000, order: 0, value: 1 },
+        { label: "In-flight: 2", observedAt: 3000, order: 2, value: 2 },
+      ],
+    },
+    {
+      key: "completed",
+      label: "Completed",
+      unit: "count",
+      points: [
+        { label: "Completed: 1", observedAt: 1000, order: 0, value: 1 },
+        { label: "Completed: 3", observedAt: 2000, order: 1, value: 3 },
+      ],
+    },
+    {
+      key: "failed",
+      label: "Failed/retried",
+      unit: "count",
+      points: [
+        { label: "Failed: 0", observedAt: 2000, order: 1, value: 0 },
       ],
     },
   ],
@@ -348,6 +443,138 @@ describe("D3CompletionInformationCard", () => {
     expect(loadingState.className).not.toContain("border-dashed");
     expect(
       within(card).queryByRole("img", { name: "Work outcome chart for 15m" }),
+    ).toBeNull();
+  });
+
+  it("preserves compact legend, axis labels, and legend placement in embedded bento layout", () => {
+    const messages = getWorkOutcomeMessages();
+    render(
+      <D3CompletionInformationCard
+        model={zoomableTrend}
+        widgetId="work-outcome-chart"
+      />,
+    );
+
+    const card = screen.getByRole("article", {
+      name: messages.chart.cardTitle,
+    });
+    const chart = within(card).getByRole("img", {
+      name: messages.chart.ariaLabel(zoomableTrend.rangeLabel),
+    });
+
+    expect(chart.getAttribute("data-work-chart-presentation")).toBe("embedded");
+
+    const legend = chart.querySelector<HTMLElement>(
+      "[data-work-chart-legend='true']",
+    );
+    const plot = chart.querySelector<HTMLElement>(
+      ".recharts-responsive-container",
+    );
+    expect(legend).toBeTruthy();
+    expect(plot).toBeTruthy();
+    vi.spyOn(legend as HTMLElement, "getBoundingClientRect").mockReturnValue({
+      bottom: 24,
+      height: 24,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+    });
+    vi.spyOn(plot as HTMLElement, "getBoundingClientRect").mockReturnValue({
+      bottom: 200,
+      height: 200,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+    });
+
+    expectWorkChartCompactLegendContract(chart);
+    expectWorkChartAxisLabelsVisible(chart, {
+      xAxisLabel: messages.chart.xAxisLabel,
+      yAxisLabel: messages.chart.yAxisLabel,
+    });
+
+    const titleHeading = within(card).getByRole("heading", { level: 3 });
+    vi.spyOn(titleHeading, "getBoundingClientRect").mockReturnValue({
+      bottom: 48,
+      height: 24,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 24,
+      width: 400,
+      x: 0,
+      y: 24,
+    });
+    vi.spyOn(legend as HTMLElement, "getBoundingClientRect").mockReturnValue({
+      bottom: 72,
+      height: 24,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 56,
+      width: 400,
+      x: 0,
+      y: 56,
+    });
+    expectWorkChartLegendClearOfCardTitle(card);
+  });
+
+  it("preserves drag-to-zoom and keyboard reset outside the chart surface in embedded layout", async () => {
+    const user = userEvent.setup();
+    const messages = getWorkOutcomeMessages();
+    render(
+      <D3CompletionInformationCard
+        model={zoomableTrend}
+        widgetId="work-outcome-chart"
+      />,
+    );
+
+    const card = screen.getByRole("article", {
+      name: messages.chart.cardTitle,
+    });
+    const chart = within(card).getByRole("img", {
+      name: messages.chart.ariaLabel(zoomableTrend.rangeLabel),
+    });
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
+      bottom: 240,
+      height: 240,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+    });
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+
+    fireEvent.mouseDown(chart, { clientX: 40, clientY: 168 });
+    fireEvent.mouseMove(chart, { clientX: 200, clientY: 168 });
+    fireEvent.mouseUp(chart, { clientX: 200, clientY: 168 });
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
+
+    const resetZoom = screen.getByRole("button", {
+      name: messages.chart.resetZoomLabel,
+    });
+    expect(chart.contains(resetZoom)).toBe(false);
+
+    resetZoom.focus();
+    expect(document.activeElement).toBe(resetZoom);
+    await user.keyboard("[Enter]");
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+    expect(
+      screen.queryByRole("button", { name: messages.chart.resetZoomLabel }),
     ).toBeNull();
   });
 
