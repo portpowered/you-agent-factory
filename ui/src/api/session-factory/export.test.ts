@@ -104,6 +104,56 @@ describe("session factory export API", () => {
     });
   });
 
+  it("maps STALE_FACTORY_VERSION current-factory failures through export", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "STALE_FACTORY_VERSION",
+              message: "The session factory version is stale.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 409,
+              statusText: "Conflict",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "STALE_FACTORY_VERSION",
+      status: 409,
+    });
+  });
+
+  it("maps FACTORY_NOT_IDLE current-factory failures through export", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "FACTORY_NOT_IDLE",
+              message: "Current factory runtime must be idle before export.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 409,
+              statusText: "Conflict",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "FACTORY_NOT_IDLE",
+      status: 409,
+    });
+  });
+
   it("maps INVALID_FACTORY_DEFINITION current-factory failures to INVALID_FACTORY", async () => {
     await expect(
       getCurrentFactory({

@@ -248,6 +248,71 @@ describe("getSessionFactory API errors", () => {
   });
 });
 
+describe("saveSessionFactory transport and API errors", () => {
+  it("maps fetch rejections to NETWORK_ERROR", async () => {
+    const networkError = new Error("connection reset");
+
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        { fetch: vi.fn().mockRejectedValue(networkError) },
+      ),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      name: "SessionFactoryAPIError",
+    });
+  });
+
+  it("surfaces FACTORY_NOT_IDLE from save responses", async () => {
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          mode: "REPLACE_CURRENT",
+          factory: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+          baseVersion: {
+            logical: "1",
+            physical: "2026-05-18T14:25:00Z",
+          },
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code: "FACTORY_NOT_IDLE",
+                message: "Factory must be idle before saving.",
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 409,
+                statusText: "Conflict",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "FACTORY_NOT_IDLE",
+      status: 409,
+    });
+  });
+});
+
 describe("getSessionFactory structured error targets", () => {
   it("preserves validation targets on structured API error responses", async () => {
     const targets = [
