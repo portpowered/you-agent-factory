@@ -114,6 +114,30 @@ function buildBrowserLaneBatches() {
       continue;
     }
 
+    if (relativePath === "./src/features/current-selection") {
+      const isolatedWorkstationHookPaths = [
+        "./src/features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateContract.test.tsx",
+        "./src/features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation.test.tsx",
+        "./src/features/current-selection/workstation-selection/hooks/use-save-editable-workstation-configuration.test.tsx",
+        "./src/features/current-selection/components/current-selection-widget.prompt-edit-save-enablement.test.tsx",
+      ];
+      batches.push({
+        label: "./src/features/current-selection/workstation-hooks",
+        paths: isolatedWorkstationHookPaths,
+      });
+      batches.push({
+        label: relativePath,
+        paths: [relativePath],
+        pathIgnorePatterns: [
+          "**/useCurrentWorkstationPromptTemplateContract.test.tsx",
+          "**/useCurrentWorkstationPromptTemplateValidation.test.tsx",
+          "**/use-save-editable-workstation-configuration.test.tsx",
+          "**/current-selection-widget.prompt-edit-save-enablement.test.tsx",
+        ],
+      });
+      continue;
+    }
+
     batches.push({
       label: relativePath,
       paths: [relativePath],
