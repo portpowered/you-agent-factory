@@ -1719,6 +1719,62 @@ function registerCurrentActivityCardTestLifecycle(): void {
     ).toBeNull();
   });
 
+  it("shows consolidated unsaved chrome with a single header status and warning toggle", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: baseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      draft: {
+        ...defaultDraftState.draft,
+        additions: {
+          ...defaultDraftState.draft.additions,
+          workers: [
+            {
+              model: "gpt-5-mini",
+              name: "reviewer",
+              type: "MODEL_WORKER",
+            },
+          ],
+        },
+      },
+      hasChanges: true,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    const statusSection = document.querySelector(
+      '[data-dashboard-action-row-section="statuses"]',
+    );
+    expect(statusSection).toBeTruthy();
+
+    expect(
+      within(statusSection as HTMLElement).getAllByRole("status"),
+    ).toHaveLength(1);
+    expect(
+      within(statusSection as HTMLElement).getByText("Unsaved changes"),
+    ).toBeTruthy();
+    expect(within(toolbar).queryAllByRole("status")).toHaveLength(0);
+
+    const toggle = screen.getByRole("button", {
+      name: "Leave factory graph editor",
+    });
+    expect(toggle.className).toContain("border-af-warning-border");
+    expect(toggle.className).toContain("bg-af-warning-surface");
+    expect(toggle.className).toContain("text-af-warning-text");
+  });
+
   it("confirms pending save changes before saving the graph draft", async () => {
     const saveAsync = vi
       .fn()

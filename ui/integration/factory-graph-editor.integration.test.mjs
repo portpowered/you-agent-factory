@@ -217,6 +217,65 @@ const editableGraphFactoryReplayLines = [
   }),
 ];
 
+function factoryGraphCardScope(page) {
+  return page.getByRole("article", { name: "Factory graph" });
+}
+
+async function expectConsolidatedDirtyGraphEditorChrome(page) {
+  const graphCard = factoryGraphCardScope(page);
+  await expect
+    .poll(
+      async () => {
+        const toggle = graphCard.getByRole("button", {
+          name: "Leave factory graph editor",
+        });
+        const toggleClassName = await toggle.getAttribute("class");
+        const unsavedStatusCount = await graphCard
+          .getByText("Unsaved changes")
+          .count();
+
+        return toggleClassName?.includes("border-af-warning-border") === true &&
+          unsavedStatusCount === 1
+          ? 1
+          : 0;
+      },
+      {
+        timeout: uiInteractionTimeoutMs,
+      },
+    )
+    .toBe(1);
+
+  const toolbar = graphCard.getByRole("region", {
+    name: "Factory graph editor tools",
+  });
+  expect(await toolbar.locator('[role="status"]').count()).toBe(0);
+}
+
+async function expectConsolidatedCleanGraphEditorChrome(page) {
+  const graphCard = factoryGraphCardScope(page);
+  await expect
+    .poll(
+      async () => {
+        const toggle = graphCard.getByRole("button", {
+          name: "Leave factory graph editor",
+        });
+        const toggleClassName = await toggle.getAttribute("class");
+        const activeStatusCount = await graphCard
+          .getByText("Editor mode active")
+          .count();
+
+        return toggleClassName?.includes("border-af-warning-border") !== true &&
+          activeStatusCount >= 1
+          ? 1
+          : 0;
+      },
+      {
+        timeout: uiInteractionTimeoutMs,
+      },
+    )
+    .toBe(1);
+}
+
 describe.sequential("factory graph editor browser integration", () => {
   let preview = null;
 
@@ -251,9 +310,12 @@ describe.sequential("factory graph editor browser integration", () => {
           .getByRole("button", { name: "Enter factory graph editor" })
           .click();
 
-        const toolbar = browserPage.page.getByRole("region", {
-          name: "Factory graph editor tools",
-        });
+        const toolbar = factoryGraphCardScope(browserPage.page).getByRole(
+          "region",
+          {
+            name: "Factory graph editor tools",
+          },
+        );
         await toolbar.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await toolbar
           .getByRole("button", { name: "Open add entity menu" })
@@ -547,9 +609,12 @@ describe.sequential("factory graph editor browser integration", () => {
           .getByRole("button", { name: "Enter factory graph editor" })
           .click();
 
-        const toolbar = browserPage.page.getByRole("region", {
-          name: "Factory graph editor tools",
-        });
+        const toolbar = factoryGraphCardScope(browserPage.page).getByRole(
+          "region",
+          {
+            name: "Factory graph editor tools",
+          },
+        );
         await toolbar.waitFor({
           state: "visible",
           timeout: uiInteractionTimeoutMs,
@@ -608,6 +673,8 @@ describe.sequential("factory graph editor browser integration", () => {
           )
           .toBe(true);
 
+        await expectConsolidatedDirtyGraphEditorChrome(browserPage.page);
+
         await saveChangesButton.focus();
         await saveChangesButton.press("Enter");
         const saveDialog = browserPage.page.getByRole("dialog", {
@@ -635,6 +702,11 @@ describe.sequential("factory graph editor browser integration", () => {
         await browserPage.page
           .getByText("Topology saved", { exact: true })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        await expectConsolidatedCleanGraphEditorChrome(browserPage.page);
+        expect(
+          await toolbar.getByRole("button", { name: "Discard changes" }).count(),
+        ).toBe(0);
 
         expect(saveRequests).toHaveLength(1);
         expect(saveRequests[0]?.sessionID).toBe("~default");
@@ -677,6 +749,86 @@ describe.sequential("factory graph editor browser integration", () => {
   );
 
   it(
+    "shows consolidated unsaved status chrome after a topology edit and clears it after discard",
+    async () => {
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: editableGraphFactoryDefinition,
+        eventLines: editableGraphFactoryReplayLines,
+      });
+      const browserPage = await openBrowserPage();
+
+      try {
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await server.replayCompleted;
+
+        await browserPage.page
+          .getByRole("button", { name: "Enter factory graph editor" })
+          .click();
+
+        const toolbar = factoryGraphCardScope(browserPage.page).getByRole(
+          "region",
+          {
+            name: "Factory graph editor tools",
+          },
+        );
+        await toolbar.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+
+        await toolbar
+          .getByRole("button", { name: "Open add entity menu" })
+          .click();
+        await browserPage.page
+          .getByLabel("Add graph entity menu")
+          .getByRole("button", { name: "Work type" })
+          .click();
+
+        const addDialog = browserPage.page.getByRole("dialog", {
+          name: "Add work type",
+        });
+        await addDialog.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await addDialog.getByLabel("Identifier").fill("essay");
+        await addDialog.getByLabel("First state").fill("queued");
+        await addDialog.getByRole("button", { name: "Add entity" }).click();
+
+        const discardChangesButton = toolbar.getByRole("button", {
+          name: "Discard changes",
+        });
+        await expect
+          .poll(async () => await discardChangesButton.isEnabled(), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe(true);
+
+        await expectConsolidatedDirtyGraphEditorChrome(browserPage.page);
+
+        await discardChangesButton.click();
+        await expectConsolidatedCleanGraphEditorChrome(browserPage.page);
+        expect(
+          await toolbar.getByRole("button", { name: "Discard changes" }).count(),
+        ).toBe(0);
+
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
+
+  it(
     "discards pending graph edits and leaves the factory graph editor without saving",
     async () => {
       const saveRequests = [];
@@ -700,9 +852,12 @@ describe.sequential("factory graph editor browser integration", () => {
           .getByRole("button", { name: "Enter factory graph editor" })
           .click();
 
-        const toolbar = browserPage.page.getByRole("region", {
-          name: "Factory graph editor tools",
-        });
+        const toolbar = factoryGraphCardScope(browserPage.page).getByRole(
+          "region",
+          {
+            name: "Factory graph editor tools",
+          },
+        );
         await toolbar.waitFor({
           state: "visible",
           timeout: uiInteractionTimeoutMs,
