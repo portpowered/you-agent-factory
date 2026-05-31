@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
+  getDefaultDashboardFlowAxisLegendPhaseItems,
 } from "./dashboard-flow-axis-legend";
-import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 
 describe("DashboardFlowAxisLegend", () => {
   it("starts minimized and reveals the dashboard flow semantic vocabulary when expanded", () => {
@@ -15,6 +16,7 @@ describe("DashboardFlowAxisLegend", () => {
       <DashboardFlowAxisLegend
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("en")}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems("en")}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems("en")}
       />,
     );
 
@@ -68,13 +70,14 @@ describe("DashboardFlowAxisLegend", () => {
       [messages.iconLabels["active-work"], "active-work"],
       [messages.iconLabels.exhaustion, "exhaustion"],
     ]) {
+      const iconEntry = legend.querySelector(`[data-legend-icon='${kind}']`);
       const icon = legendScope.getByRole("img", {
         name: messages.iconLabel(label),
       });
 
+      expect(iconEntry).toBeTruthy();
       expect(icon.getAttribute("data-graph-semantic-icon")).toBe(kind);
-      expect(legendScope.getByText(label)).toBeTruthy();
-      expect(legend.querySelector(`[data-legend-icon='${kind}']`)).toBeTruthy();
+      expect(within(iconEntry as HTMLElement).getByText(label)).toBeTruthy();
     }
 
     fireEvent.click(collapseButton);
@@ -97,6 +100,7 @@ describe("DashboardFlowAxisLegend", () => {
         className="relative top-0"
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("en").slice(0, 1)}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems("en").slice(0, 2)}
+        phaseItems={[]}
       />,
     );
 
@@ -130,6 +134,7 @@ describe("DashboardFlowAxisLegend", () => {
       <DashboardFlowAxisLegend
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("ja")}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems("ja")}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems("ja")}
         locale="ja"
       />,
     );
@@ -161,6 +166,7 @@ describe("DashboardFlowAxisLegend", () => {
       <DashboardFlowAxisLegend
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("fr-CA")}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems("fr-CA")}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems("fr-CA")}
         locale="fr-CA"
       />,
     );
@@ -183,5 +189,71 @@ describe("DashboardFlowAxisLegend", () => {
         name: messages.iconLabel(messages.iconLabels.workstation),
       }),
     ).toBeTruthy();
+  });
+
+  it("renders work-state lifecycle swatches with localized labels when expanded", () => {
+    const editorMessages = getFactoryGraphEditorMessages("en");
+    const messages = getDashboardFlowAxisLegendMessages("en");
+
+    render(
+      <DashboardFlowAxisLegend
+        edgeItems={[]}
+        iconItems={[]}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems("en")}
+      />,
+    );
+
+    expect(
+      screen.queryByLabelText(editorMessages.workStatePhaseLegendAriaLabel),
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: messages.expandToggleLabel("graph legend"),
+      }),
+    );
+
+    const phaseLegend = screen.getByLabelText(
+      editorMessages.workStatePhaseLegendAriaLabel,
+    );
+
+    expect(phaseLegend.getAttribute("aria-label")).toBe(
+      editorMessages.workStatePhaseLegendAriaLabel,
+    );
+    expect(screen.getByText("Initial")).toBeTruthy();
+    expect(screen.getByText("Processing")).toBeTruthy();
+    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(screen.getByText("Failed")).toBeTruthy();
+
+    const swatches = phaseLegend.querySelectorAll("[aria-hidden='true']");
+    expect(swatches.length).toBe(4);
+    expect(swatches[0]?.getAttribute("class")).toContain(
+      "border-af-info-border",
+    );
+    expect(swatches[0]?.getAttribute("class")).toContain("bg-af-info-surface");
+    expect(swatches[1]?.getAttribute("class")).toContain(
+      "border-af-warning-border",
+    );
+    expect(swatches[1]?.getAttribute("class")).toContain(
+      "bg-af-warning-surface",
+    );
+    expect(swatches[2]?.getAttribute("class")).toContain(
+      "border-af-success-border",
+    );
+    expect(swatches[2]?.getAttribute("class")).toContain(
+      "bg-af-success-surface",
+    );
+    expect(swatches[3]?.getAttribute("class")).toContain(
+      "border-af-danger-border",
+    );
+    expect(swatches[3]?.getAttribute("class")).toContain(
+      "bg-af-danger-surface",
+    );
+
+    for (const phase of ["INITIAL", "PROCESSING", "TERMINAL", "FAILED"]) {
+      expect(
+        phaseLegend.querySelector(`[data-legend-phase='${phase}']`),
+      ).toBeTruthy();
+    }
   });
 });

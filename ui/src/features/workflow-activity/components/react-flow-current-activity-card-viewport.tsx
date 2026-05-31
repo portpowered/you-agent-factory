@@ -32,6 +32,7 @@ import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
+  getDefaultDashboardFlowAxisLegendPhaseItems,
 } from "./dashboard-flow-axis-legend";
 import {
   GraphDropOverlay,
@@ -251,6 +252,7 @@ export function CurrentActivityGraphViewport({
         defaultExpanded={false}
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(locale)}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems(locale)}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems(locale)}
         locale={locale}
       />
       <section
