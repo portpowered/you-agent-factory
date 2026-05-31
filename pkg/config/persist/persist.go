@@ -1,5 +1,5 @@
 // Package persist is the canonical entrypoint for persisting factory definitions
-// to disk: named-factory create/replace, default-root definition replace, and
+// to disk: named-factory create/replace, split-layout replace, and
 // current-factory pointer read/write.
 package persist
 
@@ -46,12 +46,6 @@ func ReplaceNamedFactory(rootDir, name string, canonicalFactoryJSON []byte) (str
 // PersistNamedFactoryWithReport.
 func ReplaceNamedFactoryWithReport(rootDir, name string, canonicalFactoryJSON []byte) (*NamedFactoryPersistResult, error) {
 	return config.ReplaceNamedFactoryWithReport(rootDir, name, canonicalFactoryJSON)
-}
-
-// ReplaceDefaultFactoryDefinition atomically replaces the legacy single-file
-// factory.json at rootDir with payload, returning a restore function for rollback.
-func ReplaceDefaultFactoryDefinition(rootDir string, payload []byte) (func(), error) {
-	return config.ReplaceDefaultFactoryDefinition(rootDir, payload)
 }
 
 // ReplaceFactorySplitLayout atomically replaces an existing factory directory

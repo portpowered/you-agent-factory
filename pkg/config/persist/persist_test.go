@@ -170,39 +170,6 @@ func TestReplaceFactorySplitLayout_MatchesConfigPackage(t *testing.T) {
 	}
 }
 
-func TestReplaceDefaultFactoryDefinition_StagesAndRestores(t *testing.T) {
-	rootDir := t.TempDir()
-	initial := namedFactoryPayload(t, "legacy")
-	updated := namedFactoryPayload(t, "legacy-v2")
-
-	if err := os.WriteFile(filepath.Join(rootDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
-		t.Fatalf("WriteFile(factory.json): %v", err)
-	}
-
-	restore, err := persist.ReplaceDefaultFactoryDefinition(rootDir, updated)
-	if err != nil {
-		t.Fatalf("persist.ReplaceDefaultFactoryDefinition: %v", err)
-	}
-
-	got, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
-	if err != nil {
-		t.Fatalf("ReadFile(factory.json): %v", err)
-	}
-	if string(got) != string(updated) {
-		t.Fatalf("factory.json after replace = %q, want updated payload", string(got))
-	}
-
-	restore()
-
-	got, err = os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
-	if err != nil {
-		t.Fatalf("ReadFile(factory.json) after restore: %v", err)
-	}
-	if string(got) != string(initial) {
-		t.Fatalf("factory.json after restore = %q, want initial payload", string(got))
-	}
-}
-
 func TestIsInvalidNamedFactory_DetectsPersistValidationFailure(t *testing.T) {
 	rootDir := t.TempDir()
 
