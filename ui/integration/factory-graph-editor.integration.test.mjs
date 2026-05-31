@@ -320,9 +320,9 @@ describe.sequential("factory graph editor browser integration", () => {
         await toolbar
           .getByRole("button", { name: "Open add entity menu" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        await expect(toolbar.getByRole("button", { name: "Discard changes" })).toHaveCount(
-          0,
-        );
+        expect(
+          await toolbar.getByRole("button", { name: "Discard changes" }).count(),
+        ).toBe(0);
 
         expectNoBrowserErrors(
           browserPage.pageErrors,
@@ -897,9 +897,9 @@ describe.sequential("factory graph editor browser integration", () => {
           .toBe(true);
 
         await discardChangesButton.click();
-        await expect(toolbar.getByRole("button", { name: "Discard changes" })).toHaveCount(
-          0,
-        );
+        expect(
+          await toolbar.getByRole("button", { name: "Discard changes" }).count(),
+        ).toBe(0);
 
         await browserPage.page
           .getByRole("button", { name: "Leave factory graph editor" })
