@@ -5,7 +5,7 @@ import type {
   CurrentFactoryDefinitionError,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import { useSaveCurrentFactory } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
@@ -54,7 +54,7 @@ export function useSaveEditableWorkerConfiguration({
     null,
   );
   const saveInFlightRef = useRef(false);
-  const mutation = useSaveCurrentFactory();
+  const { isPending, saveAsync } = useFactoryDocumentSave();
 
   useResetExitedSaveScope({
     scopeKey,
@@ -73,7 +73,7 @@ export function useSaveEditableWorkerConfiguration({
     editableConfigurationState?.status === "ready" &&
     editableConfigurationState.canSave &&
     editableConfigurationState.pendingFactoryDefinition != null &&
-    !mutation.isPending;
+    !isPending;
 
   const saveState = useMemo(
     () =>
@@ -115,9 +115,9 @@ export function useSaveEditableWorkerConfiguration({
       value: editableConfigurationState.pendingFactoryDefinition,
     };
     try {
-      await mutation.mutateAsync({
+      await saveAsync({
         baseVersion: request.baseVersion,
-        factoryDefinition: request.value,
+        factory: request.value,
       });
       request.markChangesSaved?.();
       setSubmittingScopeKey(null);
@@ -139,7 +139,7 @@ export function useSaveEditableWorkerConfiguration({
   }, [
     editableConfigurationState,
     messages.editableConfigurationSaveFallbackError,
-    mutation,
+    saveAsync,
     scopeKey,
   ]);
 

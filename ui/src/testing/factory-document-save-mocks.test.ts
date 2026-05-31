@@ -11,7 +11,7 @@ describe("factory-document-save-mocks", () => {
   it("mockFactoryDocumentSave exposes idle success and error mutation seams", async () => {
     const success = mockFactoryDocumentSave({ mode: "success" });
     expect(success.isPending).toBe(false);
-    await expect(success.mutateAsync({} as never)).resolves.toEqual({
+    await expect(success.saveAsync({} as never)).resolves.toEqual({
       name: "Current Factory",
       version: {
         logical: "7",
@@ -26,7 +26,7 @@ describe("factory-document-save-mocks", () => {
       mode: "error",
       errorMode: "factory_not_idle",
     });
-    await expect(error.mutateAsync({} as never)).rejects.toBeInstanceOf(
+    await expect(error.saveAsync({} as never)).rejects.toBeInstanceOf(
       CurrentFactoryDefinitionError,
     );
   });
@@ -57,16 +57,16 @@ describe("factory-document-save-mocks", () => {
       resolvedDocument,
     });
 
-    await expect(success.mutateAsync({} as never)).resolves.toEqual(
+    await expect(success.saveAsync({} as never)).resolves.toEqual(
       resolvedDocument,
     );
   });
 
-  it("mockPendingFactoryDocumentSave keeps mutateAsync pending until resolved", async () => {
+  it("mockPendingFactoryDocumentSave keeps saveAsync pending until resolved", async () => {
     const pending = mockPendingFactoryDocumentSave();
     expect(pending.saveMutation.isPending).toBe(true);
 
-    const savePromise = pending.mutateAsync({} as never);
+    const savePromise = pending.saveAsync({} as never);
     pending.deferred.resolve({
       name: "Saved",
       version: { logical: "8", physical: "2026-05-23T15:52:00.001Z" },

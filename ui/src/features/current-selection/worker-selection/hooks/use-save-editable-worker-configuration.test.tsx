@@ -8,7 +8,7 @@ import {
   mockPendingFactoryDocumentSave,
 } from "../../../../testing/factory-document-save-mocks";
 import { workerFieldValidationTarget } from "../../../../testing/factory-validation-target-fixtures";
-import * as currentFactoryHooks from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { useSaveEditableWorkerConfiguration } from "./use-save-editable-worker-configuration";
@@ -25,10 +25,11 @@ describe("useSaveEditableWorkerConfiguration", () => {
       mode: "error",
       rejectedError: "network unavailable",
     });
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue(
-      saveMutation as never,
-    );
-    const mutateAsync = saveMutation.mutateAsync;
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+    const saveAsync = saveMutation.saveAsync;
 
     const { result } = renderHook(
       () =>
@@ -50,12 +51,12 @@ describe("useSaveEditableWorkerConfiguration", () => {
         status: "error",
       });
     });
-    expect(mutateAsync).toHaveBeenCalledWith({
+    expect(saveAsync).toHaveBeenCalledWith({
       baseVersion: {
         logical: "7",
         physical: "2026-05-23T15:52:00Z",
       },
-      factoryDefinition: {
+      factory: {
         name: "Current Factory",
         workers: [
           {
@@ -93,10 +94,11 @@ describe("useSaveEditableWorkerConfiguration", () => {
         workTypes: [],
       },
     });
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue(
-      saveMutation as never,
-    );
-    const mutateAsync = saveMutation.mutateAsync;
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+    const saveAsync = saveMutation.saveAsync;
 
     const { result } = renderHook(
       () =>
@@ -118,12 +120,12 @@ describe("useSaveEditableWorkerConfiguration", () => {
       expect(result.current.saveState).toEqual({ status: "success" });
     });
     expect(markChangesSaved).toHaveBeenCalledTimes(1);
-    expect(mutateAsync).toHaveBeenCalledWith({
+    expect(saveAsync).toHaveBeenCalledWith({
       baseVersion: {
         logical: "7",
         physical: "2026-05-23T15:52:00Z",
       },
-      factoryDefinition: {
+      factory: {
         name: "Current Factory",
         workers: [
           {
@@ -140,10 +142,11 @@ describe("useSaveEditableWorkerConfiguration", () => {
 
   it("ignores repeated save requests while the current save is still in flight", async () => {
     const pendingSave = mockPendingFactoryDocumentSave();
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue(
-      pendingSave.saveMutation as never,
-    );
-    const mutateAsync = pendingSave.mutateAsync;
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(pendingSave.saveMutation as never);
+    const saveAsync = pendingSave.saveAsync;
     const deferredSave = pendingSave.deferred;
 
     const { result } = renderHook(
@@ -162,7 +165,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
       await result.current.save();
     });
 
-    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(saveAsync).toHaveBeenCalledTimes(1);
     expect(result.current.saveState).toEqual({ status: "submitting" });
 
     deferredSave.resolve({
@@ -190,9 +193,10 @@ describe("useSaveEditableWorkerConfiguration", () => {
       mode: "error",
       errorMode: "stale_version",
     });
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue(
-      saveMutation as never,
-    );
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
 
     const { result } = renderHook(
       () =>
@@ -218,7 +222,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
   });
 
   it("clears save feedback when the selected worker scope changes", async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({
+    const saveAsync = vi.fn().mockResolvedValue({
       name: "Current Factory",
       version: {
         logical: "8",
@@ -234,9 +238,12 @@ describe("useSaveEditableWorkerConfiguration", () => {
       ],
       workstations: [],
     });
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
       isPending: false,
-      mutateAsync,
+      saveAsync,
     } as never);
 
     const { rerender, result } = renderHook(
@@ -267,7 +274,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
   });
 
   it("maps targeted save validation failures onto worker field errors", async () => {
-    const mutateAsync = vi.fn().mockRejectedValue(
+    const saveAsync = vi.fn().mockRejectedValue(
       new CurrentFactoryDefinitionError("Model provider is not supported.", {
         code: "BAD_REQUEST",
         status: 400,
@@ -279,9 +286,12 @@ describe("useSaveEditableWorkerConfiguration", () => {
         ],
       }),
     );
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
       isPending: false,
-      mutateAsync,
+      saveAsync,
     } as never);
 
     const { result } = renderHook(
@@ -319,16 +329,19 @@ describe("useSaveEditableWorkerConfiguration", () => {
     ["factory.workers[0].model", "model"],
   ] as const)("maps save validation target %s onto %s", async (_field, expectedField) => {
     const message = `Invalid ${expectedField}.`;
-    const mutateAsync = vi.fn().mockRejectedValue(
+    const saveAsync = vi.fn().mockRejectedValue(
       new CurrentFactoryDefinitionError(message, {
         code: "BAD_REQUEST",
         status: 400,
         targets: [workerFieldValidationTarget(expectedField, message)],
       }),
     );
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
       isPending: false,
-      mutateAsync,
+      saveAsync,
     } as never);
 
     const { result } = renderHook(
