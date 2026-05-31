@@ -122,7 +122,7 @@ describe("factory graph editor toolbar controls", () => {
     ).toBeTruthy();
   });
 
-  it("renders the confirmation dialog through the shared dialog pattern", async () => {
+  it("renders the confirmation dialog portaled to document.body", async () => {
     render(
       <FactoryGraphEditorConfirmationDialog
         cancelLabel="Cancel removal"
@@ -139,6 +139,7 @@ describe("factory graph editor toolbar controls", () => {
     const dialog = screen.getByRole("dialog", {
       name: "Remove review workstation?",
     });
+    expect(document.body.contains(dialog)).toBe(true);
     expect(
       within(dialog).getByRole("button", { name: "Cancel removal" }),
     ).toBeTruthy();

@@ -1,11 +1,16 @@
 import type { ReactNode } from "react";
 
-import { DashboardMutationDialog } from "../../workflow-activity/components/mutation-dialog";
 import {
   Button,
   DashboardActionRow,
   DashboardActionButton,
   DashboardStatusPill,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -482,18 +487,32 @@ export function FactoryGraphEditorConfirmationDialog({
   onConfirm: () => void;
   title: string;
 }) {
-  if (!isOpen) {
-    return null;
-  }
+  const handleOpenChange = (open: boolean) => {
+    if (!open && !isBusy) {
+      onCancel();
+    }
+  };
 
   return (
-    <DashboardMutationDialog
-      closeDisabled={isBusy}
-      description={description}
-      onClose={onCancel}
-      title={title}
-      footer={
-        <>
+    <Dialog onOpenChange={handleOpenChange} open={isOpen}>
+      <DialogContent
+        closeDisabled={isBusy}
+        onEscapeKeyDown={(event) => {
+          if (isBusy) {
+            event.preventDefault();
+          }
+        }}
+        onInteractOutside={(event) => {
+          if (isBusy) {
+            event.preventDefault();
+          }
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
           <Button
             disabled={isBusy}
             onClick={onCancel}
@@ -505,10 +524,8 @@ export function FactoryGraphEditorConfirmationDialog({
           <Button onClick={onConfirm} tone={confirmTone} type="button">
             {confirmLabel}
           </Button>
-        </>
-      }
-    >
-      <div />
-    </DashboardMutationDialog>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
