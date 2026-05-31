@@ -391,6 +391,11 @@ export function createMockEditableFactoryGraph(
       edges: [],
       nodes: [],
     },
+    documentSaveControls: {
+      beginConfirmation: vi.fn(),
+      cancelConfirmation: vi.fn(),
+      clearSaveFeedback: vi.fn(),
+    },
     saveMutation: {
       error: null,
       isPending: false,

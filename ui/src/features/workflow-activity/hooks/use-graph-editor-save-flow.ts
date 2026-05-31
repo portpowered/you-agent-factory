@@ -1,5 +1,10 @@
 import { useCallback, useState } from "react";
 
+import {
+  isFactoryDocumentSaveConfirming,
+  type FactoryDocumentSaveState,
+} from "../../current-selection/base/hooks/factory-document-save-types";
+import type { EditableFactoryGraphDocumentSaveControls } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
@@ -19,6 +24,8 @@ export type GraphEditorTransientControllerReset = {
 export function useGraphEditorSaveFlow({
   activeWorkCount,
   addEntityController,
+  documentSave,
+  documentSaveControls,
   draftState,
   editableGraph,
   editorUnavailableClassifierWorkstationName,
@@ -30,6 +37,8 @@ export function useGraphEditorSaveFlow({
 }: {
   activeWorkCount: number;
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
+  documentSave: FactoryDocumentSaveState;
+  documentSaveControls: EditableFactoryGraphDocumentSaveControls;
   draftState: EditableFactoryGraphViewModel["draftState"];
   editableGraph: EditableFactoryGraphViewModel;
   editorUnavailableClassifierWorkstationName?: string;
@@ -40,10 +49,10 @@ export function useGraphEditorSaveFlow({
   transientControllerReset: GraphEditorTransientControllerReset;
 }) {
   const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
-  const [isConfirmingSave, setIsConfirmingSave] = useState(false);
   const [saveAttemptRevision, setSaveAttemptRevision] = useState(0);
   const hasActiveWork = activeWorkCount > 0;
   const isStaleDraft = editableGraph.saveState.isStale;
+  const isConfirmingSave = isFactoryDocumentSaveConfirming(documentSave);
   const canSaveDraft =
     editableGraph.saveState.canSave &&
     editorUnavailableClassifierWorkstationName === undefined &&
@@ -56,16 +65,28 @@ export function useGraphEditorSaveFlow({
       : undefined;
   const saveSummary = buildFactoryGraphSaveSummary(draftState.draft, locale);
 
+  const setIsConfirmingSave = useCallback(
+    (open: boolean) => {
+      if (open) {
+        documentSaveControls.beginConfirmation();
+        return;
+      }
+      documentSaveControls.cancelConfirmation();
+    },
+    [documentSaveControls],
+  );
+
   const resetTransientEditorState = useCallback(() => {
     addEntityController.reset();
     saveEditableDefinition.reset();
+    documentSaveControls.clearSaveFeedback();
     transientControllerReset.setConnectionNotice(null);
-    setIsConfirmingSave(false);
     setIsConfirmingLeaveEditor(false);
     transientControllerReset.setPendingRemovalEdgeId(null);
     transientControllerReset.setPendingRemovalNodeId(null);
   }, [
     addEntityController,
+    documentSaveControls,
     saveEditableDefinition,
     transientControllerReset,
   ]);
@@ -97,21 +118,25 @@ export function useGraphEditorSaveFlow({
       try {
         const didSave = await editableGraph.actions.save();
         if (!didSave) {
-          setIsConfirmingSave(false);
+          documentSaveControls.clearSaveFeedback();
           return false;
         }
-        setIsConfirmingSave(false);
         setIsConfirmingLeaveEditor(false);
         if (leaveAfterSave) {
           leaveEditor();
         }
         return true;
       } catch {
-        setIsConfirmingSave(false);
+        documentSaveControls.clearSaveFeedback();
         return false;
       }
     },
-    [canSaveDraft, editableGraph.actions, leaveEditor],
+    [
+      canSaveDraft,
+      documentSaveControls,
+      editableGraph.actions,
+      leaveEditor,
+    ],
   );
 
   const handleSaveDraft = useCallback(
@@ -124,6 +149,8 @@ export function useGraphEditorSaveFlow({
   }, [saveDraft]);
 
   return {
+    beginSaveConfirmation: documentSaveControls.beginConfirmation,
+    cancelSaveConfirmation: documentSaveControls.cancelConfirmation,
     canSaveDraft,
     handleDiscardEditorChanges,
     handleDiscardPendingChanges,

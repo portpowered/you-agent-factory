@@ -77,6 +77,11 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
       resetDraft: vi.fn(),
       validationErrors: [],
     },
+    documentSaveControls: {
+      beginConfirmation: vi.fn(),
+      cancelConfirmation: vi.fn(),
+      clearSaveFeedback: vi.fn(),
+    },
     saveState: {
       canSave: false,
       documentSave: { status: "idle" },

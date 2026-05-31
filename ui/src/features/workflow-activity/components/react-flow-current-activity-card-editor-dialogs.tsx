@@ -1,3 +1,4 @@
+import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/hooks/factory-document-save-types";
 import { FactoryGraphEditorAddEntityDialog } from "../../factory-graph-editor/components/factory-graph-editor-add-dialog";
 import { FactoryGraphEditorConfirmationDialog } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/components/factory-graph-editor-leave-dialog";
@@ -70,11 +71,17 @@ export function CurrentActivityGraphEditorDialogs({
         cancelLabel={messages.leaveDialogKeepEditing}
         confirmLabel={messages.saveConfirmAction}
         description={editor.saveSummary.description}
-        isBusy={editor.saveEditableDefinition.isPending}
+        isBusy={
+          editor.saveEditableDefinition.isPending ||
+          isFactoryDocumentSaveSubmitting(editor.documentSave)
+        }
         isOpen={editor.isConfirmingSave}
         onCancel={() => {
-          if (!editor.saveEditableDefinition.isPending) {
-            editor.setIsConfirmingSave(false);
+          if (
+            !editor.saveEditableDefinition.isPending &&
+            !isFactoryDocumentSaveSubmitting(editor.documentSave)
+          ) {
+            editor.cancelSaveConfirmation();
           }
         }}
         onConfirm={() => {

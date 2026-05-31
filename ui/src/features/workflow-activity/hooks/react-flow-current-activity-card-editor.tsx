@@ -63,6 +63,8 @@ export function useCurrentActivityGraphEditor(
   const saveFlow = useGraphEditorSaveFlow({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     addEntityController,
+    documentSave: editableGraph.saveState.documentSave,
+    documentSaveControls: editableGraph.documentSaveControls,
     draftState,
     editableGraph,
     editorUnavailableClassifierWorkstationName:
@@ -86,7 +88,9 @@ export function useCurrentActivityGraphEditor(
     addMenuActions: session.addMenuActions,
     blockedRemovalReason: controllers.blockedRemovalReason,
     canInteractWithEditor: session.canInteractWithEditor,
+    cancelSaveConfirmation: saveFlow.cancelSaveConfirmation,
     canSaveDraft: saveFlow.canSaveDraft,
+    documentSave: editableGraph.saveState.documentSave,
     connectionNotice: controllers.connectionNotice,
     currentFactoryDefinition: session.currentFactoryDefinition,
     draftState,

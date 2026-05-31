@@ -5,6 +5,12 @@ export type EditableFactoryGraphSaveMutation = Pick<
   ReturnType<typeof useFactoryDocumentSave>,
   "error" | "isPending" | "reset"
 >;
+
+export interface EditableFactoryGraphDocumentSaveControls {
+  beginConfirmation: () => void;
+  cancelConfirmation: () => void;
+  clearSaveFeedback: () => void;
+}
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
@@ -64,6 +70,7 @@ export interface EditableFactoryGraphViewModel {
     documentSave: FactoryDocumentSaveState;
     isStale: boolean;
   };
+  documentSaveControls: EditableFactoryGraphDocumentSaveControls;
   saveMutation: EditableFactoryGraphSaveMutation;
   validationState: {
     errors: FactoryGraphDraftValidationError[];

@@ -107,6 +107,34 @@ describe("useEditableFactoryGraph", () => {
     });
   });
 
+  it("drives save confirmation from scoped document save state", () => {
+    setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
+    );
+    hookState.draftState.hasChanges = true;
+
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument: draftWorkstationFactoryDocument,
+      factoryDocumentScopeKey: "session-graph",
+    });
+
+    act(() => {
+      result.current.documentSaveControls.beginConfirmation();
+    });
+
+    expect(result.current.saveState.documentSave).toEqual({
+      status: "confirming",
+    });
+
+    act(() => {
+      result.current.documentSaveControls.cancelConfirmation();
+    });
+
+    expect(result.current.saveState.documentSave).toEqual({
+      status: "idle",
+    });
+  });
+
   it("delegates save to scoped factory document save", async () => {
     const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
       mockFactoryDocumentSave({ mode: "success" }),

@@ -80,6 +80,11 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       discard: fixtureState.draftState.resetDraft,
       save: vi.fn(),
     },
+    documentSaveControls: {
+      beginConfirmation: vi.fn(),
+      cancelConfirmation: vi.fn(),
+      clearSaveFeedback: vi.fn(),
+    },
     draftState: fixtureState.draftState,
     saveMutation: {
       error: fixtureState.saveEditableDefinition.error,

@@ -12,6 +12,12 @@ export type FactoryDocumentSaveState<
       status: "error";
     };
 
+export function isFactoryDocumentSaveConfirming(
+  saveState: FactoryDocumentSaveState,
+): boolean {
+  return saveState.status === "confirming";
+}
+
 export function isFactoryDocumentSaveSubmitting(
   saveState: FactoryDocumentSaveState,
 ): boolean {

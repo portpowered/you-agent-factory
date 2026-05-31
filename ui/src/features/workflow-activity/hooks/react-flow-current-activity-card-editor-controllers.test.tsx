@@ -433,6 +433,11 @@ function createEditableGraph(
       edges: [],
       nodes: [],
     },
+    documentSaveControls: {
+      beginConfirmation: vi.fn(),
+      cancelConfirmation: vi.fn(),
+      clearSaveFeedback: vi.fn(),
+    },
     saveState: {
       canSave: false,
       documentSave: { status: "idle" },

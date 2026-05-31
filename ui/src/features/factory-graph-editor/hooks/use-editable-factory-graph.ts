@@ -98,6 +98,7 @@ export function useEditableFactoryGraph(
       pendingFactoryDefinition: draftState.pendingFactoryDefinition,
     },
     projection,
+    documentSaveControls: saveController.documentSaveControls,
     saveMutation: saveController.saveMutation,
     saveState: {
       canSave: saveController.canSave,
@@ -371,16 +372,21 @@ function useEditableFactoryGraphSaveController({
   }, [scopedDocumentSave.clearSaveFeedback, scopedDocumentSave.reset]);
   const save = useSaveEditableFactoryGraph({
     canSave,
+    confirmSave: scopedDocumentSave.confirmSave,
     draftState,
     factoryDocumentScopeKey,
     locale,
-    saveNow: scopedDocumentSave.saveNow,
     setBlockedOperation,
   });
 
   return {
     canSave,
     documentSave,
+    documentSaveControls: {
+      beginConfirmation: scopedDocumentSave.beginConfirmation,
+      cancelConfirmation: scopedDocumentSave.cancelConfirmation,
+      clearSaveFeedback: scopedDocumentSave.clearSaveFeedback,
+    },
     isStale,
     resetSaveState,
     save,
@@ -394,17 +400,17 @@ function useEditableFactoryGraphSaveController({
 
 function useSaveEditableFactoryGraph({
   canSave,
+  confirmSave,
   draftState,
   factoryDocumentScopeKey,
   locale,
-  saveNow,
   setBlockedOperation,
 }: {
   canSave: boolean;
+  confirmSave: ReturnType<typeof useScopedFactoryDocumentSave>["confirmSave"];
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   factoryDocumentScopeKey: string | null;
   locale?: string | null;
-  saveNow: ReturnType<typeof useScopedFactoryDocumentSave>["saveNow"];
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
@@ -429,7 +435,7 @@ function useSaveEditableFactoryGraph({
     }
 
     let didSave = false;
-    await saveNow({
+    await confirmSave({
       baseVersion: draftState.latestDocument.version,
       factory: saveInput.value,
       onSaved: () => {
@@ -442,10 +448,10 @@ function useSaveEditableFactoryGraph({
     return didSave;
   }, [
     canSave,
+    confirmSave,
     draftState,
     factoryDocumentScopeKey,
     locale,
-    saveNow,
     setBlockedOperation,
   ]);
 }

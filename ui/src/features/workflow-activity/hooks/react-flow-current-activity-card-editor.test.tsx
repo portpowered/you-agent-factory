@@ -107,6 +107,7 @@ const hookState = vi.hoisted(() => ({
     saveAsync: vi.fn(async () => undefined),
   },
   unsupportedFromDefinition: undefined as string | undefined,
+  documentSave: { status: "idle" as const },
   saveStateIsStale: false,
 }));
 
@@ -134,6 +135,17 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
         return true;
       },
     },
+    documentSaveControls: {
+      beginConfirmation: vi.fn(() => {
+        hookState.documentSave = { status: "confirming" };
+      }),
+      cancelConfirmation: vi.fn(() => {
+        hookState.documentSave = { status: "idle" };
+      }),
+      clearSaveFeedback: vi.fn(() => {
+        hookState.documentSave = { status: "idle" };
+      }),
+    },
     draftState: hookState.draftState,
     saveMutation: {
       error: hookState.saveEditableDefinition.error,
@@ -152,7 +164,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
               "The factory definition changed while you were editing. Refresh or discard your draft before saving.",
             status: "warning",
           }
-        : { status: "idle" },
+        : hookState.documentSave,
       isStale: hookState.saveStateIsStale,
     },
   }),
@@ -243,6 +255,7 @@ describe("useCurrentActivityGraphEditor", () => {
       reset: vi.fn(),
       saveAsync: vi.fn(async () => undefined),
     };
+    hookState.documentSave = { status: "idle" };
     hookState.unsupportedFromDefinition = undefined;
     hookState.saveStateIsStale = false;
   });
@@ -360,13 +373,15 @@ describe("useCurrentActivityGraphEditor", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     snapshot.runtime.in_flight_dispatch_count = 0;
 
-    const { result } = renderHook(() =>
+    const { result, rerender } = renderHook(() =>
       useCurrentActivityGraphEditor(snapshot),
     );
 
     act(() => {
       result.current.setIsConfirmingSave(true);
     });
+    rerender();
+    expect(result.current.isConfirmingSave).toBe(true);
 
     let didSave = true;
     await act(async () => {
@@ -374,6 +389,7 @@ describe("useCurrentActivityGraphEditor", () => {
     });
 
     expect(didSave).toBe(false);
+    rerender();
     expect(result.current.isConfirmingSave).toBe(false);
   });
 
@@ -390,7 +406,6 @@ describe("useCurrentActivityGraphEditor", () => {
       result.current.handleEditorModeToggle();
       result.current.setActiveTool("connect");
       result.current.setIsConfirmingLeaveEditor(true);
-      result.current.setIsConfirmingSave(true);
     });
 
     let didSave = false;
