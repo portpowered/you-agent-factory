@@ -92,9 +92,9 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it("renders worker and work-type specific fields", () => {
+  it("renders model worker fields and emits onChange payloads", () => {
     const workerChange = vi.fn();
-    const { rerender } = renderDialog({
+    renderDialog({
       draft: {
         argsText: "",
         command: "",
@@ -109,6 +109,12 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       },
       onChange: workerChange,
     });
+
+    expect(screen.getByRole("combobox", { name: "Worker type" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Model provider" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Model" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Command" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Args" })).toBeNull();
 
     fireEvent.change(screen.getByRole("combobox", { name: "Model provider" }), {
       target: { value: "CURSOR" },
@@ -143,19 +149,113 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         "Optional. Leave blank to use the provider default model identifier.",
       ),
     ).toBeTruthy();
+  });
 
-    const workTypeChange = vi.fn();
+  it("toggles script worker fields and clears deselected values", () => {
+    const workerChange = vi.fn();
+    const { rerender } = renderDialog({
+      draft: {
+        argsText: "",
+        command: "",
+        kind: "worker",
+        model: "gpt-5.5",
+        modelProvider: "CURSOR",
+        name: "runner",
+        workerType: "MODEL_WORKER",
+      },
+      errors: {
+        modelProvider: "Select a model provider for the new worker.",
+      },
+      onChange: workerChange,
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Worker type" }), {
+      target: { value: "SCRIPT_WORKER" },
+    });
+
+    expect(workerChange).toHaveBeenCalledWith({
+      argsText: "",
+      command: "",
+      kind: "worker",
+      model: "",
+      modelProvider: "",
+      name: "runner",
+      workerType: "SCRIPT_WORKER",
+    });
+
     rerender(
       <FactoryGraphEditorAddEntityDialog
         currentFactoryDefinition={currentFactoryDefinition}
-        draft={{ initialStateName: "", kind: "work-type", name: "article" }}
-        errors={{ initialStateName: "Enter the first work-state identifier." }}
+        draft={{
+          argsText: "",
+          command: "",
+          kind: "worker",
+          model: "",
+          modelProvider: "",
+          name: "runner",
+          workerType: "SCRIPT_WORKER",
+        }}
+        errors={{}}
         isOpen={true}
-        onChange={workTypeChange}
+        onChange={workerChange}
         onClose={vi.fn()}
         onSubmit={vi.fn()}
       />,
     );
+
+    expect(screen.queryByRole("combobox", { name: "Model provider" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Model" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Command" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Args" })).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Command" }), {
+      target: { value: "./run.sh" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Args" }), {
+      target: { value: "--verbose\n--dry-run" },
+    });
+
+    expect(workerChange).toHaveBeenNthCalledWith(2, {
+      argsText: "",
+      command: "./run.sh",
+      kind: "worker",
+      model: "",
+      modelProvider: "",
+      name: "runner",
+      workerType: "SCRIPT_WORKER",
+    });
+    expect(workerChange).toHaveBeenNthCalledWith(3, {
+      argsText: "--verbose\n--dry-run",
+      command: "",
+      kind: "worker",
+      model: "",
+      modelProvider: "",
+      name: "runner",
+      workerType: "SCRIPT_WORKER",
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Worker type" }), {
+      target: { value: "MODEL_WORKER" },
+    });
+
+    expect(workerChange).toHaveBeenCalledWith({
+      argsText: "",
+      command: "",
+      kind: "worker",
+      model: "",
+      modelProvider: "",
+      name: "runner",
+      workerType: "MODEL_WORKER",
+    });
+  });
+
+  it("renders work-type specific fields", () => {
+    const workTypeChange = vi.fn();
+    renderDialog({
+      draft: { initialStateName: "", kind: "work-type", name: "article" },
+      errors: { initialStateName: "Enter the first work-state identifier." },
+      onChange: workTypeChange,
+    });
 
     fireEvent.change(screen.getByRole("textbox", { name: "First state" }), {
       target: { value: "drafting" },
