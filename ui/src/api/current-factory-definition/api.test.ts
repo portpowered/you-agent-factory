@@ -2,7 +2,7 @@ import {
   factoryRuntimeNotIdleTarget,
   staleFactoryVersionTarget,
 } from "../../testing/factory-validation-target-fixtures";
-import { sessionFactoryOperatorErrorMessages } from "../session-factory/operator-errors";
+import { sessionFactoryOperatorErrorMessages } from "../session-factory/errors";
 import {
   CURRENT_FACTORY_EDITOR_SAVE_MODE,
   CurrentFactoryDefinitionError,
