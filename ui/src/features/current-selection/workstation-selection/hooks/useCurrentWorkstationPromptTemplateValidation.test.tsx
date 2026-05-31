@@ -172,6 +172,70 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       });
     });
   });
+
+  it("surfaces not-found failures from the prompt-template validation query", async () => {
+    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockRejectedValue(
+      {
+        code: "NOT_FOUND",
+        message: "Current factory workstation not found.",
+        name: "CurrentFactoryPromptTemplateAPIError",
+      },
+    );
+
+    const { result } = renderHook(
+      () =>
+        useCurrentWorkstationPromptTemplateValidation(
+          "Review",
+          "Use {{ .Prompt }}",
+        ),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        data: undefined,
+        error: {
+          code: "NOT_FOUND",
+          message: "Current factory workstation not found.",
+        },
+        isPending: false,
+        status: "error",
+      });
+    });
+  });
+
+  it("surfaces network failures from the prompt-template validation query", async () => {
+    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockRejectedValue(
+      {
+        code: "NETWORK_ERROR",
+        message:
+          "The dashboard could not reach the current factory prompt-template validation API.",
+        name: "CurrentFactoryPromptTemplateAPIError",
+      },
+    );
+
+    const { result } = renderHook(
+      () =>
+        useCurrentWorkstationPromptTemplateValidation(
+          "Review",
+          "Use {{ .Prompt }}",
+        ),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        data: undefined,
+        error: {
+          code: "NETWORK_ERROR",
+          message:
+            "The dashboard could not reach the current factory prompt-template validation API.",
+        },
+        isPending: false,
+        status: "error",
+      });
+    });
+  });
 });
 
 function createQueryClientWrapper() {
