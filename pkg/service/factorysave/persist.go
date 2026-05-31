@@ -41,9 +41,7 @@ func persistUpsertNamedFactoryPayload(
 	nextVersion factoryapi.HybridLogicalTimestamp,
 	replaceExisting bool,
 ) (string, error) {
-	sanitized := request
-	sanitized.Version = nil
-	payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
+	prepared, err := preparePersistedFactoryPayload(string(request.Name), request, nextVersion)
 	if err != nil {
 		return "", err
 	}
@@ -52,12 +50,12 @@ func persistUpsertNamedFactoryPayload(
 		if err != nil {
 			return "", mapUpsertNamedFactoryPersistError(err)
 		}
-		if _, err := persistFactoryLayoutAtDir(targetDir, payload); err != nil {
+		if _, err := persistFactoryLayoutAtDir(targetDir, prepared); err != nil {
 			return "", mapUpsertNamedFactoryPersistError(err)
 		}
 		return targetDir, nil
 	}
-	factoryDir, err := configpersist.PersistNamedFactory(sessionRootDir, string(request.Name), payload)
+	factoryDir, err := configpersist.PersistNamedFactoryWithPrepared(sessionRootDir, string(request.Name), prepared)
 	if err != nil {
 		return "", mapUpsertNamedFactoryPersistError(err)
 	}
@@ -68,10 +66,10 @@ func resolveNamedFactoryLayoutTargetDir(sessionRootDir string, name factoryapi.F
 	return factoryconfig.ResolveNamedFactoryDir(sessionRootDir, string(name))
 }
 
-func persistFactoryLayoutAtDir(targetDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
-	result, err := configpersist.ReplaceFactoryLayoutAtDirWithResult(
+func persistFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	result, err := configpersist.ReplaceFactoryLayoutAtDirWithPreparedWithResult(
 		targetDir,
-		payload,
+		prepared,
 		configpersist.DefaultFactoryLayoutReplaceOptions(targetDir),
 	)
 	if err != nil {

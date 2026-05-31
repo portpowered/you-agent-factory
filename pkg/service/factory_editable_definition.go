@@ -279,8 +279,8 @@ func (h factorySaveHost) ActivateSessionEditableFactory(
 	return h.FactoryService.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
 }
 
-func (h factorySaveHost) ReplaceFactoryLayoutAtDir(targetDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
-	return h.FactoryService.replaceFactoryLayoutAtDir(targetDir, payload)
+func (h factorySaveHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	return h.FactoryService.replaceFactoryLayoutAtDir(targetDir, prepared)
 }
 
 func (h factorySaveHost) CurrentFactoryDefinitionVersionAtRoot(rootDir string, name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
@@ -346,10 +346,10 @@ func (fs *FactoryService) activateSessionEditableFactory(
 	return fs.replaceSessionRuntime(ctx, session, runtimeName, replacement)
 }
 
-func (fs *FactoryService) replaceFactoryLayoutAtDir(targetDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
-	return configpersist.ReplaceFactoryLayoutAtDirWithResult(
+func (fs *FactoryService) replaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	return configpersist.ReplaceFactoryLayoutAtDirWithPreparedWithResult(
 		targetDir,
-		payload,
+		prepared,
 		configpersist.DefaultFactoryLayoutReplaceOptions(targetDir),
 	)
 }

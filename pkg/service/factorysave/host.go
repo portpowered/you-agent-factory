@@ -23,7 +23,7 @@ type Host interface {
 		name factoryapi.FactoryName,
 		runtimeName string,
 	) error
-	ReplaceFactoryLayoutAtDir(targetDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error)
+	ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error)
 	CurrentFactoryDefinitionVersionAtRoot(rootDir string, name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error)
 	SessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error)
 	SerializeNamedFactoryUpsertResponse(

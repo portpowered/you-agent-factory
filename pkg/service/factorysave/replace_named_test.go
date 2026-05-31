@@ -133,11 +133,11 @@ func (h *splitLayoutNamedSaveHost) ActivateSessionEditableFactory(context.Contex
 	return nil
 }
 
-func (h *splitLayoutNamedSaveHost) ReplaceFactoryLayoutAtDir(targetDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+func (h *splitLayoutNamedSaveHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
 	h.replaceTargetDir = targetDir
-	return factoryconfig.ReplaceFactoryLayoutAtDirWithResult(
+	return factoryconfig.ReplaceFactoryLayoutAtDirWithPreparedWithResult(
 		targetDir,
-		payload,
+		prepared,
 		factoryconfig.DefaultFactoryLayoutReplaceOptions(targetDir),
 	)
 }

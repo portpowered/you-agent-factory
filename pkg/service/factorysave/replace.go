@@ -44,12 +44,12 @@ func (s *Service) saveReplaceCurrentForSession(
 			return err
 		}
 		nextVersion := nextEditableFactoryVersion(current.Version, s.now().Now().UTC())
-		payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
+		prepared, err := preparePersistedFactoryPayload(string(current.Name), sanitized, nextVersion)
 		if err != nil {
 			return err
 		}
 
-		replaceResult, err := s.host.ReplaceFactoryLayoutAtDir(targetDir, payload)
+		replaceResult, err := s.host.ReplaceFactoryLayoutAtDir(targetDir, prepared)
 		if err != nil {
 			return err
 		}

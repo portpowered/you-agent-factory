@@ -739,6 +739,26 @@ type factorySplitLayoutReplaceHooks struct {
 	afterStageWrite func(stagingDir string) error
 }
 
+// PreparedFactoryLayoutPayload holds normalized factory state produced once from
+// submitted JSON for split-layout validation and persist.
+type PreparedFactoryLayoutPayload struct {
+	Config    *interfaces.FactoryConfig
+	Canonical []byte
+}
+
+// PrepareFactoryLayoutPayload normalizes factory JSON into expanded config (with
+// inline runtime bodies for split writes) and thin canonical factory.json bytes.
+func PrepareFactoryLayoutPayload(segment string, payload []byte) (*PreparedFactoryLayoutPayload, error) {
+	cfg, canonical, err := normalizeNamedFactoryPayload(segment, payload)
+	if err != nil {
+		return nil, err
+	}
+	return &PreparedFactoryLayoutPayload{
+		Config:    cfg,
+		Canonical: canonical,
+	}, nil
+}
+
 // FactoryLayoutReplaceOptions configures ReplaceFactoryLayoutAtDir.
 type FactoryLayoutReplaceOptions struct {
 	LayoutWrite FactorySplitLayoutWriteOptions
@@ -770,7 +790,21 @@ type FactorySplitLayoutReplaceResult struct {
 // ReplaceFactoryLayoutAtDir and also returns DiscardBackup for callers that
 // must remove the on-disk backup after successful downstream activation.
 func ReplaceFactoryLayoutAtDirWithResult(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (*FactorySplitLayoutReplaceResult, error) {
-	return replaceFactoryLayoutAtDir(targetDir, payload, opts, factorySplitLayoutReplaceHooks{})
+	return replaceFactoryLayoutAtDir(targetDir, payload, nil, opts, factorySplitLayoutReplaceHooks{})
+}
+
+// ReplaceFactoryLayoutAtDirWithPreparedWithResult atomically replaces targetDir
+// using a pre-normalized payload so validation and split layout writes share the
+// same expanded FactoryConfig and canonical factory.json bytes.
+func ReplaceFactoryLayoutAtDirWithPreparedWithResult(
+	targetDir string,
+	prepared *PreparedFactoryLayoutPayload,
+	opts FactoryLayoutReplaceOptions,
+) (*FactorySplitLayoutReplaceResult, error) {
+	if prepared == nil {
+		return nil, fmt.Errorf("prepared factory layout payload is required")
+	}
+	return replaceFactoryLayoutAtDir(targetDir, nil, prepared, opts, factorySplitLayoutReplaceHooks{})
 }
 
 func ReplaceFactoryLayoutAtDir(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (restore func(), err error) {
@@ -797,7 +831,7 @@ func ReplaceFactoryLayoutAtDirWithAfterStageHook(
 	if afterStageWrite != nil {
 		hooks.afterStageWrite = afterStageWrite
 	}
-	result, err := replaceFactoryLayoutAtDir(targetDir, payload, opts, hooks)
+	result, err := replaceFactoryLayoutAtDir(targetDir, payload, nil, opts, hooks)
 	if err != nil {
 		return nil, err
 	}
@@ -827,12 +861,13 @@ func ReplaceFactorySplitLayoutWithAfterStageHook(
 	if afterStageWrite != nil {
 		hooks.afterStageWrite = afterStageWrite
 	}
-	return replaceFactoryLayoutAtDir(targetDir, canonicalFactoryJSON, DefaultFactoryLayoutReplaceOptions(targetDir), hooks)
+	return replaceFactoryLayoutAtDir(targetDir, canonicalFactoryJSON, nil, DefaultFactoryLayoutReplaceOptions(targetDir), hooks)
 }
 
 func replaceFactoryLayoutAtDir(
 	targetDir string,
 	payload []byte,
+	prepared *PreparedFactoryLayoutPayload,
 	opts FactoryLayoutReplaceOptions,
 	hooks factorySplitLayoutReplaceHooks,
 ) (*FactorySplitLayoutReplaceResult, error) {
@@ -845,7 +880,7 @@ func replaceFactoryLayoutAtDir(
 
 	segment := filepath.Base(targetDir)
 	parentDir := filepath.Dir(targetDir)
-	stagingDir, cleanupStaging, err := stageFactorySplitLayoutReplace(targetDir, segment, parentDir, payload, opts, hooks)
+	stagingDir, cleanupStaging, err := stageFactorySplitLayoutReplace(targetDir, segment, parentDir, payload, prepared, opts, hooks)
 	if err != nil {
 		return nil, err
 	}
@@ -869,12 +904,23 @@ func replaceFactoryLayoutAtDir(
 func stageFactorySplitLayoutReplace(
 	targetDir, segment, parentDir string,
 	payload []byte,
+	prepared *PreparedFactoryLayoutPayload,
 	opts FactoryLayoutReplaceOptions,
 	hooks factorySplitLayoutReplaceHooks,
 ) (stagingDir string, cleanup func(), err error) {
-	factoryCfg, canonical, err := normalizeNamedFactoryPayload(segment, payload)
-	if err != nil {
-		return "", func() {}, err
+	var factoryCfg *interfaces.FactoryConfig
+	var canonical []byte
+	switch {
+	case prepared != nil:
+		factoryCfg = prepared.Config
+		canonical = prepared.Canonical
+	case len(payload) > 0:
+		factoryCfg, canonical, err = normalizeNamedFactoryPayload(segment, payload)
+		if err != nil {
+			return "", func() {}, err
+		}
+	default:
+		return "", func() {}, fmt.Errorf("factory layout payload is required")
 	}
 
 	sourcePath := filepath.Join(targetDir, interfaces.FactoryConfigFile)

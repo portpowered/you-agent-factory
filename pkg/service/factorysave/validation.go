@@ -2,7 +2,6 @@ package factorysave
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -57,27 +56,14 @@ func nextEditableFactoryVersion(
 	}
 }
 
-func marshalPersistedFactoryPayload(
-	sanitized factoryapi.Factory,
-	version factoryapi.HybridLogicalTimestamp,
-) ([]byte, error) {
-	persisted := sanitized
-	persisted.Version = &version
-	payload, err := json.Marshal(persisted)
-	if err != nil {
-		return nil, fmt.Errorf("marshal editable factory payload: %w", err)
-	}
-	return payload, nil
-}
-
 func isEditableFactoryVersionAdvanced(candidate, current factoryapi.HybridLogicalTimestamp) bool {
 	return candidate.Logical > current.Logical && candidate.Physical.UTC().After(current.Physical.UTC())
 }
 
 func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLoader factoryconfig.WorkstationLoader) error {
 	result, err := validationentry.ValidateFactoryAPI(context.Background(), submitted, factoryvalidation.Options{
-		Profile:             factoryvalidation.ProfilePrePersist,
-		WorkstationLoader:   workstationLoader,
+		Profile:           factoryvalidation.ProfilePrePersist,
+		WorkstationLoader: workstationLoader,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)

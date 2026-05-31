@@ -29,6 +29,12 @@ func PersistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte) (str
 	return config.PersistNamedFactory(rootDir, name, canonicalFactoryJSON)
 }
 
+// PersistNamedFactoryWithPrepared materializes a named factory from a
+// pre-normalized payload shared by validation and split layout writes.
+func PersistNamedFactoryWithPrepared(rootDir, name string, prepared *PreparedFactoryLayoutPayload) (string, error) {
+	return config.PersistNamedFactoryWithPrepared(rootDir, name, prepared)
+}
+
 // PersistNamedFactoryWithReport materializes a compact canonical factory payload
 // under a named subdirectory rooted at rootDir and reports portable bundled
 // file replacements.
@@ -70,6 +76,24 @@ type FactorySplitLayoutReplaceResult = config.FactorySplitLayoutReplaceResult
 // returns DiscardBackup for successful activation cleanup.
 func ReplaceFactoryLayoutAtDirWithResult(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (*FactorySplitLayoutReplaceResult, error) {
 	return config.ReplaceFactoryLayoutAtDirWithResult(targetDir, payload, opts)
+}
+
+// PreparedFactoryLayoutPayload holds normalized factory state for split-layout persist.
+type PreparedFactoryLayoutPayload = config.PreparedFactoryLayoutPayload
+
+// PrepareFactoryLayoutPayload normalizes factory JSON for split-layout persist.
+func PrepareFactoryLayoutPayload(segment string, payload []byte) (*PreparedFactoryLayoutPayload, error) {
+	return config.PrepareFactoryLayoutPayload(segment, payload)
+}
+
+// ReplaceFactoryLayoutAtDirWithPreparedWithResult replaces targetDir using a
+// pre-normalized payload shared by validation and layout writes.
+func ReplaceFactoryLayoutAtDirWithPreparedWithResult(
+	targetDir string,
+	prepared *PreparedFactoryLayoutPayload,
+	opts FactoryLayoutReplaceOptions,
+) (*FactorySplitLayoutReplaceResult, error) {
+	return config.ReplaceFactoryLayoutAtDirWithPreparedWithResult(targetDir, prepared, opts)
 }
 
 // ReplaceFactorySplitLayout atomically replaces an existing factory directory
