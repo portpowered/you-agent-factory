@@ -1833,7 +1833,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(previewDialog.textContent).toContain("Dropped Factory");
     expect(previewDialog.textContent).toContain("factory-import.png");
     expect(previewDialog.textContent).toContain(
-      "Review the dropped factory before activation.",
+      "Review the dropped factory before confirming import.",
     );
     expect(
       within(previewDialog)
