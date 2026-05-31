@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
 import {
@@ -7,11 +7,13 @@ import {
   type AgentBentoLayoutItem,
 } from "../../bento/components/agent-bento";
 import type { WorkChartModel } from "../lib/trends";
+import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-story-contract";
 import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
   expectWorkChartLegendClearOfCardTitle,
 } from "../lib/work-chart-legend-story-contract";
+import { dragWorkChart } from "../lib/work-chart-zoom-story-contract";
 import { D3CompletionInformationCard } from "./d3-information-card";
 import type { WorkChartState } from "./work-chart";
 import { WorkOutcomeWidget } from "./work-outcome-widget";
@@ -178,6 +180,7 @@ async function expectWorkOutcomeChartContract(
   expect(overlay?.className).toContain("pb-3");
   expect(overlay?.className).toContain("pt-0");
   expect(chart.querySelector(".recharts-responsive-container")).not.toBeNull();
+  expectSingleWorkOutcomeCardHeader(card);
   expectWorkChartCompactLegendContract(chart);
   expectWorkChartAxisLabelsVisible(chart);
   expectWorkChartLegendClearOfCardTitle(card);
@@ -363,6 +366,7 @@ export const EmptyData = {
 
     const emptyState = within(card).getByRole("status");
     expectCenteredStatusPanel(emptyState);
+    expectSingleWorkOutcomeCardHeader(card);
   },
 };
 
@@ -387,6 +391,7 @@ export const LoadingData = {
 
     const loadingState = within(card).getByRole("status");
     expectCenteredStatusPanel(loadingState);
+    expectSingleWorkOutcomeCardHeader(card);
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
@@ -412,6 +417,7 @@ export const ErrorState = {
 
     const alert = within(card).getByRole("alert");
     expectCenteredStatusPanel(alert);
+    expectSingleWorkOutcomeCardHeader(card);
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
@@ -460,6 +466,53 @@ export const LocalizedZhCN = {
     await expect(within(card).getByText("刻度")).toBeVisible();
     await expect(within(card).getByText("工作计数")).toBeVisible();
     expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
+    expectSingleWorkOutcomeCardHeader(card, { locale: "zh-CN" });
+  },
+};
+
+export const ZoomInteraction = {
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          model={populatedTrend}
+          widgetId="work-outcome-chart-zoom-story"
+        />
+      ),
+      height: "28rem",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+    const chart = within(card).getByRole("img", {
+      name: "Work outcome chart for 15m",
+    });
+
+    expectSingleWorkOutcomeCardHeader(card);
+    expectWorkChartCompactLegendContract(chart);
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
+
+    await dragWorkChart(chart, 0.1, 0.5);
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
+    expect(canvas.queryByText("Zoomed to ticks 10-20")).toBeNull();
+
+    const reset = canvas.getByRole("button", {
+      name: "Reset work outcome chart zoom",
+    });
+    await expect(reset).toBeVisible();
+    expect(chart.contains(reset)).toBe(false);
+
+    await userEvent.click(reset);
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
+    expect(canvas.queryByText("Zoomed to ticks 10-20")).toBeNull();
   },
 };
 

@@ -7,13 +7,13 @@ import {
   within,
 } from "@testing-library/react";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import type { WorkChartModel } from "../lib/trends";
 import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
   expectWorkChartLegendClearOfCardTitle,
 } from "../lib/work-chart-legend-contract";
+import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-contract";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { D3CompletionInformationCard } from "./d3-information-card";
 
@@ -233,25 +233,11 @@ describe("D3CompletionInformationCard", () => {
     const card = screen.getByRole("article", {
       name: messages.chart.cardTitle,
     });
-    const headers = card.querySelectorAll("header");
-    expect(headers).toHaveLength(1);
-
-    const cardHeader = headers[0] as HTMLElement;
-    const titleHeading = within(cardHeader).getByRole("heading", {
-      level: 3,
-      name: messages.chart.cardTitle,
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: messages.chart.cardRegionLabel,
+      cardTitle: messages.chart.cardTitle,
+      headerActionLabel: "Remove chart",
     });
-    expect(titleHeading.className).toContain(DASHBOARD_SECTION_HEADING_CLASS);
-
-    const chartRegion = within(card).getByLabelText(
-      messages.chart.cardRegionLabel,
-    );
-    expect(
-      within(chartRegion).queryByRole("heading", {
-        level: 3,
-        name: messages.chart.cardTitle,
-      }),
-    ).toBeNull();
   });
 
   it("flattens ready-state chart chrome without duplicating the bento card title", () => {
