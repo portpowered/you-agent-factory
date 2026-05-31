@@ -11,10 +11,12 @@ import { useGraphEditorControllers } from "./use-graph-editor-controllers";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 import { useGraphEditorSession } from "./use-graph-editor-session";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph editor hook wires session, controllers, and save flow into one card value model.
 export function useCurrentActivityGraphEditor(
   snapshot: DashboardSnapshot,
   locale?: string | null,
   factoryDocumentScopeKey?: string | null,
+  onNodeRemovedFromDraft?: (nodeId: string) => void,
 ) {
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
@@ -56,6 +58,7 @@ export function useCurrentActivityGraphEditor(
     draftState,
     editableGraph,
     locale,
+    onNodeRemovedFromDraft,
     saveEditableDefinition,
     setActiveTool,
   });
@@ -94,6 +97,7 @@ export function useCurrentActivityGraphEditor(
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,
     editorMode,
+    handleCancelRemoval: controllers.handleCancelRemoval,
     handleDiscardPendingChanges: saveFlow.handleDiscardPendingChanges,
     handleConfirmRemoval: controllers.handleConfirmRemoval,
     handleConnectionAnchorClick: controllers.handleConnectionAnchorClick,
@@ -102,6 +106,7 @@ export function useCurrentActivityGraphEditor(
     handleEditorEdgeDelete: controllers.handleEditorEdgeDelete,
     handleEditorModeToggle: session.handleEditorModeToggle,
     handleEditorNodeDelete: controllers.handleEditorNodeDelete,
+    handleSelectionNodeDelete: controllers.handleSelectionNodeDelete,
     handleSaveDraft: saveFlow.handleSaveDraft,
     handleSaveBeforeLeavingEditor: saveFlow.handleSaveBeforeLeavingEditor,
     graphDraftSaveSucceeded: editableGraph.saveState.lastSuccess,

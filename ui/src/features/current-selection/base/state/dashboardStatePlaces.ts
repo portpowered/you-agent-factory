@@ -55,10 +55,10 @@ function topologyStatePlace(
 }
 
 function factoryStatePlace(
-  snapshot: DashboardSnapshot,
+  factory: DashboardFactoryDefinition | undefined,
   placeId: string,
 ): DashboardPlaceRef | null {
-  for (const workType of factoryWorkTypes(snapshot.factory)) {
+  for (const workType of factoryWorkTypes(factory)) {
     for (const state of workType.states) {
       if (workStatePlaceId(workType.name, state.name) !== placeId) {
         continue;
@@ -80,16 +80,20 @@ function factoryStatePlace(
 export function findDashboardStatePlace(
   snapshot: DashboardSnapshot,
   placeId: string,
+  factoryOverride?: DashboardFactoryDefinition,
 ): DashboardPlaceRef | null {
+  const factory = factoryOverride ?? snapshot.factory;
+
   return (
     topologyStatePlace(snapshot, placeId) ??
-    factoryStatePlace(snapshot, placeId)
+    factoryStatePlace(factory, placeId)
   );
 }
 
 export function hasDashboardStatePlace(
   snapshot: DashboardSnapshot,
   placeId: string,
+  factoryOverride?: DashboardFactoryDefinition,
 ): boolean {
-  return findDashboardStatePlace(snapshot, placeId) !== null;
+  return findDashboardStatePlace(snapshot, placeId, factoryOverride) !== null;
 }

@@ -1,15 +1,15 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: editable graph hook keeps draft, projection, save, and mutation wiring in one view-model seam.
 import { useCallback, useMemo, useState } from "react";
-
-import {
-  type CanonicalFactoryDefinition,
-  createEmptyFactoryGraphDraft,
-  type FactoryGraphDraft,
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
+import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
+import type {
+  CanonicalFactoryDefinition,
+  FactoryGraphDraft,
 } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
+import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
 import type { FactoryGraphNodeFieldUpdate } from "../lib/factory-graph-field-operations";
 import { updateFactoryGraphNodeField } from "../lib/factory-graph-field-operations";
-import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
 import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,
@@ -20,6 +20,7 @@ import {
   projectFactoryGraphToReactFlow,
   removeFactoryGraphNode,
 } from "../lib/factory-graph-operations";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 import type {
   EditableFactoryGraphSaveInput,
@@ -328,7 +329,7 @@ function useEditableFactoryGraphSaveController({
   locale?: string | null;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,
-  ) => Promise<unknown>;
+  ) => Promise<CurrentFactoryDocument>;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
@@ -390,7 +391,7 @@ function useSaveEditableFactoryGraph({
   resetSaveState: () => void;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,
-  ) => Promise<unknown>;
+  ) => Promise<CurrentFactoryDocument>;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
@@ -416,18 +417,16 @@ function useSaveEditableFactoryGraph({
     setIsSaving(true);
     resetSaveState();
     try {
-      await saveFactoryDefinition({
+      const savedDocument = await saveFactoryDefinition({
         baseVersion: draftState.latestDocument.version,
         factoryDefinition: saveInput.value,
       });
-      draftState.replaceDraft(createEmptyFactoryGraphDraft());
+      draftState.adoptSavedFactoryDocument(savedDocument);
       setBlockedOperation(null);
       setLastSaveSuccess(true);
       return true;
     } catch (error) {
-      setLastSaveError(
-        error instanceof Error ? error.message : "Factory graph save failed.",
-      );
+      setLastSaveError(resolveFactoryGraphSaveErrorMessage(error, locale));
       return false;
     } finally {
       setIsSaving(false);
@@ -457,6 +456,19 @@ function isFactoryGraphDraftStale(
       draftState.baseDocument.version.physical !==
         draftState.latestDocument.version.physical)
   );
+}
+
+function resolveFactoryGraphSaveErrorMessage(
+  error: unknown,
+  locale?: string | null,
+): string {
+  if (error instanceof CurrentFactoryDefinitionError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return getFactoryGraphEditorMessages(locale).noticeSaveFailedTitle;
 }
 
 function missingFactoryResult(

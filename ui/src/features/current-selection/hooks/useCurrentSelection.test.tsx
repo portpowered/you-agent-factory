@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type {
   DashboardActiveExecution,
   DashboardInferenceAttempt,
@@ -16,6 +17,17 @@ import {
 } from "../state/selectionHistoryStore";
 import { buildReplayFixtureTimelineSnapshot } from "../../../testing/replay-fixtures";
 import { useCurrentSelection } from "./useCurrentSelection";
+
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
+  const actual = await vi.importActual(
+    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  );
+
+  return {
+    ...actual,
+    useCurrentFactoryDocument: vi.fn(),
+  };
+});
 
 const TEST_TOPOLOGY: DashboardSnapshot["topology"] = {
   edges: [],
@@ -306,6 +318,9 @@ function SelectionHarness({
 describe("useCurrentSelection", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+    } as ReturnType<typeof useCurrentFactoryDocument>);
   });
 
   afterEach(() => {

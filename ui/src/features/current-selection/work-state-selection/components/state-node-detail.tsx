@@ -22,15 +22,18 @@ import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
 } from "../../base/components/current-selection-locale";
+import { getWorkStateDetailMessages } from "../messages/work-state-detail";
 import type {
   StateNodeDetailCardProps,
   StatePositionWorkListItemProps,
   StatePositionWorkListProps,
 } from "../lib/detail-card-types";
+import { WorkStateTopologyDeleteSection } from "./work-state-topology-delete-section";
 
 export function StateNodeDetailCard({
   currentWorkItems,
   failedWorkDetailsByWorkID,
+  locale,
   onSelectWorkItem,
   place,
   terminalHistoryWorkItems = [],
@@ -43,6 +46,9 @@ export function StateNodeDetailCard({
     ? terminalHistoryWorkItems
     : currentWorkItems;
   const messages = useCurrentSelectionDetailMessages();
+  const topologyMessages = getWorkStateDetailMessages(locale);
+  const workTypeName = place.type_id?.trim() ?? "";
+  const stateName = place.state_value?.trim() ?? "";
   const summaryLabel = formatStateSelectionSummary(
     place.type_id,
     place.state_value,
@@ -53,6 +59,14 @@ export function StateNodeDetailCard({
       <div className="mt-0 grid gap-1" title={placeLabel}>
         <p className={WIDGET_SUBTITLE_CLASS}>{summaryLabel || placeLabel}</p>
       </div>
+      {workTypeName && stateName ? (
+        <WorkStateTopologyDeleteSection
+          messages={topologyMessages}
+          placeId={place.place_id}
+          stateName={stateName}
+          workTypeName={workTypeName}
+        />
+      ) : null}
       <dl>
         <div>
           <dt>{messages.countLabel}</dt>
