@@ -22,6 +22,7 @@ import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
+import { GraphEditorPlacementProvider } from "./graph-editor-placement-context";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 export {
@@ -139,6 +140,7 @@ export function ReactFlowCurrentActivityCardView(
       : null;
 
   return (
+    <GraphEditorPlacementProvider>
     <section
       aria-labelledby={headingID}
       className={CURRENT_ACTIVITY_CARD_CLASS}
@@ -194,5 +196,6 @@ export function ReactFlowCurrentActivityCardView(
         shouldRenderImportPreviewDialog={shouldRenderImportPreviewDialog}
       />
     </section>
+    </GraphEditorPlacementProvider>
   );
 }
