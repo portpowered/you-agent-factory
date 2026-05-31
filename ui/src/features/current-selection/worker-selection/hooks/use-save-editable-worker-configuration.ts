@@ -1,11 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
 
-import type {
-  CanonicalFactoryDefinition,
-  CurrentFactoryDefinitionError,
-  CurrentFactoryVersion,
-} from "../../../../api/current-factory-definition";
-import { useSaveCurrentFactory } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import { useScopedFactoryDocumentSave } from "../../base/hooks/useScopedFactoryDocumentSave";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
@@ -25,265 +21,54 @@ interface UseSaveEditableWorkerConfigurationResult {
   saveState: EditableWorkerSaveState;
 }
 
-interface EditableWorkerSaveRequest {
-  baseVersion: CurrentFactoryVersion;
-  markChangesSaved?: () => void;
-  scopeKey: string;
-  value: CanonicalFactoryDefinition;
-}
-
-interface EditableWorkerErrorState {
-  fieldErrors?: EditableWorkerSaveValidationErrors;
-  message: string;
-  scopeKey: string;
-  status: "error" | "warning";
-}
-
 export function useSaveEditableWorkerConfiguration({
   editableConfigurationState,
   locale,
   scopeKey,
 }: UseSaveEditableWorkerConfigurationOptions): UseSaveEditableWorkerConfigurationResult {
   const messages = getWorkerDetailMessages(locale);
-  const [lastFailedScope, setLastFailedScope] =
-    useState<EditableWorkerErrorState | null>(null);
-  const [lastSuccessfulScopeKey, setLastSuccessfulScopeKey] = useState<
-    string | null
-  >(null);
-  const [submittingScopeKey, setSubmittingScopeKey] = useState<string | null>(
-    null,
-  );
-  const saveInFlightRef = useRef(false);
-  const mutation = useSaveCurrentFactory();
+  const isDirty =
+    editableConfigurationState?.status === "ready" &&
+    editableConfigurationState.isDirty;
 
-  useResetExitedSaveScope({
-    scopeKey,
-    setLastFailedScope,
-    setLastSuccessfulScopeKey,
-  });
-  const previousScopeKeyRef = useRef<string | null>(scopeKey);
-  const hasScopeChanged = previousScopeKeyRef.current !== scopeKey;
-  useResetSuccessfulSaveStateOnDraftChange({
-    editableConfigurationState,
-    scopeKey,
-    setLastSuccessfulScopeKey,
-  });
+  const { isPending, saveNow, saveState } =
+    useScopedFactoryDocumentSave<EditableWorkerSaveValidationErrors>({
+      fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
+      isDirty,
+      mapSaveErrorToFieldErrors: resolveSaveFieldErrors,
+      scopeKey,
+    });
 
   const canSave =
     editableConfigurationState?.status === "ready" &&
     editableConfigurationState.canSave &&
     editableConfigurationState.pendingFactoryDefinition != null &&
-    !mutation.isPending;
-
-  const saveState = useMemo(
-    () =>
-      resolveEditableWorkerSaveState({
-        hasScopeChanged,
-        lastFailedScope,
-        lastSuccessfulScopeKey,
-        scopeKey,
-        submittingScopeKey,
-      }),
-    [
-      hasScopeChanged,
-      lastFailedScope,
-      lastSuccessfulScopeKey,
-      scopeKey,
-      submittingScopeKey,
-    ],
-  );
+    !isPending;
 
   const save = useCallback(async () => {
     if (
       editableConfigurationState?.status !== "ready" ||
       editableConfigurationState.pendingFactoryDefinition == null ||
-      editableConfigurationState.baseVersion == null ||
-      scopeKey == null ||
-      saveInFlightRef.current
+      scopeKey == null
     ) {
       return;
     }
 
-    setLastFailedScope(null);
-    setLastSuccessfulScopeKey(null);
-    saveInFlightRef.current = true;
-    setSubmittingScopeKey(scopeKey);
-    const request: EditableWorkerSaveRequest = {
+    await saveNow({
       baseVersion: editableConfigurationState.baseVersion,
-      markChangesSaved: editableConfigurationState.markChangesSaved,
+      factory: editableConfigurationState.pendingFactoryDefinition,
+      onSaved: editableConfigurationState.markChangesSaved,
       scopeKey,
-      value: editableConfigurationState.pendingFactoryDefinition,
-    };
-    try {
-      await mutation.mutateAsync({
-        baseVersion: request.baseVersion,
-        factoryDefinition: request.value,
-      });
-      request.markChangesSaved?.();
-      setSubmittingScopeKey(null);
-      setLastFailedScope(null);
-      setLastSuccessfulScopeKey(request.scopeKey);
-    } catch (error) {
-      setSubmittingScopeKey(null);
-      setLastSuccessfulScopeKey(null);
-      setLastFailedScope({
-        ...normalizeSaveError(error, {
-          fallbackMessage: messages.editableConfigurationSaveFallbackError,
-        }),
-        scopeKey: request.scopeKey,
-      });
-      return;
-    } finally {
-      saveInFlightRef.current = false;
-    }
-  }, [
-    editableConfigurationState,
-    messages.editableConfigurationSaveFallbackError,
-    mutation,
-    scopeKey,
-  ]);
+    });
+  }, [editableConfigurationState, saveNow, scopeKey]);
 
-  return {
-    canSave,
-    save,
-    saveState,
-  };
-}
-
-function resolveEditableWorkerSaveState({
-  hasScopeChanged,
-  lastFailedScope,
-  lastSuccessfulScopeKey,
-  scopeKey,
-  submittingScopeKey,
-}: {
-  hasScopeChanged: boolean;
-  lastFailedScope: EditableWorkerErrorState | null;
-  lastSuccessfulScopeKey: string | null;
-  scopeKey: string | null;
-  submittingScopeKey: string | null;
-}): EditableWorkerSaveState {
-  if (submittingScopeKey !== null && submittingScopeKey === scopeKey) {
-    return { status: "submitting" };
-  }
-  if (hasScopeChanged) {
-    return { status: "idle" };
-  }
-  if (
-    lastFailedScope !== null &&
-    scopeKey !== null &&
-    lastFailedScope.scopeKey === scopeKey
-  ) {
-    if (lastFailedScope.status === "warning") {
-      return {
-        message: lastFailedScope.message,
-        status: "warning",
-      };
-    }
-
-    return {
-      errorMessage: lastFailedScope.message,
-      fieldErrors: lastFailedScope.fieldErrors,
-      status: "error",
-    };
-  }
-  if (lastSuccessfulScopeKey !== null && lastSuccessfulScopeKey === scopeKey) {
-    return { status: "success" };
-  }
-
-  return { status: "idle" };
-}
-
-function useResetExitedSaveScope({
-  scopeKey,
-  setLastFailedScope,
-  setLastSuccessfulScopeKey,
-}: {
-  scopeKey: string | null;
-  setLastFailedScope: (value: EditableWorkerErrorState | null) => void;
-  setLastSuccessfulScopeKey: (value: string | null) => void;
-}) {
-  const previousScopeKeyRef = useRef<string | null>(scopeKey);
-
-  useEffect(() => {
-    if (previousScopeKeyRef.current !== scopeKey) {
-      setLastFailedScope(null);
-      setLastSuccessfulScopeKey(null);
-      previousScopeKeyRef.current = scopeKey;
-    }
-  }, [scopeKey, setLastFailedScope, setLastSuccessfulScopeKey]);
-}
-
-function useResetSuccessfulSaveStateOnDraftChange({
-  editableConfigurationState,
-  scopeKey,
-  setLastSuccessfulScopeKey,
-}: {
-  editableConfigurationState?: EditableWorkerConfigurationState;
-  scopeKey: string | null;
-  setLastSuccessfulScopeKey: (
-    value: string | null | ((currentScopeKey: string | null) => string | null),
-  ) => void;
-}) {
-  useEffect(() => {
-    if (
-      editableConfigurationState?.status === "ready" &&
-      editableConfigurationState.isDirty
-    ) {
-      setLastSuccessfulScopeKey((currentScopeKey) =>
-        currentScopeKey === scopeKey ? null : currentScopeKey,
-      );
-    }
-  }, [editableConfigurationState, scopeKey, setLastSuccessfulScopeKey]);
-}
-
-function normalizeSaveError(
-  error: unknown,
-  {
-    fallbackMessage,
-  }: {
-    fallbackMessage: string;
-  },
-): Pick<EditableWorkerErrorState, "fieldErrors" | "message" | "status"> {
-  if (!isCurrentFactoryDefinitionError(error)) {
-    if (error instanceof Error) {
-      return {
-        message: error.message,
-        status: "error",
-      };
-    }
-
-    return {
-      message: fallbackMessage,
-      status: "error",
-    };
-  }
-
-  if (error.code === "STALE_FACTORY_VERSION") {
-    return {
-      message: error.message,
-      status: "warning",
-    };
-  }
-
-  return {
-    fieldErrors: resolveSaveFieldErrors(error),
-    message: error.message,
-    status: "error",
-  };
-}
-
-function isCurrentFactoryDefinitionError(
-  error: unknown,
-): error is Pick<
-  CurrentFactoryDefinitionError,
-  "code" | "message" | "targets"
-> {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    typeof (error as { code?: unknown }).code === "string" &&
-    typeof (error as { message?: unknown }).message === "string"
+  return useMemo(
+    () => ({
+      canSave,
+      save,
+      saveState,
+    }),
+    [canSave, save, saveState],
   );
 }
 

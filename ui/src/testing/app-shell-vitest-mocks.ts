@@ -14,13 +14,16 @@ vi.mock("../features/flowchart/lib/layout", async () => {
   };
 });
 
-vi.mock("../features/current-factory-definition/public", async () => {
-  const actual = await vi.importActual<
-    typeof import("../features/current-factory-definition/public")
-  >("../features/current-factory-definition/public");
+vi.mock(
+  "../features/current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual<
+      typeof import("../features/current-factory-definition/hooks/useCurrentFactoryDefinition")
+    >("../features/current-factory-definition/hooks/useCurrentFactoryDefinition");
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);

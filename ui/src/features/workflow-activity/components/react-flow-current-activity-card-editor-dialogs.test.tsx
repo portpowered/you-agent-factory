@@ -156,7 +156,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     isConfirmingSave: true,
     leaveDialogOpen: true,
     pendingRemovalIntent: null,
-    saveEditableDefinition: { status: "idle" as const },
+    saveEditableDefinition: { isPending: false },
     saveSummary: { description: "Save pending route changes." },
     setAddEntityDraft: vi.fn(),
     setAddEntityErrors: vi.fn(),
@@ -263,7 +263,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     const editor = createEditorStub({
       isConfirmingSave: true,
       pendingRemovalIntent: null,
-      saveEditableDefinition: { status: "pending" as const },
+      saveEditableDefinition: { isPending: true },
     });
     const imports = createImportsStub({
       dropState: { status: "idle" as const },

@@ -18,10 +18,8 @@ import type { CurrentFactoryDocument } from "../../../api/current-factory-defini
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import {
-  useCurrentFactoryDocument,
-  useSaveCurrentFactory,
-} from "../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
@@ -147,17 +145,20 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 
-vi.mock("../../current-factory-definition/public", async () => {
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
   const actual = await vi.importActual(
-    "../../current-factory-definition/public",
+    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   );
 
   return {
     ...actual,
     useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
   };
 });
+
+vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
+  useFactoryDocumentSave: vi.fn(),
+}));
 
 const editableFactoryDocument: CurrentFactoryDocument = {
   name: "Current Factory",
@@ -246,7 +247,7 @@ const importController: CurrentActivityImportController = {
 };
 
 let restoreBrowserTestShims: (() => void) | null = null;
-let mutateAsync: ReturnType<typeof vi.fn>;
+let saveAsync: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -257,11 +258,13 @@ beforeEach(() => {
     error: null,
     status: "success",
   } as never);
-  mutateAsync = vi.fn().mockResolvedValue(editableFactoryDocument);
-  vi.mocked(useSaveCurrentFactory).mockReturnValue({
-    mutateAsync,
+  saveAsync = vi.fn().mockResolvedValue(editableFactoryDocument);
+  vi.mocked(useFactoryDocumentSave).mockReturnValue({
+    error: null,
+    isPending: false,
     reset: vi.fn(),
-    status: "idle",
+    save: vi.fn(),
+    saveAsync,
   } as never);
 });
 
@@ -470,7 +473,7 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
         },
       ],
     } satisfies CurrentFactoryDocument;
-    mutateAsync.mockResolvedValue(factoryDocumentWithDistinctWorkstationId);
+    saveAsync.mockResolvedValue(factoryDocumentWithDistinctWorkstationId);
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: factoryDocumentWithDistinctWorkstationId,
       error: null,
@@ -514,9 +517,9 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
     );
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({
+      expect(saveAsync).toHaveBeenCalledWith({
         baseVersion: factoryDocumentWithDistinctWorkstationId.version,
-        factoryDefinition: {
+        factory: {
           ...factoryDocumentWithDistinctWorkstationId,
           resources: [],
           workstations: [

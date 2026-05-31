@@ -13,7 +13,7 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import { installDashboardBrowserTestShims } from "../components/dashboard/test-browser-shims";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
-import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import {

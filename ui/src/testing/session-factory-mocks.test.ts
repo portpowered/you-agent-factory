@@ -11,6 +11,7 @@ import {
   mergeImportedFactoryIntoSessionDocument,
   mockGetSessionFactory,
   mockPutSessionFactory,
+  parseSessionFactoryPutFactory,
   sessionFactoryImportActivationDocument,
   sessionFactoryNamedExportDocument,
 } from "./session-factory-mocks";
@@ -172,5 +173,22 @@ describe("session-factory-mocks helpers", () => {
       logical: "2",
       physical: "not-a-timestamp",
     });
+  });
+
+  it("parseSessionFactoryPutFactory accepts wrapped and bare factory bodies", () => {
+    expect(
+      parseSessionFactoryPutFactory(
+        JSON.stringify({
+          mode: "REPLACE_CURRENT",
+          factory: sessionFactoryImportActivationDocument,
+        }),
+      ),
+    ).toEqual(sessionFactoryImportActivationDocument);
+
+    expect(
+      parseSessionFactoryPutFactory(
+        JSON.stringify(sessionFactoryImportActivationDocument),
+      ),
+    ).toEqual(sessionFactoryImportActivationDocument);
   });
 });

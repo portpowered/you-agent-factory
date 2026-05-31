@@ -22,6 +22,10 @@ import {
   EDITABLE_WORKER_TYPES,
 } from "../../../current-factory-definition/lib/worker-editable-values";
 import {
+  DetailCardFactorySaveFeedback,
+  mergeDetailCardSaveFieldErrors,
+} from "../../base/components/detail-card-factory-save-feedback";
+import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   CurrentSelectionSectionHeader,
@@ -32,6 +36,7 @@ import type {
   EditableWorkerConfigurationState,
   EditableWorkerOverwriteField,
   EditableWorkerSaveState,
+  EditableWorkerSaveValidationErrors,
   EditableWorkerValidationErrors,
   WorkerDetailCardProps,
 } from "../lib/detail-card-types";
@@ -141,18 +146,22 @@ function WorkerEditableConfigurationReadyForm({
   state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
   workerName: string;
 }) {
-  const validationErrors = mergeEditableValidationErrors(
-    state.validationErrors,
-    saveState,
-  );
+  const validationErrors = mergeDetailCardSaveFieldErrors<
+    EditableWorkerValidationErrors & Record<string, string | undefined>,
+    EditableWorkerSaveValidationErrors
+  >(state.validationErrors, saveState);
   const isSaving = saveState?.status === "submitting";
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
-      <WorkerEditableConfigurationSaveFeedback
-        messages={messages}
+      <DetailCardFactorySaveFeedback<EditableWorkerSaveValidationErrors>
+        messages={{
+          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
+          staleVersionDetail:
+            messages.editableConfigurationSaveStaleVersionDetail,
+          successMessage: messages.editableConfigurationSaveSuccess(workerName),
+        }}
         saveState={saveState}
-        workerName={workerName}
       />
       <WorkerEditableConfigurationSharedImpactWarning
         messages={messages}
@@ -243,75 +252,6 @@ function WorkerEditableConfigurationReadyForm({
       />
     </form>
   );
-}
-
-function WorkerEditableConfigurationSaveFeedback({
-  messages,
-  saveState,
-  workerName,
-}: {
-  messages: ReturnType<typeof getWorkerDetailMessages>;
-  saveState?: EditableWorkerSaveState;
-  workerName: string;
-}) {
-  if (saveState?.status === "success") {
-    return (
-      <p
-        className={cn("m-0 text-af-success-text", DASHBOARD_BODY_TEXT_CLASS)}
-        role="status"
-      >
-        {messages.editableConfigurationSaveSuccess(workerName)}
-      </p>
-    );
-  }
-
-  if (saveState?.status === "warning") {
-    return (
-      <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
-        <p
-          className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
-          role="alert"
-        >
-          {saveState.message}
-        </p>
-        <p
-          className={cn(
-            "m-0 text-af-text-subtle",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
-          {messages.editableConfigurationSaveStaleVersionDetail}
-        </p>
-      </div>
-    );
-  }
-
-  if (saveState?.status === "error") {
-    return (
-      <p
-        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
-        role="alert"
-      >
-        {messages.editableConfigurationSaveErrorPrefix} {saveState.errorMessage}
-      </p>
-    );
-  }
-
-  return null;
-}
-
-function mergeEditableValidationErrors(
-  validationErrors: EditableWorkerValidationErrors,
-  saveState?: EditableWorkerSaveState,
-): EditableWorkerValidationErrors {
-  if (saveState?.status !== "error" || !saveState.fieldErrors) {
-    return validationErrors;
-  }
-
-  return {
-    ...validationErrors,
-    ...saveState.fieldErrors,
-  };
 }
 
 function WorkerEditableConfigurationOverwriteWarning({

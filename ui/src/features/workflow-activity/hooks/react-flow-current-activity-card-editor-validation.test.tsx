@@ -141,9 +141,9 @@ const hookState = vi.hoisted(() => ({
   },
   saveEditableDefinition: {
     error: null,
-    mutateAsync: vi.fn(async () => undefined),
+    isPending: false,
     reset: vi.fn(),
-    status: "idle" as const,
+    saveAsync: vi.fn(async () => undefined),
   },
   unsupportedFromDefinition: undefined as string | undefined,
 }));
@@ -177,9 +177,12 @@ vi.mock("../../../api/factory-validation", async () => {
   };
 });
 
-vi.mock("../../current-factory-definition/public", () => ({
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", () => ({
   useCurrentFactoryDocument: () => hookState.currentFactoryQuery,
-  useSaveCurrentFactory: () => hookState.saveEditableDefinition,
+}));
+
+vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
+  useFactoryDocumentSave: () => hookState.saveEditableDefinition,
 }));
 
 vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
@@ -192,6 +195,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
     saveState: {
       canSave: hookState.draftState.hasChanges,
       isStale: false,
+      lastSuccess: false,
     },
   }),
 }));

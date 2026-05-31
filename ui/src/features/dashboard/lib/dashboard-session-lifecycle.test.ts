@@ -83,4 +83,21 @@ describe("resetDashboardSessionScopedState", () => {
       exact: false,
     });
   });
+
+  it("resets stream state without locale when omitted", () => {
+    const queryClient = {
+      removeQueries: vi.fn(),
+    };
+    const resetTimeline = vi.fn();
+    const resetStreamState = vi.fn();
+
+    resetDashboardSessionScopedState(
+      queryClient as never,
+      resetStreamState,
+      resetTimeline,
+    );
+
+    expect(resetStreamState).toHaveBeenCalledWith(undefined);
+    expect(queryClient.removeQueries).toHaveBeenCalledTimes(1);
+  });
 });

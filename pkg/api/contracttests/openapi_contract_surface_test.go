@@ -108,34 +108,12 @@ func TestOpenAPIContract_PersistedFactoryRoutesUseCanonicalPluralVocabulary(t *t
 
 	if pathItem, ok := paths["/factories"].(map[string]any); ok {
 		if _, ok := pathItem["post"].(map[string]any); ok {
-			t.Fatal("paths./factories.post must not be published; use session-scoped PUT /factory-sessions/{session_id}/factory")
+			t.Fatal("paths./factories.post must not be published; use session-scoped PUT saveCurrentFactoryBySessionId")
 		}
 	}
 	if _, ok := paths["/factory"]; ok {
 		t.Fatal("paths./factory must not be published for persisted factory definitions")
 	}
-}
-
-func TestOpenAPIContract_SessionFactoryPUTPublishesSaveMode(t *testing.T) {
-	schemas := loadBundledOpenAPIComponentSchemas(t)
-	saveRequest := schemaObject(t, schemas, "SaveFactoryForSessionRequest")
-	assertRequiredFields(t, saveRequest, "factory")
-	properties := schemaProperties(t, saveRequest, "SaveFactoryForSessionRequest")
-	assertPropertyRef(t, properties, "factory", "#/components/schemas/Factory")
-	modeProperty, ok := properties["mode"].(map[string]any)
-	if !ok {
-		t.Fatal("SaveFactoryForSessionRequest.properties.mode is missing")
-	}
-	if got := modeProperty["$ref"]; got != "#/components/schemas/FactorySaveMode" {
-		t.Fatalf("SaveFactoryForSessionRequest.properties.mode.$ref = %v, want #/components/schemas/FactorySaveMode", got)
-	}
-	if got, _ := modeProperty["default"].(string); got != "REPLACE_CURRENT" {
-		t.Fatalf("SaveFactoryForSessionRequest.properties.mode.default = %q, want REPLACE_CURRENT", got)
-	}
-	assertEnumValues(t, schemaObject(t, schemas, "FactorySaveMode"), "FactorySaveMode", []string{
-		"REPLACE_CURRENT",
-		"UPSERT_NAMED_AND_ACTIVATE",
-	})
 }
 
 func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testing.T) {
@@ -150,6 +128,7 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 		"/factory-sessions/{session_id}/work/staged-files":          {"post"},
 		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
+		"/factory-sessions/{session_id}/work/{id}/move":             {"post"},
 		"/factory-sessions/{session_id}/events":                     {"get"},
 		"/factory-sessions/{session_id}/status":                     {"get"},
 		"/factory-sessions/{session_id}/factory":                    {"get", "put"},
@@ -167,6 +146,7 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 	}
 
 	for _, retiredPath := range []string{
+		"/factories",
 		"/factories/{factory_id}/work",
 		"/factories/{factory_id}/work-requests/{request_id}",
 		"/factories/{factory_id}/work/{id}",
@@ -267,6 +247,7 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/work/staged-files":                     {"post"},
 		"/work-requests/{request_id}":            {"put"},
 		"/work/{id}":                             {"get"},
+		"/work/{id}/move":                        {"post"},
 		"/events":                                {"get"},
 		"/status":                                {"get"},
 		"/models":                                {"get"},
@@ -320,7 +301,7 @@ func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	for _, schema := range []string{
 		"SubmitWorkRequest", "SubmitWorkResponse", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "UpsertWorkRequestSubmittedWork", "WorkRequest", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
-		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "FactorySaveMode", "SaveFactoryForSessionRequest", "Factory", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
+		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)
@@ -393,6 +374,14 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	stageSubmitWorkFileResponse := schemaObject(t, schemas, "StageSubmitWorkFileResponse")
 	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType")
+}
+
+func TestOpenAPIContract_MoveWorkRequestSchema(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	moveWorkRequestSchema := schemaObject(t, schemas, "MoveWorkRequest")
+	assertRequiredFields(t, moveWorkRequestSchema, "stateName")
+	moveWorkRequestProperties := schemaProperties(t, moveWorkRequestSchema, "MoveWorkRequest")
+	assertSchemaPropertiesPresent(t, moveWorkRequestProperties, "MoveWorkRequest", "stateName", "requestId")
 }
 
 func assertWorkRequestSurfaceSchemas(t *testing.T, schemas map[string]any) {
@@ -601,6 +590,7 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 
 func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	t.Helper()
+
 	currentFactory := pathOperation(t, paths, "/factory-sessions/{session_id}/factory", "get")
 	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/Factory")
 	assertResponseRef(t, currentFactory, "404", "#/components/responses/NotFound")
@@ -624,6 +614,18 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	assertResponseSchemaRef(t, invokeModel, "200", "#/components/schemas/ModelInvocationResponse")
 	assertResponseRef(t, invokeModel, "400", "#/components/responses/BadRequest")
 	assertResponseRef(t, invokeModel, "404", "#/components/responses/NotFound")
+
+	moveWork := pathOperation(t, paths, "/work/{id}/move", "post")
+	assertRequestSchemaRef(t, moveWork, "#/components/schemas/MoveWorkRequest")
+	assertResponseSchemaRef(t, moveWork, "200", "#/components/schemas/Work")
+	assertResponseRef(t, moveWork, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, moveWork, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, moveWork, "409", "#/components/responses/MoveWorkConflict")
+
+	moveWorkBySession := pathOperation(t, paths, "/factory-sessions/{session_id}/work/{id}/move", "post")
+	assertRequestSchemaRef(t, moveWorkBySession, "#/components/schemas/MoveWorkRequest")
+	assertResponseSchemaRef(t, moveWorkBySession, "200", "#/components/schemas/Work")
+	assertResponseRef(t, moveWorkBySession, "409", "#/components/responses/MoveWorkConflict")
 }
 
 func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {
@@ -645,5 +647,8 @@ func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {
 	assertResponseExampleCodeFamilies(t, responses, "SaveCurrentFactoryConflict", map[string]string{
 		"FACTORY_NOT_IDLE":      "CONFLICT",
 		"STALE_FACTORY_VERSION": "CONFLICT",
+	})
+	assertResponseExampleCodeFamilies(t, responses, "MoveWorkConflict", map[string]string{
+		"MOVE_WORK_REQUEST_ALREADY_APPLIED": "CONFLICT",
 	})
 }

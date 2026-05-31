@@ -1,4 +1,7 @@
-import type { FactoryEvent, FactoryRelation } from "../../../../api/events";
+import type {
+  FactoryEvent,
+  FactoryRelation,
+} from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import {
   completionToProviderSession,
@@ -39,6 +42,7 @@ import {
   resolveDispatchTransitionID,
   syncCompletedDispatchAttempt,
 } from "./replayWorldStateSupport";
+import { applyWorkStateChange } from "./replayWorldStateWorkStateChange";
 import type {
   DispatchRequestEvent,
   DispatchResponseEvent,
@@ -52,6 +56,7 @@ import type {
   ScriptRequestEvent,
   ScriptResponseEvent,
   WorkRequestEvent,
+  WorkStateChangeEvent,
 } from "./replayWorldStateTypes";
 import { orderedEvents, uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
@@ -166,6 +171,9 @@ function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
       return;
     case FACTORY_EVENT_TYPES.factoryStateResponse:
       state.factory_state = (event as FactoryStateResponseEvent).payload.state;
+      return;
+    case FACTORY_EVENT_TYPES.workStateChange:
+      applyWorkStateChange(state, event as WorkStateChangeEvent);
       return;
   }
 }

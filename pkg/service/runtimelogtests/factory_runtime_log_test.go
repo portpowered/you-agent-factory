@@ -496,8 +496,11 @@ func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) 
 
 	workFile := filepath.Join(dir, opts.workFileName)
 	writeWorkRequestFile(t, workFile, opts.work)
-	logDir := t.TempDir()
-	recordPath := filepath.Join(t.TempDir(), "recording.json")
+	logDir := filepath.Join(dir, "runtime-logs")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatalf("create runtime log dir: %v", err)
+	}
+	recordPath := filepath.Join(dir, "recording.json")
 
 	logger := opts.logger
 	if logger == nil {

@@ -10,6 +10,7 @@ import {
 } from "../../../api/current-factory-definition";
 import { getCurrentFactoryDocumentMock } from "../../../../testing/bun-current-factory-definition-api-mocks";
 import { wrapWithDashboardSessionTest } from "../../../testing";
+import { divergentDocumentPlaneFactoryDocument } from "../../../testing/graph-editor-harness";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 
 const { useCurrentFactoryExport } = await import("./use-current-factory-export");
@@ -30,9 +31,6 @@ const documentFactory: CurrentFactoryDocument = {
     physical: 1,
   },
 };
-
-/** Fixture-only: snapshot topology that must not become the export payload. */
-const snapshotOnlyWorkstationName = "snapshot-only";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: export document-plane cases share session and divergent-fixture setup.
 describe("useCurrentFactoryExport", () => {
@@ -178,7 +176,9 @@ describe("useCurrentFactoryExport", () => {
   });
 
   it("exports the factory document when snapshot topology would diverge", async () => {
-    getCurrentFactoryDocumentMock.mockResolvedValue(documentFactory);
+    getCurrentFactoryDocumentMock.mockResolvedValue(
+      divergentDocumentPlaneFactoryDocument,
+    );
 
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
       wrapper: createQueryClientWrapper(),
@@ -192,17 +192,13 @@ describe("useCurrentFactoryExport", () => {
       throw new Error("Expected export to succeed from the document plane.");
     }
 
-    expect(result.current.currentFactoryExport.factoryDefinition.workstations).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: "document-only" }),
-      ]),
-    );
-    expect(result.current.currentFactoryExport.factoryDefinition.workstations).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: snapshotOnlyWorkstationName }),
-      ]),
-    );
-    expect(snapshotOnlyWorkstationName).toBe("snapshot-only");
+    const workstationNames =
+      result.current.currentFactoryExport.factoryDefinition.workstations?.map(
+        (workstation) => workstation.name,
+      ) ?? [];
+
+    expect(workstationNames).toContain("Document Only");
+    expect(workstationNames).not.toContain("Snapshot Only");
   });
 });
 

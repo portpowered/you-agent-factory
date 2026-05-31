@@ -5,7 +5,7 @@ import {
   type CurrentFactoryDocument,
 } from "../api/current-factory-definition";
 import type { FactoryValue } from "../api/named-factory";
-import type { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
+import type { useCurrentFactoryDocument } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { defaultSessionFactoryVersion } from "./session-factory-mocks";
 
 function mockCurrentFactoryDocument(

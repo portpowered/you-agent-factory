@@ -1,0 +1,271 @@
+import { fireEvent, screen, within } from "@testing-library/react";
+import type { Mock } from "vitest";
+
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
+import { createDeferredPromise } from "../../../../testing/app-shell-export-test-utils";
+import {
+  type MockFactoryDocumentSaveReturn,
+  mockFactoryDocumentSave,
+} from "../../../../testing/factory-document-save-mocks";
+import type { FactoryDocumentSaveInput } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { CurrentSelectionState } from "../../hooks/useCurrentSelection";
+import { DETAIL_CARD_NOW } from "./detail-card-test-helpers";
+
+export { DETAIL_CARD_NOW };
+
+export const DETAIL_CARD_SAVE_FACTORY_VERSION = {
+  logical: "7",
+  physical: "2026-05-23T15:52:00Z",
+} as const;
+
+export type DetailCardEditableFactoryDocumentOverrides = {
+  behavior?: "STANDARD" | "REPEATER" | "POLLER";
+  model?: string;
+  modelProvider?: "CURSOR" | "CODEX" | "CLAUDE" | "GEMINI" | "KIRO" | "OPENCODE";
+  prompt?: string;
+  workerName?: string;
+  workerOptions?: string[];
+};
+
+export type DetailCardMultiWorkstationFactoryDocumentOverrides = {
+  planPrompt?: string;
+  reviewPrompt?: string;
+};
+
+export function buildDetailCardFactoryDocumentQueryResult(
+  data: CurrentFactoryDocument | undefined,
+) {
+  return {
+    data,
+    error: null,
+    failureCount: 0,
+    failureReason: null,
+    fetchStatus: "idle",
+    isError: false,
+    isFetched: true,
+    isFetchedAfterMount: true,
+    isFetching: false,
+    isInitialLoading: false,
+    isLoading: false,
+    isLoadingError: false,
+    isPaused: false,
+    isPending: false,
+    isPlaceholderData: false,
+    isRefetchError: false,
+    isRefetching: false,
+    isStale: true,
+    isSuccess: true,
+    promise: Promise.resolve(data),
+    refetch: async () => data as never,
+    status: "success",
+  } as never;
+}
+
+export function buildDetailCardFactoryDocumentSaveHookReturn(
+  saveAsync: Mock<
+    (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
+  >,
+  options?: { isPending?: boolean },
+): MockFactoryDocumentSaveReturn {
+  return mockFactoryDocumentSave({
+    isPending: options?.isPending,
+    saveAsync,
+  });
+}
+
+export function createDetailCardDeferredFactoryDocumentSave() {
+  return createDeferredPromise<CurrentFactoryDocument>();
+}
+
+export function buildDetailCardEditableFactoryDocument(
+  overrides?: DetailCardEditableFactoryDocumentOverrides,
+): CurrentFactoryDocument {
+  const workerOptions = overrides?.workerOptions ?? ["reviewer", "planner"];
+
+  return {
+    name: "Current Factory",
+    version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
+    workers: workerOptions.map((name, index) => ({
+      model: overrides?.model ?? `gpt-5.${index + 5}`,
+      modelProvider:
+        overrides?.modelProvider ?? (index === 0 ? ("CURSOR" as const) : ("CODEX" as const)),
+      name,
+      type: "MODEL_WORKER",
+    })),
+    workstations: [
+      {
+        behavior: overrides?.behavior ?? "STANDARD",
+        body:
+          overrides?.prompt ??
+          "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        worker: overrides?.workerName ?? "reviewer",
+      },
+    ],
+    workTypes: [],
+  };
+}
+
+export function buildDetailCardMultiWorkstationFactoryDocument(
+  overrides?: DetailCardMultiWorkstationFactoryDocumentOverrides,
+): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
+    workers: [
+      {
+        model: "gpt-5.5",
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5.6",
+        modelProvider: "CODEX",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body:
+          overrides?.reviewPrompt ??
+          "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        worker: "reviewer",
+      },
+      {
+        body: overrides?.planPrompt ?? "Plan the implementation.",
+        id: "plan",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/plan.md",
+        worker: "planner",
+      },
+    ],
+    workTypes: [],
+  };
+}
+
+export function buildDetailCardSharedWorkerFactoryDocument(overrides?: {
+  prompt?: string;
+}): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
+    workers: [
+      {
+        model: "gpt-5.5",
+        modelProvider: "CURSOR",
+        name: "processor",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body:
+          overrides?.prompt ??
+          "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        worker: "processor",
+      },
+      {
+        body: "Plan the implementation.",
+        id: "plan",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/plan.md",
+        worker: "processor",
+      },
+    ],
+    workTypes: [],
+  };
+}
+
+export function buildDetailCardCurrentSelection(
+  overrides: Partial<CurrentSelectionState> = {},
+): CurrentSelectionState {
+  return {
+    canRedoSelection: false,
+    canUndoSelection: false,
+    completedWorkItems: [],
+    failedWorkItems: [],
+    openTerminalWorkDetail: () => undefined,
+    redoSelection: () => undefined,
+    selectedNode: null,
+    selectedNodeActiveExecutions: [],
+    selectedNodeProviderSessions: [],
+    selectedNodeWorkstationRequests: [],
+    selectedStateCurrentWorkItems: [],
+    selectedStatePlace: null,
+    selectedStateTerminalHistoryWorkItems: [],
+    selectedStateTokenCount: 0,
+    selectedWorkDispatchAttempts: [],
+    selectedWorkID: null,
+    selectedWorkProviderSessions: [],
+    selectedWorkRequestHistory: [],
+    selectedWorkWorkstationRequests: [],
+    selectedWorkstationRequest: null,
+    selectedWorker: null,
+    selectedWorkerName: null,
+    selectedWorkerWorkstationNames: [],
+    selection: null,
+    selectStateNode: () => undefined,
+    selectStateWorkItem: () => undefined,
+    selectWorkByID: () => undefined,
+    selectWorkItem: () => undefined,
+    selectWorker: () => undefined,
+    selectWorkstation: () => undefined,
+    selectWorkstationRequest: () => undefined,
+    terminalWorkDetail: null,
+    undoSelection: () => undefined,
+    ...overrides,
+  };
+}
+
+export function buildDetailCardWorkstationNodeSelection(
+  nodeId = semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id
+    .review.node_id,
+) {
+  const selectedNode =
+    semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
+
+  return buildDetailCardCurrentSelection({
+    selectedNode,
+    selection: { kind: "node", nodeId },
+  });
+}
+
+export function expandDetailCardWorkstationConfiguration(
+  buttonName = "Expand editable configuration",
+  headingName = "Configuration",
+) {
+  const section = screen
+    .getAllByRole("heading", { name: headingName })
+    .at(-1)
+    ?.closest("section");
+  if (!section) {
+    throw new Error("expected editable configuration section");
+  }
+
+  fireEvent.click(
+    within(section).getByRole("button", {
+      name: buttonName,
+    }),
+  );
+}

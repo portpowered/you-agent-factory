@@ -5,7 +5,6 @@ generate:
   client: true
 output-options:
   include-operation-ids:
-    - createFactory
     - getEditableCurrentFactoryDefinition
     - getCurrentFactory
     - saveEditableCurrentFactoryDefinition

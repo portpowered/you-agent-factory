@@ -8,7 +8,7 @@ import { mock } from "bun:test";
 /** Resolved the same way as `../features/...` imports from `ui/src/testing/`. */
 const LAYOUT_MODULE = "../src/features/flowchart/lib/layout";
 const FACTORY_DEFINITION_MODULE =
-  "../src/features/current-factory-definition/public";
+  "../src/features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 
 export const useCurrentFactoryDocumentMock = mock(() => {
   throw new Error("useCurrentFactoryDocumentMock not configured");

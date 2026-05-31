@@ -22,7 +22,7 @@ behavior.
 | `ui/src/features/workflow-activity/public/index.ts` | `components/dashboard-flow-axis-legend`, `components/react-flow-current-activity-card`, `components/workflow-activity-bento-card` | Direct component modules under `workflow-activity/components/` |
 | `ui/src/features/timeline/state/index.ts` | Deleted one-line state barrel for timeline debug/store exports | `timeline/state/factoryTimelineStore` and the owning state module |
 | `ui/src/features/terminal-work/messages/index.ts` | Deleted one-line message barrel | `terminal-work/messages/terminal-work` |
-| `ui/src/features/current-factory-definition/public/index.ts` | `lib/workstation-behavior`, `lib/workstation-editable-values` | Direct helper modules under `current-factory-definition/lib/` |
+| `ui/src/features/current-factory-definition/public/index.ts` | `lib/workstation-behavior`, `lib/workstation-editable-values` (barrel later deleted entirely; see `remove-dead-current-factory-definition-public-barrel`) | Direct helper modules under `current-factory-definition/lib/`; hooks from `current-factory-definition/hooks/*`; types from `api/current-factory-definition` |
 | `ui/src/features/flowchart/public/index.ts` | `lib/layout`, `lib/workstation-semantics` | Direct helper modules under `flowchart/lib/` |
 | `ui/src/features/import/public/index.ts` | `lib/factory-png-import` | `import/lib/factory-png-import` |
 | `ui/src/features/provider-session-detail/public/index.ts` | `lib/provider-session-ref` | `provider-session-detail/lib/provider-session-ref` |
@@ -38,8 +38,6 @@ entrypoints that maintained consumers compile through:
   status panel.
 - `workflow-activity/public`: mutation dialog, workflow activity widget, and
   the current-activity import controller hook.
-- `current-factory-definition/public`: current-factory-definition hook and
-  public current-factory-definition API types.
 - `flowchart/public`: activity node components, semantic graph icon, and
   workstation icon metadata.
 - `import/public`: import preview dialog and import activation, preview, and

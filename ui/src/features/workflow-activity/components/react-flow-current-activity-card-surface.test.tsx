@@ -121,7 +121,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     saveBlockedReason: "Stop active work before saving this draft.",
     saveEditableDefinition: {
       error: new Error("Save failed"),
-      status: "success" as const,
+      isPending: false,
     },
     setActiveTool: vi.fn(),
     setAddMenuOpen: vi.fn(),
@@ -380,7 +380,7 @@ describe("CurrentActivityGraphSurface", () => {
             isStaleDraft: false,
             saveEditableDefinition: {
               error: null,
-              status: "success" as const,
+              isPending: false,
             },
           }) as never
         }
