@@ -6,9 +6,9 @@ import type {
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
+  type FactoryValidationGraphProjection,
   projectFactoryValidationTargets,
   validationNodeErrorForNode,
-  type FactoryValidationGraphProjection,
 } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type {
   GraphLayout,
@@ -30,6 +30,7 @@ import {
   buildSemanticGraphHandles,
   type CurrentActivityEditorState,
   resolveWorkstationConnectionAnchorContext,
+  resolveZAxisIncompleteHints,
   supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
 
@@ -590,6 +591,12 @@ function buildWorkstationNode(
         validationProjection,
       }),
       kind: "workstation",
+      zAxisIncompleteHints: resolveZAxisIncompleteHints({
+        connectionAnchorContext,
+        editor: input.editor,
+        locale: input.locale,
+        nodeKind: "workstation",
+      }),
       progressOutcomeRouteWorkstation,
       locale: input.locale,
       muted:
