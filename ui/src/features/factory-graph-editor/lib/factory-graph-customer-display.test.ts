@@ -6,6 +6,7 @@ import {
 } from "./factory-graph-customer-display";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
 import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
+import { maintainerRuntimeShapedFactory } from "./maintainer-runtime-shaped-factory.fixture";
 
 const pureSystemTimeFactory = {
   name: "system-time-only",
@@ -114,6 +115,7 @@ function edgeIds(
   return topology.edges.map((edge) => edge.id);
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: customer-display regression fixtures stay grouped around the filter they protect.
 describe("filterFactoryGraphTopologyForCustomerDisplay", () => {
   it("removes pure system-time graph nodes and incident edges", () => {
     const rawTopology = buildFactoryGraphTopologyFromDefinition(
@@ -219,5 +221,19 @@ describe("filterFactoryGraphTopologyForCustomerDisplay", () => {
         nodeId.includes(SYSTEM_TIME_WORK_TYPE_ID),
       ),
     ).toBe(false);
+  });
+
+  it("omits phantom worker nodes from maintainer runtime-shaped factories", () => {
+    const filtered = filterFactoryGraphTopologyForCustomerDisplay(
+      buildFactoryGraphTopologyFromDefinition(maintainerRuntimeShapedFactory),
+    );
+
+    expect(nodeIds(filtered)).not.toContain("worker:");
+    expect(nodeIds(filtered)).toEqual(
+      expect.arrayContaining(["worker:processor", "worker:workspace-setup"]),
+    );
+    expect(
+      edgeIds(filtered).some((edgeId) => edgeId.startsWith("worker-assignment:")),
+    ).toBe(true);
   });
 });
