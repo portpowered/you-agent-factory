@@ -16,12 +16,12 @@ import {
   DashboardGraphControls,
 } from "../../../components/dashboard/dashboard-graph";
 import { cn } from "../../../lib/cn";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
   type FactoryGraphEditorMenuAction,
   FactoryGraphEditorToolbar,
   FactoryGraphEditorWorkStatePhaseLegend,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
-import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
@@ -37,7 +37,7 @@ import {
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
 
-function CurrentActivityEditorToolbar(props: {
+function CurrentActivityGraphEditorChrome(props: {
   activeTool: "add" | "connect" | "delete" | null;
   addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteractWithEditor: boolean;
@@ -55,24 +55,30 @@ function CurrentActivityEditorToolbar(props: {
   saveDisabledReason?: string;
 }) {
   return (
-    <FactoryGraphEditorToolbar
-      activeTool={props.activeTool}
-      addMenuActions={props.addMenuActions}
-      canDiscard={props.hasPendingChanges}
-      canInteract={props.canInteractWithEditor}
-      canSave={props.canSaveDraft}
-      hasPendingChanges={props.hasPendingChanges}
-      isSaving={props.isSavingDraft}
-      locale={props.locale}
-      onAddAction={props.onAddAction}
-      onAddMenuOpenChange={props.onAddMenuOpenChange}
-      onDiscard={props.handleDiscardPendingChanges}
-      onSave={props.handleSaveDraft}
-      onSelectTool={props.onSelectTool}
-      openAddMenu={props.openAddMenu}
-      saveDisabledReason={props.saveDisabledReason}
-      visible={props.editorMode}
-    />
+    <>
+      <FactoryGraphEditorWorkStatePhaseLegend
+        locale={props.locale}
+        visible={props.editorMode}
+      />
+      <FactoryGraphEditorToolbar
+        activeTool={props.activeTool}
+        addMenuActions={props.addMenuActions}
+        canDiscard={props.hasPendingChanges}
+        canInteract={props.canInteractWithEditor}
+        canSave={props.canSaveDraft}
+        hasPendingChanges={props.hasPendingChanges}
+        isSaving={props.isSavingDraft}
+        locale={props.locale}
+        onAddAction={props.onAddAction}
+        onAddMenuOpenChange={props.onAddMenuOpenChange}
+        onDiscard={props.handleDiscardPendingChanges}
+        onSave={props.handleSaveDraft}
+        onSelectTool={props.onSelectTool}
+        openAddMenu={props.openAddMenu}
+        saveDisabledReason={props.saveDisabledReason}
+        visible={props.editorMode}
+      />
+    </>
   );
 }
 
@@ -311,11 +317,7 @@ export function CurrentActivityGraphViewport({
             fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
           />
         </ReactFlow>
-        <FactoryGraphEditorWorkStatePhaseLegend
-          locale={locale}
-          visible={editorMode}
-        />
-        <CurrentActivityEditorToolbar
+        <CurrentActivityGraphEditorChrome
           activeTool={activeTool}
           addMenuActions={addMenuActions}
           canInteractWithEditor={canInteractWithEditor}
