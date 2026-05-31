@@ -67,7 +67,7 @@ export function resolvePromptValidationState(
     return { status: "idle" };
   }
 
-  if (promptValidation.isPending || promptValidation.isFetching) {
+  if (isPromptTemplateValidationInFlight(promptValidation)) {
     return { status: "loading" };
   }
 
@@ -94,6 +94,18 @@ export function resolvePromptValidationState(
     result: promptValidation.data,
     status: "ready",
   };
+}
+
+function isPromptTemplateValidationInFlight(
+  promptValidation: ReturnType<
+    typeof useCurrentWorkstationPromptTemplateValidation
+  >,
+): boolean {
+  if (promptValidation.isPending) {
+    return true;
+  }
+
+  return promptValidation.isFetching && promptValidation.data === undefined;
 }
 
 function editablePromptDiagnosticFromAPI(

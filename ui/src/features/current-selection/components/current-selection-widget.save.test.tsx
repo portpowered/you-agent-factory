@@ -154,6 +154,73 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
   });
 
+  it("keeps save enabled after syntax recovery while prompt validation refetches settled results", async () => {
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockImplementation(
+      (_workstationName, prompt) => {
+        const isValidPrompt = prompt === "Use {{ .WorkID }}.";
+        return {
+          data: isValidPrompt
+            ? {
+                diagnostics: [],
+                valid: true,
+              }
+            : {
+                diagnostics: [
+                  {
+                    endOffset: 24,
+                    kind: "SYNTAX_ERROR",
+                    message: "line 1: unexpected EOF",
+                    startOffset: 0,
+                  },
+                ],
+                valid: false,
+              },
+          error: null,
+          isError: false,
+          isFetching: isValidPrompt,
+          isPending: false,
+          isSuccess: true,
+          status: "success",
+        } as never;
+      },
+    );
+
+    renderWorkstationSelection();
+    expandDetailCardWorkstationConfiguration();
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "{{ if .WorkID }}" },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: "Save changes" })
+          .getAttribute("disabled"),
+      ).not.toBeNull();
+    });
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Use {{ .WorkID }}." },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: "Save changes" })
+          .getAttribute("disabled"),
+      ).toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Overwrite the running factory definition?",
+      }),
+    ).toBeTruthy();
+  });
+
   it("confirms before saving and refreshes the form to the saved workstation values", async () => {
     const savedFactory = buildDetailCardEditableFactoryDocument({
       prompt: "Review the diff and verify browser behavior.",

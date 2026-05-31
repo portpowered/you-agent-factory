@@ -211,7 +211,8 @@ export function validateEditableWorkstationDraft(
   } else if (
     promptIsRequired &&
     promptValidationState.status === "ready" &&
-    promptValidationState.diagnostics.length > 0
+    (!promptValidationState.result.valid ||
+      promptValidationState.diagnostics.length > 0)
   ) {
     validationErrors.prompt = messages.editableConfigurationPromptFieldHint;
   }
