@@ -3,7 +3,7 @@ import "@xyflow/react/dist/style.css";
 import { useId } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import type { FactoryValue } from "../../../api/named-factory";
+import type { FactoryValue } from "../../../api/session-factory";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
