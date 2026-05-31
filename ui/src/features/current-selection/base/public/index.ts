@@ -14,3 +14,11 @@ export * from "../components/current-selection-header-actions";
 export * from "../components/detail-card-shared";
 export * from "../components/detail-card-types";
 export { NoSelectionDetailCard } from "../components/no-selection-detail-card";
+
+export * from "../hooks/detail-card-save-types";
+export {
+  useScopedFactoryDocumentSave,
+  type ScopedFactoryDocumentSaveRequest,
+  type UseScopedFactoryDocumentSaveOptions,
+  type UseScopedFactoryDocumentSaveResult,
+} from "../hooks/useScopedFactoryDocumentSave";
