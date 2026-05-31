@@ -65,4 +65,31 @@ describe("getSessionFactory version validation", () => {
       name: "SessionFactoryAPIError",
     });
   });
+
+  it("throws when factory version object is missing", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              name: "Current Factory",
+              workers: [],
+              workstations: [],
+              workTypes: [],
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      name: "SessionFactoryAPIError",
+    });
+  });
 });

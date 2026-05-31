@@ -2,7 +2,8 @@ import {
   factoryRuntimeNotIdleTarget,
   staleFactoryVersionTarget,
 } from "../../testing/factory-validation-target-fixtures";
-import { saveSessionFactory } from "./api";
+import { getSessionFactory, saveSessionFactory } from "./api";
+import { SessionFactoryAPIError } from "./errors";
 
 const baseSaveParams = {
   sessionID: "~default",
@@ -13,6 +14,35 @@ const baseSaveParams = {
     workTypes: [],
   },
 } as const;
+
+describe("getSessionFactory transport errors", () => {
+  it("throws SessionFactoryAPIError for network failures", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockRejectedValue(new Error("connection reset")),
+      }),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      name: "SessionFactoryAPIError",
+    });
+  });
+
+  it("uses rejected message when error response omits message", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response("{}", {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 500,
+            statusText: "Internal Server Error",
+          }),
+        ),
+      }),
+    ).rejects.toBeInstanceOf(SessionFactoryAPIError);
+  });
+});
 
 describe("saveSessionFactory stale and idle errors", () => {
   it("surfaces STALE_FACTORY_VERSION with structured targets", async () => {
