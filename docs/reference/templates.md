@@ -1,9 +1,9 @@
 # Templates
 
-`you docs templates` surfaces this guide from the packaged CLI topic list. The
-maintained canonical copy lives at `docs/reference/templates.md`. Cross-cutting
-guard and relationship behavior is documented in `you docs guards` and
-`you docs relationships`.
+`you docs templates` prints this guide from the packaged CLI topic list. The
+repository file is `docs/reference/templates.md`. Cross-cutting guard and
+relationship behavior is documented in `you docs guards`
+and `you docs relationships`.
 
 Use this page when you need the supported Go-template surfaces, the full
 template variable inventory, and the quoting rules that differ between

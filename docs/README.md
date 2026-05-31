@@ -100,6 +100,13 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - [Understand a run timeline](internal/development/run-timeline.md) explains how
   `/events`, recordings, replay, and the dashboard use one ordered event timeline.
 
+## Maintainer workflow (packaged CLI reference)
+
+- Edit topic markdown only under [`docs/reference/`](reference/README.md).
+- Run `make docs-reference-smoke` from the repository root before shipping.
+- Do not maintain a parallel copy under `pkg/cli/docs/`; `you docs` serves the
+  embedded `docs/reference/` tree.
+
 ## Contributor Guides
 
 - [Development guide](internal/development/development.md)

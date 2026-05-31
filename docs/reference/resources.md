@@ -1,7 +1,7 @@
 # Resources
 
-`you docs resources` is the canonical packaged bounded-concurrency guide. The
-maintained reference lives at `docs/reference/resources.md`.
+`you docs resources` prints this guide from the packaged CLI topic list. The
+repository file is `docs/reference/resources.md`.
 
 Use this page when you need the current you-agent-factory resource contract for
 bounded concurrency across workstations.
