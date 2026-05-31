@@ -56,16 +56,21 @@ vi.mock("../features/flowchart/lib/layout", async () => {
   };
 });
 
+const currentFactoryDocumentMock = vi.hoisted(() => ({
+  actual: null as typeof useCurrentFactoryDocument | null,
+}));
+
 vi.mock(
   "../features/current-factory-definition/hooks/useCurrentFactoryDefinition",
-  async () => {
-    const actual = await vi.importActual(
-      "../features/current-factory-definition/hooks/useCurrentFactoryDefinition",
-    );
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import("../features/current-factory-definition/hooks/useCurrentFactoryDefinition")
+    >();
+    currentFactoryDocumentMock.actual = actual.useCurrentFactoryDocument;
 
     return {
       ...actual,
-      useCurrentFactoryDocument: vi.fn(),
+      useCurrentFactoryDocument: vi.fn(actual.useCurrentFactoryDocument),
     };
   },
 );
@@ -277,7 +282,8 @@ export function nonPromptTemplateFetchPaths(
   return fetchCallPaths(fetchMock).filter(
     (path) =>
       !path.includes("/prompt-template-contract") &&
-      path !== "/factory-sessions",
+      path !== "/factory-sessions" &&
+      !path.endsWith("/factory"),
   );
 }
 
@@ -331,6 +337,16 @@ export function mockCurrentFactoryDocument(
   vi.mocked(useCurrentFactoryDocument).mockReturnValue(result as never);
 }
 
+export function resetCurrentFactoryDocumentMock(): void {
+  if (currentFactoryDocumentMock.actual == null) {
+    throw new Error("useCurrentFactoryDocument mock was not initialized");
+  }
+
+  vi.mocked(useCurrentFactoryDocument).mockImplementation(
+    currentFactoryDocumentMock.actual,
+  );
+}
+
 export function registerAppDashboardTestLifecycle(): void {
   beforeEach(() => {
     window.localStorage.clear();
@@ -340,30 +356,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
-    mockCurrentFactoryDocument({
-      data: undefined,
-      error: null,
-      failureCount: 0,
-      failureReason: null,
-      fetchStatus: "idle",
-      isError: false,
-      isFetched: false,
-      isFetchedAfterMount: false,
-      isFetching: false,
-      isInitialLoading: false,
-      isLoading: false,
-      isLoadingError: false,
-      isPaused: false,
-      isPending: true,
-      isPlaceholderData: false,
-      isRefetchError: false,
-      isRefetching: false,
-      isStale: true,
-      isSuccess: false,
-      promise: Promise.resolve(undefined),
-      refetch: vi.fn(),
-      status: "pending",
-    } as never);
+    resetCurrentFactoryDocumentMock();
   });
 
   afterEach(() => {
