@@ -176,9 +176,13 @@ those retries like `you submit batch` idempotency.
 
 ## Is the factory running?
 
-Before `you submit`, watched `factory/inputs/**`, or `POST /work`, confirm a factory
-service is listening and has an open session. A local `factory.json` on disk does
-not by itself mean a runtime is accepting work.
+Before `you submit` or `you submit batch`, confirm a factory service is listening
+and has an open session. A local `factory.json` on disk does not by itself mean a
+runtime is accepting work.
+
+Operators who submit via watched `factory/inputs/**`, dashboard, or `POST /work`
+should still follow the checks below; see [Work](work.md) (`you docs work`) for
+HTTP and dashboard submit contracts.
 
 Use these checks in order:
 
@@ -238,8 +242,9 @@ the process that bound the listener.
 | `you run --continuously` | Yes — processes work until you stop the process. |
 | `you run` (batch, no `--continuously`) | No — exits when the factory goes idle; not suitable for later `you submit` or watched inbox ingress unless you restart it. |
 
-For steady `you submit`, dashboard submit, or `POST /work` against an already-running
-host, prefer `you` or `you run --continuously`. Use batch `you run` when you want a
+For steady `you submit` or `you submit batch` against an already-running host,
+prefer `you` or `you run --continuously`. Operators using dashboard submit or
+`POST /work` need the same continuous run mode. Use batch `you run` when you want a
 one-shot local run that shuts down on idle.
 
 ## Operator loop
@@ -248,7 +253,9 @@ Use this loop when driving a factory from the CLI or an autonomous agent:
 
 1. **Check running** — follow [Is the factory running?](#is-the-factory-running?)
    (`you session list`, then `you factory query` or status when you need depth).
-2. **Submit** — enqueue work with `you submit`, batch inbox files, or `POST /work`.
+2. **Submit** — enqueue work with `you submit` or `you submit batch` (see
+   [Batch submit for agents](#batch-submit-for-agents) for batch JSON and stable
+   `requestId`).
 3. **Verify** — confirm acceptance on stdout, then inspect work with
    `you work show <work-id>` or `you work list --name <name>` (see [Work](work.md)).
 
@@ -268,15 +275,26 @@ you submit \
 Replace `task` with a `workTypeName` from your `factory.json` and `request.md`
 with the payload file your factory expects.
 
+### Copy-paste `you submit batch` example
+
+```bash
+you submit batch ./batches/release-story-set.json
+```
+
+Use the same `FACTORY_REQUEST_BATCH` shape and stable `requestId` as in
+[Batch submit for agents](#batch-submit-for-agents). Reuse the same `requestId`
+on retries so the factory upserts instead of creating duplicate batches.
+
 ## Command Matrix
 
 | Command | Purpose | Factory must already be running? |
 |---------|---------|----------------------------------|
 | `you run --dir <factory>` | Start (or attach to) a local factory from a directory | No — command starts runtime |
 | `you run --factory <path> "<prompt>"` | One-shot CLI run with inline factory file and prompt | Depends on flags; see [Config](config.md) |
-| `you run --work <batch.json>` | Submit batch JSON as part of startup | No when combined with `--dir` startup |
-| `you submit` | Submit work through CLI/dashboard flows | Yes — see [Is the factory running?](#is-the-factory-running?) |
-| Dashboard / `POST /work` | API submission against running service | Yes — see [Is the factory running?](#is-the-factory-running?) |
+| `you run --work <batch.json>` | Submit batch JSON as part of **local startup** (agent path when not already running) | No when combined with `--dir` startup |
+| `you submit` | Submit one work item (autonomous agent path) | Yes — see [Is the factory running?](#is-the-factory-running?) |
+| `you submit batch` | Upsert batch JSON to a running session (autonomous agent path) | Yes — see [Is the factory running?](#is-the-factory-running?) |
+| Dashboard / `POST /work` | **Operator-only** API or UI submission | Yes — see [Work](work.md) (`you docs work`) |
 | `you docs <topic>` | Print packaged reference markdown | No |
 
 Use [Mock Workers](mock-workers.md) and [Record and Replay](record-replay.md)
@@ -288,7 +306,7 @@ Autonomous agent workflows usually split into two cooperating roles:
 
 | Role | Responsibility | Typical artifacts |
 |------|----------------|-------------------|
-| **Planner / scheduler** | Reads topology, chooses the next work item, writes batch or single-work requests, and enqueues work without executing workstation prompts | Batch JSON under `inputs/`, planning prompts, `POST /work` bodies |
+| **Planner / scheduler** | Reads topology, chooses the next work item, prepares batch or single-work JSON, and enqueues work via `you submit` or `you submit batch` without executing workstation prompts | CLI batch JSON files, planning prompts, unary `you submit` flags and payloads |
 | **Executor** | Runs when a token reaches a workstation input place; loads worker + workstation `AGENTS.md`, calls the configured worker backend, and returns accept, continue, reject, or failure outcomes | Workstation and worker `AGENTS.md`, rendered templates ([Templates](templates.md)) |
 
 Planners should prefer factory-local overview docs and [Config](config.md) before
