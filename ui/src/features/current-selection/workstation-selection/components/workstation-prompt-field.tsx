@@ -1,6 +1,5 @@
 import { useId, useState } from "react";
-
-import { DisclosureButton } from "../../../../components/ui/disclosure-button";
+import { MonacoPromptEditor } from "../../../../components/prompt-editor";
 import {
   Collapsible,
   CollapsibleContent,
@@ -10,8 +9,8 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
+import { DisclosureButton } from "../../../../components/ui/disclosure-button";
 import { cn } from "../../../../lib/cn";
-import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import {
   CURRENT_SELECTION_ALERT_PANEL_CLASS,
   CURRENT_SELECTION_CODE_SUBTLE_CLASS,
@@ -23,7 +22,7 @@ import type {
   EditableWorkstationPromptHelpState,
   WorkstationDetailCardProps,
 } from "../lib/detail-card-types";
-import { WorkstationPromptEditor } from "./workstation-prompt-editor";
+import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 export function EditableConfigurationPromptInput({
   messages,
@@ -47,7 +46,7 @@ export function EditableConfigurationPromptInput({
   return (
     <div className="grid gap-2">
       <div>
-        <WorkstationPromptEditor
+        <MonacoPromptEditor
           ariaLabel={messages.promptFieldLabel}
           ariaDescribedBy={describedBy || undefined}
           ariaInvalid={Boolean(state.validationErrors.prompt)}
@@ -134,7 +133,10 @@ function EditableConfigurationReadyPromptHelp({
   promptHelpState,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
-  promptHelpState: Extract<EditableWorkstationPromptHelpState, { status: "ready" }>;
+  promptHelpState: Extract<
+    EditableWorkstationPromptHelpState,
+    { status: "ready" }
+  >;
 }) {
   const [expanded, setExpanded] = useState(false);
   const sectionId = useId();
@@ -143,7 +145,12 @@ function EditableConfigurationReadyPromptHelp({
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className={cn("m-0 min-w-0 flex-1", CURRENT_SELECTION_NOTICE_SUBTLE_CLASS)}>
+        <p
+          className={cn(
+            "m-0 min-w-0 flex-1",
+            CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
+          )}
+        >
           {messages.editableConfigurationPromptAutocompleteSummary(
             promptHelpState.contract.availableVariables.length,
             promptHelpState.contract.inputCount,

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import { WorkstationPromptEditor } from "./workstation-prompt-editor";
+import { MonacoPromptEditor } from "./monaco-prompt-editor";
 
 const readyAutocompleteState = {
   contract: {
@@ -18,7 +18,7 @@ const readyAutocompleteState = {
   status: "ready" as const,
 };
 
-describe("WorkstationPromptEditor", () => {
+describe("MonacoPromptEditor", () => {
   it("wires Monaco markers, accessibility props, editing, scroll, and ready lifecycle", async () => {
     const onChange = vi.fn();
     const onMount = vi.fn();
@@ -26,7 +26,7 @@ describe("WorkstationPromptEditor", () => {
     const onScrollChange = vi.fn();
 
     const { unmount } = render(
-      <WorkstationPromptEditor
+      <MonacoPromptEditor
         ariaDescribedBy="prompt-help prompt-error"
         ariaInvalid
         ariaLabel="Prompt"
