@@ -795,14 +795,14 @@ func (s *Server) handleMoveWork(
 		return
 	}
 
-	token, ok := findPublicWorkToken(snapshot.Marking.Tokens, workID)
+	materialized := materialize.CollectPublicWorkTokens(&snapshot.Marking, snapshot.Dispatches)
+	token, inFlightOnly, ok := findPublicWorkToken(materialized, workID)
 	if !ok {
 		s.writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
 		return
 	}
-	materialized := materialize.CollectPublicWorkTokens(&snapshot.Marking, snapshot.Dispatches)
 	workNamesByID := publicWorkNamesByID(materialized.Tokens)
-	work := tokenToWork(token, snapshot.Topology, false)
+	work := tokenToWork(token, snapshot.Topology, inFlightOnly)
 	work.Relations = generatedWorkRelations(token, work.Name, workNamesByID)
 	s.writeJSON(w, http.StatusOK, work)
 }

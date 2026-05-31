@@ -321,32 +321,36 @@ func (s *Server) getWork(
 		return
 	}
 
-	token, ok := findPublicWorkToken(snapshot.Marking.Tokens, string(id))
+	materialized := materialize.CollectPublicWorkTokens(&snapshot.Marking, snapshot.Dispatches)
+	token, inFlightOnly, ok := findPublicWorkToken(materialized, string(id))
 	if !ok {
 		s.writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
 		return
 	}
 
-	materialized := materialize.CollectPublicWorkTokens(&snapshot.Marking, snapshot.Dispatches)
 	workNamesByID := publicWorkNamesByID(materialized.Tokens)
-	work := tokenToWork(token, snapshot.Topology, false)
+	work := tokenToWork(token, snapshot.Topology, inFlightOnly)
 	work.Relations = generatedWorkRelations(token, work.Name, workNamesByID)
 	s.writeJSON(w, http.StatusOK, work)
 }
 
-func findPublicWorkToken(tokens map[string]*interfaces.Token, id string) (*interfaces.Token, bool) {
-	if token, ok := tokens[id]; ok && publicWorkToken(token) {
-		return token, true
+func findPublicWorkToken(materialized materialize.PublicWorkTokens, id string) (*interfaces.Token, bool, bool) {
+	for _, token := range materialized.Tokens {
+		if token.ID == id && publicWorkToken(token) {
+			_, inFlightOnly := materialized.InFlightOnlyByID[token.ID]
+			return token, inFlightOnly, true
+		}
 	}
-	for _, token := range tokens {
+	for _, token := range materialized.Tokens {
 		if !publicWorkToken(token) {
 			continue
 		}
 		if token.Color.WorkID == id {
-			return token, true
+			_, inFlightOnly := materialized.InFlightOnlyByID[token.ID]
+			return token, inFlightOnly, true
 		}
 	}
-	return nil, false
+	return nil, false, false
 }
 func tokenToWork(t *interfaces.Token, net *state.Net, inFlightOnly bool) factoryapi.Work {
 	name := firstNonEmptyString(t.Color.Name, t.Color.WorkID, t.ID)

@@ -286,6 +286,70 @@ func TestGetWorkNotFound(t *testing.T) {
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "work not found")
 }
 
+func TestGetWork_IncludesDispatchOnlyWorkWithProcessingState(t *testing.T) {
+	now := time.Now()
+	dispatchToken := interfaces.Token{
+		ID:      "tok-in-flight",
+		PlaceID: "task:review",
+		Color: interfaces.TokenColor{
+			DataType:   interfaces.DataTypeWork,
+			WorkID:     "work-in-flight",
+			WorkTypeID: "task",
+			Name:       "In flight story",
+		},
+		CreatedAt: now,
+		EnteredAt: now,
+	}
+	srv := newTestServer(&testutil.MockFactory{
+		EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			Dispatches: map[string]*interfaces.DispatchEntry{
+				"dispatch-1": {
+					DispatchID:     "dispatch-1",
+					ConsumedTokens: []interfaces.Token{dispatchToken},
+				},
+			},
+			Topology: listWorkFilterTopology(),
+		},
+	})
+
+	for _, path := range []string{"/work/work-in-flight", "/work/tok-in-flight"} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+			work := decodeJSONResponse[factoryapi.Work](t, rec)
+			if stringValue(work.WorkId) != "work-in-flight" || work.Name != "In flight story" {
+				t.Fatalf("work = %#v, want dispatch-only identity fields", work)
+			}
+			if work.State == nil || work.State.Name != "review" || work.State.Type != factoryapi.WorkStateTypePROCESSING {
+				t.Fatalf("state = %#v, want review/PROCESSING from consumed place", work.State)
+			}
+		})
+	}
+}
+
+func TestGetWork_NotFoundWhenAbsentFromMarkingAndDispatches(t *testing.T) {
+	now := time.Now()
+	srv := newTestServer(&testutil.MockFactory{
+		EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+				"tok-mark": listWorkToken("tok-mark", "work-mark", "task:init", "task", now),
+			}},
+			Dispatches: map[string]*interfaces.DispatchEntry{},
+			Topology:   listWorkFilterTopology(),
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work/work-missing", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "work not found")
+}
+
 func TestGetStatus_ReturnsAggregateSnapshotStatus(t *testing.T) {
 	now := time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC)
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
