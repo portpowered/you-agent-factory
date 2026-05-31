@@ -15,6 +15,7 @@ export function useCurrentActivityGraphEditor(
   snapshot: DashboardSnapshot,
   locale?: string | null,
   factoryDocumentScopeKey?: string | null,
+  onNodeRemovedFromDraft?: (nodeId: string) => void,
 ) {
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
@@ -56,6 +57,7 @@ export function useCurrentActivityGraphEditor(
     draftState,
     editableGraph,
     locale,
+    onNodeRemovedFromDraft,
     saveEditableDefinition,
     setActiveTool,
   });
@@ -103,6 +105,7 @@ export function useCurrentActivityGraphEditor(
     handleEditorEdgeDelete: controllers.handleEditorEdgeDelete,
     handleEditorModeToggle: session.handleEditorModeToggle,
     handleEditorNodeDelete: controllers.handleEditorNodeDelete,
+    handleSelectionNodeDelete: controllers.handleSelectionNodeDelete,
     handleSaveDraft: saveFlow.handleSaveDraft,
     handleSaveBeforeLeavingEditor: saveFlow.handleSaveBeforeLeavingEditor,
     graphDraftSaveSucceeded: editableGraph.saveState.lastSuccess,

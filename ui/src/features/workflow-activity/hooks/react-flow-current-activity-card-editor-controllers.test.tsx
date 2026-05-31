@@ -409,6 +409,48 @@ describe("current activity graph editor controllers", () => {
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
+  it("applies selection-panel node removal without requiring delete tool mode", () => {
+    const reset = vi.fn();
+    const unassignedDefinition: CanonicalFactoryDefinition = {
+      ...baseFactoryDefinition,
+      workers: [
+        ...(baseFactoryDefinition.workers ?? []),
+        {
+          model: "gpt-5",
+          name: "editor",
+          type: "MODEL_WORKER",
+        },
+      ],
+    };
+    const draftState = createDraftState({
+      baseFactoryDefinition: unassignedDefinition,
+    });
+    const editableGraph = createEditableGraph();
+    const onNodeRemovedFromDraft = vi.fn();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: null,
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        onNodeRemovedFromDraft,
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleSelectionNodeDelete("worker:editor");
+    });
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith("worker:editor");
+    expect(onNodeRemovedFromDraft).toHaveBeenCalledWith("worker:editor");
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
+
   it.each([
     {
       nodeId: "resource:cache",

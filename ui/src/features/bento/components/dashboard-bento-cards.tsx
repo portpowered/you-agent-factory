@@ -253,6 +253,15 @@ function buildOverviewWidgetCard({
             importController={importController}
             locale={locale}
             now={now}
+            onNodeRemovedFromDraft={(nodeId) => {
+              if (!nodeId.startsWith("worker:")) {
+                return;
+              }
+
+              currentSelection.clearSelectedWorkerIfMatching(
+                nodeId.slice("worker:".length),
+              );
+            }}
             onSelectStateNode={currentSelection.selectStateNode}
             onSelectWorkID={currentSelection.selectWorkByID}
             onSelectWorker={currentSelection.selectWorker}

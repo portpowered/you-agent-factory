@@ -38,6 +38,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   handleEditorEdgeDelete: (edgeId: string) => void;
   handleEditorModeToggle: () => void;
   handleEditorNodeDelete: (nodeId: string) => void;
+  handleSelectionNodeDelete: (nodeId: string) => void;
   handleSaveDraft: () => Promise<boolean>;
   handleSaveBeforeLeavingEditor: () => Promise<boolean>;
   graphDraftSaveSucceeded: boolean;
@@ -92,6 +93,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     handleEditorEdgeDelete: args.handleEditorEdgeDelete,
     handleEditorModeToggle: args.handleEditorModeToggle,
     handleEditorNodeDelete: args.handleEditorNodeDelete,
+    handleSelectionNodeDelete: args.handleSelectionNodeDelete,
     handleSaveDraft: args.handleSaveDraft,
     handleSaveBeforeLeavingEditor: args.handleSaveBeforeLeavingEditor,
     graphDraftSaveSucceeded: args.graphDraftSaveSucceeded,

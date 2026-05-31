@@ -10,6 +10,7 @@ import type {
   TerminalWorkStatus,
 } from "../../terminal-work/lib/types";
 import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
+import { selectDefaultSelection } from "../base/state/dashboardSelection";
 import {
   findTerminalWorkItem,
   inferStateWorkTerminalStatus,
@@ -67,6 +68,17 @@ export function useCurrentSelectionActions({
   const selectWorker = (workerName: string) => {
     commitSelectionState({
       selection: { kind: "worker", workerName },
+      terminalWorkDetail: null,
+    });
+  };
+
+  const clearSelectedWorkerIfMatching = (workerName: string) => {
+    if (selection?.kind !== "worker" || selection.workerName !== workerName) {
+      return;
+    }
+
+    commitSelectionState({
+      selection: snapshot ? selectDefaultSelection(snapshot) : null,
       terminalWorkDetail: null,
     });
   };
@@ -170,6 +182,7 @@ export function useCurrentSelectionActions({
   };
 
   return {
+    clearSelectedWorkerIfMatching,
     openTerminalWorkDetail,
     selectStateNode,
     selectStateWorkItem,

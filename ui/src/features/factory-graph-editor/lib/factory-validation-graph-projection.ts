@@ -36,6 +36,11 @@ export interface FactoryValidationGraphProjection {
 const WORKSTATION_GRAPH_NODE_PREFIX = "workstation:";
 const WORK_TYPE_GRAPH_NODE_PREFIX = "work-type:";
 const WORK_STATE_GRAPH_NODE_PREFIX = "work-state:";
+const WORKER_GRAPH_NODE_PREFIX = "worker:";
+
+export function factoryGraphNodeIdForWorker(workerName: string): string {
+  return `${WORKER_GRAPH_NODE_PREFIX}${workerName}`;
+}
 
 export function factoryGraphNodeIdForWorkstation(subjectId: string): string {
   return `${WORKSTATION_GRAPH_NODE_PREFIX}${subjectId}`;
