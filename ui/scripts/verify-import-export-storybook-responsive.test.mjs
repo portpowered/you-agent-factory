@@ -286,7 +286,12 @@ describe("viewport assertions", () => {
 describe("story assertions", () => {
   test("verifyExportDialog checks the expected export controls", async () => {
     const textbox = { isVisible: vi.fn().mockResolvedValue(true) };
-    const coverImage = { isVisible: vi.fn().mockResolvedValue(true) };
+    const coverImage = {
+      evaluate: vi.fn().mockResolvedValue(
+        "rounded-xl border border-dashed border-af-border-strong bg-af-surface-subtle",
+      ),
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
     const cancelButton = { isVisible: vi.fn().mockResolvedValue(true) };
     const exportButton = { isVisible: vi.fn().mockResolvedValue(true) };
     const helperCopy = { isVisible: vi.fn().mockResolvedValue(true) };
