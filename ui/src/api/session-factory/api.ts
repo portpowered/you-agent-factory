@@ -76,8 +76,9 @@ export async function saveSessionFactory(
   params: SaveSessionFactoryParams,
   options: SaveSessionFactoryOptions = {},
 ): Promise<SessionFactoryDocument> {
-  const mode = params.mode ?? "REPLACE_CURRENT";
-  const includeVersion = params.includeVersion ?? mode === "REPLACE_CURRENT";
+  const resolvedMode = params.mode ?? "REPLACE_CURRENT";
+  const includeVersion =
+    params.includeVersion ?? resolvedMode === "REPLACE_CURRENT";
   const factoryPayload: CanonicalFactory = {
     ...params.factory,
   };
@@ -87,10 +88,15 @@ export async function saveSessionFactory(
     delete factoryPayload.version;
   }
 
-  const requestBody = {
-    mode,
-    factory: factoryPayload,
-  };
+  const requestBody =
+    params.mode !== undefined
+      ? {
+          mode: params.mode,
+          factory: factoryPayload,
+        }
+      : {
+          factory: factoryPayload,
+        };
 
   return requestSessionFactoryDocument({
     body: JSON.stringify(requestBody),

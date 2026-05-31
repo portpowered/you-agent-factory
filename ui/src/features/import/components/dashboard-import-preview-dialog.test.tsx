@@ -2,7 +2,7 @@ import { useState } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 
-import { NamedFactoryAPIError } from "../../../api/named-factory";
+import { SessionFactoryAPIError } from "../../../api/session-factory";
 import {
   DashboardImportPreviewDialog,
   FactoryImportPreviewDialog,
@@ -125,7 +125,7 @@ describe("DashboardImportPreviewDialog", () => {
     const { baseElement } = render(
       <DashboardImportPreviewDialog
         activationState={{
-          error: new NamedFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
+          error: new SessionFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
           status: "error",
         }}
         currentSessionFactoryName={defaultCurrentSessionFactoryName}
@@ -178,7 +178,7 @@ describe("DashboardImportPreviewDialog", () => {
     function ImportPreviewCancelHarness() {
       const [activationState, setActivationState] =
         useState<DashboardImportPreviewDialogProps["activationState"]>({
-          error: new NamedFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
+          error: new SessionFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
           status: "error",
         });
       const [importPreviewState, setImportPreviewState] =
@@ -264,7 +264,7 @@ describe("DashboardImportPreviewDialog", () => {
   it("shows activation failures and delegates confirmation with the ready preview payload", async () => {
     const { onConfirm } = renderDialog({
       activationState: {
-        error: new NamedFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
+        error: new SessionFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
         status: "error",
       },
     });
@@ -325,7 +325,7 @@ describe("DashboardImportPreviewDialog", () => {
     async (code, message, expectedCopy) => {
       renderDialog({
         activationState: {
-          error: new NamedFactoryAPIError(message, { code }),
+          error: new SessionFactoryAPIError(message, { code }),
           status: "error",
         },
       });
@@ -407,7 +407,7 @@ describe("DashboardImportPreviewDialog", () => {
   it("renders mapped activation error copy for zh-CN", async () => {
     renderDialog({
       activationState: {
-        error: new NamedFactoryAPIError("Network unreachable", {
+        error: new SessionFactoryAPIError("Network unreachable", {
           code: "NETWORK_ERROR",
         }),
         status: "error",

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { components, operations, paths } from "./openapi";
 
-describe("generated factory OpenAPI types", () => {
+describe("generated session factory OpenAPI types", () => {
   it("exposes typed session factory save payloads and machine-readable error codes", () => {
     const factory: components["schemas"]["Factory"] = {
       name: "customer-support-triage",

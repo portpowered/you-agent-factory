@@ -1,25 +1,15 @@
 import { currentFactoryDefinitionAPIErrorMessages } from "../current-factory-definition/messages";
-import {
-  activateImportedFactoryForSession,
-  getCurrentFactory,
-  NamedFactoryAPIError,
-} from "./api";
+import { getCurrentFactory } from "./export";
+import { SessionFactoryAPIError } from "./errors";
 
-const canonicalFactory = {
-  name: "Current Factory",
-  workTypes: [],
-  workers: [],
-  workstations: [],
-} as const;
-
-describe("named factory API error handling", () => {
+describe("session factory export API error handling", () => {
   it("fails fast when current-factory fetch is unavailable", async () => {
     await expect(
       getCurrentFactory({
         fetch: true as unknown as typeof fetch,
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("Current factory export is unavailable in this environment.", {
+      new SessionFactoryAPIError("Current factory export is unavailable in this environment.", {
         code: "NETWORK_ERROR",
       }),
     );
@@ -39,7 +29,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.invalidResponse, {
+      new SessionFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.invalidResponse, {
         code: "INTERNAL_ERROR",
         responseBody: "not-a-factory",
         status: 200,
@@ -56,7 +46,7 @@ describe("named factory API error handling", () => {
         fetch: vi.fn().mockRejectedValue(networkError),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.network, {
+      new SessionFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.network, {
         code: "NETWORK_ERROR",
         responseBody: networkError,
       }),
@@ -77,7 +67,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
+      new SessionFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
         code: "INTERNAL_ERROR",
         responseBody: {
           code: "SOMETHING_NEW",
@@ -103,7 +93,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("Factory name is required.", {
+      new SessionFactoryAPIError("Factory name is required.", {
         code: "BAD_REQUEST",
         responseBody: {
           code: "BAD_REQUEST",
@@ -129,7 +119,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
+      new SessionFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
         code: "INTERNAL_ERROR",
         responseBody: {
           code: 42,
@@ -138,63 +128,6 @@ describe("named factory API error handling", () => {
         status: 400,
         statusText: "Bad Request",
       }),
-    );
-  });
-
-  it("maps FACTORY_NOT_IDLE session save failures into named factory activation errors", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: "Current Factory",
-            workTypes: [],
-            workers: [],
-            workstations: [],
-            version: {
-              logical: "9",
-              physical: "2026-05-18T14:25:00Z",
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            code: "FACTORY_NOT_IDLE",
-            message: "Current factory runtime must be idle before activation.",
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 409,
-            statusText: "Conflict",
-          },
-        ),
-      );
-
-    await expect(
-      activateImportedFactoryForSession(canonicalFactory, { fetch: fetchMock }),
-    ).rejects.toEqual(
-      new NamedFactoryAPIError(
-        "The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
-        {
-          code: "FACTORY_NOT_IDLE",
-          status: 409,
-          statusText: "Conflict",
-          responseBody: {
-            code: "FACTORY_NOT_IDLE",
-            message: "Current factory runtime must be idle before activation.",
-          },
-        },
-      ),
     );
   });
 
@@ -209,7 +142,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
+      new SessionFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
         code: "INTERNAL_ERROR",
         responseBody: null,
         status: 503,
@@ -238,7 +171,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError("A named factory with this name already exists.", {
+      new SessionFactoryAPIError("A named factory with this name already exists.", {
         code: "FACTORY_ALREADY_EXISTS",
         responseBody: {
           code: "FACTORY_ALREADY_EXISTS",
@@ -261,7 +194,7 @@ describe("named factory API error handling", () => {
         ),
       }),
     ).rejects.toEqual(
-      new NamedFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
+      new SessionFactoryAPIError(currentFactoryDefinitionAPIErrorMessages.rejectedRequest, {
         code: "INTERNAL_ERROR",
         responseBody: "temporarily unavailable",
         status: 503,

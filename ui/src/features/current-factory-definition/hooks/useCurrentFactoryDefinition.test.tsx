@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import type {
+  CanonicalFactoryDefinition,
+  CurrentFactoryDocument,
+} from "../../../api/current-factory-definition";
 import {
   getCurrentFactoryDefinitionMock,
   getCurrentFactoryDocumentMock,

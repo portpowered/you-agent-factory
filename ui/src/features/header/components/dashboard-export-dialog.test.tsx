@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import type { FactoryValue } from "../../../api/named-factory";
+import type { FactoryValue } from "../../../api/session-factory";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import type { useCurrentFactoryExport } from "../../export/hooks/use-current-factory-export";
 import { DashboardExportDialog } from "./dashboard-export-dialog";

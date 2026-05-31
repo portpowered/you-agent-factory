@@ -1,16 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
-import {
-  baseFactoryDefinition,
-  currentFactoryDocument,
-} from "../lib/factory-graph-draft.test-helpers";
-import { buildFactoryGraphTopologyFromDefinition } from "../lib/factory-graph-draft-graph";
 import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
+import {
+  createHookTestGraphEditorDraftState,
+  draftWorkstationFactoryDefinition,
+  draftWorkstationFactoryDocument,
+  type MockGraphEditorDraftState,
+} from "../../../testing/graph-editor-harness";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const hookState = vi.hoisted(() => ({
-  draftState: {} as ReturnType<
-    typeof import("./factory-graph-draft-hook").useFactoryGraphDraftState
-  >,
+  draftState: {} as MockGraphEditorDraftState,
 }));
 
 vi.mock("./factory-graph-draft-hook", () => ({
@@ -20,32 +19,13 @@ vi.mock("./factory-graph-draft-hook", () => ({
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the view-model contract is clearer when its state and action scenarios stay together.
 describe("useEditableFactoryGraph", () => {
   beforeEach(() => {
-    const draft = createEmptyFactoryGraphDraft();
-    hookState.draftState = {
-      baseDocument: currentFactoryDocument,
-      draft,
-      graph: buildFactoryGraphTopologyFromDefinition(currentFactoryDocument),
-      hasChanges: false,
-      latestDocument: currentFactoryDocument,
-      pendingFactoryDefinition: currentFactoryDocument,
-      replaceDraft: vi.fn((nextDraft) => {
-        hookState.draftState.draft = nextDraft;
-        hookState.draftState.hasChanges = true;
-      }),
-      resetDraft: vi.fn(() => {
-        hookState.draftState.draft = createEmptyFactoryGraphDraft();
-        hookState.draftState.hasChanges = false;
-      }),
-      source: "current-factory",
-      updateDraft: vi.fn(),
-      validationErrors: [],
-    };
+    hookState.draftState = createHookTestGraphEditorDraftState();
   });
 
   it("exposes pending, projection, validation, and blocked operation state", () => {
     const { result, rerender } = renderHook(() =>
       useEditableFactoryGraph({
-        currentFactoryDocument,
+        currentFactoryDocument: draftWorkstationFactoryDocument,
       }),
     );
 
@@ -87,7 +67,7 @@ describe("useEditableFactoryGraph", () => {
   it("reports stale save state when the current factory changes during a draft", () => {
     hookState.draftState.hasChanges = true;
     hookState.draftState.latestDocument = {
-      ...currentFactoryDocument,
+      ...draftWorkstationFactoryDocument,
       version: {
         logical: "6",
         physical: "2026-05-18T16:00:00Z",
@@ -124,7 +104,7 @@ describe("useEditableFactoryGraph", () => {
 
     const { result } = renderHook(() =>
       useEditableFactoryGraph({
-        currentFactoryDocument,
+        currentFactoryDocument: draftWorkstationFactoryDocument,
         saveFactoryDefinition,
       }),
     );
@@ -136,7 +116,7 @@ describe("useEditableFactoryGraph", () => {
 
     expect(didSave).toBe(true);
     expect(saveFactoryDefinition).toHaveBeenCalledWith({
-      baseVersion: currentFactoryDocument.version,
+      baseVersion: draftWorkstationFactoryDocument.version,
       factoryDefinition: expect.objectContaining({
         resources: expect.arrayContaining([
           expect.objectContaining({ name: "review-slot" }),
@@ -170,8 +150,8 @@ describe("useEditableFactoryGraph", () => {
     const { result } = renderHook(() =>
       useEditableFactoryGraph({
         currentFactoryDocument: {
-          ...baseFactoryDefinition,
-          version: currentFactoryDocument.version,
+          ...draftWorkstationFactoryDefinition,
+          version: draftWorkstationFactoryDocument.version,
         },
         saveFactoryDefinition,
       }),

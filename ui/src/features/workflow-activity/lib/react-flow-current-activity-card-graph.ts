@@ -3,8 +3,13 @@ import type {
   DashboardActiveExecution,
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
+import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
-import { validationNodeErrorForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+import {
+  projectFactoryValidationTargets,
+  validationNodeErrorForNode,
+  type FactoryValidationGraphProjection,
+} from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type {
   GraphLayout,
   PositionedEdge,
@@ -27,6 +32,25 @@ import {
   resolveWorkstationConnectionAnchorContext,
   supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
+
+export function projectCurrentActivityGraphValidation(
+  validationTargets: readonly FactoryValidationTarget[] = [],
+): FactoryValidationGraphProjection {
+  return projectFactoryValidationTargets(validationTargets);
+}
+
+function resolveCurrentActivityValidationProjection(input: {
+  editor?: CurrentActivityEditorState;
+  validationTargets?: readonly FactoryValidationTarget[];
+}): FactoryValidationGraphProjection | undefined {
+  if (!input.editor && input.validationTargets === undefined) {
+    return undefined;
+  }
+
+  const targets =
+    input.validationTargets ?? input.editor?.validationTargets ?? [];
+  return projectCurrentActivityGraphValidation(targets);
+}
 
 export const EMPTY_GRAPH_LAYOUT: GraphLayout = {
   edges: [],
@@ -352,6 +376,7 @@ interface BuildCurrentActivityNodesInput {
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
   storedNodePositions: GraphNodePositions;
+  validationTargets?: readonly FactoryValidationTarget[];
 }
 
 function buildPlaceNodeShell(
@@ -379,14 +404,12 @@ function buildPlaceNodeData(
   positionedNode: PositionedPlaceNode,
   input: BuildCurrentActivityNodesInput,
   factoryGraphNode: ReturnType<typeof resolveFactoryGraphPlaceNode>,
+  validationProjection: FactoryValidationGraphProjection | undefined,
 ) {
   const place = positionedNode.place;
   const factoryGraphNodeId = factoryGraphNode?.nodeId ?? positionedNode.nodeId;
-  const validationNodeError = input.editor?.validationProjection
-    ? validationNodeErrorForNode(
-        input.editor.validationProjection,
-        factoryGraphNodeId,
-      )
+  const validationNodeError = validationProjection
+    ? validationNodeErrorForNode(validationProjection, factoryGraphNodeId)
     : undefined;
 
   return {
@@ -404,7 +427,7 @@ function buildPlaceNodeData(
             locale: input.locale,
             nodeId: factoryGraphNode.nodeId,
             nodeKind: factoryGraphNode.kind,
-            validationProjection: input.editor?.validationProjection,
+            validationProjection,
           })
         : [],
       locale: input.locale,
@@ -427,6 +450,7 @@ function buildPlaceNodeData(
 function buildPlaceNode(
   positionedNode: PositionedPlaceNode,
   input: BuildCurrentActivityNodesInput,
+  validationProjection: FactoryValidationGraphProjection | undefined,
 ): CurrentActivityNode {
   const factoryGraphNode = resolveFactoryGraphPlaceNode(positionedNode.place);
   const basePlaceNode = buildPlaceNodeShell(positionedNode, input);
@@ -434,6 +458,7 @@ function buildPlaceNode(
     positionedNode,
     input,
     factoryGraphNode,
+    validationProjection,
   );
 
   if (place.kind === "work_state") {
@@ -514,6 +539,7 @@ function buildPlaceNode(
 function buildWorkstationNode(
   positionedNode: PositionedWorkstationNode,
   input: BuildCurrentActivityNodesInput,
+  validationProjection: FactoryValidationGraphProjection | undefined,
   authoredProgressOutcomeSourceHandleIds?: ReadonlySet<string>,
 ): CurrentActivityNode | null {
   const workstation =
@@ -561,7 +587,7 @@ function buildWorkstationNode(
         locale: input.locale,
         nodeId: positionedNode.nodeId,
         nodeKind: "workstation",
-        validationProjection: input.editor?.validationProjection,
+        validationProjection,
       }),
       kind: "workstation",
       progressOutcomeRouteWorkstation,
@@ -614,7 +640,12 @@ export function buildCurrentActivityNodes({
   selection,
   snapshot,
   storedNodePositions,
+  validationTargets,
 }: BuildCurrentActivityNodesInput): CurrentActivityNode[] {
+  const validationProjection = resolveCurrentActivityValidationProjection({
+    editor,
+    validationTargets,
+  });
   const nextNodes: CurrentActivityNode[] = [];
   const resourceAliases = resourceAliasNodeIds(graphLayout.nodes);
   const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
@@ -648,7 +679,11 @@ export function buildCurrentActivityNodes({
 
     if (positionedNode.nodeKind !== "workstation") {
       nextNodes.push(
-        buildPlaceNode(positionedNode as PositionedPlaceNode, input),
+        buildPlaceNode(
+          positionedNode as PositionedPlaceNode,
+          input,
+          validationProjection,
+        ),
       );
       continue;
     }
@@ -656,6 +691,7 @@ export function buildCurrentActivityNodes({
     const workstationNode = buildWorkstationNode(
       positionedNode as PositionedWorkstationNode,
       input,
+      validationProjection,
       authoredProgressOutcomeSourceHandlesByNodeId.get(positionedNode.nodeId),
     );
     if (workstationNode) {

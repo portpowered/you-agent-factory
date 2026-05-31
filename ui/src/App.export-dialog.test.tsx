@@ -4,7 +4,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "bun:test";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
-import type { FactoryValue } from "./api/named-factory";
+import type { FactoryValue } from "./api/session-factory";
 import {
   baselineSnapshot,
   nonPromptTemplateFetchPaths,

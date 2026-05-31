@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 
-import { discoverSessionNamedFactoryNames } from "./api";
+import { discoverSessionNamedFactoryNames } from "./import-activation";
 
 describe("discoverSessionNamedFactoryNames", () => {
   afterEach(() => {
