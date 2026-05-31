@@ -3,9 +3,7 @@ import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
-import type {
-  DashboardSnapshot,
-} from "../../../api/dashboard/types";
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
   resourceOccupancySnapshotForTick,
@@ -445,6 +443,8 @@ function CurrentActivityImportStory({ snapshot }: CurrentActivityStoryProps) {
             setSelection({ kind: "work-type", workTypeName })
           }
           onSelectWorker={(workerName) =>
+            setSelection({ kind: "worker", workerName })
+          }
           onSelectStateNode={(placeId) =>
             setSelection({ kind: "state-node", placeId })
           }

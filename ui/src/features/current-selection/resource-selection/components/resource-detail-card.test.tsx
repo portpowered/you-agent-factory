@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: resource detail card regressions share one mocked factory-document seam.
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
@@ -197,8 +198,12 @@ describe("ResourceDetailCard", () => {
 
     renderResourceDetailCard("agent-slot", { tokenCount: 1 });
 
-    expect(screen.getByRole("heading", { name: "Resource configuration" })).toBeTruthy();
-    expect(screen.getByLabelText("Name").getAttribute("value")).toBe("agent-slot");
+    expect(
+      screen.getByRole("heading", { name: "Resource configuration" }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Name").getAttribute("value")).toBe(
+      "agent-slot",
+    );
     expect(screen.getByLabelText("Capacity").getAttribute("value")).toBe("2");
     expect(screen.getByText("Invocation slot")).toBeTruthy();
     expect(screen.getByText("Available tokens")).toBeTruthy();
@@ -308,7 +313,9 @@ describe("ResourceDetailCard", () => {
     expect(screen.queryByLabelText("Name")).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Expand resource configuration editor" }),
+      screen.getByRole("button", {
+        name: "Expand resource configuration editor",
+      }),
     );
 
     expect(screen.getByLabelText("Name")).toBeTruthy();

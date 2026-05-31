@@ -7,13 +7,13 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
 import type { FactoryWorker } from "../../../api/events/types";
+import { resourceTokenCountFromSnapshot } from "../resource-selection/lib/resource-detail-values";
 import {
   findFactoryWorkerInSnapshot,
   findFactoryWorkTypeInSnapshot,
   resolveDashboardSelection,
   workstationNamesReferencingWorkerInSnapshot,
 } from "../state/dashboardSelection";
-import { resourceTokenCountFromSnapshot } from "../resource-selection/lib/resource-detail-values";
 import type {
   DashboardSelection,
   TerminalWorkDetail,
@@ -285,6 +285,7 @@ function useSelectedWorkerAndWorkTypeData(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: derived selection state composes node, state, work, worker, resource, and work-type projections in one return surface.
 export function useCurrentSelectionDerivedState({
   projectedWorkstationRequestsByDispatchID,
   selection,

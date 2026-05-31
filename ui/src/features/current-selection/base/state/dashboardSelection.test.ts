@@ -1,15 +1,16 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: selection-resolution regression coverage stays in one place for timeline readability.
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: selection-resolution regression coverage stays in one place for timeline readability.
 import type { DashboardSnapshot } from "../../../../api/dashboard";
 import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 
 import { buildFactoryTimelineSnapshot } from "../../../timeline/state/factoryTimelineStore";
 import {
+  type DashboardWorkItemSelection,
+  type DashboardWorkstationRequestSelection,
   findFactoryWorkerInSnapshot,
   resolveDashboardSelection,
   workstationNamesReferencingWorkerInSnapshot,
-  type DashboardWorkItemSelection,
-  type DashboardWorkstationRequestSelection,
 } from "./dashboardSelection";
 
 function event(
@@ -30,59 +31,75 @@ function event(
   };
 }
 
-const initialStructureRequest = event("event-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
-  factory: {
-    workTypes: [{
-      name: "story",
-      states: [
-        { name: "new", type: "INITIAL" },
-        { name: "review", type: "PROCESSING" },
+const initialStructureRequest = event(
+  "event-1",
+  1,
+  FACTORY_EVENT_TYPES.initialStructureRequest,
+  {
+    factory: {
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" },
+            { name: "review", type: "PROCESSING" },
+          ],
+        },
       ],
-    }],
-    workstations: [
-      {
-        id: "review",
-        inputs: [{ state: "new", workType: "story" }],
-        name: "Review",
-        outputs: [{ state: "review", workType: "story" }],
-        worker: "reviewer",
-      },
-    ],
+      workstations: [
+        {
+          id: "review",
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "review", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+    },
   },
-});
+);
 
 const workRequest = event("event-2", 2, FACTORY_EVENT_TYPES.workRequest, {
   type: "FACTORY_REQUEST_BATCH",
-  works: [{
-    name: "Selection Story",
-    request_id: "request-selection-1",
-    trace_id: "trace-selection-1",
-    work_id: "work-selection-1",
-    work_type_id: "story",
-  }],
+  works: [
+    {
+      name: "Selection Story",
+      request_id: "request-selection-1",
+      trace_id: "trace-selection-1",
+      work_id: "work-selection-1",
+      work_type_id: "story",
+    },
+  ],
 });
 workRequest.context.requestId = "request-selection-1";
 workRequest.context.traceIds = ["trace-selection-1"];
 workRequest.context.workIds = ["work-selection-1"];
 
-const dispatchRequest = event("event-3", 3, FACTORY_EVENT_TYPES.dispatchRequest, {
-  dispatchId: "dispatch-selection-1",
-  inputs: [{
-    name: "Selection Story",
-    request_id: "request-selection-1",
-    trace_id: "trace-selection-1",
-    work_id: "work-selection-1",
-    work_type_id: "story",
-  }],
-  transitionId: "review",
-  workstation: {
-    id: "review",
-    inputs: [{ state: "new", workType: "story" }],
-    name: "Review",
-    outputs: [{ state: "review", workType: "story" }],
-    worker: "reviewer",
+const dispatchRequest = event(
+  "event-3",
+  3,
+  FACTORY_EVENT_TYPES.dispatchRequest,
+  {
+    dispatchId: "dispatch-selection-1",
+    inputs: [
+      {
+        name: "Selection Story",
+        request_id: "request-selection-1",
+        trace_id: "trace-selection-1",
+        work_id: "work-selection-1",
+        work_type_id: "story",
+      },
+    ],
+    transitionId: "review",
+    workstation: {
+      id: "review",
+      inputs: [{ state: "new", workType: "story" }],
+      name: "Review",
+      outputs: [{ state: "review", workType: "story" }],
+      worker: "reviewer",
+    },
   },
-});
+);
 dispatchRequest.context.dispatchId = "dispatch-selection-1";
 dispatchRequest.context.traceIds = ["trace-selection-1"];
 dispatchRequest.context.workIds = ["work-selection-1"];
@@ -93,7 +110,8 @@ describe("resolveDashboardSelection", () => {
       [initialStructureRequest, workRequest, dispatchRequest],
       3,
     );
-    const request = activeTick.workstationRequestsByDispatchID["dispatch-selection-1"];
+    const request =
+      activeTick.workstationRequestsByDispatchID["dispatch-selection-1"];
     if (!request) {
       throw new Error("expected workstation request projection");
     }
@@ -107,7 +125,8 @@ describe("resolveDashboardSelection", () => {
     const resolved = resolveDashboardSelection({
       selection,
       snapshot: activeTick,
-      workstationRequestsByDispatchID: activeTick.workstationRequestsByDispatchID,
+      workstationRequestsByDispatchID:
+        activeTick.workstationRequestsByDispatchID,
     });
 
     expect(resolved).toMatchObject({
@@ -122,12 +141,16 @@ describe("resolveDashboardSelection", () => {
       [initialStructureRequest, workRequest, dispatchRequest],
       3,
     );
-    const request = activeTick.workstationRequestsByDispatchID["dispatch-selection-1"];
+    const request =
+      activeTick.workstationRequestsByDispatchID["dispatch-selection-1"];
     if (!request) {
       throw new Error("expected workstation request projection");
     }
 
-    const beforeDispatch = buildFactoryTimelineSnapshot([initialStructureRequest, workRequest], 2);
+    const beforeDispatch = buildFactoryTimelineSnapshot(
+      [initialStructureRequest, workRequest],
+      2,
+    );
     const resolved = resolveDashboardSelection({
       selection: {
         dispatchId: request.dispatch_id,
@@ -136,7 +159,8 @@ describe("resolveDashboardSelection", () => {
         request,
       },
       snapshot: beforeDispatch,
-      workstationRequestsByDispatchID: beforeDispatch.workstationRequestsByDispatchID,
+      workstationRequestsByDispatchID:
+        beforeDispatch.workstationRequestsByDispatchID,
     });
 
     expect(resolved).toEqual({ kind: "node", nodeId: "review" });
@@ -311,10 +335,9 @@ describe("resolveDashboardSelection", () => {
       type: "MODEL_WORKER",
       model: "gpt-5",
     });
-    expect(workstationNamesReferencingWorkerInSnapshot(snapshot, "reviewer")).toEqual([
-      "Review",
-      "Plan",
-    ]);
+    expect(
+      workstationNamesReferencingWorkerInSnapshot(snapshot, "reviewer"),
+    ).toEqual(["Review", "Plan"]);
   });
 
   it("retains factory-graph work-type selections while the work type remains in the factory", () => {
