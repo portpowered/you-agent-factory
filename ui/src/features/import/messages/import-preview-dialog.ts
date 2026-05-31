@@ -1,5 +1,7 @@
-import type { SessionFactoryAPIErrorCode } from "../../../api/session-factory";
-import { sessionFactoryOperatorErrorMessages } from "../../../api/session-factory";
+import {
+  sessionFactoryOperatorErrorMessages,
+  type SessionFactoryAPIErrorCode,
+} from "../../../api/session-factory";
 import {
   type LocalizedMessages,
   resolveLocalizedMessages,

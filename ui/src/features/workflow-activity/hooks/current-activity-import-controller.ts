@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import type { FactoryValue } from "../../../api/session-factory";
+import type { ImportFactoryValue } from "../../../api/session-factory";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import {
@@ -32,7 +32,7 @@ export interface CurrentActivityImportController {
 }
 
 export interface UseCurrentActivityImportControllerOptions {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
+  activateFactory?: (input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>;
   locale?: string | null;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;

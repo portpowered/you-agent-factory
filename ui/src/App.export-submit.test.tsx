@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import { readFactoryImportPng } from "./features/import/lib/factory-png-import";
-import type { FactoryValue } from "./api/session-factory";
+import type { ImportFactoryValue } from "./api/session-factory";
 import {
   baselineSnapshot,
   jsonResponse,
@@ -41,7 +41,7 @@ const currentFactoryWithBundledFiles = {
       },
     ],
   },
-} satisfies FactoryValue;
+} satisfies ImportFactoryValue;
 
 const currentFactoryWithBundledFilesAPIResponse = {
   ...currentFactoryWithBundledFiles,
@@ -121,7 +121,7 @@ describe("App shell export submission flows", () => {
     }
   });
 
-  it("exports the current named-factory API payload instead of the event timeline projection", async () => {
+  it("exports the current session factory document instead of the event timeline projection", async () => {
     const exportProbe = installExportDownloadProbe();
     const writeFactoryExportPngSpy = vi
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")

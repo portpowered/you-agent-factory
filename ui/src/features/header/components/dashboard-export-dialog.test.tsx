@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import type { FactoryValue } from "../../../api/session-factory";
+import type { ImportImportFactoryValue } from "../../../api/session-factory";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import type { useCurrentFactoryExport } from "../../export/hooks/use-current-factory-export";
 import { DashboardExportDialog } from "./dashboard-export-dialog";
@@ -31,7 +31,7 @@ vi.mock("../../export/hooks/use-current-factory-export", () => ({
 const factory = {
   name: "Factory Aurora",
   workspaces: {},
-} as const satisfies Partial<FactoryValue>;
+} as const satisfies Partial<ImportFactoryValue>;
 
 describe("DashboardExportDialog", () => {
   beforeEach(() => {
@@ -39,7 +39,7 @@ describe("DashboardExportDialog", () => {
     isExportDialogOpen = false;
     currentFactoryExportState = {
       currentFactoryExport: {
-        factoryDefinition: factory as FactoryValue,
+        factoryDefinition: factory as ImportFactoryValue,
         ok: true,
       },
       isPreparing: false,

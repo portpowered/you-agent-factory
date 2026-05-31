@@ -6,7 +6,7 @@ import "../../../styles.css";
 import type {
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
-import type { FactoryValue } from "../../../api/session-factory";
+import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
   resourceOccupancySnapshotForTick,
   semanticWorkflowDashboardSnapshot,
@@ -419,7 +419,7 @@ function CurrentActivityImportStory({ snapshot }: CurrentActivityStoryProps) {
     <>
       <div style={{ minHeight: "760px" }}>
         <ReactFlowCurrentActivityCard
-          activateFactory={async (value: FactoryValue) => value}
+          activateFactory={async (value: ImportFactoryValue) => value}
           now={Date.parse("2026-04-08T12:00:04Z")}
           onFactoryActivated={() => {
             setActivationStatus(

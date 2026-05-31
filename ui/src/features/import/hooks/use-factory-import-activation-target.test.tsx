@@ -44,7 +44,6 @@ describe("useFactoryImportActivationTarget", () => {
       workTypes: [],
       workers: [],
       workstations: [],
-      version: { logical: "1", physical: "2026-01-01T00:00:00.000Z" },
     });
     vi.mocked(discoverSessionNamedFactoryNames).mockResolvedValue([
       "Review Session Import Factory",
@@ -77,7 +76,6 @@ describe("useFactoryImportActivationTarget", () => {
       workTypes: [],
       workers: [],
       workstations: [],
-      version: { logical: "1", physical: "2026-01-01T00:00:00.000Z" },
     });
     vi.mocked(discoverSessionNamedFactoryNames).mockResolvedValue(["alpha"]);
 

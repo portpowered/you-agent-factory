@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
-import type { FactoryValue } from "./api/session-factory";
+import type { ImportFactoryValue } from "./api/session-factory";
 import {
   baselineSnapshot,
   fetchCallPaths,
@@ -97,7 +97,7 @@ describe("App shell export dialog flows", () => {
         logical: "2",
         physical: "2026-04-16T12:05:00Z",
       },
-    } satisfies FactoryValue;
+    } satisfies ImportFactoryValue;
     const refreshedCurrentFactoryAPIResponse = {
       ...refreshedCurrentFactoryExportResponse,
       version: currentSessionFactoryExportAPIResponse.version,

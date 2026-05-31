@@ -3,7 +3,6 @@
  * prompt-template contract and validation routes (same `/factory-sessions/...` prefix).
  */
 export * from "./api";
-export * from "./export";
 export {
   normalizeSessionFactoryAPIErrorCode,
   SessionFactoryAPIError,
@@ -11,11 +10,5 @@ export {
   type SessionFactoryAPIErrorDetails,
 } from "./errors";
 export * from "./import-activation";
-export {
-  allocateFirstFreeSuffixedFactoryName,
-  extractNamedFactoryNamesFromSessionTargets,
-  resolveImportCreateFactoryName,
-} from "./import-save-mode";
 export * from "./operator-errors";
 export * from "./prompt-template";
-export type { FactoryValue } from "./types";

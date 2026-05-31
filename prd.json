@@ -1,32 +1,31 @@
 {
-  "project": "UI Graph Editor Orchestration Split",
-  "branchName": "ralph/ui-graph-editor-orchestration-split",
-  "description": "Split workflow-activity graph editor orchestration into focused session, save-flow, and controller hooks plus a thin React Flow card viewport—preserving all operator-visible edit, save, leave, and validation behavior while aligning domain logic with factory-graph-editor and session save with useFactoryDocumentSave.",
+  "project": "infinite-you",
+  "branchName": "ralph/ui-session-factory-client-recovery",
+  "description": "Recovery implementation of the UI session factory client (U1): unify dashboard factory GET/PUT behind one mode-aware transport aligned with session factory save modes, migrate current-factory-definition and editor save, add import confirm choices (replace current vs create new named), unify errors, and remove POST /factories from dashboard paths.",
   "context": {
-    "customerAsk": "Split graph editor hooks and card layers. Soft program dependency: factory-validation-consolidation (V) for draft validation API. Full spec: tasks/prd-ui-graph-editor-orchestration-split.md",
-    "problem": "The current-activity graph editor composes editor mode, tools, add/connect/remove controllers, save and leave confirmation, classifier gating, draft validation, and editable factory graph state across large hook and card files with duplicated test mocks—making changes risky and blurring domain, session UX, and viewport responsibilities.",
-    "solution": "Reorganize into factory-graph-editor (draft, operations, projection, save input), workflow-activity graph-editor hooks (session mode/tools, save/leave, controllers), and thin card components (React Flow wiring only). Prove zero operator-visible regression with existing hook/card tests, a shared graph-editor test harness, browser verification on the full edit path, and an optional validationTargets extension point for program V without default UI change."
+    "customerAsk": "Retry after network outage. Full spec: tasks/prd-ui-session-factory-client.md. UI session factory client (U1 recovery).",
+    "problem": "Factory definition I/O is split across current-factory-definition, named-factory, and factory-definition. Session-scoped replace import partially landed, but PUT bodies lack save modes, import has no replace-vs-create choice, createFactory and POST /factories remain, and error mapping is duplicated.",
+    "solution": "Add a single session-factory transport with getSessionFactory and saveSessionFactory (mode + factory), delegate current-factory-definition, wire editor save as replace-current only, extend import confirm for replace and upsert-named paths with suffixed naming, unify SessionFactoryAPIError mapping, then remove createFactory and all dashboard POST /factories usage."
   },
   "acceptanceCriteria": [
-    "Operators retain identical graph edit mode, tools, connect/remove/add, save, discard, and leave/confirm behavior including active-work save block and classifier unsupported gating",
-    "Save persists canonical factory document with version via shared useFactoryDocumentSave / REPLACE_CURRENT path",
-    "Draft validation in edit mode still debounces, aborts stale requests, and refreshes markers after graph mutations without incorrect interaction blocking",
-    "factory-graph-editor owns domain; workflow-activity hooks own session UX; card TSX stays composition-only with no new inline domain mutations",
-    "Graph editor tests pass without weakened assertions; shared graph-editor-harness reduces duplicated mock setup in largest editor tests",
-    "Typecheck, lint, and UI tests pass (quality gate)"
+    "Dashboard factory reads and writes use one session factory client for GET and PUT on /factory-sessions/{session_id}/factory with { mode?, factory } bodies.",
+    "Editor Save uses replace-current only on every session tab; no editor path calls upsert-named-and-activate.",
+    "Import confirm offers Replace current factory (default) and Create new named factory with resolved name shown for the create path.",
+    "No dashboard import or save flow calls POST /factories; createFactory is removed from product paths.",
+    "selectedSessionID reaches session factory save and import activation consistently with export.",
+    "Save and import map STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, INVALID_FACTORY, and related codes to consistent actionable UI errors.",
+    "Quality gate: UI typecheck, lint, and relevant unit and integration tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "ui-graph-editor-orchestration-split-001",
-      "title": "Editor session mode and interaction gating",
-      "description": "As an operator editing the factory graph, I need edit mode and tools to enable only when the factory document is ready and editable in-graph so I am not misled into mutating an unsupported or loading graph.",
+      "id": "ui-session-factory-client-recovery-001",
+      "title": "Session factory transport and OpenAPI alignment",
+      "description": "As a frontend maintainer, I want one module that performs session factory GET/PUT with save modes so all dashboard factory I/O shares one contract-shaped transport.",
       "acceptanceCriteria": [
-        "Entering edit mode enables graph interaction when the current factory document query succeeded and no classifier workstation blocks in-graph editing; leaving edit mode clears the active tool",
-        "While the factory document is loading or save is pending, graph edit interactions stay disabled even if edit mode is on",
-        "When a classifier workstation blocks the graph editor, entering edit mode has no effect and unavailable treatment matches pre-split behavior",
-        "Active tool selection drives connection/removal/add flows the same as before (one tool mode at a time)",
-        "Session orchestration is implemented in useGraphEditorSession; useCurrentActivityGraphEditor composes it without changing the public return shape used by the card",
-        "Existing hook tests for mode toggle and interaction gating pass without assertion weakening",
+        "ui/src/api/session-factory/ exports getSessionFactory(sessionID) and saveSessionFactory({ sessionID, mode?, factory }).",
+        "PUT body is { mode?: REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE, factory } with version inside factory when required.",
+        "Transport uses currentFactorySessionPath and shared transport helpers for default and non-default sessions.",
+        "Unit tests assert HTTP method, path, and JSON body for GET and for PUT with omitted mode, REPLACE_CURRENT, and UPSERT_NAMED_AND_ACTIVATE.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -35,16 +34,14 @@
       "notes": ""
     },
     {
-      "id": "ui-graph-editor-orchestration-split-002",
-      "title": "Save, discard, and leave confirmation flows",
-      "description": "As an operator with pending graph edits, I need save, discard, and leave flows to behave exactly as today—including confirmations and blocked save when work is active.",
+      "id": "ui-session-factory-client-recovery-002",
+      "title": "Delegate current-factory-definition to session factory client",
+      "description": "As a feature developer, I want existing current-factory hooks to call the unified client so save and get behavior stays consistent without duplicating fetch logic.",
       "acceptanceCriteria": [
-        "Saving from the editor persists via the shared factory document save hook; success closes confirm-save UI; failure leaves the operator in edit mode with the same error treatment as today",
-        "Save stays blocked with the same user-visible reason when factory work is in flight or the draft is stale",
-        "Leaving edit mode with unsaved changes opens leave confirmation; discard reverts the draft and exits; save-and-leave saves then exits",
-        "Discard pending changes clears transient editor state (connection notice, pending removal, confirm dialogs) without unintended mode exit",
-        "Save/leave orchestration lives in useGraphEditorSaveFlow using existing save-summary and active-work guards from factory-graph-editor lib",
-        "Document-plane and save/leave hook tests pass without assertion weakening",
+        "getCurrentFactoryDocument and saveCurrentFactoryDocument delegate to the session factory client as thin wrappers.",
+        "SaveCurrentFactoryInput.baseVersion remains an adapter that sets factory.version on the wire body only.",
+        "React Query keys in useCurrentFactoryDefinition are unchanged unless documented in a one-line comment.",
+        "Existing current-factory-definition API unit tests pass after any required { mode, factory } body updates.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -53,81 +50,70 @@
       "notes": ""
     },
     {
-      "id": "ui-graph-editor-orchestration-split-003",
-      "title": "Graph edit tools (connect, remove, add)",
-      "description": "As an operator in graph edit mode, I need to connect nodes, remove nodes/edges, and add entities through the same tools and confirmations as today.",
+      "id": "ui-session-factory-client-recovery-003",
+      "title": "Unified session factory error mapping",
+      "description": "As a dashboard operator, I want save and import failures to use consistent error codes and messages so I can recover from stale version or busy runtime situations.",
       "acceptanceCriteria": [
-        "Connection tool: anchor selection, connect completion, and connection notices behave as before including blocked/invalid connection messaging",
-        "Removal tool: node/edge delete and confirm-removal flows behave as before including blocked removal reasons",
-        "Add-entity menu actions add workstations, workers, work types/states, and resources through unchanged factory graph operations",
-        "useGraphEditorControllers composes existing connection/removal modules and add-entity controller without changing factory-graph-editor operation semantics",
-        "Controller-focused hook tests pass without assertion weakening",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 3,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "ui-graph-editor-orchestration-split-004",
-      "title": "Current-activity card as thin viewport",
-      "description": "As an operator using the dashboard, I want the current-activity graph card to look and behave the same while implementation delegates orchestration to hooks and presentational subcomponents.",
-      "acceptanceCriteria": [
-        "react-flow-current-activity-card and related surface/dialog/chrome components contain no new domain mutation logic—only composition, projections, and React Flow event wiring",
-        "Loading, empty, and error states for the factory document in edit mode show the same messages and disabled chrome as before",
-        "Keyboard-accessible editor controls retain the same roles, labels, and focus behavior on mode toggle, tools, and confirm dialogs",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify in browser: dashboard current-activity card edit → mutate graph → save or discard → leave editor; import and observer paths unchanged"
-      ],
-      "priority": 4,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "ui-graph-editor-orchestration-split-005",
-      "title": "Shared graph-editor test harness",
-      "description": "As a maintainer writing graph editor tests, I want reusable editable-graph fixtures so behavioral tests stay focused and mock setup does not drift from production shapes.",
-      "acceptanceCriteria": [
-        "ui/src/testing/graph-editor-harness.ts exposes mockEditableFactoryGraph, common factory/dashboard fixtures, and helpers for editor hook/card tests",
-        "At least one large editor test file imports the harness instead of inline hoisted mocks with unchanged behavioral assertions",
+        "Session factory transport maps API errors to one normalized error surface with stable adapters for save and import callers.",
+        "STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, INVALID_FACTORY, FACTORY_ALREADY_EXISTS, and NETWORK_ERROR normalize predictably.",
+        "Import preview surfaces recoverable stale-version guidance when activation returns STALE_FACTORY_VERSION.",
+        "Unit tests cover at least one mapped error per major code used by save and import.",
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 5,
-      "passes": false,
+      "priority": 3,
+      "passes": true,
       "notes": ""
     },
     {
-      "id": "ui-graph-editor-orchestration-split-006",
-      "title": "Validation overlay extension point (no default UI change)",
-      "description": "As a maintainer preparing for factory-validation-consolidation (program V), I want graph projection to accept optional validation targets so future handle/node markers can wire in without another orchestration refactor.",
+      "id": "ui-session-factory-client-recovery-004",
+      "title": "Editor save uses replace-current only",
+      "description": "As a factory editor, I want Save to always replace the factory current in my active session tab so I never accidentally create a new named factory from the graph or detail editors.",
       "acceptanceCriteria": [
-        "Current-activity graph projection accepts optional validationTargets defaulting to empty; default input produces the same visible graph and selection validation messages as today",
-        "When validationTargets are supplied in tests, marker projection uses factory-validation-graph-projection rules without duplicating subject parsing in the card",
-        "Live draft validation in edit mode (debounce, abort stale requests, refresh after add/remove/connect) passes existing validation hook tests",
+        "useSaveCurrentFactory and dependent save paths call saveSessionFactory with REPLACE_CURRENT or omit mode.",
+        "No editor or current-selection save path calls UPSERT_NAMED_AND_ACTIVATE.",
+        "Stale version and not-idle errors still surface in the same save dialogs and controls as before migration.",
+        "selectedSessionID is passed through to save mutations the same way as export.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser: save on default and non-default session tabs issues session-scoped PUT with replace-current semantics and no POST /factories"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-factory-client-recovery-005",
+      "title": "Import confirm dialog with replace vs create-new-named",
+      "description": "As a dashboard operator, I want to choose whether an imported PNG replaces my session current factory or creates a new named factory so I can import without losing the active definition when I need a copy.",
+      "acceptanceCriteria": [
+        "Import confirm dialog offers Replace current factory (default) and Create new named factory with accessible labels and keyboard-focusable actions.",
+        "Replace path GETs current, sets imported factory.name to session current name, and PUTs REPLACE_CURRENT with version from GET.",
+        "Create path derives name from PNG metadata, allocates suffixed names on conflict, and PUTs UPSERT_NAMED_AND_ACTIVATE omitting version when the name is new.",
+        "Dialog shows the resolved target name for the create path before confirm.",
+        "useFactoryImportActivation uses the new flow by default with no POST /factories.",
+        "App.import.test.tsx and non-default session import coverage are updated for applicable paths.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser: confirm dialog shows both actions; replace on a second tab updates only that session; create shows resolved name"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-factory-client-recovery-006",
+      "title": "Remove named-factory createFactory",
+      "description": "As a maintainer, I want dead global factory creation API removed after migration so regressions to POST /factories are impossible from dashboard code.",
+      "acceptanceCriteria": [
+        "createFactory is removed from named-factory/api.ts with no remaining dashboard imports.",
+        "Tests that asserted POST /factories are updated to session PUT or removed when redundant.",
+        "openapi.named-factory.test.ts reflects retired create endpoint usage from the UI perspective.",
+        "UI test network assertions show zero POST /factories during import and save flows.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "ui-session-factory-client-007",
-      "title": "Unified session factory error mapping",
-      "description": "As a dashboard operator, I want consistent, actionable error messages in save and import dialogs when the session factory API rejects a request.",
-      "acceptanceCriteria": [
-        "Session factory client maps STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, INVALID_FACTORY, INVALID_FACTORY_NAME, and related codes to one error surface for save and import without duplicate switch logic in hooks.",
-        "Import preview shows stale-version guidance when the API returns STALE_FACTORY_VERSION.",
-        "Network and 5xx failures use the same recoverable copy patterns as before migration.",
-        "Unit tests cover stale, not-idle, and invalid-factory mappings from mocked HTTP responses.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
       "passes": true,
       "notes": ""
     }
