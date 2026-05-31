@@ -1,46 +1,60 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
-import {
-  staleFactoryVersionTarget,
-} from "../../../testing/factory-validation-target-fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import {
-  useCurrentFactoryDocument,
-  useSaveCurrentFactory,
-} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { staleFactoryVersionTarget } from "../../../testing/factory-validation-target-fixtures";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
+import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import {
   createCurrentSelectionWidgetQueryClient,
   renderWithExistingQueryClient,
   renderWithQueryClient,
 } from "./current-selection-widget-test-utils";
-import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 
 const saveCurrentFactoryMutation = vi.fn();
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: vi.fn(),
+  }),
+);
+
+vi.mock(
+  "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
+  () => ({
+    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+  }),
+);
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -52,9 +66,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
+    vi.mocked(useFactoryDocumentSave).mockReturnValue({
       isPending: false,
-      mutateAsync: saveCurrentFactoryMutation,
+      saveAsync: saveCurrentFactoryMutation,
     } as never);
     vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
       data: {
@@ -190,7 +204,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
-          factoryDefinition: expect.objectContaining({
+          factory: expect.objectContaining({
             version: {
               logical: "7",
               physical: "2026-05-23T15:52:00Z",
@@ -417,7 +431,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
-          factoryDefinition: expect.objectContaining({
+          factory: expect.objectContaining({
             version: {
               logical: "7",
               physical: "2026-05-23T15:52:00Z",
@@ -456,7 +470,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
         expect.objectContaining({
-          factoryDefinition: expect.objectContaining({
+          factory: expect.objectContaining({
             workstations: [
               expect.objectContaining({
                 behavior: "REPEATER",
@@ -502,14 +516,15 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       buildEditableDefinitionResult(refreshedFactory),
     );
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode,
-            selection: { kind: "node", nodeId: selectedNode.node_id },
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -547,7 +562,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
-          factoryDefinition: expect.objectContaining({
+          factory: expect.objectContaining({
             version: {
               logical: "7",
               physical: "2026-05-23T15:52:00Z",
@@ -555,17 +570,17 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             workers: [
               expect.objectContaining({
                 model: "gpt-5.5",
-              name: "processor",
-            }),
-          ],
-          workstations: [
-            expect.objectContaining({
-              body: "Updated only the review workstation prompt.",
-              name: "Review",
-            }),
-            expect.objectContaining({
-              body: "Plan the implementation.",
-              name: "Plan",
+                name: "processor",
+              }),
+            ],
+            workstations: [
+              expect.objectContaining({
+                body: "Updated only the review workstation prompt.",
+                name: "Review",
+              }),
+              expect.objectContaining({
+                body: "Plan the implementation.",
+                name: "Plan",
               }),
             ],
           }),
@@ -582,7 +597,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
 
@@ -608,16 +625,19 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getAllByRole("button", { name: "Saving..." })[0]).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: "Saving..." })[0],
+    ).toBeTruthy();
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode: planNode,
-            selection: { kind: "node", nodeId: planNode.node_id },
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: planNode,
+          selection: { kind: "node", nodeId: planNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expandEditableConfiguration();
@@ -665,7 +685,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
 
@@ -700,11 +722,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       buildEditableDefinitionResult(savedFactory),
     );
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection()}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection()}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expect(
@@ -713,14 +736,15 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ),
     ).toBeNull();
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode: reviewNode,
-            selection: { kind: "node", nodeId: reviewNode.node_id },
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: reviewNode,
+          selection: { kind: "node", nodeId: reviewNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expandEditableConfiguration();
@@ -768,7 +792,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       within(saveDialog).getByRole("button", { name: "Saving..." }).disabled,
     ).toBe(true);
 
-    fireEvent.click(within(saveDialog).getByRole("button", { name: "Saving..." }));
+    fireEvent.click(
+      within(saveDialog).getByRole("button", { name: "Saving..." }),
+    );
     expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
 
     deferredSave.resolve(
@@ -796,7 +822,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
 
@@ -831,14 +859,15 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       buildEditableDefinitionResult(savedFactory),
     );
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode: planNode,
-            selection: { kind: "node", nodeId: planNode.node_id },
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: planNode,
+          selection: { kind: "node", nodeId: planNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expandEditableConfiguration();
@@ -849,14 +878,15 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ),
     ).toBeNull();
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode: reviewNode,
-            selection: { kind: "node", nodeId: reviewNode.node_id },
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: reviewNode,
+          selection: { kind: "node", nodeId: reviewNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expandEditableConfiguration();
@@ -885,7 +915,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
 
@@ -912,14 +944,15 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
     });
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode: planNode,
-            selection: { kind: "node", nodeId: planNode.node_id },
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: planNode,
+          selection: { kind: "node", nodeId: planNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expandEditableConfiguration();
@@ -957,7 +990,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
       new CurrentFactoryDefinitionError(
@@ -995,23 +1030,25 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ).toBeTruthy();
     });
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection()}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection()}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode: reviewNode,
-            selection: { kind: "node", nodeId: reviewNode.node_id },
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: reviewNode,
+          selection: { kind: "node", nodeId: reviewNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expandEditableConfiguration();
@@ -1039,7 +1076,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
       new CurrentFactoryDefinitionError(
@@ -1077,28 +1116,30 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ).toBeTruthy();
     });
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode: planNode,
-            selection: { kind: "node", nodeId: planNode.node_id },
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: planNode,
+          selection: { kind: "node", nodeId: planNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expandEditableConfiguration();
 
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
 
-    rerender(<CurrentSelectionWidget
-          currentSelection={buildCurrentSelection({
-            selectedNode: reviewNode,
-            selection: { kind: "node", nodeId: reviewNode.node_id },
-          })}
-          now={DETAIL_CARD_NOW}
-          selectedWorkExecutionDetails={null}
-        />,
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: reviewNode,
+          selection: { kind: "node", nodeId: reviewNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
     );
 
     expandEditableConfiguration();
@@ -1307,9 +1348,9 @@ function buildMultiWorkstationEditableFactoryDefinition(overrides?: {
   };
 }
 
-function buildSharedWorkerFactoryDefinition(
-  overrides?: { prompt?: string },
-): CurrentFactoryDocument {
+function buildSharedWorkerFactoryDefinition(overrides?: {
+  prompt?: string;
+}): CurrentFactoryDocument {
   return {
     name: "Current Factory",
     version: {

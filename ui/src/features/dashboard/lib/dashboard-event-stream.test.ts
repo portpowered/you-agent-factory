@@ -59,6 +59,23 @@ describe("prepareDashboardStreamSession", () => {
     expect(hasOpenedStreamRef.current).toBe(false);
   });
 
+  it("keeps queued events on first mount for the default refresh token", () => {
+    const queuedEvents = [{ id: "event-1" }];
+    const queuedEventsRef = { current: queuedEvents as { id: string }[] };
+    const hasOpenedStreamRef = { current: false };
+    expect(
+      prepareDashboardStreamSession({
+        hasOpenedStreamRef,
+        previousSessionKey: null,
+        queuedEventsRef,
+        refreshToken: 0,
+        selectedSessionID: "~default",
+      }),
+    ).toBe(true);
+    expect(queuedEventsRef.current).toBe(queuedEvents);
+    expect(hasOpenedStreamRef.current).toBe(true);
+  });
+
   it("clears queued events when the session key or refresh token changes", () => {
     const queuedEventsRef = { current: [{ id: "event-1" }] as { id: string }[] };
     const hasOpenedStreamRef = { current: false };
@@ -151,6 +168,33 @@ describe("syncCurrentFactoryDefinition", () => {
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: currentFactoryDocumentQueryKey(sessionID),
+    });
+  });
+
+  it("coerces numeric logical versions into document cache entries", () => {
+    const queryClient = new QueryClient();
+    syncCurrentFactoryDefinition(queryClient, {
+      context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+      id: "event-1",
+      payload: {
+        factory: {
+          ...validFactory,
+          version: {
+            logical: 9,
+            physical: "2026-05-31T12:00:00Z",
+          },
+        },
+      },
+      type: FACTORY_EVENT_TYPES.factoryChange,
+    }, sessionID);
+
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey(sessionID)),
+    ).toMatchObject({
+      version: {
+        logical: "9",
+        physical: "2026-05-31T12:00:00Z",
+      },
     });
   });
 

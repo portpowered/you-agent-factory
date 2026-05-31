@@ -1,4 +1,4 @@
-import { DashboardMutationDialog } from "../../workflow-activity/public";
+import { DashboardMutationDialog } from "../../workflow-activity/components/mutation-dialog";
 import { Button } from "../../../components/ui";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 

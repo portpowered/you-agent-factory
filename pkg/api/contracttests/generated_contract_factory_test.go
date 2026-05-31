@@ -232,9 +232,7 @@ func assertGeneratedWorkRequestJSON(t *testing.T, workRequest factoryapi.WorkReq
 func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.Factory) {
 	t.Helper()
 
-	saveRequest := factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{
-		Factory: namedFactory,
-	}
+	saveRequest := factoryapi.SaveFactoryForSessionRequest{Factory: namedFactory}
 	current := namedFactory
 	badRequest := factoryapi.CreateFactoryBadRequest{
 		Code:    factoryapi.INVALIDFACTORYNAME,

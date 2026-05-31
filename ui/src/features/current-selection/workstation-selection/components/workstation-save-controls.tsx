@@ -1,5 +1,5 @@
 import { Save } from "lucide-react";
-import { DashboardMutationDialog } from "../../../workflow-activity/public";
+import { DashboardMutationDialog } from "../../../workflow-activity/components/mutation-dialog";
 import { Button, DashboardActionButton } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";

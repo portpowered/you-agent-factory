@@ -6,10 +6,8 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import {
-  useCurrentFactoryDocument,
-  useSaveCurrentFactory,
-} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { DashboardSelection } from "../../current-selection/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
@@ -25,9 +23,12 @@ vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", as
   return {
     ...actual,
     useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
   };
 });
+
+vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
+  useFactoryDocumentSave: vi.fn(),
+}));
 
 vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () => {
   const actual = await vi.importActual(
@@ -197,10 +198,12 @@ function registerWorkflowActivityBentoCardTestSetup() {
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
-      mutateAsync: vi.fn(),
+    vi.mocked(useFactoryDocumentSave).mockReturnValue({
+      error: null,
+      isPending: false,
       reset: vi.fn(),
-      status: "idle",
+      save: vi.fn(),
+      saveAsync: vi.fn(),
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue(
       defaultDraftState as never,
