@@ -127,11 +127,8 @@ func ValidatePromptTemplate(tmpl string, inputCount int) PromptTemplateValidatio
 	parsed, err := template.New("prompt").Parse(tmpl)
 	if err != nil {
 		return PromptTemplateValidationResult{
-			Diagnostics: []PromptTemplateDiagnostic{{
-				Kind:    PromptTemplateDiagnosticKindSyntaxError,
-				Message: err.Error(),
-			}},
-			Valid: false,
+			Diagnostics: []PromptTemplateDiagnostic{promptTemplateSyntaxDiagnostic(err, tmpl)},
+			Valid:       false,
 		}
 	}
 
@@ -819,6 +816,87 @@ func buildPromptValidationData(inputCount int) PromptData {
 			},
 		},
 	}
+}
+
+func promptTemplateSyntaxDiagnostic(err error, tmpl string) PromptTemplateDiagnostic {
+	line, humanMessage := parseGoTemplateParseError(err.Error())
+	message := humanMessage
+	if line > 0 {
+		message = fmt.Sprintf("line %d: %s", line, humanMessage)
+	}
+
+	diagnostic := PromptTemplateDiagnostic{
+		Kind:    PromptTemplateDiagnosticKindSyntaxError,
+		Message: message,
+	}
+	if line > 0 {
+		if startOffset, endOffset, ok := promptTemplateLineInclusiveByteOffsets(tmpl, line); ok {
+			diagnostic.StartOffset = startOffset
+			diagnostic.EndOffset = endOffset
+		}
+	}
+	return diagnostic
+}
+
+func parseGoTemplateParseError(text string) (line int, humanMessage string) {
+	const prefix = "template: prompt:"
+	if !strings.HasPrefix(text, prefix) {
+		return 0, text
+	}
+
+	rest := strings.TrimPrefix(text, prefix)
+	linePart, afterLine, found := strings.Cut(rest, ":")
+	if !found {
+		return 0, rest
+	}
+
+	parsedLine, err := strconv.Atoi(linePart)
+	if err != nil {
+		return 0, rest
+	}
+
+	if columnPart, afterColumn, foundColumn := strings.Cut(afterLine, ":"); foundColumn {
+		if _, columnErr := strconv.Atoi(columnPart); columnErr == nil {
+			return parsedLine, strings.TrimSpace(afterColumn)
+		}
+	}
+
+	return parsedLine, strings.TrimSpace(afterLine)
+}
+
+func promptTemplateLineInclusiveByteOffsets(tmpl string, lineNumber int) (startOffset int, endOffset int, ok bool) {
+	if lineNumber < 1 {
+		return 0, 0, false
+	}
+
+	currentLine := 1
+	lineStart := 0
+	for byteIndex := 0; byteIndex <= len(tmpl); byteIndex++ {
+		if currentLine == lineNumber {
+			lineStart = byteIndex
+			break
+		}
+		if byteIndex >= len(tmpl) {
+			return 0, 0, false
+		}
+		if tmpl[byteIndex] == '\n' {
+			currentLine++
+		}
+	}
+
+	lineEnd := lineStart
+	for lineEnd < len(tmpl) && tmpl[lineEnd] != '\n' {
+		lineEnd++
+	}
+
+	if lineEnd < lineStart {
+		return 0, 0, false
+	}
+	if lineEnd == lineStart {
+		return lineStart + 1, lineStart + 1, true
+	}
+
+	return lineStart + 1, lineEnd, true
 }
 
 func promptTemplateExecutionDiagnostic(err error, tmpl string) (PromptTemplateDiagnostic, bool) {
