@@ -16,6 +16,7 @@ export interface WorkerDetailCardProps {
   editableConfigurationState?: EditableWorkerConfigurationState;
   headerAction?: ReactNode;
   locale?: string | null;
+  onSaveConfiguration?: () => void;
   saveState?: EditableWorkerSaveState;
   widgetId?: string;
   workerName: string;

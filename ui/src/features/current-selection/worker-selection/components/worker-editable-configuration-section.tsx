@@ -3,7 +3,6 @@ import { type ReactNode, useId, useState } from "react";
 
 import {
   DashboardActionButton,
-  DashboardActionRow,
   ExpandablePanelTrigger,
   Select,
 } from "../../../../components/ui";
@@ -27,9 +26,11 @@ import {
 } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   CurrentSelectionSectionHeader,
 } from "../../base/components/detail-card-shared";
+import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
 import { formatEditableWorkerOverwriteFieldLabels } from "../editing/editable-worker-overwrite-fields";
 import type {
   EditableWorkerConfigurationState,
@@ -43,11 +44,13 @@ import type { getWorkerDetailMessages } from "../messages/worker-detail";
 
 export function WorkerEditableConfigurationSection({
   messages,
+  onSaveConfiguration,
   saveState,
   state,
   workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
+  onSaveConfiguration?: () => void;
   saveState?: EditableWorkerSaveState;
   state?: WorkerDetailCardProps["editableConfigurationState"];
   workerName: string;
@@ -118,6 +121,7 @@ export function WorkerEditableConfigurationSection({
           {state?.status === "ready" ? (
             <WorkerEditableConfigurationReadyForm
               messages={messages}
+              onSaveConfiguration={onSaveConfiguration}
               saveState={saveState}
               state={state}
               workerName={workerName}
@@ -131,11 +135,13 @@ export function WorkerEditableConfigurationSection({
 
 function WorkerEditableConfigurationReadyForm({
   messages,
+  onSaveConfiguration,
   saveState,
   state,
   workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
+  onSaveConfiguration?: () => void;
   saveState?: EditableWorkerSaveState;
   state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
   workerName: string;
@@ -180,32 +186,32 @@ function WorkerEditableConfigurationReadyForm({
         messages={messages}
         state={state}
       />
-      <WorkerEditableConfigurationField
-        errorMessage={validationErrors.name}
-        fieldId="editable-worker-name"
-        input={
-          <input
-            aria-describedby={
-              validationErrors.name ? "editable-worker-name-error" : undefined
-            }
-            aria-invalid={validationErrors.name ? "true" : undefined}
-            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
-            id="editable-worker-name"
-            onChange={(event) => state.onNameChange(event.target.value)}
-            type="text"
-            value={state.draft.name}
-          />
-        }
-        label={messages.nameFieldLabel}
-        supportingContent={
-          <WorkerEditableConfigurationServerChangedHint
-            fieldName="name"
-            messages={messages}
-            state={state}
-          />
-        }
-      />
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
+        <WorkerEditableConfigurationField
+          errorMessage={validationErrors.name}
+          fieldId="editable-worker-name"
+          input={
+            <input
+              aria-describedby={
+                validationErrors.name ? "editable-worker-name-error" : undefined
+              }
+              aria-invalid={validationErrors.name ? "true" : undefined}
+              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              id="editable-worker-name"
+              onChange={(event) => state.onNameChange(event.target.value)}
+              type="text"
+              value={state.draft.name}
+            />
+          }
+          label={messages.nameFieldLabel}
+          supportingContent={
+            <WorkerEditableConfigurationServerChangedHint
+              fieldName="name"
+              messages={messages}
+              state={state}
+            />
+          }
+        />
         <WorkerEditableConfigurationField
           errorMessage={validationErrors.type}
           fieldId="editable-worker-type"
@@ -246,17 +252,24 @@ function WorkerEditableConfigurationReadyForm({
           validationErrors={validationErrors}
         />
       </div>
-      {state.isDirty ? (
-        <DashboardActionRow
-          actions={
-            <DashboardActionButton
-              disabled={isSaving}
-              onClick={state.onResetToLatest}
-              type="button"
-            >
-              {messages.discardDraftAction}
-            </DashboardActionButton>
+      {onSaveConfiguration ? (
+        <EditableConfigurationSaveRow
+          busyLabel={messages.editableConfigurationSaveBusyAction}
+          canSave={state.canSave}
+          isSaving={isSaving}
+          onSave={onSaveConfiguration}
+          resetSlot={
+            state.isDirty ? (
+              <DashboardActionButton
+                disabled={isSaving}
+                onClick={state.onResetToLatest}
+                type="button"
+              >
+                {messages.discardDraftAction}
+              </DashboardActionButton>
+            ) : undefined
           }
+          saveLabel={messages.editableConfigurationSaveAction}
         />
       ) : null}
     </form>
@@ -778,10 +791,7 @@ function WorkerEditableConfigurationFieldHelp({
 }) {
   return (
     <p
-      className={cn(
-        "m-0 text-af-text-subtle",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
+      className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}
     >
       {children}
     </p>

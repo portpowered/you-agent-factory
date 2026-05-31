@@ -16,12 +16,15 @@ import type {
   SelectedWorkRelationshipGraph,
 } from "../work-selection/public";
 import { WorkItemDetailCard } from "../work-selection/public";
-import { useEditableWorkTypeConfigurationState } from "../work-type-selection/hooks/use-editable-work-type-configuration-state";
-import { useSaveEditableWorkTypeConfiguration } from "../work-type-selection/hooks/use-save-editable-work-type-configuration";
+import { useEditableWorkStateConfigurationState } from "../work-state-selection/hooks/use-editable-work-state-configuration-state";
+import { useSaveEditableWorkStateConfiguration } from "../work-state-selection/hooks/use-save-editable-work-state-configuration";
+import { EditableWorkStateSaveHeaderAction } from "../work-state-selection/public";
 import {
   EditableWorkTypeSaveDialog,
   EditableWorkTypeSaveHeaderAction,
 } from "../work-type-selection/components/work-type-save-controls";
+import { useEditableWorkTypeConfigurationState } from "../work-type-selection/hooks/use-editable-work-type-configuration-state";
+import { useSaveEditableWorkTypeConfiguration } from "../work-type-selection/hooks/use-save-editable-work-type-configuration";
 import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
 import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
@@ -32,9 +35,6 @@ import {
   EditableWorkstationSaveHeaderAction,
   WorkstationDetailCard,
 } from "../workstation-selection/public";
-import { useEditableWorkStateConfigurationState } from "../work-state-selection/hooks/use-editable-work-state-configuration-state";
-import { useSaveEditableWorkStateConfiguration } from "../work-state-selection/hooks/use-save-editable-work-state-configuration";
-import { EditableWorkStateSaveHeaderAction } from "../work-state-selection/public";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
@@ -75,6 +75,7 @@ function renderCurrentSelectionDetailCard({
   saveState,
   workStateHeaderAction,
   workStateSaveState,
+  onSaveWorkerConfiguration,
   workerHeaderAction,
   workTypeHeaderAction,
   workTypeSaveState,
@@ -109,6 +110,7 @@ function renderCurrentSelectionDetailCard({
   workStateSaveState: ReturnType<
     typeof useSaveEditableWorkStateConfiguration
   >["saveState"];
+  onSaveWorkerConfiguration: () => void;
   workerHeaderAction: ReactNode;
   workTypeHeaderAction: ReactNode;
   saveState: ReturnType<
@@ -208,6 +210,7 @@ function renderCurrentSelectionDetailCard({
         editableConfigurationState={editableWorkerConfigurationState}
         headerAction={workerHeaderAction}
         locale={locale}
+        onSaveConfiguration={onSaveWorkerConfiguration}
         saveState={workerSaveState}
         widgetId={widgetId}
         workerName={selectedWorkerName}
@@ -393,6 +396,7 @@ export function CurrentSelectionWidget({
     onSelectTraceID,
     workStateHeaderAction,
     workStateSaveState: workStateSave.saveState,
+    onSaveWorkerConfiguration: () => void workerSave.save(),
     workerHeaderAction,
     workTypeHeaderAction,
     saveState: workstationSave.saveState,

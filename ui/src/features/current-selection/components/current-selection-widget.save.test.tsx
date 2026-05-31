@@ -1366,7 +1366,10 @@ describe("CurrentSelectionWidget worker save flow", () => {
     fireEvent.change(screen.getByLabelText("Model"), {
       target: { value: "gpt-5.9" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save worker" }));
+    const saveWorkerButtons = screen.getAllByRole("button", {
+      name: "Save worker",
+    });
+    fireEvent.click(saveWorkerButtons[saveWorkerButtons.length - 1] ?? saveWorkerButtons[0]);
 
     expect(
       screen.queryByRole("heading", {
@@ -1397,11 +1400,11 @@ describe("CurrentSelectionWidget worker save flow", () => {
         ),
       ).toBeTruthy();
     });
-    expect(
-      screen
-        .getByRole("button", { name: "Save worker" })
-        .getAttribute("disabled"),
-    ).not.toBeNull();
+    for (const saveButton of screen.getAllByRole("button", {
+      name: "Save worker",
+    })) {
+      expect(saveButton.getAttribute("disabled")).not.toBeNull();
+    }
   });
 });
 
