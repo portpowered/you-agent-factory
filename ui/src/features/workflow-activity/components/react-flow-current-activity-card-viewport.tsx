@@ -8,9 +8,10 @@ import {
   type NodeChange,
   type NodeTypes,
   ReactFlow,
+  type ReactFlowInstance,
   type XYPosition,
 } from "@xyflow/react";
-import { useCallback } from "react";
+import { type MutableRefObject, useCallback } from "react";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
@@ -152,6 +153,7 @@ function factoryGraphEdgeIdForRenderedEdge(nodes: Node[], edge: Edge) {
   )}->${factoryGraphNodeIdForRenderedNode(nodes, edge.target)}`;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes React Flow canvas wiring with editor toolbar overlays.
 export function CurrentActivityGraphViewport({
   activeTool,
   addMenuActions,
@@ -182,6 +184,8 @@ export function CurrentActivityGraphViewport({
   openAddMenu,
   saveDisabledReason,
   setStoredNodePosition,
+  flowContainerRef,
+  flowInstanceRef,
 }: {
   activeTool: "add" | "connect" | "delete" | null;
   addMenuActions?: FactoryGraphEditorMenuAction[];
@@ -216,6 +220,8 @@ export function CurrentActivityGraphViewport({
     nodeId: string,
     position: XYPosition,
   ) => void;
+  flowContainerRef?: MutableRefObject<HTMLElement | null>;
+  flowInstanceRef?: MutableRefObject<ReactFlowInstance | null>;
 }) {
   const editorMessages = getFactoryGraphEditorMessages(locale);
   const isValidConnection = buildCurrentActivityIsValidConnection({
@@ -248,6 +254,7 @@ export function CurrentActivityGraphViewport({
         locale={locale}
       />
       <section
+        ref={flowContainerRef}
         aria-describedby={headingID}
         aria-label={editorMessages.viewportLabel}
         className={cn(
@@ -286,6 +293,11 @@ export function CurrentActivityGraphViewport({
           edgesFocusable={editorMode}
           nodesConnectable={editorMode && activeTool === "connect"}
           onConnect={handleConnect}
+          onInit={(instance) => {
+            if (flowInstanceRef) {
+              flowInstanceRef.current = instance;
+            }
+          }}
           onError={handleCurrentActivityReactFlowError}
           onEdgeClick={(_, edge) => {
             if (editorMode) {

@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import type { ReactFlowInstance } from "@xyflow/react";
+import { useMemo, useRef } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
@@ -7,13 +8,15 @@ import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messag
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+import type { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
 import {
   mergeFactoryValidationTargets,
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
 } from "../lib/react-flow-current-activity-card-validation";
+import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
+import { GraphEditorPlacementRegistrar } from "./graph-editor-placement-context";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
-import type { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph surface keeps editor notices, validation, and viewport wiring together.
@@ -35,6 +38,11 @@ export function CurrentActivityGraphSurface({
   snapshot: DashboardSnapshot;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
+  const flowContainerRef = useRef<HTMLElement | null>(null);
+  const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
+  const storedNodePositions = useCurrentActivityGraphStore(
+    (state) => state.positionsByGraphKey[graph.graphKey] ?? {},
+  );
   const saveError = editor.saveEditableDefinition.error;
   const editorValidationProjection = useMemo(() => {
     if (!editor.editorMode) {
@@ -133,6 +141,14 @@ export function CurrentActivityGraphSurface({
           {messages.noticeStaleDescription}
         </FactoryGraphEditorNotice>
       ) : null}
+      <GraphEditorPlacementRegistrar
+        flowContainerRef={flowContainerRef}
+        flowInstanceRef={flowInstanceRef}
+        graphKey={graph.graphKey}
+        nodes={graph.nodes}
+        setStoredNodePosition={graph.setStoredNodePosition}
+        storedNodePositions={storedNodePositions}
+      />
       <CurrentActivityGraphViewport
         activeTool={editor.activeTool}
         addMenuActions={editor.addMenuActions}
@@ -140,6 +156,8 @@ export function CurrentActivityGraphSurface({
         canSaveDraft={editor.canSaveDraft}
         editorMode={editor.editorMode}
         edges={graph.edges}
+        flowContainerRef={flowContainerRef}
+        flowInstanceRef={flowInstanceRef}
         graphKey={graph.graphKey}
         handleDiscardPendingChanges={editor.handleDiscardPendingChanges}
         handleNodesChange={graph.handleNodesChange}

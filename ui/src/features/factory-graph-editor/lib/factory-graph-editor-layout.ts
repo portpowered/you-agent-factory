@@ -7,7 +7,8 @@ import type {
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
 
-const NODE_DIMENSIONS_BY_KIND: Record<
+/** Node bounds used by the factory graph editor layout and viewport placement resolver. */
+export const FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND: Record<
   FactoryGraphNodeKind,
   { height: number; width: number }
 > = {
@@ -41,7 +42,7 @@ export async function buildFactoryGraphEditorLayout(
       toNodeId: edge.targetId,
     })),
     nodes: topology.nodes.map((node) => ({
-      ...NODE_DIMENSIONS_BY_KIND[node.kind],
+      ...FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND[node.kind],
       id: node.id,
       nodeId: node.id,
       nodeKind: node.kind,

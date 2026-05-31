@@ -7,8 +7,8 @@ import {
   FactoryGraphEditorStatus,
   type FactoryGraphEditorTool,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   createFactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityDraft,
@@ -16,7 +16,8 @@ import {
   type FactoryGraphAddEntityKind,
   validateFactoryGraphAddEntityDraft,
 } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { useGraphEditorPlaceAddedNode } from "./graph-editor-placement-context";
 
 export function useFactoryGraphAddEntityController({
   currentFactoryDefinition,
@@ -32,6 +33,7 @@ export function useFactoryGraphAddEntityController({
     useState<FactoryGraphAddEntityDraft | null>(null);
   const [addEntityErrors, setAddEntityErrors] =
     useState<FactoryGraphAddEntityFieldErrors>({});
+  const placeAddedNode = useGraphEditorPlaceAddedNode();
 
   const handleAddEntityAction = useCallback(
     (actionID: string) => {
@@ -68,9 +70,15 @@ export function useFactoryGraphAddEntityController({
       return;
     }
 
+    placeAddedNode?.(addEntityDraft);
     setAddEntityDraft(null);
     setAddEntityErrors({});
-  }, [addEntityDraft, currentFactoryDefinition, editableGraph.actions]);
+  }, [
+    addEntityDraft,
+    currentFactoryDefinition,
+    editableGraph.actions,
+    placeAddedNode,
+  ]);
 
   const reset = useCallback(() => {
     setAddMenuOpen(false);

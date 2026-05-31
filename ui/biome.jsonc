@@ -170,7 +170,8 @@
         "integration/browser-test-harness.mjs",
         "integration/event-stream-replay.integration.test.mjs",
         "integration/dashboard-session-tabs.integration.test.mjs",
-        "integration/factory-graph-editor.integration.test.mjs"
+        "integration/factory-graph-editor.integration.test.mjs",
+        "integration/factory-graph-editor-node-placement.integration.test.mjs"
       ],
       "linter": {
         "rules": {
