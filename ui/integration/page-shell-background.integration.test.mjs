@@ -8,7 +8,12 @@ import {
   expectNoBrowserErrors,
   openBrowserPage,
   startBrowserPreview,
+  startFactoryApiServer,
 } from "./browser-test-harness.mjs";
+
+const pageShellFactoryDefinition = {
+  name: "Page Shell Harness",
+};
 
 describe.sequential("page-shell background browser integration", () => {
   let preview = null;
@@ -25,6 +30,10 @@ describe.sequential("page-shell background browser integration", () => {
   it(
     "applies a flat foundation blue page shell on the document root",
     async () => {
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: pageShellFactoryDefinition,
+      });
       const browserPage = await openBrowserPage({
         artifactLabel: "page-shell-background",
       });
@@ -53,6 +62,7 @@ describe.sequential("page-shell background browser integration", () => {
         );
       } finally {
         await browserPage.close();
+        await server.stop();
       }
     },
     browserScenarioTimeoutMs,
