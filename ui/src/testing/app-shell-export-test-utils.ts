@@ -2,7 +2,7 @@ import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
 import type { CurrentFactoryDocument } from "../api/current-factory-definition";
 import type { FactoryValue } from "../api/named-factory";
-import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
+import type { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
 import { defaultSessionFactoryVersion } from "./session-factory-mocks";
 
 function mockCurrentFactoryDocument(
@@ -72,18 +72,6 @@ export function mockExportCurrentFactoryDocumentLoaded(
       isFetching: false,
       isPending: false,
       isSuccess: true,
-    }),
-  );
-}
-
-/** Simulate an in-flight current-factory refresh while the export dialog is open. */
-export function mockExportCurrentFactoryDocumentPreparing(): void {
-  mockCurrentFactoryDocument(
-    createCurrentFactoryDocumentQueryResult({
-      data: undefined,
-      isFetching: true,
-      isPending: true,
-      isSuccess: false,
     }),
   );
 }
