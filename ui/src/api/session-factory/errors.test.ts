@@ -17,8 +17,12 @@ describe("normalizeSessionFactoryAPIErrorCode", () => {
   });
 
   it("maps unknown or missing API codes to INTERNAL_ERROR", () => {
-    expect(normalizeSessionFactoryAPIErrorCode("UNKNOWN_CODE")).toBe("INTERNAL_ERROR");
-    expect(normalizeSessionFactoryAPIErrorCode(undefined)).toBe("INTERNAL_ERROR");
+    expect(normalizeSessionFactoryAPIErrorCode("UNKNOWN_CODE")).toBe(
+      "INTERNAL_ERROR",
+    );
+    expect(normalizeSessionFactoryAPIErrorCode(undefined)).toBe(
+      "INTERNAL_ERROR",
+    );
   });
 });
 

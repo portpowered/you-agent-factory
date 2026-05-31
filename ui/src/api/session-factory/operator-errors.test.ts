@@ -1,9 +1,9 @@
+import { getSessionFactory, saveSessionFactory } from "./api";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 import {
   resolveSessionFactoryAPIErrorMessage,
   sessionFactoryOperatorErrorMessages,
 } from "./operator-errors";
-import { getSessionFactory, saveSessionFactory } from "./api";
 
 const sessionFactoryFixture = {
   name: "Current Factory",
@@ -18,23 +18,26 @@ const sessionFactoryFixture = {
 
 describe("resolveSessionFactoryAPIErrorMessage", () => {
   it.each([
-    ["STALE_FACTORY_VERSION", sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION],
+    [
+      "STALE_FACTORY_VERSION",
+      sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
+    ],
     ["FACTORY_NOT_IDLE", sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE],
     ["INVALID_FACTORY", sessionFactoryOperatorErrorMessages.INVALID_FACTORY],
-    ["INVALID_FACTORY_NAME", sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME],
-  ] as const)(
-    "maps %s to the canonical operator message regardless of API copy",
-    (code, expectedMessage) => {
-      expect(
-        resolveSessionFactoryAPIErrorMessage({
-          apiMessage: "Backend-specific diagnostic text.",
-          code,
-          rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
-          status: 409,
-        }),
-      ).toBe(expectedMessage);
-    },
-  );
+    [
+      "INVALID_FACTORY_NAME",
+      sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
+    ],
+  ] as const)("maps %s to the canonical operator message regardless of API copy", (code, expectedMessage) => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        apiMessage: "Backend-specific diagnostic text.",
+        code,
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+        status: 409,
+      }),
+    ).toBe(expectedMessage);
+  });
 
   it("maps network failures to the session factory network copy", () => {
     expect(
@@ -97,48 +100,39 @@ describe("session factory HTTP error mapping", () => {
       "STALE_FACTORY_VERSION",
       sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
     ],
-    [
-      "FACTORY_NOT_IDLE",
-      sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE,
-    ],
-    [
-      "INVALID_FACTORY",
-      sessionFactoryOperatorErrorMessages.INVALID_FACTORY,
-    ],
-  ] as const)(
-    "surfaces canonical %s copy from mocked PUT failures",
-    async (code, message) => {
-      await expect(
-        saveSessionFactory(
-          {
-            sessionID: "~default",
-            factory: sessionFactoryFixture,
-          },
-          {
-            fetch: vi.fn().mockResolvedValue(
-              new Response(
-                JSON.stringify({
-                  code,
-                  message: "Ignored API diagnostic.",
-                }),
-                {
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  status: 409,
-                  statusText: "Conflict",
+    ["FACTORY_NOT_IDLE", sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE],
+    ["INVALID_FACTORY", sessionFactoryOperatorErrorMessages.INVALID_FACTORY],
+  ] as const)("surfaces canonical %s copy from mocked PUT failures", async (code, message) => {
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: sessionFactoryFixture,
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code,
+                message: "Ignored API diagnostic.",
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
                 },
-              ),
+                status: 409,
+                statusText: "Conflict",
+              },
             ),
-          },
-        ),
-      ).rejects.toMatchObject({
-        code,
-        message,
-        status: 409,
-      });
-    },
-  );
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code,
+      message,
+      status: 409,
+    });
+  });
 
   it("surfaces canonical not-idle copy from mocked GET failures", async () => {
     await expect(

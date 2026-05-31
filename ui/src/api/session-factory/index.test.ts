@@ -9,9 +9,9 @@ describe("session-factory index exports", () => {
     expect(normalizeSessionFactoryAPIErrorCode("STALE_FACTORY_VERSION")).toBe(
       "STALE_FACTORY_VERSION",
     );
-    expect(new SessionFactoryAPIError("save failed", { code: "BAD_REQUEST" }).code).toBe(
-      "BAD_REQUEST",
-    );
+    expect(
+      new SessionFactoryAPIError("save failed", { code: "BAD_REQUEST" }).code,
+    ).toBe("BAD_REQUEST");
 
     const fetch = vi.fn().mockResolvedValue(
       new Response(
