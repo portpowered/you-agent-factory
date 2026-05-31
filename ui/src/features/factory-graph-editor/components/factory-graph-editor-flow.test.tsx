@@ -5,7 +5,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import "../../../styles.css";
-import type { FactoryGraphTopology } from "../lib/factory-graph-draft-types";
+import { baseFactoryDefinition } from "../lib/factory-graph-draft.test-helpers";
+import { buildFactoryGraphTopologyFromDefinition } from "../lib/factory-graph-draft-graph";
+import type {
+  CanonicalFactoryDefinition,
+  FactoryGraphTopology,
+} from "../lib/factory-graph-draft-types";
 import { buildFactoryGraphEditorLayout } from "../lib/factory-graph-editor-layout";
 import {
   buildFactoryGraphEditorFlowModel,
@@ -199,17 +204,20 @@ function renderEditorFlow(
   canEditConnections = false,
   topology: FactoryGraphTopology = EDITOR_EDGE_TOPOLOGY,
   options?: {
+    factoryDefinition?: CanonicalFactoryDefinition | null;
     pendingAdditionNodeIds?: ReadonlySet<string>;
+    pendingRemovalNodeIds?: ReadonlySet<string>;
     workerStatusByName?: ReadonlyMap<string, "active" | "errored" | "idle" | "unavailable">;
   },
 ) {
   const flow = buildFactoryGraphEditorFlowModel({
     canEditConnections,
+    factoryDefinition: options?.factoryDefinition,
     pendingAdditionEdgeIds: new Set<string>(),
     pendingAdditionNodeIds: options?.pendingAdditionNodeIds ?? new Set<string>(),
     pendingConnectionSource: null,
     pendingRemovalEdgeIds: new Set<string>(),
-    pendingRemovalNodeIds: new Set<string>(),
+    pendingRemovalNodeIds: options?.pendingRemovalNodeIds ?? new Set<string>(),
     topology,
     workerStatusByName: options?.workerStatusByName,
   });
@@ -346,6 +354,98 @@ describe("factory graph editor edge labels", () => {
     expect(flow.nodes.find((node) => node.id === "workstation:review")?.position).toEqual(
       positionsByNodeId.get("workstation:review"),
     );
+  });
+});
+
+describe("factory graph editor work state lifecycle styling", () => {
+  let restoreBrowserTestShims: (() => void) | null = null;
+
+  const lifecycleFactoryDefinition = {
+    ...baseFactoryDefinition,
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          { name: "queued", type: "INITIAL" },
+          { name: "review", type: "PROCESSING" },
+          { name: "done", type: "TERMINAL" },
+          { name: "failed", type: "FAILED" },
+        ],
+      },
+    ],
+  } satisfies CanonicalFactoryDefinition;
+
+  const lifecycleTopology =
+    buildFactoryGraphTopologyFromDefinition(lifecycleFactoryDefinition);
+
+  beforeEach(() => {
+    restoreBrowserTestShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserTestShims?.();
+    restoreBrowserTestShims = null;
+  });
+
+  it("applies phase surface classes from projected workStateType", async () => {
+    renderEditorFlow(false, lifecycleTopology, {
+      factoryDefinition: lifecycleFactoryDefinition,
+    });
+
+    const expectSurface = async (title: string, borderClass: string) => {
+      const node = (await screen.findByTitle(title)).closest("article");
+      expect(node).not.toBeNull();
+      expect(node?.className).toContain(borderClass);
+    };
+
+    await expectSurface("story:queued", "border-af-info-border");
+    await expectSurface("story:review", "border-af-warning-border");
+    await expectSurface("story:done", "border-af-success-border");
+    await expectSurface("story:failed", "border-af-danger-border");
+  });
+
+  it("keeps non-work-state nodes on existing kind styling", async () => {
+    renderEditorFlow(false, lifecycleTopology, {
+      factoryDefinition: lifecycleFactoryDefinition,
+    });
+
+    const workerNode = (await screen.findByTitle("writer")).closest("article");
+    expect(workerNode?.className).toContain("border-af-info-border");
+    expect(workerNode?.className).toContain("bg-af-info-surface");
+  });
+
+  it("falls back to neutral work-state styling without factory definition", async () => {
+    renderEditorFlow(false, lifecycleTopology);
+
+    const queuedNode = (await screen.findByTitle("story:queued")).closest(
+      "article",
+    );
+    expect(queuedNode?.className).toContain("border-af-border-strong");
+    expect(queuedNode?.className).toContain("bg-af-surface-raised");
+  });
+
+  it("keeps draft addition and removal treatments visible on phase-colored nodes", async () => {
+    renderEditorFlow(false, lifecycleTopology, {
+      factoryDefinition: lifecycleFactoryDefinition,
+      pendingAdditionNodeIds: new Set(["work-state:story:queued"]),
+      pendingRemovalNodeIds: new Set(["work-state:story:failed"]),
+    });
+
+    const additionNode = (await screen.findByTitle("story:queued")).closest(
+      "article",
+    );
+    const removalNode = (await screen.findByTitle("story:failed")).closest(
+      "article",
+    );
+
+    expect(additionNode?.className).toContain("border-af-info-border");
+    expect(additionNode?.className).toContain("ring-af-warning-border");
+    expect(additionNode?.textContent).toContain("Pending");
+
+    expect(removalNode?.className).toContain("ring-af-danger-border");
+    expect(removalNode?.className).toContain("bg-af-danger-surface");
+    expect(removalNode?.textContent).toContain("Removing");
   });
 });
 
