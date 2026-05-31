@@ -35,6 +35,24 @@ describe("validateFactoryDefinition error mapping", () => {
     });
   });
 
+  it("falls back to rejected request copy for 400 responses without API message", async () => {
+    await expect(
+      validateFactoryDefinition(emptyFactory, {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ code: "INVALID_FACTORY" }), {
+            headers: { "Content-Type": "application/json" },
+            status: 400,
+            statusText: "Bad Request",
+          }),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: factoryValidationAPIErrorMessages.rejectedRequest,
+      status: 400,
+    });
+  });
+
   it("maps 400 validation failures to BAD_REQUEST with API copy", async () => {
     await expect(
       validateFactoryDefinition(emptyFactory, {
