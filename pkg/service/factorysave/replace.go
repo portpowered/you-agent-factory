@@ -108,7 +108,7 @@ func (s *Service) saveDefaultCurrentFactoryForSession(
 		if err != nil {
 			return err
 		}
-		replaceResult, err := s.host.ReplaceFactorySplitLayout(sessionRootDir, payload)
+		replaceResult, err := s.host.ReplaceFactoryLayoutAtDir(sessionRootDir, payload)
 		if err != nil {
 			return err
 		}

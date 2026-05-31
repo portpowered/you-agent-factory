@@ -62,6 +62,16 @@ func ReplaceFactoryLayoutAtDir(targetDir string, payload []byte, opts FactoryLay
 	return config.ReplaceFactoryLayoutAtDir(targetDir, payload, opts)
 }
 
+// FactorySplitLayoutReplaceResult holds rollback and backup-discard callbacks after
+// a successful ReplaceFactoryLayoutAtDirWithResult commit.
+type FactorySplitLayoutReplaceResult = config.FactorySplitLayoutReplaceResult
+
+// ReplaceFactoryLayoutAtDirWithResult is like ReplaceFactoryLayoutAtDir and also
+// returns DiscardBackup for successful activation cleanup.
+func ReplaceFactoryLayoutAtDirWithResult(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (*FactorySplitLayoutReplaceResult, error) {
+	return config.ReplaceFactoryLayoutAtDirWithResult(targetDir, payload, opts)
+}
+
 // ReplaceFactorySplitLayout atomically replaces an existing factory directory
 // with a split-layout materialization of canonicalFactoryJSON.
 func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (*config.FactorySplitLayoutReplaceResult, error) {

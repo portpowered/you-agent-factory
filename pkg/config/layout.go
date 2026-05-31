@@ -766,8 +766,15 @@ type FactorySplitLayoutReplaceResult struct {
 // normalizeNamedFactoryPayload, staging, writeFactorySplitLayout, LoadRuntimeConfig
 // validation, and an atomic swap. restore reverts to the pre-replace directory
 // tree when downstream activation fails.
+// ReplaceFactoryLayoutAtDirWithResult runs the same pipeline as
+// ReplaceFactoryLayoutAtDir and also returns DiscardBackup for callers that
+// must remove the on-disk backup after successful downstream activation.
+func ReplaceFactoryLayoutAtDirWithResult(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (*FactorySplitLayoutReplaceResult, error) {
+	return replaceFactoryLayoutAtDir(targetDir, payload, opts, factorySplitLayoutReplaceHooks{})
+}
+
 func ReplaceFactoryLayoutAtDir(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (restore func(), err error) {
-	result, err := replaceFactoryLayoutAtDir(targetDir, payload, opts, factorySplitLayoutReplaceHooks{})
+	result, err := ReplaceFactoryLayoutAtDirWithResult(targetDir, payload, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -805,7 +812,7 @@ func ReplaceFactoryLayoutAtDirWithAfterStageHook(
 // Restore to reinstate the pre-replace tree when downstream steps fail; call
 // DiscardBackup after successful activation to remove the on-disk backup.
 func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (*FactorySplitLayoutReplaceResult, error) {
-	return replaceFactoryLayoutAtDir(targetDir, canonicalFactoryJSON, DefaultFactoryLayoutReplaceOptions(targetDir), factorySplitLayoutReplaceHooks{})
+	return ReplaceFactoryLayoutAtDirWithResult(targetDir, canonicalFactoryJSON, DefaultFactoryLayoutReplaceOptions(targetDir))
 }
 
 // ReplaceFactorySplitLayoutWithAfterStageHook runs split-layout replace and invokes
