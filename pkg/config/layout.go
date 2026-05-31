@@ -130,7 +130,11 @@ func ExpandFactoryConfigLayoutWithExpansionReport(path string) (string, LayoutEx
 		return "", LayoutExpansionReport{}, fmt.Errorf("normalize factory config %s: %w", sourcePath, err)
 	}
 
-	report, err := writeExpandedFactoryLayout(filepath.Dir(sourcePath), targetDir, cfgForExpandedFiles, canonical, sourcePath)
+	report, err := writeFactorySplitLayout(targetDir, cfgForExpandedFiles, canonical, sourcePath, FactorySplitLayoutWriteOptions{
+		SourceDir:                   filepath.Dir(sourcePath),
+		CopyReferencedScripts:       true,
+		OverwriteExistingSplitFiles: false,
+	})
 	if err != nil {
 		return "", LayoutExpansionReport{}, err
 	}
@@ -815,7 +819,9 @@ func stageFactorySplitLayoutReplace(
 		_ = os.RemoveAll(stagingDir)
 	}
 
-	if _, err := writeNamedFactoryLayout(stagingDir, factoryCfg, canonical, sourcePath); err != nil {
+	if _, err := writeFactorySplitLayout(stagingDir, factoryCfg, canonical, sourcePath, FactorySplitLayoutWriteOptions{
+		OverwriteExistingSplitFiles: true,
+	}); err != nil {
 		return "", cleanup, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 	}
 	if hooks.afterStageWrite != nil {

@@ -739,7 +739,10 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, opti
 		}
 	}()
 
-	replacements, err := writeNamedFactoryLayout(stagingDir, factoryCfg, canonical, sourcePath)
+	report, err := writeFactorySplitLayout(stagingDir, factoryCfg, canonical, sourcePath, FactorySplitLayoutWriteOptions{
+		OverwriteExistingSplitFiles: true,
+	})
+	replacements := report.BundledReplacements
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 	}
@@ -924,43 +927,6 @@ func ResolveCurrentFactoryDir(rootDir string) (string, error) {
 	}
 
 	return "", fmt.Errorf("resolve current factory in %s: %w", rootDir, ErrFactoryLayoutNotFound)
-}
-
-func writeNamedFactoryLayout(targetDir string, cfg *interfaces.FactoryConfig, canonical []byte, sourcePath string) ([]PortableBundledFileReplacement, error) {
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create factory directory %s: %w", targetDir, err)
-	}
-
-	formatted, err := formatCanonicalFactoryJSON(canonical, sourcePath)
-	if err != nil {
-		return nil, err
-	}
-	factoryPath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
-	if err := os.WriteFile(factoryPath, formatted, 0o644); err != nil {
-		return nil, fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
-	}
-	persistExpansion := splitRuntimeExpansionOptions{overwriteExisting: true}
-	if _, err := writeExpandedWorkerFiles(targetDir, cfg.Workers, persistExpansion); err != nil {
-		return nil, err
-	}
-	if _, _, err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations, persistExpansion); err != nil {
-		return nil, err
-	}
-	if err := pruneStaleSplitRuntimeDirs(targetDir, cfg); err != nil {
-		return nil, err
-	}
-	replacements, err := materializePortableBundledFiles(targetDir, cfg)
-	if err != nil {
-		return nil, err
-	}
-	inputsDir := filepath.Join(targetDir, interfaces.InputsDir)
-	if err := os.MkdirAll(inputsDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create inputs directory %s: %w", inputsDir, err)
-	}
-	if err := ensureDefaultInputChannelDirectories(targetDir, cfg); err != nil {
-		return nil, err
-	}
-	return replacements, nil
 }
 
 func ensureDefaultInputChannelDirectories(targetDir string, cfg *interfaces.FactoryConfig) error {
