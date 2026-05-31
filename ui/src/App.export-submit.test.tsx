@@ -6,7 +6,6 @@ import { readFactoryImportPng } from "./features/import/lib/factory-png-import";
 import type { FactoryValue } from "./api/named-factory";
 import {
   baselineSnapshot,
-  jsonResponse,
   registerAppDashboardTestLifecycle,
   renderApp,
 } from "./testing/app-shell-test-utils";
@@ -17,6 +16,7 @@ import {
   exportTimelineEvents,
   fromBase64,
   installExportDownloadProbe,
+  mockExportCurrentFactoryDocumentLoaded,
   toArrayBuffer,
 } from "./testing/app-shell-export-test-utils";
 
@@ -54,13 +54,11 @@ describe("App shell export submission flows", () => {
 
   it("validates the export fields and accepts the confirmed name plus selected image", async () => {
     const exportProbe = installExportDownloadProbe();
-    const { fetchMock } = renderApp({
+    mockExportCurrentFactoryDocumentLoaded();
+    renderApp({
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentSessionFactoryExportAPIResponse),
-    );
 
     try {
       fireEvent.click(
@@ -144,13 +142,11 @@ describe("App shell export submission flows", () => {
         },
         ok: true,
       });
-    const { fetchMock } = renderApp({
+    mockExportCurrentFactoryDocumentLoaded();
+    renderApp({
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentSessionFactoryExportAPIResponse),
-    );
 
     try {
       fireEvent.click(
@@ -220,13 +216,13 @@ describe("App shell export submission flows", () => {
         });
         return exportResultPromise;
       });
-    const { fetchMock } = renderApp({
+    mockExportCurrentFactoryDocumentLoaded(
+      currentFactoryWithBundledFilesAPIResponse,
+    );
+    renderApp({
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentFactoryWithBundledFilesAPIResponse),
-    );
 
     try {
       fireEvent.click(

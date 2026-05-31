@@ -6,10 +6,12 @@ import * as factoryPngImportModule from "./features/import/lib/factory-png-impor
 import {
   createDeferredPromise,
   currentNamedFactoryExportResponse,
+  currentSessionFactoryExportAPIResponse,
   exportImageFile,
   exportTimelineEvents,
   fromBase64,
   installExportDownloadProbe,
+  mockExportCurrentFactoryDocumentLoaded,
 } from "./testing/app-shell-export-test-utils";
 import {
   baselineSnapshot,
@@ -364,6 +366,10 @@ describe("App shell import flows", () => {
     );
 
     try {
+      mockExportCurrentFactoryDocumentLoaded({
+        ...sessionFactoryNamedExportDocument,
+        ...currentSessionFactoryExportAPIResponse,
+      });
       fireEvent.click(
         await screen.findByRole("button", { name: "Export PNG" }),
       );

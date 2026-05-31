@@ -1,12 +1,12 @@
 import "../testing/bun-app-shell-module-mocks";
+import { useCurrentFactoryDocumentMock } from "../testing/bun-app-shell-module-mocks";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "bun:test";
-import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
+import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import type { FactoryValue } from "./api/named-factory";
 import {
   baselineSnapshot,
-  jsonResponse,
   nonPromptTemplateFetchPaths,
   registerAppDashboardTestLifecycle,
   renderApp,
@@ -19,21 +19,22 @@ import {
   exportImageFile,
   fromBase64,
   installExportDownloadProbe,
+  createCurrentFactoryDocumentQueryResult,
+  mockExportCurrentFactoryDocumentLoaded,
   toArrayBuffer,
 } from "./testing/app-shell-export-test-utils";
+import type { CurrentFactoryDocument } from "./api/current-factory-definition";
 
 describe("App shell export dialog flows", () => {
   registerAppDashboardTestLifecycle();
 
   it("opens the export dialog from the toolbar and dismisses it without dashboard side effects", async () => {
     const exportProbe = installExportDownloadProbe();
+    mockExportCurrentFactoryDocumentLoaded();
     const { fetchMock } = renderApp({
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentSessionFactoryExportAPIResponse),
-    );
 
     try {
       fireEvent.click(
@@ -73,9 +74,7 @@ describe("App shell export dialog flows", () => {
           screen.queryByRole("dialog", { name: "Export factory" }),
         ).toBeNull();
       });
-      expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
-        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`,
-      ]);
+      expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
       expect(exportProbe.getDownloadedBlob()).toBeNull();
       expect(exportProbe.getDownloadedFilename()).toBe("");
     } finally {
@@ -101,7 +100,6 @@ describe("App shell export dialog flows", () => {
       ...refreshedCurrentFactoryExportResponse,
       version: currentSessionFactoryExportAPIResponse.version,
     };
-    const refreshedCurrentFactoryResponse = createDeferredPromise<Response>();
     const writeFactoryExportPngSpy = vi
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
       .mockResolvedValue({
@@ -115,40 +113,32 @@ describe("App shell export dialog flows", () => {
         },
         ok: true,
       });
-    const { fetchMock } = renderApp({
+    const exportDocumentRef: {
+      current: CurrentFactoryDocument | null;
+    } = {
+      current: currentSessionFactoryExportAPIResponse,
+    };
+    useCurrentFactoryDocumentMock.mockImplementation(() => {
+      if (exportDocumentRef.current == null) {
+        return createCurrentFactoryDocumentQueryResult({
+          data: undefined,
+          isFetching: true,
+          isPending: true,
+          isSuccess: false,
+        });
+      }
+
+      return createCurrentFactoryDocumentQueryResult({
+        data: exportDocumentRef.current,
+        isFetching: false,
+        isPending: false,
+        isSuccess: true,
+      });
+    });
+
+    renderApp({
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
-    });
-    let currentFactoryFetchCount = 0;
-
-    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-      const path =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? `${input.pathname}${input.search}`
-            : input.url;
-
-      if (
-        path !==
-        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`
-      ) {
-        throw new Error(`unexpected fetch for ${path}`);
-      }
-
-      currentFactoryFetchCount += 1;
-
-      if (currentFactoryFetchCount === 1) {
-        return jsonResponse(currentSessionFactoryExportAPIResponse);
-      }
-
-      if (currentFactoryFetchCount === 2) {
-        return refreshedCurrentFactoryResponse.promise;
-      }
-
-      throw new Error(
-        `unexpected current factory fetch #${currentFactoryFetchCount}`,
-      );
     });
 
     try {
@@ -173,6 +163,7 @@ describe("App shell export dialog flows", () => {
         ).toBeNull();
       });
 
+      exportDocumentRef.current = null;
       fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
 
       const secondDialog = await screen.findByRole("dialog", {
@@ -185,20 +176,24 @@ describe("App shell export dialog flows", () => {
       ).toBeTruthy();
       expect(writeFactoryExportPngSpy).not.toHaveBeenCalled();
 
+      exportDocumentRef.current = refreshedCurrentFactoryAPIResponse;
       await act(async () => {
-        refreshedCurrentFactoryResponse.resolve(
-          jsonResponse(refreshedCurrentFactoryAPIResponse),
-        );
-        await refreshedCurrentFactoryResponse.promise;
+        useExportDialogStore.setState({ isExportDialogOpen: false });
+      });
+      await act(async () => {
+        useExportDialogStore.setState({ isExportDialogOpen: true });
       });
 
+      const refreshedDialog = await screen.findByRole("dialog", {
+        name: "Export factory",
+      });
       await waitFor(() => {
         expect(
-          within(secondDialog).getByDisplayValue("imported-workflow"),
+          within(refreshedDialog).getByDisplayValue("imported-workflow"),
         ).toBeTruthy();
       });
 
-      const imageInput = within(secondDialog).getByLabelText(
+      const imageInput = within(refreshedDialog).getByLabelText(
         "Cover image",
       ) as HTMLInputElement;
       Object.defineProperty(imageInput, "files", {
@@ -207,7 +202,7 @@ describe("App shell export dialog flows", () => {
       });
       fireEvent.change(imageInput);
       fireEvent.click(
-        within(secondDialog).getByRole("button", { name: "Export PNG" }),
+        within(refreshedDialog).getByRole("button", { name: "Export PNG" }),
       );
 
       const { version: _refetchedVersion, ...refreshedExportFactory } =
@@ -233,13 +228,11 @@ describe("App shell export dialog flows", () => {
     const writeFactoryExportPngSpy = vi
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
       .mockReturnValue(pendingExport.promise);
-    const { fetchMock } = renderApp({
+    mockExportCurrentFactoryDocumentLoaded();
+    renderApp({
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentSessionFactoryExportAPIResponse),
-    );
 
     try {
       fireEvent.click(

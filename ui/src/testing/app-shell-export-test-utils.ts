@@ -2,7 +2,91 @@ import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
 import type { CurrentFactoryDocument } from "../api/current-factory-definition";
 import type { FactoryValue } from "../api/named-factory";
+import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
 import { defaultSessionFactoryVersion } from "./session-factory-mocks";
+
+function mockCurrentFactoryDocument(
+  result: CurrentFactoryDocumentQuery,
+): void {
+  const useCurrentFactoryDocumentMock = (
+    globalThis as typeof globalThis & {
+      __useCurrentFactoryDocumentMock?: {
+        mockReturnValue: (value: unknown) => void;
+      };
+    }
+  ).__useCurrentFactoryDocumentMock;
+  if (!useCurrentFactoryDocumentMock) {
+    throw new Error(
+      "Bun app-shell mocks are not loaded; import ui/testing/bun-app-shell-module-mocks before export test utils.",
+    );
+  }
+  useCurrentFactoryDocumentMock.mockReturnValue(result as never);
+}
+
+type CurrentFactoryDocumentQuery = ReturnType<typeof useCurrentFactoryDocument>;
+
+export function createCurrentFactoryDocumentQueryResult(
+  overrides: Partial<CurrentFactoryDocumentQuery> & {
+    data?: CurrentFactoryDocument;
+  },
+): CurrentFactoryDocumentQuery {
+  const data = overrides.data;
+  const isSuccess = overrides.isSuccess ?? data != null;
+  const isPending = overrides.isPending ?? !isSuccess;
+  const isFetching = overrides.isFetching ?? false;
+
+  return {
+    data,
+    error: null,
+    failureCount: 0,
+    failureReason: null,
+    fetchStatus: isFetching ? "fetching" : "idle",
+    isError: false,
+    isFetched: isSuccess,
+    isFetchedAfterMount: isSuccess,
+    isFetching,
+    isInitialLoading: isPending,
+    isLoading: isPending,
+    isLoadingError: false,
+    isPaused: false,
+    isPending,
+    isPlaceholderData: false,
+    isRefetchError: false,
+    isRefetching: isFetching,
+    isStale: false,
+    isSuccess,
+    promise: Promise.resolve(data),
+    refetch: async () => ({}) as never,
+    status: isSuccess ? "success" : "pending",
+    ...overrides,
+  } as CurrentFactoryDocumentQuery;
+}
+
+/** Seed the mocked session-factory document hook for App-shell export flows. */
+export function mockExportCurrentFactoryDocumentLoaded(
+  document: CurrentFactoryDocument = currentSessionFactoryExportAPIResponse,
+): void {
+  mockCurrentFactoryDocument(
+    createCurrentFactoryDocumentQueryResult({
+      data: document,
+      isFetching: false,
+      isPending: false,
+      isSuccess: true,
+    }),
+  );
+}
+
+/** Simulate an in-flight current-factory refresh while the export dialog is open. */
+export function mockExportCurrentFactoryDocumentPreparing(): void {
+  mockCurrentFactoryDocument(
+    createCurrentFactoryDocumentQueryResult({
+      data: undefined,
+      isFetching: true,
+      isPending: true,
+      isSuccess: false,
+    }),
+  );
+}
 
 const onePixelPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";

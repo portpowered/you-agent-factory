@@ -10,11 +10,10 @@ import { describe, expect, it, vi } from "bun:test";
 import { DASHBOARD_PAGE_HEADING_CLASS } from "./components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStreamStore";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
-import { currentSessionFactoryExportAPIResponse } from "./testing/app-shell-export-test-utils";
+import { mockExportCurrentFactoryDocumentLoaded } from "./testing/app-shell-export-test-utils";
 import {
   createFactoryImportValue,
   createFileDropTransfer,
-  jsonResponse,
   registerAppDashboardTestLifecycle,
   renderApp,
   terminalSnapshot,
@@ -30,24 +29,10 @@ describe("App shell locale and toolbar flows", () => {
       ok: true,
       value: importValue,
     });
-    const { fetchMock } = renderApp({
+    mockExportCurrentFactoryDocumentLoaded();
+    renderApp({
       initialLocale: "en",
       snapshot: terminalSnapshot,
-    });
-
-    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-      const path =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? `${input.pathname}${input.search}`
-            : input.url;
-
-      if (path === "/factory-sessions/~default/factory") {
-        return jsonResponse(currentSessionFactoryExportAPIResponse);
-      }
-
-      throw new Error(`unexpected fetch for ${path}`);
     });
 
     const englishToolbar = await screen.findByRole("region", {
