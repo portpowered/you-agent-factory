@@ -134,6 +134,38 @@ Authoring guidance:
   `PARENT_CHILD`, or multiple work types in one batch (see `you docs
   relationships`).
 
+## Operator loop (maintainer factory)
+
+Short loop for submitting and verifying maintainer work against a **running**
+factory (see `you docs agents` § Is the factory running?):
+
+1. **`you session list`** — confirm the service is listening and a session is
+   open. Connection refused means start `you run --dir ./factory` (or
+   `you run --continuously`) before submitting.
+2. **Submit an idea** — default path for new work: CLI or inbox markdown under
+   `factory/inputs/idea/default/` (see **Submission recipes** above).
+3. **Verify acceptance** — use one or more of:
+   - **`GET /factory-sessions/{session_id}/status`** — `factoryState` and
+     `runtimeStatus` show whether the runtime accepted work and is processing
+     (session id is often `~default` on single-session hosts).
+   - **Dashboard** — `http://localhost:7437/dashboard/ui` on the same host/port
+     as the API (adjust for `--server` / `--port`).
+   - **`you work list`** — when the listing is populated, locate the submitted
+     item by name or `workId` from the submit response.
+
+Example CLI submit:
+
+```bash
+you submit --name my-idea --work-type-name idea --payload path/to.md
+```
+
+**Post-submit timing:** `you work show <work-id>` may not find the item
+immediately while dispatch is still in flight. An empty `you work list` right
+after submit does **not** by itself mean the submit failed — prefer session
+status and the dashboard until work appears in the list, then use
+`you work show` or `you work list --name <name>` for detail (see `you docs work`
+§ Verify after submit).
+
 ## Maintainer notes
 
 - Maintainer control surface: `factory/internal/{asks,view,progress,meta}.md`
