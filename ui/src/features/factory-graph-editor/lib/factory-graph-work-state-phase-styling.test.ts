@@ -4,6 +4,7 @@ import {
   workStatePhaseSemanticIconClassName,
   workStatePhaseSemanticIconKind,
   workStatePhaseSurfaceClassName,
+  workStatePhaseSwatchClassName,
 } from "./factory-graph-work-state-phase-styling";
 
 describe("factory graph work state phase styling", () => {
@@ -31,6 +32,7 @@ describe("factory graph work state phase styling", () => {
     "maps %s to phase surface and icon styling",
     (type, surfaceClass, iconKind, iconClass) => {
       expect(workStatePhaseSurfaceClassName(type)).toBe(surfaceClass);
+      expect(workStatePhaseSwatchClassName(type)).toBe(surfaceClass);
       expect(workStatePhaseSemanticIconKind(type)).toBe(iconKind);
       expect(workStatePhaseSemanticIconClassName(type)).toBe(iconClass);
     },

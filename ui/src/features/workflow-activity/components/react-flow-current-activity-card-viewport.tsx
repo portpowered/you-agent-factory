@@ -19,6 +19,7 @@ import { cn } from "../../../lib/cn";
 import {
   type FactoryGraphEditorMenuAction,
   FactoryGraphEditorToolbar,
+  FactoryGraphEditorWorkStatePhaseLegend,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
@@ -310,6 +311,10 @@ export function CurrentActivityGraphViewport({
             fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
           />
         </ReactFlow>
+        <FactoryGraphEditorWorkStatePhaseLegend
+          locale={locale}
+          visible={editorMode}
+        />
         <CurrentActivityEditorToolbar
           activeTool={activeTool}
           addMenuActions={addMenuActions}

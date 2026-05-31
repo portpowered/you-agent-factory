@@ -12,6 +12,7 @@ import type {
 } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphConnectionEndpoint } from "../lib/factory-graph-editor-connections";
 import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-controls";
+import { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-work-state-phase-legend";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
@@ -583,7 +584,8 @@ function WorkStateLifecyclePhasesStory() {
   });
 
   return (
-    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-border bg-af-surface-raised p-4">
+    <div className="relative h-[520px] w-full rounded-[1.5rem] border border-af-border bg-af-surface-raised p-4">
+      <FactoryGraphEditorWorkStatePhaseLegend visible={true} />
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
         edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
@@ -622,6 +624,15 @@ export const WorkStateLifecyclePhases = {
     await expectPhaseBorder("story:review", "border-af-warning-border");
     await expectPhaseBorder("story:done", "border-af-success-border");
     await expectPhaseBorder("story:failed", "border-af-danger-border");
+
+    const legend = canvasElement.querySelector(
+      "[data-factory-graph-work-state-phase-legend]",
+    );
+    if (!legend) {
+      throw new Error("Expected work state phase legend");
+    }
+    await expect(within(legend as HTMLElement).getByText("Initial")).toBeVisible();
+    await expect(within(legend as HTMLElement).getByText("Completed")).toBeVisible();
   },
 };
 

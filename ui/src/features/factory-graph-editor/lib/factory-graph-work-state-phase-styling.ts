@@ -1,5 +1,23 @@
+/**
+ * Maintainer note: factory graph editor work-state node colors map canonical
+ * `WorkStateType` values from the factory definition to semantic tokens:
+ * - INITIAL → af-info (blue)
+ * - PROCESSING → af-warning (yellow)
+ * - TERMINAL → af-success (green)
+ * - FAILED → af-danger (red)
+ *
+ * Observer current-activity graphs use different icon tones in
+ * `current-activity-place-node.tsx`; keep editor lifecycle styling here.
+ */
 import type { GraphSemanticIconKind } from "../../flowchart/components/graph-semantic-icon";
 import type { FactoryGraphWorkStateType } from "./factory-graph-work-state-type";
+
+export const WORK_STATE_PHASE_LEGEND_ORDER = [
+  "INITIAL",
+  "PROCESSING",
+  "TERMINAL",
+  "FAILED",
+] as const satisfies readonly FactoryGraphWorkStateType[];
 
 const NEUTRAL_WORK_STATE_SURFACE =
   "border-af-border-strong bg-af-surface-raised";
@@ -31,6 +49,12 @@ const WORK_STATE_PHASE_ICON_CLASS: Record<FactoryGraphWorkStateType, string> =
     TERMINAL: "text-af-success",
     FAILED: "text-af-danger",
   };
+
+export function workStatePhaseSwatchClassName(
+  workStateType: FactoryGraphWorkStateType,
+): string {
+  return WORK_STATE_PHASE_SURFACE[workStateType];
+}
 
 export function workStatePhaseSurfaceClassName(
   workStateType: FactoryGraphWorkStateType | undefined,
