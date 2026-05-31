@@ -59,6 +59,23 @@ describe("prepareDashboardStreamSession", () => {
     expect(hasOpenedStreamRef.current).toBe(false);
   });
 
+  it("keeps queued events on first mount for the default refresh token", () => {
+    const queuedEvents = [{ id: "event-1" }];
+    const queuedEventsRef = { current: queuedEvents as { id: string }[] };
+    const hasOpenedStreamRef = { current: false };
+    expect(
+      prepareDashboardStreamSession({
+        hasOpenedStreamRef,
+        previousSessionKey: null,
+        queuedEventsRef,
+        refreshToken: 0,
+        selectedSessionID: "~default",
+      }),
+    ).toBe(true);
+    expect(queuedEventsRef.current).toBe(queuedEvents);
+    expect(hasOpenedStreamRef.current).toBe(true);
+  });
+
   it("clears queued events when the session key or refresh token changes", () => {
     const queuedEventsRef = { current: [{ id: "event-1" }] as { id: string }[] };
     const hasOpenedStreamRef = { current: false };

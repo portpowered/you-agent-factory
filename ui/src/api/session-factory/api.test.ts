@@ -213,6 +213,47 @@ describe("saveSessionFactory", () => {
     );
   });
 
+  it("omits mode on PUT when REPLACE_CURRENT is the default save mode", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "10",
+            physical: "2026-05-18T14:40:00Z",
+          },
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveSessionFactory(
+      {
+        sessionID: "~default",
+        factory: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+        mode: "REPLACE_CURRENT",
+      },
+      { fetch },
+    );
+
+    const requestBody = JSON.parse(
+      (fetch.mock.calls[0]?.[1] as RequestInit | undefined)?.body as string,
+    );
+    expect(requestBody.mode).toBe("REPLACE_CURRENT");
+  });
+
   it("throws SessionFactoryAPIError for network failures", async () => {
     await expect(
       saveSessionFactory(
