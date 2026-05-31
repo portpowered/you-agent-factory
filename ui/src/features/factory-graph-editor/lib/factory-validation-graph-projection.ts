@@ -1,4 +1,9 @@
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
+import {
+  factoryGraphConnectionAnchorContext,
+  workstationRendersProgressOutcomeHandleValidation,
+} from "./factory-graph-editor-connections";
 
 export type FactoryValidationSubjectLocation =
   FactoryValidationTarget["subject"]["location"];
@@ -196,6 +201,45 @@ export function validationHandleErrorsForNode(
   nodeId: string,
 ): ReadonlyMap<string, FactoryValidationHandleError> | undefined {
   return projection.handleErrorsByNodeId.get(nodeId);
+}
+
+export function filterValidationHandleErrorsForWorkstation(
+  handleErrors: ReadonlyMap<string, FactoryValidationHandleError>,
+  workstation: WorkstationProgressOutcomeRouteContext | undefined,
+): ReadonlyMap<string, FactoryValidationHandleError> {
+  if (!workstation) {
+    return handleErrors;
+  }
+
+  const context = factoryGraphConnectionAnchorContext(workstation);
+  const filtered = new Map<string, FactoryValidationHandleError>();
+  for (const [handleId, error] of handleErrors) {
+    if (workstationRendersProgressOutcomeHandleValidation(context, handleId)) {
+      filtered.set(handleId, error);
+    }
+  }
+  return filtered;
+}
+
+export function validationTargetIsRenderedForWorkstation(
+  target: FactoryValidationTarget,
+  workstation: WorkstationProgressOutcomeRouteContext | undefined,
+): boolean {
+  if (target.subject.type !== "WORKSTATION" || !workstation) {
+    return true;
+  }
+
+  const handleId = workstationHandleIdForValidationLocation(
+    target.subject.location,
+  );
+  if (!handleId) {
+    return true;
+  }
+
+  return workstationRendersProgressOutcomeHandleValidation(
+    factoryGraphConnectionAnchorContext(workstation),
+    handleId,
+  );
 }
 
 export function validationNodeErrorForNode(

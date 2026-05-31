@@ -16,6 +16,7 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   mergeAuthoredProgressOutcomeConnectionAnchors,
   PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
+  workstationRendersProgressOutcomeHandleValidation,
   workstationRendersProgressOutcomeZAxisHintAnchors,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
@@ -267,19 +268,6 @@ export function buildSemanticGraphHandles(args: {
 }
 
 export const buildEditorHandles = buildSemanticGraphHandles;
-
-function workstationRendersProgressOutcomeHandleValidation(
-  context: FactoryGraphConnectionAnchorContext,
-  anchorId: string,
-): boolean {
-  if (!PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchorId)) {
-    return true;
-  }
-
-  return getFactoryGraphConnectionAnchors("workstation", context).some(
-    (anchor) => anchor.id === anchorId,
-  );
-}
 
 function endpointNodeKind(
   nodeId: string,

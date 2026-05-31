@@ -1,9 +1,12 @@
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
+  filterValidationHandleErrorsForWorkstation,
   projectFactoryValidationTargets,
   type FactoryValidationGraphProjection,
+  validationTargetIsRenderedForWorkstation,
 } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import {
   factoryGraphNodeIdForWorkState,
@@ -65,6 +68,32 @@ function collectMessagesForNodeIds(
   return [...messages];
 }
 
+function collectWorkstationMessagesForSelection(
+  messagesByNodeId: ReadonlyMap<
+    string,
+    readonly FactoryValidationTarget[]
+  >,
+  nodeIds: ReadonlySet<string>,
+  workstation: WorkstationProgressOutcomeRouteContext | undefined,
+): string[] {
+  const messages = new Set<string>();
+
+  for (const [nodeId, targets] of messagesByNodeId) {
+    if (!nodeIds.has(nodeId)) {
+      continue;
+    }
+
+    for (const target of targets) {
+      if (!validationTargetIsRenderedForWorkstation(target, workstation)) {
+        continue;
+      }
+      messages.add(target.message);
+    }
+  }
+
+  return [...messages];
+}
+
 function workstationGraphNodeIdsForSelection(
   factoryDefinition: CanonicalFactoryDefinition | undefined,
   selectionNodeId: string,
@@ -106,6 +135,24 @@ function workStateGraphNodeIdsForPlaceId(placeId: string): ReadonlySet<string> {
   return new Set([factoryGraphNodeIdForWorkState(placeId), placeId]);
 }
 
+function findCanonicalWorkstationByNodeId(
+  factoryDefinition: CanonicalFactoryDefinition | undefined,
+  nodeId: string,
+): WorkstationProgressOutcomeRouteContext | undefined {
+  if (!factoryDefinition) {
+    return undefined;
+  }
+
+  const normalizedNodeId = nodeId.startsWith(WORKSTATION_GRAPH_NODE_PREFIX)
+    ? nodeId.slice(WORKSTATION_GRAPH_NODE_PREFIX.length)
+    : nodeId;
+
+  return factoryDefinition.workstations?.find(
+    (candidate) =>
+      candidate.id === normalizedNodeId || candidate.name === normalizedNodeId,
+  );
+}
+
 export function validationMessagesForSelectedWorkstation(args: {
   factoryDefinition?: CanonicalFactoryDefinition;
   projection: FactoryValidationGraphProjection;
@@ -123,10 +170,16 @@ export function validationMessagesForSelectedWorkstation(args: {
     return [];
   }
 
+  const workstation = findCanonicalWorkstationByNodeId(
+    args.factoryDefinition,
+    args.selectionNodeId,
+  );
+
   const messages = new Set(
-    collectMessagesForNodeIds(
+    collectWorkstationMessagesForSelection(
       args.projection.workstationMessagesByNodeId,
       workstationNodeIds,
+      workstation,
     ),
   );
 
@@ -135,7 +188,10 @@ export function validationMessagesForSelectedWorkstation(args: {
     if (!handleErrors) {
       continue;
     }
-    for (const error of handleErrors.values()) {
+    for (const error of filterValidationHandleErrorsForWorkstation(
+      handleErrors,
+      workstation,
+    ).values()) {
       messages.add(error.message);
     }
   }
