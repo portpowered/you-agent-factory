@@ -675,4 +675,95 @@ describe.sequential("factory graph editor browser integration", () => {
     },
     browserScenarioTimeoutMs,
   );
+
+  it(
+    "discards pending graph edits and leaves the factory graph editor without saving",
+    async () => {
+      const saveRequests = [];
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: editableGraphFactoryDefinition,
+        eventLines: editableGraphFactoryReplayLines,
+        onSaveCurrentFactory: async (value) => {
+          saveRequests.push(value);
+        },
+      });
+      const browserPage = await openBrowserPage();
+
+      try {
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await server.replayCompleted;
+
+        await browserPage.page
+          .getByRole("button", { name: "Enter factory graph editor" })
+          .click();
+
+        const toolbar = browserPage.page.getByRole("region", {
+          name: "Factory graph editor tools",
+        });
+        await toolbar.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+
+        await toolbar
+          .getByRole("button", { name: "Open add entity menu" })
+          .click();
+        await browserPage.page
+          .getByLabel("Add graph entity menu")
+          .getByRole("button", { name: "Work type" })
+          .click();
+
+        const addDialog = browserPage.page.getByRole("dialog", {
+          name: "Add work type",
+        });
+        await addDialog.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await addDialog.getByLabel("Identifier").fill("essay");
+        await addDialog.getByLabel("First state").fill("queued");
+        await addDialog.getByRole("button", { name: "Add entity" }).click();
+
+        const discardChangesButton = toolbar.getByRole("button", {
+          name: "Discard changes",
+        });
+        await expect
+          .poll(async () => await discardChangesButton.isEnabled(), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe(true);
+
+        await discardChangesButton.click();
+        await toolbar
+          .getByText("No draft changes", { exact: true })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        await browserPage.page
+          .getByRole("button", { name: "Leave factory graph editor" })
+          .click();
+
+        await browserPage.page
+          .getByRole("button", { name: "Enter factory graph editor" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await toolbar.waitFor({
+          state: "hidden",
+          timeout: uiInteractionTimeoutMs,
+        });
+
+        expect(saveRequests).toHaveLength(0);
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
 });

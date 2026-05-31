@@ -2,8 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   baseFactoryDefinitionDocument,
+  createHookTestGraphEditorDraftState,
   createMockEditableFactoryGraph,
   createMockGraphEditorDraftState,
+  draftWorkstationFactoryDocument,
+  mockEditableFactoryGraph,
   wireMockEditableFactoryGraph,
   type MockEditableFactoryGraphHooks,
 } from "./graph-editor-harness";
@@ -89,6 +92,28 @@ describe("graph-editor-harness", () => {
     await expect(graph.actions.save()).resolves.toBe(false);
     expect(saveFactoryDefinition).not.toHaveBeenCalled();
     expect(graph.saveState.canSave).toBe(false);
+  });
+
+  it("mockEditableFactoryGraph alias matches createMockEditableFactoryGraph", () => {
+    expect(mockEditableFactoryGraph).toBe(createMockEditableFactoryGraph);
+  });
+
+  it("createHookTestGraphEditorDraftState seeds draft workstation topology", () => {
+    const draftState = createHookTestGraphEditorDraftState();
+    expect(draftState.baseDocument).toEqual(draftWorkstationFactoryDocument);
+    expect(draftState.graph.nodes.map((node) => node.id)).toContain(
+      "workstation:draft",
+    );
+  });
+
+  it("createHookTestGraphEditorDraftState mutates draft on replaceDraft", () => {
+    const draftState = createHookTestGraphEditorDraftState();
+    const nextDraft = createMockGraphEditorDraftState().draft;
+
+    draftState.replaceDraft(nextDraft);
+
+    expect(draftState.draft).toBe(nextDraft);
+    expect(draftState.hasChanges).toBe(true);
   });
 
   it("createMockEditableFactoryGraph marks save state stale when versions diverge", () => {

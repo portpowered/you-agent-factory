@@ -12,7 +12,7 @@ import {
 } from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
-import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
@@ -1001,11 +1001,46 @@ describe("current activity graph active item labels", () => {
     expect(labelsByPlaceId.get("story:blocked")).toEqual(["token-4"]);
   });
 
+  it("leaves validation markers unset when validationTargets default to empty", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], graphLayout.edges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: null,
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: buildSampleFactorySnapshot(factory),
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(
+      nodes.find((node) => node.id === "work-type:task")?.data,
+    ).toMatchObject({
+      validationError: false,
+      validationMessage: undefined,
+    });
+  });
+
   it("marks work type and work state nodes with validation error treatment from canonical targets", async () => {
     const factory = loadSampleFactoryDefinition();
     const graphLayout =
       await buildCurrentActivityGraphLayoutFromFactory(factory);
-    const validationProjection = projectFactoryValidationTargets([
+    const validationTargets: FactoryValidationTarget[] = [
       {
         code: "factory.workType.missingCompletionState",
         message: 'work type "task" must declare a completion state.',
@@ -1026,7 +1061,7 @@ describe("current activity graph active item labels", () => {
           type: "WORK_STATE",
         },
       },
-    ]);
+    ];
     const nodes = buildCurrentActivityNodes({
       activeExecutionsByWorkstationNodeID: {},
       activeGraphHighlights: buildActiveGraphHighlights([], graphLayout.edges),
@@ -1037,8 +1072,8 @@ describe("current activity graph active item labels", () => {
         editorMode: true,
         onConnectionAnchorClick: vi.fn(),
         pendingConnectionSource: null,
-        validationProjection,
       },
+      validationTargets,
       factoryDefinition: factory,
       graphLayout,
       now: Date.parse("2026-05-24T00:00:00Z"),
@@ -1070,7 +1105,7 @@ describe("current activity graph active item labels", () => {
     const factory = loadSampleFactoryDefinition();
     const graphLayout =
       await buildCurrentActivityGraphLayoutFromFactory(factory);
-    const validationProjection = projectFactoryValidationTargets([
+    const validationTargets: FactoryValidationTarget[] = [
       {
         code: "factory.workstation.missingRejectionRoute",
         message: "Workstation process must define a reject route.",
@@ -1102,7 +1137,7 @@ describe("current activity graph active item labels", () => {
           type: "WORKSTATION",
         },
       },
-    ]);
+    ];
     const nodes = buildCurrentActivityNodes({
       activeExecutionsByWorkstationNodeID: {},
       activeGraphHighlights: buildActiveGraphHighlights([], graphLayout.edges),
@@ -1113,8 +1148,8 @@ describe("current activity graph active item labels", () => {
         editorMode: true,
         onConnectionAnchorClick: vi.fn(),
         pendingConnectionSource: null,
-        validationProjection,
       },
+      validationTargets,
       factoryDefinition: factory,
       graphLayout,
       now: Date.parse("2026-05-24T00:00:00Z"),

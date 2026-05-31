@@ -3,6 +3,7 @@ import type {
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
   type FactoryGraphConnectionAnchorContext,
@@ -27,7 +28,7 @@ export interface CurrentActivityEditorState {
   editorMode: boolean;
   onConnectionAnchorClick: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
-  validationProjection?: FactoryValidationGraphProjection;
+  validationTargets?: readonly FactoryValidationTarget[];
 }
 
 type CurrentActivityEndpointKind = Extract<
