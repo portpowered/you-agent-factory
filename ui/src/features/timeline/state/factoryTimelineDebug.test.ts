@@ -93,6 +93,24 @@ describe("factoryTimelineDebug", () => {
     expect((BASE_EVENT.payload as { prompt: string }).prompt).not.toContain("[truncated ");
   });
 
+  it("returns the original event when compaction would not change payload text", () => {
+    const event = {
+      ...BASE_EVENT,
+      payload: {
+        prompt: "short",
+        response: "ok",
+      },
+    };
+
+    expect(
+      compactFactoryEventForTimeline(event, {
+        compactEventText: true,
+        maxEventTextChars: 2_048,
+        memoryDebug: false,
+      }),
+    ).toBe(event);
+  });
+
   it("summarizes retained timeline memory and persists the latest profile", () => {
     const storage = window.localStorage;
     storage.removeItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY);
@@ -126,6 +144,32 @@ describe("factoryTimelineDebug", () => {
     persistFactoryTimelineMemorySummary(storage, summary);
 
     expect(readPersistedFactoryTimelineMemorySummary(storage)).toEqual(summary);
+  });
+
+  it("orders top events by heavy payload bytes before estimated JSON size", () => {
+    const lightEvent: FactoryEvent = {
+      ...BASE_EVENT,
+      id: "light-event",
+      payload: {
+        prompt: "small",
+      },
+    };
+    const heavyEvent: FactoryEvent = {
+      ...BASE_EVENT,
+      id: "heavy-event",
+      payload: {
+        prompt: "x".repeat(8_192),
+      },
+    };
+
+    const summary = summarizeFactoryTimelineMemory([lightEvent, heavyEvent], 7, {
+      location: { search: "" },
+    });
+
+    expect(summary.topEvents.map((entry) => entry.id)).toEqual(["heavy-event", "light-event"]);
+    expect(summary.topEvents[0]?.heavyPayloadBytesMB).toBeGreaterThan(
+      summary.topEvents[1]?.heavyPayloadBytesMB ?? 0,
+    );
   });
 
   it("returns null when no persisted summary exists", () => {

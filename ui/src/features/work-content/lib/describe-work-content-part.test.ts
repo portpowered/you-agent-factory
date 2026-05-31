@@ -19,6 +19,16 @@ describe("describeWorkContentPart", () => {
     ).toBe("JSON: Payload");
   });
 
+  it("skips empty file strings and prefers label", () => {
+    expect(
+      describeWorkContentPart({
+        type: "text",
+        file: "",
+        label: "Inline notes",
+      }),
+    ).toBe("Text: Inline notes");
+  });
+
   it("uses content type when file and label are absent", () => {
     expect(
       describeWorkContentPart({
