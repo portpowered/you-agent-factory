@@ -31,12 +31,9 @@ function expectDefinitionValue(
 }
 
 async function selectReviewRequest(dispatchID: string): Promise<void> {
-  const reviewWorkstationButton = screen.queryByRole("button", {
-    name: "Select Review workstation",
-  });
-  if (reviewWorkstationButton) {
-    fireEvent.click(reviewWorkstationButton);
-  }
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Select Review workstation" }),
+  );
 
   const workstationSelection = await screen.findByRole("article", {
     name: "Current selection",
@@ -176,7 +173,7 @@ describe("App replay workstation request flows", () => {
     ).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Select Review workstation" }),
+      await screen.findByRole("button", { name: "Select Review workstation" }),
     );
     fireEvent.click(
       screen.getByRole("button", {
