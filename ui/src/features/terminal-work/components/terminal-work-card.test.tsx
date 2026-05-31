@@ -5,6 +5,11 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import {
+  STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
+  STANDARD_LIST_SELECTION_ROW_INFO_CLASS,
+  STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
+} from "../../../components/ui/standard-list-selection";
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
 
@@ -302,22 +307,14 @@ describe("CompletedFailedWorkstationCard", () => {
       />,
     );
 
-    expect(
-      screen
-        .getByRole("button", { name: /Failed Story/ })
-        .getAttribute("data-selected"),
-    ).toBe("true");
-    expect(
-      screen.getByRole("button", { name: /Failed Story/ }).className,
-    ).toContain("text-af-text");
-    expect(
-      screen.getByRole("button", { name: /Failed Story/ }).className,
-    ).toContain("border-af-accent-border");
-    expect(
-      screen
-        .getByRole("button", { name: /Done Story/ })
-        .getAttribute("data-selected"),
-    ).toBeNull();
+    expectStandardListTerminalRow(
+      screen.getByRole("button", { name: /Failed Story/ }),
+      { selected: true, tone: "danger" },
+    );
+    expectStandardListTerminalRow(
+      screen.getByRole("button", { name: /Done Story/ }),
+      { selected: false, tone: "info" },
+    );
   });
 
   it("keeps selection styling controlled by props across rerenders", () => {
@@ -353,16 +350,14 @@ describe("CompletedFailedWorkstationCard", () => {
       />,
     );
 
-    expect(
-      screen
-        .getByRole("button", { name: /Done Story/ })
-        .getAttribute("data-selected"),
-    ).toBeNull();
-    expect(
-      screen
-        .getByRole("button", { name: /Failed Story/ })
-        .getAttribute("data-selected"),
-    ).toBe("true");
+    expectStandardListTerminalRow(
+      screen.getByRole("button", { name: /Done Story/ }),
+      { selected: false, tone: "info" },
+    );
+    expectStandardListTerminalRow(
+      screen.getByRole("button", { name: /Failed Story/ }),
+      { selected: true, tone: "danger" },
+    );
   });
 
   it("renders explicit empty messages for each outcome row", () => {
@@ -483,3 +478,35 @@ describe("CompletedFailedWorkstationCard", () => {
     ).toBe("false");
   });
 });
+
+const ACCENT_SELECTED_TOKENS = [
+  "bg-af-accent",
+  "bg-af-accent-surface",
+  "border-af-accent",
+  "shadow-af-accent-selected",
+] as const;
+
+function expectStandardListTerminalRow(
+  row: HTMLElement,
+  {
+    selected,
+    tone,
+  }: {
+    selected: boolean;
+    tone: "info" | "danger";
+  },
+) {
+  const unselectedToneClass =
+    tone === "danger"
+      ? STANDARD_LIST_SELECTION_ROW_DANGER_CLASS
+      : STANDARD_LIST_SELECTION_ROW_INFO_CLASS;
+
+  expect(row.getAttribute("aria-pressed")).toBe(selected ? "true" : "false");
+  expect(row.getAttribute("data-selected")).toBe(selected ? "true" : "false");
+  expect(row.className).toContain(
+    selected ? STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS : unselectedToneClass,
+  );
+  for (const token of ACCENT_SELECTED_TOKENS) {
+    expect(row.className).not.toContain(token);
+  }
+}

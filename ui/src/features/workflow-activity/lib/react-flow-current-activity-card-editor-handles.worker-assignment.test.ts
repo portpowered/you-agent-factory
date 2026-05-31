@@ -138,6 +138,7 @@ it("builds current-activity workstation nodes without worker-assignment handles 
     now: Date.parse("2026-05-24T00:00:00Z"),
     onSelectStateNode: () => {},
     onSelectWorkID: () => {},
+    onSelectResource: () => {},
     onSelectWorker: () => {},
     onSelectWorkType: () => {},
     onSelectWorkstation: () => {},

@@ -1,0 +1,135 @@
+import {
+  createContext,
+  forwardRef,
+  type HTMLAttributes,
+  type ReactNode,
+  useContext,
+} from "react";
+
+import { cn } from "../../lib/cn";
+import {
+  SelectableCardButton,
+  type SelectableCardButtonProps,
+} from "./selectable-card-button";
+
+export type StandardListSelectionTone = "neutral" | "info" | "danger";
+
+const StandardListSelectionDisabledContext = createContext(false);
+
+export const STANDARD_LIST_SELECTION_LIST_CLASS = "grid gap-2";
+
+const STANDARD_LIST_SELECTION_ROW_BASE_CLASS =
+  "h-auto min-h-0 w-full justify-start gap-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+
+export const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
+  "border-af-border bg-af-surface-raised text-af-text hover:border-af-border-strong hover:bg-af-overlay";
+
+export const STANDARD_LIST_SELECTION_ROW_INFO_CLASS =
+  "border-af-info-border bg-af-info-surface text-af-on-info";
+
+export const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
+  "border-af-danger-border bg-af-danger-surface text-af-on-danger";
+
+export const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
+  "border-af-border-strong bg-af-surface-subtle text-af-text";
+
+const STANDARD_LIST_SELECTION_TONE_CLASS: Record<
+  StandardListSelectionTone,
+  string
+> = {
+  neutral: STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
+  info: STANDARD_LIST_SELECTION_ROW_INFO_CLASS,
+  danger: STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
+};
+
+export function standardListSelectionRowClassName({
+  className,
+  selected,
+  tone = "neutral",
+}: {
+  className?: string;
+  selected: boolean;
+  tone?: StandardListSelectionTone;
+}): string {
+  return cn(
+    STANDARD_LIST_SELECTION_ROW_BASE_CLASS,
+    selected
+      ? STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS
+      : STANDARD_LIST_SELECTION_TONE_CLASS[tone],
+    className,
+  );
+}
+
+export interface StandardListSelectionProps
+  extends HTMLAttributes<HTMLDivElement> {
+  children: ReactNode;
+  disabled?: boolean;
+  selectionAnnouncement?: string;
+}
+
+export function StandardListSelection({
+  children,
+  className,
+  disabled = false,
+  selectionAnnouncement,
+  ...props
+}: StandardListSelectionProps) {
+  return (
+    <StandardListSelectionDisabledContext.Provider value={disabled}>
+      <div
+        aria-busy={disabled ? true : undefined}
+        className={cn(STANDARD_LIST_SELECTION_LIST_CLASS, className)}
+        {...props}
+      >
+        {children}
+        {selectionAnnouncement ? (
+          <div aria-live="polite" className="sr-only">
+            {selectionAnnouncement}
+          </div>
+        ) : null}
+      </div>
+    </StandardListSelectionDisabledContext.Provider>
+  );
+}
+
+export interface StandardListSelectionItemProps
+  extends Omit<SelectableCardButtonProps, "selected" | "tone"> {
+  selected?: boolean;
+  tone?: StandardListSelectionTone;
+}
+
+export const StandardListSelectionItem = forwardRef<
+  HTMLButtonElement,
+  StandardListSelectionItemProps
+>(function StandardListSelectionItem(
+  {
+    children,
+    className,
+    disabled,
+    selected = false,
+    tone = "neutral",
+    ...props
+  },
+  ref,
+) {
+  const listDisabled = useContext(StandardListSelectionDisabledContext);
+
+  return (
+    <SelectableCardButton
+      className={standardListSelectionRowClassName({
+        className,
+        selected,
+        tone,
+      })}
+      data-selected={selected ? "true" : "false"}
+      disabled={disabled ?? listDisabled}
+      ref={ref}
+      selected={selected}
+      size="sm"
+      tone="outline"
+      {...props}
+    >
+      {children}
+    </SelectableCardButton>
+  );
+});

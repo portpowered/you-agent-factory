@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
-
 import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/types";
+import {
+  STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
+  STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
+} from "../../../components/ui/standard-list-selection";
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 import type {
   TerminalWorkItem,
@@ -52,6 +55,19 @@ const failedItems: TerminalWorkItem[] = [
   },
 ];
 
+const ACCENT_SELECTED_TOKENS = [
+  "bg-af-accent",
+  "bg-af-accent-surface",
+  "border-af-accent",
+  "shadow-af-accent-selected",
+] as const;
+
+function expectNoAccentSelectedTreatment(className: string) {
+  for (const token of ACCENT_SELECTED_TOKENS) {
+    expect(className).not.toContain(token);
+  }
+}
+
 function SelectableTerminalWorkStory() {
   const [selectedItem, setSelectedItem] = useState<{
     label: string;
@@ -92,6 +108,7 @@ export default {
 };
 
 export const MixedOutcomes = {
+  tags: ["test"],
   render: () => <SelectableTerminalWorkStory />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
@@ -121,6 +138,20 @@ export const MixedOutcomes = {
     await expect(doneStory).toBeVisible();
     await userEvent.click(doneStory);
     await expect(doneStory).toHaveAttribute("data-selected", "true");
+    await expect(doneStory).toHaveAttribute("aria-pressed", "true");
+    expect(doneStory.className).toContain(
+      STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
+    );
+    expectNoAccentSelectedTreatment(doneStory.className);
+
+    const failedStory = await terminalScope.findByRole("button", {
+      name: "Failed Story",
+    });
+    expect(failedStory.className).toContain(
+      STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
+    );
+    await expect(failedStory).toHaveAttribute("aria-pressed", "false");
+    expectNoAccentSelectedTreatment(failedStory.className);
   },
 };
 

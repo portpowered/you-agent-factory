@@ -672,6 +672,7 @@ function renderCurrentActivity(snapshot = createSnapshot()) {
       now={Date.parse("2026-04-08T12:00:04Z")}
       onSelectStateNode={vi.fn()}
       onSelectWorkID={vi.fn()}
+      onSelectResource={vi.fn()}
       onSelectWorker={vi.fn()}
       onSelectWorkType={vi.fn()}
       onSelectWorkstation={vi.fn()}

@@ -7,6 +7,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
 import type { FactoryWorker } from "../../../api/events/types";
+import { resourceTokenCountFromSnapshot } from "../resource-selection/lib/resource-detail-values";
 import {
   findFactoryWorkerInSnapshot,
   findFactoryWorkTypeInSnapshot,
@@ -147,6 +148,28 @@ function useSelectedStatePlaceData({
   };
 }
 
+function useSelectedResourceRuntime(
+  selection: DashboardSelection | null,
+  snapshot: DashboardSnapshot | null | undefined,
+) {
+  const selectedResourceName =
+    selection?.kind === "resource" ? selection.resourceName : null;
+
+  return useMemo(() => {
+    if (!selectedResourceName) {
+      return { selectedResourceName: null, selectedResourceTokenCount: null };
+    }
+
+    return {
+      selectedResourceName,
+      selectedResourceTokenCount: resourceTokenCountFromSnapshot(
+        snapshot,
+        selectedResourceName,
+      ),
+    };
+  }, [selectedResourceName, snapshot]);
+}
+
 function useSelectedWorkData({
   projectedWorkstationRequestsByDispatchID,
   selection,
@@ -262,6 +285,7 @@ function useSelectedWorkerAndWorkTypeData(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: derived selection state composes node, state, work, worker, resource, and work-type projections in one return surface.
 export function useCurrentSelectionDerivedState({
   projectedWorkstationRequestsByDispatchID,
   selection,
@@ -322,6 +346,8 @@ export function useCurrentSelectionDerivedState({
       : selection?.kind === "workstation-request"
         ? (selection.request.work_items[0]?.work_id ?? null)
         : (terminalWorkDetail?.traceWorkID ?? null);
+  const { selectedResourceName, selectedResourceTokenCount } =
+    useSelectedResourceRuntime(selection, snapshot);
   const {
     selectedWorker,
     selectedWorkerName,
@@ -376,6 +402,8 @@ export function useCurrentSelectionDerivedState({
     selectedWorkProviderSessions: work.selectedWorkProviderSessions,
     selectedWorkRequestHistory: work.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: work.selectedWorkWorkstationRequests,
+    selectedResourceName,
+    selectedResourceTokenCount,
     selectedWorker,
     selectedWorkerName,
     selectedWorkerWorkstationNames,

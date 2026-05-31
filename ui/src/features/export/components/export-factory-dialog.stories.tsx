@@ -1,7 +1,6 @@
 import { expect, fireEvent, userEvent, within } from "storybook/test";
-
-import { ExportFactoryDialog } from "./export-factory-dialog";
 import { getExportDialogMessages } from "../messages/export-dialog";
+import { ExportFactoryDialog } from "./export-factory-dialog";
 
 const factory = {
   name: "Factory Aurora",
@@ -91,6 +90,38 @@ export const Preparing = {
       scope.getByRole("button", { name: messages.exportAction }),
     ).toBeDisabled();
     await expect(scope.getByText(messages.loadingStatus)).toBeVisible();
+  },
+};
+
+export const UnifiedChooseFileChrome = {
+  args: {
+    factory,
+    initialFactoryName: "Factory Aurora",
+    isOpen: true,
+    onClose: () => {},
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const messages = getExportDialogMessages("en");
+    const canvas = within(canvasElement.ownerDocument.body);
+    const dialog = await canvas.findByRole("dialog", { name: messages.title });
+    const scope = within(dialog);
+    const imageInput = scope.getByLabelText(messages.imageLabel);
+
+    await expect(imageInput.className).toContain("border-dashed");
+    await expect(imageInput.className).toContain("border-af-border-strong");
+    await expect(imageInput.className).toContain("bg-af-surface-subtle");
+    await expect(imageInput.className).not.toContain("bg-af-accent-surface");
+    await expect(imageInput.className).not.toContain("border-af-accent-border");
+    await expect(imageInput.className).not.toContain(
+      "file:bg-af-accent-surface",
+    );
+    await expect(imageInput.className).not.toContain("file:text-af-accent");
+
+    const coverImage = new File(["png"], "cover.png", { type: "image/png" });
+    await userEvent.upload(imageInput, coverImage);
+    await expect(
+      scope.getByText(messages.selectedImageLabel("cover.png")),
+    ).toBeVisible();
   },
 };
 

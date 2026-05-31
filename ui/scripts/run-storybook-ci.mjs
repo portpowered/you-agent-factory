@@ -307,6 +307,7 @@ export async function runStorybookCI({
     await settle(POST_TEST_RUNNER_SETTLE_MS);
     await waitForStableIndex();
     await Promise.race([runCommand(["run", "storybook:responsive-check"]), serverExit]);
+    await Promise.race([runCommand(["run", "storybook:choose-file-check"]), serverExit]);
   } finally {
     shuttingDown = true;
     await stop(server);

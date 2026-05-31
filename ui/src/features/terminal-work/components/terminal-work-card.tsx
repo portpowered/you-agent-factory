@@ -11,7 +11,10 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { SelectableCardButton } from "../../../components/ui/selectable-card-button";
+import {
+  StandardListSelection,
+  StandardListSelectionItem,
+} from "../../../components/ui/standard-list-selection";
 import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
@@ -66,14 +69,6 @@ const TERMINAL_ROW_HEADER_CLASS =
 const TERMINAL_ROW_TITLE_CLASS = "flex min-w-0 flex-1 items-center gap-2";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_LIST_CLASS = "grid gap-2";
-const TERMINAL_BUTTON_CLASS = cn(
-  "grid h-auto min-h-0 w-full justify-start gap-1 border-af-info-border bg-af-info-surface px-2.5 py-2 text-left text-af-on-info [overflow-wrap:anywhere]",
-  DASHBOARD_BODY_TEXT_CLASS,
-);
-const TERMINAL_BUTTON_FAILED_CLASS =
-  "border-af-danger-border bg-af-danger-surface text-af-on-danger";
-const TERMINAL_BUTTON_SELECTED_CLASS =
-  "border-af-accent-border bg-af-accent-surface text-af-text shadow-af-accent-selected";
 const TERMINAL_BUTTON_LABEL_CLASS = "font-bold";
 const TERMINAL_BUTTON_META_CLASS = cn(
   "leading-snug text-current",
@@ -222,35 +217,31 @@ function TerminalWorkRow({
 
         <CollapsibleContent className={TERMINAL_LIST_CLASS} id={rowId}>
           {items.length > 0 ? (
-            items.map((item) => (
-              <SelectableCardButton
-                aria-label={item.label}
-                className={cn(
-                  TERMINAL_BUTTON_CLASS,
-                  status === "failed" && TERMINAL_BUTTON_FAILED_CLASS,
-                  selectedLabel === item.label &&
-                    TERMINAL_BUTTON_SELECTED_CLASS,
-                )}
-                data-selected={
-                  selectedLabel === item.label ? "true" : undefined
-                }
-                key={`${status}-${item.label}`}
-                onClick={() => onSelectItem(item)}
-                selected={selectedLabel === item.label}
-                size="sm"
-                tone="outline"
-              >
-                <span className={TERMINAL_BUTTON_LABEL_CLASS}>
-                  {item.label}
-                </span>
-                {renderTerminalWorkContext(
-                  item,
-                  fallbackMessage,
-                  summary,
-                  status,
-                )}
-              </SelectableCardButton>
-            ))
+            <StandardListSelection>
+              {items.map((item) => (
+                <StandardListSelectionItem
+                  aria-label={item.label}
+                  className={cn(
+                    "px-2.5 py-2 [overflow-wrap:anywhere]",
+                    DASHBOARD_BODY_TEXT_CLASS,
+                  )}
+                  key={`${status}-${item.label}`}
+                  onClick={() => onSelectItem(item)}
+                  selected={selectedLabel === item.label}
+                  tone={status === "failed" ? "danger" : "info"}
+                >
+                  <span className={TERMINAL_BUTTON_LABEL_CLASS}>
+                    {item.label}
+                  </span>
+                  {renderTerminalWorkContext(
+                    item,
+                    fallbackMessage,
+                    summary,
+                    status,
+                  )}
+                </StandardListSelectionItem>
+              ))}
+            </StandardListSelection>
           ) : (
             <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>
           )}

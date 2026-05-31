@@ -2,21 +2,25 @@ import { describe, expect, it } from "vitest";
 
 import { SUPPORTED_LOCALES } from "../../../../i18n";
 import {
-  getCurrentSelectionDetailMessages,
-  type CurrentSelectionDetailMessages,
-} from "./current-selection-detail";
-import {
-  getCurrentSelectionDispatchHistoryMessages,
-  type CurrentSelectionDispatchHistoryMessages,
-} from "./current-selection-dispatch-history";
-import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
 } from "../../messages/workstation-detail";
 import {
+  getResourceDetailMessages,
+  type ResourceDetailMessages,
+} from "../../resource-selection/messages/resource-detail";
+import {
   getWorkerDetailMessages,
   type WorkerDetailMessages,
 } from "../../worker-selection/messages/worker-detail";
+import {
+  type CurrentSelectionDetailMessages,
+  getCurrentSelectionDetailMessages,
+} from "./current-selection-detail";
+import {
+  type CurrentSelectionDispatchHistoryMessages,
+  getCurrentSelectionDispatchHistoryMessages,
+} from "./current-selection-dispatch-history";
 import {
   getWorkTypeDetailMessages,
   type WorkTypeDetailMessages,
@@ -113,6 +117,36 @@ const invokeDispatchHistory = (
       return [formatter("Dependency" as never, "accepted" as never)];
     default:
       throw new Error(`Unhandled dispatch-history formatter ${key}`);
+  }
+};
+
+const invokeResourceDetail = (
+  key: string,
+  formatter: (...args: never[]) => unknown,
+) => {
+  switch (key satisfies keyof ResourceDetailMessages) {
+    case "editableConfigurationNameDuplicate":
+      return [formatter("duplicate-resource" as never)];
+    case "editableConfigurationOverwriteWarning":
+      return [formatter("Capacity" as never)];
+    case "editableConfigurationSaveSuccess":
+      return [formatter("agent-slot" as never)];
+    case "editableConfigurationSharedImpactWarning":
+      return [
+        formatter(
+          "agent-slot" as never,
+          "reviewer" as never,
+          "Review" as never,
+        ),
+      ];
+    case "localizeResourceType":
+      return [
+        formatter("INVOCATION_SLOT" as never),
+        formatter("MODEL" as never),
+        formatter("future-type" as never),
+      ];
+    default:
+      throw new Error(`Unhandled resource-detail formatter ${key}`);
   }
 };
 
@@ -230,7 +264,10 @@ const invokeWorkstationDetail = (
     case "historyRunCountLabel":
       return [formatter(1 as never), formatter(3 as never)];
     case "editableConfigurationPromptAutocompleteSummary":
-      return [formatter(1 as never, 1 as never), formatter(3 as never, 2 as never)];
+      return [
+        formatter(1 as never, 1 as never),
+        formatter(3 as never, 2 as never),
+      ];
     case "openNamedWorkItemAction":
     case "selectWorkItemLabel":
       return [formatter("Review Story" as never)];
@@ -297,6 +334,15 @@ describe("current-selection message catalogs", () => {
     assertCatalogValuesResolve(
       getWorkerDetailMessages(locale) as unknown as Record<string, unknown>,
       invokeWorkerDetail,
+    );
+  });
+
+  it.each(
+    SUPPORTED_LOCALES,
+  )("resolves every %s resource-detail value", (locale) => {
+    assertCatalogValuesResolve(
+      getResourceDetailMessages(locale) as unknown as Record<string, unknown>,
+      invokeResourceDetail,
     );
   });
 

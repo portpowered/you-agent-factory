@@ -21,7 +21,6 @@ import type { WorkstationProgressOutcomeRouteContext } from "../../current-facto
 import {
   type FactoryGraphEditorMenuAction,
   FactoryGraphEditorToolbar,
-  FactoryGraphEditorWorkStatePhaseLegend,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
@@ -32,6 +31,7 @@ import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
+  getDefaultDashboardFlowAxisLegendPhaseItems,
 } from "./dashboard-flow-axis-legend";
 import {
   GraphDropOverlay,
@@ -56,30 +56,24 @@ function CurrentActivityGraphEditorChrome(props: {
   saveDisabledReason?: string;
 }) {
   return (
-    <>
-      <FactoryGraphEditorWorkStatePhaseLegend
-        locale={props.locale}
-        visible={props.editorMode}
-      />
-      <FactoryGraphEditorToolbar
-        activeTool={props.activeTool}
-        addMenuActions={props.addMenuActions}
-        canDiscard={props.hasPendingChanges}
-        canInteract={props.canInteractWithEditor}
-        canSave={props.canSaveDraft}
-        hasPendingChanges={props.hasPendingChanges}
-        isSaving={props.isSavingDraft}
-        locale={props.locale}
-        onAddAction={props.onAddAction}
-        onAddMenuOpenChange={props.onAddMenuOpenChange}
-        onDiscard={props.handleDiscardPendingChanges}
-        onSave={props.handleSaveDraft}
-        onSelectTool={props.onSelectTool}
-        openAddMenu={props.openAddMenu}
-        saveDisabledReason={props.saveDisabledReason}
-        visible={props.editorMode}
-      />
-    </>
+    <FactoryGraphEditorToolbar
+      activeTool={props.activeTool}
+      addMenuActions={props.addMenuActions}
+      canDiscard={props.hasPendingChanges}
+      canInteract={props.canInteractWithEditor}
+      canSave={props.canSaveDraft}
+      hasPendingChanges={props.hasPendingChanges}
+      isSaving={props.isSavingDraft}
+      locale={props.locale}
+      onAddAction={props.onAddAction}
+      onAddMenuOpenChange={props.onAddMenuOpenChange}
+      onDiscard={props.handleDiscardPendingChanges}
+      onSave={props.handleSaveDraft}
+      onSelectTool={props.onSelectTool}
+      openAddMenu={props.openAddMenu}
+      saveDisabledReason={props.saveDisabledReason}
+      visible={props.editorMode}
+    />
   );
 }
 
@@ -251,6 +245,7 @@ export function CurrentActivityGraphViewport({
         defaultExpanded={false}
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(locale)}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems(locale)}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems(locale)}
         locale={locale}
       />
       <section

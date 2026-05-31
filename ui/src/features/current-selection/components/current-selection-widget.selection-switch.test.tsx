@@ -2,39 +2,49 @@ import { screen, within } from "@testing-library/react";
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { selectWorkItemExecutionDetails } from "../state/executionDetails";
+import type { DashboardSelection } from "../state/selection-types";
+import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
+import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
+import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import {
   createCurrentSelectionWidgetQueryClient,
   renderWithExistingQueryClient,
 } from "./current-selection-widget-test-utils";
-import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
-import type { DashboardSelection } from "../state/selection-types";
-import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../workstation-selection/hooks/use-save-editable-workstation-configuration", () => ({
-  useSaveEditableWorkstationConfiguration: vi.fn(),
-}));
+vi.mock(
+  "../workstation-selection/hooks/use-save-editable-workstation-configuration",
+  () => ({
+    useSaveEditableWorkstationConfiguration: vi.fn(),
+  }),
+);
 
-vi.mock("../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
+vi.mock(
+  "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
+  () => ({
+    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+  }),
+);
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection-switch regressions share one render harness.
 describe("CurrentSelectionWidget selection switching", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
@@ -151,7 +161,225 @@ describe("CurrentSelectionWidget selection switching", () => {
       }),
     ).toBeTruthy();
   });
+
+  it("replaces resource configuration with the selected workstation detail view", () => {
+    const queryClient = createCurrentSelectionWidgetQueryClient();
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          resources: [
+            {
+              capacity: 2,
+              name: "agent-slot",
+              type: "INVOCATION_SLOT",
+            },
+          ],
+        }),
+      ),
+    );
+
+    const { rerender } = renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedResourceName: "agent-slot",
+          selection: { kind: "resource", resourceName: "agent-slot" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Resource configuration" }),
+    ).toBeTruthy();
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    expect(
+      within(currentSelection).queryByRole("heading", {
+        name: "Resource configuration",
+      }),
+    ).toBeNull();
+    expect(
+      within(currentSelection).getByRole("heading", { name: "Configuration" }),
+    ).toBeTruthy();
+  });
+
+  it("replaces resource configuration with the selected worker detail view", () => {
+    const queryClient = createCurrentSelectionWidgetQueryClient();
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          resources: [
+            {
+              capacity: 2,
+              name: "agent-slot",
+              type: "INVOCATION_SLOT",
+            },
+          ],
+        }),
+      ),
+    );
+
+    const { rerender } = renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedResourceName: "agent-slot",
+          selection: { kind: "resource", resourceName: "agent-slot" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Resource configuration" }),
+    ).toBeTruthy();
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedWorkerName: "reviewer",
+          selection: { kind: "worker", workerName: "reviewer" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    expect(
+      within(currentSelection).queryByRole("heading", {
+        name: "Resource configuration",
+      }),
+    ).toBeNull();
+    expect(
+      within(currentSelection).getByRole("heading", {
+        name: "Worker configuration",
+      }),
+    ).toBeTruthy();
+    expect(within(currentSelection).getByLabelText("Model")).toBeTruthy();
+  });
+
+  it("replaces worker configuration with the selected resource detail view", () => {
+    const queryClient = createCurrentSelectionWidgetQueryClient();
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          resources: [
+            {
+              capacity: 2,
+              name: "agent-slot",
+              type: "INVOCATION_SLOT",
+            },
+          ],
+        }),
+      ),
+    );
+
+    const { rerender } = renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedWorkerName: "reviewer",
+          selection: { kind: "worker", workerName: "reviewer" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Worker configuration" }),
+    ).toBeTruthy();
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedResourceName: "agent-slot",
+          selection: { kind: "resource", resourceName: "agent-slot" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    expect(
+      within(currentSelection).queryByRole("heading", {
+        name: "Worker configuration",
+      }),
+    ).toBeNull();
+    expect(
+      within(currentSelection).getByRole("heading", {
+        name: "Resource configuration",
+      }),
+    ).toBeTruthy();
+    expect(within(currentSelection).getByLabelText("Capacity")).toBeTruthy();
+  });
 });
+
+function buildEditableFactoryDefinition(overrides?: {
+  resources?: CanonicalFactoryDefinition["resources"];
+}): CanonicalFactoryDefinition {
+  return {
+    ...buildEditableFactoryDefinitionBase(),
+    resources: overrides?.resources,
+  };
+}
+
+function buildEditableFactoryDefinitionBase(): CanonicalFactoryDefinition {
+  return {
+    name: "Current Factory",
+    workers: [
+      {
+        model: "gpt-5.5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5.6",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body: "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        worker: "reviewer",
+      },
+    ],
+    workTypes: [],
+  };
+}
 
 function buildCurrentSelection(
   overrides: Partial<CurrentSelectionState> = {},
@@ -176,12 +404,19 @@ function buildCurrentSelection(
     selectedWorkProviderSessions: [],
     selectedWorkRequestHistory: [],
     selectedWorkWorkstationRequests: [],
+    selectedResourceName: null,
+    selectedResourceTokenCount: null,
+    selectedWorker: null,
+    selectedWorkerName: null,
+    selectedWorkerWorkstationNames: [],
     selectedWorkstationRequest: null,
     selection: null,
+    selectResource: () => undefined,
     selectStateNode: () => undefined,
     selectStateWorkItem: () => undefined,
     selectWorkByID: () => undefined,
     selectWorkItem: () => undefined,
+    selectWorker: () => undefined,
     selectWorkstation: () => undefined,
     selectWorkstationRequest: () => undefined,
     terminalWorkDetail: null,
@@ -218,34 +453,3 @@ function buildEditableDefinitionResult(
     status: "success",
   } as never;
 }
-
-function buildEditableFactoryDefinition(): CanonicalFactoryDefinition {
-  return {
-    name: "Current Factory",
-    workers: [
-      {
-        model: "gpt-5.5",
-        name: "reviewer",
-        type: "MODEL_WORKER",
-      },
-      {
-        model: "gpt-5.6",
-        name: "planner",
-        type: "MODEL_WORKER",
-      },
-    ],
-    workstations: [
-      {
-        body: "Review the latest story changes before approval.",
-        id: "review",
-        inputs: [{ state: "queued", workType: "story" }],
-        name: "Review",
-        outputs: [{ state: "approved", workType: "story" }],
-        promptFile: "prompts/review.md",
-        worker: "reviewer",
-      },
-    ],
-    workTypes: [],
-  };
-}
-

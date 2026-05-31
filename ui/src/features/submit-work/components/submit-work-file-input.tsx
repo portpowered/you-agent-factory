@@ -2,6 +2,7 @@ import { type DragEvent, useState } from "react";
 
 import { Button } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
+import { ChooseFileField } from "../../choose-file/public";
 import { submitWorkItemRowTypeLabel } from "../lib/submit-work-item-type-label";
 import type { SubmitWorkMessages } from "../messages/submit-work";
 import type { SubmitWorkDraftFileItem } from "./submit-work-card";
@@ -59,89 +60,91 @@ export function FileSubmissionItemEditor({
         }}
         type="file"
       />
-      <label
-        className={cn(
-          "grid gap-3 rounded-lg border border-dashed p-3 transition-colors",
-          isDragActive
-            ? "border-af-accent-border bg-af-accent-surface"
-            : "border-af-border bg-af-surface",
-          disabled
-            ? "cursor-not-allowed text-af-text-disabled"
-            : "cursor-pointer",
-        )}
-        htmlFor={inputID}
-        onDragEnter={(event) => {
-          if (!canHandleDraggedFiles(event, canStageFiles)) {
-            return;
-          }
-          event.preventDefault();
-          setIsDragActive(true);
-        }}
-        onDragLeave={(event) => {
-          if (!canHandleDraggedFiles(event, canStageFiles)) {
-            return;
-          }
-          event.preventDefault();
-          const nextTarget = event.relatedTarget;
-          if (
-            nextTarget instanceof Node &&
-            event.currentTarget.contains(nextTarget)
-          ) {
-            return;
-          }
-          setIsDragActive(false);
-        }}
-        onDragOver={(event) => {
-          if (!canHandleDraggedFiles(event, canStageFiles)) {
-            return;
-          }
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "copy";
-          setIsDragActive(true);
-        }}
-        onDrop={(event) => {
-          if (!canHandleDraggedFiles(event, canStageFiles)) {
-            return;
-          }
-          event.preventDefault();
-          setIsDragActive(false);
-          const nextFiles = Array.from(event.dataTransfer.files ?? []);
-          if (nextFiles.length === 0) {
-            return;
-          }
-          onStageFileItems(nextFiles);
-        }}
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <span className={fieldLabelClassName}>{inputLabel}</span>
-          <span className={helpTextClassName}>{stateDescription}</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            asChild
-            className="pointer-events-none"
-            size="sm"
-            tone={item.stagingStatus === "failure" ? "destructive" : "outline"}
+      <ChooseFileField
+        afterControl={
+          item.stagingStatus === "failure" && item.stagingError ? (
+            <p className={validationTextClassName}>{item.stagingError}</p>
+          ) : null
+        }
+        control={
+          <label
+            className={cn("grid gap-3 p-3", !disabled && "cursor-pointer")}
+            htmlFor={inputID}
+            onDragEnter={(event) => {
+              if (!canHandleDraggedFiles(event, canStageFiles)) {
+                return;
+              }
+              event.preventDefault();
+              setIsDragActive(true);
+            }}
+            onDragLeave={(event) => {
+              if (!canHandleDraggedFiles(event, canStageFiles)) {
+                return;
+              }
+              event.preventDefault();
+              const nextTarget = event.relatedTarget;
+              if (
+                nextTarget instanceof Node &&
+                event.currentTarget.contains(nextTarget)
+              ) {
+                return;
+              }
+              setIsDragActive(false);
+            }}
+            onDragOver={(event) => {
+              if (!canHandleDraggedFiles(event, canStageFiles)) {
+                return;
+              }
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setIsDragActive(true);
+            }}
+            onDrop={(event) => {
+              if (!canHandleDraggedFiles(event, canStageFiles)) {
+                return;
+              }
+              event.preventDefault();
+              setIsDragActive(false);
+              const nextFiles = Array.from(event.dataTransfer.files ?? []);
+              if (nextFiles.length === 0) {
+                return;
+              }
+              onStageFileItems(nextFiles);
+            }}
           >
-            <span>
-              {item.stagingStatus === "ready"
-                ? messages.replaceFileAction
-                : messages.chooseFileAction}
-            </span>
-          </Button>
-          {(item.fileName ?? "").length > 0 ? (
-            <span className={helpTextClassName}>
-              {messages.fileItemMetadata(
-                item.fileName ?? "",
-                item.mediaType ?? "",
-              )}
-            </span>
-          ) : null}
-        </div>
-      </label>
-      {item.stagingStatus === "failure" && item.stagingError ? (
-        <p className={validationTextClassName}>{item.stagingError}</p>
-      ) : null}
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={fieldLabelClassName}>{inputLabel}</span>
+              <span className={helpTextClassName}>{stateDescription}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                asChild
+                className="pointer-events-none"
+                size="sm"
+                tone={
+                  item.stagingStatus === "failure" ? "destructive" : "outline"
+                }
+              >
+                <span>
+                  {item.stagingStatus === "ready"
+                    ? messages.replaceFileAction
+                    : messages.chooseFileAction}
+                </span>
+              </Button>
+              {(item.fileName ?? "").length > 0 ? (
+                <span className={helpTextClassName}>
+                  {messages.fileItemMetadata(
+                    item.fileName ?? "",
+                    item.mediaType ?? "",
+                  )}
+                </span>
+              ) : null}
+            </div>
+          </label>
+        }
+        disabled={disabled}
+        dragActive={isDragActive}
+      />
     </div>
   );
 }

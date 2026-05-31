@@ -15,7 +15,7 @@ interface UseSaveEditableWorkstationConfigurationOptions {
   scopeKey: string | null;
 }
 
-interface UseSaveEditableWorkstationConfigurationResult {
+export interface UseSaveEditableWorkstationConfigurationResult {
   beginSaveConfirmation: () => void;
   canSave: boolean;
   cancelSaveConfirmation: () => void;

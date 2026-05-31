@@ -39,12 +39,6 @@ export const approvedButtonUsageAllowlist = [
     relativeFilePath: "src/features/header/components/dashboard-session-tabs.tsx",
   },
   {
-    rawButtonFingerprints: ['SESSION_TARGET_BUTTON_CLASS'],
-    rawButtonReason:
-      "The open-session dialog trigger is a dedicated tab-strip affordance rather than an ordinary action button.",
-    relativeFilePath: "src/features/header/components/dashboard-session-tabs-open-dialog.tsx",
-  },
-  {
     rawButtonFingerprints: [
       'aria-label={workstationMessages.selectProviderSessionLabel(',
     ],

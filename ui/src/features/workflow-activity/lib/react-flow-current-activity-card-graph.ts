@@ -5,6 +5,8 @@ import type {
 } from "../../../api/dashboard/types";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import {
   type FactoryValidationGraphProjection,
   projectFactoryValidationTargets,
@@ -163,6 +165,86 @@ function workstationGraphNodeId(nodeId: string): string {
 function placeGraphNodeId(placeId: string): string {
   // hardcoded-ui-copy-exception: non-product-diagnostic
   return `place:${placeId}`;
+}
+
+export function renderedHandleIdsByNodeId(
+  nodes: ReadonlyArray<Pick<CurrentActivityNode, "data" | "id">>,
+): ReadonlyMap<string, ReadonlySet<string>> {
+  return new Map(
+    nodes.map((node) => [
+      node.id,
+      new Set((node.data.handles ?? []).map((handle) => handle.id)),
+    ]),
+  );
+}
+
+function workstationProgressOutcomeRoutesSupported(
+  node: Pick<CurrentActivityNode, "data" | "id">,
+): boolean | undefined {
+  if (node.data.kind !== "workstation") {
+    return undefined;
+  }
+
+  const workstation = (
+    node.data as {
+      progressOutcomeRouteWorkstation?: WorkstationProgressOutcomeRouteContext;
+    }
+  ).progressOutcomeRouteWorkstation;
+  if (!workstation) {
+    return undefined;
+  }
+
+  return workstationSupportsProgressOutcomeRoutes(workstation);
+}
+
+export function shouldIncludeCurrentActivityGraphEdge(
+  edge: PositionedEdge,
+  handleAssignments: HandleAssignments,
+  handleIdsByNodeId: ReadonlyMap<string, ReadonlySet<string>>,
+  nodesById: ReadonlyMap<string, Pick<CurrentActivityNode, "data" | "id">>,
+): boolean {
+  const sourceHandle = handleAssignments.sourceHandlesByEdgeId.get(edge.edgeId);
+  const targetHandle = handleAssignments.targetHandlesByEdgeId.get(edge.edgeId);
+  if (!sourceHandle || !targetHandle) {
+    return false;
+  }
+
+  if (PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(sourceHandle)) {
+    const sourceNode = nodesById.get(edge.fromNodeId);
+    if (
+      sourceNode &&
+      workstationProgressOutcomeRoutesSupported(sourceNode) === false
+    ) {
+      return false;
+    }
+  }
+
+  const sourceHandles = handleIdsByNodeId.get(edge.fromNodeId);
+  const targetHandles = handleIdsByNodeId.get(edge.toNodeId);
+  if (!sourceHandles || !targetHandles) {
+    return false;
+  }
+
+  return (
+    sourceHandles.has(sourceHandle) && targetHandles.has(targetHandle)
+  );
+}
+
+export function filterGraphEdgesForRenderedHandles(
+  edges: PositionedEdge[],
+  handleAssignments: HandleAssignments,
+  nodes: ReadonlyArray<Pick<CurrentActivityNode, "data" | "id">>,
+): PositionedEdge[] {
+  const handleIdsByNodeId = renderedHandleIdsByNodeId(nodes);
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  return edges.filter((edge) =>
+    shouldIncludeCurrentActivityGraphEdge(
+      edge,
+      handleAssignments,
+      handleIdsByNodeId,
+      nodesById,
+    ),
+  );
 }
 
 export function buildHandleAssignments(
@@ -366,6 +448,7 @@ interface BuildCurrentActivityNodesInput {
   graphLayout: GraphLayout;
   locale?: string;
   now: number;
+  onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (
     workID: string,
@@ -480,10 +563,22 @@ function buildPlaceNode(
   }
 
   if (place.kind === "resource") {
+    const resolvedResourceName =
+      typeof place.type_id === "string" && place.type_id.trim().length > 0
+        ? place.type_id
+        : place.place_id.replace(/:available$/, "");
     return {
       ...basePlaceNode,
-      data: { ...basePlaceData, kind: "resource" as const, place },
-      selectable: false,
+      data: {
+        ...basePlaceData,
+        kind: "resource" as const,
+        onSelectResource: input.onSelectResource,
+        place,
+        selectedResource:
+          input.selection?.kind === "resource" &&
+          input.selection.resourceName === resolvedResourceName,
+      },
+      selectable: true,
       type: "resource",
     };
   }
@@ -644,6 +739,7 @@ export function buildCurrentActivityNodes({
   graphLayout,
   locale,
   now,
+  onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
@@ -675,6 +771,7 @@ export function buildCurrentActivityNodes({
     graphLayout,
     locale,
     now,
+    onSelectResource,
     onSelectStateNode,
     onSelectWorkID,
     onSelectWorker,

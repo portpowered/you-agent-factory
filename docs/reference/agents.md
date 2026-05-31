@@ -63,41 +63,126 @@ bodies in worker and workstation `AGENTS.md` files per
 
 ## Submitting Work
 
-Work enters a running factory through one of these ingress paths:
+**Autonomous agents must submit work only through the CLI.** Use `you submit` for
+a single work item, `you submit batch` for a `FACTORY_REQUEST_BATCH` against a
+running factory, and `you run --work <path>` **only** when you are starting a
+local factory run with batch JSON (for example `you run --dir <factory> --work
+batch.json`). Do not treat watched inbox files, dashboard submit, `POST /work`,
+or `PUT /work-requests/{id}` as parallel agent control paths.
 
-| Ingress | When to use |
-|---------|-------------|
-| Watched `factory/inputs/**` JSON files | Steady-state factory already running; canonical batch and per-type inboxes |
-| `you run --work <path>` | Submit a batch JSON file before or while starting a local factory run |
-| `POST /work` | Single submitted work item against a running API |
-| `you submit` / dashboard submit | Operator-driven single-work submission with UI validation |
-| `PUT /work-requests/{id}` | Replace or update a staged work request where the API supports it |
+| Command | When autonomous agents use it |
+|---------|-------------------------------|
+| `you submit` | Submit one work item to a **running** factory |
+| `you submit batch` | Upsert batch JSON to a **running** factory session |
+| `you run --work <path>` | Submit batch JSON as part of **local startup** only—not steady-state ingress while a factory is already running |
 
-Batch submissions use `FACTORY_REQUEST_BATCH`. Single submissions use explicit
-`name` and `workTypeName` fields. See [Work](work.md) for `POST /work` and tag
-flow; see [Batch Inputs](batch-inputs.md) for batch shape, inbox placement,
-`DEPENDS_ON`, and `PARENT_CHILD`.
+Operators who use watched `factory/inputs/**` folders, dashboard HTTP submit,
+`POST /work`, or `PUT /work-requests/{id}` should read [Batch Inputs](batch-inputs.md)
+(`you docs batch-inputs`) and [Work](work.md) (`you docs work`) for inbox layout,
+HTTP contracts, and operator workflows. Agents still use the CLI commands above.
+
+Batch submissions use `FACTORY_REQUEST_BATCH` with explicit `requestId`, `name`,
+and `workTypeName` fields. See [Batch Inputs](batch-inputs.md) for batch shape,
+`DEPENDS_ON`, and `PARENT_CHILD`; see [Work](work.md) for submitted-work tags and
+verification after CLI submit.
+
+### Batch submit for agents
+
+When a factory is already running, upsert multi-item work with `you submit batch`
+against the live session. The JSON body must set `"type": "FACTORY_REQUEST_BATCH"`
+and a **stable, non-empty `requestId`**. The CLI validates locally, then issues
+`PUT` to `/factory-sessions/{session}/work-requests/{requestId}` (same upsert
+semantics as operator HTTP batch ingress in [Batch Inputs](batch-inputs.md)).
+
+For `DEPENDS_ON`, `PARENT_CHILD`, relation field names, and full batch shape, read
+[Batch Inputs](batch-inputs.md) (`you docs batch-inputs`)—do not duplicate that
+contract here.
+
+Minimal batch (save to a file or pipe inline):
+
+```json
+{
+  "requestId": "release-story-set",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "story-auth",
+      "workTypeName": "story",
+      "payload": { "title": "Harden auth session handling" }
+    }
+  ]
+}
+```
+
+File path (primary form):
+
+```bash
+you submit batch ./batches/release-story-set.json
+```
+
+Pipe or stdin without a temp file:
+
+```bash
+cat batch.json | you submit batch
+```
+
+Inline JSON positional (small batches; mind shell length limits):
+
+```bash
+you submit batch '{"requestId":"release-story-set","type":"FACTORY_REQUEST_BATCH","works":[{"name":"story-auth","workTypeName":"story","payload":{"title":"Harden auth session handling"}}]}'
+```
+
+Use `you submit batch --dry-run <path>` to validate without contacting the server.
+Run `you submit batch --help` for `--file`, explicit stdin (`you submit batch -`),
+`--server`, `--session`, and `--json` flags.
+
+### Idempotency and duplicate work
+
+The factory does **not** automatically merge or deduplicate work across arbitrary
+retries. Treat every ingress path by its own rules:
+
+| Path | Dedupes when you retry? |
+|------|-------------------------|
+| `you submit batch` with the same `requestId` and batch body | Yes — idempotent batch upsert on that work-request |
+| `you submit batch` with a **new** `requestId` | No — creates a new batch submission |
+| `you submit` (unary), repeated with the same flags and payload | No — each successful call enqueues **new** work |
+| New inbox file under `factory/inputs/**` | No — a new file is a new submission, not a CLI batch retry |
+| `POST /work` or dashboard submit with a new body | No — new HTTP or UI submissions are new work |
+
+**Autonomous agents:** Reuse the same stable `requestId` on `you submit batch` when
+you mean to refresh or replace one batch. Change `requestId` (or call unary
+`you submit` again) only when you intentionally want additional work. Do not drop
+files into `factory/inputs` or call `POST /work` expecting the factory to treat
+those retries like `you submit batch` idempotency.
 
 ### Pre-Submit Checklist
 
 - [ ] Confirm a factory service is running — run `you session list` or follow
-  [Is the factory running?](#is-the-factory-running?) before `you submit`, watched
-  `factory/inputs/**`, or `POST /work`.
+  [Is the factory running?](#is-the-factory-running?) before `you submit` or
+  `you submit batch` (or before `you run --work` when starting a local run).
 - [ ] Read `factory.json` and factory-local `factory/docs/overview.md` or
   `factory/docs/README.md` when present.
 - [ ] Confirm the `workTypeName` exists in `factory.json` ([Config](config.md)).
-- [ ] Place batch files under the inbox paths your factory documents
-  ([Batch Inputs](batch-inputs.md)).
-- [ ] Set `requestId`, `name`, and relation fields with OpenAPI camelCase names
+- [ ] For multi-item work, prepare `FACTORY_REQUEST_BATCH` JSON and submit with
+  `you submit batch`—not by placing files under `factory/inputs` inbox paths
+  ([Batch Inputs](batch-inputs.md) for operator inbox layout only).
+- [ ] Choose a stable, non-empty `requestId` before the first batch submit; reuse
+  it on retries so the factory upserts the same work-request instead of forking
+  duplicate batches ([Idempotency and duplicate work](#idempotency-and-duplicate-work)).
+- [ ] Set `name` and relation fields with OpenAPI camelCase names
   (`requestId`, `workTypeName`, `sourceWorkName`, `targetWorkName`).
 - [ ] Add `relations[]` when ordering or parent membership matters
   ([Relationships](relationships.md)).
 
 ## Is the factory running?
 
-Before `you submit`, watched `factory/inputs/**`, or `POST /work`, confirm a factory
-service is listening and has an open session. A local `factory.json` on disk does
-not by itself mean a runtime is accepting work.
+Before `you submit` or `you submit batch`, confirm a factory service is listening
+and has an open session. A local `factory.json` on disk does not by itself mean a
+runtime is accepting work.
+
+Operators who submit via watched `factory/inputs/**`, dashboard, or `POST /work`
+should still follow the checks below; see [Work](work.md) (`you docs work`) for
+HTTP and dashboard submit contracts.
 
 Use these checks in order:
 
@@ -157,8 +242,9 @@ the process that bound the listener.
 | `you run --continuously` | Yes — processes work until you stop the process. |
 | `you run` (batch, no `--continuously`) | No — exits when the factory goes idle; not suitable for later `you submit` or watched inbox ingress unless you restart it. |
 
-For steady `you submit`, dashboard submit, or `POST /work` against an already-running
-host, prefer `you` or `you run --continuously`. Use batch `you run` when you want a
+For steady `you submit` or `you submit batch` against an already-running host,
+prefer `you` or `you run --continuously`. Operators using dashboard submit or
+`POST /work` need the same continuous run mode. Use batch `you run` when you want a
 one-shot local run that shuts down on idle.
 
 ## Operator loop
@@ -167,7 +253,9 @@ Use this loop when driving a factory from the CLI or an autonomous agent:
 
 1. **Check running** — follow [Is the factory running?](#is-the-factory-running?)
    (`you session list`, then `you factory query` or status when you need depth).
-2. **Submit** — enqueue work with `you submit`, batch inbox files, or `POST /work`.
+2. **Submit** — enqueue work with `you submit` or `you submit batch` (see
+   [Batch submit for agents](#batch-submit-for-agents) for batch JSON and stable
+   `requestId`).
 3. **Verify** — confirm acceptance on stdout, then inspect work with
    `you work show <work-id>` or `you work list --name <name>` (see [Work](work.md)).
 
@@ -187,15 +275,26 @@ you submit \
 Replace `task` with a `workTypeName` from your `factory.json` and `request.md`
 with the payload file your factory expects.
 
+### Copy-paste `you submit batch` example
+
+```bash
+you submit batch ./batches/release-story-set.json
+```
+
+Use the same `FACTORY_REQUEST_BATCH` shape and stable `requestId` as in
+[Batch submit for agents](#batch-submit-for-agents). Reuse the same `requestId`
+on retries so the factory upserts instead of creating duplicate batches.
+
 ## Command Matrix
 
 | Command | Purpose | Factory must already be running? |
 |---------|---------|----------------------------------|
 | `you run --dir <factory>` | Start (or attach to) a local factory from a directory | No — command starts runtime |
 | `you run --factory <path> "<prompt>"` | One-shot CLI run with inline factory file and prompt | Depends on flags; see [Config](config.md) |
-| `you run --work <batch.json>` | Submit batch JSON as part of startup | No when combined with `--dir` startup |
-| `you submit` | Submit work through CLI/dashboard flows | Yes — see [Is the factory running?](#is-the-factory-running?) |
-| Dashboard / `POST /work` | API submission against running service | Yes — see [Is the factory running?](#is-the-factory-running?) |
+| `you run --work <batch.json>` | Submit batch JSON as part of **local startup** (agent path when not already running) | No when combined with `--dir` startup |
+| `you submit` | Submit one work item (autonomous agent path) | Yes — see [Is the factory running?](#is-the-factory-running?) |
+| `you submit batch` | Upsert batch JSON to a running session (autonomous agent path) | Yes — see [Is the factory running?](#is-the-factory-running?) |
+| Dashboard / `POST /work` | **Operator-only** API or UI submission | Yes — see [Work](work.md) (`you docs work`) |
 | `you docs <topic>` | Print packaged reference markdown | No |
 
 Use [Mock Workers](mock-workers.md) and [Record and Replay](record-replay.md)
@@ -207,7 +306,7 @@ Autonomous agent workflows usually split into two cooperating roles:
 
 | Role | Responsibility | Typical artifacts |
 |------|----------------|-------------------|
-| **Planner / scheduler** | Reads topology, chooses the next work item, writes batch or single-work requests, and enqueues work without executing workstation prompts | Batch JSON under `inputs/`, planning prompts, `POST /work` bodies |
+| **Planner / scheduler** | Reads topology, chooses the next work item, prepares batch or single-work JSON, and enqueues work via `you submit` or `you submit batch` without executing workstation prompts | CLI batch JSON files, planning prompts, unary `you submit` flags and payloads |
 | **Executor** | Runs when a token reaches a workstation input place; loads worker + workstation `AGENTS.md`, calls the configured worker backend, and returns accept, continue, reject, or failure outcomes | Workstation and worker `AGENTS.md`, rendered templates ([Templates](templates.md)) |
 
 Planners should prefer factory-local overview docs and [Config](config.md) before

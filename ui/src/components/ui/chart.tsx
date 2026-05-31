@@ -30,10 +30,28 @@ export interface ChartConfigEntry {
 export type ChartConfig = Record<string, ChartConfigEntry>;
 
 const ChartContext = createContext<ChartConfig | null>(null);
+
+export type ChartPresentation = "embedded" | "standalone";
+
 // tailwind-exception: intrinsic-sizing
-const CHART_CONTAINER_CLASS =
+const CHART_CONTAINER_STANDALONE_CLASS =
   "relative h-[18rem] rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-af-text";
+// tailwind-exception: intrinsic-sizing
+const CHART_CONTAINER_EMBEDDED_CLASS =
+  "relative flex h-full min-h-0 min-w-0 w-full flex-1 flex-col text-af-text";
 const DEFAULT_CHART_INITIAL_DIMENSION = { height: 288, width: 640 } as const;
+
+function chartContainerClassName(
+  presentation: ChartPresentation,
+  className?: string,
+): string {
+  return cn(
+    presentation === "embedded"
+      ? CHART_CONTAINER_EMBEDDED_CLASS
+      : CHART_CONTAINER_STANDALONE_CLASS,
+    className,
+  );
+}
 
 function useChartConfig() {
   const context = useContext(ChartContext);
@@ -52,6 +70,7 @@ export function ChartContainer({
   footer,
   interactionAttributes,
   overlay,
+  presentation = "standalone",
   rootAttributes,
   style,
   title,
@@ -62,6 +81,7 @@ export function ChartContainer({
   footer?: ReactNode;
   interactionAttributes?: HTMLAttributes<HTMLDivElement>;
   overlay?: ReactNode;
+  presentation?: ChartPresentation;
   rootAttributes?: Record<string, string>;
   style?: CSSProperties;
   title: string;
@@ -82,8 +102,9 @@ export function ChartContainer({
     <ChartContext.Provider value={config}>
       <div
         aria-label={title}
-        className={cn(CHART_CONTAINER_CLASS, className)}
+        className={chartContainerClassName(presentation, className)}
         data-chart-container=""
+        data-chart-presentation={presentation}
         role="img"
         {...interactionAttributes}
         {...rootAttributes}
