@@ -175,6 +175,68 @@ func TestReplaceFactorySplitLayout_PrunesRemovedWorkerAndOverwritesAgents(t *tes
 	}
 }
 
+func TestReplaceFactoryLayoutAtDir_PrunesRemovedWorkerDirectory(t *testing.T) {
+	targetDir := t.TempDir()
+	initial := splitReplaceTestPayload(t, "alpha")
+	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+	removedWorkerDir := filepath.Join(targetDir, interfaces.WorkersDir, "removed")
+	if err := os.MkdirAll(removedWorkerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(workers/removed): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(removedWorkerDir, interfaces.FactoryAgentsFileName), []byte("orphan worker\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(workers/removed/AGENTS.md): %v", err)
+	}
+
+	restore, err := factoryconfig.ReplaceFactoryLayoutAtDir(
+		targetDir,
+		splitReplaceTestPayload(t, "alpha-v2"),
+		factoryconfig.DefaultFactoryLayoutReplaceOptions(targetDir),
+	)
+	if err != nil {
+		t.Fatalf("ReplaceFactoryLayoutAtDir: %v", err)
+	}
+	if restore == nil {
+		t.Fatal("expected restore callback")
+	}
+
+	if _, err := os.Stat(removedWorkerDir); !os.IsNotExist(err) {
+		t.Fatalf("expected workers/removed pruned after persist-from-save, stat err=%v", err)
+	}
+}
+
+func TestReplaceFactoryLayoutAtDir_PrunesRemovedWorkstationDirectory(t *testing.T) {
+	targetDir := t.TempDir()
+	initial := splitReplaceTestPayload(t, "alpha")
+	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+	removedWorkstationDir := filepath.Join(targetDir, interfaces.WorkstationsDir, "removed")
+	if err := os.MkdirAll(removedWorkstationDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(workstations/removed): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(removedWorkstationDir, interfaces.FactoryAgentsFileName), []byte("orphan workstation\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(workstations/removed/AGENTS.md): %v", err)
+	}
+
+	restore, err := factoryconfig.ReplaceFactoryLayoutAtDir(
+		targetDir,
+		splitReplaceTestPayload(t, "alpha-v2"),
+		factoryconfig.DefaultFactoryLayoutReplaceOptions(targetDir),
+	)
+	if err != nil {
+		t.Fatalf("ReplaceFactoryLayoutAtDir: %v", err)
+	}
+	if restore == nil {
+		t.Fatal("expected restore callback")
+	}
+
+	if _, err := os.Stat(removedWorkstationDir); !os.IsNotExist(err) {
+		t.Fatalf("expected workstations/removed pruned after persist-from-save, stat err=%v", err)
+	}
+}
+
 func TestReplaceFactorySplitLayout_OverwritesExistingAgentsOnSave(t *testing.T) {
 	targetDir := t.TempDir()
 	payload := splitReplaceTestPayload(t, "alpha")
