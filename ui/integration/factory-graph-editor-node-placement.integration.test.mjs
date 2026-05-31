@@ -257,7 +257,11 @@ async function nodeBoundingBox(page, nodeTestId) {
   return box;
 }
 
-async function addWorker(page, toolbar, { model = "gpt-5", name }) {
+async function addWorker(
+  page,
+  toolbar,
+  { model = "gpt-5", modelProvider = "CURSOR", name },
+) {
   await toolbar.getByRole("button", { name: "Open add entity menu" }).click();
   await page
     .getByLabel("Add graph entity menu")
@@ -270,6 +274,9 @@ async function addWorker(page, toolbar, { model = "gpt-5", name }) {
     timeout: uiInteractionTimeoutMs,
   });
   await addDialog.getByLabel("Identifier").fill(name);
+  await addDialog
+    .getByRole("combobox", { name: "Model provider" })
+    .selectOption(modelProvider);
   await addDialog.getByRole("textbox", { name: "Model" }).fill(model);
   await addDialog.getByRole("button", { name: "Add entity" }).click();
 }
