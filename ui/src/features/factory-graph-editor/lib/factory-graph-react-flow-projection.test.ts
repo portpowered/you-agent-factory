@@ -10,6 +10,7 @@ import type {
   CanonicalFactoryDefinition,
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { projectFactoryGraphToReactFlow } from "./factory-graph-react-flow-projection";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: projection contract scenarios stay together around one adapter.
@@ -329,15 +330,16 @@ describe("factory graph React Flow projection", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       factoryWithoutStopWords,
     );
+    const workstationResolver = {
+      resolveWorkstation: (name: string) =>
+        factoryWithoutStopWords.workstations.find(
+          (workstation) => workstation.name === name,
+        ),
+    };
 
     const projection = projectFactoryGraphToReactFlow({
       topology,
-      workstationResolver: {
-        resolveWorkstation: (name) =>
-          factoryWithoutStopWords.workstations.find(
-            (workstation) => workstation.name === name,
-          ),
-      },
+      workstationResolver,
     });
     const anchorIds =
       projection.nodes
@@ -352,6 +354,58 @@ describe("factory graph React Flow projection", () => {
     );
     expect(anchorIds).not.toContain("workstation-on-continue-source");
     expect(anchorIds).not.toContain("workstation-on-rejection-source");
+    expect(
+      projection.nodes.find((node) => node.id === "workstation:draft")?.data
+        .zAxisIncompleteHints,
+    ).toBeNull();
+  });
+
+  it("sets z-axis incomplete hints when connection editing is enabled without stopWords", () => {
+    const factoryWithoutStopWords = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations[0],
+          behavior: "STANDARD",
+          stopWords: undefined,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      factoryWithoutStopWords,
+    );
+    const hintMessage =
+      getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint;
+
+    const projection = projectFactoryGraphToReactFlow({
+      editor: {
+        canEditConnections: true,
+        pendingAdditionEdgeIds: new Set(),
+        pendingAdditionNodeIds: new Set(),
+        pendingConnectionSource: null,
+        pendingRemovalEdgeIds: new Set(),
+        pendingRemovalNodeIds: new Set(),
+      },
+      topology,
+      workstationResolver: {
+        resolveWorkstation: (name) =>
+          factoryWithoutStopWords.workstations.find(
+            (workstation) => workstation.name === name,
+          ),
+      },
+    });
+    const workstationNode = projection.nodes.find(
+      (node) => node.id === "workstation:draft",
+    );
+
+    expect(workstationNode?.data.zAxisIncompleteHints).toEqual({
+      accessibleLabel: hintMessage,
+      title: hintMessage,
+    });
+    expect(
+      projection.nodes.find((node) => node.id === "work-state:story:queued")
+        ?.data.zAxisIncompleteHints,
+    ).toBeNull();
   });
 
   it("omits worker-assignment handles on LOGICAL_MOVE workstations", () => {
@@ -435,5 +489,48 @@ describe("factory graph React Flow projection", () => {
 
     expect(anchorIds).toContain("workstation-on-continue-source");
     expect(anchorIds).toContain("workstation-on-rejection-source");
+    expect(
+      projection.nodes.find((node) => node.id === "workstation:draft")?.data
+        .zAxisIncompleteHints,
+    ).toBeNull();
+  });
+
+  it("omits z-axis incomplete hints when connection editing is disabled", () => {
+    const factoryWithoutStopWords = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations[0],
+          behavior: "STANDARD",
+          stopWords: undefined,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      factoryWithoutStopWords,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      editor: {
+        canEditConnections: false,
+        pendingAdditionEdgeIds: new Set(),
+        pendingAdditionNodeIds: new Set(),
+        pendingConnectionSource: null,
+        pendingRemovalEdgeIds: new Set(),
+        pendingRemovalNodeIds: new Set(),
+      },
+      topology,
+      workstationResolver: {
+        resolveWorkstation: (name) =>
+          factoryWithoutStopWords.workstations.find(
+            (workstation) => workstation.name === name,
+          ),
+      },
+    });
+
+    expect(
+      projection.nodes.find((node) => node.id === "workstation:draft")?.data
+        .zAxisIncompleteHints,
+    ).toBeNull();
   });
 });
