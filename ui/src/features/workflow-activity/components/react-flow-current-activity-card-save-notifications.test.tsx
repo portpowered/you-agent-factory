@@ -1,7 +1,10 @@
 import { render } from "@testing-library/react";
 import { toast } from "sonner";
 
-import { GLOBAL_TOAST_DURATION_MS } from "../../notifications/components/app-notification-toaster";
+import {
+  GLOBAL_TOAST_DURATION_MS,
+  PERSISTENT_TOAST_DURATION_MS,
+} from "../../notifications/public";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
 
 vi.mock("sonner", () => ({
@@ -15,6 +18,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
   return {
     draftState: { hasChanges: false },
     graphDraftSaveSucceeded: false,
+    saveAttemptRevision: 0,
     saveEditableDefinition: {
       error: null,
     },
@@ -33,6 +37,7 @@ describe("CurrentActivityGraphSaveNotifications", () => {
         editor={
           createEditorStub({
             graphDraftSaveSucceeded: true,
+            saveAttemptRevision: 1,
           }) as never
         }
       />,
@@ -51,6 +56,7 @@ describe("CurrentActivityGraphSaveNotifications", () => {
       <CurrentActivityGraphSaveNotifications
         editor={
           createEditorStub({
+            saveAttemptRevision: 1,
             saveEditableDefinition: {
               error: new Error("The graph is invalid."),
             },
@@ -61,14 +67,15 @@ describe("CurrentActivityGraphSaveNotifications", () => {
 
     expect(toast.error).toHaveBeenCalledWith("Topology save failed", {
       description: "The graph is invalid.",
-      duration: GLOBAL_TOAST_DURATION_MS,
+      duration: PERSISTENT_TOAST_DURATION_MS,
     });
     expect(toast.success).not.toHaveBeenCalled();
   });
 
-  it("does not repeat the same save notification across rerenders", () => {
+  it("does not repeat the same save notification across rerenders with the same attempt revision", () => {
     const editor = createEditorStub({
       graphDraftSaveSucceeded: true,
+      saveAttemptRevision: 1,
     });
     const { rerender } = render(
       <CurrentActivityGraphSaveNotifications editor={editor as never} />,
@@ -79,5 +86,37 @@ describe("CurrentActivityGraphSaveNotifications", () => {
     );
 
     expect(toast.success).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls toast.error twice for the same message on distinct save attempts", () => {
+    const { rerender } = render(
+      <CurrentActivityGraphSaveNotifications
+        editor={
+          createEditorStub({
+            saveAttemptRevision: 1,
+            saveEditableDefinition: {
+              error: new Error("The graph is invalid."),
+            },
+          }) as never
+        }
+      />,
+    );
+
+    expect(toast.error).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <CurrentActivityGraphSaveNotifications
+        editor={
+          createEditorStub({
+            saveAttemptRevision: 2,
+            saveEditableDefinition: {
+              error: new Error("The graph is invalid."),
+            },
+          }) as never
+        }
+      />,
+    );
+
+    expect(toast.error).toHaveBeenCalledTimes(2);
   });
 });
