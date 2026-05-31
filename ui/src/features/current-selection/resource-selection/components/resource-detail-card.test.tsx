@@ -314,6 +314,30 @@ describe("ResourceDetailCard", () => {
     expect(screen.getByLabelText("Name")).toBeTruthy();
   });
 
+  it("renders provider quota editable fields for PROVIDER_QUOTA resources", () => {
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument({
+        resources: [
+          {
+            capacity: 10,
+            name: "anthropic-quota",
+            provider: "anthropic",
+            type: "PROVIDER_QUOTA",
+          },
+        ],
+      }),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    renderResourceDetailCard("anthropic-quota");
+
+    expect(screen.getByLabelText("Provider").getAttribute("value")).toBe(
+      "anthropic",
+    );
+  });
+
   it("shows overwrite warning and server-changed hints for dirty resource drafts", () => {
     const editableConfigurationState: EditableResourceConfigurationState = {
       baseVersion: {
