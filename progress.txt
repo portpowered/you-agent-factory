@@ -33,6 +33,34 @@
 - Register `relationships` at `displayOrder` 28 immediately after `guards` (27); relationships content adapts `batch-inputs.md` relation sections and `parent-aware-fan-in.md` with `SPAWNED_BY` called out as runtime/template-only, not batch-authored.
 - Story 003 index assertions belong in `root_docs_test.go` and `cli_docs_smoke_test.go` immediately after `record-replay` lines; smoke topic tests can use `absent` for `../internal/development/...` paths when replacing packaged cross-links.
 - Do not `cp` `pkg/cli/docs/reference/config.md` or `templates.md` onto `docs/reference/` — the layout-tree guides diverge from embedded packaged topics; apply cross-link edits to both trees separately.
+- Feature factory document saves go through `useFactoryDocumentSave` in `ui/src/features/current-factory-definition/hooks/useFactoryDocumentSave.ts`: `structuredClone` input, default `mode: REPLACE_CURRENT`, call `saveFactoryForSessionDocument`, and on success write both `currentFactoryDocumentQueryKey` and `currentFactoryDefinitionQueryKey` for the resolved session; export from `current-factory-definition/public`. Graph editor (`react-flow-current-activity-card-editor`) calls `saveAsync({ baseVersion, factory })`; success toasts read `graphDraftSaveSucceeded` from editable-graph `saveState.lastSuccess`, not mutation `status`. Workstation detail-card saves (`use-save-editable-workstation-configuration`) call the same hook with `saveAsync({ baseVersion, factory })` while keeping confirm/submitting/scope-key state local; widget tests mock `useFactoryDocumentSave` and assert `factory` on the payload (worker card still uses `useSaveCurrentFactory` until story 004).
+
+## 2026-05-31T09:10:00Z - ui-factory-document-save-hook-001
+- What was implemented: Added `useFactoryDocumentSave` mutation hook with `save` / `saveAsync` / `isPending` / `error` / `reset`, session override, explicit save mode, non-mutating `structuredClone` of caller factory, dual cache updates on success, and unit tests for default mode, session override, mode passthrough, immutability, and operator error codes.
+- Files changed: `ui/src/features/current-factory-definition/hooks/useFactoryDocumentSave.ts`, `useFactoryDocumentSave.test.tsx`, `useFactoryDocumentSave.errors.test.tsx`, `useFactoryDocumentSave.test-helpers.tsx`, `ui/src/features/current-factory-definition/public/index.ts`, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Wrap `saveFactoryForSessionDocument` (not `saveCurrentFactoryDocument`) so import paths can pass `UPSERT_NAMED_AND_ACTIVATE` while editor/detail cards omit mode for `REPLACE_CURRENT`.
+  - Gotchas encountered: `INVALID_FACTORY` from session-factory surfaces as `INVALID_FACTORY_DEFINITION` on `CurrentFactoryDefinitionError`; Biome `noExcessiveLinesPerFunction` caps describe blocks—split error tests into `*.errors.test.tsx` and share fixtures via `*.test-helpers.tsx`.
+  - Useful context: Story 002 migrates graph editor from `useSaveCurrentFactory`; mocks in `factory-document-save-mocks.ts` still target `useSaveCurrentFactory` until story 005.
+---
+
+## 2026-05-31T10:20:00Z - ui-factory-document-save-hook-003
+- What was implemented: Migrated workstation detail-card persistence from `useSaveCurrentFactory` to `useFactoryDocumentSave` via `saveAsync({ baseVersion, factory })`; updated hook, widget save, and prompt-edit enablement tests to mock/spy the shared hook; aligned development-guide and factory-workstation relevant-files docs.
+- Files changed: `ui/src/features/current-selection/workstation-selection/hooks/use-save-editable-workstation-configuration.ts`, `use-save-editable-workstation-configuration.test.tsx`, `ui/src/features/current-selection/components/current-selection-widget.save.test.tsx`, `current-selection-widget.prompt-edit-save-enablement.test.tsx`, `docs/internal/processes/development-guide-relevant-files.md`, `docs/internal/processes/factory-workstation-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Workstation save UX stays in `use-save-editable-workstation-configuration`; only transport/cache moves to `useFactoryDocumentSave`—payload field is `factory`, not `factoryDefinition`.
+  - Gotchas encountered: `current-selection-widget.save.test.tsx` must mock `useFactoryDocumentSave` separately from `useCurrentFactoryDefinition`; worker-selection hooks still import `useSaveCurrentFactory` until story 004.
+  - Useful context: `factory-document-save-mocks.ts` still targets legacy `useSaveCurrentFactory` until story 005 consolidates mocks for worker migration.
+---
+
+## 2026-05-31T09:15:00Z - ui-factory-document-save-hook-002
+- What was implemented: Migrated graph editor save wiring from `useSaveCurrentFactory` to `useFactoryDocumentSave` in `react-flow-current-activity-card-editor`, mapping `factoryDefinition` → `factory` for `saveAsync` and defaulting to `REPLACE_CURRENT` via the shared hook; updated dialogs/surface/notifications to use `isPending` and `graphDraftSaveSucceeded` (`saveState.lastSuccess`) instead of mutation `status`; aligned workflow-activity graph editor tests and mocks.
+- Files changed: `ui/src/features/workflow-activity/hooks/react-flow-current-activity-card-editor.tsx`, `react-flow-current-activity-card-editor-value.ts`, `react-flow-current-activity-card-editor-removals.ts`, `ui/src/features/workflow-activity/components/react-flow-current-activity-card-save-notifications.tsx`, `react-flow-current-activity-card-surface.tsx`, `react-flow-current-activity-card-editor-dialogs.tsx`, related `*.test.tsx` under workflow-activity, `docs/internal/processes/development-guide-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Graph save notifications should key off editable-graph `saveState.lastSuccess` plus cleared `draftState.hasChanges`, not react-query mutation `status`, because `useFactoryDocumentSave` exposes `isPending`/`error` only.
+  - Gotchas encountered: `EditableFactoryGraphSaveInput.factoryDefinition` maps to `FactoryDocumentSaveInput.factory` at the editor adapter boundary—update card/integration test `toHaveBeenCalledWith` expectations when migrating call sites.
+  - Useful context: Workstation/worker detail cards still use `useSaveCurrentFactory` until stories 003–004; `factory-document-save-mocks.ts` still targets the legacy hook until story 005.
+---
 
 ## 2026-05-29T14:50:44Z - docs-extensions-mock-workers-and-record-001
 - What was implemented: Added canonical `mock-workers` packaged docs topic with synchronized reference markdown, `docs.go` registration at display order 25, and test expectation updates for topic order and unsupported-topic errors.

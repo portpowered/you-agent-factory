@@ -1,32 +1,33 @@
 {
-  "project": "UI Session Factory Client",
-  "branchName": "ralph/ui-session-factory-client",
-  "description": "Consolidate dashboard factory GET/PUT behind one session-scoped client with save modes (REPLACE_CURRENT and UPSERT_NAMED_AND_ACTIVATE), migrate editor save and import confirm flows off POST /factories, and centralize error mapping—after backend session-factory-save-modes (S1) ships.",
+  "project": "UI Factory Document Save Hook",
+  "branchName": "ralph/ui-factory-document-save-hook",
+  "description": "Introduce useFactoryDocumentSave as the single React Query mutation seam for persisting a full canonical factory document to the active session factory API, then migrate graph editor and worker/workstation detail-card saves to use it while preserving existing save UX, operator error codes, and cache coherence.",
   "context": {
-    "customerAsk": "One GET/PUT session factory client with mode + factory; import dialog; remove POST /factories. Program dependency: complete backend session-factory-save-modes (S1) before implementation.",
-    "problem": "Factory definition I/O is split across current-factory-definition, named-factory (POST /factories), and factory-definition normalization. Import cannot offer create-new-named without the legacy POST path, save modes are not represented in the UI, and overlapping modules make session-scoped behavior hard to verify.",
-    "solution": "Add a session-factory API client aligned with S1 OpenAPI, delegate current-factory get/save through it, restrict editor saves to REPLACE_CURRENT, add import confirm UX for replace vs create-new-named with correct mode/name/version rules, remove createFactory, and unify API error mapping for save and import."
+    "customerAsk": "useFactoryDocumentSave shared by graph and detail cards. Full spec: tasks/prd-ui-factory-document-save-hook.md",
+    "problem": "Graph editor, workstation detail, and worker detail each duplicate save mutation logic—confirm/submitting state, scope keys, stale-version handling, operator error mapping, and React Query cache updates—while all ultimately PUT the same session factory document.",
+    "solution": "Add useFactoryDocumentSave as the one feature-level hook wrapping saveSessionFactory/current-factory save adapters; migrate graph and detail-card call sites to call it after local patches; keep draft and confirm UX in feature hooks; centralize cache updates and error codes in the shared hook."
   },
   "acceptanceCriteria": [
-    "Dashboard factory definition writes use only GET/PUT on /factory-sessions/{session_id}/factory with { mode?, factory } bodies after S1.",
-    "Editor Save uses REPLACE_CURRENT (or omitted default mode) only; no editor path calls UPSERT_NAMED_AND_ACTIVATE.",
-    "Import confirm offers Replace current factory (default) and Create new named factory, driving the correct PUT mode, name, and version rules per choice.",
-    "No dashboard save or import flow calls POST /factories; createFactory is removed from the UI API surface.",
-    "selectedSessionID from the dashboard session store threads to session factory GET/PUT for the active tab.",
-    "Canonical factory normalization remains in factory-definition; session transport does not reshape topology.",
-    "Quality gate: UI typecheck, lint, and affected unit and integration tests pass before merge."
+    "useFactoryDocumentSave is the production mutation entry point for graph editor save and worker/workstation detail-card saves.",
+    "Successful saves update both currentFactoryDocumentQueryKey and currentFactoryDefinitionQueryKey for the active session without manual invalidation from callers.",
+    "Operator failures STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, and INVALID_FACTORY surface with stable code values for existing recovery UX.",
+    "Graph editor save summary, active-work blocking, confirm-save, and confirm-leave behavior is unchanged after migration.",
+    "Workstation and worker detail cards preserve confirm-save, scope-key error isolation, submitting state, and localized error copy.",
+    "Feature code does not call saveCurrentFactoryDocument directly; that API remains for the hook layer and API tests.",
+    "Quality gate: UI typecheck, lint, and affected unit tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "ui-session-factory-client-001",
-      "title": "Session factory transport client",
-      "description": "As a frontend maintainer, I want one module that performs session factory GET/PUT against the regenerated OpenAPI contract so all features share one HTTP shape.",
+      "id": "ui-factory-document-save-hook-001",
+      "title": "Shared factory document save hook",
+      "description": "As a feature developer, I want one mutation hook for persisting a full factory document so every save path shares transport, cache updates, and error mapping.",
       "acceptanceCriteria": [
-        "After S1 lands, regenerate ui/src/api/generated/openapi.ts so PUT accepts mode and factory per backend contract.",
-        "ui/src/api/session-factory/ exports getSessionFactory(sessionID) and saveSessionFactory({ sessionID, mode?, factory }).",
-        "PUT body is { mode?: REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE, factory: Factory } with version inside factory when supplied.",
-        "GET and PUT use currentFactorySessionPath(sessionID) and shared transport.ts helpers.",
-        "Unit tests assert HTTP method, path, and JSON body for default and non-default session IDs for GET and PUT with each save mode.",
+        "useFactoryDocumentSave is exported from the current-factory-definition (or factory-document) feature hooks surface with save, saveAsync, isPending, error, and reset.",
+        "Input accepts mode (default REPLACE_CURRENT), factory, optional baseVersion, and optional sessionID defaulting from useDashboardSession.",
+        "The hook calls session factory save transport without mutating the caller factory object in place.",
+        "onSuccess updates currentFactoryDocumentQueryKey and currentFactoryDefinitionQueryKey for the resolved session.",
+        "Rejected errors expose code STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, or INVALID_FACTORY when the API returns those outcomes.",
+        "Unit tests cover success cache update, default mode, session override, and mapped error codes.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -35,30 +36,31 @@
       "notes": ""
     },
     {
-      "id": "ui-session-factory-client-002",
-      "title": "Current factory document delegates to session client",
-      "description": "As a feature developer, I want existing getCurrentFactoryDocument and saveCurrentFactoryDocument to call the session factory client so hooks do not duplicate fetch logic.",
+      "id": "ui-factory-document-save-hook-002",
+      "title": "Graph editor uses shared save hook",
+      "description": "As a factory graph editor, I want Save to behave exactly as today while the editor delegates persistence to the shared hook.",
       "acceptanceCriteria": [
-        "getCurrentFactoryDocument and saveCurrentFactoryDocument delegate to getSessionFactory and saveSessionFactory with unchanged observable behavior.",
-        "SaveCurrentFactoryInput.baseVersion maps to factory.version on the PUT body only.",
-        "React Query keys and useSaveCurrentFactory / useCurrentFactoryDefinition hook signatures are unchanged unless documented as breaking.",
-        "Existing current-factory-definition unit tests pass or are updated to mock the session client.",
+        "react-flow-current-activity-card-editor and graph save controller wiring use useFactoryDocumentSave instead of useSaveCurrentFactory.",
+        "Graph editor saves use REPLACE_CURRENT or omit mode; no graph path sends UPSERT_NAMED_AND_ACTIVATE.",
+        "Save summary, active-work blocking, confirm-save, and confirm-leave-with-unsaved-changes behavior matches pre-migration.",
+        "react-flow-current-activity-card and related editor tests pass without relaxed assertions.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "ui-session-factory-client-003",
-      "title": "Editor save always replaces current factory",
-      "description": "As a factory editor, I want Save to update the factory I am editing in the active session without switching named factories or save modes.",
+      "id": "ui-factory-document-save-hook-003",
+      "title": "Workstation detail card uses shared save hook",
+      "description": "As an operator editing a workstation in the detail card, I want save confirmation, submitting state, and errors to behave as today while persistence goes through the shared hook.",
       "acceptanceCriteria": [
-        "useSaveCurrentFactory sends mode REPLACE_CURRENT or omits mode on every editor save path.",
-        "No graph editor, activity card, worker, or workstation save path sends UPSERT_NAMED_AND_ACTIVATE.",
-        "STALE_FACTORY_VERSION and FACTORY_NOT_IDLE errors surface in the same UI states as before migration.",
-        "Save on a non-default session tab PUTs to that session factory endpoint when selectedSessionID is set.",
+        "use-save-editable-workstation-configuration persists via useFactoryDocumentSave after building CanonicalFactoryDefinition locally.",
+        "beginSaveConfirmation, cancelSaveConfirmation, confirmSave, canSave, and saveState semantics are unchanged for dirty, valid, and scope transitions.",
+        "Scope-key error and success isolation matches pre-migration behavior including stale-version handling.",
+        "use-save-editable-workstation-configuration.test.tsx and workstation detail card tests pass.",
         "Typecheck passes",
         "Tests pass",
         "Verify in browser using dev-browser skill"
@@ -68,69 +70,35 @@
       "notes": ""
     },
     {
-      "id": "ui-session-factory-client-004",
-      "title": "Import confirm dialog with replace vs create choice",
-      "description": "As a dashboard operator, I want to choose on import confirm whether to replace the current factory or create a new named factory, with accessible defaults and loading/error states.",
+      "id": "ui-factory-document-save-hook-004",
+      "title": "Worker detail card uses shared save hook",
+      "description": "As an operator editing a worker in the detail card, I want the same save behavior as the workstation card, backed by the same mutation hook.",
       "acceptanceCriteria": [
-        "Import preview confirm dialog appears on all session tabs and defaults to Replace current factory.",
-        "Operator can select Create new named factory before confirming via keyboard-accessible controls.",
-        "Dialog shows the resolved factory name for the create path once derived, including numeric suffix when applicable.",
-        "Confirm shows submitting state during activation; errors use the existing import error panel pattern.",
+        "use-save-editable-worker-configuration persists via useFactoryDocumentSave with the same confirm and saveState contract as workstation.",
+        "Localized fallback and field-target error mapping for worker saves is unchanged.",
+        "use-save-editable-worker-configuration.test.tsx uses factory-document-save-mocks against the shared hook contract without duplicated inline mutation stubs.",
+        "Worker detail card and current-selection-widget.save tests pass.",
         "Typecheck passes",
         "Tests pass",
         "Verify in browser using dev-browser skill"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "ui-session-factory-client-005",
-      "title": "Import activation uses session PUT save modes",
-      "description": "As a dashboard operator, I want import confirm to persist via the correct save mode so replace keeps my current name and create adds or upserts a new named factory in this session.",
+      "id": "ui-factory-document-save-hook-005",
+      "title": "Single public save seam for features",
+      "description": "As a reviewer, I want feature code to depend on the document save hook—not the raw API function—so new factory write surfaces have one integration point.",
       "acceptanceCriteria": [
-        "Replace path: GET current factory, set factory.name to session current name ignoring PNG name, PUT REPLACE_CURRENT with factory.version from GET.",
-        "Create path: derive factory.name from PNG metadata, allocate suffixed name on conflict, PUT UPSERT_NAMED_AND_ACTIVATE with version omitted for new names and included when upserting an existing name.",
-        "useFactoryImportActivation uses session factory client only; no POST /factories.",
-        "App.import.test.tsx and factory-import-second-session.integration.test.mjs assert PUT mode and body per dialog choice and session.",
+        "useSaveCurrentFactory is a thin wrapper around useFactoryDocumentSave or removed after migration with no production saveCurrentFactoryDocument imports outside API modules and hook tests.",
+        "factory-document-save-mocks documents and mocks the shared hook contract for graph and detail-card tests.",
+        "Internal development guide notes that features import useFactoryDocumentSave and avoid direct saveCurrentFactoryDocument.",
         "Typecheck passes",
-        "Tests pass",
-        "Verify in browser using dev-browser skill"
+        "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "ui-session-factory-client-006",
-      "title": "Remove legacy named-factory create path",
-      "description": "As a maintainer, I want dead POST /factories client surface removed so the dashboard cannot regress to global create.",
-      "acceptanceCriteria": [
-        "createFactory is removed from ui/src/api/named-factory/api.ts after call-site migration.",
-        "No dashboard import or save code references POST /factories.",
-        "Contract tests for named-factory flows expect session PUT only.",
-        "Storybook fetchMocks for current-factory and import stories use session factory paths and modes.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "ui-session-factory-client-007",
-      "title": "Unified session factory error mapping",
-      "description": "As a dashboard operator, I want consistent, actionable error messages in save and import dialogs when the session factory API rejects a request.",
-      "acceptanceCriteria": [
-        "Session factory client maps STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, INVALID_FACTORY, INVALID_FACTORY_NAME, and related codes to one error surface for save and import without duplicate switch logic in hooks.",
-        "Import preview shows stale-version guidance when the API returns STALE_FACTORY_VERSION.",
-        "Network and 5xx failures use the same recoverable copy patterns as before migration.",
-        "Unit tests cover stale, not-idle, and invalid-factory mappings from mocked HTTP responses.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]
