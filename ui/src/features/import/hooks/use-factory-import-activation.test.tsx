@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 
 import {
   activateImportedFactoryForSession,
-  NamedFactoryAPIError,
-  type FactoryValue,
-} from "../../../api/named-factory";
+  SessionFactoryAPIError,
+  type ImportFactoryValue,
+} from "../../../api/session-factory";
 
-vi.mock("../../../api/named-factory", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/named-factory")>(
-    "../../../api/named-factory",
+vi.mock("../../../api/session-factory", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/session-factory")>(
+    "../../../api/session-factory",
   );
   return {
     ...actual,
@@ -28,7 +28,7 @@ import { useFactoryImportActivation } from "./use-factory-import-activation";
 const ONE_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
 
-const canonicalFactory: FactoryValue = {
+const canonicalFactory: ImportFactoryValue = {
   id: "agent-factory",
   name: "Factory Roundtrip",
   workTypes: [
@@ -145,9 +145,9 @@ describe("useFactoryImportActivation", () => {
 
   it("activates the direct factory payload while preserving the PNG factory metadata", async () => {
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<FactoryValue>>()
+      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
       .mockImplementation(async (input) => input.value.factory);
-    const onActivated = vi.fn<(value: FactoryValue) => void>();
+    const onActivated = vi.fn<(value: ImportFactoryValue) => void>();
     const pngBytes = fromBase64(ONE_PIXEL_PNG_BASE64);
     const exportResult = await writeFactoryExportPng({
       factory: canonicalFactory,
@@ -200,12 +200,12 @@ describe("useFactoryImportActivation", () => {
   });
 
   it("reports a submitting state until activation resolves", async () => {
-    let resolveActivation: ((value: FactoryValue) => void) | null = null;
+    let resolveActivation: ((value: ImportFactoryValue) => void) | null = null;
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<FactoryValue>>()
+      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
       .mockImplementation(
         () =>
-          new Promise<FactoryValue>((resolve) => {
+          new Promise<ImportFactoryValue>((resolve) => {
             resolveActivation = resolve;
           }),
       );
@@ -244,11 +244,11 @@ describe("useFactoryImportActivation", () => {
   it("stores generic activation failures and clears them on request", async () => {
     const activationError = new Error("Factory name already exists.");
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<FactoryValue>>()
+      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
       .mockRejectedValue(
         Object.assign(activationError, {
           code: "FACTORY_ALREADY_EXISTS",
-          name: "NamedFactoryAPIError",
+          name: "SessionFactoryAPIError",
         }),
       );
 
@@ -288,9 +288,9 @@ describe("useFactoryImportActivation", () => {
 
   it("preserves explicit named factory api errors from activation failures", async () => {
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<FactoryValue>>()
+      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
       .mockRejectedValue(
-        new NamedFactoryAPIError(
+        new SessionFactoryAPIError(
           "Current factory runtime must be idle before activation.",
           { code: "FACTORY_NOT_IDLE" },
         ),
@@ -326,7 +326,7 @@ describe("useFactoryImportActivation", () => {
 
   it("normalizes non-error activation failures to a generic internal error", async () => {
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<FactoryValue>>()
+      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
       .mockRejectedValue("unstructured failure");
 
     const { result } = renderHook(

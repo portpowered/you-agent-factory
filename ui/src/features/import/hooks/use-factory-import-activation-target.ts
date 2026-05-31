@@ -5,7 +5,7 @@ import {
   discoverSessionNamedFactoryNames,
   getCurrentFactory,
   resolveImportCreateFactoryName,
-} from "../../../api/named-factory";
+} from "../../../api/session-factory";
 
 export interface UseFactoryImportActivationTargetOptions {
   enabled?: boolean;

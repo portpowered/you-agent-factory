@@ -38,6 +38,36 @@ export interface DiscoverSessionNamedFactoryNamesOptions {
   sessionID?: string | null;
 }
 
+export interface GetCurrentFactoryOptions {
+  fetch?: typeof globalThis.fetch;
+  sessionID?: string | null;
+}
+
+export async function getCurrentFactory(
+  options: GetCurrentFactoryOptions = {},
+): Promise<ImportFactoryValue> {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+
+  if (typeof fetchImplementation !== "function") {
+    throw new SessionFactoryAPIError(
+      "Current factory export is unavailable in this environment.",
+      {
+        code: "NETWORK_ERROR",
+      },
+    );
+  }
+
+  try {
+    const document = await getCurrentFactoryDocument({
+      fetch: fetchImplementation,
+      sessionID: options.sessionID,
+    });
+    return toActivatedFactoryValue(document);
+  } catch (error) {
+    throw toSessionFactoryAPIErrorFromCurrentFactoryDefinition(error);
+  }
+}
+
 export async function discoverSessionNamedFactoryNames(
   options: DiscoverSessionNamedFactoryNamesOptions = {},
 ): Promise<string[]> {

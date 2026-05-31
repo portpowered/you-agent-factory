@@ -1,12 +1,14 @@
-import type { NamedFactoryAPIErrorCode } from "../../../api/named-factory";
-import { sessionFactoryOperatorErrorMessages } from "../../../api/session-factory";
+import {
+  sessionFactoryOperatorErrorMessages,
+  type SessionFactoryAPIErrorCode,
+} from "../../../api/session-factory";
 import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../i18n";
 
 type MappedImportPreviewErrorCode = Extract<
-  NamedFactoryAPIErrorCode,
+  SessionFactoryAPIErrorCode,
   | "FACTORY_ALREADY_EXISTS"
   | "FACTORY_NOT_IDLE"
   | "INVALID_FACTORY"

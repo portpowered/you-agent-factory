@@ -5,12 +5,12 @@ import type { ReactNode } from "react";
 import {
   discoverSessionNamedFactoryNames,
   getCurrentFactory,
-} from "../../../api/named-factory";
+} from "../../../api/session-factory";
 import { useFactoryImportActivationTarget } from "./use-factory-import-activation-target";
 
-vi.mock("../../../api/named-factory", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/named-factory")>(
-    "../../../api/named-factory",
+vi.mock("../../../api/session-factory", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/session-factory")>(
+    "../../../api/session-factory",
   );
   return {
     ...actual,
