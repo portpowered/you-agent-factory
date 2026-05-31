@@ -243,14 +243,14 @@ func (h *splitLayoutDefaultSaveHost) ActivateSessionEditableFactory(context.Cont
 	return h.activateErr
 }
 
-func (h *splitLayoutDefaultSaveHost) ReplaceFactoryLayoutAtDir(sessionRootDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
-	if sessionRootDir != h.sessionRootDir {
-		return nil, errors.New("unexpected session root")
+func (h *splitLayoutDefaultSaveHost) ReplaceFactoryLayoutAtDir(targetDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	if targetDir != h.sessionRootDir {
+		return nil, errors.New("unexpected replace target dir")
 	}
 	result, err := factoryconfig.ReplaceFactoryLayoutAtDirWithResult(
-		sessionRootDir,
+		targetDir,
 		payload,
-		factoryconfig.DefaultFactoryLayoutReplaceOptions(sessionRootDir),
+		factoryconfig.DefaultFactoryLayoutReplaceOptions(targetDir),
 	)
 	if err != nil {
 		return nil, err

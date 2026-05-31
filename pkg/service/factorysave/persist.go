@@ -47,31 +47,40 @@ func persistUpsertNamedFactoryPayload(
 	if err != nil {
 		return "", err
 	}
-	var factoryDir string
 	if replaceExisting {
-		factoryDir, err = configpersist.ReplaceNamedFactory(sessionRootDir, string(request.Name), payload)
-	} else {
-		factoryDir, err = configpersist.PersistNamedFactory(sessionRootDir, string(request.Name), payload)
+		targetDir, err := resolveNamedFactoryLayoutTargetDir(sessionRootDir, request.Name)
+		if err != nil {
+			return "", mapUpsertNamedFactoryPersistError(err)
+		}
+		if _, err := persistFactoryLayoutAtDir(targetDir, payload); err != nil {
+			return "", mapUpsertNamedFactoryPersistError(err)
+		}
+		return targetDir, nil
 	}
+	factoryDir, err := configpersist.PersistNamedFactory(sessionRootDir, string(request.Name), payload)
 	if err != nil {
 		return "", mapUpsertNamedFactoryPersistError(err)
 	}
 	return factoryDir, nil
 }
 
-func replaceEditableFactoryDefinition(
-	sessionRootDir string,
-	name factoryapi.FactoryName,
-	payload []byte,
-) (string, error) {
-	factoryDir, err := configpersist.ReplaceNamedFactory(sessionRootDir, string(name), payload)
-	if err == nil {
-		return factoryDir, nil
+func resolveNamedFactoryLayoutTargetDir(sessionRootDir string, name factoryapi.FactoryName) (string, error) {
+	return factoryconfig.ResolveNamedFactoryDir(sessionRootDir, string(name))
+}
+
+func persistFactoryLayoutAtDir(targetDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	result, err := configpersist.ReplaceFactoryLayoutAtDirWithResult(
+		targetDir,
+		payload,
+		configpersist.DefaultFactoryLayoutReplaceOptions(targetDir),
+	)
+	if err != nil {
+		if configpersist.IsInvalidNamedFactory(err) {
+			return nil, fmt.Errorf("%w: %w", apisurface.ErrInvalidNamedFactory, err)
+		}
+		return nil, err
 	}
-	if configpersist.IsInvalidNamedFactory(err) {
-		return "", fmt.Errorf("%w: %w", apisurface.ErrInvalidNamedFactory, err)
-	}
-	return "", err
+	return result, nil
 }
 
 func mapUpsertNamedFactoryPersistError(err error) error {
