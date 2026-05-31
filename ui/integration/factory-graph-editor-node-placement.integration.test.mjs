@@ -3,8 +3,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
-  buildTimeoutMs,
   browserScenarioTimeoutMs,
+  buildTimeoutMs,
   expectNoBrowserErrors,
   openBrowserPage,
   startBrowserPreview,
@@ -470,9 +470,9 @@ describe.sequential("factory graph editor node placement browser integration", (
           existingDraftCenter,
         );
 
-        expect(
-          isNearViewportCenter(addedWorkerCenter, viewportMetrics),
-        ).toBe(true);
+        expect(isNearViewportCenter(addedWorkerCenter, viewportMetrics)).toBe(
+          true,
+        );
         expect(distanceFromExistingDraft).toBeGreaterThan(80);
 
         const flowPosition = await readNodeFlowPosition(
@@ -600,32 +600,35 @@ describe.sequential("factory graph editor node placement browser integration", (
         );
 
         await expect
-          .poll(async () => {
-            const nextFlowPosition = await readNodeFlowPosition(
-              browserPage.page,
-              "rf__node-resource:extra-gpu",
-            );
-            const nextScreenPosition = await readNodeScreenPosition(
-              browserPage.page,
-              "rf__node-resource:extra-gpu",
-            );
-            if (!nextScreenPosition || !initialScreenPosition) {
-              return null;
-            }
+          .poll(
+            async () => {
+              const nextFlowPosition = await readNodeFlowPosition(
+                browserPage.page,
+                "rf__node-resource:extra-gpu",
+              );
+              const nextScreenPosition = await readNodeScreenPosition(
+                browserPage.page,
+                "rf__node-resource:extra-gpu",
+              );
+              if (!nextScreenPosition || !initialScreenPosition) {
+                return null;
+              }
 
-            const movedOnScreen =
-              Math.abs(nextScreenPosition.x - initialScreenPosition.x) > 8 ||
-              Math.abs(nextScreenPosition.y - initialScreenPosition.y) > 8;
-            const movedInFlow =
-              initialFlowPosition &&
-              nextFlowPosition &&
-              (Math.abs(nextFlowPosition.x - initialFlowPosition.x) > 8 ||
-                Math.abs(nextFlowPosition.y - initialFlowPosition.y) > 8);
+              const movedOnScreen =
+                Math.abs(nextScreenPosition.x - initialScreenPosition.x) > 8 ||
+                Math.abs(nextScreenPosition.y - initialScreenPosition.y) > 8;
+              const movedInFlow =
+                initialFlowPosition &&
+                nextFlowPosition &&
+                (Math.abs(nextFlowPosition.x - initialFlowPosition.x) > 8 ||
+                  Math.abs(nextFlowPosition.y - initialFlowPosition.y) > 8);
 
-            return movedOnScreen || movedInFlow
-              ? { flow: nextFlowPosition, screen: nextScreenPosition }
-              : null;
-          }, { timeout: uiInteractionTimeoutMs })
+              return movedOnScreen || movedInFlow
+                ? { flow: nextFlowPosition, screen: nextScreenPosition }
+                : null;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
           .not.toBeNull();
 
         const draggedFlowPosition = await readNodeFlowPosition(
