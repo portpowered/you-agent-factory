@@ -146,6 +146,27 @@ it("localizes interpolated validation errors for non-default locales", () => {
   );
 });
 
+it("adopts a newer document version after save when the draft has no pending edits", () => {
+  const synced = syncFactoryGraphDraftSession(
+    {
+      draft: createEmptyFactoryGraphDraft(),
+      latestDocument: currentFactoryDocument,
+      sessionStartDocument: currentFactoryDocument,
+    },
+    {
+      ...currentFactoryDocument,
+      version: {
+        logical: "6",
+        physical: "2026-05-18T15:05:00Z",
+      },
+    },
+  );
+
+  expect(synced.draft.additions.workers).toEqual([]);
+  expect(synced.latestDocument.version.logical).toBe("6");
+  expect(synced.sessionStartDocument.version.logical).toBe("6");
+});
+
 it("keeps a dirty draft while newer editable-definition versions arrive", () => {
   const dirtyDraft = createEmptyFactoryGraphDraft();
   dirtyDraft.additions.workers.push({
