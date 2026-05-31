@@ -915,11 +915,11 @@ describe.sequential("factory graph editor browser integration", () => {
             { timeout: uiInteractionTimeoutMs },
           )
           .toBe(0);
-        await expect(
-          toolbar.getByRole("button", {
+        await toolbar
+          .getByRole("button", {
             name: "Open hide or show node classes menu",
-          }),
-        ).toBeVisible();
+          })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         expect(saveRequests).toHaveLength(0);
         expectNoBrowserErrors(
