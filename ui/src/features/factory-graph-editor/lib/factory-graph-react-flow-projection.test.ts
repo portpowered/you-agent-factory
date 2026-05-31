@@ -434,10 +434,23 @@ describe("factory graph React Flow projection", () => {
   it("omits continue and reject handles for a standard processor without stopWords", () => {
     const factoryWithoutStopWords = {
       ...baseFactoryDefinition,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "rejected", type: "FAILED" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
       workstations: [
         {
           ...baseFactoryDefinition.workstations[0],
           behavior: "STANDARD",
+          onContinue: [{ state: "queued", workType: "story" }],
+          onFailure: [{ state: "rejected", workType: "story" }],
+          onRejection: [{ state: "rejected", workType: "story" }],
           stopWords: undefined,
         },
       ],
@@ -460,6 +473,7 @@ describe("factory graph React Flow projection", () => {
       projection.nodes
         .find((node) => node.id === "workstation:draft")
         ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+    const edgeKinds = projection.edges.map((edge) => edge.data?.kind);
 
     expect(anchorIds).toEqual(
       expect.arrayContaining([
@@ -469,6 +483,10 @@ describe("factory graph React Flow projection", () => {
     );
     expect(anchorIds).not.toContain("workstation-on-continue-source");
     expect(anchorIds).not.toContain("workstation-on-rejection-source");
+    expect(edgeKinds).not.toContain("workstation-on-continue");
+    expect(edgeKinds).not.toContain("workstation-on-rejection");
+    expect(edgeKinds).toContain("workstation-on-failure");
+    expect(edgeKinds).toContain("workstation-output");
   });
 
   it("omits worker-assignment handles on LOGICAL_MOVE workstations", () => {
@@ -525,10 +543,23 @@ describe("factory graph React Flow projection", () => {
   it("exposes continue and reject handles when stopWords is configured", () => {
     const factoryWithStopWords = {
       ...baseFactoryDefinition,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "rejected", type: "FAILED" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
       workstations: [
         {
           ...baseFactoryDefinition.workstations[0],
           behavior: "STANDARD",
+          onContinue: [{ state: "queued", workType: "story" }],
+          onFailure: [{ state: "rejected", workType: "story" }],
+          onRejection: [{ state: "rejected", workType: "story" }],
           stopWords: ["DONE"],
         },
       ],
@@ -549,8 +580,11 @@ describe("factory graph React Flow projection", () => {
       projection.nodes
         .find((node) => node.id === "workstation:draft")
         ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+    const edgeKinds = projection.edges.map((edge) => edge.data?.kind);
 
     expect(anchorIds).toContain("workstation-on-continue-source");
     expect(anchorIds).toContain("workstation-on-rejection-source");
+    expect(edgeKinds).toContain("workstation-on-continue");
+    expect(edgeKinds).toContain("workstation-on-rejection");
   });
 });
