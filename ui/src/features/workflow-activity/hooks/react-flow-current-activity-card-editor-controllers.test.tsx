@@ -268,7 +268,6 @@ describe("current activity graph editor controllers", () => {
         editableGraph,
         saveEditableDefinition: {
           reset,
-          status: "idle",
         } as never,
       }),
     );
@@ -302,7 +301,6 @@ describe("current activity graph editor controllers", () => {
         editableGraph,
         saveEditableDefinition: {
           reset,
-          status: "idle",
         } as never,
       }),
     );
@@ -360,7 +358,6 @@ describe("current activity graph editor controllers", () => {
         editableGraph,
         saveEditableDefinition: {
           reset,
-          status: "idle",
         } as never,
       }),
     );

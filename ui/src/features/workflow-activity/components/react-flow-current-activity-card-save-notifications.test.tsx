@@ -14,9 +14,9 @@ vi.mock("sonner", () => ({
 function createEditorStub(overrides: Record<string, unknown> = {}) {
   return {
     draftState: { hasChanges: false },
+    graphDraftSaveSucceeded: false,
     saveEditableDefinition: {
       error: null,
-      status: "idle" as const,
     },
     ...overrides,
   };
@@ -32,10 +32,7 @@ describe("CurrentActivityGraphSaveNotifications", () => {
       <CurrentActivityGraphSaveNotifications
         editor={
           createEditorStub({
-            saveEditableDefinition: {
-              error: null,
-              status: "success" as const,
-            },
+            graphDraftSaveSucceeded: true,
           }) as never
         }
       />,
@@ -56,7 +53,6 @@ describe("CurrentActivityGraphSaveNotifications", () => {
           createEditorStub({
             saveEditableDefinition: {
               error: new Error("The graph is invalid."),
-              status: "error" as const,
             },
           }) as never
         }
@@ -72,10 +68,7 @@ describe("CurrentActivityGraphSaveNotifications", () => {
 
   it("does not repeat the same save notification across rerenders", () => {
     const editor = createEditorStub({
-      saveEditableDefinition: {
-        error: null,
-        status: "success" as const,
-      },
+      graphDraftSaveSucceeded: true,
     });
     const { rerender } = render(
       <CurrentActivityGraphSaveNotifications editor={editor as never} />,

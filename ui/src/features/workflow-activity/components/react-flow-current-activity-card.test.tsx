@@ -37,10 +37,8 @@ import {
   wireMockEditableFactoryGraph,
   workerDenseFactoryDefinitionDocument,
 } from "../../../testing/graph-editor-harness";
-import {
-  useCurrentFactoryDocument,
-  useSaveCurrentFactory,
-} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
@@ -81,9 +79,12 @@ vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", as
   return {
     ...actual,
     useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
   };
 });
+
+vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
+  useFactoryDocumentSave: vi.fn(),
+}));
 
 vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", async () => {
   const actual = await vi.importActual(
@@ -855,10 +856,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
-      mutateAsync: vi.fn(),
+    vi.mocked(useFactoryDocumentSave).mockReturnValue({
+      error: null,
+      isPending: false,
       reset: vi.fn(),
-      status: "idle",
+      save: vi.fn(),
+      saveAsync: vi.fn(),
     } as never);
     wireMockEditableFactoryGraph(
       {
@@ -1674,7 +1677,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("confirms pending save changes before saving the graph draft", async () => {
-    const mutateAsync = vi
+    const saveAsync = vi
       .fn()
       .mockResolvedValue(baseFactoryDefinitionDocument);
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
@@ -1682,10 +1685,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
-      mutateAsync,
+    vi.mocked(useFactoryDocumentSave).mockReturnValue({
+      error: null,
+      isPending: false,
       reset: vi.fn(),
-      status: "idle",
+      save: vi.fn(),
+      saveAsync,
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
@@ -1732,9 +1737,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({
+      expect(saveAsync).toHaveBeenCalledWith({
         baseVersion: baseFactoryDefinitionDocument.version,
-        factoryDefinition: baseFactoryDefinition,
+        factory: baseFactoryDefinition,
       });
     });
   });
@@ -1840,7 +1845,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("saves the pending editable definition before leaving editor mode", async () => {
-    const mutateAsync = vi
+    const saveAsync = vi
       .fn()
       .mockResolvedValue(baseFactoryDefinitionDocument);
     const replaceDraft = vi.fn();
@@ -1849,10 +1854,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
       error: null,
       status: "success",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
-      mutateAsync,
+    vi.mocked(useFactoryDocumentSave).mockReturnValue({
+      error: null,
+      isPending: false,
       reset: vi.fn(),
-      status: "idle",
+      save: vi.fn(),
+      saveAsync,
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
@@ -1879,9 +1886,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({
+      expect(saveAsync).toHaveBeenCalledWith({
         baseVersion: baseFactoryDefinitionDocument.version,
-        factoryDefinition: baseFactoryDefinition,
+        factory: baseFactoryDefinition,
       });
     });
     expect(replaceDraft).toHaveBeenCalledTimes(1);

@@ -1,32 +1,33 @@
 {
-  "project": "Manual Work Recovery",
-  "branchName": "ralph/work-manual-recovery",
-  "description": "Session-scoped operator control to move existing work items to another authored state via CLI and HTTP, with canonical WORK_STATE_CHANGE events, engine marking updates, projections, replay persistence, and pause-safe behavior.",
+  "project": "UI Factory Document Save Hook",
+  "branchName": "ralph/ui-factory-document-save-hook",
+  "description": "Introduce useFactoryDocumentSave as the single React Query mutation seam for persisting a full canonical factory document to the active session factory API, then migrate graph editor and worker/workstation detail-card saves to use it while preserving existing save UX, operator error codes, and cache coherence.",
   "context": {
-    "customerAsk": "Add session-scoped manual work migration: you work move <work-id> <state-name>, matching HTTP API, WORK_STATE_CHANGE events, engine marking, CLI, dashboard replay projection, and record/replay. Reject in-flight dispatches; allow moves while paused; retain failure history when leaving FAILED; no delete or auto-unfail.",
-    "problem": "After failures or cascading dependency failure, work can sit in FAILED or blocked states with no operator ingress to relocate tokens. Marking may be correct while the event stream, replay artifacts, and dashboard stay stale because moves lack canonical FactoryEvent recording.",
-    "solution": "Implement a full vertical slice: OpenAPI contract and move routes, pause-safe engine control path applying MutationMove, RecordWorkStateChange with SSE fanout, HTTP and CLI ingress with requestId idempotency (409 on replay), backend and UI projections, replay persistence, pause tick audit, functional recovery test, and maintainer docs after ship."
+    "customerAsk": "useFactoryDocumentSave shared by graph and detail cards. Full spec: tasks/prd-ui-factory-document-save-hook.md",
+    "problem": "Graph editor, workstation detail, and worker detail each duplicate save mutation logic—confirm/submitting state, scope keys, stale-version handling, operator error mapping, and React Query cache updates—while all ultimately PUT the same session factory document.",
+    "solution": "Add useFactoryDocumentSave as the one feature-level hook wrapping saveSessionFactory/current-factory save adapters; migrate graph and detail-card call sites to call it after local patches; keep draft and confirm UX in feature hooks; centralize cache updates and error codes in the shared hook."
   },
   "acceptanceCriteria": [
-    "POST /work/{id}/move and session-scoped variant move work to a named authored state and return work at the new position",
-    "you work move mirrors HTTP with --session and human/json output showing previous and new state",
-    "Move is rejected when work is in ActiveDispatches; duplicate requestId returns 409 without second mutation",
-    "Each successful operator move emits one WORK_STATE_CHANGE (source api or cli) on SSE and in replay artifacts",
-    "Operator move succeeds while factory is PAUSED; automatic subsystem ticks do not advance marking while paused",
-    "Dashboard timeline at a later tick shows the work token in the target place after a manual move",
-    "Typecheck, lint, and make verify-pr pass (quality gate)"
+    "useFactoryDocumentSave is the production mutation entry point for graph editor save and worker/workstation detail-card saves.",
+    "Successful saves update both currentFactoryDocumentQueryKey and currentFactoryDefinitionQueryKey for the active session without manual invalidation from callers.",
+    "Operator failures STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, and INVALID_FACTORY surface with stable code values for existing recovery UX.",
+    "Graph editor save summary, active-work blocking, confirm-save, and confirm-leave behavior is unchanged after migration.",
+    "Workstation and worker detail cards preserve confirm-save, scope-key error isolation, submitting state, and localized error copy.",
+    "Feature code does not call saveCurrentFactoryDocument directly; that API remains for the hook layer and API tests.",
+    "Quality gate: UI typecheck, lint, and affected unit tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "prd-work-manual-recovery-001",
-      "title": "OpenAPI WORK_STATE_CHANGE and move routes",
-      "description": "As a maintainer, I need a canonical event type and move API contract so operator and cascade paths share one vocabulary.",
+      "id": "ui-factory-document-save-hook-001",
+      "title": "Shared factory document save hook",
+      "description": "As a feature developer, I want one mutation hook for persisting a full factory document so every save path shares transport, cache updates, and error mapping.",
       "acceptanceCriteria": [
-        "WORK_STATE_CHANGE FactoryEventType and payload include workId, workTypeName, fromState, toState, fromPlaceId, toPlaceId, source (api | cli | cascading-failure), optional triggerWorkId and reason",
-        "POST /work/{id}/move and POST /factory-sessions/{session_id}/work/{id}/move schemas include required stateName and optional requestId",
-        "Contract tests cover enum, payload refs, and sample operator event with source cli",
-        "make verify-build-contracts passes",
-        "Coordinate WORK_STATE_CHANGE contract merge with prd-cascading-failure-events US-001",
+        "useFactoryDocumentSave is exported from the current-factory-definition (or factory-document) feature hooks surface with save, saveAsync, isPending, error, and reset.",
+        "Input accepts mode (default REPLACE_CURRENT), factory, optional baseVersion, and optional sessionID defaulting from useDashboardSession.",
+        "The hook calls session factory save transport without mutating the caller factory object in place.",
+        "onSuccess updates currentFactoryDocumentQueryKey and currentFactoryDefinitionQueryKey for the resolved session.",
+        "Rejected errors expose code STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, or INVALID_FACTORY when the API returns those outcomes.",
+        "Unit tests cover success cache update, default mode, session override, and mapped error codes.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -35,151 +36,69 @@
       "notes": ""
     },
     {
-      "id": "prd-work-manual-recovery-002",
-      "title": "Engine control path and marking migration",
-      "description": "As the runtime, I must apply a validated place change on live marking when an operator requests a move.",
+      "id": "ui-factory-document-save-hook-002",
+      "title": "Graph editor uses shared save hook",
+      "description": "As a factory graph editor, I want Save to behave exactly as today while the editor delegates persistence to the shared hook.",
       "acceptanceCriteria": [
-        "Control ingress rejects missing work, invalid state, in-flight ActiveDispatches, and terminated engine; accepts valid moves including while factory is PAUSED",
-        "Successful move applies MutationMove; leaving FAILED retains FailureRecords and clears guard-blocking fields via shared helper",
-        "Operator move does not emit fake DISPATCH_REQUEST or DISPATCH_RESPONSE events",
-        "Unit tests prove accept, reject, and paused-factory accept paths",
+        "react-flow-current-activity-card-editor and graph save controller wiring use useFactoryDocumentSave instead of useSaveCurrentFactory.",
+        "Graph editor saves use REPLACE_CURRENT or omit mode; no graph path sends UPSERT_NAMED_AND_ACTIVATE.",
+        "Save summary, active-work blocking, confirm-save, and confirm-leave-with-unsaved-changes behavior matches pre-migration.",
+        "react-flow-current-activity-card and related editor tests pass without relaxed assertions.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "prd-work-manual-recovery-003",
-      "title": "Event history and live fanout",
-      "description": "As a dashboard consumer, I need move operations recorded like other canonical runtime changes.",
+      "id": "ui-factory-document-save-hook-003",
+      "title": "Workstation detail card uses shared save hook",
+      "description": "As an operator editing a workstation in the detail card, I want save confirmation, submitting state, and errors to behave as today while persistence goes through the shared hook.",
       "acceptanceCriteria": [
-        "RecordWorkStateChange records successful operator moves with source api or cli",
-        "FactoryEventHistory subscribers receive WORK_STATE_CHANGE in order on default and session-scoped SSE",
-        "Tests assert event shape and UTC eventTime consistent with RecordWorkRequest",
+        "use-save-editable-workstation-configuration persists via useFactoryDocumentSave after building CanonicalFactoryDefinition locally.",
+        "beginSaveConfirmation, cancelSaveConfirmation, confirmSave, canSave, and saveState semantics are unchanged for dirty, valid, and scope transitions.",
+        "Scope-key error and success isolation matches pre-migration behavior including stale-version handling.",
+        "use-save-editable-workstation-configuration.test.tsx and workstation detail card tests pass.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 3,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "prd-work-manual-recovery-004",
-      "title": "HTTP API move handlers",
-      "description": "As an integrator, I can move work via the public API on the default or selected session.",
+      "id": "ui-factory-document-save-hook-004",
+      "title": "Worker detail card uses shared save hook",
+      "description": "As an operator editing a worker in the detail card, I want the same save behavior as the workstation card, backed by the same mutation hook.",
       "acceptanceCriteria": [
-        "Both move routes return 404 for missing session or work, 400 for invalid state or in-flight dispatch, 409 for duplicate requestId, and updated Work on success",
-        "Handlers route through FactoryService; move while paused succeeds in handler tests",
+        "use-save-editable-worker-configuration persists via useFactoryDocumentSave with the same confirm and saveState contract as workstation.",
+        "Localized fallback and field-target error mapping for worker saves is unchanged.",
+        "use-save-editable-worker-configuration.test.tsx uses factory-document-save-mocks against the shared hook contract without duplicated inline mutation stubs.",
+        "Worker detail card and current-selection-widget.save tests pass.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "prd-work-manual-recovery-005",
-      "title": "CLI you work move",
-      "description": "As an operator, I can move work from the CLI without using the dashboard.",
+      "id": "ui-factory-document-save-hook-005",
+      "title": "Single public save seam for features",
+      "description": "As a reviewer, I want feature code to depend on the document save hook—not the raw API function—so new factory write surfaces have one integration point.",
       "acceptanceCriteria": [
-        "you work move <work-id> <state-name> supports --session, --json, and prints work id, previous state, new state, and session id on success",
-        "CLI tests cover help, session path, success, in-flight error, and 409 on duplicate request id when exposed",
-        "tests/functional/smoke/cli_work_move_smoke_test.go passes",
+        "useSaveCurrentFactory is a thin wrapper around useFactoryDocumentSave or removed after migration with no production saveCurrentFactoryDocument imports outside API modules and hook tests.",
+        "factory-document-save-mocks documents and mocks the shared hook contract for graph and detail-card tests.",
+        "Internal development guide notes that features import useFactoryDocumentSave and avoid direct saveCurrentFactoryDocument.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "prd-work-manual-recovery-006",
-      "title": "Backend world projection for WORK_STATE_CHANGE",
-      "description": "As a service consumer, factory world state must reflect manual moves from events.",
-      "acceptanceCriteria": [
-        "world_state.go applyWorkStateChange updates place occupancy, WorkItemsByID, and failed or terminal maps",
-        "Leaving FAILED retains failure history on work facts while updating occupancy",
-        "Projection tests reconstruct FAILED to in-progress and INITIAL to arbitrary state from operator events",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "prd-work-manual-recovery-007",
-      "title": "UI replay projection for manual moves",
-      "description": "As a dashboard user, I see work at the new place after an operator move when scrubbing the timeline.",
-      "acceptanceCriteria": [
-        "replayWorldState applyWorkStateChange moves tokens and updates workItemsByID and failedWorkItemsByID without erasing historical failure details elsewhere",
-        "Timeline or dashboard tests show work in target place at a later tick after WORK_STATE_CHANGE",
-        "Verify in browser using dev-browser skill: work moved from failed to in-progress appears in target place",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "prd-work-manual-recovery-008",
-      "title": "Record and replay for operator moves",
-      "description": "As a maintainer, recorded runs preserve manual recovery for postmortems.",
-      "acceptanceCriteria": [
-        "Replay recorder persists WORK_STATE_CHANGE events for operator moves",
-        "Replay reconstructs marking positions matching live session after manual move",
-        "Replay test proves artifact round-trip for operator move events",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "prd-work-manual-recovery-009",
-      "title": "Pause and tick audit",
-      "description": "As an operator, pausing the factory freezes automatic subsystem ticks while manual move still works.",
-      "acceptanceCriteria": [
-        "While PAUSED, engine subsystems do not apply marking mutations or scheduling; operator POST move still succeeds synchronously",
-        "Test proves paused factory has no cascade or dispatch marking changes but operator move updates marking and emits WORK_STATE_CHANGE",
-        "Work-session guide documents subsystem behavior while paused",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "prd-work-manual-recovery-010",
-      "title": "Recovery scenario functional test",
-      "description": "As CI, we prove failure, cascade, manual move, and resumed progress.",
-      "acceptanceCriteria": [
-        "Functional fixture moves parent then child via API after cascade to FAILED; child can progress when factory runs",
-        "make verify-pr passes for the recovery lane",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "prd-work-manual-recovery-011",
-      "title": "Maintainer guide and AGENTS.md",
-      "description": "As a future contributor, docs reflect shipped manual recovery behavior.",
-      "acceptanceCriteria": [
-        "work-session-runtime-feature-guide.md documents WORK_STATE_CHANGE, pause policy, and failure history vs guards for operator moves",
-        "Cross-link prd-cascading-failure-events.md from the guide",
-        "AGENTS.md standards bullet links the guide only after stories 001-010 are complete",
-        "Typecheck passes"
-      ],
-      "priority": 11,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

@@ -54,10 +54,10 @@ export function CurrentActivityGraphEditorDialogs({
       <FactoryGraphEditorLeaveDialog
         canSave={editor.canSaveDraft}
         isOpen={editor.leaveDialogOpen}
-        isSaving={editor.saveEditableDefinition.status === "pending"}
+        isSaving={editor.saveEditableDefinition.isPending}
         locale={locale}
         onCancel={() => {
-          if (editor.saveEditableDefinition.status !== "pending") {
+          if (!editor.saveEditableDefinition.isPending) {
             editor.setIsConfirmingLeaveEditor(false);
           }
         }}
@@ -70,10 +70,10 @@ export function CurrentActivityGraphEditorDialogs({
         cancelLabel={messages.leaveDialogKeepEditing}
         confirmLabel={messages.saveConfirmAction}
         description={editor.saveSummary.description}
-        isBusy={editor.saveEditableDefinition.status === "pending"}
+        isBusy={editor.saveEditableDefinition.isPending}
         isOpen={editor.isConfirmingSave}
         onCancel={() => {
-          if (editor.saveEditableDefinition.status !== "pending") {
+          if (!editor.saveEditableDefinition.isPending) {
             editor.setIsConfirmingSave(false);
           }
         }}

@@ -1,14 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   getCurrentFactoryDefinition,
   getCurrentFactoryDocument,
-  saveCurrentFactoryDocument,
   type CanonicalFactoryDefinition,
   type CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
-  type SaveCurrentFactoryInput,
 } from "../../../api/current-factory-definition";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 
@@ -69,29 +67,5 @@ export function useCurrentFactoryDocument(isEnabled = true) {
     gcTime: 0,
     refetchOnWindowFocus: false,
     retry: false,
-  });
-}
-
-export function useSaveCurrentFactory() {
-  const queryClient = useQueryClient();
-  const { sessionID } = useDashboardSession();
-
-  return useMutation<
-    CurrentFactoryDocument,
-    CurrentFactoryDefinitionError,
-    SaveCurrentFactoryInput
-  >({
-    mutationFn: (input) =>
-      saveCurrentFactoryDocument(input, { sessionID }),
-    onSuccess: (document) => {
-      queryClient.setQueryData(
-        currentFactoryDocumentQueryKey(sessionID),
-        document,
-      );
-      queryClient.setQueryData(
-        currentFactoryDefinitionQueryKey(sessionID),
-        document,
-      );
-    },
   });
 }

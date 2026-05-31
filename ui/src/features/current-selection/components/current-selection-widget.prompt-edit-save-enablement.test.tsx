@@ -1,19 +1,16 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import {
   getCurrentFactoryWorkstationPromptTemplateContract,
-  validateCurrentFactoryWorkstationPromptTemplate,
   type PromptTemplateContract,
   type PromptTemplateValidationResult,
+  validateCurrentFactoryWorkstationPromptTemplate,
 } from "../../../api/current-factory-prompt-template";
-import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import {
-  useCurrentFactoryDocument,
-  useSaveCurrentFactory,
-} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { renderWithQueryClient } from "./current-selection-widget-test-utils";
 
@@ -49,17 +46,26 @@ vi.mock("../../../api/current-factory-prompt-template", async () => {
   };
 });
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
+
+vi.mock(
+  "../../current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: vi.fn(),
+  }),
+);
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -70,20 +76,20 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
+    vi.mocked(useFactoryDocumentSave).mockReturnValue({
       isPending: false,
-      mutateAsync: saveCurrentFactoryMutation,
+      saveAsync: saveCurrentFactoryMutation,
     } as never);
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockImplementation(
-      async () => promptTemplateContract,
-    );
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockImplementation(
-      async (_workstationName, prompt) => ({
-        ...validPromptValidation,
-        diagnostics: [],
-        valid: prompt.trim().length > 0,
-      }),
-    );
+    vi.mocked(
+      getCurrentFactoryWorkstationPromptTemplateContract,
+    ).mockImplementation(async () => promptTemplateContract);
+    vi.mocked(
+      validateCurrentFactoryWorkstationPromptTemplate,
+    ).mockImplementation(async (_workstationName, prompt) => ({
+      ...validPromptValidation,
+      diagnostics: [],
+      valid: prompt.trim().length > 0,
+    }));
   });
 
   afterEach(() => {
@@ -251,4 +257,3 @@ function buildEditableFactoryDefinition(): CurrentFactoryDocument {
     workTypes: [],
   };
 }
-

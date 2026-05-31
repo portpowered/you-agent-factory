@@ -1,10 +1,17 @@
+/**
+ * Shared doubles for `useFactoryDocumentSave` in graph-editor and current-selection tests.
+ *
+ * Contract: mock `saveAsync({ baseVersion?, factory, mode?, sessionID? })` and optional
+ * `isPending` / `error` / `reset` / `save` on the hook return value. Prefer
+ * `mockFactoryDocumentSave` or `mockPendingFactoryDocumentSave` over inline mutation stubs.
+ */
 import { type Mock, vi } from "vitest";
 
 import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
-  type SaveCurrentFactoryInput,
 } from "../api/current-factory-definition";
+import type { FactoryDocumentSaveInput } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
 import { createDeferredPromise } from "./app-shell-export-test-utils";
 import { staleFactoryVersionTarget } from "./factory-validation-target-fixtures";
 
@@ -17,21 +24,32 @@ export type FactoryDocumentSaveErrorMode =
 
 export interface MockFactoryDocumentSaveOptions {
   mode?: FactoryDocumentSaveMode;
-  mutateAsync?: Mock<
-    (input: SaveCurrentFactoryInput) => Promise<CurrentFactoryDocument>
+  saveAsync?: Mock<
+    (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
   >;
   isPending?: boolean;
+  error?: Error | null;
   resolvedDocument?: CurrentFactoryDocument;
   errorMode?: FactoryDocumentSaveErrorMode;
   rejectedError?: unknown;
 }
 
+export interface MockFactoryDocumentSaveReturn {
+  error: Error | null;
+  isPending: boolean;
+  reset: () => void;
+  save: (input: FactoryDocumentSaveInput) => void;
+  saveAsync: Mock<
+    (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
+  >;
+}
+
 export interface MockPendingFactoryDocumentSave {
   deferred: ReturnType<typeof createDeferredPromise<CurrentFactoryDocument>>;
-  mutateAsync: Mock<
-    (input: SaveCurrentFactoryInput) => Promise<CurrentFactoryDocument>
+  saveAsync: Mock<
+    (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
   >;
-  saveMutation: ReturnType<typeof mockFactoryDocumentSave>;
+  saveMutation: MockFactoryDocumentSaveReturn;
 }
 
 const defaultSavedDocument: CurrentFactoryDocument = {
@@ -77,38 +95,44 @@ export function factoryDocumentSaveError(
 
 export function mockFactoryDocumentSave(
   options: MockFactoryDocumentSaveOptions = {},
-) {
+): MockFactoryDocumentSaveReturn {
   const mode = options.mode ?? "idle";
-  const mutateAsync =
-    options.mutateAsync ?? buildFactoryDocumentSaveMutateAsync(options);
+  const saveAsync =
+    options.saveAsync ?? buildFactoryDocumentSaveAsync(options);
   const isPending = options.isPending ?? mode === "pending";
+  const save = vi.fn((input: FactoryDocumentSaveInput) => {
+    void saveAsync(input);
+  });
 
   return {
+    error: options.error ?? null,
     isPending,
-    mutateAsync,
+    reset: vi.fn<() => void>(),
+    save,
+    saveAsync,
   };
 }
 
 export function mockPendingFactoryDocumentSave(): MockPendingFactoryDocumentSave {
   const deferred = createDeferredPromise<CurrentFactoryDocument>();
-  const mutateAsync = vi.fn().mockReturnValue(deferred.promise) as Mock<
-    (input: SaveCurrentFactoryInput) => Promise<CurrentFactoryDocument>
+  const saveAsync = vi.fn().mockReturnValue(deferred.promise) as Mock<
+    (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
   >;
 
   return {
     deferred,
-    mutateAsync,
+    saveAsync,
     saveMutation: mockFactoryDocumentSave({
       isPending: true,
       mode: "pending",
-      mutateAsync,
+      saveAsync,
     }),
   };
 }
 
-function buildFactoryDocumentSaveMutateAsync(
+function buildFactoryDocumentSaveAsync(
   options: MockFactoryDocumentSaveOptions,
-): Mock<(input: SaveCurrentFactoryInput) => Promise<CurrentFactoryDocument>> {
+): Mock<(input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>> {
   const mode = options.mode ?? "idle";
 
   if (mode === "error") {
@@ -116,14 +140,14 @@ function buildFactoryDocumentSaveMutateAsync(
       options.rejectedError ??
       factoryDocumentSaveError(options.errorMode ?? "generic");
     return vi.fn().mockRejectedValue(rejectedError) as Mock<
-      (input: SaveCurrentFactoryInput) => Promise<CurrentFactoryDocument>
+      (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
     >;
   }
 
   if (mode === "pending") {
     const deferred = createDeferredPromise<CurrentFactoryDocument>();
     return vi.fn().mockReturnValue(deferred.promise) as Mock<
-      (input: SaveCurrentFactoryInput) => Promise<CurrentFactoryDocument>
+      (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
     >;
   }
 
@@ -132,6 +156,6 @@ function buildFactoryDocumentSaveMutateAsync(
     .mockResolvedValue(
       options.resolvedDocument ?? defaultSavedDocument,
     ) as Mock<
-    (input: SaveCurrentFactoryInput) => Promise<CurrentFactoryDocument>
+    (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
   >;
 }
