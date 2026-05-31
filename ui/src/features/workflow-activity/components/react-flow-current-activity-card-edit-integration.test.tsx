@@ -459,6 +459,56 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       }),
     ).toBeNull();
   });
+
+  it("opens save confirmation from the activity card host portaled to document.body", async () => {
+    renderCurrentActivity();
+    enterEditorMode();
+
+    await screen.findByRole("button", { name: "work-state:story:qa" });
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mock connect review to QA" }),
+    );
+
+    fireEvent.click(
+      within(
+        await screen.findByRole("region", {
+          name: "Factory graph editor tools",
+        }),
+      ).getByRole("button", { name: "Save changes" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Save factory graph changes?",
+    });
+    expect(document.body.contains(dialog)).toBe(true);
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save topology" }),
+    );
+
+    await waitFor(() => {
+      expect(saveAsync).toHaveBeenCalledWith({
+        baseVersion: editableFactoryDocument.version,
+        factory: {
+          ...editableFactoryDocument,
+          resources: [],
+          workstations: [
+            {
+              ...editableFactoryDocument.workstations[0],
+              outputs: [
+                ...editableFactoryDocument.workstations[0].outputs,
+                {
+                  state: "qa",
+                  workType: "story",
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
+  });
 });
 
 describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
