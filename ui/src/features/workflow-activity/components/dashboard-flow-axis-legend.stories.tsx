@@ -2,12 +2,14 @@ import type { ReactNode } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
+  getDefaultDashboardFlowAxisLegendPhaseItems,
 } from "./dashboard-flow-axis-legend";
-import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 
 export default {
   title: "Agent Factory/Dashboard/Dashboard Flow Axis Legend",
@@ -36,6 +38,7 @@ export const Interactive = {
         className="relative left-0 top-0"
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("en")}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems("en")}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems("en")}
       />
     </LegendStoryFrame>
   ),
@@ -66,6 +69,14 @@ export const Interactive = {
     await expect(
       legendScope.getByText(messages.edgeLabels.failurePath),
     ).toBeVisible();
+    const editorMessages = getFactoryGraphEditorMessages("en");
+    const phaseLegend = legendScope.getByLabelText(
+      editorMessages.workStatePhaseLegendAriaLabel,
+    );
+    await expect(within(phaseLegend).getByText("Initial")).toBeVisible();
+    await expect(within(phaseLegend).getByText("Processing")).toBeVisible();
+    await expect(within(phaseLegend).getByText("Completed")).toBeVisible();
+    await expect(within(phaseLegend).getByText("Failed")).toBeVisible();
     for (const [label, kind] of [
       [messages.iconLabels.queue, "queue"],
       [messages.iconLabels.processing, "processing"],
@@ -80,10 +91,14 @@ export const Interactive = {
       [messages.iconLabels["active-work"], "active-work"],
       [messages.iconLabels.exhaustion, "exhaustion"],
     ]) {
+      const iconEntry = legend.querySelector(`[data-legend-icon='${kind}']`);
       await expect(
         legendScope.getByRole("img", { name: messages.iconLabel(label) }),
       ).toHaveAttribute("data-graph-semantic-icon", kind);
-      await expect(legendScope.getByText(label)).toBeVisible();
+      await expect(iconEntry).toBeTruthy();
+      await expect(
+        within(iconEntry as HTMLElement).getByText(label),
+      ).toBeVisible();
     }
 
     await userEvent.click(collapseButton);
@@ -105,6 +120,7 @@ export const Expanded = {
         defaultExpanded={true}
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("en")}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems("en")}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems("en")}
       />
     </LegendStoryFrame>
   ),
@@ -124,6 +140,7 @@ export const Narrow = {
         className="relative left-0 top-0"
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("en")}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems("en")}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems("en")}
       />
     </LegendStoryFrame>
   ),
@@ -165,6 +182,7 @@ export const Japanese = {
         className="relative left-0 top-0"
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("ja")}
         iconItems={getDefaultDashboardFlowAxisLegendIconItems("ja")}
+        phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems("ja")}
         locale="ja"
       />
     </LegendStoryFrame>

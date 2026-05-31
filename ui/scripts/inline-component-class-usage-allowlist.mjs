@@ -74,7 +74,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#PANEL_HEADER_CLASS",
   "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#PANEL_TITLE_CLASS",
   "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#COLLAPSE_BUTTON_CLASS",
-  "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#ITEMS_LIST_CLASS",
   "src/features/workflow-activity/components/mutation-dialog.tsx#DIALOG_PANEL_CLASS",
   "src/features/workflow-activity/components/mutation-dialog.tsx#DIALOG_HEADER_CLASS",
   "src/features/workflow-activity/components/mutation-dialog.tsx#DIALOG_TITLE_CLASS",
