@@ -8,6 +8,7 @@ import type {
   EditableWorkstationPromptDiagnostic,
   EditableWorkstationPromptHelpState,
 } from "../lib/detail-card-types";
+import { formatSyntaxDiagnosticMessage } from "./workstation-prompt-diagnostic-message";
 import {
   WORKSTATION_PROMPT_MONARCH_LANGUAGE,
   WORKSTATION_PROMPT_THEME,
@@ -337,7 +338,7 @@ export function buildWorkstationPromptMarkers(
       code: diagnostic.kind,
       endColumn: endPosition.column,
       endLineNumber: endPosition.lineNumber,
-      message: diagnostic.message,
+      message: workstationPromptMarkerMessage(diagnostic),
       severity: 8,
       source: "prompt-template-validation",
       startColumn: startPosition.column,
@@ -346,6 +347,16 @@ export function buildWorkstationPromptMarkers(
   }
 
   return markers;
+}
+
+function workstationPromptMarkerMessage(
+  diagnostic: EditableWorkstationPromptDiagnostic,
+): string {
+  if (diagnostic.kind === "SYNTAX_ERROR") {
+    return formatSyntaxDiagnosticMessage(diagnostic.message);
+  }
+
+  return diagnostic.message;
 }
 
 function fallbackWorkstationPromptDiagnosticRange(prompt: string) {

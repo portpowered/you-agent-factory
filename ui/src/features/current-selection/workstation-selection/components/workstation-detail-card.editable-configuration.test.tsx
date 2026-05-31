@@ -873,7 +873,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(editableConfigurationSection().querySelector("mark")).toBeNull();
   });
 
-  it("labels syntax diagnostics separately from variable-access diagnostics", () => {
+  it("shows line-based syntax diagnostics separately from variable-access diagnostics", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -886,7 +886,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             {
               endOffset: 18,
               kind: "SYNTAX_ERROR",
-              message: "Unexpected EOF in if block.",
+              message: "line 1: unexpected EOF in if block",
               sourceText: "{{ if .WorkID }}",
               startOffset: 5,
             },
@@ -909,10 +909,13 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText("Template syntax: Unexpected EOF in if block."),
+      screen.getByText("line 1: unexpected EOF in if block"),
     ).toBeTruthy();
     expect(
-      screen.queryByText("Variable access: Unexpected EOF in if block."),
+      screen.queryByText("Template syntax: unexpected EOF in if block"),
+    ).toBeNull();
+    expect(
+      screen.queryByText("Variable access: unexpected EOF in if block"),
     ).toBeNull();
   });
 

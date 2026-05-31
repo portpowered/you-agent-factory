@@ -23,6 +23,7 @@ import type {
   EditableWorkstationPromptHelpState,
   WorkstationDetailCardProps,
 } from "../lib/detail-card-types";
+import { formatSyntaxDiagnosticMessage } from "./workstation-prompt-diagnostic-message";
 import { WorkstationPromptEditor } from "./workstation-prompt-editor";
 
 export function EditableConfigurationPromptInput({
@@ -333,8 +334,7 @@ function EditableConfigurationPromptValidationFeedback({
                   DASHBOARD_BODY_TEXT_CLASS,
                 )}
               >
-                {diagnosticLabel(diagnostic.kind, messages)}:{" "}
-                {diagnostic.message}
+                {formatPromptDiagnosticListMessage(diagnostic, messages)}
               </p>
               {diagnostic.path ? (
                 <code
@@ -359,11 +359,22 @@ function EditableConfigurationPromptValidationFeedback({
   );
 }
 
-function diagnosticLabel(
-  kind: string,
+function formatPromptDiagnosticListMessage(
+  diagnostic: {
+    kind: string;
+    message: string;
+  },
+  messages: ReturnType<typeof getWorkstationDetailMessages>,
+): string {
+  if (diagnostic.kind === "SYNTAX_ERROR") {
+    return formatSyntaxDiagnosticMessage(diagnostic.message);
+  }
+
+  return `${diagnosticVariableLabel(messages)}: ${diagnostic.message}`;
+}
+
+function diagnosticVariableLabel(
   messages: ReturnType<typeof getWorkstationDetailMessages>,
 ) {
-  return kind === "SYNTAX_ERROR"
-    ? messages.editableConfigurationPromptSyntaxDiagnosticLabel
-    : messages.editableConfigurationPromptVariableDiagnosticLabel;
+  return messages.editableConfigurationPromptVariableDiagnosticLabel;
 }
