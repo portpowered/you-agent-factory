@@ -40,7 +40,11 @@ import {
   seedTimelineSnapshots,
 } from "./app-shell-timeline-seed-utils";
 import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
-import { sessionFactoryNamedExportDocument } from "./session-factory-mocks";
+import {
+  isSessionFactoryRequest,
+  mockGetSessionFactory,
+  sessionFactoryNamedExportDocument,
+} from "./session-factory-mocks";
 
 export {
   renderWithDashboardSessionTest,
@@ -216,12 +220,22 @@ export function renderApp({
 
   const fetchMock: FetchMock = vi
     .fn()
-    .mockImplementation(async (input: RequestInfo | URL) => {
+    .mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = fetchRequestPath(input);
+      const method = (init?.method ?? "GET").toUpperCase();
 
       if (path === "/factory-sessions") {
         return jsonResponse({
           sessions: factorySessions ?? [defaultFactorySessionSummary],
+        });
+      }
+
+      if (
+        method === "GET" &&
+        isSessionFactoryRequest(path, method, sessionID ?? undefined)
+      ) {
+        return mockGetSessionFactory({
+          document: sessionFactoryNamedExportDocument,
         });
       }
 
@@ -358,11 +372,6 @@ export function registerAppDashboardTestLifecycle(): void {
       selectedSessionID: "~default",
     });
     resetCurrentFactoryDocumentMock();
-    mockCurrentFactoryDocument({
-      data: sessionFactoryNamedExportDocument,
-      error: null,
-      status: "success",
-    } as never);
   });
 
   afterEach(() => {
