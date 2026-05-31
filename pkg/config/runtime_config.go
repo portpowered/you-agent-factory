@@ -817,13 +817,6 @@ func validateNamedFactoryTarget(targetDir, segment string, options namedFactoryP
 	return nil
 }
 
-// NormalizeNamedFactoryPayload expands submitted factory JSON and re-flattens it
-// into the canonical on-disk shape (thin factory.json references, inline bodies
-// retained on the expanded FactoryConfig for split layout writes).
-func NormalizeNamedFactoryPayload(segment string, canonicalFactoryJSON []byte) (*interfaces.FactoryConfig, []byte, error) {
-	return normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
-}
-
 func normalizeNamedFactoryPayload(segment string, canonicalFactoryJSON []byte) (*interfaces.FactoryConfig, []byte, error) {
 	mapper := NewFactoryConfigMapper()
 	factoryCfg, err := mapper.Expand(canonicalFactoryJSON)
