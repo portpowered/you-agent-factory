@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { FactoryValue } from "../../../api/named-factory";
+import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
   Button,
   Dialog,
@@ -47,7 +47,7 @@ const DIALOG_SUCCESS_PANEL_CLASS =
 const DIALOG_CONTENT_CLASS = "w-full max-w-2xl gap-6";
 
 export interface ExportFactoryDialogProps {
-  factory: FactoryValue | null;
+  factory: ImportFactoryValue | null;
   initialFactoryName: string;
   isPreparing?: boolean;
   isOpen: boolean;
@@ -269,7 +269,7 @@ function ExportFactoryDialogMessages({
   messages,
   preparationFailure,
 }: Pick<ExportDialogFormState, "dialogState"> & {
-  factory: FactoryValue | null;
+  factory: ImportFactoryValue | null;
   isPreparing: boolean;
   messages: ReturnType<typeof getExportDialogMessages>;
   preparationFailure?: CurrentFactoryExportFailure | null;
@@ -316,7 +316,7 @@ function useExportFactoryDialogState({
   preparationFailure,
   validationIdBase,
 }: {
-  factory: FactoryValue | null;
+  factory: ImportFactoryValue | null;
   initialFactoryName: string;
   isOpen: boolean; locale?: string | null;
   messages: ReturnType<typeof getExportDialogMessages>;

@@ -4,7 +4,7 @@ import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
-import type { FactoryValue } from "../../../api/named-factory";
+import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
   useCurrentFactoryDocument,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
@@ -16,7 +16,7 @@ const CURRENT_FACTORY_LOAD_FAILED_MESSAGE =
   "The current factory definition could not be loaded from the current-factory API.";
 
 export interface CurrentFactoryExportSuccess {
-  factoryDefinition: FactoryValue;
+  factoryDefinition: ImportFactoryValue;
   ok: true;
 }
 
@@ -107,7 +107,7 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
 
 function currentFactoryDocumentToExportValue(
   document: CurrentFactoryDocument,
-): FactoryValue {
+): ImportFactoryValue {
   const { version: _version, ...factoryValue } = document;
   return factoryValue;
 }
