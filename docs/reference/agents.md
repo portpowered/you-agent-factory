@@ -136,10 +136,11 @@ id is often `~default` on single-session hosts). The response separates:
 |-------|---------|
 | `factoryState` | Factory lifecycle phase — for example `IDLE`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`. |
 | `runtimeStatus` | Whether the engine is actively processing — `IDLE`, `ACTIVE`, or `FINISHED`. |
+| `categories` | Token counts by lifecycle bucket — `initial`, `processing`, `terminal`, and `failed`. |
 
 `factoryState` can be `RUNNING` while `runtimeStatus` is `IDLE` when the factory is
-up but no work is in flight. Use both fields together when deciding whether to
-submit more work or wait for completion.
+up but no work is in flight. Use `factoryState`, `runtimeStatus`, and `categories`
+together when deciding whether to submit more work or wait for completion.
 
 ### 4. Dashboard
 
@@ -159,6 +160,32 @@ the process that bound the listener.
 For steady `you submit`, dashboard submit, or `POST /work` against an already-running
 host, prefer `you` or `you run --continuously`. Use batch `you run` when you want a
 one-shot local run that shuts down on idle.
+
+## Operator loop
+
+Use this loop when driving a factory from the CLI or an autonomous agent:
+
+1. **Check running** — follow [Is the factory running?](#is-the-factory-running?)
+   (`you session list`, then `you factory query` or status when you need depth).
+2. **Submit** — enqueue work with `you submit`, batch inbox files, or `POST /work`.
+3. **Verify** — confirm acceptance on stdout, then inspect work with
+   `you work show <work-id>` or `you work list --name <name>` (see [Work](work.md)).
+
+For session-scoped hosts, pass the same `--server` and `--session` on submit and
+verify commands. See [Sessions](sessions.md) (`you docs sessions`) for session list,
+factory query, status API fields, and run-mode detail.
+
+### Copy-paste `you submit` example
+
+```bash
+you submit \
+  --name driver-incident-review \
+  --work-type-name task \
+  --payload request.md
+```
+
+Replace `task` with a `workTypeName` from your `factory.json` and `request.md`
+with the payload file your factory expects.
 
 ## Command Matrix
 
@@ -204,6 +231,7 @@ in your factory's `factory/docs/overview.md`.
 | Guards and loop breakers | `you docs guards` |
 | Batch relations (`DEPENDS_ON`, `PARENT_CHILD`, `SPAWNED_BY`) | `you docs relationships` |
 | Submitted work (`POST /work`, tags, tokens) | `you docs work` |
+| Sessions, factory query, status API, dashboard | `you docs sessions` |
 | Workstation routing and runtime fields | `you docs workstations` |
 | Worker types and providers | `you docs workers` |
 | Resource capacity | `you docs resources` |
@@ -230,6 +258,7 @@ this packaged guide, the factory-local file wins for instance-specific names.
 
 - [Config](config.md) — `factory.json` topology
 - [Work](work.md) — submitted-work contracts
+- [Sessions](sessions.md) — session list, factory query, status API, dashboard
 - [Batch Inputs](batch-inputs.md) — batch ingress (alias: `batch-work`)
 - [Authoring Factories](authoring-factories.md) — greenfield factory setup
 - [Relationships](relationships.md) — batch and runtime relation semantics

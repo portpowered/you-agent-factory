@@ -11,7 +11,9 @@ work types, states, workers, workstations, resources, routing, and portability.
 
 Use [`docs/reference/config.md`](../../../docs/reference/config.md) for the
 maintained layout guide. Use [`docs/reference/work.md`](../../../docs/reference/work.md)
-for submitted-work contracts (`POST /work`, tags, and batch cross-links).
+for submitted-work contracts (`POST /work`, tags, and batch cross-links). For
+session list, factory query, status API, and `--server` / `--session` routing
+against a running service, see [Sessions](sessions.md) (`you docs sessions`).
 
 `factory.json` declares the workflow topology for a you-agent-factory run. It
 defines the work types, states, workers, workstations, resources, and routing
