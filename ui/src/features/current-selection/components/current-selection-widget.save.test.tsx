@@ -18,7 +18,7 @@ import {
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
@@ -33,9 +33,9 @@ let saveCurrentFactoryMutation: ReturnType<
   typeof mockFactoryDocumentSave
 >["mutateAsync"];
 
-vi.mock("../../current-factory-definition/public", async () => {
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
   const actual = await vi.importActual(
-    "../../current-factory-definition/public",
+    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   );
 
   return {
