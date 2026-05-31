@@ -71,6 +71,21 @@ function buildBrowserLaneBatches() {
     }
 
     const relativePath = `./src/features/${dirent.name}`;
+    if (relativePath === "./src/features/export") {
+      batches.push({
+        label: "./src/features/export/hooks/use-current-factory-export.test.tsx",
+        paths: ["./src/features/export/hooks/use-current-factory-export.test.tsx"],
+      });
+      batches.push({
+        label: relativePath,
+        paths: [relativePath],
+        pathIgnorePatterns: [
+          "**/use-current-factory-export.test.tsx",
+        ],
+      });
+      continue;
+    }
+
     batches.push({
       label: relativePath,
       paths: [relativePath],

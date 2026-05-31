@@ -11,7 +11,8 @@ import {
 import { getCurrentFactoryDocumentMock } from "../../../../testing/bun-current-factory-definition-api-mocks";
 import { wrapWithDashboardSessionTest } from "../../../testing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import { useCurrentFactoryExport } from "./use-current-factory-export";
+
+const { useCurrentFactoryExport } = await import("./use-current-factory-export");
 
 const documentFactory: CurrentFactoryDocument = {
   id: "factory-aurora",

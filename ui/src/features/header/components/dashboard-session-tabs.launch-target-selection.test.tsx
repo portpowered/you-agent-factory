@@ -1,48 +1,29 @@
+import "../../../../testing/bun-factory-sessions-api-mocks";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  listFactorySessionsMock,
+  openFactorySessionMock,
+} from "../../../../testing/bun-factory-sessions-api-mocks";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 
-const listFactorySessions = vi.fn();
-const openFactorySession = vi.fn();
-const closeFactorySession = vi.fn();
-
-vi.mock("../../../api/factory-sessions", () => ({
-  FactorySessionsAPIError: class FactorySessionsAPIError extends Error {
-    public readonly code: string;
-    public readonly targets?: unknown[];
-
-    public constructor(
-      message: string,
-      details: { code: string; targets?: unknown[] },
-    ) {
-      super(message);
-      this.name = "FactorySessionsAPIError";
-      this.code = details.code;
-      this.targets = details.targets;
-    }
-  },
-  listFactorySessions: (...args: unknown[]) => listFactorySessions(...args),
-  closeFactorySession: (...args: unknown[]) => closeFactorySession(...args),
-  openFactorySession: (...args: unknown[]) => openFactorySession(...args),
-}));
-
 describe("DashboardSessionTabs launch target selection", () => {
   beforeEach(() => {
-    listFactorySessions.mockReset();
-    openFactorySession.mockReset();
-    closeFactorySession.mockReset();
+    listFactorySessionsMock.mockReset();
+    openFactorySessionMock.mockReset();
     useDashboardSessionStore.setState({
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
   });
 
   it("launches the selected named factory instead of falling back to the default target", async () => {
-    listFactorySessions
+    listFactorySessionsMock
       .mockResolvedValueOnce([
         {
           factoryDir: "/workspace/root",
@@ -78,7 +59,7 @@ describe("DashboardSessionTabs launch target selection", () => {
           },
         },
       ]);
-    openFactorySession
+    openFactorySessionMock
       .mockResolvedValueOnce({
         targets: [
           {
@@ -143,7 +124,7 @@ describe("DashboardSessionTabs launch target selection", () => {
     );
 
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
         validateOnly: true,
       });
@@ -152,7 +133,7 @@ describe("DashboardSessionTabs launch target selection", () => {
     fireEvent.click(screen.getByRole("button", { name: /beta/i }));
 
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[1]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
         target: {
           kind: "named",

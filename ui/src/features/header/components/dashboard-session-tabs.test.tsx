@@ -1,11 +1,18 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
+import "../../../../testing/bun-factory-sessions-api-mocks";
+import { beforeEach, describe, expect, it, vi } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
 import { factorySessionFieldTarget } from "../../../testing/factory-validation-target-fixtures";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  closeFactorySessionMock,
+  listFactorySessionsMock,
+  openFactorySessionMock,
+} from "../../../../testing/bun-factory-sessions-api-mocks";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
   SESSION_TAB_PATH_MAX_LENGTH,
@@ -15,47 +22,11 @@ import {
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 
-const listFactorySessions = vi.fn();
-const openFactorySession = vi.fn();
-const closeFactorySession = vi.fn();
-
-vi.mock("../../../api/factory-sessions", () => ({
-  FactorySessionsAPIError: class FactorySessionsAPIError extends Error {
-    public readonly code: string;
-    public readonly responseBody?: unknown;
-    public readonly status?: number;
-    public readonly statusText?: string;
-    public readonly targets?: unknown[];
-
-    public constructor(
-      message: string,
-      details: {
-        code: string;
-        responseBody?: unknown;
-        status?: number;
-        statusText?: string;
-        targets?: unknown[];
-      },
-    ) {
-      super(message);
-      this.name = "FactorySessionsAPIError";
-      this.code = details.code;
-      this.responseBody = details.responseBody;
-      this.status = details.status;
-      this.statusText = details.statusText;
-      this.targets = details.targets;
-    }
-  },
-  listFactorySessions: (...args: unknown[]) => listFactorySessions(...args),
-  closeFactorySession: (...args: unknown[]) => closeFactorySession(...args),
-  openFactorySession: (...args: unknown[]) => openFactorySession(...args),
-}));
-
 describe("DashboardSessionTabs", () => {
   beforeEach(() => {
-    listFactorySessions.mockReset();
-    openFactorySession.mockReset();
-    closeFactorySession.mockReset();
+    listFactorySessionsMock.mockReset();
+    openFactorySessionMock.mockReset();
+    closeFactorySessionMock.mockReset();
     vi.unstubAllGlobals();
     useDashboardSessionStore.setState({
       pausedSessionIDs: [],
@@ -64,7 +35,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("renders loading and then the active session tabs", async () => {
-    listFactorySessions.mockResolvedValue([
+    listFactorySessionsMock.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
         folderPath: "/workspace/root",
@@ -111,7 +82,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("supports keyboard navigation across session tabs with roving tab focus", async () => {
-    listFactorySessions.mockResolvedValue([
+    listFactorySessionsMock.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
         folderPath: "/workspace/root",
@@ -190,7 +161,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("shows the offline state and allows session refetch", async () => {
-    listFactorySessions
+    listFactorySessionsMock
       .mockRejectedValueOnce(
         new FactorySessionsAPIError("network down", { code: "NETWORK_ERROR" }),
       )
@@ -213,7 +184,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("validates a folder inline and opens the only runnable target after confirmation", async () => {
-    listFactorySessions
+    listFactorySessionsMock
       .mockResolvedValueOnce([
         {
           factoryDir: "/workspace/root",
@@ -248,7 +219,7 @@ describe("DashboardSessionTabs", () => {
           },
         },
       ]);
-    openFactorySession
+    openFactorySessionMock
       .mockResolvedValueOnce({
         targets: [
           {
@@ -310,7 +281,7 @@ describe("DashboardSessionTabs", () => {
     fireEvent.submit(inspectFolderButton.closest("form") as HTMLFormElement);
 
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/other",
         validateOnly: true,
       });
@@ -323,7 +294,7 @@ describe("DashboardSessionTabs", () => {
     ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /default/i }));
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[1]?.[0]).toEqual({
         folderPath: "/workspace/other",
         target: {
           kind: "default",
@@ -339,7 +310,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("reuses the validated resolved folder path when the customer entered a tilde path", async () => {
-    listFactorySessions
+    listFactorySessionsMock
       .mockResolvedValueOnce([
         {
           factoryDir: "/workspace/root",
@@ -375,7 +346,7 @@ describe("DashboardSessionTabs", () => {
           },
         },
       ]);
-    openFactorySession
+    openFactorySessionMock
       .mockResolvedValueOnce({
         targets: [
           {
@@ -429,7 +400,7 @@ describe("DashboardSessionTabs", () => {
     );
 
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[0]?.[0]).toEqual({
         folderPath: "~/factory-root",
         validateOnly: true,
       });
@@ -438,7 +409,7 @@ describe("DashboardSessionTabs", () => {
     fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
 
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[1]?.[0]).toEqual({
         folderPath: "/Users/tester/factory-root",
         target: {
           kind: "named",
@@ -449,7 +420,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("shows clickable runnable target actions when the folder exposes multiple runnable targets", async () => {
-    listFactorySessions.mockResolvedValue([
+    listFactorySessionsMock.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
         folderPath: "/workspace/root",
@@ -461,7 +432,7 @@ describe("DashboardSessionTabs", () => {
         },
       },
     ]);
-    openFactorySession
+    openFactorySessionMock
       .mockResolvedValueOnce({
         targets: [
           {
@@ -524,7 +495,7 @@ describe("DashboardSessionTabs", () => {
     );
 
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
         validateOnly: true,
       });
@@ -539,7 +510,7 @@ describe("DashboardSessionTabs", () => {
     fireEvent.click(screen.getByRole("button", { name: /beta/i }));
 
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[1]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
         target: {
           kind: "named",
@@ -550,7 +521,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("shows recovery-oriented inline validation feedback for invalid folders", async () => {
-    listFactorySessions.mockResolvedValue([
+    listFactorySessionsMock.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
         folderPath: "/workspace/root",
@@ -562,7 +533,7 @@ describe("DashboardSessionTabs", () => {
         },
       },
     ]);
-    openFactorySession
+    openFactorySessionMock
       .mockRejectedValueOnce(
         new FactorySessionsAPIError("folder validation failed", {
           code: "BAD_REQUEST",
@@ -669,7 +640,7 @@ describe("DashboardSessionTabs", () => {
         ),
       ).toBeTruthy();
     });
-    expect(openFactorySession).toHaveBeenCalledTimes(4);
+    expect(openFactorySessionMock).toHaveBeenCalledTimes(4);
     expect(
       screen.queryByRole("region", { name: messages.targetPickerTitle }),
     ).toBeNull();
@@ -677,7 +648,7 @@ describe("DashboardSessionTabs", () => {
 
   it("confirms init-new-factory after validateOnly returns initsNewFactory", async () => {
     const emptyFolderPath = "/workspace/new-factory-root";
-    listFactorySessions
+    listFactorySessionsMock
       .mockResolvedValueOnce([
         {
           factoryDir: "/workspace/root",
@@ -712,7 +683,7 @@ describe("DashboardSessionTabs", () => {
           },
         },
       ]);
-    openFactorySession
+    openFactorySessionMock
       .mockResolvedValueOnce({
         folderPath: emptyFolderPath,
         initsNewFactory: true,
@@ -755,7 +726,7 @@ describe("DashboardSessionTabs", () => {
     );
 
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[0]?.[0]).toEqual({
         folderPath: emptyFolderPath,
         validateOnly: true,
       });
@@ -779,7 +750,7 @@ describe("DashboardSessionTabs", () => {
     );
 
     await waitFor(() => {
-      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+      expect(openFactorySessionMock.mock.calls[1]?.[0]).toEqual({
         folderPath: emptyFolderPath,
         initNewFactory: true,
       });
@@ -790,12 +761,12 @@ describe("DashboardSessionTabs", () => {
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       "session-new-factory",
     );
-    expect(openFactorySession).toHaveBeenCalledTimes(2);
+    expect(openFactorySessionMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns to folder entry when canceling init-new-factory confirmation", async () => {
     const emptyFolderPath = "/workspace/cancel-init-root";
-    listFactorySessions.mockResolvedValue([
+    listFactorySessionsMock.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
         folderPath: "/workspace/root",
@@ -807,7 +778,7 @@ describe("DashboardSessionTabs", () => {
         },
       },
     ]);
-    openFactorySession.mockResolvedValueOnce({
+    openFactorySessionMock.mockResolvedValueOnce({
       folderPath: emptyFolderPath,
       initsNewFactory: true,
     });
@@ -860,7 +831,7 @@ describe("DashboardSessionTabs", () => {
         name: messages.openSessionCreateFactoryLabel,
       }),
     ).toBeNull();
-    expect(openFactorySession).toHaveBeenCalledTimes(1);
+    expect(openFactorySessionMock).toHaveBeenCalledTimes(1);
     expect(
       (
         screen.getByRole("textbox", {
@@ -871,7 +842,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("closes the active session tab and selects the remaining session deterministically", async () => {
-    listFactorySessions
+    listFactorySessionsMock
       .mockResolvedValueOnce([
         {
           factoryDir: "/workspace/root",
@@ -908,7 +879,7 @@ describe("DashboardSessionTabs", () => {
           },
         },
       ]);
-    closeFactorySession.mockResolvedValue(undefined);
+    closeFactorySessionMock.mockResolvedValue(undefined);
 
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
 
@@ -923,7 +894,7 @@ describe("DashboardSessionTabs", () => {
     );
 
     await waitFor(() => {
-      expect(closeFactorySession).toHaveBeenCalledWith("~default");
+      expect(closeFactorySessionMock).toHaveBeenCalledWith("~default");
     });
     await waitFor(() => {
       expect(
@@ -936,7 +907,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("keeps the active session close control attached to the active tab", async () => {
-    listFactorySessions.mockResolvedValue([
+    listFactorySessionsMock.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
         folderPath: "/workspace/root",
@@ -981,7 +952,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("keeps inactive-tab close buttons quiet by default and directly operable", async () => {
-    listFactorySessions
+    listFactorySessionsMock
       .mockResolvedValueOnce([
         {
           factoryDir: "/workspace/root",
@@ -1039,7 +1010,7 @@ describe("DashboardSessionTabs", () => {
           },
         },
       ]);
-    closeFactorySession.mockResolvedValue(undefined);
+    closeFactorySessionMock.mockResolvedValue(undefined);
 
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
 
@@ -1067,7 +1038,7 @@ describe("DashboardSessionTabs", () => {
     fireEvent.click(betaCloseButton);
 
     await waitFor(() => {
-      expect(closeFactorySession).toHaveBeenCalledWith("session-beta");
+      expect(closeFactorySessionMock).toHaveBeenCalledWith("session-beta");
     });
     expect(
       screen.getByRole("tab", { name: "root" }).getAttribute("aria-selected"),
@@ -1076,7 +1047,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("keeps the open-session affordance available when the last session is closed", async () => {
-    listFactorySessions
+    listFactorySessionsMock
       .mockResolvedValueOnce([
         {
           factoryDir: "/workspace/root",
@@ -1090,7 +1061,7 @@ describe("DashboardSessionTabs", () => {
         },
       ])
       .mockResolvedValueOnce([]);
-    closeFactorySession.mockResolvedValue(undefined);
+    closeFactorySessionMock.mockResolvedValue(undefined);
     const messages = getHeaderControlsMessages("en");
 
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
@@ -1115,7 +1086,7 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("keeps close actions icon-only while a session close request is pending", async () => {
-    listFactorySessions.mockResolvedValue([
+    listFactorySessionsMock.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
         folderPath: "/workspace/root",
@@ -1127,7 +1098,7 @@ describe("DashboardSessionTabs", () => {
         },
       },
     ]);
-    closeFactorySession.mockImplementation(
+    closeFactorySessionMock.mockImplementation(
       () => new Promise<void>(() => undefined),
     );
 
@@ -1168,7 +1139,7 @@ describe("DashboardSessionTabs", () => {
     const absoluteFactoryPath =
       "/Users/operator/infinite-you/agent-factory/examples/catalog/factory";
 
-    listFactorySessions.mockResolvedValue([
+    listFactorySessionsMock.mockResolvedValue([
       {
         factoryDir: absoluteFactoryPath,
         folderPath: absoluteFactoryPath,
@@ -1207,7 +1178,7 @@ describe("DashboardSessionTabs", () => {
     const longFolderPath =
       "/workspace/customers/northwind/agent-factory/examples/catalog";
 
-    listFactorySessions.mockResolvedValue([
+    listFactorySessionsMock.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
         folderPath: "/workspace/root",
