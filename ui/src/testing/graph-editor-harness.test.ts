@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
 import {
   baseFactoryDefinitionDocument,
   createHookTestGraphEditorDraftState,
@@ -10,6 +11,11 @@ import {
   wireMockEditableFactoryGraph,
   type MockEditableFactoryGraphHooks,
 } from "./graph-editor-harness";
+import { mockFactoryDocumentSave } from "./factory-document-save-mocks";
+
+vi.mock("../features/current-factory-definition/hooks/useFactoryDocumentSave", () => ({
+  useFactoryDocumentSave: vi.fn(),
+}));
 
 describe("graph-editor-harness", () => {
   it("createMockGraphEditorDraftState seeds empty draft state with factory fixtures", () => {
@@ -35,6 +41,9 @@ describe("graph-editor-harness", () => {
   });
 
   it("createMockEditableFactoryGraph saves pending definitions when changes are allowed", async () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "success" });
+    vi.mocked(useFactoryDocumentSave).mockReturnValue(saveMutation);
+
     const draftState = createMockGraphEditorDraftState({
       hasChanges: true,
       pendingFactoryDefinition: baseFactoryDefinitionDocument,
@@ -45,6 +54,7 @@ describe("graph-editor-harness", () => {
     );
 
     await expect(graph.actions.save()).resolves.toBe(true);
+    expect(saveMutation.saveAsync).toHaveBeenCalled();
     expect(draftState.replaceDraft).toHaveBeenCalled();
   });
 
