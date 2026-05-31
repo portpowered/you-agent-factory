@@ -1,4 +1,10 @@
+import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
+
+export type EditableFactoryGraphSaveMutation = Pick<
+  ReturnType<typeof useFactoryDocumentSave>,
+  "error" | "isPending" | "reset"
+>;
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
@@ -14,20 +20,12 @@ import type {
 } from "../lib/factory-graph-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 
-export interface EditableFactoryGraphSaveInput {
-  baseVersion?: CurrentFactoryDocument["version"];
-  factoryDefinition: CanonicalFactoryDefinition;
-}
-
 export interface UseEditableFactoryGraphOptions {
   activeWorkCount?: number;
   currentFactoryDocument?: CurrentFactoryDocument;
   /** Normalized dashboard session id; graph draft resets when this changes. */
   factoryDocumentScopeKey?: string | null;
   locale?: string | null;
-  saveFactoryDefinition?: (
-    input: EditableFactoryGraphSaveInput,
-  ) => Promise<unknown>;
 }
 
 export interface EditableFactoryGraphViewModel {
@@ -66,6 +64,7 @@ export interface EditableFactoryGraphViewModel {
     documentSave: FactoryDocumentSaveState;
     isStale: boolean;
   };
+  saveMutation: EditableFactoryGraphSaveMutation;
   validationState: {
     errors: FactoryGraphDraftValidationError[];
     isValid: boolean;

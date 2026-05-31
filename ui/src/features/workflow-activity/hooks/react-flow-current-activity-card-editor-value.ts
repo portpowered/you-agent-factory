@@ -4,7 +4,7 @@ import type { FactoryGraphEditorTool } from "../../factory-graph-editor/componen
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
-import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
@@ -52,7 +52,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   >["pendingRemovalIntent"];
   saveAttemptRevision: number;
   saveBlockedReason?: string;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
   saveSummary: ReturnType<typeof buildFactoryGraphSaveSummary>;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setBlockedRemovalReason: (reason: string | null) => void;

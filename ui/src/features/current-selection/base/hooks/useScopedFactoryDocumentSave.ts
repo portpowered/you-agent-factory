@@ -34,8 +34,11 @@ export interface UseScopedFactoryDocumentSaveResult<
 > {
   beginConfirmation: () => void;
   cancelConfirmation: () => void;
+  clearSaveFeedback: () => void;
   confirmSave: (request: ScopedFactoryDocumentSaveRequest) => Promise<void>;
+  error: CurrentFactoryDefinitionError | null;
   isPending: boolean;
+  reset: () => void;
   saveNow: (request: ScopedFactoryDocumentSaveRequest) => Promise<void>;
   saveState: FactoryDocumentSaveState<TFieldErrors>;
 }
@@ -67,7 +70,7 @@ export function useScopedFactoryDocumentSave<
     null,
   );
   const saveInFlightRef = useRef(false);
-  const { isPending, saveAsync } = useFactoryDocumentSave();
+  const { error, isPending, reset, saveAsync } = useFactoryDocumentSave();
 
   useResetExitedSaveScope({
     scopeKey,
@@ -140,11 +143,20 @@ export function useScopedFactoryDocumentSave<
     }
   }, [isPending]);
 
+  const clearSaveFeedback = useCallback(() => {
+    setIsConfirming(false);
+    setLastFailedScope(null);
+    setLastSuccessfulScopeKey(null);
+  }, []);
+
   return {
     beginConfirmation,
     cancelConfirmation,
+    clearSaveFeedback,
     confirmSave: persistSave,
+    error,
     isPending,
+    reset,
     saveNow: persistSave,
     saveState,
   };

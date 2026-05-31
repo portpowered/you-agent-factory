@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
@@ -34,7 +34,7 @@ export function useGraphEditorSaveFlow({
   editableGraph: EditableFactoryGraphViewModel;
   editorUnavailableClassifierWorkstationName?: string;
   locale?: string | null;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setEditorMode: (mode: boolean) => void;
   transientControllerReset: GraphEditorTransientControllerReset;

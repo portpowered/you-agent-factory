@@ -1,12 +1,10 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: editable graph hook keeps draft, projection, save, and mutation wiring in one view-model seam.
 import { useCallback, useMemo, useState } from "react";
 
-import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/hooks/factory-document-save-types";
-import {
-  createIdleGraphDocumentSaveState,
-  mapGraphSaveOutcomeToDocumentSaveState,
-} from "../lib/graph-document-save-state";
+import { useScopedFactoryDocumentSave } from "../../current-selection/base/hooks/useScopedFactoryDocumentSave";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
+import { mapGraphSaveOutcomeToDocumentSaveState } from "../lib/graph-document-save-state";
 import {
   type CanonicalFactoryDefinition,
   createEmptyFactoryGraphDraft,
@@ -28,7 +26,6 @@ import {
 } from "../lib/factory-graph-operations";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 import type {
-  EditableFactoryGraphSaveInput,
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
 } from "./use-editable-factory-graph-types";
@@ -67,8 +64,8 @@ export function useEditableFactoryGraph(
   const saveController = useEditableFactoryGraphSaveController({
     activeWorkCount: options.activeWorkCount ?? 0,
     draftState,
+    factoryDocumentScopeKey: options.factoryDocumentScopeKey ?? null,
     locale: options.locale,
-    saveFactoryDefinition: options.saveFactoryDefinition,
     setBlockedOperation,
   });
   const mutationActions = useEditableFactoryGraphMutationActions({
@@ -101,6 +98,7 @@ export function useEditableFactoryGraph(
       pendingFactoryDefinition: draftState.pendingFactoryDefinition,
     },
     projection,
+    saveMutation: saveController.saveMutation,
     saveState: {
       canSave: saveController.canSave,
       documentSave: saveController.documentSave,
@@ -320,26 +318,30 @@ function useUpdateNodeFieldAction({
   );
 }
 
+const FACTORY_GRAPH_SAVE_FALLBACK_ERROR = "Factory graph save failed.";
+
 function useEditableFactoryGraphSaveController({
   activeWorkCount,
   draftState,
+  factoryDocumentScopeKey,
   locale,
-  saveFactoryDefinition,
   setBlockedOperation,
 }: {
   activeWorkCount: number;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  factoryDocumentScopeKey: string | null;
   locale?: string | null;
-  saveFactoryDefinition?: (
-    input: EditableFactoryGraphSaveInput,
-  ) => Promise<unknown>;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
 }) {
-  const [saveOutcome, setSaveOutcome] = useState<FactoryDocumentSaveState>(
-    createIdleGraphDocumentSaveState,
-  );
+  const messages = getFactoryGraphEditorMessages(locale);
+  const scopedDocumentSave = useScopedFactoryDocumentSave({
+    fallbackErrorMessage:
+      messages.noticeSaveFailedTitle ?? FACTORY_GRAPH_SAVE_FALLBACK_ERROR,
+    isDirty: draftState.hasChanges,
+    scopeKey: factoryDocumentScopeKey,
+  });
   const isStale = isFactoryGraphDraftStale(draftState);
   const documentSave = useMemo(
     () =>
@@ -349,29 +351,31 @@ function useEditableFactoryGraphSaveController({
             isSubmitting: false,
             isStale: true,
           })
-        : saveOutcome,
-    [isStale, saveOutcome],
+        : scopedDocumentSave.saveState,
+    [isStale, scopedDocumentSave.saveState],
   );
   const isSaving = isFactoryDocumentSaveSubmitting(documentSave);
   const canSave =
-    Boolean(saveFactoryDefinition) &&
+    factoryDocumentScopeKey !== null &&
     draftState.hasChanges &&
     draftState.pendingFactoryDefinition !== null &&
     draftState.validationErrors.length === 0 &&
     draftState.latestDocument !== null &&
     activeWorkCount === 0 &&
     !isStale &&
-    !isSaving;
+    !isSaving &&
+    !scopedDocumentSave.isPending;
   const resetSaveState = useCallback(() => {
-    setSaveOutcome(createIdleGraphDocumentSaveState());
-  }, []);
+    scopedDocumentSave.reset();
+    scopedDocumentSave.clearSaveFeedback();
+  }, [scopedDocumentSave.clearSaveFeedback, scopedDocumentSave.reset]);
   const save = useSaveEditableFactoryGraph({
     canSave,
     draftState,
+    factoryDocumentScopeKey,
     locale,
-    saveFactoryDefinition,
+    saveNow: scopedDocumentSave.saveNow,
     setBlockedOperation,
-    setSaveOutcome,
   });
 
   return {
@@ -380,30 +384,37 @@ function useEditableFactoryGraphSaveController({
     isStale,
     resetSaveState,
     save,
+    saveMutation: {
+      error: scopedDocumentSave.error,
+      isPending: scopedDocumentSave.isPending,
+      reset: scopedDocumentSave.reset,
+    },
   };
 }
 
 function useSaveEditableFactoryGraph({
   canSave,
   draftState,
+  factoryDocumentScopeKey,
   locale,
-  saveFactoryDefinition,
+  saveNow,
   setBlockedOperation,
-  setSaveOutcome,
 }: {
   canSave: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  factoryDocumentScopeKey: string | null;
   locale?: string | null;
-  saveFactoryDefinition?: (
-    input: EditableFactoryGraphSaveInput,
-  ) => Promise<unknown>;
+  saveNow: ReturnType<typeof useScopedFactoryDocumentSave>["saveNow"];
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
-  setSaveOutcome: (saveState: FactoryDocumentSaveState) => void;
 }) {
   return useCallback(async () => {
-    if (!saveFactoryDefinition || !canSave || !draftState.latestDocument) {
+    if (
+      factoryDocumentScopeKey === null ||
+      !canSave ||
+      !draftState.latestDocument
+    ) {
       return false;
     }
 
@@ -417,31 +428,25 @@ function useSaveEditableFactoryGraph({
       return false;
     }
 
-    setSaveOutcome({ status: "submitting" });
-    try {
-      await saveFactoryDefinition({
-        baseVersion: draftState.latestDocument.version,
-        factoryDefinition: saveInput.value,
-      });
-      draftState.replaceDraft(createEmptyFactoryGraphDraft());
-      setBlockedOperation(null);
-      setSaveOutcome({ status: "success" });
-      return true;
-    } catch (error) {
-      setSaveOutcome({
-        errorMessage:
-          error instanceof Error ? error.message : "Factory graph save failed.",
-        status: "error",
-      });
-      return false;
-    }
+    let didSave = false;
+    await saveNow({
+      baseVersion: draftState.latestDocument.version,
+      factory: saveInput.value,
+      onSaved: () => {
+        draftState.replaceDraft(createEmptyFactoryGraphDraft());
+        setBlockedOperation(null);
+        didSave = true;
+      },
+      scopeKey: factoryDocumentScopeKey,
+    });
+    return didSave;
   }, [
     canSave,
     draftState,
+    factoryDocumentScopeKey,
     locale,
-    saveFactoryDefinition,
+    saveNow,
     setBlockedOperation,
-    setSaveOutcome,
   ]);
 }
 

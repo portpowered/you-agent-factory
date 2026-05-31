@@ -338,7 +338,7 @@ function createMockEditableFactoryGraphActions(
     },
     save: async () => {
       if (
-        !options.saveFactoryDefinition ||
+        options.factoryDocumentScopeKey == null ||
         !draftState.hasChanges ||
         !draftState.pendingFactoryDefinition ||
         !draftState.latestDocument ||
@@ -346,10 +346,6 @@ function createMockEditableFactoryGraphActions(
       ) {
         return false;
       }
-      await options.saveFactoryDefinition({
-        baseVersion: draftState.latestDocument.version,
-        factoryDefinition: draftState.pendingFactoryDefinition,
-      });
       draftState.replaceDraft(createEmptyFactoryGraphDraft());
       return true;
     },
@@ -395,9 +391,14 @@ export function createMockEditableFactoryGraph(
       edges: [],
       nodes: [],
     },
+    saveMutation: {
+      error: null,
+      isPending: false,
+      reset: vi.fn(),
+    },
     saveState: {
       canSave:
-        Boolean(options.saveFactoryDefinition) &&
+        options.factoryDocumentScopeKey != null &&
         draftState.hasChanges &&
         draftState.pendingFactoryDefinition !== null &&
         draftState.latestDocument !== null &&

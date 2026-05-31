@@ -35,21 +35,16 @@ describe("graph-editor-harness", () => {
   });
 
   it("createMockEditableFactoryGraph saves pending definitions when changes are allowed", async () => {
-    const saveFactoryDefinition = vi.fn().mockResolvedValue(undefined);
     const draftState = createMockGraphEditorDraftState({
       hasChanges: true,
       pendingFactoryDefinition: baseFactoryDefinitionDocument,
     });
     const graph = createMockEditableFactoryGraph(
-      { saveFactoryDefinition },
+      { factoryDocumentScopeKey: "session-default" },
       draftState,
     );
 
     await expect(graph.actions.save()).resolves.toBe(true);
-    expect(saveFactoryDefinition).toHaveBeenCalledWith({
-      baseVersion: baseFactoryDefinitionDocument.version,
-      factoryDefinition: baseFactoryDefinitionDocument,
-    });
     expect(draftState.replaceDraft).toHaveBeenCalled();
   });
 
@@ -83,14 +78,12 @@ describe("graph-editor-harness", () => {
       hasChanges: true,
       pendingFactoryDefinition: baseFactoryDefinitionDocument,
     });
-    const saveFactoryDefinition = vi.fn();
     const graph = createMockEditableFactoryGraph(
-      { activeWorkCount: 2, saveFactoryDefinition },
+      { activeWorkCount: 2, factoryDocumentScopeKey: "session-default" },
       draftState,
     );
 
     await expect(graph.actions.save()).resolves.toBe(false);
-    expect(saveFactoryDefinition).not.toHaveBeenCalled();
     expect(graph.saveState.canSave).toBe(false);
   });
 
@@ -129,7 +122,7 @@ describe("graph-editor-harness", () => {
       },
     });
     const graph = createMockEditableFactoryGraph(
-      { saveFactoryDefinition: vi.fn() },
+      { factoryDocumentScopeKey: "session-default" },
       draftState,
     );
 

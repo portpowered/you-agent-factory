@@ -1,8 +1,11 @@
-import { act, renderHook } from "@testing-library/react";
+import { act } from "@testing-library/react";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
-import { useEditableFactoryGraph } from "./use-editable-factory-graph";
+import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
+import {
+  renderEditableFactoryGraphHook,
+  setupEditableFactoryGraphSaveTestEnvironment,
+} from "../../../testing/editable-factory-graph-hook-test-helpers";
 
 const sharedWorkType = {
   name: "story",
@@ -58,16 +61,19 @@ const documentFactory: CurrentFactoryDocument = {
 const snapshotOnlyWorkstationName = "snapshot-only";
 
 describe("useEditableFactoryGraph snapshot overlay", () => {
-  it("blocks save while snapshot runtime reports in-flight dispatches", () => {
-    const saveFactoryDefinition = vi.fn(async () => undefined);
+  beforeEach(() => {
+    setupEditableFactoryGraphSaveTestEnvironment();
+  });
 
-    const { result } = renderHook(() =>
-      useEditableFactoryGraph({
-        activeWorkCount: 2,
-        currentFactoryDocument: documentFactory,
-        saveFactoryDefinition,
-      }),
+  it("blocks save while snapshot runtime reports in-flight dispatches", () => {
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
     );
+
+    const { result } = renderEditableFactoryGraphHook({
+      activeWorkCount: 2,
+      currentFactoryDocument: documentFactory,
+    });
 
     act(() => {
       result.current.actions.addNode({
@@ -84,20 +90,19 @@ describe("useEditableFactoryGraph snapshot overlay", () => {
       void result.current.actions.save();
     });
 
-    expect(saveFactoryDefinition).not.toHaveBeenCalled();
+    expect(saveMutation.saveAsync).not.toHaveBeenCalled();
     expect(snapshotOnlyWorkstationName).toBe("snapshot-only");
   });
 
   it("builds save payloads from the factory document when snapshot factory would diverge", async () => {
-    const saveFactoryDefinition = vi.fn(async () => undefined);
-
-    const { result } = renderHook(() =>
-      useEditableFactoryGraph({
-        activeWorkCount: 0,
-        currentFactoryDocument: documentFactory,
-        saveFactoryDefinition,
-      }),
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
     );
+
+    const { result } = renderEditableFactoryGraphHook({
+      activeWorkCount: 0,
+      currentFactoryDocument: documentFactory,
+    });
 
     act(() => {
       result.current.actions.addNode({
@@ -113,17 +118,17 @@ describe("useEditableFactoryGraph snapshot overlay", () => {
     });
 
     expect(didSave).toBe(true);
-    expect(saveFactoryDefinition).toHaveBeenCalledWith({
+    expect(saveMutation.saveAsync).toHaveBeenCalledWith({
       baseVersion: documentFactory.version,
-      factoryDefinition: expect.objectContaining({
+      factory: expect.objectContaining({
         workstations: expect.arrayContaining([
           expect.objectContaining({ name: "document-only" }),
         ]),
       }),
     });
-    expect(saveFactoryDefinition).toHaveBeenCalledWith({
+    expect(saveMutation.saveAsync).toHaveBeenCalledWith({
       baseVersion: documentFactory.version,
-      factoryDefinition: expect.not.objectContaining({
+      factory: expect.not.objectContaining({
         workstations: expect.arrayContaining([
           expect.objectContaining({ name: snapshotOnlyWorkstationName }),
         ]),
