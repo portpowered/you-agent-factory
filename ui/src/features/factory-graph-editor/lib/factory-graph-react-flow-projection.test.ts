@@ -5,6 +5,11 @@ import type {
   CanonicalFactoryDefinition,
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
+import {
+  SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+  SYSTEM_TIME_WORK_TYPE_ID,
+  systemTimeGraphNodeId,
+} from "./factory-graph-customer-display";
 import { projectFactoryGraphToReactFlow } from "./factory-graph-react-flow-projection";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: projection contract scenarios stay together around one adapter.

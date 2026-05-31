@@ -1,3 +1,4 @@
+import "../../../../testing/bun-current-factory-definition-api-mocks";
 import { QueryClient } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 
@@ -5,9 +6,11 @@ import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import {
   type CurrentFactoryDocument,
   CURRENT_FACTORY_EDITOR_SAVE_MODE,
-  getCurrentFactoryDocument,
-  saveFactoryForSessionDocument,
 } from "../../../api/current-factory-definition";
+import {
+  getCurrentFactoryDocumentMock,
+  saveFactoryForSessionDocumentMock,
+} from "../../../../testing/bun-current-factory-definition-api-mocks";
 import { syncCurrentFactoryDefinition } from "../../dashboard/lib/dashboard-event-stream";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
@@ -20,21 +23,9 @@ import {
   editableFactoryDefinition,
 } from "./useFactoryDocumentSave.test-helpers";
 
-vi.mock("../../../api/current-factory-definition", async () => {
-  const actual = await vi.importActual(
-    "../../../api/current-factory-definition",
-  );
-
-  return {
-    ...actual,
-    getCurrentFactoryDocument: vi.fn(),
-    saveFactoryForSessionDocument: vi.fn(),
-  };
-});
-
 beforeEach(() => {
-  vi.mocked(getCurrentFactoryDocument).mockReset();
-  vi.mocked(saveFactoryForSessionDocument).mockReset();
+  getCurrentFactoryDocumentMock.mockReset();
+  saveFactoryForSessionDocumentMock.mockReset();
   useDashboardSessionStore.setState({ selectedSessionID: "~default" });
 });
 
@@ -56,7 +47,7 @@ describe("useFactoryDocumentSave", () => {
         physical: "2026-05-27T08:00:00Z",
       },
     };
-    vi.mocked(saveFactoryForSessionDocument).mockResolvedValue(savedDocument);
+    saveFactoryForSessionDocumentMock.mockResolvedValue(savedDocument);
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
 
     const { result } = renderHook(
@@ -78,7 +69,7 @@ describe("useFactoryDocumentSave", () => {
       factory: editableFactoryDefinition,
     });
 
-    expect(saveFactoryForSessionDocument).toHaveBeenCalledWith(
+    expect(saveFactoryForSessionDocumentMock).toHaveBeenCalledWith(
       {
         baseVersion: {
           logical: "7",
@@ -115,7 +106,7 @@ describe("useFactoryDocumentSave", () => {
         physical: "2026-05-27T09:00:00Z",
       },
     };
-    vi.mocked(saveFactoryForSessionDocument).mockResolvedValue(savedDocument);
+    saveFactoryForSessionDocumentMock.mockResolvedValue(savedDocument);
     useDashboardSessionStore.setState({ selectedSessionID: "session-default" });
 
     const { result } = renderHook(
@@ -134,7 +125,7 @@ describe("useFactoryDocumentSave", () => {
       sessionID: "session-override",
     });
 
-    expect(saveFactoryForSessionDocument).toHaveBeenCalledWith(
+    expect(saveFactoryForSessionDocumentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         factoryDefinition: editableFactoryDefinition,
         mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
@@ -152,7 +143,7 @@ describe("useFactoryDocumentSave", () => {
   });
 
   it("passes an explicit save mode to the session factory adapter", async () => {
-    vi.mocked(saveFactoryForSessionDocument).mockResolvedValue({
+    saveFactoryForSessionDocumentMock.mockResolvedValue({
       ...editableFactoryDefinition,
       version: {
         logical: "2",
@@ -169,7 +160,7 @@ describe("useFactoryDocumentSave", () => {
       mode: "UPSERT_NAMED_AND_ACTIVATE",
     });
 
-    expect(saveFactoryForSessionDocument).toHaveBeenCalledWith(
+    expect(saveFactoryForSessionDocumentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "UPSERT_NAMED_AND_ACTIVATE",
       }),
@@ -186,7 +177,7 @@ describe("useFactoryDocumentSave", () => {
       },
     };
     const factorySnapshot = structuredClone(factoryBeforeSave);
-    vi.mocked(saveFactoryForSessionDocument).mockImplementation(
+    saveFactoryForSessionDocumentMock.mockImplementation(
       async (input) => {
         input.factoryDefinition.version = {
           logical: "99",
@@ -227,7 +218,7 @@ describe("useFactoryDocumentSave", () => {
         physical: "2026-05-27T08:00:00Z",
       },
     };
-    vi.mocked(saveFactoryForSessionDocument).mockResolvedValue(savedDocument);
+    saveFactoryForSessionDocumentMock.mockResolvedValue(savedDocument);
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
 
     const { result } = renderHook(
@@ -248,7 +239,7 @@ describe("useFactoryDocumentSave", () => {
       factory: editableFactoryDefinition,
     });
 
-    expect(getCurrentFactoryDocument).not.toHaveBeenCalled();
+    expect(getCurrentFactoryDocumentMock).not.toHaveBeenCalled();
 
     syncCurrentFactoryDefinition(
       queryClient,
@@ -269,7 +260,7 @@ describe("useFactoryDocumentSave", () => {
       "session-2",
     );
 
-    expect(getCurrentFactoryDocument).not.toHaveBeenCalled();
+    expect(getCurrentFactoryDocumentMock).not.toHaveBeenCalled();
     expect(queryClient.getQueryData(result.current.documentKey)).toMatchObject({
       version: {
         logical: "9",

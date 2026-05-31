@@ -1,28 +1,16 @@
+import "../../../../testing/bun-current-factory-definition-api-mocks";
 import { renderHook } from "@testing-library/react";
 
-import {
-  CurrentFactoryDefinitionError,
-  saveFactoryForSessionDocument,
-} from "../../../api/current-factory-definition";
+import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
+import { saveFactoryForSessionDocumentMock } from "../../../../testing/bun-current-factory-definition-api-mocks";
 import {
   createFactoryDocumentSaveQueryClientWrapper,
   editableFactoryDefinition,
 } from "./useFactoryDocumentSave.test-helpers";
 import { useFactoryDocumentSave } from "./useFactoryDocumentSave";
 
-vi.mock("../../../api/current-factory-definition", async () => {
-  const actual = await vi.importActual(
-    "../../../api/current-factory-definition",
-  );
-
-  return {
-    ...actual,
-    saveFactoryForSessionDocument: vi.fn(),
-  };
-});
-
 beforeEach(() => {
-  vi.mocked(saveFactoryForSessionDocument).mockReset();
+  saveFactoryForSessionDocumentMock.mockReset();
 });
 
 describe("useFactoryDocumentSave operator errors", () => {
@@ -45,7 +33,7 @@ describe("useFactoryDocumentSave operator errors", () => {
         status,
       },
     );
-    vi.mocked(saveFactoryForSessionDocument).mockRejectedValue(error);
+    saveFactoryForSessionDocumentMock.mockRejectedValue(error);
 
     const { result } = renderHook(() => useFactoryDocumentSave(), {
       wrapper: createFactoryDocumentSaveQueryClientWrapper(),

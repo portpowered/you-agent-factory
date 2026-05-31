@@ -41,6 +41,144 @@ function sanitizeBatchId(label) {
   return label.replace(/[^a-zA-Z0-9._-]+/g, "_");
 }
 
+function buildFeatureCoverageBatches(relativePath) {
+  if (relativePath === "./src/features/header") {
+    return [
+      {
+        label: "./src/features/header/dashboard-session-tabs",
+        paths: [
+          "./src/features/header/components/dashboard-session-tabs.test.tsx",
+          "./src/features/header/components/dashboard-session-tabs.launch-target-selection.test.tsx",
+          "./src/features/header/lib/dashboard-session-tabs-utils.test.ts",
+        ],
+      },
+      {
+        label: relativePath,
+        paths: [relativePath],
+        pathIgnorePatterns: [
+          "**/dashboard-session-tabs.test.tsx",
+          "**/dashboard-session-tabs.launch-target-selection.test.tsx",
+          "**/dashboard-session-tabs-utils.test.ts",
+        ],
+      },
+    ];
+  }
+
+  if (relativePath === "./src/features/export") {
+    return [
+      {
+        label:
+          "./src/features/export/hooks/use-current-factory-export.test.tsx",
+        paths: [
+          "./src/features/export/hooks/use-current-factory-export.test.tsx",
+        ],
+      },
+      {
+        label:
+          "./src/features/export/components/export-factory-dialog.test.tsx",
+        paths: [
+          "./src/features/export/components/export-factory-dialog.test.tsx",
+        ],
+      },
+      {
+        label: relativePath,
+        paths: [relativePath],
+        pathIgnorePatterns: [
+          "**/use-current-factory-export.test.tsx",
+          "**/export-factory-dialog.test.tsx",
+        ],
+      },
+    ];
+  }
+
+  if (relativePath === "./src/features/current-selection") {
+    return [
+      {
+        label: "./src/features/current-selection/workstation-hooks",
+        paths: [
+          "./src/features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateContract.test.tsx",
+          "./src/features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation.test.tsx",
+          "./src/features/current-selection/workstation-selection/hooks/use-save-editable-workstation-configuration.test.tsx",
+          "./src/features/current-selection/components/current-selection-widget.prompt-edit-save-enablement.test.tsx",
+        ],
+      },
+      {
+        label: relativePath,
+        paths: [relativePath],
+        pathIgnorePatterns: [
+          "**/useCurrentWorkstationPromptTemplateContract.test.tsx",
+          "**/useCurrentWorkstationPromptTemplateValidation.test.tsx",
+          "**/use-save-editable-workstation-configuration.test.tsx",
+          "**/current-selection-widget.prompt-edit-save-enablement.test.tsx",
+        ],
+      },
+    ];
+  }
+
+  if (relativePath === "./src/features/factory-graph-editor") {
+    return [
+      {
+        label: "./src/features/factory-graph-editor/editable-graph-mock",
+        paths: [
+          "./src/features/factory-graph-editor/hooks/use-editable-factory-graph.test.tsx",
+        ],
+      },
+      {
+        label: "./src/features/factory-graph-editor/factory-validation-hook",
+        paths: [
+          "./src/features/factory-graph-editor/hooks/use-factory-validation.test.tsx",
+        ],
+      },
+      {
+        label: relativePath,
+        paths: [relativePath],
+        pathIgnorePatterns: [
+          "**/use-editable-factory-graph.test.tsx",
+          "**/use-factory-validation.test.tsx",
+        ],
+      },
+    ];
+  }
+
+  if (relativePath === "./src/features/import") {
+    return [
+      {
+        label: "./src/features/import/import-activation-hook",
+        paths: [
+          "./src/features/import/hooks/use-factory-import-activation.test.tsx",
+        ],
+      },
+      {
+        label: relativePath,
+        paths: [relativePath],
+        pathIgnorePatterns: ["**/use-factory-import-activation.test.tsx"],
+      },
+    ];
+  }
+
+  if (relativePath === "./src/features/current-factory-definition") {
+    return [
+      {
+        label: "./src/features/current-factory-definition/save-hook",
+        paths: [
+          "./src/features/current-factory-definition/hooks/useFactoryDocumentSave.test.tsx",
+          "./src/features/current-factory-definition/hooks/useFactoryDocumentSave.errors.test.tsx",
+        ],
+      },
+      {
+        label: relativePath,
+        paths: [relativePath],
+        pathIgnorePatterns: [
+          "**/useFactoryDocumentSave.test.tsx",
+          "**/useFactoryDocumentSave.errors.test.tsx",
+        ],
+      },
+    ];
+  }
+
+  return null;
+}
+
 function buildBrowserLaneBatches() {
   const batches = [];
   const srcDir = `${uiRoot}/src`;
@@ -71,70 +209,9 @@ function buildBrowserLaneBatches() {
     }
 
     const relativePath = `./src/features/${dirent.name}`;
-    if (relativePath === "./src/features/header") {
-      batches.push({
-        label: "./src/features/header/dashboard-session-tabs",
-        paths: [
-          "./src/features/header/components/dashboard-session-tabs.test.tsx",
-          "./src/features/header/components/dashboard-session-tabs.launch-target-selection.test.tsx",
-          "./src/features/header/lib/dashboard-session-tabs-utils.test.ts",
-        ],
-      });
-      batches.push({
-        label: relativePath,
-        paths: [relativePath],
-        pathIgnorePatterns: [
-          "**/dashboard-session-tabs.test.tsx",
-          "**/dashboard-session-tabs.launch-target-selection.test.tsx",
-          "**/dashboard-session-tabs-utils.test.ts",
-        ],
-      });
-      continue;
-    }
-
-    if (relativePath === "./src/features/export") {
-      batches.push({
-        label: "./src/features/export/hooks/use-current-factory-export.test.tsx",
-        paths: ["./src/features/export/hooks/use-current-factory-export.test.tsx"],
-      });
-      batches.push({
-        label: "./src/features/export/components/export-factory-dialog.test.tsx",
-        paths: [
-          "./src/features/export/components/export-factory-dialog.test.tsx",
-        ],
-      });
-      batches.push({
-        label: relativePath,
-        paths: [relativePath],
-        pathIgnorePatterns: [
-          "**/use-current-factory-export.test.tsx",
-          "**/export-factory-dialog.test.tsx",
-        ],
-      });
-      continue;
-    }
-
-    if (relativePath === "./src/features/current-selection") {
-      const isolatedWorkstationHookPaths = [
-        "./src/features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateContract.test.tsx",
-        "./src/features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation.test.tsx",
-        "./src/features/current-selection/workstation-selection/hooks/use-save-editable-workstation-configuration.test.tsx",
-        "./src/features/current-selection/components/current-selection-widget.prompt-edit-save-enablement.test.tsx",
-      ];
-      batches.push({
-        label: "./src/features/current-selection/workstation-hooks",
-        paths: isolatedWorkstationHookPaths,
-      });
-      batches.push({
-        label: relativePath,
-        paths: [relativePath],
-        pathIgnorePatterns: [
-          "**/useCurrentWorkstationPromptTemplateContract.test.tsx",
-          "**/useCurrentWorkstationPromptTemplateValidation.test.tsx",
-          "**/use-save-editable-workstation-configuration.test.tsx",
-          "**/current-selection-widget.prompt-edit-save-enablement.test.tsx",
-        ],
-      });
+    const featureBatches = buildFeatureCoverageBatches(relativePath);
+    if (featureBatches) {
+      batches.push(...featureBatches);
       continue;
     }
 

@@ -1,22 +1,14 @@
+import "../../../../testing/bun-session-factory-import-activation-mocks";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "bun:test";
 
 import {
-  activateImportedFactoryForSession,
   SessionFactoryAPIError,
   type FactoryValue,
 } from "../../../api/session-factory";
-
-vi.mock("../../../api/session-factory", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/session-factory")>(
-    "../../../api/session-factory",
-  );
-  return {
-    ...actual,
-    activateImportedFactoryForSession: vi.fn(actual.activateImportedFactoryForSession),
-  };
-});
+import { activateImportedFactoryForSessionMock } from "../../../../testing/bun-session-factory-import-activation-mocks";
 import { writeFactoryExportPng } from "../../export/lib/factory-png-export";
 import {
   PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
@@ -71,7 +63,7 @@ const canonicalFactory: FactoryValue = {
   ],
 };
 
-const mockedActivateImportedFactoryForSession = vi.mocked(activateImportedFactoryForSession);
+const mockedActivateImportedFactoryForSession = activateImportedFactoryForSessionMock;
 
 describe("useFactoryImportActivation", () => {
   beforeEach(() => {

@@ -1,25 +1,18 @@
+import "../../../../testing/bun-factory-graph-draft-hook-isolated-test-mocks";
 import { act, renderHook } from "@testing-library/react";
 import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
 import {
   createHookTestGraphEditorDraftState,
   draftWorkstationFactoryDefinition,
   draftWorkstationFactoryDocument,
-  type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
+import { factoryGraphDraftHookTestState } from "../../../../testing/bun-factory-graph-draft-hook-isolated-test-mocks";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
-
-const hookState = vi.hoisted(() => ({
-  draftState: {} as MockGraphEditorDraftState,
-}));
-
-vi.mock("./factory-graph-draft-hook", () => ({
-  useFactoryGraphDraftState: () => hookState.draftState,
-}));
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the view-model contract is clearer when its state and action scenarios stay together.
 describe("useEditableFactoryGraph", () => {
   beforeEach(() => {
-    hookState.draftState = createHookTestGraphEditorDraftState();
+    factoryGraphDraftHookTestState.draftState = createHookTestGraphEditorDraftState();
   });
 
   it("exposes pending, projection, validation, and blocked operation state", () => {
@@ -65,8 +58,8 @@ describe("useEditableFactoryGraph", () => {
   });
 
   it("reports stale save state when the current factory changes during a draft", () => {
-    hookState.draftState.hasChanges = true;
-    hookState.draftState.latestDocument = {
+    factoryGraphDraftHookTestState.draftState.hasChanges = true;
+    factoryGraphDraftHookTestState.draftState.latestDocument = {
       ...draftWorkstationFactoryDocument,
       version: {
         logical: "6",
@@ -77,7 +70,7 @@ describe("useEditableFactoryGraph", () => {
     const { result } = renderHook(() =>
       useEditableFactoryGraph({
         currentFactoryDocument:
-          hookState.draftState.latestDocument ?? undefined,
+          factoryGraphDraftHookTestState.draftState.latestDocument ?? undefined,
         saveFactoryDefinition: async () => undefined,
       }),
     );
@@ -88,8 +81,8 @@ describe("useEditableFactoryGraph", () => {
 
   it("saves pending edits through the provided save callback", async () => {
     const saveFactoryDefinition = vi.fn(async () => undefined);
-    hookState.draftState.hasChanges = true;
-    hookState.draftState.draft = {
+    factoryGraphDraftHookTestState.draftState.hasChanges = true;
+    factoryGraphDraftHookTestState.draftState.draft = {
       ...createEmptyFactoryGraphDraft(),
       additions: {
         ...createEmptyFactoryGraphDraft().additions,
@@ -123,7 +116,7 @@ describe("useEditableFactoryGraph", () => {
         ]),
       }),
     });
-    expect(hookState.draftState.replaceDraft).toHaveBeenCalledWith(
+    expect(factoryGraphDraftHookTestState.draftState.replaceDraft).toHaveBeenCalledWith(
       createEmptyFactoryGraphDraft(),
     );
     expect(result.current.saveState.lastSuccess).toBe(true);
@@ -133,8 +126,8 @@ describe("useEditableFactoryGraph", () => {
     const saveFactoryDefinition = vi.fn(async () => {
       throw new Error("API unavailable");
     });
-    hookState.draftState.hasChanges = true;
-    hookState.draftState.draft = {
+    factoryGraphDraftHookTestState.draftState.hasChanges = true;
+    factoryGraphDraftHookTestState.draftState.draft = {
       ...createEmptyFactoryGraphDraft(),
       additions: {
         ...createEmptyFactoryGraphDraft().additions,
@@ -163,7 +156,7 @@ describe("useEditableFactoryGraph", () => {
     });
 
     expect(didSave).toBe(false);
-    expect(hookState.draftState.hasChanges).toBe(true);
+    expect(factoryGraphDraftHookTestState.draftState.hasChanges).toBe(true);
     expect(result.current.saveState.lastError).toBe("API unavailable");
   });
 });

@@ -14,13 +14,17 @@ export const getCurrentFactoryDefinitionMock = mock(() => {
 export const getCurrentFactoryDocumentMock = mock(() => {
   throw new Error("getCurrentFactoryDocumentMock not configured");
 });
-export const saveCurrentFactoryDocumentMock = mock(() => {
-  throw new Error("saveCurrentFactoryDocumentMock not configured");
+export const saveFactoryForSessionDocumentMock = mock(() => {
+  throw new Error("saveFactoryForSessionDocumentMock not configured");
 });
+
+/** @deprecated use {@link saveFactoryForSessionDocumentMock} */
+export const saveCurrentFactoryDocumentMock = saveFactoryForSessionDocumentMock;
 
 mock.module(CURRENT_FACTORY_API_MODULE, () => ({
   ...currentFactoryApiActual,
   getCurrentFactoryDefinition: getCurrentFactoryDefinitionMock,
   getCurrentFactoryDocument: getCurrentFactoryDocumentMock,
-  saveCurrentFactoryDocument: saveCurrentFactoryDocumentMock,
+  saveFactoryForSessionDocument: saveFactoryForSessionDocumentMock,
+  saveCurrentFactoryDocument: saveFactoryForSessionDocumentMock,
 }));

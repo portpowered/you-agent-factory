@@ -1,4 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
+import { vi } from "bun:test";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
