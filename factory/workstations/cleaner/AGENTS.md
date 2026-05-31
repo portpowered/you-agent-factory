@@ -8,6 +8,8 @@ Your job is to periodically inspect the repository and:
 2. constructing your own theory of mind on how the system works and updating that theory of mind as you explore how things change over time.
 3. handling customer asks at `factory/internal/asks.md`
 
+Inbox drops under `factory/inputs/**` are operator-only; see `you docs batch-inputs`.
+
 # Steps
 ## step 0 - update the repo
 run git pull and make the workspace be up to date to remote
@@ -20,9 +22,9 @@ run git pull and make the workspace be up to date to remote
    - remove dead code, duplication, redundant legacy handling, and overlapping structures where the public workflow allows it
    - preserve intended public behavior unless the cleanup explicitly aims to change that behavior
    - when cleanup touches tests, prefer behavioral runtime, API, CLI, UI, or emitted-event assertions instead of meta tests about file layout, docs topology, bundle internals, or command/route inventories
-   - default to one standalone cleanup idea file
-   - use a batch only when one submission must create multiple work items together because the follow-up needs dependency ordering, parent-child membership, or mixed work types
-2. read the code under `./`, read recent PRs associated with your previous requests, and inspect the current checked-in workflow inputs under `factory/inputs/` to see any previous cleanup attempts that have already been made
+   - default to one standalone cleanup idea via `you submit`
+   - use `you submit batch` with a stable `requestId` only when one submission must create multiple work items together because the follow-up needs dependency ordering, parent-child membership, or mixed work types
+2. read the code under `./`, read recent PRs associated with your previous requests, and inspect existing work with `you work list` or related CLI commands to see any previous cleanup attempts that have already been made
 
 ## Step 2 - based on the above results decide on one of the following:
 1. update your meta view of the world
@@ -55,7 +57,7 @@ after you are done, you MUST respond with <COMPLETE>.
 2. figure out what to clean
 3. dispatch a worker to modify and clean up the code
 4. your goal is to not directly clean the code but to ask someone else to do it for you
-5. you basically write a file at `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md` with a detailed idea of what you want to change
+5. submit follow-up work with `you submit` (default) or `you submit batch` when dependency ordering or mixed work types require a batch
 
 ### Details for cleaning up code
 figure out a way to clean the code (in priority order)
@@ -70,14 +72,30 @@ that only inspect source layout, docs topology, asset bundle internals, or
 command or route inventories. Ask for behavioral assertions through observable
 runtime, API, CLI, UI, or emitted-event outcomes instead.
 
-## Step 3 - write a file
-1. default to one standalone cleanup idea file. Write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`.
-2. only use a batch submission when the follow-up needs dependency ordering, parent-child membership, or mixed work types. In that case, write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`.
-3. batch JSON must include `request_id`, `type`, and `works`, and may include `relations`.
+## Step 3 - submit follow-up work
+1. default to one standalone cleanup idea. Write one markdown payload file, then submit:
+
+```bash
+you submit \
+  --name your-idea-name \
+  --work-type-name idea \
+  --payload ./your-idea-name.md
+```
+
+2. only use a batch submission when the follow-up needs dependency ordering, parent-child membership, or mixed work types. Write the canonical `FACTORY_REQUEST_BATCH` JSON to a temp file, then submit with a stable `requestId`:
+
+```bash
+you submit batch ./your-batch.json
+```
+
+3. batch JSON must include `requestId`, `type`, and `works`, and may include `relations`.
 4. set `type` to exactly `FACTORY_REQUEST_BATCH`.
-5. every work item must have a unique `name`; every work item in `inputs/BATCH` must also set `work_type_name`.
+5. every work item must have a unique `name` and explicit `workTypeName`.
 6. use `DEPENDS_ON` relations for sibling prerequisite ordering and `PARENT_CHILD` relations for parent-aware child membership.
+7. reuse the same `requestId` on `you submit batch` retries; change `requestId` only when you intentionally want a new submission.
+
+See `you docs batch-inputs` for full batch contract detail.
 
 ## general notes
 
-we don't want files that are submitted under factory/inputs to be considered as part of git commits, as they are generally there to handle logic. 
+Do not write follow-up work into `factory/inputs` inbox paths; those paths are for operator ingress only.

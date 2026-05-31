@@ -9,6 +9,11 @@ import {
 } from "../../../components/ui/place-labels";
 import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import {
+  workStatePhaseSemanticIconClassName,
+  workStatePhaseSemanticIconKind,
+  workStatePhaseSurfaceClassName,
+} from "../../factory-graph-editor/lib/factory-graph-work-state-phase-styling";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { getActivityGraphMessages } from "../messages/activity-graph";
 import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
@@ -145,41 +150,24 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
 }
 
 function placeNodeClassName(place: DashboardPlaceRef): string {
-  const kindClassName = (() => {
-    if (place.kind === "work_state") {
-      return "border-af-border-strong";
-    }
-    if (place.kind === "resource") {
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-af-border-strong bg-af-surface text-af-text";
-    }
-    // hardcoded-ui-copy-exception: non-product-diagnostic
-    return "border-dashed border-af-info-border bg-af-surface-subtle text-af-text";
-  })();
-  const stateClassName =
-    place.state_category === "TERMINAL"
-      ? "border-af-border-strong"
-      : place.state_category === "FAILED"
-        ? "border-af-danger-border"
-        : "";
+  if (place.kind === "work_state") {
+    return workStatePhaseSurfaceClassName(place.state_category);
+  }
 
-  return cn(kindClassName, stateClassName);
+  if (place.kind === "resource") {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
+    return "border-af-border-strong bg-af-surface text-af-text";
+  }
+
+  // hardcoded-ui-copy-exception: non-product-diagnostic
+  return "border-dashed border-af-info-border bg-af-surface-subtle text-af-text";
 }
 
 function placeSemanticIconKind(
   place: DashboardPlaceRef,
 ): GraphSemanticIconKind {
   if (place.kind === "work_state") {
-    if (place.state_category === "TERMINAL") {
-      return "terminal";
-    }
-    if (place.state_category === "FAILED") {
-      return "failed";
-    }
-    if (place.state_category === "PROCESSING") {
-      return "processing";
-    }
-    return "queue";
+    return workStatePhaseSemanticIconKind(place.state_category);
   }
 
   if (place.kind === "resource") {
@@ -198,16 +186,7 @@ function placeSemanticIconLabel(
 
 function placeSemanticIconClassName(place: DashboardPlaceRef): string {
   if (place.kind === "work_state") {
-    if (place.state_category === "TERMINAL") {
-      return "text-af-success";
-    }
-    if (place.state_category === "FAILED") {
-      return "text-af-danger";
-    }
-    if (place.state_category === "PROCESSING") {
-      return "text-af-info";
-    }
-    return "text-af-text-subtle";
+    return workStatePhaseSemanticIconClassName(place.state_category);
   }
 
   if (place.kind === "resource") {
