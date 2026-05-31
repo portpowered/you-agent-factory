@@ -3078,13 +3078,14 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(legend.querySelector("[data-legend-flow]")).toBeTruthy();
     expect(collapseButton.getAttribute("aria-expanded")).toBe("true");
     for (const [label, kind] of LEGEND_ICON_EXPECTATIONS) {
+      const iconEntry = legend.querySelector(`[data-legend-icon='${kind}']`);
       const icon = legendScope.getByRole("img", {
         name: `${label} legend icon`,
       });
 
+      expect(iconEntry).toBeTruthy();
       expect(icon.getAttribute("data-graph-semantic-icon")).toBe(kind);
-      expect(legendScope.getByText(label)).toBeTruthy();
-      expect(legend.querySelector(`[data-legend-icon='${kind}']`)).toBeTruthy();
+      expect(within(iconEntry as HTMLElement).getByText(label)).toBeTruthy();
     }
     expect(
       legend.querySelector("[data-legend-icon='queue'] span.h-3"),
