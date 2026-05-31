@@ -82,10 +82,8 @@ export {
   buildDetailCardFactoryDocumentSaveHookReturn,
   buildDetailCardMultiWorkstationFactoryDocument,
   buildDetailCardSharedWorkerFactoryDocument,
-  buildDetailCardWorkerSelection,
   buildDetailCardWorkstationNodeSelection,
   createDetailCardDeferredFactoryDocumentSave,
-  createDetailCardPendingFactoryDocumentSave,
   DETAIL_CARD_SAVE_FACTORY_VERSION,
   expandDetailCardWorkstationConfiguration,
 } from "./detail-card-save-test-helpers";

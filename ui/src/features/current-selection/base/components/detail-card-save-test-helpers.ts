@@ -7,7 +7,6 @@ import { createDeferredPromise } from "../../../../testing/app-shell-export-test
 import {
   type MockFactoryDocumentSaveReturn,
   mockFactoryDocumentSave,
-  mockPendingFactoryDocumentSave,
 } from "../../../../testing/factory-document-save-mocks";
 import type { FactoryDocumentSaveInput } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { CurrentSelectionState } from "../../hooks/useCurrentSelection";
@@ -73,10 +72,6 @@ export function buildDetailCardFactoryDocumentSaveHookReturn(
     isPending: options?.isPending,
     saveAsync,
   });
-}
-
-export function createDetailCardPendingFactoryDocumentSave() {
-  return mockPendingFactoryDocumentSave();
 }
 
 export function createDetailCardDeferredFactoryDocumentSave() {
@@ -253,13 +248,6 @@ export function buildDetailCardWorkstationNodeSelection(
   return buildDetailCardCurrentSelection({
     selectedNode,
     selection: { kind: "node", nodeId },
-  });
-}
-
-export function buildDetailCardWorkerSelection(workerName = "reviewer") {
-  return buildDetailCardCurrentSelection({
-    selectedWorkerName: workerName,
-    selection: { kind: "worker", workerName },
   });
 }
 

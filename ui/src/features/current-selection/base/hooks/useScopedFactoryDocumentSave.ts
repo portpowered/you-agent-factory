@@ -77,6 +77,9 @@ export function useScopedFactoryDocumentSave<
   });
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
   const hasScopeChanged = previousScopeKeyRef.current !== scopeKey;
+  if (hasScopeChanged) {
+    previousScopeKeyRef.current = scopeKey;
+  }
   useResetSuccessfulSaveStateOnDraftChange({
     isDirty,
     scopeKey,

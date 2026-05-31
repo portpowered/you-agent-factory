@@ -78,6 +78,41 @@ describe("useScopedFactoryDocumentSave scope isolation", () => {
     expect(result.current.saveState).toEqual({ status: "idle" });
   });
 
+  it("surfaces success on a new scope after rerendering from a previous scope", async () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "success" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const scopeBSaveRequest: ScopedFactoryDocumentSaveRequest = {
+      ...defaultSaveRequest,
+      scopeKey: "worker:reviewer",
+    };
+
+    const { rerender, result } = renderHook(
+      ({ scopeKey }) =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey,
+        }),
+      {
+        initialProps: { scopeKey: "review:transition:Review" },
+        wrapper: createQueryClientWrapper(),
+      },
+    );
+
+    rerender({ scopeKey: "worker:reviewer" });
+
+    await act(async () => {
+      await result.current.saveNow(scopeBSaveRequest);
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "success" });
+    });
+  });
+
   it("clears success when the draft becomes dirty again for the current scope", async () => {
     const saveMutation = mockFactoryDocumentSave({ mode: "success" });
     vi.spyOn(
