@@ -1,5 +1,12 @@
-import { DashboardMutationDialog } from "../../workflow-activity/components/mutation-dialog";
-import { Button } from "../../../components/ui";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export function FactoryGraphEditorLeaveDialog({
@@ -19,19 +26,35 @@ export function FactoryGraphEditorLeaveDialog({
   onDiscard: () => void;
   onSave: () => void;
 }) {
-  if (!isOpen) {
-    return null;
-  }
   const messages = getFactoryGraphEditorMessages(locale);
 
+  const handleOpenChange = (open: boolean) => {
+    if (!open && !isSaving) {
+      onCancel();
+    }
+  };
+
   return (
-    <DashboardMutationDialog
-      closeDisabled={isSaving}
-      description={messages.leaveDialogDescription}
-      onClose={onCancel}
-      title={messages.leaveDialogTitle}
-      footer={
-        <>
+    <Dialog onOpenChange={handleOpenChange} open={isOpen}>
+      <DialogContent
+        closeDisabled={isSaving}
+        onEscapeKeyDown={(event) => {
+          if (isSaving) {
+            event.preventDefault();
+          }
+        }}
+        onInteractOutside={(event) => {
+          if (isSaving) {
+            event.preventDefault();
+          }
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{messages.leaveDialogTitle}</DialogTitle>
+          <DialogDescription>{messages.leaveDialogDescription}</DialogDescription>
+        </DialogHeader>
+        <p className="m-0 text-sm text-af-text-muted">{messages.leaveDialogBody}</p>
+        <DialogFooter>
           <Button
             disabled={isSaving}
             onClick={onCancel}
@@ -55,10 +78,8 @@ export function FactoryGraphEditorLeaveDialog({
           >
             {isSaving ? messages.draftActionsSaving : messages.draftActionsSave}
           </Button>
-        </>
-      }
-    >
-      <p className="m-0 text-sm text-af-text-muted">{messages.leaveDialogBody}</p>
-    </DashboardMutationDialog>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
