@@ -289,9 +289,11 @@ export function useCurrentActivityGraphViewModel({
         handleAssignments,
         pendingAdditionEdgeIds,
         visibleGraphEdges,
+        baseNodes,
       ),
     [
       activeGraphHighlights,
+      baseNodes,
       handleAssignments,
       pendingAdditionEdgeIds,
       visibleGraphEdges,
