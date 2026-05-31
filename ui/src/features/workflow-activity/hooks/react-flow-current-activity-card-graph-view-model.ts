@@ -161,7 +161,7 @@ export function currentActivityCardFactoryDefinition(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
   _snapshot: DashboardSnapshot,
 ): DashboardSnapshot["factory"] | null | undefined {
-  if (editor.editableDefinitionQuery.status !== "success") {
+  if (editor.editableDefinitionQuery?.status !== "success") {
     return null;
   }
 
