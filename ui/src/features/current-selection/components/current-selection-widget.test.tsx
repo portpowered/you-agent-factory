@@ -802,8 +802,9 @@ describe("CurrentSelectionWidget", () => {
         "Select a workstation, work item, or state node to inspect live details.",
       ),
     ).toBeNull();
-    expect(screen.getByRole("heading", { name: "Summary" })).toBeTruthy();
-    expect(screen.getAllByText("agent-slot").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Resource configuration" })).toBeTruthy();
+    expect(screen.getByLabelText("Name")).toBeTruthy();
+    expect(screen.getByLabelText("Capacity")).toBeTruthy();
     expect(screen.getByText("Available tokens")).toBeTruthy();
     expect(
       screen.getByRole("heading", { name: "Referencing workers" }),

@@ -26,6 +26,7 @@ import {
 import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
 import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
+import { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
 import {
   NoSelectionDetailCard,
   ResourceDetailCard,
@@ -55,6 +56,7 @@ function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
   editableConfigurationState,
+  editableResourceConfigurationState,
   editableWorkerConfigurationState,
   failedWorkDetailsByWorkID,
   headerAction,
@@ -75,6 +77,9 @@ function renderCurrentSelectionDetailCard({
   currentSelection: CurrentSelectionState;
   editableConfigurationState: ReturnType<
     typeof useEditableWorkstationConfigurationState
+  >;
+  editableResourceConfigurationState: ReturnType<
+    typeof useEditableResourceConfigurationState
   >;
   editableWorkerConfigurationState: ReturnType<
     typeof useEditableWorkerConfigurationState
@@ -185,6 +190,7 @@ function renderCurrentSelectionDetailCard({
   if (selection?.kind === "resource" && selectedResourceName) {
     return (
       <ResourceDetailCard
+        editableConfigurationState={editableResourceConfigurationState}
         locale={locale}
         resourceName={selectedResourceName}
         tokenCount={selectedResourceTokenCount}
@@ -239,6 +245,7 @@ export function CurrentSelectionWidget({
     selectedNodeProviderSessions,
     selectedWorkDispatchAttempts,
     selectedWorkRequestHistory,
+    selectedResourceName,
     selectedWorkerName,
     selection,
   } = currentSelection;
@@ -250,6 +257,11 @@ export function CurrentSelectionWidget({
   const editableWorkerConfigurationState = useEditableWorkerConfigurationState(
     selection,
     selectedWorkerName,
+    locale,
+  );
+  const editableResourceConfigurationState = useEditableResourceConfigurationState(
+    selection,
+    selectedResourceName,
     locale,
   );
   const workstationSaveScopeKey =
@@ -303,6 +315,7 @@ export function CurrentSelectionWidget({
     activeTraceID,
     currentSelection,
     editableConfigurationState,
+    editableResourceConfigurationState,
     editableWorkerConfigurationState,
     failedWorkDetailsByWorkID,
     headerAction: workstationHeaderAction,

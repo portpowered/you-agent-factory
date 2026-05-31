@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { DashboardSelection } from "../../base/state/selection-types";
+import { useEditableResourceConfigurationState } from "../hooks/use-editable-resource-configuration-state";
 import { ResourceDetailCard } from "./resource-detail-card";
 
 vi.mock(
@@ -94,13 +96,41 @@ function buildFactoryDocument(
   };
 }
 
+function renderResourceDetailCard(
+  resourceName: string,
+  options?: {
+    selection?: DashboardSelection;
+    tokenCount?: number | null;
+  },
+) {
+  function Harness() {
+    const editableConfigurationState = useEditableResourceConfigurationState(
+      options?.selection ?? {
+        kind: "resource",
+        resourceName,
+      },
+      resourceName,
+    );
+
+    return (
+      <ResourceDetailCard
+        editableConfigurationState={editableConfigurationState}
+        resourceName={resourceName}
+        tokenCount={options?.tokenCount}
+      />
+    );
+  }
+
+  return render(<Harness />);
+}
+
 describe("ResourceDetailCard", () => {
   beforeEach(() => {
     mockFactoryDocumentQuery();
   });
 
   it("shows loading state while the current factory document is pending", () => {
-    render(<ResourceDetailCard resourceName="agent-slot" />);
+    renderResourceDetailCard("agent-slot");
 
     expect(
       screen.getByText(
@@ -117,7 +147,7 @@ describe("ResourceDetailCard", () => {
       status: "error",
     } as never);
 
-    render(<ResourceDetailCard resourceName="agent-slot" />);
+    renderResourceDetailCard("agent-slot");
 
     expect(screen.getByRole("alert").textContent).toContain(
       "Resource definition unavailable.",
@@ -135,7 +165,7 @@ describe("ResourceDetailCard", () => {
       status: "success",
     } as never);
 
-    render(<ResourceDetailCard resourceName="missing-resource" />);
+    renderResourceDetailCard("missing-resource");
 
     expect(
       screen.getByText(
@@ -152,14 +182,11 @@ describe("ResourceDetailCard", () => {
       status: "success",
     } as never);
 
-    render(
-      <ResourceDetailCard resourceName="agent-slot" tokenCount={1} />,
-    );
+    renderResourceDetailCard("agent-slot", { tokenCount: 1 });
 
-    expect(screen.getAllByText("agent-slot").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Summary" })).toBeTruthy();
-    expect(screen.getByText("Capacity")).toBeTruthy();
-    expect(screen.getByText("2")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Resource configuration" })).toBeTruthy();
+    expect(screen.getByLabelText("Name").getAttribute("value")).toBe("agent-slot");
+    expect(screen.getByLabelText("Capacity").getAttribute("value")).toBe("2");
     expect(screen.getByText("Invocation slot")).toBeTruthy();
     expect(screen.getByText("Available tokens")).toBeTruthy();
     expect(screen.getByText("1")).toBeTruthy();
@@ -181,11 +208,17 @@ describe("ResourceDetailCard", () => {
       status: "success",
     } as never);
 
-    render(<ResourceDetailCard resourceName="voice-model" />);
+    renderResourceDetailCard("voice-model");
 
-    expect(screen.getByText("OMNIVOICE_Q4_K_M")).toBeTruthy();
-    expect(screen.getByText("llama.cpp")).toBeTruthy();
-    expect(screen.getByText("ON_DEMAND")).toBeTruthy();
+    expect(screen.getByLabelText("Model").getAttribute("value")).toBe(
+      "OMNIVOICE_Q4_K_M",
+    );
+    expect(screen.getByLabelText("Backend").getAttribute("value")).toBe(
+      "llama.cpp",
+    );
+    expect(screen.getByLabelText("Load policy").getAttribute("value")).toBe(
+      "ON_DEMAND",
+    );
     expect(screen.queryByText("anthropic")).toBeNull();
   });
 });
