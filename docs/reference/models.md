@@ -346,4 +346,3 @@ inference coverage.
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Resources](resources.md)
-- [Functional long-test package map](../internal/processes/runtime-lookup-test-fixture-inventory.md)
