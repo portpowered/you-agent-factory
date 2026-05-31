@@ -26,14 +26,22 @@ function buildDraft(
 }
 
 describe("validateEditableWorkerDraft", () => {
-  it("requires model provider and model for model workers", () => {
+  it("allows model workers with provider set and empty model", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({ model: "", modelProvider: "CURSOR" }),
+        messages,
+      ),
+    ).toEqual({});
+  });
+
+  it("requires model provider for model workers", () => {
     expect(
       validateEditableWorkerDraft(
         buildDraft({ model: "", modelProvider: null }),
         messages,
       ),
     ).toEqual({
-      model: messages.editableConfigurationModelRequired,
       modelProvider: messages.editableConfigurationModelProviderRequired,
     });
   });

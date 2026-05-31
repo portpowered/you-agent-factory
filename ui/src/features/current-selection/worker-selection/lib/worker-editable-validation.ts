@@ -30,21 +30,15 @@ export function validateEditableWorkerDraft(
     | "editableConfigurationBodyRequired"
     | "editableConfigurationCommandRequired"
     | "editableConfigurationModelProviderRequired"
-    | "editableConfigurationModelRequired"
     | "editableConfigurationProviderRequired"
     | "editableConfigurationScriptCommandOrBodyRequired"
   >,
 ): EditableWorkerValidationErrors {
   const validationErrors: EditableWorkerValidationErrors = {};
 
-  if (draft.type === "MODEL_WORKER") {
-    if (!draft.modelProvider) {
-      validationErrors.modelProvider =
-        messages.editableConfigurationModelProviderRequired;
-    }
-    if (draft.model.trim().length === 0) {
-      validationErrors.model = messages.editableConfigurationModelRequired;
-    }
+  if (draft.type === "MODEL_WORKER" && !draft.modelProvider) {
+    validationErrors.modelProvider =
+      messages.editableConfigurationModelProviderRequired;
   }
 
   if (draft.type === "SCRIPT_WORKER") {
