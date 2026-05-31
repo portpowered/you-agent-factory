@@ -25,7 +25,7 @@ const BASE_EVENT: FactoryEvent = {
   type: FACTORY_EVENT_TYPES.inferenceRequest,
 };
 
-describe("factoryTimelineDebug", () => {
+describe("factoryTimelineDebug options and compaction", () => {
   it("reads debug flags from the browser query string", () => {
     expect(
       readFactoryTimelineDebugOptions({
@@ -110,7 +110,9 @@ describe("factoryTimelineDebug", () => {
       }),
     ).toBe(event);
   });
+});
 
+describe("factoryTimelineDebug memory summary", () => {
   it("summarizes retained timeline memory and persists the latest profile", () => {
     const storage = window.localStorage;
     storage.removeItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY);
@@ -180,7 +182,9 @@ describe("factoryTimelineDebug", () => {
 
     expect(readPersistedFactoryTimelineMemorySummary(storage)).toBeNull();
   });
+});
 
+describe("factoryTimelineDebug global install", () => {
   it("installs window debug globals that summarize current timeline state", () => {
     const browserWindow = {
       location: { search: "" },
@@ -212,5 +216,3 @@ describe("factoryTimelineDebug", () => {
     expect(debugGlobal?.readPersistedSummary()).toBeNull();
   });
 });
-
-
