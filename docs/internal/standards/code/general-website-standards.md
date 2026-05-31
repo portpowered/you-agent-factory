@@ -158,7 +158,7 @@ Dashboard surfaces use two different “expand” patterns. Pick the pattern tha
 
 Rules:
 
-- Dashboard inline disclosure entry points **MUST** use `ExpandablePanelTrigger` (or `ExpandablePanelIcon` only when the surrounding chrome already owns the button shell, such as workflow-activity legend toggles). Do not add raw `<button aria-expanded>` or duplicate `HISTORY_TOGGLE_CLASS` disclosure markup in feature code.
+- Dashboard inline disclosure entry points **MUST** use `ExpandablePanelTrigger` (or `ExpandablePanelIcon` only when the surrounding chrome already owns the button shell, such as workflow-activity legend toggles). Do not add raw `<button aria-expanded>` or duplicate section-toggle disclosure markup in feature code.
 - Pass `expanded`, `controlsID`, and either `onClick` or `onToggle` to the trigger; keep one source of truth for expanded state in the feature. Use `variant` (`section`, `compact`, `outline`) for layout alignment instead of copying toggle class strings.
 - Icon-only triggers **MUST** supply `aria-label`; labeled triggers **MAY** pass visible expand/collapse text as `children` and still set `aria-label` when locale copy differs from visible text.
 - Full-screen or modal expand **MUST** use dialog shell primitives. Opening a dialog is not inline disclosure; do not route dialog open actions through `ExpandablePanelTrigger`.
