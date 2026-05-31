@@ -1,3 +1,5 @@
+import "../../../../testing/bun-export-factory-dialog-mocks";
+import { beforeEach, describe, expect, it, vi } from "bun:test";
 import {
   fireEvent,
   render,
@@ -6,19 +8,15 @@ import {
   within,
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
+import {
+  downloadBlobAsFileMock,
+  writeFactoryExportPngMock,
+} from "../../../../testing/bun-export-factory-dialog-mocks";
 import { downloadBlobAsFile } from "../lib/browser-download";
 import { ExportFactoryDialog } from "./export-factory-dialog";
 import type { WriteFactoryExportPngResult } from "../lib/factory-png-export";
 import { writeFactoryExportPng } from "../lib/factory-png-export";
 import { getExportDialogMessages } from "../messages/export-dialog";
-
-vi.mock("../lib/browser-download", () => ({
-  downloadBlobAsFile: vi.fn(),
-}));
-
-vi.mock("../lib/factory-png-export", () => ({
-  writeFactoryExportPng: vi.fn(),
-}));
 
 const factory = {
   name: "Factory Aurora",

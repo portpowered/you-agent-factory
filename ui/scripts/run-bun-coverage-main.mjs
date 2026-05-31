@@ -77,10 +77,17 @@ function buildBrowserLaneBatches() {
         paths: ["./src/features/export/hooks/use-current-factory-export.test.tsx"],
       });
       batches.push({
+        label: "./src/features/export/components/export-factory-dialog.test.tsx",
+        paths: [
+          "./src/features/export/components/export-factory-dialog.test.tsx",
+        ],
+      });
+      batches.push({
         label: relativePath,
         paths: [relativePath],
         pathIgnorePatterns: [
           "**/use-current-factory-export.test.tsx",
+          "**/export-factory-dialog.test.tsx",
         ],
       });
       continue;
