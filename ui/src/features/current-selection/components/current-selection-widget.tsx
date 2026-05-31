@@ -4,22 +4,23 @@ import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../../api/dashboard/types";
+import { parseFactoryGraphWorkTypeNodeId } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
-import { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
-import { WorkstationDetailCard } from "../workstation-selection/public";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useSelectedProviderSessionState } from "../work-selection/hooks/useSelectedProviderSessionState";
-import { WorkItemDetailCard } from "../work-selection/public";
-import type {
-  SelectedWorkItemExecutionDetails,
-  SelectedWorkRelationshipGraph,
-} from "../work-selection/public";
 import {
   CurrentSelectionHeaderActionProvider,
   CurrentSelectionLocaleProvider,
 } from "../base/public";
-import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
+import { useSelectedProviderSessionState } from "../work-selection/hooks/useSelectedProviderSessionState";
+import type {
+  SelectedWorkItemExecutionDetails,
+  SelectedWorkRelationshipGraph,
+} from "../work-selection/public";
+import { WorkItemDetailCard } from "../work-selection/public";
+import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
+import { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
+import { WorkstationDetailCard } from "../workstation-selection/public";
 import {
   CurrentSelectionWorkstationSaveDialog,
   useCurrentSelectionDetailSave,
@@ -30,6 +31,7 @@ import {
   StateNodeDetailCard,
   WorkerDetailCard,
   WorkstationRequestDetailCard,
+  WorkTypeDetailCard,
 } from "./current-selection-cards";
 
 export interface CurrentSelectionWidgetProps {
@@ -48,7 +50,7 @@ export interface CurrentSelectionWidgetProps {
   widgetId?: string;
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection routing keeps each detail card branch explicit.
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection detail routing keeps one switch over dashboard selection kinds.
 function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
@@ -60,9 +62,9 @@ function renderCurrentSelectionDetailCard({
   locale,
   now,
   onSelectTraceID,
-  saveState,
   resourceHeaderAction,
   resourceSaveState,
+  saveState,
   workerHeaderAction,
   workerSaveState,
   selectedProviderSessionKey,
@@ -92,10 +94,10 @@ function renderCurrentSelectionDetailCard({
   resourceSaveState: ReturnType<
     typeof useCurrentSelectionDetailSave
   >["resourceSaveState"];
-  workerHeaderAction: ReactNode;
   saveState: ReturnType<
     typeof useCurrentSelectionDetailSave
   >["workstationSaveState"];
+  workerHeaderAction: ReactNode;
   workerSaveState: ReturnType<
     typeof useCurrentSelectionDetailSave
   >["workerSaveState"];
@@ -166,6 +168,7 @@ function renderCurrentSelectionDetailCard({
       <StateNodeDetailCard
         currentWorkItems={selectedStateCurrentWorkItems}
         failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
+        locale={locale}
         onSelectWorkItem={(workItem) =>
           selectStateWorkItem(selectedStatePlace, workItem)
         }
@@ -200,6 +203,20 @@ function renderCurrentSelectionDetailCard({
         saveState={resourceSaveState}
         tokenCount={selectedResourceTokenCount}
         widgetId={widgetId}
+      />
+    );
+  }
+
+  const selectedWorkTypeName =
+    selection?.kind === "node"
+      ? parseFactoryGraphWorkTypeNodeId(selection.nodeId)
+      : null;
+  if (selectedWorkTypeName) {
+    return (
+      <WorkTypeDetailCard
+        locale={locale}
+        widgetId={widgetId}
+        workTypeName={selectedWorkTypeName}
       />
     );
   }

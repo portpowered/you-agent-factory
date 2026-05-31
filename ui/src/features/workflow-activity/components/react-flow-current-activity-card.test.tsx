@@ -44,6 +44,7 @@ import {
   SYSTEM_TIME_WORK_TYPE_ID,
   systemTimeGraphNodeId,
 } from "../../factory-graph-editor/lib/factory-graph-customer-display";
+import { maintainerRuntimeShapedFactory } from "../../factory-graph-editor/lib/maintainer-runtime-shaped-factory.fixture";
 import { removeFactoryGraphNode } from "../../factory-graph-editor/lib/factory-graph-operations";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
@@ -2442,6 +2443,42 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     );
 
     expect(onSelectWorker).toHaveBeenCalledWith("writer");
+  });
+
+  it("renders maintainer runtime-shaped factory workers without a bare worker: node", async () => {
+    const factoryDocument = {
+      ...maintainerRuntimeShapedFactory,
+      version: { logical: "1", physical: "2026-05-31T20:00:00Z" },
+    };
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: factoryDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      latestDocument: factoryDocument,
+      pendingFactoryDefinition: factoryDocument,
+    } as never);
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.factory = maintainerRuntimeShapedFactory;
+
+    const { onSelectWorker } = renderCurrentActivity({ snapshot });
+
+    expect(
+      await screen.findByRole("button", { name: "Select processor worker" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Select workspace-setup worker" }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("worker:processor")).toBeTruthy();
+    expect(screen.getByLabelText("worker:workspace-setup")).toBeTruthy();
+    expect(screen.queryByLabelText("worker:")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select processor worker" }),
+    );
+    expect(onSelectWorker).toHaveBeenCalledWith("processor");
   });
 
   it("shows selected styling for the active worker selection", async () => {

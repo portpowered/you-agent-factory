@@ -310,9 +310,14 @@ and [Workers](workers.md) for worker-side requirement metadata.
 Session and API factory writes share one on-disk persist pipeline. Whether you
 save the default session factory (`REPLACE_CURRENT` on the root-as-factory
 layout) or a named factory (`UPSERT_NAMED_AND_ACTIVATE` or named
-`REPLACE_CURRENT`), the server normalizes the submitted factory JSON, writes a
-thin `factory.json`, expands `workers/` and `workstations/` runtime files,
-validates with `LoadRuntimeConfig`, and commits atomically.
+`REPLACE_CURRENT`), the server normalizes the submitted factory JSON, runs
+pre-save topology checks on that normalized view, writes a thin `factory.json`,
+expands `workers/` and `workstations/` runtime files, validates the staged tree with `LoadRuntimeConfig`, and commits atomically.
+Pre-save topology checks use the same normalized factory view as the split write;
+full alignment with validate-only `POST /factory-validations` is tracked in the
+**Factory validation convergence** maintainer PRD (`prd-factory-validation-convergence`).
+The post-persist `LoadRuntimeConfig` gate remains part of this split-layout persist
+contract.
 
 | Path | On-disk result |
 |------|----------------|

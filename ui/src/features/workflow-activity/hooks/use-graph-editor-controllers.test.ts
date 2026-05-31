@@ -18,6 +18,7 @@ const fixtureState = vi.hoisted(() => ({
   },
   removalController: {
     blockedRemovalReason: null as string | null,
+    handleCancelRemoval: vi.fn(),
     handleConfirmRemoval: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),

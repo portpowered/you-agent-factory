@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
@@ -7,6 +7,7 @@ import type { DashboardSelection } from "../../current-selection/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
+import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
 import {
   type CurrentActivitySelection,
   ReactFlowCurrentActivityCardView,
@@ -18,6 +19,7 @@ interface WorkflowActivityBentoCardProps {
   importController: CurrentActivityImportController;
   locale?: string;
   now: number;
+  onNodeRemovedFromDraft?: (nodeId: string) => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
   onSelectWorkID: (
@@ -36,6 +38,7 @@ export function WorkflowActivityBentoCard({
   importController,
   locale,
   now,
+  onNodeRemovedFromDraft,
   selection,
   snapshot,
   widgetInstanceID,
@@ -47,7 +50,38 @@ export function WorkflowActivityBentoCard({
 }: WorkflowActivityBentoCardProps) {
   const messages = getWorkflowActivityShellMessages(locale);
   const { sessionID } = useDashboardSession();
-  const editor = useCurrentActivityGraphEditor(snapshot, locale, sessionID);
+  const setTopologyEditorBridgeHandlers =
+    useFactoryGraphTopologyEditorBridge((state) => state.setHandlers);
+  const editor = useCurrentActivityGraphEditor(
+    snapshot,
+    locale,
+    sessionID,
+    onNodeRemovedFromDraft,
+  );
+
+  useEffect(() => {
+    if (!editor.editorMode) {
+      setTopologyEditorBridgeHandlers(null);
+      return;
+    }
+
+    setTopologyEditorBridgeHandlers({
+      blockedRemovalReason: editor.blockedRemovalReason,
+      canInteractWithEditor: editor.canInteractWithEditor,
+      editorMode: editor.editorMode,
+      requestNodeRemoval: editor.handleSelectionNodeDelete,
+    });
+
+    return () => {
+      setTopologyEditorBridgeHandlers(null);
+    };
+  }, [
+    editor.blockedRemovalReason,
+    editor.canInteractWithEditor,
+    editor.editorMode,
+    editor.handleSelectionNodeDelete,
+    setTopologyEditorBridgeHandlers,
+  ]);
 
   return (
     <AgentBentoCard

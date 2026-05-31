@@ -124,12 +124,11 @@ export function parseResourceCapacityText(
     return null;
   }
 
-  const capacity = Number.parseInt(trimmed, 10);
-  if (!Number.isInteger(capacity)) {
+  if (!/^\d+$/.test(trimmed)) {
     return null;
   }
 
-  return capacity;
+  return Number.parseInt(trimmed, 10);
 }
 
 function buildResourceFromDraft(

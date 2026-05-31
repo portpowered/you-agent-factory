@@ -1,8 +1,20 @@
 import { act, renderHook } from "@testing-library/react";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
+import type { EditableFactoryGraphSaveInput } from "./use-editable-factory-graph-types";
+
+function createSaveFactoryDefinitionMock(
+  baseVersion: CurrentFactoryDocument["version"],
+) {
+  return vi.fn(async (input: EditableFactoryGraphSaveInput) => ({
+    ...input.factoryDefinition,
+    version: {
+      logical: String(Number(baseVersion.logical) + 1),
+      physical: "2026-05-31T12:00:00Z",
+    },
+  }));
+}
 
 const sharedWorkType = {
   name: "story",
@@ -89,7 +101,9 @@ describe("useEditableFactoryGraph snapshot overlay", () => {
   });
 
   it("builds save payloads from the factory document when snapshot factory would diverge", async () => {
-    const saveFactoryDefinition = vi.fn(async () => undefined);
+    const saveFactoryDefinition = createSaveFactoryDefinitionMock(
+      documentFactory.version,
+    );
 
     const { result } = renderHook(() =>
       useEditableFactoryGraph({

@@ -26,6 +26,7 @@ export interface StatePositionWorkListItemProps {
 export interface StateNodeDetailCardProps {
   currentWorkItems: StatePositionWorkItem[];
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
+  locale?: string | null;
   onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
   place: DashboardPlaceRef;
   terminalHistoryWorkItems?: StatePositionWorkItem[];

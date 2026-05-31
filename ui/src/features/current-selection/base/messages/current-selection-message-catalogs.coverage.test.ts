@@ -183,6 +183,8 @@ const invokeWorkerDetail = (
         formatter("HOSTED_WORKER" as never),
         formatter("future-type" as never),
       ];
+    case "topologyDeleteAction":
+      return [formatter("reviewer" as never)];
     default:
       throw new Error(`Unhandled worker-detail formatter ${key}`);
   }

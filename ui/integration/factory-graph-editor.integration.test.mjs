@@ -5,20 +5,20 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-
+import { buildReplayCoverageReport } from "../src/testing/replay-fixture-catalog";
 import {
-  buildTimeoutMs,
   browserScenarioTimeoutMs,
+  buildTimeoutMs,
   defaultFactorySessionID,
-  exportCoverImagePath,
   expectNoBrowserErrors,
+  exportCoverImagePath,
+  fillWorkstationPromptBody,
   loadReplayLines,
   openBrowserPage,
   startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
-import { buildReplayCoverageReport } from "../src/testing/replay-fixture-catalog";
 
 const exportFactoryDefinition = {
   inputTypes: [
@@ -254,7 +254,10 @@ describe.sequential("factory graph editor browser integration", () => {
         const toolbar = browserPage.page.getByRole("region", {
           name: "Factory graph editor tools",
         });
-        await toolbar.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await toolbar.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
         await toolbar
           .getByRole("button", { name: "Open add entity menu" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
@@ -341,16 +344,22 @@ describe.sequential("factory graph editor browser integration", () => {
             timeout: uiInteractionTimeoutMs,
           });
         await server.replayCompleted;
-        await browserPage.page.getByRole("button", { name: "Export PNG" }).waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
+        await browserPage.page
+          .getByRole("button", { name: "Export PNG" })
+          .waitFor({
+            state: "visible",
+            timeout: uiInteractionTimeoutMs,
+          });
 
-        await browserPage.page.getByRole("button", { name: "Export PNG" }).click();
-        await browserPage.page.getByRole("heading", { name: "Export factory" }).waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
+        await browserPage.page
+          .getByRole("button", { name: "Export PNG" })
+          .click();
+        await browserPage.page
+          .getByRole("heading", { name: "Export factory" })
+          .waitFor({
+            state: "visible",
+            timeout: uiInteractionTimeoutMs,
+          });
         const exportDialog = browserPage.page.getByRole("dialog", {
           name: "Export factory",
         });
@@ -424,10 +433,12 @@ describe.sequential("factory graph editor browser integration", () => {
         await exportDialog
           .getByRole("button", { exact: true, name: "Close" })
           .click();
-        await browserPage.page.getByRole("heading", { name: "Export factory" }).waitFor({
-          state: "hidden",
-          timeout: uiInteractionTimeoutMs,
-        });
+        await browserPage.page
+          .getByRole("heading", { name: "Export factory" })
+          .waitFor({
+            state: "hidden",
+            timeout: uiInteractionTimeoutMs,
+          });
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,
@@ -445,7 +456,9 @@ describe.sequential("factory graph editor browser integration", () => {
           ({ bytes, fileName }) => {
             const dataTransfer = new DataTransfer();
             dataTransfer.items.add(
-              new File([new Uint8Array(bytes)], fileName, { type: "image/png" }),
+              new File([new Uint8Array(bytes)], fileName, {
+                type: "image/png",
+              }),
             );
             return dataTransfer;
           },
@@ -462,7 +475,9 @@ describe.sequential("factory graph editor browser integration", () => {
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
-        await viewport.dispatchEvent("drop", { dataTransfer: importDataTransfer });
+        await viewport.dispatchEvent("drop", {
+          dataTransfer: importDataTransfer,
+        });
 
         const importDialog = browserPage.page.getByRole("dialog", {
           name: "Review factory import",
@@ -571,10 +586,8 @@ describe.sequential("factory graph editor browser integration", () => {
           timeout: uiInteractionTimeoutMs,
         });
         await addDialog.getByLabel("Identifier").fill("review");
-        await addDialog.getByLabel("Prompt body").fill("Review the drafted story.");
-        await addDialog
-          .getByRole("button", { name: "Add entity" })
-          .click();
+        await fillWorkstationPromptBody(addDialog, "Review the drafted story.");
+        await addDialog.getByRole("button", { name: "Add entity" }).click();
 
         const saveChangesButton = toolbar.getByRole("button", {
           name: "Save changes",
@@ -600,12 +613,9 @@ describe.sequential("factory graph editor browser integration", () => {
           .click();
 
         await expect
-          .poll(
-            async () => await saveChangesButton.isEnabled(),
-            {
-              timeout: uiInteractionTimeoutMs,
-            },
-          )
+          .poll(async () => await saveChangesButton.isEnabled(), {
+            timeout: uiInteractionTimeoutMs,
+          })
           .toBe(true);
 
         await saveChangesButton.focus();
@@ -623,9 +633,7 @@ describe.sequential("factory graph editor browser integration", () => {
             { exact: true },
           )
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        await saveDialog
-          .getByRole("button", { name: "Save topology" })
-          .click();
+        await saveDialog.getByRole("button", { name: "Save topology" }).click();
 
         await expect
           .poll(() => saveRequests.length, {

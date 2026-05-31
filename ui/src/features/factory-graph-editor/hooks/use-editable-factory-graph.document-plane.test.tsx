@@ -53,6 +53,7 @@ const documentFactory: CurrentFactoryDocument = {
   ],
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: document-plane regressions share one editable-graph fixture seam.
 describe("useEditableFactoryGraph document plane", () => {
   it("projects editable graph nodes from the loaded factory document only", () => {
     const { result } = renderHook(() =>
@@ -142,7 +143,22 @@ describe("useEditableFactoryGraph document plane", () => {
   });
 
   it("clears pending edits after save and resyncs latestDocument when the document cache updates", async () => {
-    const saveFactoryDefinition = vi.fn(async () => undefined);
+    const savedDocumentAfterSave: CurrentFactoryDocument = {
+      ...documentFactory,
+      version: {
+        logical: "9",
+        physical: "2026-05-31T01:30:00Z",
+      },
+      workers: [
+        ...(documentFactory.workers ?? []),
+        {
+          model: "gpt-5",
+          name: "extra",
+          type: "MODEL_WORKER",
+        },
+      ],
+    };
+    const saveFactoryDefinition = vi.fn(async () => savedDocumentAfterSave);
 
     const { result, rerender } = renderHook(
       ({ currentFactoryDocument }: { currentFactoryDocument: CurrentFactoryDocument }) =>
@@ -181,9 +197,11 @@ describe("useEditableFactoryGraph document plane", () => {
       }),
     });
     expect(result.current.pendingState.hasChanges).toBe(false);
+    expect(result.current.draftState.latestDocument).toEqual(savedDocumentAfterSave);
+    expect(result.current.draftState.baseDocument?.version.logical).toBe("9");
 
     const savedDocument: CurrentFactoryDocument = {
-      ...documentFactory,
+      ...savedDocumentAfterSave,
       version: {
         logical: "10",
         physical: "2026-05-31T02:00:00Z",

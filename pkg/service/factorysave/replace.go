@@ -30,8 +30,9 @@ func (s *Service) saveReplaceCurrentForSession(
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	if current.Name == apisurface.DefaultCurrentFactoryName {
-		return s.saveDefaultCurrentFactoryForSession(ctx, sessionID, session, sessionRootDir, current, request, sanitized)
+	targetDir, activateFactoryDir, err := resolveReplaceCurrentLayoutTarget(sessionRootDir, current.Name)
+	if err != nil {
+		return factoryapi.Factory{}, err
 	}
 
 	var saved factoryapi.Factory
@@ -43,18 +44,26 @@ func (s *Service) saveReplaceCurrentForSession(
 			return err
 		}
 		nextVersion := nextEditableFactoryVersion(current.Version, s.now().Now().UTC())
-		payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
+		prepared, err := preparePersistedFactoryPayload(string(current.Name), sanitized, nextVersion)
 		if err != nil {
 			return err
 		}
 
-		factoryDir, err := replaceEditableFactoryDefinition(sessionRootDir, request.Name, payload)
+		replaceResult, err := s.host.ReplaceFactoryLayoutAtDir(targetDir, prepared)
 		if err != nil {
 			return err
 		}
-		if err := s.host.ActivateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, request.Name, string(request.Name)); err != nil {
+
+		if err := s.host.ActivateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, activateFactoryDir, current.Name, string(current.Name)); err != nil {
+			if replaceResult != nil && replaceResult.Restore != nil {
+				replaceResult.Restore()
+			}
 			return err
 		}
+		if replaceResult != nil && replaceResult.DiscardBackup != nil {
+			replaceResult.DiscardBackup()
+		}
+
 		var readbackErr error
 		saved, readbackErr = s.host.GetCurrentFactoryForSession(ctx, sessionID)
 		return readbackErr
@@ -63,6 +72,20 @@ func (s *Service) saveReplaceCurrentForSession(
 		return factoryapi.Factory{}, err
 	}
 	return saved, nil
+}
+
+func resolveReplaceCurrentLayoutTarget(
+	sessionRootDir string,
+	name factoryapi.FactoryName,
+) (targetDir string, activateFactoryDir string, err error) {
+	if name == apisurface.DefaultCurrentFactoryName {
+		return sessionRootDir, sessionRootDir, nil
+	}
+	factoryDir, err := resolveNamedFactoryLayoutTargetDir(sessionRootDir, name)
+	if err != nil {
+		return "", "", err
+	}
+	return factoryDir, factoryDir, nil
 }
 
 func (s *Service) prepareEditableFactoryDefinitionSave(
@@ -84,51 +107,4 @@ func (s *Service) prepareEditableFactoryDefinitionSave(
 		return "", factoryapi.Factory{}, err
 	}
 	return sessionRootDir, sanitized, nil
-}
-
-func (s *Service) saveDefaultCurrentFactoryForSession(
-	ctx context.Context,
-	sessionID string,
-	session *factorysessions.LiveSession,
-	sessionRootDir string,
-	current factoryapi.Factory,
-	request factoryapi.Factory,
-	sanitized factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	var saved factoryapi.Factory
-	err := s.host.WithActivationLock(func() error {
-		if err := s.host.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
-			return err
-		}
-		if err := requireFreshEditableFactoryVersionAtRoot(s.host, request.Version, sessionRootDir, current.Name); err != nil {
-			return err
-		}
-		nextVersion := nextEditableFactoryVersion(current.Version, s.now().Now().UTC())
-		payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
-		if err != nil {
-			return err
-		}
-		replaceResult, err := s.host.ReplaceFactorySplitLayout(sessionRootDir, payload)
-		if err != nil {
-			return err
-		}
-
-		if err := s.host.ActivateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, sessionRootDir, current.Name, string(current.Name)); err != nil {
-			if replaceResult != nil && replaceResult.Restore != nil {
-				replaceResult.Restore()
-			}
-			return err
-		}
-		if replaceResult != nil && replaceResult.DiscardBackup != nil {
-			replaceResult.DiscardBackup()
-		}
-
-		var readbackErr error
-		saved, readbackErr = s.host.GetCurrentFactoryForSession(ctx, sessionID)
-		return readbackErr
-	})
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	return saved, nil
 }

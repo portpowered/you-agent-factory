@@ -132,6 +132,7 @@ const hookState = vi.hoisted(() => ({
     validationErrors: [],
   },
   removalController: {
+    handleCancelRemoval: vi.fn(),
     handleConfirmRemoval: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),

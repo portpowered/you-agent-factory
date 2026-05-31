@@ -26,7 +26,7 @@ export interface UseEditableFactoryGraphOptions {
   locale?: string | null;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,
-  ) => Promise<unknown>;
+  ) => Promise<CurrentFactoryDocument>;
 }
 
 export interface EditableFactoryGraphViewModel {

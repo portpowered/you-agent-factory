@@ -24,6 +24,8 @@ export interface FactoryGraphEditorMessages {
   addDialogKindLabel: string;
   addDialogModelHelp: string;
   addDialogModelLabel: string;
+  addDialogPromptBodyEditorError: string;
+  addDialogPromptBodyEditorLoading: string;
   addDialogPromptBodyHelp: string;
   addDialogPromptBodyLabel: string;
   addDialogStateTypeLabel: string;
@@ -433,6 +435,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelHelp:
         "The model identifier saved on the new `MODEL_WORKER`.",
       addDialogModelLabel: "Model",
+      addDialogPromptBodyEditorError:
+        "The prompt editor could not start. Edit the prompt text below while we recover.",
+      addDialogPromptBodyEditorLoading: "Starting the prompt editor.",
       addDialogPromptBodyHelp:
         "Optional prompt content for the workstation body.",
       addDialogPromptBodyLabel: "Prompt body",
@@ -662,6 +667,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogKindLabel: "类型",
       addDialogModelHelp: "将保存到新 `MODEL_WORKER` 上的模型标识符。",
       addDialogModelLabel: "模型",
+      addDialogPromptBodyEditorError:
+        "提示词编辑器无法启动。请先在下方编辑提示正文，我们稍后会恢复编辑器。",
+      addDialogPromptBodyEditorLoading: "正在启动提示词编辑器。",
       addDialogPromptBodyHelp: "工作站正文的可选提示内容。",
       addDialogPromptBodyLabel: "提示正文",
       addDialogStateTypeLabel: "状态类型",

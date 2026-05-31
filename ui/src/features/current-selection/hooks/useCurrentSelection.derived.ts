@@ -35,6 +35,7 @@ export function useSelectionSynchronization({
   selection,
   snapshot,
   terminalWorkDetail,
+  topologyFactory,
 }: {
   projectedWorkstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined;
   replacePresent: (state: { selection: DashboardSelection | null; terminalWorkDetail: TerminalWorkDetail | null }) => void;
@@ -42,6 +43,7 @@ export function useSelectionSynchronization({
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot | null | undefined;
   terminalWorkDetail: TerminalWorkDetail | null;
+  topologyFactory?: DashboardSnapshot["factory"];
 }) {
   useEffect(() => {
     if (!snapshot) {
@@ -53,6 +55,7 @@ export function useSelectionSynchronization({
       selection: resolveDashboardSelection({
         selection,
         snapshot,
+        topologyFactory,
         workstationRequestsByDispatchID: projectedWorkstationRequestsByDispatchID,
       }),
       terminalWorkDetail,
@@ -64,6 +67,7 @@ export function useSelectionSynchronization({
     selection,
     snapshot,
     terminalWorkDetail,
+    topologyFactory,
   ]);
 }
 

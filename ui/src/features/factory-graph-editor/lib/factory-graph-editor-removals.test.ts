@@ -118,6 +118,7 @@ describe("factory graph editor removals", () => {
     expect(removalIntent).toMatchObject({
       confirmDescription: "This will remove 4 graph edges.",
       confirmLabel: "Delete review workstation",
+      requiresConfirmation: true,
       title: "Remove review workstation?",
     });
 
@@ -233,6 +234,7 @@ describe("factory graph editor removals", () => {
       title: "Remove review success route?",
       confirmDescription:
         "This will remove the success route from review to story:done.",
+      requiresConfirmation: true,
     });
   });
 
@@ -264,6 +266,7 @@ describe("factory graph editor removals", () => {
       confirmDescription:
         "This will remove 2 graph edges. story also owns 2 work states, which will be removed with it.",
       confirmLabel: "Delete story work-type",
+      requiresConfirmation: true,
       title: "Remove story work-type?",
     });
 
@@ -277,6 +280,7 @@ describe("factory graph editor removals", () => {
       confirmDescription:
         "This will remove 1 graph edge. Worker and workstation resource references that depend on gpu will be cleared from the pending draft.",
       confirmLabel: "Delete gpu resource",
+      requiresConfirmation: true,
       title: "Remove gpu resource?",
     });
   });

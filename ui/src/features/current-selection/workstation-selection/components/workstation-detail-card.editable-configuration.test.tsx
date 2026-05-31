@@ -1010,6 +1010,83 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeTruthy();
   });
 
+  it("resizes the prompt editor horizontally and keeps help and diagnostics below the editor", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    const { container } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          promptHelpState: {
+            contract: {
+              availableVariables: [
+                {
+                  category: "ROOT",
+                  description: "Work item id.",
+                  example: "{{ .WorkID }}",
+                  path: ".WorkID",
+                },
+              ],
+              inputCount: 1,
+              unavailableAccessPatterns: [],
+            },
+            status: "ready",
+          },
+          promptDiagnostics: [
+            {
+              kind: "INVALID_VARIABLE",
+              message: "Prompt root is invalid.",
+              sourceText: "{{ .Prompt }}",
+            },
+          ],
+          validationErrors: {
+            prompt:
+              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const section = editableConfigurationSection();
+    const resizable = section.querySelector(
+      "[data-prompt-editor-resizable='true']",
+    ) as HTMLElement;
+    const handle = within(section).getByRole("slider", {
+      name: "Resize prompt editor width",
+    });
+    const promptEditor = screen.getByLabelText("Prompt");
+    const diagnosticsPanel = document.getElementById(
+      "editable-workstation-prompt-diagnostics",
+    );
+
+    Object.defineProperty(resizable, "offsetWidth", {
+      configurable: true,
+      value: 520,
+    });
+
+    fireEvent.pointerDown(handle, { button: 0, clientX: 120, pointerId: 11 });
+    fireEvent.pointerMove(handle, { clientX: 220, pointerId: 11 });
+    fireEvent.pointerUp(handle, { pointerId: 11 });
+
+    expect(resizable.style.width).toBe("620px");
+    expect(promptEditor.parentElement?.getAttribute("aria-describedby")).toBe(
+      "editable-workstation-prompt-error editable-workstation-prompt-diagnostics",
+    );
+    expectHeadingBefore(resizable, promptVariableHelpToggle());
+    expectHeadingBefore(resizable, diagnosticsPanel as HTMLElement);
+    expect(container.querySelector("[data-prompt-editor-resizable='true']")).toBeTruthy();
+  });
+
   it("links prompt editor accessibility metadata to validation and diagnostic feedback", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;

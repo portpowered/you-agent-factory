@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: dashboard bento card wiring keeps widget render and selection bridge callbacks colocated.
 import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
@@ -253,6 +254,23 @@ function buildOverviewWidgetCard({
             importController={importController}
             locale={locale}
             now={now}
+            onNodeRemovedFromDraft={(nodeId) => {
+              if (nodeId.startsWith("worker:")) {
+                currentSelection.clearSelectedWorkerIfMatching(
+                  nodeId.slice("worker:".length),
+                );
+                return;
+              }
+
+              if (nodeId.startsWith("work-state:")) {
+                currentSelection.clearSelectedStateNodeIfMatching(
+                  nodeId.slice("work-state:".length),
+                );
+                return;
+              }
+
+              currentSelection.clearSelectedFactoryGraphNodeIfMatching(nodeId);
+            }}
             onSelectResource={currentSelection.selectResource}
             onSelectStateNode={currentSelection.selectStateNode}
             onSelectWorkID={currentSelection.selectWorkByID}

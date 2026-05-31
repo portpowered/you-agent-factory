@@ -9,6 +9,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
 import type { FactoryWorker } from "../../../api/events/types";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type {
   TerminalWorkItem,
@@ -68,6 +69,9 @@ export interface CurrentSelectionState {
   selectWorkstationRequest: (request: DashboardWorkstationRequest) => void;
   selectResource: (resourceName: string) => void;
   selectWorker: (workerName: string) => void;
+  clearSelectedFactoryGraphNodeIfMatching: (nodeId: string) => void;
+  clearSelectedStateNodeIfMatching: (placeId: string) => void;
+  clearSelectedWorkerIfMatching: (workerName: string) => void;
   terminalWorkDetail: TerminalWorkDetail | null;
   undoSelection: () => void;
 }
@@ -104,6 +108,8 @@ export function useCurrentSelection({
     snapshot,
     workstationRequestsByDispatchID,
   );
+  const currentFactoryDocumentQuery = useCurrentFactoryDocument();
+  const topologyFactory = currentFactoryDocumentQuery.data ?? undefined;
 
   useEffect(() => {
     if (sessionChanged) {
@@ -119,6 +125,7 @@ export function useCurrentSelection({
     selection,
     snapshot,
     terminalWorkDetail,
+    topologyFactory,
   });
 
   const derived = useCurrentSelectionDerivedState({
@@ -179,6 +186,10 @@ export function useCurrentSelection({
     selectWorkItem: actions.selectWorkItem,
     selectWorkstation: actions.selectWorkstation,
     selectWorkstationRequest: actions.selectWorkstationRequest,
+    clearSelectedFactoryGraphNodeIfMatching:
+      actions.clearSelectedFactoryGraphNodeIfMatching,
+    clearSelectedStateNodeIfMatching: actions.clearSelectedStateNodeIfMatching,
+    clearSelectedWorkerIfMatching: actions.clearSelectedWorkerIfMatching,
     selectResource: actions.selectResource,
     selectWorker: actions.selectWorker,
     terminalWorkDetail,
