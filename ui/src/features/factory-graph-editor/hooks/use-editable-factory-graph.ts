@@ -21,6 +21,7 @@ import {
   removeFactoryGraphNode,
 } from "../lib/factory-graph-operations";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import type {
   EditableFactoryGraphSaveInput,
   EditableFactoryGraphViewModel,
@@ -327,7 +328,7 @@ function useEditableFactoryGraphSaveController({
   locale?: string | null;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,
-  ) => Promise<unknown>;
+  ) => Promise<CurrentFactoryDocument>;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
@@ -389,7 +390,7 @@ function useSaveEditableFactoryGraph({
   resetSaveState: () => void;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,
-  ) => Promise<unknown>;
+  ) => Promise<CurrentFactoryDocument>;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
@@ -415,11 +416,11 @@ function useSaveEditableFactoryGraph({
     setIsSaving(true);
     resetSaveState();
     try {
-      await saveFactoryDefinition({
+      const savedDocument = await saveFactoryDefinition({
         baseVersion: draftState.latestDocument.version,
         factoryDefinition: saveInput.value,
       });
-      draftState.replaceDraft(createEmptyFactoryGraphDraft());
+      draftState.adoptSavedFactoryDocument(savedDocument);
       setBlockedOperation(null);
       setLastSaveSuccess(true);
       return true;

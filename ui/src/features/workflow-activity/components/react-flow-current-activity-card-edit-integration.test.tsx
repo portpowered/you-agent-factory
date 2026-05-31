@@ -466,6 +466,68 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     ).toBeNull();
   });
 
+  it("removes a deleted worker from the graph after save adopts the saved factory document", async () => {
+    const factoryWithSpareWorker: CurrentFactoryDocument = {
+      ...editableFactoryDocument,
+      workers: [
+        ...(editableFactoryDocument.workers ?? []),
+        {
+          model: "gpt-5-mini",
+          name: "spare",
+          type: "MODEL_WORKER",
+        },
+      ],
+    };
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: factoryWithSpareWorker,
+      error: null,
+      status: "success",
+    } as never);
+    saveAsync.mockImplementation(async (input) => ({
+      ...input.factory,
+      version: {
+        logical: "9",
+        physical: "2026-05-31T02:00:00Z",
+      },
+    }));
+
+    renderCurrentActivity(createSnapshot(factoryWithSpareWorker));
+    enterEditorMode();
+
+    expect(
+      await screen.findByRole("button", { name: "worker:spare" }),
+    ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "worker:spare" }));
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    fireEvent.click(
+      within(toolbar).getByRole("button", { name: "Save changes" }),
+    );
+    fireEvent.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "Save factory graph changes?",
+        }),
+      ).getByRole("button", { name: "Save topology" }),
+    );
+
+    await waitFor(() => {
+      expect(saveAsync).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "worker:spare" }),
+      ).toBeNull();
+    });
+    expect(
+      within(toolbar).getByText("No draft changes", { exact: true }),
+    ).toBeTruthy();
+  });
+
   it("opens save confirmation from the activity card host portaled to document.body", async () => {
     renderCurrentActivity();
     enterEditorMode();

@@ -346,6 +346,34 @@ describe("resolveDashboardSelection", () => {
     });
   });
 
+  it("falls back when topologyFactory omits the selected worker even if snapshot.factory still lists it", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+    snapshot.factory = {
+      ...snapshot.factory,
+      workers: [
+        { name: "reviewer", type: "MODEL_WORKER" },
+        { name: "spare", type: "MODEL_WORKER" },
+      ],
+    };
+
+    const resolved = resolveDashboardSelection({
+      selection: {
+        kind: "worker",
+        workerName: "spare",
+      },
+      snapshot,
+      topologyFactory: {
+        ...snapshot.factory,
+        workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
+      },
+    });
+
+    expect(resolved).toEqual({
+      kind: "node",
+      nodeId: "review",
+    });
+  });
+
   it("falls back to the default dashboard selection when the selected worker disappears", () => {
     const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
     snapshot.factory = {

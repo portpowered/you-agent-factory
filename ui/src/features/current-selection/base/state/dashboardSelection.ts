@@ -59,28 +59,41 @@ export function selectDefaultSelection(snapshot: DashboardSnapshot): DashboardSe
 interface ResolveDashboardSelectionInput {
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
+  /** When set, topology entity existence checks use this factory instead of snapshot.factory. */
+  topologyFactory?: DashboardSnapshot["factory"];
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
 
 export function resolveDashboardSelection({
   selection,
   snapshot,
+  topologyFactory,
   workstationRequestsByDispatchID,
 }: ResolveDashboardSelectionInput): DashboardSelection | null {
   if (selection === null) {
     return selectDefaultSelection(snapshot);
   }
 
+  const factory = topologyFactory ?? snapshot.factory;
+
   if (selection.kind === "node") {
     if (snapshot.topology.workstation_nodes_by_id[selection.nodeId]) {
+      const workstationName = parseFactoryGraphWorkstationNodeId(
+        selection.nodeId,
+      );
+      if (
+        workstationName &&
+        factory &&
+        !workstationExistsInFactory(factory, workstationName)
+      ) {
+        return selectDefaultSelection(snapshot);
+      }
+
       return selection;
     }
 
     const workTypeName = parseFactoryGraphWorkTypeNodeId(selection.nodeId);
-    if (
-      workTypeName &&
-      workTypeExistsInSnapshotFactory(snapshot, workTypeName)
-    ) {
+    if (workTypeName && workTypeExistsInFactory(factory, workTypeName)) {
       return selection;
     }
 
@@ -88,7 +101,7 @@ export function resolveDashboardSelection({
   }
 
   if (selection.kind === "state-node") {
-    return hasDashboardStatePlace(snapshot, selection.placeId)
+    return hasDashboardStatePlace(snapshot, selection.placeId, factory)
       ? selection
       : selectDefaultSelection(snapshot);
   }
@@ -102,7 +115,7 @@ export function resolveDashboardSelection({
   }
 
   if (selection.kind === "worker") {
-    return workerExistsInSnapshotFactory(snapshot, selection.workerName)
+    return workerExistsInFactory(factory, selection.workerName)
       ? selection
       : selectDefaultSelection(snapshot);
   }
@@ -450,18 +463,29 @@ function resolveRetainedRequestNodeID(
   );
 }
 
-function workerExistsInSnapshotFactory(
-  snapshot: DashboardSnapshot,
-  workerName: string,
-): boolean {
-  return findFactoryWorkerInSnapshot(snapshot, workerName) !== undefined;
+function parseFactoryGraphWorkstationNodeId(nodeId: string): string | null {
+  const prefix = "workstation:";
+  if (!nodeId.startsWith(prefix)) {
+    return null;
+  }
+
+  const name = nodeId.slice(prefix.length);
+  return name.length > 0 ? name : null;
 }
 
-function workTypeExistsInSnapshotFactory(
-  snapshot: DashboardSnapshot,
+function workerExistsInFactory(
+  factory: DashboardSnapshot["factory"],
+  workerName: string,
+): boolean {
+  return (
+    factory?.workers?.some((worker) => worker.name === workerName) ?? false
+  );
+}
+
+function workTypeExistsInFactory(
+  factory: DashboardSnapshot["factory"],
   workTypeName: string,
 ): boolean {
-  const factory = snapshot.factory;
   if (!factory) {
     return false;
   }
@@ -474,6 +498,17 @@ function workTypeExistsInSnapshotFactory(
   const legacyFactory = factory as LegacyDashboardFactoryDefinition;
   const workTypes = factory.workTypes ?? legacyFactory.work_types ?? [];
   return workTypes.some((workType) => workType.name === workTypeName);
+}
+
+function workstationExistsInFactory(
+  factory: NonNullable<DashboardSnapshot["factory"]>,
+  workstationName: string,
+): boolean {
+  return (
+    factory.workstations?.some(
+      (workstation) => workstation.name === workstationName,
+    ) ?? false
+  );
 }
 
 export function findFactoryWorkerInSnapshot(

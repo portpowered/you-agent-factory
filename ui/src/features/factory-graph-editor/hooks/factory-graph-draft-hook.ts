@@ -16,7 +16,7 @@ const EMPTY_VALIDATION_ERRORS: FactoryGraphDraftValidationError[] = [];
 
 type FactoryGraphDraftCallbacks = Pick<
   FactoryGraphDraftDerivedState,
-  "replaceDraft" | "resetDraft" | "updateDraft"
+  "adoptSavedFactoryDocument" | "replaceDraft" | "resetDraft" | "updateDraft"
 >;
 
 interface UseFactoryGraphDraftStateOptions {
@@ -98,6 +98,17 @@ export function useFactoryGraphDraftState(
     });
   }, [currentFactoryDocument]);
 
+  const adoptSavedFactoryDocument = useCallback(
+    (document: CurrentFactoryDocument) => {
+      setSessionState({
+        draft: createEmptyFactoryGraphDraft(),
+        latestDocument: document,
+        sessionStartDocument: document,
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     const previousScopeKey = lastFactoryDocumentScopeKeyRef.current;
     const scopeChanged =
@@ -127,6 +138,7 @@ export function useFactoryGraphDraftState(
       sessionState
         ? createCurrentFactoryGraphDraftState({
             callbacks: {
+              adoptSavedFactoryDocument,
               replaceDraft,
               resetDraft,
               updateDraft,
@@ -135,13 +147,21 @@ export function useFactoryGraphDraftState(
             sessionState,
           })
         : null,
-    [options.locale, replaceDraft, resetDraft, sessionState, updateDraft],
+    [
+      adoptSavedFactoryDocument,
+      options.locale,
+      replaceDraft,
+      resetDraft,
+      sessionState,
+      updateDraft,
+    ],
   );
 
   const unavailableState = useMemo<FactoryGraphDraftDerivedState>(
     () =>
       createUnavailableFactoryGraphDraftState({
         callbacks: {
+          adoptSavedFactoryDocument,
           replaceDraft,
           resetDraft,
           updateDraft,
@@ -149,7 +169,14 @@ export function useFactoryGraphDraftState(
         emptyDraft,
         emptyGraph,
       }),
-    [emptyDraft, emptyGraph, replaceDraft, resetDraft, updateDraft],
+    [
+      adoptSavedFactoryDocument,
+      emptyDraft,
+      emptyGraph,
+      replaceDraft,
+      resetDraft,
+      updateDraft,
+    ],
   );
 
   return currentFactoryState ?? unavailableState;
@@ -184,6 +211,7 @@ function createCurrentFactoryGraphDraftState({
     hasChanges: hasFactoryGraphDraftChanges(sessionState.draft),
     latestDocument: sessionState.latestDocument,
     pendingFactoryDefinition,
+    adoptSavedFactoryDocument: callbacks.adoptSavedFactoryDocument,
     replaceDraft: callbacks.replaceDraft,
     resetDraft: callbacks.resetDraft,
     source: "current-factory",
@@ -208,6 +236,7 @@ function createUnavailableFactoryGraphDraftState({
     hasChanges: false,
     latestDocument: null,
     pendingFactoryDefinition: null,
+    adoptSavedFactoryDocument: callbacks.adoptSavedFactoryDocument,
     replaceDraft: callbacks.replaceDraft,
     resetDraft: callbacks.resetDraft,
     source: "projection",

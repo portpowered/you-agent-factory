@@ -9,6 +9,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
 import type { FactoryWorker } from "../../../api/events/types";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type {
   TerminalWorkItem,
@@ -104,6 +105,8 @@ export function useCurrentSelection({
     snapshot,
     workstationRequestsByDispatchID,
   );
+  const currentFactoryDocumentQuery = useCurrentFactoryDocument();
+  const topologyFactory = currentFactoryDocumentQuery.data ?? undefined;
 
   useEffect(() => {
     if (sessionChanged) {
@@ -119,6 +122,7 @@ export function useCurrentSelection({
     selection,
     snapshot,
     terminalWorkDetail,
+    topologyFactory,
   });
 
   const derived = useCurrentSelectionDerivedState({

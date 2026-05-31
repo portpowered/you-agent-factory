@@ -79,7 +79,7 @@ describe("useEditableFactoryGraph", () => {
       useEditableFactoryGraph({
         currentFactoryDocument:
           hookState.draftState.latestDocument ?? undefined,
-        saveFactoryDefinition: async () => undefined,
+        saveFactoryDefinition: async () => draftWorkstationFactoryDocument,
       }),
     );
 
@@ -88,7 +88,21 @@ describe("useEditableFactoryGraph", () => {
   });
 
   it("saves pending edits through the provided save callback", async () => {
-    const saveFactoryDefinition = vi.fn(async () => undefined);
+    const savedDocument: typeof draftWorkstationFactoryDocument = {
+      ...draftWorkstationFactoryDocument,
+      resources: [
+        ...(draftWorkstationFactoryDocument.resources ?? []),
+        {
+          capacity: 1,
+          name: "review-slot",
+        },
+      ],
+      version: {
+        logical: "9",
+        physical: "2026-05-31T02:00:00Z",
+      },
+    };
+    const saveFactoryDefinition = vi.fn(async () => savedDocument);
     hookState.draftState.hasChanges = true;
     hookState.draftState.draft = {
       ...createEmptyFactoryGraphDraft(),
@@ -124,8 +138,8 @@ describe("useEditableFactoryGraph", () => {
         ]),
       }),
     });
-    expect(hookState.draftState.replaceDraft).toHaveBeenCalledWith(
-      createEmptyFactoryGraphDraft(),
+    expect(hookState.draftState.adoptSavedFactoryDocument).toHaveBeenCalledWith(
+      savedDocument,
     );
     expect(result.current.saveState.lastSuccess).toBe(true);
   });
