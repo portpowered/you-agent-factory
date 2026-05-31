@@ -31,7 +31,9 @@ import {
 import {
   baseFactoryDefinition,
   baseFactoryDefinitionDocument,
+  buildDivergentPlaneDashboardSnapshot,
   createMockGraphEditorDraftState,
+  divergentDocumentPlaneFactoryDocument,
   wireMockEditableFactoryGraph,
   workerDenseFactoryDefinitionDocument,
 } from "../../../testing/graph-editor-harness";
@@ -1244,6 +1246,80 @@ function registerCurrentActivityCardTestLifecycle(): void {
       expect(document.querySelector('[data-id="worker:stalled"]')).toBeTruthy();
       expect(document.querySelector('[data-id="resource:gpu"]')).toBeTruthy();
     });
+  });
+
+  it("renders snapshot-only workstations in observe mode when the document plane diverges", async () => {
+    const snapshot = buildDivergentPlaneDashboardSnapshot();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: divergentDocumentPlaneFactoryDocument,
+      error: null,
+      status: "success",
+    } as never);
+    wireMockEditableFactoryGraph(
+      {
+        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
+        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
+      },
+      createMockGraphEditorDraftState({
+        baseDocument: divergentDocumentPlaneFactoryDocument,
+        latestDocument: divergentDocumentPlaneFactoryDocument,
+        pendingFactoryDefinition: divergentDocumentPlaneFactoryDocument,
+      }),
+    );
+
+    renderCurrentActivity({ snapshot });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: "Select Document Only workstation",
+        }),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("button", {
+          name: "Select Snapshot Only workstation",
+        }),
+      ).toBeTruthy();
+    });
+  });
+
+  it("renders document-only workstations in edit mode when the snapshot plane diverges", async () => {
+    const snapshot = buildDivergentPlaneDashboardSnapshot();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: divergentDocumentPlaneFactoryDocument,
+      error: null,
+      status: "success",
+    } as never);
+    wireMockEditableFactoryGraph(
+      {
+        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
+        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
+      },
+      createMockGraphEditorDraftState({
+        baseDocument: divergentDocumentPlaneFactoryDocument,
+        latestDocument: divergentDocumentPlaneFactoryDocument,
+        pendingFactoryDefinition: divergentDocumentPlaneFactoryDocument,
+      }),
+    );
+
+    renderCurrentActivity({ snapshot });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: "Select Document Only workstation",
+        }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.queryByRole("button", {
+        name: "Select Snapshot Only workstation",
+      }),
+    ).toBeNull();
   });
 
   it("does not render the editor-only visibility preset controls in embedded editor mode", async () => {
