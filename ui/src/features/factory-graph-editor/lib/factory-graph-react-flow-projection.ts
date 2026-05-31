@@ -98,6 +98,8 @@ export interface FactoryGraphReactFlowEditorOverlay {
 
 export interface ProjectFactoryGraphToReactFlowOptions {
   editor?: FactoryGraphReactFlowEditorOverlay;
+  /** When true, omit edges whose handles are absent from rendered connection anchors. */
+  filterEdgesToRenderedHandles?: boolean;
   factoryDefinition?: CanonicalFactoryDefinition | null;
   layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
@@ -218,16 +220,20 @@ export function projectFactoryGraphToReactFlow(
     });
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
 
+  const projectedEdges = displayTopology.edges.map((topologyEdge) =>
+    buildFactoryGraphReactFlowEdge(topologyEdge, projectionInput),
+  );
+
   return {
-    edges: displayTopology.edges
-      .map((topologyEdge) => ({
-        edge: buildFactoryGraphReactFlowEdge(topologyEdge, projectionInput),
-        kind: topologyEdge.kind,
-      }))
-      .filter(({ edge, kind }) =>
-        shouldIncludeFactoryGraphReactFlowEdge(edge, kind, nodesById),
-      )
-      .map(({ edge }) => edge),
+    edges: input.filterEdgesToRenderedHandles
+      ? projectedEdges.filter((edge) =>
+          shouldIncludeFactoryGraphReactFlowEdge(
+            edge,
+            edge.data?.kind,
+            nodesById,
+          ),
+        )
+      : projectedEdges,
     nodes,
   };
 }

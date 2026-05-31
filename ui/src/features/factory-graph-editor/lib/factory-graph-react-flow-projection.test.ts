@@ -466,6 +466,7 @@ describe("factory graph React Flow projection", () => {
     };
 
     const projection = projectFactoryGraphToReactFlow({
+      filterEdgesToRenderedHandles: true,
       topology,
       workstationResolver,
     });
@@ -487,6 +488,50 @@ describe("factory graph React Flow projection", () => {
     expect(edgeKinds).not.toContain("workstation-on-rejection");
     expect(edgeKinds).toContain("workstation-on-failure");
     expect(edgeKinds).toContain("workstation-output");
+  });
+
+  it("keeps progress-outcome edges for observer projections when handle filtering is disabled", () => {
+    const factoryWithoutStopWords = {
+      ...baseFactoryDefinition,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "rejected", type: "FAILED" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations[0],
+          behavior: "STANDARD",
+          onContinue: [{ state: "queued", workType: "story" }],
+          onFailure: [{ state: "rejected", workType: "story" }],
+          onRejection: [{ state: "rejected", workType: "story" }],
+          stopWords: undefined,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      factoryWithoutStopWords,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      mode: "observer",
+      topology,
+      workstationResolver: {
+        resolveWorkstation: (name) =>
+          factoryWithoutStopWords.workstations.find(
+            (workstation) => workstation.name === name,
+          ),
+      },
+    });
+    const edgeKinds = projection.edges.map((edge) => edge.data?.kind);
+
+    expect(edgeKinds).toContain("workstation-on-continue");
+    expect(edgeKinds).toContain("workstation-on-rejection");
   });
 
   it("omits worker-assignment handles on LOGICAL_MOVE workstations", () => {
