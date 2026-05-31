@@ -5,7 +5,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
-import type { FactoryWorker } from "../../../../api/events/types";
+import type { FactoryResource, FactoryWorker } from "../../../../api/events/types";
 import { hasDashboardStatePlace } from "./dashboardStatePlaces";
 
 export interface DashboardNodeSelection {
@@ -38,12 +38,18 @@ export interface DashboardWorkerSelection {
   workerName: string;
 }
 
+export interface DashboardResourceSelection {
+  kind: "resource";
+  resourceName: string;
+}
+
 export type DashboardSelection =
   | DashboardNodeSelection
   | DashboardStateNodeSelection
   | DashboardWorkItemSelection
   | DashboardWorkstationRequestSelection
-  | DashboardWorkerSelection;
+  | DashboardWorkerSelection
+  | DashboardResourceSelection;
 
 export function selectDefaultSelection(snapshot: DashboardSnapshot): DashboardSelection | null {
   const firstActiveNodeId = snapshot.runtime.active_workstation_node_ids?.[0];
@@ -92,6 +98,12 @@ export function resolveDashboardSelection({
 
   if (selection.kind === "worker") {
     return workerExistsInSnapshotFactory(snapshot, selection.workerName)
+      ? selection
+      : selectDefaultSelection(snapshot);
+  }
+
+  if (selection.kind === "resource") {
+    return resourceExistsInSnapshotFactory(snapshot, selection.resourceName)
       ? selection
       : selectDefaultSelection(snapshot);
   }
@@ -444,6 +456,20 @@ function workerExistsInSnapshotFactory(
   workerName: string,
 ): boolean {
   return findFactoryWorkerInSnapshot(snapshot, workerName) !== undefined;
+}
+
+function resourceExistsInSnapshotFactory(
+  snapshot: DashboardSnapshot,
+  resourceName: string,
+): boolean {
+  return findFactoryResourceInSnapshot(snapshot, resourceName) !== undefined;
+}
+
+export function findFactoryResourceInSnapshot(
+  snapshot: DashboardSnapshot,
+  resourceName: string,
+): FactoryResource | undefined {
+  return snapshot.factory?.resources?.find((resource) => resource.name === resourceName);
 }
 
 export function findFactoryWorkerInSnapshot(

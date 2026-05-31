@@ -96,7 +96,7 @@ function toCurrentActivitySelection(
     return { kind: "node", nodeId: selection.nodeId };
   }
 
-  if (selection?.kind === "worker") {
+  if (selection?.kind === "worker" || selection?.kind === "resource") {
     return selection;
   }
 

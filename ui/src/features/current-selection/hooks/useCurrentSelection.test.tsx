@@ -298,6 +298,9 @@ function SelectionHarness({
       <div data-testid="selected-worker-workstations">
         {currentSelection.selectedWorkerWorkstationNames.join(",")}
       </div>
+      <div data-testid="selected-resource-name">
+        {currentSelection.selectedResourceName ?? ""}
+      </div>
       <div data-testid="selection-kind">{currentSelection.selection?.kind ?? ""}</div>
     </>
   );
@@ -746,6 +749,82 @@ describe("useCurrentSelection", () => {
         "Review,Plan",
       );
       expect(screen.getByTestId("selection-kind").textContent).toBe("worker");
+    });
+  });
+
+  it("derives selected resource name from resource dashboard selection", async () => {
+    const snapshot = buildSnapshot({
+      activeExecution: buildActiveExecution(
+        "dispatch-review-active",
+        [buildWorkItem("work-active", "Active Story")],
+        "2026-04-08T12:00:03Z",
+      ),
+    });
+    snapshot.factory = {
+      resources: [{ name: "gpu", capacity: 2 }],
+    };
+
+    act(() => {
+      useSelectionHistoryStore.getState().replacePresent({
+        selection: { kind: "resource", resourceName: "gpu" },
+        terminalWorkDetail: null,
+      });
+    });
+
+    render(
+      <SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-resource-name").textContent).toBe("gpu");
+      expect(screen.getByTestId("selection-kind").textContent).toBe("resource");
+    });
+  });
+
+  it("falls back resource selection when the resource disappears from the factory document", async () => {
+    const snapshot = buildSnapshot({
+      activeExecution: buildActiveExecution(
+        "dispatch-review-active",
+        [buildWorkItem("work-active", "Active Story")],
+        "2026-04-08T12:00:03Z",
+      ),
+    });
+    snapshot.factory = {
+      resources: [{ name: "gpu", capacity: 2 }],
+    };
+
+    act(() => {
+      useSelectionHistoryStore.getState().replacePresent({
+        selection: { kind: "resource", resourceName: "removed-resource" },
+        terminalWorkDetail: null,
+      });
+    });
+
+    const { rerender } = render(
+      <SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selection-kind").textContent).toBe("node");
+      expect(screen.getByTestId("selected-resource-name").textContent).toBe("");
+    });
+
+    snapshot.factory = {
+      resources: [{ name: "gpu", capacity: 2 }],
+    };
+
+    act(() => {
+      useSelectionHistoryStore.getState().replacePresent({
+        selection: { kind: "resource", resourceName: "gpu" },
+        terminalWorkDetail: null,
+      });
+    });
+
+    rerender(<SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selection-kind").textContent).toBe("resource");
+      expect(screen.getByTestId("selected-resource-name").textContent).toBe("gpu");
     });
   });
 

@@ -246,6 +246,7 @@ export function useCurrentSelectionDerivedState({
         ? selection.request.work_items[0]?.work_id ?? null
         : terminalWorkDetail?.traceWorkID ?? null;
   const selectedWorkerName = selection?.kind === "worker" ? selection.workerName : null;
+  const selectedResourceName = selection?.kind === "resource" ? selection.resourceName : null;
   const selectedWorker = useMemo((): FactoryWorker | null => {
     if (!snapshot || !selectedWorkerName) {
       return null;
@@ -306,6 +307,7 @@ export function useCurrentSelectionDerivedState({
     selectedWorkProviderSessions: work.selectedWorkProviderSessions,
     selectedWorkRequestHistory: work.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: work.selectedWorkWorkstationRequests,
+    selectedResourceName,
     selectedWorker,
     selectedWorkerName,
     selectedWorkerWorkstationNames,

@@ -337,4 +337,45 @@ describe("resolveDashboardSelection", () => {
       nodeId: "review",
     });
   });
+
+  it("retains resource selections while the authored resource remains in the factory document", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+    snapshot.factory = {
+      ...snapshot.factory,
+      resources: [{ name: "gpu", capacity: 2 }],
+    };
+
+    const selection = {
+      kind: "resource" as const,
+      resourceName: "gpu",
+    };
+
+    expect(
+      resolveDashboardSelection({
+        selection,
+        snapshot,
+      }),
+    ).toEqual(selection);
+  });
+
+  it("falls back to the default dashboard selection when the selected resource disappears", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+    snapshot.factory = {
+      ...snapshot.factory,
+      resources: [{ name: "gpu", capacity: 2 }],
+    };
+
+    const resolved = resolveDashboardSelection({
+      selection: {
+        kind: "resource",
+        resourceName: "removed-resource",
+      },
+      snapshot,
+    });
+
+    expect(resolved).toEqual({
+      kind: "node",
+      nodeId: "review",
+    });
+  });
 });

@@ -48,6 +48,7 @@ export interface CurrentSelectionState {
   selectedWorkProviderSessions: DashboardProviderSessionAttempt[];
   selectedWorkRequestHistory: WorkstationRequestLike[];
   selectedWorkWorkstationRequests: DashboardWorkstationRequest[];
+  selectedResourceName: string | null;
   selectedWorker: FactoryWorker | null;
   selectedWorkerName: string | null;
   selectedWorkerWorkstationNames: string[];
@@ -64,6 +65,7 @@ export interface CurrentSelectionState {
   ) => void;
   selectWorkstation: (nodeId: string) => void;
   selectWorkstationRequest: (request: DashboardWorkstationRequest) => void;
+  selectResource: (resourceName: string) => void;
   selectWorker: (workerName: string) => void;
   terminalWorkDetail: TerminalWorkDetail | null;
   undoSelection: () => void;
@@ -163,6 +165,7 @@ export function useCurrentSelection({
     selectedWorkProviderSessions: derived.selectedWorkProviderSessions,
     selectedWorkRequestHistory: derived.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: derived.selectedWorkWorkstationRequests,
+    selectedResourceName: derived.selectedResourceName,
     selectedWorker: derived.selectedWorker,
     selectedWorkerName: derived.selectedWorkerName,
     selectedWorkerWorkstationNames: derived.selectedWorkerWorkstationNames,
@@ -174,6 +177,7 @@ export function useCurrentSelection({
     selectWorkItem: actions.selectWorkItem,
     selectWorkstation: actions.selectWorkstation,
     selectWorkstationRequest: actions.selectWorkstationRequest,
+    selectResource: actions.selectResource,
     selectWorker: actions.selectWorker,
     terminalWorkDetail,
     undoSelection: store.undoSelection,
