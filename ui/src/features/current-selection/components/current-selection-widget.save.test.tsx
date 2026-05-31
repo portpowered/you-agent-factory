@@ -42,7 +42,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     const saveMutation = mockFactoryDocumentSave();
-    saveCurrentFactoryMutation = saveMutation.mutateAsync;
+    saveCurrentFactoryMutation = saveMutation.saveAsync;
     useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
@@ -200,7 +200,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
-          factoryDefinition: expect.objectContaining({
+          factory: expect.objectContaining({
             version: {
               logical: "7",
               physical: "2026-05-23T15:52:00Z",
@@ -417,7 +417,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
-          factoryDefinition: expect.objectContaining({
+          factory: expect.objectContaining({
             version: {
               logical: "7",
               physical: "2026-05-23T15:52:00Z",
@@ -456,7 +456,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
         expect.objectContaining({
-          factoryDefinition: expect.objectContaining({
+          factory: expect.objectContaining({
             workstations: [
               expect.objectContaining({
                 behavior: "REPEATER",
@@ -548,7 +548,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
-          factoryDefinition: expect.objectContaining({
+          factory: expect.objectContaining({
             version: {
               logical: "7",
               physical: "2026-05-23T15:52:00Z",
