@@ -1,9 +1,7 @@
 import { useCallback, useState } from "react";
 
-import {
-  isFactoryDocumentSaveConfirming,
-  type FactoryDocumentSaveState,
-} from "../../current-selection/base/public";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
+import { isFactoryDocumentSaveConfirming } from "../../current-selection/base/hooks/factory-document-save-types";
 import type { EditableFactoryGraphDocumentSaveControls } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";

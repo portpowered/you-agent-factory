@@ -3,10 +3,6 @@ import type { FactoryDocumentSaveState } from "../../current-selection/base/publ
 export const STALE_FACTORY_GRAPH_DRAFT_WARNING =
   "The factory definition changed while you were editing. Refresh or discard your draft before saving.";
 
-export function createIdleGraphDocumentSaveState(): FactoryDocumentSaveState {
-  return { status: "idle" };
-}
-
 export function mapGraphSaveOutcomeToDocumentSaveState({
   errorMessage,
   isSubmitting,

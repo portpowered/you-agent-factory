@@ -3,13 +3,7 @@ export {
   type FactoryDocumentSaveInput,
 } from "../hooks/useFactoryDocumentSave";
 
-export {
-  type FactoryDocumentSaveState,
-  getFactoryDocumentSaveErrorMessage,
-  isFactoryDocumentSaveConfirming,
-  isFactoryDocumentSaveSubmitting,
-  isFactoryDocumentSaveSuccessful,
-} from "../../current-selection/base/hooks/factory-document-save-types";
+export type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 
 export {
   useScopedFactoryDocumentSave,

@@ -22,7 +22,7 @@ export {
 export { NoSelectionDetailCard } from "../components/no-selection-detail-card";
 
 export * from "../hooks/detail-card-save-types";
-export * from "../hooks/factory-document-save-types";
+export type { FactoryDocumentSaveState } from "../hooks/factory-document-save-types";
 export {
   useFactoryDocumentSave,
   type FactoryDocumentSaveInput,
