@@ -3,16 +3,23 @@ import { useEffect, useMemo, useState } from "react";
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
+  type EditableWorkstationBehavior,
+  workerSupportsPollerBehavior,
+  workstationBehaviorRequiresPrompt,
+} from "../../../current-factory-definition/lib/workstation-behavior";
+import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
+import type { DashboardSelection } from "../../base/state/selection-types";
+import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import {
-  workstationBehaviorRequiresPrompt,
-  workerSupportsPollerBehavior,
-  type EditableWorkstationBehavior,
-} from "../../../current-factory-definition/lib/workstation-behavior";
+  resolvePromptHelpState,
+  resolvePromptValidationState,
+} from "../editing/editable-workstation-prompt-state";
+import type { RunnerID } from "../editing/runner-metadata";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationPromptHelpState,
@@ -21,16 +28,9 @@ import type {
   EditableWorkstationWorkerOptionsState,
 } from "../lib/detail-card-types";
 import {
-  resolvePromptHelpState,
-  resolvePromptValidationState,
-} from "../editing/editable-workstation-prompt-state";
-import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
-import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
 } from "../messages/workstation-detail";
-import type { RunnerID } from "../editing/runner-metadata";
-import type { DashboardSelection } from "../../base/state/selection-types";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
@@ -122,9 +122,7 @@ export function useEditableWorkstationConfigurationState(
 }
 
 function useEditableWorkstationSession(
-  editableDefinition: ReturnType<
-    typeof useCurrentFactoryDocument
-  >["data"],
+  editableDefinition: ReturnType<typeof useCurrentFactoryDocument>["data"],
   selectedNode: DashboardWorkstationNode | null,
   selection: DashboardSelection | null,
 ) {

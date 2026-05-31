@@ -1,7 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-
-import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import {
@@ -11,16 +10,19 @@ import {
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
-vi.mock("../../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
 vi.mock("./useCurrentWorkstationPromptTemplateContract", () => ({
   useCurrentWorkstationPromptTemplateContract: vi.fn(),
@@ -184,10 +186,10 @@ describe("useEditableWorkstationConfigurationState", () => {
 
     await waitFor(() => {
       expect(result.current).toMatchObject({
-      draft: {
-        behavior: "STANDARD",
-        prompt: "Server refreshed prompt before local edits.",
-        workerName: "reviewer",
+        draft: {
+          behavior: "STANDARD",
+          prompt: "Server refreshed prompt before local edits.",
+          workerName: "reviewer",
         },
         isDirty: false,
         status: "ready",
@@ -349,10 +351,10 @@ describe("useEditableWorkstationConfigurationState", () => {
 
     await waitFor(() => {
       expect(result.current).toMatchObject({
-      draft: {
-        behavior: "STANDARD",
-        prompt: "Plan the implementation.",
-        workerName: "planner",
+        draft: {
+          behavior: "STANDARD",
+          prompt: "Plan the implementation.",
+          workerName: "planner",
         },
         initialValues: {
           behavior: "STANDARD",
@@ -529,10 +531,9 @@ describe("useEditableWorkstationConfigurationState", () => {
     );
 
     await waitFor(() => {
-      expect(useCurrentWorkstationPromptTemplateContract).toHaveBeenLastCalledWith(
-        "Canonical Review",
-        true,
-      );
+      expect(
+        useCurrentWorkstationPromptTemplateContract,
+      ).toHaveBeenLastCalledWith("Canonical Review", true);
       expect(
         useCurrentWorkstationPromptTemplateValidation,
       ).toHaveBeenLastCalledWith(
@@ -771,15 +772,14 @@ function buildEditableFactoryDefinition(overrides?: {
       logical: "7",
       physical: "2026-05-23T15:52:00Z",
     },
-    workers: (overrides?.workerOptions ?? [
-      { name: "reviewer", type: "MODEL_WORKER" as const },
-    ]).map((worker, index) => ({
-      model:
-        worker.type === "MODEL_WORKER" ? `gpt-5.${index + 5}` : undefined,
+    workers: (
+      overrides?.workerOptions ?? [
+        { name: "reviewer", type: "MODEL_WORKER" as const },
+      ]
+    ).map((worker, index) => ({
+      model: worker.type === "MODEL_WORKER" ? `gpt-5.${index + 5}` : undefined,
       name: worker.name,
-      ...(worker.type === "SCRIPT_WORKER"
-        ? { command: "./poller.sh" }
-        : {}),
+      ...(worker.type === "SCRIPT_WORKER" ? { command: "./poller.sh" } : {}),
       type: worker.type,
     })),
     workstations: [

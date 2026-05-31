@@ -4,16 +4,19 @@ import { useCurrentFactoryDocument } from "../../../current-factory-definition/h
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
 
-vi.mock("../../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
 function mockFactoryDocumentQuery(
   overrides: Partial<ReturnType<typeof useCurrentFactoryDocument>> = {},
@@ -218,9 +221,9 @@ describe("WorkerDetailCard", () => {
     });
 
     expect(onModelProviderChange).toHaveBeenCalledWith("CODEX");
-    expect(editableConfigurationState.onModelLocalityChange).toHaveBeenCalledWith(
-      "LOCAL",
-    );
+    expect(
+      editableConfigurationState.onModelLocalityChange,
+    ).toHaveBeenCalledWith("LOCAL");
     expect(screen.queryByLabelText("Command")).toBeNull();
 
     fireEvent.click(
@@ -442,9 +445,7 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(
-      screen.getByText(/overwrite newer server values for/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/overwrite newer server values for/i)).toBeTruthy();
     expect(
       screen.getByText(
         /The running factory changed this field while you were editing/i,

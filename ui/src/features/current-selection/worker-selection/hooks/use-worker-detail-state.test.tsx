@@ -3,16 +3,19 @@ import type { CurrentFactoryDocument } from "../../../../api/current-factory-def
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useWorkerDetailState } from "./use-worker-detail-state";
 
-vi.mock("../../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
 function mockFactoryDocumentQuery(
   overrides: Partial<ReturnType<typeof useCurrentFactoryDocument>> = {},
