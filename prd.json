@@ -1,0 +1,112 @@
+{
+  "project": "infinite-you",
+  "branchName": "ralph/graph-editor-z-axis-incomplete-hint",
+  "description": "Add a red glowing in-node hint on factory graph workstation nodes at progress-outcome (z-axis) anchor positions when Continue/Reject connections are blocked because stopWords are not configured, tied to the same rules that omit or disable those connect handles, with localized tooltip copy that clears when requirements are satisfied.",
+  "context": {
+    "customerAsk": "When a graph entity still needs completion on the z axis, render a red glowing indicator on the z-axis control/position when incomplete and blocking connection establishment, tied to the same validation/rules that disable connect gestures, with copy/tooltip explaining what must be completed to connect.",
+    "problem": "Standard model workstations without configured stopWords do not support Continue/Reject progress-outcome routes. The graph editor omits or hides those connect handles with no in-node explanation, so operators cannot tell why connections are blocked. Connection notices only appear after failed gestures.",
+    "solution": "Derive z-axis incomplete state from workstationSupportsProgressOutcomeRoutes and existing anchor filtering, render red pulsing orbs at Continue/Reject slots on ActivityGraphNodeShell when editor Connect mode blocks those routes, add localized factory-graph-editor messages, and wire through both buildSemanticGraphHandles and factory-graph-react-flow-projection buildNodeHandles with tests and Storybook/browser verification."
+  },
+  "acceptanceCriteria": [
+    "Workstations blocking Continue/Reject connections show a red glowing z-axis hint on the node in graph editor Connect mode",
+    "Hint visibility uses the same workstationSupportsProgressOutcomeRoutes and anchor-filter rules as connect-handle omission, not a separate flag",
+    "Hint includes accessible name and tooltip explaining stopWords must be configured on the workstation before z-axis connections are allowed",
+    "Hint clears and Continue/Reject handles work normally when stopWords are configured; no false positives on classifiers, repeaters, or fully configured workstations",
+    "Automated tests cover hint on/off fixtures; Storybook or browser verification confirms visible orb styling",
+    "ui typecheck, lint, and affected tests pass"
+  ],
+  "userStories": [
+    {
+      "id": "graph-editor-z-axis-incomplete-hint-001",
+      "title": "Derive z-axis incomplete state for connection blocking",
+      "description": "As a maintainer, I need a single shared predicate for workstations that block progress-outcome connections because z-axis setup is incomplete so hint visibility cannot drift from connect-handle rules.",
+      "acceptanceCriteria": [
+        "Exported helper returns true exactly when Continue/Reject anchors are filtered due to missing stopWords on a standard model processor (inverse of workstationSupportsProgressOutcomeRoutes for that class)",
+        "Helper returns false for classifiers, repeaters, and workstations that already support progress-outcome routes",
+        "Unit tests cover standard processor without stopWords (true), with stopWords (false), repeater without stopWords (false), and classifier (false)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "graph-editor-z-axis-incomplete-hint-002",
+      "title": "Localized hint copy for z-axis completion",
+      "description": "As an operator, I want tooltip and screen-reader text that explains what to complete before I can connect Continue/Reject routes.",
+      "acceptanceCriteria": [
+        "FactoryGraphEditorMessages includes z-axis incomplete hint strings in editor.ts with English and existing catalog locales",
+        "Copy states Continue/Reject connections require configured stop words on the workstation in plain language",
+        "editor.test.ts asserts English and at least one localized locale resolve non-empty strings",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "graph-editor-z-axis-incomplete-hint-003",
+      "title": "Render red orb hint on workstation node shell",
+      "description": "As an operator in Connect mode, I want a red glowing orb at progress-outcome anchor positions when z-axis setup is incomplete so I see why connections are blocked at the node.",
+      "acceptanceCriteria": [
+        "ActivityGraphNodeShell renders red pulsing orbs at Continue/Reject slots when zAxisIncompleteHints (or equivalent) is set in editor context",
+        "Orbs use danger design tokens, are pointer-events-none on the decorative layer, and expose aria-label and title from localized messages",
+        "Component or unit test asserts orbs render when hints prop is set and are absent when unset",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: graph editor Connect tool on standard processor without stop words shows red orbs at Continue/Reject positions"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "graph-editor-z-axis-incomplete-hint-004",
+      "title": "Wire z-axis hints in workflow activity graph editor handles",
+      "description": "As an operator editing topology from the Workflow Activity card, I want z-axis hints on workstation nodes where connect handles are built today.",
+      "acceptanceCriteria": [
+        "buildSemanticGraphHandles / buildCurrentActivityNodes sets z-axis hint props when editorMode is true, Connect tool is active, and the shared incomplete predicate is true",
+        "When stopWords are configured, hints are absent and Continue/Reject handles appear per existing behavior",
+        "Workstations with hidden authored continue/reject handles still show z-axis hint while incomplete predicate is true",
+        "react-flow-current-activity-card-graph.test.ts or focused handle test asserts hint prop presence and absence",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "graph-editor-z-axis-incomplete-hint-005",
+      "title": "Wire z-axis hints in factory graph editor React Flow projection",
+      "description": "As an operator using the factory graph editor flow model, I want the same z-axis hint behavior as the dashboard activity graph.",
+      "acceptanceCriteria": [
+        "buildNodeHandles in factory-graph-react-flow-projection.ts applies the incomplete predicate and passes hint props when canEditConnections is true",
+        "factory-graph-react-flow-projection.test.ts and/or factory-graph-editor-flow.progress-outcome-routes.test.tsx assert hint on without stopWords and off with stopWords configured",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: factory graph editor shows hint matching activity graph for without/with stopWords fixtures"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "graph-editor-z-axis-incomplete-hint-006",
+      "title": "Storybook and regression guard for progress-outcome routes",
+      "description": "As a maintainer, I want Storybook coverage so responsive layout does not regress z-axis hint placement.",
+      "acceptanceCriteria": [
+        "ProgressOutcomeRoutesWithoutStopWords story or sibling documents z-axis incomplete hint with play function asserting visible hint markers",
+        "Existing progress-outcome route tests pass without weakening connect-handle expectations",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: Storybook shows orbs without stop words and none with ProgressOutcomeRoutesWithStopWords"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
