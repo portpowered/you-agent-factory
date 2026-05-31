@@ -279,8 +279,8 @@ func (h factorySaveHost) ActivateSessionEditableFactory(
 	return h.FactoryService.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
 }
 
-func (h factorySaveHost) ReplaceDefaultFactoryDefinition(sessionRootDir string, payload []byte) (func(), error) {
-	return h.FactoryService.replaceDefaultFactoryDefinition(sessionRootDir, payload)
+func (h factorySaveHost) ReplaceFactorySplitLayout(sessionRootDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	return h.FactoryService.replaceFactorySplitLayout(sessionRootDir, payload)
 }
 
 func (h factorySaveHost) CurrentFactoryDefinitionVersionAtRoot(rootDir string, name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
@@ -346,8 +346,8 @@ func (fs *FactoryService) activateSessionEditableFactory(
 	return fs.replaceSessionRuntime(ctx, session, runtimeName, replacement)
 }
 
-func (fs *FactoryService) replaceDefaultFactoryDefinition(sessionRootDir string, payload []byte) (func(), error) {
-	return configpersist.ReplaceDefaultFactoryDefinition(sessionRootDir, payload)
+func (fs *FactoryService) replaceFactorySplitLayout(sessionRootDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	return configpersist.ReplaceFactorySplitLayout(sessionRootDir, payload)
 }
 
 // Factory service composition seams (wire / BuildFactoryService). Co-located here

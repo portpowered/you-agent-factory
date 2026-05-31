@@ -23,7 +23,7 @@ type Host interface {
 		name factoryapi.FactoryName,
 		runtimeName string,
 	) error
-	ReplaceDefaultFactoryDefinition(sessionRootDir string, payload []byte) (restore func(), err error)
+	ReplaceFactorySplitLayout(sessionRootDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error)
 	CurrentFactoryDefinitionVersionAtRoot(rootDir string, name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error)
 	SessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error)
 	SerializeNamedFactoryUpsertResponse(

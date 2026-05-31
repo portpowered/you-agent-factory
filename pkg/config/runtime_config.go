@@ -939,10 +939,14 @@ func writeNamedFactoryLayout(targetDir string, cfg *interfaces.FactoryConfig, ca
 	if err := os.WriteFile(factoryPath, formatted, 0o644); err != nil {
 		return nil, fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
 	}
-	if _, err := writeExpandedWorkerFiles(targetDir, cfg.Workers); err != nil {
+	persistExpansion := splitRuntimeExpansionOptions{overwriteExisting: true}
+	if _, err := writeExpandedWorkerFiles(targetDir, cfg.Workers, persistExpansion); err != nil {
 		return nil, err
 	}
-	if _, _, err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations); err != nil {
+	if _, _, err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations, persistExpansion); err != nil {
+		return nil, err
+	}
+	if err := pruneStaleSplitRuntimeDirs(targetDir, cfg); err != nil {
 		return nil, err
 	}
 	replacements, err := materializePortableBundledFiles(targetDir, cfg)

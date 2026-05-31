@@ -108,14 +108,19 @@ func (s *Service) saveDefaultCurrentFactoryForSession(
 		if err != nil {
 			return err
 		}
-		restore, err := s.host.ReplaceDefaultFactoryDefinition(sessionRootDir, payload)
+		replaceResult, err := s.host.ReplaceFactorySplitLayout(sessionRootDir, payload)
 		if err != nil {
 			return err
 		}
 
 		if err := s.host.ActivateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, sessionRootDir, current.Name, string(current.Name)); err != nil {
-			restore()
+			if replaceResult != nil && replaceResult.Restore != nil {
+				replaceResult.Restore()
+			}
 			return err
+		}
+		if replaceResult != nil && replaceResult.DiscardBackup != nil {
+			replaceResult.DiscardBackup()
 		}
 
 		var readbackErr error

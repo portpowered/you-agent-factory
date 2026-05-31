@@ -133,36 +133,40 @@ func TestReadWriteCurrentFactoryPointer_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestReplaceDefaultFactoryDefinition_StagesAndRestores(t *testing.T) {
-	rootDir := t.TempDir()
-	initial := namedFactoryPayload(t, "legacy")
-	updated := namedFactoryPayload(t, "legacy-v2")
-
-	if err := os.WriteFile(filepath.Join(rootDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
+func TestReplaceFactorySplitLayout_MatchesConfigPackage(t *testing.T) {
+	targetDir := t.TempDir()
+	payload := namedFactoryPayload(t, "alpha")
+	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), payload, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 
-	restore, err := persist.ReplaceDefaultFactoryDefinition(rootDir, updated)
+	facadeResult, err := persist.ReplaceFactorySplitLayout(targetDir, payload)
 	if err != nil {
-		t.Fatalf("persist.ReplaceDefaultFactoryDefinition: %v", err)
+		t.Fatalf("persist.ReplaceFactorySplitLayout: %v", err)
+	}
+	if facadeResult == nil || facadeResult.Restore == nil {
+		t.Fatal("expected restore callback from persist facade")
 	}
 
-	got, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
-	if err != nil {
-		t.Fatalf("ReadFile(factory.json): %v", err)
+	rootDir2 := t.TempDir()
+	if err := os.WriteFile(filepath.Join(rootDir2, interfaces.FactoryConfigFile), payload, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
-	if string(got) != string(updated) {
-		t.Fatalf("factory.json after replace = %q, want updated payload", string(got))
+	configResult, err := config.ReplaceFactorySplitLayout(rootDir2, payload)
+	if err != nil {
+		t.Fatalf("config.ReplaceFactorySplitLayout: %v", err)
+	}
+	if configResult == nil || configResult.Restore == nil {
+		t.Fatal("expected restore callback from config package")
 	}
 
-	restore()
-
-	got, err = os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
-	if err != nil {
-		t.Fatalf("ReadFile(factory.json) after restore: %v", err)
+	agentsPath := filepath.Join(targetDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName)
+	if _, err := os.Stat(agentsPath); err != nil {
+		t.Fatalf("expected split worker file from facade path: %v", err)
 	}
-	if string(got) != string(initial) {
-		t.Fatalf("factory.json after restore = %q, want initial payload", string(got))
+	agentsPath = filepath.Join(rootDir2, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName)
+	if _, err := os.Stat(agentsPath); err != nil {
+		t.Fatalf("expected split worker file from config path: %v", err)
 	}
 }
 
