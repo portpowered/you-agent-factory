@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
@@ -346,6 +347,7 @@ describe("WorkerDetailCard", () => {
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
         headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
+        onSaveConfiguration={vi.fn()}
         workerName="reviewer"
       />,
     );
@@ -353,13 +355,15 @@ describe("WorkerDetailCard", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "Saving reviewer updates every workstation",
     );
-    expect(screen.getByRole("button", { name: "Save worker" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Save worker" })).toHaveLength(
+      2,
+    );
     expect(
       screen.getByRole("button", { name: "Discard local changes" }),
     ).toBeTruthy();
   });
 
-  it("renders header save and omits a footer Save button", () => {
+  it("stacks configuration fields vertically and renders a labeled footer Save", () => {
     const editableConfigurationState: EditableWorkerConfigurationState = {
       canSave: true,
       draft: {
@@ -415,17 +419,30 @@ describe("WorkerDetailCard", () => {
       status: "success",
     } as never);
 
-    render(
+    const onSaveConfiguration = vi.fn();
+
+    const { container } = render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
         headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
+        onSaveConfiguration={onSaveConfiguration}
         workerName="reviewer"
       />,
     );
 
-    expect(screen.getAllByRole("button", { name: "Save worker" })).toHaveLength(
-      1,
+    const fieldGroup = container.querySelector(
+      `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
     );
+    expect(fieldGroup).not.toBeNull();
+    expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);
+    expect(fieldGroup?.className).not.toMatch(/xl:grid-cols-\d/);
+
+    const saveButtons = screen.getAllByRole("button", { name: "Save worker" });
+    expect(saveButtons).toHaveLength(2);
+
+    fireEvent.click(saveButtons[1] ?? saveButtons[0]);
+    expect(onSaveConfiguration).toHaveBeenCalledTimes(1);
+
     expect(
       screen.getByRole("button", { name: "Discard local changes" }),
     ).toBeTruthy();
@@ -946,6 +963,7 @@ describe("WorkerDetailCard", () => {
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
         headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
+        onSaveConfiguration={vi.fn()}
         workerName="reviewer"
       />,
     );
@@ -963,11 +981,10 @@ describe("WorkerDetailCard", () => {
     expect(
       screen.queryByText("Enter a model before saving this worker."),
     ).toBeNull();
-    expect(
-      screen
-        .getByRole("button", { name: "Save worker" })
-        .hasAttribute("disabled"),
-    ).toBe(false);
+    const footerSave = screen.getAllByRole("button", {
+      name: "Save worker",
+    })[1];
+    expect(footerSave?.hasAttribute("disabled")).toBe(false);
   });
 
   it("disables save and shows field errors while validation is unresolved", () => {
@@ -1032,6 +1049,7 @@ describe("WorkerDetailCard", () => {
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
         headerAction={buildWorkerHeaderSaveAction({ canSave: false })}
+        onSaveConfiguration={vi.fn()}
         workerName="reviewer"
       />,
     );
@@ -1047,10 +1065,10 @@ describe("WorkerDetailCard", () => {
     expect(
       screen.queryByText("Enter a model before saving this worker."),
     ).toBeNull();
-    expect(
-      screen
-        .getByRole("button", { name: "Save worker" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
+    for (const saveButton of screen.getAllByRole("button", {
+      name: "Save worker",
+    })) {
+      expect(saveButton.hasAttribute("disabled")).toBe(true);
+    }
   });
 });

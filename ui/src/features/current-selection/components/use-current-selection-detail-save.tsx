@@ -1,20 +1,20 @@
+import type { DashboardSelection } from "../base/state/selection-types";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { EditableResourceSaveHeaderAction } from "../resource-selection/components/resource-save-controls";
 import type { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
 import { useSaveEditableResourceConfiguration } from "../resource-selection/hooks/use-save-editable-resource-configuration";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import type { DashboardSelection } from "../base/state/selection-types";
+import type { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
+import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
+import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
 import type { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
 import {
-  useSaveEditableWorkstationConfiguration,
   type UseSaveEditableWorkstationConfigurationResult,
+  useSaveEditableWorkstationConfiguration,
 } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import {
   EditableWorkstationSaveDialog,
   EditableWorkstationSaveHeaderAction,
 } from "../workstation-selection/public";
-import type { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
-import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
-import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
 
 export function useCurrentSelectionDetailSave({
   currentSelection,
@@ -101,6 +101,7 @@ export function useCurrentSelectionDetailSave({
   return {
     resourceHeaderAction,
     resourceSaveState: resourceSave.saveState,
+    saveWorkerConfiguration: () => void workerSave.save(),
     workstationHeaderAction,
     workstationSave,
     workstationSaveState: workstationSave.saveState,

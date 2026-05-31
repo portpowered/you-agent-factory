@@ -23,7 +23,9 @@ import {
   createDetailCardDeferredFactoryDocumentSave,
   DETAIL_CARD_NOW,
   DETAIL_CARD_SAVE_FACTORY_VERSION,
+  clickWorkstationSave,
   expandDetailCardWorkstationConfiguration,
+  workstationFooterSaveButton,
 } from "../base/components/detail-card-test-helpers";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
@@ -136,9 +138,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     await waitFor(() => {
       expect(
-        screen
-          .getByRole("button", { name: "Save changes" })
-          .getAttribute("disabled"),
+        workstationFooterSaveButton().getAttribute("disabled"),
       ).not.toBeNull();
     });
     expect(screen.getByText("Prompt diagnostics")).toBeTruthy();
@@ -149,9 +149,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     await waitFor(() => {
       expect(
-        screen
-          .getByRole("button", { name: "Save changes" })
-          .getAttribute("disabled"),
+        workstationFooterSaveButton().getAttribute("disabled"),
       ).toBeNull();
     });
     await waitFor(() => {
@@ -199,9 +197,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     await waitFor(() => {
       expect(
-        screen
-          .getByRole("button", { name: "Save changes" })
-          .getAttribute("disabled"),
+        workstationFooterSaveButton().getAttribute("disabled"),
       ).not.toBeNull();
     });
 
@@ -211,13 +207,11 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     await waitFor(() => {
       expect(
-        screen
-          .getByRole("button", { name: "Save changes" })
-          .getAttribute("disabled"),
+        workstationFooterSaveButton().getAttribute("disabled"),
       ).toBeNull();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
 
     expect(
       screen.getByRole("heading", {
@@ -238,7 +232,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Review the diff and verify browser behavior." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
 
     expect(
       screen.getByRole("heading", {
@@ -281,9 +275,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       "Review the diff and verify browser behavior.",
     );
     expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
+      workstationFooterSaveButton().getAttribute("disabled"),
     ).not.toBeNull();
   });
 
@@ -303,7 +295,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this draft while the save fails." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -318,9 +310,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       "Keep this draft while the save fails.",
     );
     expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
+      workstationFooterSaveButton().getAttribute("disabled"),
     ).toBeNull();
   });
 
@@ -333,7 +323,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this draft through a generic failure." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -363,7 +353,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this draft through a stale write." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -382,9 +372,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       "Keep this draft through a stale write.",
     );
     expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
+      workstationFooterSaveButton().getAttribute("disabled"),
     ).toBeNull();
   });
 
@@ -417,7 +405,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Worker"), {
       target: { value: "planner" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -439,7 +427,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Changed prompt before cancelling save." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
 
     expect(
       screen.getByRole("heading", {
@@ -472,7 +460,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Worker"), {
       target: { value: "planner" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -515,7 +503,10 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       screen.getByRole("option", { name: "重复器" }).getAttribute("value"),
     ).toBe("REPEATER");
 
-    fireEvent.click(screen.getByRole("button", { name: "保存更改" }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "保存更改" }).at(-1) ??
+        screen.getAllByRole("button", { name: "保存更改" })[0],
+    );
     fireEvent.click(screen.getByRole("button", { name: "覆盖工厂" }));
 
     await waitFor(() => {
@@ -578,7 +569,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
 
     expect(
       screen.getByText(
@@ -605,7 +596,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Updated only the review workstation prompt." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -673,7 +664,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Review the latest branch diff before approval." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -707,9 +698,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       "Plan the implementation.",
     );
     expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
+      workstationFooterSaveButton().getAttribute("disabled"),
     ).not.toBeNull();
 
     deferredSave.resolve(
@@ -761,7 +750,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Review the saved factory before approval." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -813,9 +802,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       "Review the saved factory before approval.",
     );
     expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
+      workstationFooterSaveButton().getAttribute("disabled"),
     ).not.toBeNull();
   });
 
@@ -830,7 +817,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Save this prompt once while the request is pending." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
 
     const confirmButton = screen.getByRole("button", {
       name: "Overwrite factory",
@@ -899,7 +886,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Review the saved factory before approval." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -956,9 +943,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       "Review the saved factory before approval.",
     );
     expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
+      workstationFooterSaveButton().getAttribute("disabled"),
     ).not.toBeNull();
   });
 
@@ -993,7 +978,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep the failed review draft scoped here." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -1034,9 +1019,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       "Plan the implementation.",
     );
     expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
+      workstationFooterSaveButton().getAttribute("disabled"),
     ).not.toBeNull();
   });
 
@@ -1075,7 +1058,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this failed draft from leaking back in." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -1119,9 +1102,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       "Review the latest story changes before approval.",
     );
     expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
+      workstationFooterSaveButton().getAttribute("disabled"),
     ).not.toBeNull();
   });
 
@@ -1161,7 +1142,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this failed draft from leaking back in." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
@@ -1210,9 +1191,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       "Review the latest story changes before approval.",
     );
     expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
+      workstationFooterSaveButton().getAttribute("disabled"),
     ).not.toBeNull();
   });
 });
@@ -1481,11 +1460,8 @@ describe("CurrentSelectionWidget work state save flow", () => {
     });
 
     await waitFor(() => {
-      expect(
-        screen
-          .getByRole("button", { name: "Save work state" })
-          .getAttribute("disabled"),
-      ).not.toBeNull();
+      const saveButtons = screen.getAllByRole("button", { name: "Save work state" });
+      expect(saveButtons[0]?.getAttribute("disabled")).not.toBeNull();
     });
     expect(
       screen.getByText(
@@ -1529,7 +1505,13 @@ describe("CurrentSelectionWidget work state save flow", () => {
     fireEvent.change(screen.getByLabelText("State name"), {
       target: { value: "ready" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save work state" }));
+    const saveWorkStateButtons = screen.getAllByRole("button", {
+      name: "Save work state",
+    });
+    fireEvent.click(
+      saveWorkStateButtons[saveWorkStateButtons.length - 1] ??
+        saveWorkStateButtons[0],
+    );
 
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
@@ -1592,7 +1574,10 @@ describe("CurrentSelectionWidget worker save flow", () => {
     fireEvent.change(screen.getByLabelText("Model"), {
       target: { value: "gpt-5.9" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save worker" }));
+    const saveWorkerButtons = screen.getAllByRole("button", {
+      name: "Save worker",
+    });
+    fireEvent.click(saveWorkerButtons[saveWorkerButtons.length - 1] ?? saveWorkerButtons[0]);
 
     expect(
       screen.queryByRole("heading", {
@@ -1623,11 +1608,11 @@ describe("CurrentSelectionWidget worker save flow", () => {
         ),
       ).toBeTruthy();
     });
-    expect(
-      screen
-        .getByRole("button", { name: "Save worker" })
-        .getAttribute("disabled"),
-    ).not.toBeNull();
+    for (const saveButton of screen.getAllByRole("button", {
+      name: "Save worker",
+    })) {
+      expect(saveButton.getAttribute("disabled")).not.toBeNull();
+    }
   });
 });
 

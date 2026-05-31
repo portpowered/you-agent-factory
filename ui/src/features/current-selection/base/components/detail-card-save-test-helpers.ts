@@ -369,3 +369,20 @@ export function expandDetailCardWorkstationConfiguration(
     }),
   );
 }
+
+export function workstationSaveButtons() {
+  return screen.getAllByRole("button", { name: "Save changes" });
+}
+
+export function workstationFooterSaveButton() {
+  const footer = workstationSaveButtons().at(-1);
+  if (!footer) {
+    throw new Error("expected workstation Save changes button");
+  }
+
+  return footer;
+}
+
+export function clickWorkstationSave() {
+  fireEvent.click(workstationFooterSaveButton());
+}

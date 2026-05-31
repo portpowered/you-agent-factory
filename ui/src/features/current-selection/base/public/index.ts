@@ -14,6 +14,10 @@ export * from "../components/current-selection-header-actions";
 export * from "../components/detail-card-shared";
 export * from "../components/detail-card-types";
 export {
+  EditableConfigurationSaveRow,
+  type EditableConfigurationSaveRowProps,
+} from "../components/editable-configuration-save-row";
+export {
   DetailCardFactorySaveFeedback,
   mergeDetailCardSaveFieldErrors,
   type DetailCardFactorySaveFeedbackMessages,

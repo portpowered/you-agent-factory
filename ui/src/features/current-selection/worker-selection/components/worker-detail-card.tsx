@@ -12,6 +12,7 @@ export function WorkerDetailCard({
   editableConfigurationState,
   headerAction,
   locale,
+  onSaveConfiguration,
   saveState,
   widgetId = "current-selection",
   workerName,
@@ -50,6 +51,7 @@ export function WorkerDetailCard({
           />
           <WorkerEditableConfigurationSection
             messages={messages}
+            onSaveConfiguration={onSaveConfiguration}
             saveState={saveState}
             state={editableConfigurationState}
             workerName={workerName}

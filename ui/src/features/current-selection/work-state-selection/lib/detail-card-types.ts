@@ -72,6 +72,7 @@ export interface StateNodeDetailCardProps {
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
   headerAction?: ReactNode;
   locale?: string | null;
+  onSaveConfiguration?: () => void;
   onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
   place: DashboardPlaceRef;
   saveState?: EditableWorkStateSaveState;

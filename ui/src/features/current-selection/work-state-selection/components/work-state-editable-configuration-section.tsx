@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DashboardActionButton, DashboardActionRow } from "../../../../components/ui";
+import { DashboardActionButton } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -13,8 +13,10 @@ import {
 } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
   CurrentSelectionSectionHeader,
 } from "../../base/components/detail-card-shared";
+import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
 import type {
   EditableWorkStateConfigurationState,
   EditableWorkStateSaveState,
@@ -25,10 +27,12 @@ import type { getWorkStateDetailMessages } from "../messages/work-state-detail";
 
 export function WorkStateEditableConfigurationSection({
   messages,
+  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkStateDetailMessages>;
+  onSaveConfiguration?: () => void;
   saveState?: EditableWorkStateSaveState;
   state?: EditableWorkStateConfigurationState;
 }) {
@@ -62,6 +66,7 @@ export function WorkStateEditableConfigurationSection({
         {state?.status === "ready" ? (
           <WorkStateEditableConfigurationReadyForm
             messages={messages}
+            onSaveConfiguration={onSaveConfiguration}
             saveState={saveState}
             state={state}
           />
@@ -73,10 +78,12 @@ export function WorkStateEditableConfigurationSection({
 
 function WorkStateEditableConfigurationReadyForm({
   messages,
+  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkStateDetailMessages>;
+  onSaveConfiguration?: () => void;
   saveState?: EditableWorkStateSaveState;
   state: Extract<EditableWorkStateConfigurationState, { status: "ready" }>;
 }) {
@@ -106,47 +113,56 @@ function WorkStateEditableConfigurationReadyForm({
         </p>
       ) : null}
       <WorkStateEditableConfigurationDraftStatus messages={messages} state={state} />
-      <WorkStateEditableConfigurationField
-        errorMessage={validationErrors.name}
-        fieldId="editable-work-state-name"
-        input={
-          <input
-            aria-describedby={
-              validationErrors.name ? "editable-work-state-name-error" : undefined
-            }
-            aria-invalid={validationErrors.name ? "true" : undefined}
-            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
-            id="editable-work-state-name"
-            onChange={(event) => state.onNameChange(event.target.value)}
-            type="text"
-            value={state.draft.name}
-          />
-        }
-        label={messages.nameFieldLabel}
-      />
-      <WorkStateEditableConfigurationField
-        fieldId="editable-work-state-type"
-        input={
-          <output
-            className="block w-full rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2 text-sm text-af-text-muted"
-            id="editable-work-state-type"
-          >
-            {messages.localizeWorkStateType(state.draft.type)}
-          </output>
-        }
-        label={messages.typeFieldLabel}
-      />
-      {state.isDirty ? (
-        <DashboardActionRow
-          actions={
-            <DashboardActionButton
-              disabled={isSaving}
-              onClick={state.onResetToLatest}
-              type="button"
-            >
-              {messages.discardDraftAction}
-            </DashboardActionButton>
+      <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
+        <WorkStateEditableConfigurationField
+          errorMessage={validationErrors.name}
+          fieldId="editable-work-state-name"
+          input={
+            <input
+              aria-describedby={
+                validationErrors.name ? "editable-work-state-name-error" : undefined
+              }
+              aria-invalid={validationErrors.name ? "true" : undefined}
+              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              id="editable-work-state-name"
+              onChange={(event) => state.onNameChange(event.target.value)}
+              type="text"
+              value={state.draft.name}
+            />
           }
+          label={messages.nameFieldLabel}
+        />
+        <WorkStateEditableConfigurationField
+          fieldId="editable-work-state-type"
+          input={
+            <output
+              className="block w-full rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2 text-sm text-af-text-muted"
+              id="editable-work-state-type"
+            >
+              {messages.localizeWorkStateType(state.draft.type)}
+            </output>
+          }
+          label={messages.typeFieldLabel}
+        />
+      </div>
+      {onSaveConfiguration ? (
+        <EditableConfigurationSaveRow
+          busyLabel={messages.editableConfigurationSaveBusyAction}
+          canSave={state.canSave}
+          isSaving={isSaving}
+          onSave={onSaveConfiguration}
+          resetSlot={
+            state.isDirty ? (
+              <DashboardActionButton
+                disabled={isSaving}
+                onClick={state.onResetToLatest}
+                type="button"
+              >
+                {messages.discardDraftAction}
+              </DashboardActionButton>
+            ) : undefined
+          }
+          saveLabel={messages.editableConfigurationSaveAction}
         />
       ) : null}
     </form>

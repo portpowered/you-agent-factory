@@ -1,8 +1,14 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import { useEditableWorkTypeConfigurationState } from "../hooks/use-editable-work-type-configuration-state";
+import type {
+  EditableWorkTypeConfigurationState,
+  EditableWorkTypeSaveState,
+} from "../lib/detail-card-types";
 import { WorkTypeDetailCard } from "./work-type-detail-card";
+import { EditableWorkTypeSaveHeaderAction } from "./work-type-save-controls";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -56,6 +62,24 @@ function buildFactoryDocument(
   };
 }
 
+function buildWorkTypeHeaderSaveAction({
+  canSave,
+  onClick = vi.fn(),
+  saveState = { status: "idle" },
+}: {
+  canSave: boolean;
+  onClick?: () => void;
+  saveState?: EditableWorkTypeSaveState;
+}) {
+  return (
+    <EditableWorkTypeSaveHeaderAction
+      canSave={canSave}
+      onClick={onClick}
+      saveState={saveState}
+    />
+  );
+}
+
 function WorkTypeDetailCardHarness({
   onSelectWorkStateGraphNode,
   workTypeName,
@@ -77,6 +101,7 @@ function WorkTypeDetailCardHarness({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: WorkTypeDetailCard coverage keeps loading, ready, and editable state regressions together.
 describe("WorkTypeDetailCard", () => {
   beforeEach(() => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
@@ -186,5 +211,60 @@ describe("WorkTypeDetailCard", () => {
     expect(onSelectWorkStateGraphNode).toHaveBeenCalledWith(
       "work-state:story:queued",
     );
+  });
+
+  it("stacks configuration fields vertically and renders a labeled footer Save", () => {
+    const editableConfigurationState: EditableWorkTypeConfigurationState = {
+      baseVersion: buildFactoryDocument().version,
+      canSave: true,
+      draft: {
+        handlingBehavior: null,
+        name: "story",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        handlingBehavior: null,
+        name: "story",
+        states: [
+          { name: "queued", type: "INITIAL" },
+          { name: "done", type: "TERMINAL" },
+        ],
+      },
+      isDirty: true,
+      markChangesSaved: vi.fn(),
+      onHandlingBehaviorChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onResetToLatest: vi.fn(),
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+    const onSaveConfiguration = vi.fn();
+
+    const { container } = render(
+      <WorkTypeDetailCard
+        editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkTypeHeaderSaveAction({ canSave: true })}
+        onSaveConfiguration={onSaveConfiguration}
+        workTypeName="story"
+      />,
+    );
+
+    const panel = screen.getByRole("article", { name: "Current selection" });
+    const fieldGroup = container.querySelector(
+      `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+    );
+    expect(fieldGroup).not.toBeNull();
+    expect(fieldGroup?.className).not.toMatch(/sm:grid-cols-\d/);
+    expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);
+    expect(fieldGroup?.className).not.toMatch(/xl:grid-cols-\d/);
+
+    const saveButtons = within(panel).getAllByRole("button", {
+      name: "Save changes",
+    });
+    expect(saveButtons).toHaveLength(2);
+
+    fireEvent.click(saveButtons[1] ?? saveButtons[0]);
+    expect(onSaveConfiguration).toHaveBeenCalledTimes(1);
   });
 });

@@ -14,7 +14,9 @@ import {
   buildDetailCardFactoryDocumentSaveHookReturn,
   buildDetailCardWorkstationNodeSelection,
   DETAIL_CARD_NOW,
+  clickWorkstationSave,
   expandDetailCardWorkstationConfiguration,
+  workstationFooterSaveButton,
 } from "../base/components/detail-card-test-helpers";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { CurrentSelectionWidget } from "./current-selection-widget";
@@ -130,7 +132,7 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
 
     expandDetailCardWorkstationConfiguration();
 
-    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    const saveButton = workstationFooterSaveButton();
     expect(saveButton.getAttribute("disabled")).not.toBeNull();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
@@ -166,7 +168,7 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
 
     expandDetailCardWorkstationConfiguration();
 
-    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    const saveButton = workstationFooterSaveButton();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "{{ if .WorkID }}" },
