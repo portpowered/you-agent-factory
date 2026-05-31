@@ -29,6 +29,8 @@ export const EXECUTION_PILL_CLASS = cn(
 export const PROVIDER_SESSION_CARD_CLASS = "rounded-lg border border-af-border bg-af-surface-subtle p-3.5";
 export const CURRENT_SELECTION_FIELD_PANEL_CLASS =
   "grid gap-2 rounded-2xl border border-af-border bg-af-surface-subtle p-3";
+/** Editable configuration field groups must use this stack instead of multi-column grid wrappers. */
+export const CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS = "grid grid-cols-1 gap-3";
 export const CURRENT_SELECTION_NOTICE_SUBTLE_CLASS = cn(
   "m-0 text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
