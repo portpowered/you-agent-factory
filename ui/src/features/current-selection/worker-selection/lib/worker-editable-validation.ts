@@ -15,12 +15,18 @@ export type EditableWorkerValidationField =
   | "model"
   | "modelLocality"
   | "modelProvider"
+  | "name"
   | "provider"
   | "type";
 
 export type EditableWorkerValidationErrors = Partial<
   Record<EditableWorkerValidationField, string>
 >;
+
+export interface ValidateEditableWorkerDraftContext {
+  originalWorkerName: string;
+  workerNames: string[];
+}
 
 export function validateEditableWorkerDraft(
   draft: EditableWorkerDraft,
@@ -30,11 +36,25 @@ export function validateEditableWorkerDraft(
     | "editableConfigurationBodyRequired"
     | "editableConfigurationCommandRequired"
     | "editableConfigurationModelProviderRequired"
+    | "editableConfigurationNameDuplicate"
+    | "editableConfigurationNameRequired"
     | "editableConfigurationProviderRequired"
     | "editableConfigurationScriptCommandOrBodyRequired"
   >,
+  context?: ValidateEditableWorkerDraftContext,
 ): EditableWorkerValidationErrors {
   const validationErrors: EditableWorkerValidationErrors = {};
+  const trimmedName = draft.name.trim();
+
+  if (trimmedName.length === 0) {
+    validationErrors.name = messages.editableConfigurationNameRequired;
+  } else if (
+    context &&
+    trimmedName !== context.originalWorkerName &&
+    context.workerNames.includes(trimmedName)
+  ) {
+    validationErrors.name = messages.editableConfigurationNameDuplicate(trimmedName);
+  }
 
   if (draft.type === "MODEL_WORKER" && !draft.modelProvider) {
     validationErrors.modelProvider =
@@ -71,14 +91,18 @@ export function mergeEditableWorkerContractValidationErrors(
     WorkerDetailMessages,
     "editableConfigurationContractInvalidPrefix"
   >,
+  workerIndex?: number,
 ): EditableWorkerValidationErrors {
   if (!pendingFactoryDefinition) {
     return validationErrors;
   }
 
-  const worker = pendingFactoryDefinition.workers?.find(
-    (candidate) => candidate.name === workerName,
-  );
+  const worker =
+    workerIndex != null && workerIndex >= 0
+      ? pendingFactoryDefinition.workers?.[workerIndex]
+      : pendingFactoryDefinition.workers?.find(
+          (candidate) => candidate.name === workerName,
+        );
   if (!worker) {
     return validationErrors;
   }
@@ -181,6 +205,8 @@ function resolveEditableWorkerContractField(
       return "modelLocality";
     case "modelProvider":
       return "modelProvider";
+    case "name":
+      return "name";
     case "provider":
       return "provider";
     case "type":

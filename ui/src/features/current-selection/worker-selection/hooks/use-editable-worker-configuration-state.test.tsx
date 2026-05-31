@@ -69,6 +69,7 @@ describe("useEditableWorkerConfigurationState", () => {
       draft: {
         model: "gpt-5.5",
         modelProvider: "CURSOR",
+        name: "reviewer",
         type: "MODEL_WORKER",
       },
       hasValidationErrors: false,
@@ -453,12 +454,93 @@ describe("useEditableWorkerConfigurationState", () => {
         draft: {
           model: "gpt-4.1",
           modelProvider: "CODEX",
+          name: "planner",
           type: "MODEL_WORKER",
         },
         isDirty: false,
         overwriteFieldNames: [],
         status: "ready",
       });
+    });
+  });
+
+  it("blocks save when the worker name duplicates another worker", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CURSOR",
+            name: "reviewer",
+            type: "MODEL_WORKER",
+          },
+          {
+            model: "gpt-4.1",
+            modelProvider: "CODEX",
+            name: "writer",
+            type: "MODEL_WORKER",
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onNameChange("writer");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: false,
+      hasValidationErrors: true,
+      isDirty: true,
+      validationErrors: {
+        name: expect.stringContaining("writer"),
+      },
+    });
+  });
+
+  it("includes renamed worker and updated workstation references in pending factory", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onNameChange("senior-reviewer");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      draft: {
+        name: "senior-reviewer",
+      },
+      pendingFactoryDefinition: {
+        workers: [
+          expect.objectContaining({
+            name: "senior-reviewer",
+          }),
+        ],
+        workstations: [
+          expect.objectContaining({
+            name: "Review",
+            worker: "senior-reviewer",
+          }),
+        ],
+      },
     });
   });
 });

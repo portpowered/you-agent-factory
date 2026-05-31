@@ -123,6 +123,10 @@ function buildReadyEditableWorkerConfigurationState({
   >;
   workerName: string;
 }): Extract<EditableWorkerConfigurationState, { status: "ready" }> {
+  const workerIndex =
+    editableDefinition.workers?.findIndex(
+      (worker) => worker.name === workerName,
+    ) ?? -1;
   const pendingFactoryDefinition = applyEditableWorkerDraft(
     editableDefinition,
     workerName,
@@ -130,10 +134,14 @@ function buildReadyEditableWorkerConfigurationState({
   );
   const messages = getWorkerDetailMessages();
   const validationErrors = mergeEditableWorkerContractValidationErrors(
-    validateEditableWorkerDraft(sessionState.draft, messages),
+    validateEditableWorkerDraft(sessionState.draft, messages, {
+      originalWorkerName: workerName,
+      workerNames: (editableDefinition.workers ?? []).map((worker) => worker.name),
+    }),
     pendingFactoryDefinition,
     workerName,
     messages,
+    workerIndex >= 0 ? workerIndex : undefined,
   );
   const hasValidationErrors =
     hasEditableWorkerValidationErrors(validationErrors);
@@ -179,6 +187,9 @@ function buildReadyEditableWorkerConfigurationState({
         ...draft,
         modelProvider: value,
       }));
+    },
+    onNameChange: (value) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, name: value }));
     },
     onProviderChange: (value) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, provider: value }));
@@ -249,6 +260,7 @@ function areEditableWorkerDraftsEqual(
     left.model === right.model &&
     left.modelLocality === right.modelLocality &&
     left.modelProvider === right.modelProvider &&
+    left.name === right.name &&
     left.provider === right.provider &&
     left.type === right.type
   );

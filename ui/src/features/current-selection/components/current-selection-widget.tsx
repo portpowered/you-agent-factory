@@ -252,6 +252,7 @@ export function CurrentSelectionWidget({
   const workerSave = useSaveEditableWorkerConfiguration({
     editableConfigurationState: editableWorkerConfigurationState,
     locale,
+    onWorkerRenamed: currentSelection.selectWorker,
     scopeKey: workerSaveScopeKey,
   });
   const providerSessionState = useSelectedProviderSessionState({

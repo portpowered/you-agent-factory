@@ -97,6 +97,7 @@ describe("applyEditableWorkerDraft", () => {
       model: "gpt-5.9",
       modelLocality: "CLOUD",
       modelProvider: "CODEX",
+      name: "reviewer",
       provider: null,
       type: "MODEL_WORKER",
     });
@@ -205,6 +206,7 @@ describe("applyEditableWorkerDraft", () => {
       model: "",
       modelLocality: null,
       modelProvider: null,
+      name: "linear-sync",
       provider: "LINEAR",
       type: "HOSTED_WORKER",
     });
@@ -216,6 +218,84 @@ describe("applyEditableWorkerDraft", () => {
       provider: "LINEAR",
       type: "HOSTED_WORKER",
     });
+  });
+
+  it("renames the selected worker and rewrites referencing workstation assignments", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+        {
+          command: "echo",
+          name: "runner",
+          type: "SCRIPT_WORKER",
+        },
+      ],
+      workstations: [
+        { id: "review", name: "Review", worker: "reviewer" },
+        { id: "plan", name: "Plan", worker: "reviewer" },
+        { id: "run", name: "Run", worker: "runner" },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkerDraft(
+      factory,
+      "reviewer",
+      editableWorkerDraftFromValues({
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review", "Plan"],
+      }),
+    );
+
+    expect(updatedFactory?.workers?.[0]?.name).toBe("reviewer");
+    expect(updatedFactory?.workstations).toEqual([
+      { id: "review", name: "Review", worker: "reviewer" },
+      { id: "plan", name: "Plan", worker: "reviewer" },
+      { id: "run", name: "Run", worker: "runner" },
+    ]);
+
+    const renamedFactory = applyEditableWorkerDraft(factory, "reviewer", {
+      ...editableWorkerDraftFromValues({
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review", "Plan"],
+      }),
+      name: "senior-reviewer",
+    });
+
+    expect(renamedFactory?.workers?.[0]).toMatchObject({
+      name: "senior-reviewer",
+      modelProvider: "CURSOR",
+      type: "MODEL_WORKER",
+    });
+    expect(renamedFactory?.workstations).toEqual([
+      { id: "review", name: "Review", worker: "senior-reviewer" },
+      { id: "plan", name: "Plan", worker: "senior-reviewer" },
+      { id: "run", name: "Run", worker: "runner" },
+    ]);
   });
 });
 

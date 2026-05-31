@@ -27,6 +27,7 @@ export type EditableWorkerSaveValidationErrors = {
   model?: string;
   modelLocality?: string;
   modelProvider?: string;
+  name?: string;
   provider?: string;
   type?: string;
 } & Record<string, string>;
@@ -39,6 +40,7 @@ export type EditableWorkerOverwriteField =
   | "model"
   | "modelLocality"
   | "modelProvider"
+  | "name"
   | "provider"
   | "type";
 
@@ -69,6 +71,7 @@ export type EditableWorkerConfigurationState =
       onModelProviderChange: (
         value: EditableWorkerDraft["modelProvider"],
       ) => void;
+      onNameChange: (value: string) => void;
       onProviderChange: (value: EditableWorkerDraft["provider"]) => void;
       markChangesSaved: () => void;
       onResetToLatest: () => void;

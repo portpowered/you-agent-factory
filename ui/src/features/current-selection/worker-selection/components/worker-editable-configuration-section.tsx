@@ -159,7 +159,9 @@ function WorkerEditableConfigurationReadyForm({
           errorPrefix: messages.editableConfigurationSaveErrorPrefix,
           staleVersionDetail:
             messages.editableConfigurationSaveStaleVersionDetail,
-          successMessage: messages.editableConfigurationSaveSuccess(workerName),
+          successMessage: messages.editableConfigurationSaveSuccess(
+            state.draft.name.trim() || workerName,
+          ),
         }}
         saveState={saveState}
       />
@@ -183,6 +185,31 @@ function WorkerEditableConfigurationReadyForm({
       <WorkerEditableConfigurationDraftStatus
         messages={messages}
         state={state}
+      />
+      <WorkerEditableConfigurationField
+        errorMessage={validationErrors.name}
+        fieldId="editable-worker-name"
+        input={
+          <input
+            aria-describedby={
+              validationErrors.name ? "editable-worker-name-error" : undefined
+            }
+            aria-invalid={validationErrors.name ? "true" : undefined}
+            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            id="editable-worker-name"
+            onChange={(event) => state.onNameChange(event.target.value)}
+            type="text"
+            value={state.draft.name}
+          />
+        }
+        label={messages.nameFieldLabel}
+        supportingContent={
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="name"
+            messages={messages}
+            state={state}
+          />
+        }
       />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <WorkerEditableConfigurationField
@@ -336,7 +363,7 @@ function WorkerEditableConfigurationSharedImpactWarning({
         role="alert"
       >
         {messages.editableConfigurationSharedImpactWarning(
-          workerName,
+          state.draft.name.trim() || workerName,
           formatList(workstationNames),
         )}
       </p>

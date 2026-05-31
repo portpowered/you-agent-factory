@@ -24,6 +24,8 @@ export interface WorkerDetailMessages {
   editableConfigurationLoading: string;
   editableConfigurationModelProviderRequired: string;
   editableConfigurationModelRequired: string;
+  editableConfigurationNameDuplicate: (workerName: string) => string;
+  editableConfigurationNameRequired: string;
   editableConfigurationProviderRequired: string;
   editableConfigurationSaveAction: string;
   editableConfigurationSaveBusyAction: string;
@@ -46,6 +48,7 @@ export interface WorkerDetailMessages {
   modelLocalityLabel: string;
   modelProviderFieldHelp: string;
   modelProviderLabel: string;
+  nameFieldLabel: string;
   notConfiguredOptionLabel: string;
   notConfiguredValue: string;
   providerFieldLabel: string;

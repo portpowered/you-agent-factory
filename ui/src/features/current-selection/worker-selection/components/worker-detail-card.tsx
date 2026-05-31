@@ -20,7 +20,9 @@ export function WorkerDetailCard({
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <p className={WIDGET_SUBTITLE_CLASS}>{workerName}</p>
+      {editableConfigurationState?.status !== "ready" ? (
+        <p className={WIDGET_SUBTITLE_CLASS}>{workerName}</p>
+      ) : null}
       {detailState.status === "loading" ? (
         <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
           {messages.configurationLoading}
