@@ -23,6 +23,7 @@ export function resolveGraphDocumentSaveToastNotification({
   hasDraftChanges: boolean;
   messages: Pick<
     FactoryGraphEditorMessages,
+    | "noticeSaveFailedAffectedSummary"
     | "noticeSaveFailedTitle"
     | "noticeSaveSuccessDescription"
     | "noticeSaveSuccessTitle"
@@ -64,6 +65,7 @@ export function resolveGraphDocumentSaveToastNotification({
     const description = buildGraphSaveErrorToastDescription(
       documentSave.errorMessage,
       saveMutationError?.targets,
+      messages.noticeSaveFailedAffectedSummary,
     );
 
     return {
@@ -116,9 +118,13 @@ export function buildStaleVersionToastDescription(
 
 export function buildGraphSaveErrorToastDescription(
   errorMessage: string,
-  targets?: readonly FactoryValidationTarget[],
+  targets: readonly FactoryValidationTarget[] | undefined,
+  formatAffectedSummary: (labels: string) => string,
 ): string {
-  const targetSummary = formatGraphSaveValidationTargetSummary(targets);
+  const targetSummary = formatGraphSaveValidationTargetSummary(
+    targets,
+    formatAffectedSummary,
+  );
   if (targetSummary === null) {
     return errorMessage;
   }
@@ -127,7 +133,8 @@ export function buildGraphSaveErrorToastDescription(
 }
 
 export function formatGraphSaveValidationTargetSummary(
-  targets?: readonly FactoryValidationTarget[],
+  targets: readonly FactoryValidationTarget[] | undefined,
+  formatAffectedSummary: (labels: string) => string,
 ): string | null {
   if (!targets?.length) {
     return null;
@@ -142,7 +149,7 @@ export function formatGraphSaveValidationTargetSummary(
     return null;
   }
 
-  return `Affected: ${uniqueLabels.join("; ")}`;
+  return formatAffectedSummary(uniqueLabels.join("; "));
 }
 
 function formatGraphValidationTargetLabel(

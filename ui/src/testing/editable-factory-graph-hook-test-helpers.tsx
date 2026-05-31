@@ -4,14 +4,14 @@ import type { ReactNode } from "react";
 import { vi } from "vitest";
 
 import * as factoryDocumentSaveHooks from "../features/current-factory-definition/public";
-import type { UseEditableFactoryGraphOptions } from "../features/factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { useEditableFactoryGraph } from "../features/factory-graph-editor/hooks/use-editable-factory-graph";
 import { DashboardSessionProvider } from "../features/dashboard/session/dashboard-session-provider";
-import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
+import { useEditableFactoryGraph } from "../features/factory-graph-editor/hooks/use-editable-factory-graph";
+import type { UseEditableFactoryGraphOptions } from "../features/factory-graph-editor/hooks/use-editable-factory-graph-types";
 import {
-  mockFactoryDocumentSave,
   type MockFactoryDocumentSaveReturn,
+  mockFactoryDocumentSave,
 } from "./factory-document-save-mocks";
+import { seedScopedFactoryDocumentSaveTestSession } from "./scoped-factory-document-save-test-helpers";
 
 export const defaultGraphDocumentScopeKey = "session-default";
 
@@ -20,7 +20,7 @@ export function setupEditableFactoryGraphSaveTestEnvironment(
     mode: "success",
   }),
 ) {
-  useDashboardSessionStore.setState({ selectedSessionID: "~default" });
+  seedScopedFactoryDocumentSaveTestSession();
   vi.restoreAllMocks();
   vi.spyOn(factoryDocumentSaveHooks, "useFactoryDocumentSave").mockReturnValue(
     saveMutation as never,

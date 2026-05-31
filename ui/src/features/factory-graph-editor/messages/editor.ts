@@ -84,6 +84,7 @@ export interface FactoryGraphEditorMessages {
   noticeEmptyMessage: string;
   noticeEmptyTitle: string;
   noticeRemovalBlockedTitle: string;
+  noticeSaveFailedAffectedSummary: (labels: string) => string;
   noticeSaveFailedTitle: string;
   noticeSaveSuccessDescription: string;
   noticeSaveSuccessTitle: string;
@@ -490,6 +491,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         "The factory has not published any workstation graph yet.",
       noticeEmptyTitle: "No workflow topology loaded",
       noticeRemovalBlockedTitle: "Removal blocked",
+      noticeSaveFailedAffectedSummary: (labels) => `Affected: ${labels}`,
       noticeSaveFailedTitle: "Topology save failed",
       noticeSaveSuccessDescription:
         "The draft has been cleared and the graph is waiting for the latest factory-change event refresh.",
@@ -841,6 +843,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeEmptyMessage: "该工厂尚未发布任何工作站图。",
       noticeEmptyTitle: "尚未加载工作流拓扑",
       noticeRemovalBlockedTitle: "移除被阻止",
+      noticeSaveFailedAffectedSummary: (labels) => `受影响项：${labels}`,
       noticeSaveFailedTitle: "拓扑保存失败",
       noticeSaveSuccessDescription:
         "草稿已清除，图正在等待最新的 factory-change 事件刷新。",

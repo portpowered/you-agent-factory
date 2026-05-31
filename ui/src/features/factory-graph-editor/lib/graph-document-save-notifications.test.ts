@@ -11,6 +11,7 @@ import {
 } from "./graph-document-save-notifications";
 
 const messages = {
+  noticeSaveFailedAffectedSummary: (labels: string) => `Affected: ${labels}`,
   noticeSaveFailedTitle: "Topology save failed",
   noticeSaveSuccessDescription: "Draft cleared.",
   noticeSaveSuccessTitle: "Topology saved",
@@ -18,6 +19,8 @@ const messages = {
     "Refresh or discard the current draft before saving so you do not overwrite a newer topology version.",
   noticeStaleTitle: "A newer factory definition is available",
 };
+
+const formatAffectedSummary = messages.noticeSaveFailedAffectedSummary;
 
 describe("resolveGraphDocumentSaveToastNotification", () => {
   it("returns success toast when scoped save succeeded and the draft is clean", () => {
@@ -118,10 +121,12 @@ describe("resolveGraphDocumentSaveToastNotification", () => {
       description: buildGraphSaveErrorToastDescription(
         saveMutationError.message,
         targets,
+        formatAffectedSummary,
       ),
       key: `error:${saveMutationError.message}:${buildGraphSaveErrorToastDescription(
         saveMutationError.message,
         targets,
+        formatAffectedSummary,
       )}`,
       kind: "error",
       title: messages.noticeSaveFailedTitle,
@@ -131,14 +136,21 @@ describe("resolveGraphDocumentSaveToastNotification", () => {
 
 describe("formatGraphSaveValidationTargetSummary", () => {
   it("returns null when there are no targets", () => {
-    expect(formatGraphSaveValidationTargetSummary()).toBeNull();
-    expect(formatGraphSaveValidationTargetSummary([])).toBeNull();
+    expect(
+      formatGraphSaveValidationTargetSummary(undefined, formatAffectedSummary),
+    ).toBeNull();
+    expect(
+      formatGraphSaveValidationTargetSummary([], formatAffectedSummary),
+    ).toBeNull();
   });
 
   it("deduplicates repeated target labels", () => {
     const target = workerFieldValidationTarget("prompt");
     expect(
-      formatGraphSaveValidationTargetSummary([target, target]),
+      formatGraphSaveValidationTargetSummary(
+        [target, target],
+        formatAffectedSummary,
+      ),
     ).toBe("Affected: WORKER prompt (DEFINITION)");
   });
 });
