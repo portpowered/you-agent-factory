@@ -177,7 +177,7 @@ vi.mock("../../../api/factory-validation", async () => {
   };
 });
 
-vi.mock("../../current-factory-definition/public", () => ({
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", () => ({
   useCurrentFactoryDocument: () => hookState.currentFactoryQuery,
   useSaveCurrentFactory: () => hookState.saveEditableDefinition,
 }));

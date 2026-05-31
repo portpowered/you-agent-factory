@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { useSaveCurrentFactory } from "../../current-factory-definition/public";
+import type { useSaveCurrentFactory } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import {
