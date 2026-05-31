@@ -3,15 +3,15 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   activateImportedFactoryForSession,
+  SessionFactoryAPIError,
   type FactoryValue,
-  NamedFactoryAPIError,
-} from "../../../api/named-factory";
+} from "../../../api/session-factory";
 import type { FactoryImportConfirmInput } from "../lib/factory-import-save-choice";
 
 export type FactoryImportActivationState =
   | { status: "idle" }
   | { status: "submitting" }
-  | { error: NamedFactoryAPIError; status: "error" };
+  | { error: SessionFactoryAPIError; status: "error" };
 
 export interface UseFactoryImportActivationOptions {
   activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
@@ -44,7 +44,7 @@ export function useFactoryImportActivation({
         })),
     [activateFactoryOverride, sessionID],
   );
-  const [activationError, setActivationError] = useState<NamedFactoryAPIError | null>(null);
+  const [activationError, setActivationError] = useState<SessionFactoryAPIError | null>(null);
   const mutation = useMutation({
     mutationFn: (input: FactoryImportConfirmInput) => activateFactory(input),
     onError: (error) => {
@@ -86,14 +86,14 @@ export function useFactoryImportActivation({
   };
 }
 
-function normalizeActivationError(error: unknown): NamedFactoryAPIError {
-  if (error instanceof NamedFactoryAPIError) {
+function normalizeActivationError(error: unknown): SessionFactoryAPIError {
+  if (error instanceof SessionFactoryAPIError) {
     return error;
   }
 
   if (error instanceof Error) {
-    return new NamedFactoryAPIError(error.message, { code: "INTERNAL_ERROR" });
+    return new SessionFactoryAPIError(error.message, { code: "INTERNAL_ERROR" });
   }
 
-  return new NamedFactoryAPIError("Factory activation failed.", { code: "INTERNAL_ERROR" });
+  return new SessionFactoryAPIError("Factory activation failed.", { code: "INTERNAL_ERROR" });
 }

@@ -4,6 +4,7 @@ type FactoryValidationTarget = components["schemas"]["FactoryValidationTarget"];
 
 export type SessionFactoryAPIErrorCode =
   | "BAD_REQUEST"
+  | "FACTORY_ALREADY_EXISTS"
   | "FACTORY_NOT_IDLE"
   | "INTERNAL_ERROR"
   | "INVALID_FACTORY"
@@ -46,6 +47,7 @@ export function normalizeSessionFactoryAPIErrorCode(
 ): SessionFactoryAPIErrorCode {
   switch (code) {
     case "BAD_REQUEST":
+    case "FACTORY_ALREADY_EXISTS":
     case "FACTORY_NOT_IDLE":
     case "INVALID_FACTORY":
     case "INVALID_FACTORY_NAME":

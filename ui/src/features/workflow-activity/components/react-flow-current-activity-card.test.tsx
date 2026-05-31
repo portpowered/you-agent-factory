@@ -14,10 +14,8 @@ import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import {
-  type FactoryValue,
-  NamedFactoryAPIError,
-} from "../../../api/named-factory";
+import type { FactoryValue } from "../../../api/named-factory";
+import { SessionFactoryAPIError } from "../../../api/session-factory";
 import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
@@ -2106,7 +2104,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const activateFactory = vi
       .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
       .mockRejectedValue(
-        new NamedFactoryAPIError("Named factory already exists.", {
+        new SessionFactoryAPIError("Named factory already exists.", {
           code: "FACTORY_ALREADY_EXISTS",
           status: 409,
         }),
@@ -2159,7 +2157,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const activateFactory = vi
       .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
       .mockRejectedValue(
-        new NamedFactoryAPIError(
+        new SessionFactoryAPIError(
           "Current factory runtime must be idle before activation.",
           {
             code: "FACTORY_NOT_IDLE",
@@ -3678,7 +3676,7 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     const activateFactory = vi
       .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
       .mockRejectedValue(
-        new NamedFactoryAPIError("Named factory already exists.", {
+        new SessionFactoryAPIError("Named factory already exists.", {
           code: "FACTORY_ALREADY_EXISTS",
           status: 409,
         }),

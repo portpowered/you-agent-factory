@@ -1,4 +1,4 @@
-import type { FactoryImportSaveChoice } from "../../../api/named-factory";
+import type { FactoryImportSaveChoice } from "../../../api/session-factory";
 import type { FactoryPngImportValue } from "./factory-png-import";
 
 export type { FactoryImportSaveChoice };

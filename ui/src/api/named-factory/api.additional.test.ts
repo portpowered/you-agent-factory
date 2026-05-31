@@ -1,16 +1,5 @@
 import { currentFactoryDefinitionAPIErrorMessages } from "../current-factory-definition/messages";
-import {
-  activateImportedFactoryForSession,
-  getCurrentFactory,
-  NamedFactoryAPIError,
-} from "./api";
-
-const canonicalFactory = {
-  name: "Current Factory",
-  workTypes: [],
-  workers: [],
-  workstations: [],
-} as const;
+import { getCurrentFactory, NamedFactoryAPIError } from "./api";
 
 describe("named factory API error handling", () => {
   it("fails fast when current-factory fetch is unavailable", async () => {
@@ -138,63 +127,6 @@ describe("named factory API error handling", () => {
         status: 400,
         statusText: "Bad Request",
       }),
-    );
-  });
-
-  it("maps FACTORY_NOT_IDLE session save failures into named factory activation errors", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: "Current Factory",
-            workTypes: [],
-            workers: [],
-            workstations: [],
-            version: {
-              logical: "9",
-              physical: "2026-05-18T14:25:00Z",
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            code: "FACTORY_NOT_IDLE",
-            message: "Current factory runtime must be idle before activation.",
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 409,
-            statusText: "Conflict",
-          },
-        ),
-      );
-
-    await expect(
-      activateImportedFactoryForSession(canonicalFactory, { fetch: fetchMock }),
-    ).rejects.toEqual(
-      new NamedFactoryAPIError(
-        "The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
-        {
-          code: "FACTORY_NOT_IDLE",
-          status: 409,
-          statusText: "Conflict",
-          responseBody: {
-            code: "FACTORY_NOT_IDLE",
-            message: "Current factory runtime must be idle before activation.",
-          },
-        },
-      ),
     );
   });
 

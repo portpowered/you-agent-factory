@@ -107,7 +107,7 @@ describe("getSessionFactory", () => {
   });
 });
 
-describe("saveSessionFactory", () => {
+describe("saveSessionFactory — issues PUT with factory-only body when mode is omitted on the default session", () => {
   it("issues PUT with factory-only body when mode is omitted on the default session", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
@@ -167,7 +167,9 @@ describe("saveSessionFactory", () => {
       }),
     );
   });
+});
 
+describe("saveSessionFactory — issues PUT with REPLACE_CURRENT mode and incremented version on the default session", () => {
   it("issues PUT with REPLACE_CURRENT mode and incremented version on the default session", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
@@ -232,7 +234,9 @@ describe("saveSessionFactory", () => {
       }),
     );
   });
+});
 
+describe("saveSessionFactory — issues PUT with REPLACE_CURRENT on a non-default session", () => {
   it("issues PUT with REPLACE_CURRENT on a non-default session", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
@@ -294,7 +298,9 @@ describe("saveSessionFactory", () => {
       }),
     );
   });
+});
 
+describe("saveSessionFactory — issues PUT with UPSERT_NAMED_AND_ACTIVATE on the default session without version", () => {
   it("issues PUT with UPSERT_NAMED_AND_ACTIVATE on the default session without version", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
@@ -349,7 +355,9 @@ describe("saveSessionFactory", () => {
       }),
     );
   });
+});
 
+describe("saveSessionFactory — issues PUT with UPSERT_NAMED_AND_ACTIVATE on a non-default session without version", () => {
   it("issues PUT with UPSERT_NAMED_AND_ACTIVATE on a non-default session without version", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
@@ -404,7 +412,9 @@ describe("saveSessionFactory", () => {
       }),
     );
   });
+});
 
+describe("saveSessionFactory — throws SessionFactoryAPIError for network failures", () => {
   it("throws SessionFactoryAPIError for network failures", async () => {
     await expect(
       saveSessionFactory(

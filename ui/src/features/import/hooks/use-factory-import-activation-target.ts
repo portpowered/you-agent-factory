@@ -3,9 +3,9 @@ import { useMemo } from "react";
 
 import {
   discoverSessionNamedFactoryNames,
-  getCurrentFactory,
+  getSessionFactory,
   resolveImportCreateFactoryName,
-} from "../../../api/named-factory";
+} from "../../../api/session-factory";
 
 export interface UseFactoryImportActivationTargetOptions {
   enabled?: boolean;
@@ -28,7 +28,10 @@ export function useFactoryImportActivationTarget({
 }: UseFactoryImportActivationTargetOptions = {}): FactoryImportActivationTarget {
   const currentFactoryQuery = useQuery({
     enabled,
-    queryFn: () => getCurrentFactory({ sessionID }),
+    queryFn: async () => {
+      const document = await getSessionFactory(sessionID?.trim() || "~default");
+      return { name: document.name };
+    },
     queryKey: ["factory-import-current-factory", sessionID ?? "~default"],
   });
   const existingNamesQuery = useQuery({

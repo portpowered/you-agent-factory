@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 
 import {
   activateImportedFactoryForSession,
-  NamedFactoryAPIError,
+  SessionFactoryAPIError,
   type FactoryValue,
-} from "../../../api/named-factory";
+} from "../../../api/session-factory";
 
-vi.mock("../../../api/named-factory", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/named-factory")>(
-    "../../../api/named-factory",
+vi.mock("../../../api/session-factory", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/session-factory")>(
+    "../../../api/session-factory",
   );
   return {
     ...actual,
@@ -248,7 +248,7 @@ describe("useFactoryImportActivation", () => {
       .mockRejectedValue(
         Object.assign(activationError, {
           code: "FACTORY_ALREADY_EXISTS",
-          name: "NamedFactoryAPIError",
+          name: "SessionFactoryAPIError",
         }),
       );
 
@@ -286,11 +286,11 @@ describe("useFactoryImportActivation", () => {
     expect(result.current.activationState).toEqual({ status: "idle" });
   });
 
-  it("preserves explicit named factory api errors from activation failures", async () => {
+  it("preserves explicit session factory api errors from activation failures", async () => {
     const activateFactory = vi
       .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<FactoryValue>>()
       .mockRejectedValue(
-        new NamedFactoryAPIError(
+        new SessionFactoryAPIError(
           "Current factory runtime must be idle before activation.",
           { code: "FACTORY_NOT_IDLE" },
         ),
