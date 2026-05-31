@@ -86,6 +86,7 @@ export function WorkflowActivityBentoCard({
       chromeDensity="compact"
       headerAction={
         <CurrentActivityGraphHeaderActions
+          key={`graph-editor-header-${editor.editorMode}-${editor.draftState.hasChanges}`}
           compact
           editorMode={editor.editorMode}
           editorUnavailableClassifierWorkstationName={

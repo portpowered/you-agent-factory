@@ -1,5 +1,4 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   cleanup,
   fireEvent,
@@ -28,6 +27,7 @@ import {
   workstationKindParityDashboardSnapshot,
   workstationKindParityExpectations,
 } from "../../../components/dashboard/test-fixtures";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   baseFactoryDefinition,
   baseFactoryDefinitionDocument,
@@ -39,6 +39,8 @@ import {
 } from "../../../testing/graph-editor-harness";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
@@ -46,8 +48,6 @@ import {
 } from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { maintainerRuntimeShapedFactory } from "../../factory-graph-editor/lib/maintainer-runtime-shaped-factory.fixture";
 import { removeFactoryGraphNode } from "../../factory-graph-editor/lib/factory-graph-operations";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
-import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
@@ -72,47 +72,61 @@ import {
   ReactFlowCurrentActivityCard,
 } from "./react-flow-current-activity-card";
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
-  useFactoryDocumentSave: vi.fn(),
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: vi.fn(),
+  }),
+);
 
-vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", async () => {
-  const actual = await vi.importActual(
-    "../../factory-graph-editor/hooks/use-editable-factory-graph",
-  );
+vi.mock(
+  "../../factory-graph-editor/hooks/use-editable-factory-graph",
+  async () => {
+    const actual = await vi.importActual(
+      "../../factory-graph-editor/hooks/use-editable-factory-graph",
+    );
 
-  return {
-    ...actual,
-    useEditableFactoryGraph: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useEditableFactoryGraph: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () => {
-  const actual = await vi.importActual(
-    "../../factory-graph-editor/hooks/factory-graph-draft-hook",
-  );
+vi.mock(
+  "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+  async () => {
+    const actual = await vi.importActual(
+      "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+    );
 
-  return {
-    ...actual,
-    useFactoryGraphDraftState: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useFactoryGraphDraftState: vi.fn(),
+    };
+  },
+);
 
 const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
 
 interface RenderCurrentActivityOptions {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>;
+  activateFactory?: (
+    input: FactoryImportConfirmInput,
+  ) => Promise<ImportFactoryValue>;
   importController?: CurrentActivityImportController;
   locale?: string;
   onFactoryActivated?: () => void;
@@ -879,7 +893,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     restoreBrowserTestShims = null;
     vi.clearAllMocks();
   });
+}
 
+function registerCurrentActivityCardEditorChromeTests(): void {
   it("keeps editor controls unavailable until the graph editor mode is enabled", async () => {
     renderCurrentActivity({
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
@@ -1470,7 +1486,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
       }),
     ).not.toHaveLength(0);
   });
+}
 
+function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
   it("removes a workstation without opening a confirmation", () => {
     const result = removeFactoryGraphNode({
       baseFactoryDefinition: baseFactoryDefinitionDocument,
@@ -1548,7 +1566,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
         name: "Select Review workstation",
       }),
     ).toBeTruthy();
-    expect(screen.getByText("Unsaved graph changes")).toBeTruthy();
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
   it("shows a loading editor state while the editable definition is still fetching", async () => {
@@ -1631,6 +1649,49 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(resetDraft).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps editor mode when choosing Keep editing on the leave dialog", async () => {
+    const resetDraft = vi.fn();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: baseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      hasChanges: true,
+      resetDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Leave factory graph editor" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Leave graph editor with unsaved changes?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Keep editing" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(resetDraft).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole("button", { name: "Leave factory graph editor" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+  });
+
   it("shows explicit save and discard actions for pending graph changes", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: baseFactoryDefinitionDocument,
@@ -1677,10 +1738,64 @@ function registerCurrentActivityCardTestLifecycle(): void {
     ).toBeNull();
   });
 
+  it("shows consolidated unsaved chrome with a single header status and warning toggle", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: baseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      draft: {
+        ...defaultDraftState.draft,
+        additions: {
+          ...defaultDraftState.draft.additions,
+          workers: [
+            {
+              model: "gpt-5-mini",
+              name: "reviewer",
+              type: "MODEL_WORKER",
+            },
+          ],
+        },
+      },
+      hasChanges: true,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    const statusSection = document.querySelector(
+      '[data-dashboard-action-row-section="statuses"]',
+    );
+    expect(statusSection).toBeTruthy();
+
+    expect(
+      within(statusSection as HTMLElement).getAllByRole("status"),
+    ).toHaveLength(1);
+    expect(
+      within(statusSection as HTMLElement).getByText("Unsaved changes"),
+    ).toBeTruthy();
+    expect(within(toolbar).queryAllByRole("status")).toHaveLength(0);
+
+    const toggle = screen.getByRole("button", {
+      name: "Leave factory graph editor",
+    });
+    expect(toggle.className).toContain("border-af-warning-border");
+    expect(toggle.className).toContain("bg-af-warning-surface");
+    expect(toggle.className).toContain("text-af-warning-text");
+  });
+
   it("confirms pending save changes before saving the graph draft", async () => {
-    const saveAsync = vi
-      .fn()
-      .mockResolvedValue(baseFactoryDefinitionDocument);
+    const saveAsync = vi.fn().mockResolvedValue(baseFactoryDefinitionDocument);
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: baseFactoryDefinitionDocument,
       error: null,
@@ -1846,9 +1961,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("saves the pending editable definition before leaving editor mode", async () => {
-    const saveAsync = vi
-      .fn()
-      .mockResolvedValue(baseFactoryDefinitionDocument);
+    const saveAsync = vi.fn().mockResolvedValue(baseFactoryDefinitionDocument);
     const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: baseFactoryDefinitionDocument,
@@ -1895,6 +2008,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(replaceDraft).toHaveBeenCalledTimes(1);
   });
 }
+
+describe("ReactFlowCurrentActivityCard editor chrome", () => {
+  registerCurrentActivityCardTestLifecycle();
+  registerCurrentActivityCardEditorChromeTests();
+  registerCurrentActivityCardEditorLeaveAndSaveTests();
+});
 
 describe("ReactFlowCurrentActivityCard import flows", () => {
   registerCurrentActivityCardTestLifecycle();
@@ -2674,7 +2793,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       );
 
       await screen.findByRole("button", { name: "Save changes" });
-      expect(await screen.findByText("Unsaved graph changes")).toBeTruthy();
+      expect(await screen.findByText("Unsaved changes")).toBeTruthy();
       expect(screen.queryByText("Topology edits are blocked")).toBeNull();
       await waitFor(() => {
         expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
@@ -3425,7 +3544,9 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
               now={Date.parse("2026-04-08T12:00:04Z")}
               onSelectWorkID={vi.fn()}
               selection={null}
-              snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
+              snapshot={dashboardSnapshotWithActiveWorkItemCount(
+                activeItemCount,
+              )}
               onSelectStateNode={vi.fn()}
               onSelectWorker={vi.fn()}
               onSelectWorkstation={vi.fn()}
