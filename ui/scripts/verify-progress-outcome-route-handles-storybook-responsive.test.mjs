@@ -67,11 +67,11 @@ describe("verifyProgressOutcomeRouteHandlesStorybookResponsive", () => {
 
     await verifyProgressOutcomeRoutesWithoutStopWords(
       { expectVisible },
-      createPage(buttons, 2),
+      createPage(buttons, 0),
       { label: "desktop" },
     );
 
-    expect(expectVisible).toHaveBeenCalledTimes(4);
+    expect(expectVisible).toHaveBeenCalledTimes(2);
   });
 
   test("fails when continue handles remain visible without stopWords", async () => {
@@ -122,10 +122,10 @@ describe("verifyProgressOutcomeRouteHandlesStorybookResponsive", () => {
     await expect(
       verifyProgressOutcomeRoutesWithoutStopWords(
         { expectVisible },
-        createPage(buttons, 0),
+        createPage(buttons, 2),
         { label: "desktop" },
       ),
-    ).rejects.toThrow(/Expected 2 z-axis incomplete hints/);
+    ).rejects.toThrow(/Expected no z-axis incomplete hints/);
   });
 
   test("fails when z-axis hints remain visible with stopWords configured", async () => {

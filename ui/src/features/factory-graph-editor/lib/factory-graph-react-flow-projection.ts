@@ -25,8 +25,14 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
   resolveFactoryGraphConnectionAnchorContext,
+  workstationRendersProgressOutcomeHandleValidation,
   workstationRendersProgressOutcomeZAxisHintAnchors,
 } from "./factory-graph-editor-connections";
+import {
+  filterValidationHandleErrorsForWorkstation,
+  type FactoryValidationGraphProjection,
+  validationHandleErrorsForNode,
+} from "./factory-validation-graph-projection";
 import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
 import {
   type FactoryGraphWorkStateType,
@@ -95,6 +101,7 @@ export interface FactoryGraphReactFlowEditorOverlay {
   pendingRemovalEdgeIds: ReadonlySet<string>;
   pendingRemovalNodeIds: ReadonlySet<string>;
   validationErrors?: readonly FactoryGraphDraftValidationError[];
+  validationProjection?: FactoryValidationGraphProjection;
 }
 
 export interface ProjectFactoryGraphToReactFlowOptions {
@@ -494,6 +501,20 @@ function buildNodeHandles(input: {
           pendingSourceNode,
           input.workstationResolver,
         )?.workstation;
+  const rawValidationHandleErrors =
+    input.node.kind === "workstation" && input.editor?.validationProjection
+      ? validationHandleErrorsForNode(
+          input.editor.validationProjection,
+          input.node.id,
+        )
+      : undefined;
+  const validationHandleErrors =
+    rawValidationHandleErrors === undefined
+      ? undefined
+      : filterValidationHandleErrorsForWorkstation(
+          rawValidationHandleErrors,
+          anchorContext?.workstation,
+        );
 
   return getLocalizedFactoryGraphConnectionAnchors(
     input.node.kind,
@@ -515,15 +536,28 @@ function buildNodeHandles(input: {
         targetNodeKind: input.node.kind,
         targetWorkstation: anchorContext?.workstation,
       });
+    const handleValidation = validationHandleErrors?.get(anchor.id);
+    const rendersHandleValidation =
+      input.node.kind !== "workstation" ||
+      !anchorContext ||
+      workstationRendersProgressOutcomeHandleValidation(
+        anchorContext,
+        anchor.id,
+      );
+    const showHandleValidation =
+      handleValidation !== undefined && rendersHandleValidation;
 
     return {
-      buttonAriaLabel:
-        anchor.role === "source"
+      buttonAriaLabel: showHandleValidation
+        ? handleValidation.message
+        : anchor.role === "source"
           ? `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`
           : `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`,
       buttonDisabled: !canEditConnections || nodeIsPendingRemoval,
       buttonPressed: selected || undefined,
-      buttonTitle: anchor.description,
+      buttonTitle: showHandleValidation
+        ? handleValidation.message
+        : anchor.description,
       connectable: canEditConnections && !nodeIsPendingRemoval,
       id: anchor.id,
       label: anchor.label,
@@ -539,13 +573,19 @@ function buildNodeHandles(input: {
           : undefined,
       side: anchor.side,
       type: anchor.role,
-      variant: selected
-        ? "selected"
-        : compatible
-          ? "valid-target"
-          : canEditConnections
-            ? "default"
-            : "muted",
+      validationError: showHandleValidation || undefined,
+      validationMessage: showHandleValidation
+        ? handleValidation.message
+        : undefined,
+      variant: showHandleValidation
+        ? "error"
+        : selected
+          ? "selected"
+          : compatible
+            ? "valid-target"
+            : canEditConnections
+              ? "default"
+              : "muted",
     } satisfies ActivityGraphNodeHandle;
   });
 }
