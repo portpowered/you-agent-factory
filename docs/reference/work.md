@@ -15,6 +15,10 @@ resources, routing, and portability—see [Config](config.md) (`you docs config`
 For watched batch files under `inputs/`, relation fields, and the
 `FACTORY_REQUEST_BATCH` contract, see [Batch Inputs](batch-inputs.md).
 
+For confirming a factory service is running and routing `--server` or
+`--session` on submit and work commands, see [Sessions](sessions.md)
+(`you docs sessions`).
+
 This is the canonical customer-facing guide for submitted-work contracts.
 Keep single-work API fields, batch cross-links, tag propagation, and
 submission-oriented runtime flow here. Keep `factory.json` topology in
@@ -25,6 +29,7 @@ submission-oriented runtime flow here. Keep `factory.json` topology in
 | Need | Use |
 |------|-----|
 | Define `factory.json`, work types, states, routing, or portability fields | [Config](config.md) |
+| Confirm the factory is running, choose run modes, or route `--server` / `--session` | [Sessions](sessions.md) |
 | Submit one work item with `POST /work` or understand required API fields | This guide |
 | Place batch request files under `inputs/`, define `FACTORY_REQUEST_BATCH`, or choose `DEPENDS_ON` versus `PARENT_CHILD` | [Batch Inputs](batch-inputs.md) |
 | Walk through a full factory setup with example files and commands | [Author factories](authoring-factories.md) |
@@ -93,7 +98,8 @@ including `requestId`, relation fields, and optional `currentChainingTraceId`.
 operators and scripts; failures never print the success confirmation.
 
 Use the same `--server` base URI and `--session` target as `you work list` and
-`you work show` when verifying work in a non-default factory session.
+`you work show` when verifying work in a non-default factory session. See
+[Sessions](sessions.md) for session list, routing tables, and run-mode guidance.
 
 ### Human success output
 

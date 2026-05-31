@@ -22,6 +22,7 @@ const (
 	TopicGuards             Topic = "guards"
 	TopicRelationships      Topic = "relationships"
 	TopicWork               Topic = "work"
+	TopicSessions           Topic = "sessions"
 	TopicWorkstations       Topic = "workstations"
 	TopicWorkers            Topic = "workers"
 	TopicResources          Topic = "resources"
@@ -44,6 +45,7 @@ const (
 	referenceGuardsPath             = "reference/guards.md"
 	referenceRelationshipsPath      = "reference/relationships.md"
 	referenceWorkPath               = "reference/work.md"
+	referenceSessionsPath           = "reference/sessions.md"
 	referenceWorkstationsPath       = "reference/workstations.md"
 	referenceWorkersPath            = "reference/workers.md"
 	referenceResourcesPath          = "reference/resources.md"
@@ -69,6 +71,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicGuards, description: "Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.", path: referenceGuardsPath, displayOrder: 27},
 	{topic: TopicRelationships, description: "Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.", path: referenceRelationshipsPath, displayOrder: 28},
 	{topic: TopicWork, description: "Submitted work: POST /work, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
+	{topic: TopicSessions, description: "Live factory sessions: session list, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},

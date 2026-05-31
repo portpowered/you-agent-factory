@@ -3,7 +3,9 @@
 Use this page when you need the canonical factory directory layout, the
 field-by-field `factory.json` topology contract, and where each authored file
 lives. Use [Submitted work](work.md) for `POST /work`, tags, and batch
-cross-links.
+cross-links. For live session inspection (`you session list`, `you factory query`,
+status API fields, and `--server` / `--session` on HTTP client commands), see
+[Sessions](sessions.md).
 
 ## Current Contract
 

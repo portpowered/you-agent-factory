@@ -58,6 +58,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"guards",
 		"relationships",
 		"work",
+		"sessions",
 		"workstations",
 		"workers",
 		"resources",
@@ -89,6 +90,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"guards",
 		"relationships",
 		"work",
+		"sessions",
 		"workstations",
 		"workstation",
 		"workers",
@@ -155,6 +157,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
 		"`work` - Submitted work",
+		"`sessions` - Live factory sessions",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
@@ -167,6 +170,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`you docs mock-workers`",
 		"`you docs record-replay`",
 		"`you docs work`",
+		"`you docs sessions`",
 		"`you docs workstations`",
 		"`you docs batch-inputs`",
 	} {
@@ -206,6 +210,47 @@ func TestMarkdown_ReturnsRawPackagedMarkdownForEachSupportedTopic(t *testing.T) 
 				t.Fatalf("Markdown(%q) returned empty content", doc.topic)
 			}
 		})
+	}
+}
+
+func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("agents")
+	if err != nil {
+		t.Fatalf("Markdown(agents) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Agents",
+		"## Is the factory running?",
+		"you session list",
+		"you factory query",
+		"GET /factory-sessions/{session_id}/status",
+		"factoryState",
+		"runtimeStatus",
+		"categories",
+		"http://localhost:7437/dashboard/ui",
+		"you run --continuously",
+		"## Operator loop",
+		"you submit",
+		"--name driver-incident-review",
+		"--work-type-name task",
+		"--payload request.md",
+		"you docs sessions",
+		"[Is the factory running?](#is-the-factory-running?)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(agents) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs agents`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(agents) included wrapper text %q:\n%s", wrapper, got)
+		}
 	}
 }
 
@@ -553,6 +598,51 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("sessions")
+	if err != nil {
+		t.Fatalf("Markdown(sessions) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Sessions and Runtime",
+		"## Session list",
+		"you session list",
+		"you session list --json",
+		"you session list --port 9090",
+		"## Factory query",
+		"you factory query",
+		"you --json factory query",
+		"you --server http://localhost:9090 factory query",
+		"GET /factory-sessions/{session_id}/status",
+		"factoryState",
+		"runtimeStatus",
+		"categories",
+		"totalTokens",
+		"http://localhost:7437/dashboard/ui",
+		"## `--server` and `--session` routing",
+		"you submit --session session-beta",
+		"you run --continuously",
+		"[Agents](agents.md)",
+		"[Work](work.md)",
+		"[Config](config.md)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(sessions) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs sessions`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(sessions) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	t.Parallel()
 
@@ -560,7 +650,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }
