@@ -17,6 +17,10 @@ import {
   getWorkerDetailMessages,
   type WorkerDetailMessages,
 } from "../../worker-selection/messages/worker-detail";
+import {
+  getWorkTypeDetailMessages,
+  type WorkTypeDetailMessages,
+} from "../../work-type-selection/messages/work-type-detail";
 
 const assertResolvedValue = (value: unknown) => {
   expect(typeof value).toBe("string");
@@ -156,6 +160,29 @@ const invokeWorkerDetail = (
   }
 };
 
+const invokeWorkTypeDetail = (
+  key: string,
+  formatter: (...args: never[]) => unknown,
+) => {
+  switch (key satisfies keyof WorkTypeDetailMessages) {
+    case "editableConfigurationNameDuplicate":
+    case "editableConfigurationSaveSuccess":
+    case "topologyDeleteAction":
+      return [formatter("story" as never)];
+    case "localizeWorkStateType":
+      return [
+        formatter("INITIAL" as never),
+        formatter("PROCESSING" as never),
+        formatter("TERMINAL" as never),
+        formatter("FAILED" as never),
+      ];
+    case "selectWorkStateGraphNodeLabel":
+      return [formatter("queued" as never)];
+    default:
+      throw new Error(`Unhandled work-type-detail formatter ${key}`);
+  }
+};
+
 const invokeWorkstationDetail = (
   key: string,
   formatter: (...args: never[]) => unknown,
@@ -270,6 +297,15 @@ describe("current-selection message catalogs", () => {
     assertCatalogValuesResolve(
       getWorkerDetailMessages(locale) as unknown as Record<string, unknown>,
       invokeWorkerDetail,
+    );
+  });
+
+  it.each(
+    SUPPORTED_LOCALES,
+  )("resolves every %s work-type-detail value", (locale) => {
+    assertCatalogValuesResolve(
+      getWorkTypeDetailMessages(locale) as unknown as Record<string, unknown>,
+      invokeWorkTypeDetail,
     );
   });
 });
