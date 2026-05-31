@@ -96,6 +96,17 @@ describe("resolveSessionFactoryAPIErrorMessage", () => {
       }),
     ).toBe(sessionFactoryAPIErrorMessages.rejectedSaveRequest);
   });
+
+  it("maps NOT_FOUND to the API message when provided", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        apiMessage: "Session factory not found.",
+        code: "NOT_FOUND",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedRequest,
+        status: 404,
+      }),
+    ).toBe("Session factory not found.");
+  });
 });
 
 describe("session factory HTTP error mapping", () => {

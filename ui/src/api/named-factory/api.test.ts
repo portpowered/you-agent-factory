@@ -1011,4 +1011,61 @@ describe("factory API", () => {
       message: "The current factory editing API returned an invalid response.",
     });
   });
+
+  it("maps unknown API error codes from replace import activation to INTERNAL_ERROR", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Session Current Name",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: defaultSessionFactoryVersion,
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: "WEIRD_API_CODE",
+            message: "Activation rejected.",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 500,
+            statusText: "Internal Server Error",
+          },
+        ),
+      );
+
+    await expect(
+      activateImportedFactoryForSession(
+        {
+          name: "Imported Factory",
+          workTypes: [],
+          workers: [],
+          workstations: [],
+        },
+        { fetch: fetchMock },
+      ),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      responseBody: {
+        code: "WEIRD_API_CODE",
+        message: "Activation rejected.",
+      },
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+  });
 });
