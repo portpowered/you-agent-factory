@@ -5,7 +5,7 @@ const defaultSessionFactoryVersion = {
   physical: "2026-05-18T14:25:00Z",
 } as const;
 
-describe("session factory export API", () => {
+describe("session factory export API success paths", () => {
   it("reads the current factory as a direct canonical factory payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -77,7 +77,9 @@ describe("session factory export API", () => {
       },
     );
   });
+});
 
+describe("session factory export API HTTP error mapping", () => {
   it("maps NOT_FOUND current-factory failures to SessionFactoryAPIError", async () => {
     await expect(
       getCurrentFactory({
@@ -153,7 +155,9 @@ describe("session factory export API", () => {
       status: 409,
     });
   });
+});
 
+describe("session factory export API invalid document handling", () => {
   it("maps INVALID_FACTORY_DEFINITION current-factory failures to INVALID_FACTORY", async () => {
     await expect(
       getCurrentFactory({

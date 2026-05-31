@@ -5,10 +5,8 @@ import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { validationMessagesForGraphSelection } from "../lib/react-flow-current-activity-card-validation";
-import type {
-  CurrentActivitySelection,
-  useCurrentActivityGraphViewModel,
-} from "./react-flow-current-activity-card";
+import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
+import type { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 export function CurrentActivityGraphSurface({
