@@ -37,6 +37,7 @@ export function StateNodeDetailCard({
   failedWorkDetailsByWorkID,
   headerAction,
   locale,
+  onSaveConfiguration,
   onSelectWorkItem,
   place,
   saveState,
@@ -69,6 +70,7 @@ export function StateNodeDetailCard({
       {editableConfigurationState ? (
         <WorkStateEditableConfigurationSection
           messages={workStateMessages}
+          onSaveConfiguration={onSaveConfiguration}
           saveState={saveState}
           state={editableConfigurationState}
         />

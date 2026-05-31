@@ -11,6 +11,7 @@ export function WorkTypeDetailCard({
   editableConfigurationState,
   headerAction,
   locale,
+  onSaveConfiguration,
   onSelectWorkStateGraphNode,
   saveState,
   widgetId = "current-selection",
@@ -45,6 +46,7 @@ export function WorkTypeDetailCard({
       {editableConfigurationState?.status === "ready" ? (
         <WorkTypeReadySection
           messages={messages}
+          onSaveConfiguration={onSaveConfiguration}
           onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
           saveState={saveState}
           state={editableConfigurationState}

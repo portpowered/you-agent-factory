@@ -77,6 +77,8 @@ function renderCurrentSelectionDetailCard({
   workStateSaveState,
   onSaveWorkerConfiguration,
   onSaveWorkstationConfiguration,
+  onSaveWorkStateConfiguration,
+  onSaveWorkTypeConfiguration,
   workerHeaderAction,
   workTypeHeaderAction,
   workTypeSaveState,
@@ -113,6 +115,8 @@ function renderCurrentSelectionDetailCard({
   >["saveState"];
   onSaveWorkerConfiguration: () => void;
   onSaveWorkstationConfiguration: () => void;
+  onSaveWorkStateConfiguration: () => void;
+  onSaveWorkTypeConfiguration: () => void;
   workerHeaderAction: ReactNode;
   workTypeHeaderAction: ReactNode;
   saveState: ReturnType<
@@ -194,6 +198,7 @@ function renderCurrentSelectionDetailCard({
         failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
         headerAction={workStateHeaderAction}
         locale={locale}
+        onSaveConfiguration={onSaveWorkStateConfiguration}
         onSelectWorkItem={(workItem) =>
           selectStateWorkItem(selectedStatePlace, workItem)
         }
@@ -226,6 +231,7 @@ function renderCurrentSelectionDetailCard({
         editableConfigurationState={editableWorkTypeConfigurationState}
         headerAction={workTypeHeaderAction}
         locale={locale}
+        onSaveConfiguration={onSaveWorkTypeConfiguration}
         onSelectWorkStateGraphNode={selectWorkstation}
         saveState={workTypeSaveState}
         widgetId={widgetId}
@@ -401,6 +407,8 @@ export function CurrentSelectionWidget({
     workStateSaveState: workStateSave.saveState,
     onSaveWorkerConfiguration: () => void workerSave.save(),
     onSaveWorkstationConfiguration: workstationSave.beginSaveConfirmation,
+    onSaveWorkStateConfiguration: () => void workStateSave.save(),
+    onSaveWorkTypeConfiguration: workTypeSave.beginSaveConfirmation,
     workerHeaderAction,
     workTypeHeaderAction,
     saveState: workstationSave.saveState,

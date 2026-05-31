@@ -21,7 +21,7 @@ function WorkTypeStateRowContent({
   state: NonNullable<EditableWorkTypeValues["states"]>[number];
 }) {
   return (
-    <div className="grid min-w-0 gap-1 sm:grid-cols-2 sm:gap-3">
+    <div className="grid min-w-0 gap-1">
       <div className="grid min-w-0 gap-1">
         <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
           {messages.stateNameColumnLabel}

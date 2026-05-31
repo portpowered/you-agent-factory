@@ -4,6 +4,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashbo
 import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
 import { describe, expect, it, vi } from "vitest";
+import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
 import type {
   EditableWorkStateConfigurationState,
@@ -487,10 +488,71 @@ describe("StateNodeDetailCard editable work state configuration", () => {
     const nameInput = screen.getByLabelText(messages.nameFieldLabel);
     expect(nameInput.getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByText(duplicateMessage)).toBeTruthy();
+    const saveButtons = screen.getAllByRole("button", {
+      name: messages.editableConfigurationSaveAction,
+    });
+    expect(saveButtons[0]?.getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("stacks configuration fields vertically and renders a labeled footer Save", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+      (place) => place.place_id === "story:implemented",
+    );
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+    const onSaveConfiguration = vi.fn();
+
+    const { container } = render(
+      <StateNodeDetailCard
+        currentWorkItems={[]}
+        editableConfigurationState={{
+          baseVersion: buildFactoryDocument().version,
+          canSave: true,
+          draft: {
+            name: "implemented",
+            type: "PROCESSING",
+          },
+          hasValidationErrors: false,
+          initialValues: {
+            stateName: "implemented",
+            stateNamesInWorkType: ["implemented", "complete"],
+            stateType: "PROCESSING",
+            workTypeName: "story",
+          },
+          isDirty: true,
+          markChangesSaved: vi.fn(),
+          onNameChange: vi.fn(),
+          onResetToLatest: vi.fn(),
+          originalStateName: "implemented",
+          pendingFactoryDefinition: buildFactoryDocument(),
+          status: "ready",
+          validationErrors: {},
+          workTypeName: "story",
+        }}
+        headerAction={buildWorkStateHeaderSaveAction({ canSave: true })}
+        onSaveConfiguration={onSaveConfiguration}
+        place={resolvedSelectedState}
+        tokenCount={0}
+      />,
+    );
+
+    const fieldGroup = container.querySelector(
+      `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+    );
+    expect(fieldGroup).not.toBeNull();
+    expect(fieldGroup?.className).not.toMatch(/sm:grid-cols-\d/);
+    expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);
+
+    const saveButtons = screen.getAllByRole("button", {
+      name: messages.editableConfigurationSaveAction,
+    });
+    expect(saveButtons).toHaveLength(2);
+
+    fireEvent.click(saveButtons[1] ?? saveButtons[0]);
+    expect(onSaveConfiguration).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("button", { name: messages.editableConfigurationSaveAction })
-        .getAttribute("disabled"),
-    ).not.toBeNull();
+      screen.getByRole("button", { name: messages.discardDraftAction }),
+    ).toBeTruthy();
   });
 
   it("keeps runtime work list content when editable configuration is ready", () => {
