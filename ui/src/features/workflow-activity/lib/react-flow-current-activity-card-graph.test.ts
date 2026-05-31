@@ -936,10 +936,7 @@ describe("current activity graph editor handles", () => {
     );
     expect(handleIds).not.toContain("workstation-on-continue-source");
     expect(handleIds).not.toContain("workstation-on-rejection-source");
-    expect(workstationNode?.data.zAxisIncompleteHints).toEqual({
-      accessibleLabel: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
-      title: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
-    });
+    expect(workstationNode?.data.zAxisIncompleteHints).toBeNull();
   });
 
   it("keeps hidden continue and reject handles for authored edges without stopWords", async () => {
@@ -988,10 +985,7 @@ describe("current activity graph editor handles", () => {
         id: "workstation-on-rejection-source",
       }),
     );
-    expect(reviewNode?.data.zAxisIncompleteHints).toEqual({
-      accessibleLabel: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
-      title: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
-    });
+    expect(reviewNode?.data.zAxisIncompleteHints).toBeNull();
   });
 
   it("includes continue and reject editor handles when stopWords are configured", async () => {

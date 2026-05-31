@@ -25,6 +25,7 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
   resolveFactoryGraphConnectionAnchorContext,
+  workstationRendersProgressOutcomeZAxisHintAnchors,
 } from "./factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
 import {
@@ -447,7 +448,8 @@ export function resolveFactoryGraphZAxisIncompleteHints(input: {
     !input.anchorContext?.workstation ||
     !workstationHasZAxisIncompleteForConnections(
       input.anchorContext.workstation,
-    )
+    ) ||
+    !workstationRendersProgressOutcomeZAxisHintAnchors(input.anchorContext)
   ) {
     return null;
   }

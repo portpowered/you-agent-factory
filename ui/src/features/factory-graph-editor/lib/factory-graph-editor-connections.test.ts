@@ -13,6 +13,7 @@ import {
   factoryGraphConnectionAnchorContext,
   getLocalizedFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
+  workstationRendersProgressOutcomeZAxisHintAnchors,
 } from "./factory-graph-editor-connections";
 
 const baseDraft: FactoryGraphDraft = {
@@ -334,5 +335,18 @@ describe("factory graph editor connections", () => {
 
     expect(nextDraft.edgeChanges.additions).toEqual([]);
     expect(nextDraft.edgeChanges.removals).toEqual([]);
+  });
+
+  it("does not render z-axis hint anchor slots when continue and reject handles are omitted", () => {
+    expect(
+      workstationRendersProgressOutcomeZAxisHintAnchors(
+        standardProcessorWithoutStopWords,
+      ),
+    ).toBe(false);
+    expect(
+      workstationRendersProgressOutcomeZAxisHintAnchors(
+        standardProcessorWithStopWords,
+      ),
+    ).toBe(true);
   });
 });

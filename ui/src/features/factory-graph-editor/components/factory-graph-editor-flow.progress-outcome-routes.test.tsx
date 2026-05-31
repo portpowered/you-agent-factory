@@ -5,7 +5,6 @@ import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import "../../../styles.css";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { baseFactoryDefinition } from "../lib/factory-graph-draft.test-helpers";
 import type { FactoryGraphTopology } from "../lib/factory-graph-draft-types";
 import {
@@ -110,14 +109,9 @@ describe("factory graph editor progress outcome route handles", () => {
       screen.queryByRole("button", { name: "Connect: draft Reject" }),
     ).toBeNull();
 
-    const hints = container.querySelectorAll("[data-z-axis-incomplete-hint]");
-    expect(hints).toHaveLength(2);
-    const hintMessage =
-      getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint;
-    for (const hint of hints) {
-      expect(hint.getAttribute("aria-label")).toBe(hintMessage);
-      expect(hint.getAttribute("title")).toBe(hintMessage);
-    }
+    expect(
+      container.querySelectorAll("[data-z-axis-incomplete-hint]"),
+    ).toHaveLength(0);
   });
 
   it("shows continue and reject connect handles when stopWords are configured", async () => {

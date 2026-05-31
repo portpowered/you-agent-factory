@@ -16,6 +16,7 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   mergeAuthoredProgressOutcomeConnectionAnchors,
   PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
+  workstationRendersProgressOutcomeZAxisHintAnchors,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { validationHandleErrorsForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
@@ -147,6 +148,9 @@ export function resolveZAxisIncompleteHints(args: {
   if (
     !workstationHasZAxisIncompleteForConnections(
       args.connectionAnchorContext.workstation,
+    ) ||
+    !workstationRendersProgressOutcomeZAxisHintAnchors(
+      args.connectionAnchorContext,
     )
   ) {
     return null;

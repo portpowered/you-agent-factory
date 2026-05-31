@@ -218,6 +218,25 @@ export function getFactoryGraphConnectionAnchors(
   return filterWorkstationConnectionAnchors(anchors, context);
 }
 
+/** True when Continue/Reject connect anchors are on the rendered workstation rail. */
+export function workstationRendersProgressOutcomeZAxisHintAnchors(
+  context: FactoryGraphConnectionAnchorContext,
+): boolean {
+  const renderedIds = new Set(
+    getFactoryGraphConnectionAnchors("workstation", context).map(
+      (anchor) => anchor.id,
+    ),
+  );
+
+  for (const anchorId of PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS) {
+    if (!renderedIds.has(anchorId)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function getLocalizedFactoryGraphConnectionAnchors(
   kind: FactoryGraphNodeKind,
   locale?: string | null,
