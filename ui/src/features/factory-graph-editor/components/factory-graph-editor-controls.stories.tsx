@@ -260,7 +260,7 @@ export const EditorMode = {
       within(toolbar).getByRole("button", { name: "Connect" }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(
-      within(toolbar).getByText("Draft changes pending"),
+      within(toolbar).getByRole("button", { name: "Discard changes" }),
     ).toBeVisible();
   },
 };
@@ -305,9 +305,6 @@ export const PendingDraftActions = {
       name: "Factory graph editor tools",
     });
 
-    await expect(
-      within(toolbar).getByText("Draft changes pending"),
-    ).toBeVisible();
     await expect(
       within(toolbar).getByRole("button", { name: "Discard changes" }),
     ).toBeVisible();

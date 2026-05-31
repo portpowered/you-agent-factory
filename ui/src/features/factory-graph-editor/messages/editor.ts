@@ -114,8 +114,6 @@ export interface FactoryGraphEditorMessages {
   toolbarDeleteDescription: string;
   toolbarDeleteLabel: string;
   toolbarOpenAddMenuLabel: string;
-  toolbarPendingChanges: string;
-  toolbarNoPendingChanges: string;
   toolbarVisibilityMenuAriaLabel: string;
   toolbarVisibilityMenuDescription: string;
   toolbarVisibilityMenuTitle: string;
@@ -504,8 +502,6 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarDeleteDescription: "Remove nodes or edges from the draft",
       toolbarDeleteLabel: "Delete",
       toolbarOpenAddMenuLabel: "Open add entity menu",
-      toolbarPendingChanges: "Draft changes pending",
-      toolbarNoPendingChanges: "No draft changes",
       toolbarVisibilityMenuAriaLabel: "Add graph entity menu",
       toolbarVisibilityMenuDescription:
         "Choose a supported entity to add to the current draft.",
@@ -875,8 +871,6 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarDeleteDescription: "从草稿中移除节点或边",
       toolbarDeleteLabel: "删除",
       toolbarOpenAddMenuLabel: "打开添加实体菜单",
-      toolbarPendingChanges: "草稿更改待处理",
-      toolbarNoPendingChanges: "没有草稿更改",
       toolbarVisibilityMenuAriaLabel: "添加图实体菜单",
       toolbarVisibilityMenuDescription: "选择要添加到当前草稿的受支持实体。",
       toolbarVisibilityMenuTitle: "添加图实体",

@@ -4,7 +4,6 @@ import {
   Button,
   DashboardActionRow,
   DashboardActionButton,
-  DashboardStatusPill,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -137,9 +136,9 @@ export function FactoryGraphEditorToolbar({
         }
         tone={activeTool === "connect" ? "secondary" : "outline"}
       />
-      <DashboardActionRow
-        actions={
-          hasPendingChanges ? (
+      {hasPendingChanges ? (
+        <DashboardActionRow
+          actions={
             <>
               <DashboardActionButton
                 disabled={!canDiscard || isSaving}
@@ -164,23 +163,11 @@ export function FactoryGraphEditorToolbar({
                 <SaveIcon />
               </FactoryGraphEditorTooltipActionButton>
             </>
-          ) : null
-        }
-        actionsClassName={hasPendingChanges ? TOOLBAR_ACTIONS_CLASS : undefined}
-        className={TOOLBAR_MIXED_ROW_CLASS}
-        statuses={
-          <DashboardStatusPill
-            aria-live="polite"
-            className="max-md:min-w-0 max-md:flex-1 max-md:justify-center"
-            role="status"
-            tone={hasPendingChanges ? "warning" : "neutral"}
-          >
-            {hasPendingChanges
-              ? messages.toolbarPendingChanges
-              : messages.toolbarNoPendingChanges}
-          </DashboardStatusPill>
-        }
-      />
+          }
+          actionsClassName={TOOLBAR_ACTIONS_CLASS}
+          className={TOOLBAR_MIXED_ROW_CLASS}
+        />
+      ) : null}
     </section>
   );
 }
