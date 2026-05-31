@@ -38,45 +38,72 @@ func replaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte, ho
 
 	segment := filepath.Base(targetDir)
 	parentDir := filepath.Dir(targetDir)
-	factoryCfg, canonical, err := normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
+	stagingDir, cleanupStaging, err := stageFactorySplitLayoutReplace(targetDir, segment, parentDir, canonicalFactoryJSON, hooks)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanupStaging()
+
+	backupDir, err := commitFactorySplitLayoutReplace(parentDir, targetDir, stagingDir, segment)
 	if err != nil {
 		return nil, err
 	}
 
-	sourcePath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
-	stagingDir, err := os.MkdirTemp(parentDir, "."+segment+".staging-")
+	return &FactorySplitLayoutReplaceResult{
+		Restore: func() {
+			restoreFactorySplitLayoutReplace(targetDir, backupDir)
+		},
+		DiscardBackup: func() {
+			_ = os.RemoveAll(backupDir)
+		},
+	}, nil
+}
+
+func stageFactorySplitLayoutReplace(
+	targetDir, segment, parentDir string,
+	canonicalFactoryJSON []byte,
+	hooks factorySplitLayoutReplaceHooks,
+) (stagingDir string, cleanup func(), err error) {
+	factoryCfg, canonical, err := normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
 	if err != nil {
-		return nil, fmt.Errorf("create staging directory for factory %q: %w", segment, err)
+		return "", func() {}, err
 	}
-	keepStaging := false
-	defer func() {
-		if !keepStaging {
-			_ = os.RemoveAll(stagingDir)
-		}
-	}()
+
+	sourcePath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
+	stagingDir, err = os.MkdirTemp(parentDir, "."+segment+".staging-")
+	if err != nil {
+		return "", func() {}, fmt.Errorf("create staging directory for factory %q: %w", segment, err)
+	}
+	cleanup = func() {
+		_ = os.RemoveAll(stagingDir)
+	}
 
 	if _, err := writeNamedFactoryLayout(stagingDir, factoryCfg, canonical, sourcePath); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
+		return "", cleanup, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 	}
 	if hooks.afterStageWrite != nil {
 		if err := hooks.afterStageWrite(stagingDir); err != nil {
-			return nil, fmt.Errorf("prepare staged factory %q: %w", segment, err)
+			return "", cleanup, fmt.Errorf("prepare staged factory %q: %w", segment, err)
 		}
 	}
 	if _, err := LoadRuntimeConfig(stagingDir, nil); err != nil {
-		return nil, fmt.Errorf("%w: validate factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+		return "", cleanup, fmt.Errorf("%w: validate factory %q config: %w", ErrInvalidNamedFactory, segment, err)
 	}
 
-	backupDir, err := os.MkdirTemp(parentDir, "."+segment+".previous-")
+	return stagingDir, cleanup, nil
+}
+
+func commitFactorySplitLayoutReplace(parentDir, targetDir, stagingDir, segment string) (backupDir string, err error) {
+	backupDir, err = os.MkdirTemp(parentDir, "."+segment+".previous-")
 	if err != nil {
-		return nil, fmt.Errorf("prepare replacement backup for factory %q: %w", segment, err)
+		return "", fmt.Errorf("prepare replacement backup for factory %q: %w", segment, err)
 	}
 	if err := os.Remove(backupDir); err != nil {
-		return nil, fmt.Errorf("prepare replacement backup for factory %q: %w", segment, err)
+		return "", fmt.Errorf("prepare replacement backup for factory %q: %w", segment, err)
 	}
 
 	if err := os.Rename(targetDir, backupDir); err != nil {
-		return nil, fmt.Errorf("backup existing factory %q: %w", segment, err)
+		return "", fmt.Errorf("backup existing factory %q: %w", segment, err)
 	}
 	committed := false
 	defer func() {
@@ -89,19 +116,10 @@ func replaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte, ho
 	}()
 
 	if err := os.Rename(stagingDir, targetDir); err != nil {
-		return nil, fmt.Errorf("commit factory %q: %w", segment, err)
+		return "", fmt.Errorf("commit factory %q: %w", segment, err)
 	}
-	keepStaging = true
 	committed = true
-
-	return &FactorySplitLayoutReplaceResult{
-		Restore: func() {
-			restoreFactorySplitLayoutReplace(targetDir, backupDir)
-		},
-		DiscardBackup: func() {
-			_ = os.RemoveAll(backupDir)
-		},
-	}, nil
+	return backupDir, nil
 }
 
 func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {

@@ -198,50 +198,83 @@ func writeExpandedWorkstationFiles(targetDir string, workstationConfigs []interf
 	agentsWritten := 0
 	promptsWritten := 0
 	for _, workstationCfg := range configs {
-		segment, err := safeFactoryLayoutSegment("workstation", workstationCfg.Name)
+		wroteAgents, wrotePrompts, err := expandSingleWorkstation(workstationsDir, workstationCfg, opts)
 		if err != nil {
 			return 0, 0, err
 		}
-		workstationDir := filepath.Join(workstationsDir, segment)
-		if !hasInlineWorkstationRuntime(workstationCfg) && !opts.overwriteExisting {
-			exists, err := agentsFileExists(workstationDir)
-			if err != nil {
-				return 0, 0, fmt.Errorf("check workstation %q AGENTS.md: %w", workstationCfg.Name, err)
-			}
-			if exists {
-				continue
-			}
-		}
-		def, promptFileContent := workstationDefForExpansion(workstationCfg)
-		agents := renderAgentsBody(def.Body)
-		if !hasInlineWorkstationRuntime(workstationCfg) {
-			agents, err = renderAgentsMarkdown(workstationFrontmatterForExpansion(def), def.Body)
-			if err != nil {
-				return 0, 0, fmt.Errorf("render workstation %q AGENTS.md: %w", workstationCfg.Name, err)
-			}
-		}
-		promptPath := ""
-		if def.PromptFile != "" {
-			promptPath, err = safePromptFilePath(workstationDir, def.PromptFile)
-			if err != nil {
-				return 0, 0, fmt.Errorf("resolve workstation %q prompt file: %w", workstationCfg.Name, err)
-			}
-		}
-		if err := writeAgentsFile(workstationDir, agents); err != nil {
-			return 0, 0, fmt.Errorf("write workstation %q AGENTS.md: %w", workstationCfg.Name, err)
-		}
-		agentsWritten++
-		if promptPath != "" {
-			if err := os.MkdirAll(filepath.Dir(promptPath), 0o755); err != nil {
-				return 0, 0, fmt.Errorf("create workstation %q prompt directory: %w", workstationCfg.Name, err)
-			}
-			if err := os.WriteFile(promptPath, []byte(promptFileContent), 0o644); err != nil {
-				return 0, 0, fmt.Errorf("write workstation %q prompt file: %w", workstationCfg.Name, err)
-			}
-			promptsWritten++
-		}
+		agentsWritten += wroteAgents
+		promptsWritten += wrotePrompts
 	}
 	return agentsWritten, promptsWritten, nil
+}
+
+func expandSingleWorkstation(
+	workstationsDir string,
+	workstationCfg interfaces.FactoryWorkstationConfig,
+	opts splitRuntimeExpansionOptions,
+) (agentsWritten, promptsWritten int, err error) {
+	segment, err := safeFactoryLayoutSegment("workstation", workstationCfg.Name)
+	if err != nil {
+		return 0, 0, err
+	}
+	workstationDir := filepath.Join(workstationsDir, segment)
+	if skip, err := shouldSkipWorkstationExpansion(workstationDir, workstationCfg, opts); err != nil {
+		return 0, 0, err
+	} else if skip {
+		return 0, 0, nil
+	}
+
+	def, promptFileContent := workstationDefForExpansion(workstationCfg)
+	agents, err := agentsMarkdownForWorkstationExpansion(workstationCfg, def)
+	if err != nil {
+		return 0, 0, fmt.Errorf("render workstation %q AGENTS.md: %w", workstationCfg.Name, err)
+	}
+	promptPath := ""
+	if def.PromptFile != "" {
+		promptPath, err = safePromptFilePath(workstationDir, def.PromptFile)
+		if err != nil {
+			return 0, 0, fmt.Errorf("resolve workstation %q prompt file: %w", workstationCfg.Name, err)
+		}
+	}
+	if err := writeAgentsFile(workstationDir, agents); err != nil {
+		return 0, 0, fmt.Errorf("write workstation %q AGENTS.md: %w", workstationCfg.Name, err)
+	}
+	agentsWritten = 1
+	if promptPath == "" {
+		return agentsWritten, 0, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0o755); err != nil {
+		return 0, 0, fmt.Errorf("create workstation %q prompt directory: %w", workstationCfg.Name, err)
+	}
+	if err := os.WriteFile(promptPath, []byte(promptFileContent), 0o644); err != nil {
+		return 0, 0, fmt.Errorf("write workstation %q prompt file: %w", workstationCfg.Name, err)
+	}
+	return agentsWritten, 1, nil
+}
+
+func shouldSkipWorkstationExpansion(
+	workstationDir string,
+	workstationCfg interfaces.FactoryWorkstationConfig,
+	opts splitRuntimeExpansionOptions,
+) (bool, error) {
+	if hasInlineWorkstationRuntime(workstationCfg) || opts.overwriteExisting {
+		return false, nil
+	}
+	exists, err := agentsFileExists(workstationDir)
+	if err != nil {
+		return false, fmt.Errorf("check workstation %q AGENTS.md: %w", workstationCfg.Name, err)
+	}
+	return exists, nil
+}
+
+func agentsMarkdownForWorkstationExpansion(
+	workstationCfg interfaces.FactoryWorkstationConfig,
+	def interfaces.FactoryWorkstationConfig,
+) ([]byte, error) {
+	if hasInlineWorkstationRuntime(workstationCfg) {
+		return renderAgentsBody(def.Body), nil
+	}
+	return renderAgentsMarkdown(workstationFrontmatterForExpansion(def), def.Body)
 }
 
 func writeExpandedReferencedScripts(sourceDir, targetDir string, cfg *interfaces.FactoryConfig) error {
