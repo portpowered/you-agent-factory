@@ -15,6 +15,7 @@ import {
   buildDetailCardFactoryDocumentSaveHookReturn,
   buildDetailCardMultiWorkstationFactoryDocument,
   buildDetailCardSharedWorkerFactoryDocument,
+  buildDetailCardWorkStateFactoryDocument,
   createDetailCardDeferredFactoryDocumentSave,
   DETAIL_CARD_NOW,
   DETAIL_CARD_SAVE_FACTORY_VERSION,
@@ -1145,6 +1146,128 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 });
 
+describe("CurrentSelectionWidget work state save flow", () => {
+  beforeEach(() => {
+    resetSelectionHistoryStore();
+    saveCurrentFactoryMutation.mockReset();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardWorkStateFactoryDocument(),
+      ),
+    );
+    vi.mocked(useFactoryDocumentSave).mockReturnValue(
+      buildDetailCardFactoryDocumentSaveHookReturn(
+        saveCurrentFactoryMutation,
+      ) as never,
+    );
+  });
+
+  afterEach(() => {
+    resetSelectionHistoryStore();
+  });
+
+  it("wires header save for editable work state rename and blocks duplicate names", async () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedStatePlace =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
+
+    if (!selectedStatePlace) {
+      throw new Error("expected implemented state fixture");
+    }
+
+    renderWorkStateSelection(selectedStatePlace);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("State name")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByLabelText("State name"), {
+      target: { value: "complete" },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: "Save work state" })
+          .getAttribute("disabled"),
+      ).not.toBeNull();
+    });
+    expect(
+      screen.getByText(
+        'A work state named "complete" already exists for this work type.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it("persists work state rename inline and updates selection to the new place id", async () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedStatePlace =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
+    const selectStateNode = vi.fn();
+    const savedFactory = buildDetailCardWorkStateFactoryDocument({
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "ready", type: "PROCESSING" },
+            { name: "complete", type: "TERMINAL" },
+            { name: "blocked", type: "FAILED" },
+          ],
+        },
+      ],
+    });
+
+    if (!selectedStatePlace) {
+      throw new Error("expected implemented state fixture");
+    }
+
+    saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
+
+    renderWorkStateSelection(selectedStatePlace, selectStateNode);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("State name")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByLabelText("State name"), {
+      target: { value: "ready" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save work state" }));
+
+    await waitFor(() => {
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseVersion: DETAIL_CARD_SAVE_FACTORY_VERSION,
+          factory: expect.objectContaining({
+            workTypes: [
+              expect.objectContaining({
+                name: "story",
+                states: expect.arrayContaining([
+                  expect.objectContaining({ name: "ready", type: "PROCESSING" }),
+                ]),
+              }),
+            ],
+          }),
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(selectStateNode).toHaveBeenCalledWith("story:ready");
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Running factory saved. ready was updated in the running factory definition.",
+        ),
+      ).toBeTruthy();
+    });
+  });
+});
+
 describe("CurrentSelectionWidget worker save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
@@ -1238,6 +1361,28 @@ function renderWorkerSelection() {
       currentSelection={buildDetailCardCurrentSelection({
         selectedWorkerName: "reviewer",
         selection: { kind: "worker", workerName: "reviewer" },
+      })}
+      now={DETAIL_CARD_NOW}
+      selectedWorkExecutionDetails={null}
+    />,
+  );
+}
+
+function renderWorkStateSelection(
+  selectedStatePlace: NonNullable<
+    ReturnType<typeof buildDetailCardCurrentSelection>["selectedStatePlace"]
+  >,
+  selectStateNode: ReturnType<typeof vi.fn> = vi.fn(),
+) {
+  return renderWithQueryClient(
+    <CurrentSelectionWidget
+      currentSelection={buildDetailCardCurrentSelection({
+        selectStateNode,
+        selectedStatePlace,
+        selection: {
+          kind: "state-node",
+          placeId: selectedStatePlace.place_id,
+        },
       })}
       now={DETAIL_CARD_NOW}
       selectedWorkExecutionDetails={null}

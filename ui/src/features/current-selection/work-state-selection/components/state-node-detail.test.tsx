@@ -1,9 +1,16 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
 import { describe, expect, it, vi } from "vitest";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
+import type {
+  EditableWorkStateConfigurationState,
+  EditableWorkStateSaveState,
+} from "../lib/detail-card-types";
+import { getWorkStateDetailMessages } from "../messages/work-state-detail";
+import { EditableWorkStateSaveHeaderAction } from "./work-state-save-controls";
 import { StateNodeDetailCard } from "./state-node-detail";
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
@@ -339,5 +346,198 @@ describe("StateNodeDetailCard", () => {
         `开始时间 ${formatLocalDateTime(activeStoryStartedAt, "不可用", "zh-CN")}`,
       ),
     ).toBeTruthy();
+  });
+});
+
+function buildFactoryDocument(
+  overrides?: Partial<CurrentFactoryDocument>,
+): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    version: {
+      logical: "7",
+      physical: "2026-05-23T16:22:24Z",
+    },
+    workers: [],
+    workstations: [],
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          { name: "implemented", type: "PROCESSING" },
+          { name: "complete", type: "TERMINAL" },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function buildWorkStateHeaderSaveAction({
+  canSave,
+  onClick = vi.fn(),
+  saveState = { status: "idle" },
+}: {
+  canSave: boolean;
+  onClick?: () => void;
+  saveState?: EditableWorkStateSaveState;
+}) {
+  return (
+    <EditableWorkStateSaveHeaderAction
+      canSave={canSave}
+      onClick={onClick}
+      saveState={saveState}
+    />
+  );
+}
+
+describe("StateNodeDetailCard editable work state configuration", () => {
+  const messages = getWorkStateDetailMessages();
+
+  it("renders editable name and read-only lifecycle type when configuration state is ready", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+      (place) => place.place_id === "story:implemented",
+    );
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+    const editableConfigurationState: EditableWorkStateConfigurationState = {
+      baseVersion: buildFactoryDocument().version,
+      canSave: false,
+      draft: {
+        name: "implemented",
+        type: "PROCESSING",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        stateName: "implemented",
+        stateNamesInWorkType: ["implemented", "complete"],
+        stateType: "PROCESSING",
+        workTypeName: "story",
+      },
+      isDirty: false,
+      markChangesSaved: vi.fn(),
+      onNameChange: vi.fn(),
+      onResetToLatest: vi.fn(),
+      originalStateName: "implemented",
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+      workTypeName: "story",
+    };
+
+    render(
+      <StateNodeDetailCard
+        currentWorkItems={[]}
+        editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkStateHeaderSaveAction({ canSave: false })}
+        place={resolvedSelectedState}
+        tokenCount={0}
+      />,
+    );
+
+    expect(screen.getByLabelText(messages.nameFieldLabel)).toBeTruthy();
+    expect(screen.getByText(messages.localizeWorkStateType("PROCESSING"))).toBeTruthy();
+    expect(screen.queryByText("story: implemented")).toBeNull();
+    expect(screen.getByText(messages.editableConfigurationHeading)).toBeTruthy();
+  });
+
+  it("shows duplicate-name validation with aria-invalid and role alert", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+      (place) => place.place_id === "story:implemented",
+    );
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+    const duplicateMessage = messages.editableConfigurationNameDuplicate("complete");
+
+    render(
+      <StateNodeDetailCard
+        currentWorkItems={[]}
+        editableConfigurationState={{
+          baseVersion: buildFactoryDocument().version,
+          canSave: false,
+          draft: {
+            name: "complete",
+            type: "PROCESSING",
+          },
+          hasValidationErrors: true,
+          initialValues: {
+            stateName: "implemented",
+            stateNamesInWorkType: ["implemented", "complete"],
+            stateType: "PROCESSING",
+            workTypeName: "story",
+          },
+          isDirty: true,
+          markChangesSaved: vi.fn(),
+          onNameChange: vi.fn(),
+          onResetToLatest: vi.fn(),
+          originalStateName: "implemented",
+          pendingFactoryDefinition: buildFactoryDocument(),
+          status: "ready",
+          validationErrors: {
+            name: duplicateMessage,
+          },
+          workTypeName: "story",
+        }}
+        headerAction={buildWorkStateHeaderSaveAction({ canSave: false })}
+        place={resolvedSelectedState}
+        tokenCount={0}
+      />,
+    );
+
+    const nameInput = screen.getByLabelText(messages.nameFieldLabel);
+    expect(nameInput.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(duplicateMessage)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: messages.editableConfigurationSaveAction })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+  });
+
+  it("keeps runtime work list content when editable configuration is ready", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+      (place) => place.place_id === "story:implemented",
+    );
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+
+    render(
+      <StateNodeDetailCard
+        currentWorkItems={[
+          {
+            display_name: "Active Story",
+            work_id: "work-active-story",
+          },
+        ]}
+        editableConfigurationState={{
+          baseVersion: buildFactoryDocument().version,
+          canSave: false,
+          draft: {
+            name: "implemented",
+            type: "PROCESSING",
+          },
+          hasValidationErrors: false,
+          initialValues: {
+            stateName: "implemented",
+            stateNamesInWorkType: ["implemented", "complete"],
+            stateType: "PROCESSING",
+            workTypeName: "story",
+          },
+          isDirty: false,
+          markChangesSaved: vi.fn(),
+          onNameChange: vi.fn(),
+          onResetToLatest: vi.fn(),
+          originalStateName: "implemented",
+          pendingFactoryDefinition: buildFactoryDocument(),
+          status: "ready",
+          validationErrors: {},
+          workTypeName: "story",
+        }}
+        place={resolvedSelectedState}
+        tokenCount={1}
+      />,
+    );
+
+    expect(screen.getByText("Current work")).toBeTruthy();
+    expect(screen.getByText("Active Story")).toBeTruthy();
   });
 });

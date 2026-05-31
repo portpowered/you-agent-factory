@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { DashboardFailedWorkDetail, DashboardPlaceRef } from "../../../../api/dashboard/types";
 import type {
   CanonicalFactoryDefinition,
@@ -66,10 +68,13 @@ export interface StatePositionWorkListItemProps {
 
 export interface StateNodeDetailCardProps {
   currentWorkItems: StatePositionWorkItem[];
+  editableConfigurationState?: EditableWorkStateConfigurationState;
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
+  headerAction?: ReactNode;
   locale?: string | null;
   onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
   place: DashboardPlaceRef;
+  saveState?: EditableWorkStateSaveState;
   terminalHistoryWorkItems?: StatePositionWorkItem[];
   tokenCount: number;
   widgetId?: string;

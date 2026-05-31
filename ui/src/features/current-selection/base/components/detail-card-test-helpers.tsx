@@ -82,6 +82,7 @@ export {
   buildDetailCardFactoryDocumentSaveHookReturn,
   buildDetailCardMultiWorkstationFactoryDocument,
   buildDetailCardSharedWorkerFactoryDocument,
+  buildDetailCardWorkStateFactoryDocument,
   buildDetailCardWorkstationNodeSelection,
   createDetailCardDeferredFactoryDocumentSave,
   DETAIL_CARD_SAVE_FACTORY_VERSION,
