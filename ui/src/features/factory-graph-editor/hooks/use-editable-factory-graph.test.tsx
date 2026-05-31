@@ -10,7 +10,6 @@ import {
 } from "../../../testing/graph-editor-harness";
 import {
   createEditableFactoryGraphHookWrapper,
-  defaultGraphDocumentScopeKey,
   renderEditableFactoryGraphHook,
   setupEditableFactoryGraphSaveTestEnvironment,
 } from "../../../testing/editable-factory-graph-hook-test-helpers";

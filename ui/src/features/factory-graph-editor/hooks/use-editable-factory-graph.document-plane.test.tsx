@@ -59,7 +59,7 @@ const documentFactory: CurrentFactoryDocument = {
   ],
 };
 
-describe("useEditableFactoryGraph document plane", () => {
+describe("useEditableFactoryGraph document plane projection", () => {
   beforeEach(() => {
     setupEditableFactoryGraphSaveTestEnvironment();
   });
@@ -91,6 +91,12 @@ describe("useEditableFactoryGraph document plane", () => {
       nodes: [],
     });
     expect(result.current.graphState).toBeNull();
+  });
+});
+
+describe("useEditableFactoryGraph document plane scope and persist", () => {
+  beforeEach(() => {
+    setupEditableFactoryGraphSaveTestEnvironment();
   });
 
   it("drops a dirty draft when the factory document scope key changes", () => {
