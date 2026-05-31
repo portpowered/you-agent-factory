@@ -1,4 +1,8 @@
-export { MonacoPromptEditor } from "./monaco-prompt-editor";
+export {
+  CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH,
+  FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH,
+  MonacoPromptEditor,
+} from "./monaco-prompt-editor";
 export {
   buildWorkstationPromptCompletionItems,
   buildWorkstationPromptMarkers,

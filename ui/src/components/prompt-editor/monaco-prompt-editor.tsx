@@ -54,6 +54,11 @@ const PROMPT_EDITOR_OPTIONS = {
   wrappingIndent: "same",
 } as const;
 
+export const CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH =
+  "inmemory://model/current-selection/workstation-prompt";
+export const FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH =
+  "inmemory://model/factory-graph-add/workstation-prompt";
+
 let monacoSetupState: "error" | "ready" = "ready";
 
 if (import.meta.env.MODE !== "test") {
@@ -74,6 +79,7 @@ interface MonacoPromptEditorProps {
   diagnostics?: PromptEditorDiagnostic[];
   hasDiagnostics?: boolean;
   loadingMessage: string;
+  modelPath: string;
   onChange: (value: string) => void;
   onMount?: (editorInstance: MonacoEditorAPI.IStandaloneCodeEditor) => void;
   onReadyChange?: (isReady: boolean) => void;
@@ -94,6 +100,7 @@ export function MonacoPromptEditor({
   diagnostics = [],
   hasDiagnostics = false,
   loadingMessage,
+  modelPath,
   onChange,
   onMount,
   onReadyChange,
@@ -183,7 +190,7 @@ export function MonacoPromptEditor({
         onScrollChange,
       })}
       options={{ ...options, ariaLabel }}
-      path="inmemory://model/current-selection/workstation-prompt"
+      path={modelPath}
       theme={WORKSTATION_PROMPT_THEME_ID}
       value={value}
       width="100%"

@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import {
+  CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH,
   MonacoPromptEditor,
   PromptEditorDiagnosticsPanel,
 } from "../../../../components/prompt-editor";
@@ -68,6 +69,7 @@ export function EditableConfigurationPromptInput({
           diagnostics={state.promptDiagnostics}
           hasDiagnostics={state.promptDiagnostics.length > 0}
           loadingMessage={messages.editableConfigurationPromptEditorLoading}
+          modelPath={CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH}
           onChange={state.onPromptChange}
           startupErrorMessage={messages.editableConfigurationPromptEditorError}
           value={state.draft.prompt}

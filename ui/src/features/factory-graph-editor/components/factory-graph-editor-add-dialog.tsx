@@ -1,4 +1,7 @@
-import { MonacoPromptEditor } from "../../../components/prompt-editor";
+import {
+  FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH,
+  MonacoPromptEditor,
+} from "../../../components/prompt-editor";
 import {
   Button,
   Dialog,
@@ -386,6 +389,7 @@ function FactoryGraphEditorPromptBodyField({
         autocompleteState={factoryGraphAddPromptAutocompleteState}
         className={INPUT_CLASS}
         loadingMessage={loadingMessage}
+        modelPath={FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH}
         onChange={onChange}
         startupErrorMessage={startupErrorMessage}
         value={value}

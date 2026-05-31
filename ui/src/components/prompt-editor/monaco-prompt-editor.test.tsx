@@ -42,6 +42,7 @@ describe("MonacoPromptEditor", () => {
         ]}
         hasDiagnostics
         loadingMessage="Loading prompt editor."
+        modelPath="inmemory://model/test/workstation-prompt"
         onChange={onChange}
         onMount={onMount}
         onReadyChange={onReadyChange}
