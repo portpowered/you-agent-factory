@@ -58,6 +58,57 @@ describe("factory graph React Flow projection", () => {
     );
   });
 
+  it("projects renamed work-state node ids and labels from an updated factory definition", () => {
+    const renamedFactoryDefinition = {
+      ...baseFactoryDefinition,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "ready", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          inputs: [{ state: "ready", workType: "story" }],
+          name: "draft",
+          outputs: [{ state: "done", workType: "story" }],
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      renamedFactoryDefinition,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition: renamedFactoryDefinition,
+      topology,
+    });
+
+    expect(
+      projection.nodes.find((node) => node.id === "work-state:story:ready"),
+    ).toMatchObject({
+      data: {
+        kind: "work-state",
+        label: "story:ready",
+      },
+      id: "work-state:story:ready",
+    });
+    expect(
+      projection.nodes.some((node) => node.id === "work-state:story:queued"),
+    ).toBe(false);
+    expect(projection.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-input:work-state:story:ready->workstation:draft",
+        }),
+      ]),
+    );
+  });
+
   it("projects workStateType from factory definition for all lifecycle phases", () => {
     const lifecycleFactoryDefinition = {
       ...baseFactoryDefinition,

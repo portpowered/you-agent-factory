@@ -300,6 +300,7 @@ interface ReactFlowCurrentActivityCardProps {
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (workID: string) => void;
   onSelectWorker: (workerName: string) => void;
+  onSelectWorkType: (workTypeName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   selection: CurrentActivitySelection | null;
   snapshot: typeof semanticWorkflowDashboardSnapshot;
@@ -313,6 +314,7 @@ function createProps(
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
     onSelectWorker: vi.fn(),
+    onSelectWorkType: vi.fn(),
     onSelectWorkstation: vi.fn(),
     selection: null,
     snapshot: semanticWorkflowDashboardSnapshot,

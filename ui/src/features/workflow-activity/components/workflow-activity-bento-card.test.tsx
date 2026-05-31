@@ -139,6 +139,7 @@ function renderWorkflowActivityBentoCard({
         onSelectWorkID={vi.fn()}
         onSelectStateNode={vi.fn()}
         onSelectWorker={vi.fn()}
+        onSelectWorkType={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />
       </DashboardSessionTestProvider>
@@ -169,7 +170,8 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
           onSelectWorkID={vi.fn()}
           onSelectStateNode={vi.fn()}
           onSelectWorker={vi.fn()}
-          onSelectWorkstation={vi.fn()}
+          onSelectWorkType={vi.fn()}
+        onSelectWorkstation={vi.fn()}
         />
         <WorkflowActivityBentoCard
           importController={createImportController()}
@@ -181,7 +183,8 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
           onSelectWorkID={vi.fn()}
           onSelectStateNode={vi.fn()}
           onSelectWorker={vi.fn()}
-          onSelectWorkstation={vi.fn()}
+          onSelectWorkType={vi.fn()}
+        onSelectWorkstation={vi.fn()}
         />
       </div>
       </DashboardSessionTestProvider>

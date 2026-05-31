@@ -43,6 +43,7 @@ export type CurrentActivityGraphViewModelInput = {
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
   onSelectWorker: (workerName: string) => void;
+  onSelectWorkType: (workTypeName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
@@ -60,6 +61,7 @@ function useCurrentActivityBaseNodes({
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
+  onSelectWorkType,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -70,6 +72,7 @@ function useCurrentActivityBaseNodes({
   | "onSelectStateNode"
   | "onSelectWorkID"
   | "onSelectWorker"
+  | "onSelectWorkType"
   | "onSelectWorkstation"
   | "selection"
   | "locale"
@@ -107,6 +110,7 @@ function useCurrentActivityBaseNodes({
         onSelectStateNode,
         onSelectWorkID,
         onSelectWorker,
+        onSelectWorkType,
         onSelectWorkstation,
         selection,
         snapshot,
@@ -124,6 +128,7 @@ function useCurrentActivityBaseNodes({
       onSelectStateNode,
       onSelectWorkID,
       onSelectWorker,
+      onSelectWorkType,
       onSelectWorkstation,
       selection,
       snapshot,
@@ -196,6 +201,7 @@ export function useCurrentActivityGraphViewModel({
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
+  onSelectWorkType,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -250,6 +256,7 @@ export function useCurrentActivityGraphViewModel({
     onSelectStateNode,
     onSelectWorkID,
     onSelectWorker,
+    onSelectWorkType,
     onSelectWorkstation,
     selection,
     snapshot,
