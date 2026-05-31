@@ -1,4 +1,5 @@
 import {
+  isStageSubmitWorkFileAPIError,
   StageSubmitWorkFileAPIError,
   stageSubmitWorkFile,
 } from "./api";
@@ -91,5 +92,22 @@ describe("stageSubmitWorkFile", () => {
         statusText: "Bad Request",
       }),
     );
+  });
+});
+
+describe("isStageSubmitWorkFileAPIError", () => {
+  it("returns true for staged submit-work file API errors", () => {
+    const error = new StageSubmitWorkFileAPIError({
+      code: "BAD_REQUEST",
+      message: "Invalid staged file.",
+      status: 400,
+      statusText: "Bad Request",
+    });
+    expect(isStageSubmitWorkFileAPIError(error)).toBe(true);
+  });
+
+  it("returns false for unrelated errors", () => {
+    expect(isStageSubmitWorkFileAPIError(new Error("offline"))).toBe(false);
+    expect(isStageSubmitWorkFileAPIError(null)).toBe(false);
   });
 });

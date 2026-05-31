@@ -1,5 +1,7 @@
+import { sessionFactoryAPIErrorMessages } from "./messages";
 import {
   normalizeSessionFactoryAPIErrorCode,
+  resolveSessionFactoryAPIErrorMessage,
   SessionFactoryAPIError,
 } from "./errors";
 
@@ -23,6 +25,29 @@ describe("normalizeSessionFactoryAPIErrorCode", () => {
     expect(normalizeSessionFactoryAPIErrorCode(undefined)).toBe(
       "INTERNAL_ERROR",
     );
+  });
+});
+
+describe("resolveSessionFactoryAPIErrorMessage", () => {
+  it("returns the rejected request copy for INTERNAL_ERROR without API copy", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        code: "INTERNAL_ERROR",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+        status: 400,
+      }),
+    ).toBe(sessionFactoryAPIErrorMessages.rejectedSaveRequest);
+  });
+
+  it("returns the API message for BAD_REQUEST when present", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        apiMessage: "Factory name is required.",
+        code: "BAD_REQUEST",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+        status: 400,
+      }),
+    ).toBe("Factory name is required.");
   });
 });
 
