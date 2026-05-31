@@ -1,39 +1,27 @@
-import { cn } from "../../../../lib/cn";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import {
   formatDurationMillis,
   formatLocalDateTime,
 } from "../../../../components/ui/formatters";
+import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { cn } from "../../../../lib/cn";
+import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
+import {
+  useCurrentSelectionDispatchHistoryMessages,
+  useCurrentSelectionLocale,
+  useCurrentSelectionOperationalEnumMessages,
+} from "../../base/components/current-selection-locale";
 import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   CURRENT_SELECTION_BADGE_CLASS,
   EXECUTION_PILL_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
-  PROVIDER_SESSION_CARD_CLASS,
   normalizeDetailText,
+  PROVIDER_SESSION_CARD_CLASS,
 } from "../../base/components/detail-card-shared";
-import type { SelectedWorkRequestHistoryItem } from "../lib/detail-card-types";
-import {
-  DispatchInferenceAttemptsSection,
-  DispatchScriptAttemptsSection,
-} from "./selected-work-dispatch-attempt-sections";
-import {
-  DispatchDetailList,
-  DispatchDetailSection,
-  TraceActionGroup,
-  WorkItemActionGroup,
-} from "./selected-work-dispatch-history-card-shared";
-import { WorkItemPayloadList } from "../../work-selection/public";
-import {
-  useCurrentSelectionDispatchHistoryMessages,
-  useCurrentSelectionOperationalEnumMessages,
-  useCurrentSelectionLocale,
-} from "../../base/components/current-selection-locale";
 import type { CurrentSelectionDispatchHistoryMessages } from "../../base/messages/current-selection-dispatch-history";
+import { WorkItemPayloadList } from "../../work-selection/public";
 import {
   dedupeWorkItems,
   requestDurationMillis,
@@ -51,7 +39,18 @@ import {
   requestTraceIDs,
   scriptResponseFailureType,
 } from "../dispatch-history/selected-work-dispatch-history-helpers";
-import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
+import type { SelectedWorkRequestHistoryItem } from "../lib/detail-card-types";
+import {
+  DispatchInferenceAttemptsSection,
+  DispatchScriptAttemptsSection,
+} from "./selected-work-dispatch-attempt-sections";
+import {
+  DispatchDetailList,
+  DispatchDetailSection,
+  TraceActionGroup,
+  WorkItemActionGroup,
+} from "./selected-work-dispatch-history-card-shared";
+import { WorkstationOperationKindBadge } from "./selected-work-operation-history-cards";
 
 interface DispatchHistoryCardProps {
   activeTraceID?: string | null;
@@ -80,9 +79,14 @@ export function DispatchHistoryCard({
   const locale = useCurrentSelectionLocale();
   const view = buildDispatchHistoryView(request);
   const isCurrentDispatch = currentDispatchID === request.dispatch_id;
+  const title = requestTitle(request, selectedWorkID);
 
   return (
     <article
+      aria-label={messages.workstationDispatchRowAccessibleLabel(
+        title,
+        request.dispatch_id,
+      )}
       className={cn(
         PROVIDER_SESSION_CARD_CLASS,
         isCurrentDispatch && CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
@@ -93,7 +97,7 @@ export function DispatchHistoryCard({
         isCurrentDispatch={isCurrentDispatch}
         messages={messages}
         outcome={view.outcome}
-        title={requestTitle(request, selectedWorkID)}
+        title={title}
       />
       <DispatchSummaryDetails
         locale={locale}
@@ -149,7 +153,9 @@ export function DispatchHistoryCard({
           />
         </>
       )}
-      {view.hasFailureDetails ? <DispatchFailureSection messages={messages} view={view} /> : null}
+      {view.hasFailureDetails ? (
+        <DispatchFailureSection messages={messages} view={view} />
+      ) : null}
     </article>
   );
 }
@@ -173,14 +179,19 @@ interface DispatchHistoryView {
   traceIDs: string[];
 }
 
-function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): DispatchHistoryView {
+function buildDispatchHistoryView(
+  request: SelectedWorkRequestHistoryItem,
+): DispatchHistoryView {
   const failureReason = normalizeDetailText(requestFailureReason(request));
   const failureMessage = normalizeDetailText(requestFailureMessage(request));
   const errorClass = normalizeDetailText(requestErrorClass(request));
   const scriptRequest = requestScriptRequest(request);
   const scriptResponse = requestScriptResponse(request);
-  const hasFailureDetails = Boolean(failureReason || failureMessage || errorClass);
-  const isScriptBackedRequest = scriptRequest !== undefined || scriptResponse !== undefined;
+  const hasFailureDetails = Boolean(
+    failureReason || failureMessage || errorClass,
+  );
+  const isScriptBackedRequest =
+    scriptRequest !== undefined || scriptResponse !== undefined;
   const sortedInferenceAttempts = requestInferenceAttempts(request);
 
   return {
@@ -225,11 +236,16 @@ function DispatchHistoryHeader({
           {title || dispatchID || messages.unknownDispatchTitle}
         </strong>
         <div className="flex flex-wrap items-center gap-2">
-          <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+          <p
+            className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+          >
             {outcome
               ? enumMessages.localizeOutcome(outcome)
               : enumMessages.localizeOutcome("PENDING")}
           </p>
+          <WorkstationOperationKindBadge
+            label={messages.workstationOperationKindBadge}
+          />
           {isCurrentDispatch ? (
             <span className={CURRENT_SELECTION_BADGE_CLASS}>
               {messages.currentDispatchBadge}
@@ -237,7 +253,9 @@ function DispatchHistoryHeader({
           ) : null}
         </div>
       </div>
-      <span className={EXECUTION_PILL_CLASS}>{dispatchID || messages.unknownDispatchId}</span>
+      <span className={EXECUTION_PILL_CLASS}>
+        {dispatchID || messages.unknownDispatchId}
+      </span>
     </div>
   );
 }
@@ -261,8 +279,14 @@ function DispatchSummaryDetails({
 
   return (
     <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
-      <InferenceAttemptDetail label={messages.workstationLabel} value={request.workstation_name} />
-      <InferenceAttemptDetail label={messages.startedAtLabel} value={startedAt} />
+      <InferenceAttemptDetail
+        label={messages.workstationLabel}
+        value={request.workstation_name}
+      />
+      <InferenceAttemptDetail
+        label={messages.startedAtLabel}
+        value={startedAt}
+      />
       <InferenceAttemptDetail
         label={messages.durationLabel}
         value={
@@ -337,9 +361,7 @@ function DispatchResponseSection({
         label={messages.outputWorkLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
-        selectWorkItemAccessibleLabel={
-          messages.selectWorkItemAccessibleLabel
-        }
+        selectWorkItemAccessibleLabel={messages.selectWorkItemAccessibleLabel}
       />
       <TraceActionGroup
         activeTraceID={activeTraceID}
@@ -377,9 +399,7 @@ function DispatchTraceSection({
         label={messages.outputWorkLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
-        selectWorkItemAccessibleLabel={
-          messages.selectWorkItemAccessibleLabel
-        }
+        selectWorkItemAccessibleLabel={messages.selectWorkItemAccessibleLabel}
       />
       <TraceActionGroup
         activeTraceID={activeTraceID}
@@ -406,7 +426,11 @@ function DispatchFailureSection({
         entries={[
           { label: messages.failureReasonLabel, value: view.failureReason },
           { label: messages.failureMessageLabel, value: view.failureMessage },
-          { label: messages.failureTypeLabel, code: true, value: view.failureType },
+          {
+            label: messages.failureTypeLabel,
+            code: true,
+            value: view.failureType,
+          },
         ]}
       />
     </DispatchDetailSection>

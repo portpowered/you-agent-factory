@@ -21,6 +21,8 @@ export function WorkItemDetailCard({
   onSelectProviderSession,
   onSelectTraceID,
   onSelectWorkID,
+  operationCount,
+  operationHistory,
   relationshipGraph,
   selectedNode,
   selectedProviderSessionKey,
@@ -31,6 +33,7 @@ export function WorkItemDetailCard({
 }: WorkItemDetailCardProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
   const workContentMessages = getWorkContentInspectMessages(locale);
+  const displayedOperationCount = operationCount ?? dispatchAttempts.length;
   const payloadStatus =
     selection.workItem.payloadStatus ?? selection.workItem.payload_status;
   const payloadReason =
@@ -74,7 +77,7 @@ export function WorkItemDetailCard({
         </div>
         <div>
           <dt>{messages.workstationDispatchesLabel}</dt>
-          <dd>{dispatchAttempts.length}</dd>
+          <dd>{displayedOperationCount}</dd>
         </div>
       </dl>
       <WorkContentReadOnlyList
@@ -105,6 +108,7 @@ export function WorkItemDetailCard({
         onSelectProviderSession={onSelectProviderSession}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}
+        operationHistory={operationHistory}
         requests={workstationRequests}
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedWorkID={selection.workItem.work_id}

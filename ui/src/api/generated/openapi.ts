@@ -1100,6 +1100,26 @@ export interface components {
                 [key: string]: components["schemas"]["FactoryWorldWorkstationRequestView"];
             };
         };
+        /** @description Additive dashboard read-model contract slice that publishes per-work move operations derived from canonical WORK_STATE_CHANGE events without reintroducing removed `/dashboard` endpoints. */
+        FactoryWorldWorkMoveOperationProjectionSlice: {
+            workMoveOperationsByWorkId?: {
+                [key: string]: components["schemas"]["FactoryWorldWorkMoveOperationView"][];
+            };
+        };
+        FactoryWorldWorkMoveOperationView: {
+            workId: string;
+            workTypeName?: string;
+            fromState: string;
+            toState: string;
+            fromPlaceId: string;
+            toPlaceId: string;
+            source: components["schemas"]["WorkStateChangeSource"];
+            requestId?: string;
+            tick: number;
+            sequence: number;
+            /** Format: date-time */
+            eventTime?: string;
+        };
         FactoryWorldRenderedPromptDiagnostic: {
             systemPromptHash?: string;
             userMessageHash?: string;

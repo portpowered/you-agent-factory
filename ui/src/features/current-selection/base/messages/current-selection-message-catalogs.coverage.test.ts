@@ -115,6 +115,23 @@ const invokeDispatchHistory = (
       return [formatter("Review Story" as never)];
     case "relationshipStateLabel":
       return [formatter("Dependency" as never, "accepted" as never)];
+    case "formatMoveTransition":
+      return [formatter("init" as never, "review" as never)];
+    case "localizeMoveSource":
+      return [
+        formatter("api" as never),
+        formatter("cli" as never),
+        formatter("cascading-failure" as never),
+        formatter("future-source" as never),
+      ];
+    case "logicalMoveDispatchRowAccessibleLabel":
+    case "workstationDispatchRowAccessibleLabel":
+      return [
+        formatter("Review" as never, "dispatch-1" as never),
+        formatter(undefined as never, undefined as never),
+      ];
+    case "operatorMoveRowAccessibleLabel":
+      return [formatter("init → review" as never)];
     default:
       throw new Error(`Unhandled dispatch-history formatter ${key}`);
   }

@@ -193,6 +193,9 @@ describe("useCurrentSelectionDerivedState", () => {
     expect(result.current.selectedWorkID).toBe("work-selection-1");
     expect(result.current.selectedWorkRequestHistory).toHaveLength(1);
     expect(result.current.selectedWorkDispatchAttempts).toHaveLength(1);
+    expect(result.current.selectedWorkOperationHistory).toEqual([
+      { kind: "workstation", request: buildReviewRequest() },
+    ]);
   });
 
   it("resolves state-node place work items and token count", () => {

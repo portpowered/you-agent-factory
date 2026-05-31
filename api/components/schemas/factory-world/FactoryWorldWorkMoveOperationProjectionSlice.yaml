@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+description: >-
+  Additive dashboard read-model contract slice that publishes per-work move
+  operations derived from canonical WORK_STATE_CHANGE events without
+  reintroducing removed `/dashboard` endpoints.
+properties:
+  workMoveOperationsByWorkId:
+    type: object
+    additionalProperties:
+      type: array
+      items:
+        $ref: './FactoryWorldWorkMoveOperationView.yaml'

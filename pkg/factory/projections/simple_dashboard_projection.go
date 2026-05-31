@@ -18,6 +18,7 @@ type SimpleDashboardRuntimeProjection struct {
 	PlaceTokenCounts                 map[string]int
 	CurrentWorkItemsByPlaceID        map[string][]interfaces.FactoryWorldWorkItemRef
 	PlaceOccupancyWorkItemsByPlaceID map[string][]interfaces.FactoryWorldWorkItemRef
+	WorkMoveOperationsByWorkID       map[string][]interfaces.FactoryWorldWorkStateChangeRecord
 	Session                          interfaces.FactoryWorldSessionRuntime
 }
 
@@ -43,6 +44,7 @@ func BuildSimpleDashboardProjection(state interfaces.FactoryWorldState) SimpleDa
 			PlaceTokenCounts:                 buildFactoryWorldPlaceTokenCounts(state.PlaceOccupancyByID),
 			CurrentWorkItemsByPlaceID:        buildFactoryWorldCurrentWorkItemsByPlaceID(state),
 			PlaceOccupancyWorkItemsByPlaceID: buildFactoryWorldPlaceOccupancyWorkItemsByPlaceID(state),
+			WorkMoveOperationsByWorkID:       buildWorkMoveOperationsByWorkID(state),
 			Session: interfaces.FactoryWorldSessionRuntime{
 				HasData:         len(activeIDs) > 0 || len(completedHistory) > 0 || hasCustomerWorkItems(state.WorkItemsByID),
 				DispatchedCount: len(activeIDs) + countCustomerCompletedDispatches(state),
@@ -111,4 +113,29 @@ func appendCustomerOutputPlaceIDs(workstation interfaces.FactoryWorkstation) []s
 	outputPlaceIDs = append(outputPlaceIDs, workstation.RejectionPlaceIDs...)
 	outputPlaceIDs = append(outputPlaceIDs, workstation.FailurePlaceIDs...)
 	return outputPlaceIDs
+}
+
+func buildWorkMoveOperationsByWorkID(
+	state interfaces.FactoryWorldState,
+) map[string][]interfaces.FactoryWorldWorkStateChangeRecord {
+	if len(state.WorkStateChangesByWorkID) == 0 {
+		return nil
+	}
+
+	operationsByWorkID := make(
+		map[string][]interfaces.FactoryWorldWorkStateChangeRecord,
+		len(state.WorkStateChangesByWorkID),
+	)
+	for workID, records := range state.WorkStateChangesByWorkID {
+		if len(records) == 0 {
+			continue
+		}
+		cloned := make([]interfaces.FactoryWorldWorkStateChangeRecord, len(records))
+		copy(cloned, records)
+		operationsByWorkID[workID] = cloned
+	}
+	if len(operationsByWorkID) == 0 {
+		return nil
+	}
+	return operationsByWorkID
 }

@@ -705,6 +705,9 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 	if _, ok := failedState.FailedWorkItemsByID["work-recover"]; !ok {
 		t.Fatalf("work-recover should be failed before operator move")
 	}
+	if got := failedState.WorkStateChangesByWorkID["work-recover"]; len(got) != 0 {
+		t.Fatalf("work-recover move history before operator move = %#v, want empty", got)
+	}
 
 	recoveredState, err := ReconstructFactoryWorldState(events, 4)
 	if err != nil {
@@ -728,6 +731,19 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 	item := recoveredState.WorkItemsByID["work-recover"]
 	if item.PlaceID != "task:review" || item.State != "review" {
 		t.Fatalf("work item = %#v, want place task:review and state review", item)
+	}
+	assertWorkStateChangeRecord(t, recoveredState.WorkStateChangesByWorkID["work-recover"], interfaces.FactoryWorldWorkStateChangeRecord{
+		WorkID:       "work-recover",
+		WorkTypeName: "task",
+		FromState:    "failed",
+		ToState:      "review",
+		FromPlaceID:  "task:failed",
+		ToPlaceID:    "task:review",
+		Source:       interfaces.WorkStateChangeSourceCLI,
+		Tick:         4,
+	})
+	if len(recoveredState.WorkStateChangesByWorkID) != 1 {
+		t.Fatalf("move history work ids = %d, want only work-recover", len(recoveredState.WorkStateChangesByWorkID))
 	}
 }
 
@@ -759,5 +775,18 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromInitialToArbitrary
 	item := state.WorkItemsByID["work-bootstrap"]
 	if item.PlaceID != "task:review" || item.State != "review" {
 		t.Fatalf("work item = %#v, want place task:review and state review", item)
+	}
+	assertWorkStateChangeRecord(t, state.WorkStateChangesByWorkID["work-bootstrap"], interfaces.FactoryWorldWorkStateChangeRecord{
+		WorkID:       "work-bootstrap",
+		WorkTypeName: "task",
+		FromState:    "init",
+		ToState:      "review",
+		FromPlaceID:  "task:init",
+		ToPlaceID:    "task:review",
+		Source:       interfaces.WorkStateChangeSourceAPI,
+		Tick:         2,
+	})
+	if len(state.WorkStateChangesByWorkID) != 1 {
+		t.Fatalf("move history work ids = %d, want only work-bootstrap", len(state.WorkStateChangesByWorkID))
 	}
 }

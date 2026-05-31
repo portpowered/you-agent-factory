@@ -2352,6 +2352,53 @@ components:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/FactoryWorldWorkstationRequestView'
+    FactoryWorldWorkMoveOperationProjectionSlice:
+      type: object
+      additionalProperties: false
+      description: Additive dashboard read-model contract slice that publishes per-work move operations derived from canonical WORK_STATE_CHANGE events without reintroducing removed `/dashboard` endpoints.
+      properties:
+        workMoveOperationsByWorkId:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/FactoryWorldWorkMoveOperationView'
+    FactoryWorldWorkMoveOperationView:
+      type: object
+      additionalProperties: false
+      required:
+        - workId
+        - fromState
+        - toState
+        - fromPlaceId
+        - toPlaceId
+        - source
+        - tick
+        - sequence
+      properties:
+        workId:
+          type: string
+        workTypeName:
+          type: string
+        fromState:
+          type: string
+        toState:
+          type: string
+        fromPlaceId:
+          type: string
+        toPlaceId:
+          type: string
+        source:
+          $ref: '#/components/schemas/WorkStateChangeSource'
+        requestId:
+          type: string
+        tick:
+          type: integer
+        sequence:
+          type: integer
+        eventTime:
+          type: string
+          format: date-time
     FactoryWorldRenderedPromptDiagnostic:
       type: object
       additionalProperties: false

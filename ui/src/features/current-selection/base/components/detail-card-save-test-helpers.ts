@@ -266,6 +266,7 @@ export function buildDetailCardCurrentSelection(
     selectedStateTokenCount: 0,
     selectedWorkDispatchAttempts: [],
     selectedWorkID: null,
+    selectedWorkOperationHistory: [],
     selectedWorkProviderSessions: [],
     selectedWorkRequestHistory: [],
     selectedWorkWorkstationRequests: [],

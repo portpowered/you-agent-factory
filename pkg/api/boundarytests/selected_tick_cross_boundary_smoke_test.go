@@ -32,6 +32,11 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 	requestSlice := api.BuildFactoryWorldWorkstationRequestProjectionSlice(worldState)
 	assertSelectedTickWorkstationRequests(t, requestSlice)
 
+	moveSlice := api.BuildFactoryWorldWorkMoveOperationProjectionSlice(worldState)
+	if moveSlice.WorkMoveOperationsByWorkId != nil {
+		t.Fatalf("work move operations = %#v, want nil for selected-tick smoke fixture", moveSlice.WorkMoveOperationsByWorkId)
+	}
+
 	now := t0.Add(12 * time.Second)
 	output := dashboard.FormatSimpleDashboardWithRenderData(
 		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{

@@ -1,0 +1,35 @@
+type: object
+additionalProperties: false
+required:
+  - workId
+  - fromState
+  - toState
+  - fromPlaceId
+  - toPlaceId
+  - source
+  - tick
+  - sequence
+properties:
+  workId:
+    type: string
+  workTypeName:
+    type: string
+  fromState:
+    type: string
+  toState:
+    type: string
+  fromPlaceId:
+    type: string
+  toPlaceId:
+    type: string
+  source:
+    $ref: '../events/WorkStateChangeSource.yaml'
+  requestId:
+    type: string
+  tick:
+    type: integer
+  sequence:
+    type: integer
+  eventTime:
+    type: string
+    format: date-time

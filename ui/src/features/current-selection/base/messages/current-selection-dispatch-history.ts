@@ -8,6 +8,26 @@ export interface CurrentSelectionDispatchHistoryMessages {
   dispatchHistoryCountLabel: (count: number) => string;
   dispatchHistoryEmpty: string;
   dispatchHistoryHeading: string;
+  formatMoveTransition: (fromState: string, toState: string) => string;
+  logicalMoveDispatchRowAccessibleLabel: (
+    workstationName: string | undefined,
+    dispatchID: string | undefined,
+  ) => string;
+  logicalMoveDispatchTitle: string;
+  localizeMoveSource: (source: string) => string;
+  moveOccurredAtLabel: string;
+  moveOperationKindBadge: string;
+  moveSourceLabel: string;
+  moveTransitionLabel: string;
+  operatorMoveRowAccessibleLabel: (transition: string) => string;
+  operatorMoveTitle: string;
+  workstationDispatchRowAccessibleLabel: (
+    title: string | undefined,
+    dispatchID: string | undefined,
+  ) => string;
+  workstationOperationKindBadge: string;
+  workOperationsEmpty: string;
+  workOperationsHeading: string;
   consumedPayloadEmpty: string;
   consumedPayloadError: string;
   consumedPayloadHeading: string;
@@ -123,6 +143,29 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     dispatchHistoryEmpty:
       "No workstation dispatch has been recorded yet for this work item.",
     dispatchHistoryHeading: "Workstation dispatches",
+    formatMoveTransition: (fromState, toState) => `${fromState} → ${toState}`,
+    logicalMoveDispatchRowAccessibleLabel: (workstationName, dispatchID) =>
+      `Logical move dispatch ${workstationName ?? "workstation"} ${dispatchID ?? "unknown dispatch"}`,
+    logicalMoveDispatchTitle: "Logical move dispatch",
+    localizeMoveSource: (source) =>
+      ({
+        api: "API",
+        cli: "CLI",
+        "cascading-failure": "Cascading failure",
+      })[source] ?? source,
+    moveOccurredAtLabel: "Occurred at",
+    moveOperationKindBadge: "Move",
+    moveSourceLabel: "Source",
+    moveTransitionLabel: "State transition",
+    operatorMoveRowAccessibleLabel: (transition) =>
+      `Operator move ${transition}`,
+    operatorMoveTitle: "Operator move",
+    workstationDispatchRowAccessibleLabel: (title, dispatchID) =>
+      `Workstation dispatch ${title ?? "dispatch"} ${dispatchID ?? "unknown dispatch"}`,
+    workstationOperationKindBadge: "Workstation",
+    workOperationsEmpty:
+      "No move or workstation operations have been recorded yet for this work item.",
+    workOperationsHeading: "Work operations",
     consumedPayloadEmpty:
       "No consumed payload content was recorded for this work item.",
     consumedPayloadError:
@@ -255,6 +298,29 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     dispatchHistoryEmpty:
       "この作業項目ではまだワークステーションのディスパッチが記録されていません。",
     dispatchHistoryHeading: "ワークステーションのディスパッチ",
+    formatMoveTransition: (fromState, toState) => `${fromState} → ${toState}`,
+    logicalMoveDispatchRowAccessibleLabel: (workstationName, dispatchID) =>
+      `論理移動ディスパッチ ${workstationName ?? "ワークステーション"} ${dispatchID ?? "不明なディスパッチ"}`,
+    logicalMoveDispatchTitle: "論理移動ディスパッチ",
+    localizeMoveSource: (source) =>
+      ({
+        api: "API",
+        cli: "CLI",
+        "cascading-failure": "カスケード失敗",
+      })[source] ?? source,
+    moveOccurredAtLabel: "発生時刻",
+    moveOperationKindBadge: "移動",
+    moveSourceLabel: "ソース",
+    moveTransitionLabel: "状態遷移",
+    operatorMoveRowAccessibleLabel: (transition) =>
+      `オペレーター移動 ${transition}`,
+    operatorMoveTitle: "オペレーター移動",
+    workstationDispatchRowAccessibleLabel: (title, dispatchID) =>
+      `ワークステーションディスパッチ ${title ?? "ディスパッチ"} ${dispatchID ?? "不明なディスパッチ"}`,
+    workstationOperationKindBadge: "ワークステーション",
+    workOperationsEmpty:
+      "この作業項目ではまだ移動またはワークステーション操作が記録されていません。",
+    workOperationsHeading: "作業操作",
     consumedPayloadEmpty:
       "この作業項目には消費済みペイロード内容が記録されていません。",
     consumedPayloadError:
@@ -369,13 +435,11 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "作業 ID",
     workTypeLabel: "作業タイプ",
     selectedWorkHeading: "選択中の作業",
-    workRelationshipsError:
-      "この作業項目の作業関係を読み込めませんでした。",
+    workRelationshipsError: "この作業項目の作業関係を読み込めませんでした。",
     workRelationshipsEmpty:
       "この作業項目では親子関係や依存関係を利用できません。",
     workRelationshipsHeading: "作業の関係",
-    workRelationshipsLoading:
-      "この作業項目の作業関係を読み込み中です。",
+    workRelationshipsLoading: "この作業項目の作業関係を読み込み中です。",
     workstationDispatchesLabel: "ワークステーションのディスパッチ",
     workstationLabel: "ワークステーション",
     workstationUnavailableValue: "利用不可",
@@ -385,6 +449,28 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     dispatchHistoryEmpty:
       "이 작업 항목에는 아직 워크스테이션 디스패치가 기록되지 않았습니다.",
     dispatchHistoryHeading: "워크스테이션 디스패치",
+    formatMoveTransition: (fromState, toState) => `${fromState} → ${toState}`,
+    logicalMoveDispatchRowAccessibleLabel: (workstationName, dispatchID) =>
+      `논리 이동 디스패치 ${workstationName ?? "워크스테이션"} ${dispatchID ?? "알 수 없는 디스패치"}`,
+    logicalMoveDispatchTitle: "논리 이동 디스패치",
+    localizeMoveSource: (source) =>
+      ({
+        api: "API",
+        cli: "CLI",
+        "cascading-failure": "연쇄 실패",
+      })[source] ?? source,
+    moveOccurredAtLabel: "발생 시각",
+    moveOperationKindBadge: "이동",
+    moveSourceLabel: "소스",
+    moveTransitionLabel: "상태 전환",
+    operatorMoveRowAccessibleLabel: (transition) => `운영자 이동 ${transition}`,
+    operatorMoveTitle: "운영자 이동",
+    workstationDispatchRowAccessibleLabel: (title, dispatchID) =>
+      `워크스테이션 디스패치 ${title ?? "디스패치"} ${dispatchID ?? "알 수 없는 디스패치"}`,
+    workstationOperationKindBadge: "워크스테이션",
+    workOperationsEmpty:
+      "이 작업 항목에는 아직 이동 또는 워크스테이션 작업이 기록되지 않았습니다.",
+    workOperationsHeading: "작업 기록",
     consumedPayloadEmpty:
       "이 작업 항목에는 소비된 페이로드 내용이 기록되지 않았습니다.",
     consumedPayloadError:
@@ -498,13 +584,11 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "작업 ID",
     workTypeLabel: "작업 유형",
     selectedWorkHeading: "선택한 작업",
-    workRelationshipsError:
-      "이 작업 항목의 작업 관계를 불러오지 못했습니다.",
+    workRelationshipsError: "이 작업 항목의 작업 관계를 불러오지 못했습니다.",
     workRelationshipsEmpty:
       "이 작업 항목에는 상하위 또는 의존 관계가 없습니다.",
     workRelationshipsHeading: "작업 관계",
-    workRelationshipsLoading:
-      "이 작업 항목의 작업 관계를 불러오는 중입니다.",
+    workRelationshipsLoading: "이 작업 항목의 작업 관계를 불러오는 중입니다.",
     workstationDispatchesLabel: "워크스테이션 디스패치",
     workstationLabel: "워크스테이션",
     workstationUnavailableValue: "사용할 수 없음",
@@ -513,6 +597,27 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     dispatchHistoryCountLabel: (count: number) => `${count} 次分派`,
     dispatchHistoryEmpty: "这个工作项暂时还没有记录任何工作站分派。",
     dispatchHistoryHeading: "工作站分派",
+    formatMoveTransition: (fromState, toState) => `${fromState} → ${toState}`,
+    logicalMoveDispatchRowAccessibleLabel: (workstationName, dispatchID) =>
+      `逻辑移动分派 ${workstationName ?? "工作站"} ${dispatchID ?? "未知分派"}`,
+    logicalMoveDispatchTitle: "逻辑移动分派",
+    localizeMoveSource: (source) =>
+      ({
+        api: "API",
+        cli: "CLI",
+        "cascading-failure": "级联失败",
+      })[source] ?? source,
+    moveOccurredAtLabel: "发生时间",
+    moveOperationKindBadge: "移动",
+    moveSourceLabel: "来源",
+    moveTransitionLabel: "状态转换",
+    operatorMoveRowAccessibleLabel: (transition) => `操作员移动 ${transition}`,
+    operatorMoveTitle: "操作员移动",
+    workstationDispatchRowAccessibleLabel: (title, dispatchID) =>
+      `工作站分派 ${title ?? "分派"} ${dispatchID ?? "未知分派"}`,
+    workstationOperationKindBadge: "工作站",
+    workOperationsEmpty: "这个工作项暂时还没有记录任何移动或工作站操作。",
+    workOperationsHeading: "工作操作",
     consumedPayloadEmpty: "这个工作项没有记录任何已消费的载荷内容。",
     consumedPayloadError: "无法加载这个工作项的已消费载荷详情。",
     consumedPayloadHeading: "已消费载荷",

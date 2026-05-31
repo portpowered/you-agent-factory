@@ -19,6 +19,10 @@ import type {
   TerminalWorkDetail,
 } from "../state/selection-types";
 import {
+  buildSelectedWorkOperationHistory,
+  type SelectedWorkOperationHistoryItem,
+} from "./selected-work-operation-history";
+import {
   activeExecutionsForSelectedWorkstation,
   buildSelectedWorkDispatchAttempts,
   buildTerminalWorkItems,
@@ -232,9 +236,26 @@ function useSelectedWorkData({
             projectedWorkstationRequestsByDispatchID,
         })
       : [];
+  const selectedWorkOperationHistory =
+    useMemo((): SelectedWorkOperationHistoryItem[] => {
+      if (selection?.kind !== "work-item") {
+        return [];
+      }
+
+      return buildSelectedWorkOperationHistory({
+        moveOperations:
+          snapshot?.runtime.work_move_operations_by_work_id?.[
+            selection.workItem.work_id
+          ],
+        snapshot,
+        workID: selection.workItem.work_id,
+        workstationRequests: selectedWorkRequestHistory,
+      });
+    }, [selectedWorkRequestHistory, selection, snapshot]);
 
   return {
     selectedWorkDispatchAttempts,
+    selectedWorkOperationHistory,
     selectedWorkProviderSessions,
     selectedWorkRequestHistory,
     selectedWorkWorkstationRequests,
@@ -399,6 +420,7 @@ export function useCurrentSelectionDerivedState({
     selectedStateTokenCount,
     selectedWorkDispatchAttempts: work.selectedWorkDispatchAttempts,
     selectedWorkID,
+    selectedWorkOperationHistory: work.selectedWorkOperationHistory,
     selectedWorkProviderSessions: work.selectedWorkProviderSessions,
     selectedWorkRequestHistory: work.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: work.selectedWorkWorkstationRequests,

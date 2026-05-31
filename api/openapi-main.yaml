@@ -1039,6 +1039,10 @@ components:
       $ref: './components/schemas/data-models/FactoryName.yaml'
     FactoryWorldWorkstationRequestProjectionSlice:
       $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestProjectionSlice.yaml'
+    FactoryWorldWorkMoveOperationProjectionSlice:
+      $ref: './components/schemas/factory-world/FactoryWorldWorkMoveOperationProjectionSlice.yaml'
+    FactoryWorldWorkMoveOperationView:
+      $ref: './components/schemas/factory-world/FactoryWorldWorkMoveOperationView.yaml'
     FactoryWorldRenderedPromptDiagnostic:
       $ref: './components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml'
     FactoryWorldProviderDiagnostic:
