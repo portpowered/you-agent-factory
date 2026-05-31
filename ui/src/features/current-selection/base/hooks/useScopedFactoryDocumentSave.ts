@@ -6,7 +6,7 @@ import type {
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
 import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
-import type { DetailCardSaveState } from "./detail-card-save-types";
+import type { FactoryDocumentSaveState } from "./factory-document-save-types";
 
 export interface ScopedFactoryDocumentSaveRequest {
   baseVersion: CurrentFactoryVersion;
@@ -37,7 +37,7 @@ export interface UseScopedFactoryDocumentSaveResult<
   confirmSave: (request: ScopedFactoryDocumentSaveRequest) => Promise<void>;
   isPending: boolean;
   saveNow: (request: ScopedFactoryDocumentSaveRequest) => Promise<void>;
-  saveState: DetailCardSaveState<TFieldErrors>;
+  saveState: FactoryDocumentSaveState<TFieldErrors>;
 }
 
 interface ScopedFactoryDocumentSaveErrorState<
@@ -236,7 +236,7 @@ function resolveDetailCardSaveState<
   lastSuccessfulScopeKey: string | null;
   scopeKey: string | null;
   submittingScopeKey: string | null;
-}): DetailCardSaveState<TFieldErrors> {
+}): FactoryDocumentSaveState<TFieldErrors> {
   if (submittingScopeKey !== null && submittingScopeKey === scopeKey) {
     return { status: "submitting" };
   }

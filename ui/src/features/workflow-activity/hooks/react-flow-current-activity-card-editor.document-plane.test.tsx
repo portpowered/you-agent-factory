@@ -83,6 +83,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
     draftState: fixtureState.draftState,
     saveState: {
       canSave: false,
+      documentSave: { status: "idle" },
       isStale: false,
     },
   }),

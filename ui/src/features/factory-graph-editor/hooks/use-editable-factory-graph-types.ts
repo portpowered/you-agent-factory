@@ -1,3 +1,4 @@
+import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
@@ -62,10 +63,8 @@ export interface EditableFactoryGraphViewModel {
   projection: FactoryGraphReactFlowProjection;
   saveState: {
     canSave: boolean;
-    isSaving: boolean;
+    documentSave: FactoryDocumentSaveState;
     isStale: boolean;
-    lastError: string | null;
-    lastSuccess: boolean;
   };
   validationState: {
     errors: FactoryGraphDraftValidationError[];

@@ -96,6 +96,11 @@ describe("useEditableFactoryGraph", () => {
 
     expect(result.current.saveState.isStale).toBe(true);
     expect(result.current.saveState.canSave).toBe(false);
+    expect(result.current.saveState.documentSave).toEqual({
+      message:
+        "The factory definition changed while you were editing. Refresh or discard your draft before saving.",
+      status: "warning",
+    });
   });
 
   it("saves pending edits through the provided save callback", async () => {
@@ -138,7 +143,9 @@ describe("useEditableFactoryGraph", () => {
     expect(hookState.draftState.replaceDraft).toHaveBeenCalledWith(
       createEmptyFactoryGraphDraft(),
     );
-    expect(result.current.saveState.lastSuccess).toBe(true);
+    expect(result.current.saveState.documentSave).toEqual({
+      status: "success",
+    });
   });
 
   it("keeps the draft and exposes save errors when the save callback fails", async () => {
@@ -176,6 +183,9 @@ describe("useEditableFactoryGraph", () => {
 
     expect(didSave).toBe(false);
     expect(hookState.draftState.hasChanges).toBe(true);
-    expect(result.current.saveState.lastError).toBe("API unavailable");
+    expect(result.current.saveState.documentSave).toEqual({
+      errorMessage: "API unavailable",
+      status: "error",
+    });
   });
 });

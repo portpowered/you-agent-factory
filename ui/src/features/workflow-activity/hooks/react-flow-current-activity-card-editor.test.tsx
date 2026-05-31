@@ -141,8 +141,14 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
         hookState.draftState.pendingFactoryDefinition !== null &&
         hookState.draftState.latestDocument !== null &&
         !hookState.saveStateIsStale,
+      documentSave: hookState.saveStateIsStale
+        ? {
+            message:
+              "The factory definition changed while you were editing. Refresh or discard your draft before saving.",
+            status: "warning",
+          }
+        : { status: "idle" },
       isStale: hookState.saveStateIsStale,
-      lastSuccess: false,
     },
   }),
 }));

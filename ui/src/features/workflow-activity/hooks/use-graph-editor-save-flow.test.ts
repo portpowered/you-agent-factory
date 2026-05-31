@@ -91,8 +91,14 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
         fixtureState.draftState.pendingFactoryDefinition !== null &&
         fixtureState.draftState.latestDocument !== null &&
         !fixtureState.saveStateIsStale,
+      documentSave: fixtureState.saveStateIsStale
+        ? {
+            message:
+              "The factory definition changed while you were editing. Refresh or discard your draft before saving.",
+            status: "warning",
+          }
+        : { status: "idle" },
       isStale: fixtureState.saveStateIsStale,
-      lastSuccess: false,
     },
   };
 }

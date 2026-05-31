@@ -403,10 +403,14 @@ export function createMockEditableFactoryGraph(
         draftState.latestDocument !== null &&
         activeWorkCount === 0 &&
         !isStale,
-      isSaving: false,
+      documentSave: isStale
+        ? {
+            message:
+              "The factory definition changed while you were editing. Refresh or discard your draft before saving.",
+            status: "warning",
+          }
+        : { status: "idle" },
       isStale,
-      lastError: null,
-      lastSuccess: false,
     },
     validationState: {
       errors: draftState.validationErrors,

@@ -79,8 +79,8 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
     },
     saveState: {
       canSave: false,
+      documentSave: { status: "idle" },
       isStale: false,
-      lastSuccess: false,
     },
   };
 }

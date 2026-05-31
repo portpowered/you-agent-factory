@@ -435,10 +435,8 @@ function createEditableGraph(
     },
     saveState: {
       canSave: false,
-      isSaving: false,
+      documentSave: { status: "idle" },
       isStale: false,
-      lastError: null,
-      lastSuccess: false,
     },
     validationState: {
       errors: [],
