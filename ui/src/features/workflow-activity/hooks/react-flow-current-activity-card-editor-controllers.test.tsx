@@ -130,6 +130,7 @@ describe("current activity graph editor controllers", () => {
         canInteractWithEditor: true,
         draftState,
         editableGraph,
+        hiddenNodeClasses: new Set(),
       }),
     );
 
@@ -179,6 +180,7 @@ describe("current activity graph editor controllers", () => {
         canInteractWithEditor: true,
         draftState,
         editableGraph,
+        hiddenNodeClasses: new Set(),
       }),
     );
 
@@ -230,6 +232,7 @@ describe("current activity graph editor controllers", () => {
         canInteractWithEditor: true,
         draftState,
         editableGraph,
+        hiddenNodeClasses: new Set(),
       }),
     );
 
@@ -267,6 +270,7 @@ describe("current activity graph editor controllers", () => {
         canInteractWithEditor: true,
         draftState,
         editableGraph,
+        hiddenNodeClasses: new Set(),
         saveEditableDefinition: {
           reset,
         } as never,
@@ -303,6 +307,7 @@ describe("current activity graph editor controllers", () => {
         canInteractWithEditor: true,
         draftState,
         editableGraph,
+        hiddenNodeClasses: new Set(),
         saveEditableDefinition: {
           reset,
         } as never,
@@ -355,6 +360,7 @@ describe("current activity graph editor controllers", () => {
         canInteractWithEditor: true,
         draftState,
         editableGraph,
+        hiddenNodeClasses: new Set(),
         saveEditableDefinition: {
           reset,
         } as never,
@@ -384,6 +390,7 @@ describe("current activity graph editor controllers", () => {
         canInteractWithEditor: true,
         draftState,
         editableGraph,
+        hiddenNodeClasses: new Set(),
         saveEditableDefinition: {
           reset,
         } as never,
@@ -435,6 +442,7 @@ describe("current activity graph editor controllers", () => {
         canInteractWithEditor: true,
         draftState,
         editableGraph,
+        hiddenNodeClasses: new Set(),
         onNodeRemovedFromDraft,
         saveEditableDefinition: {
           reset,
@@ -489,6 +497,7 @@ describe("current activity graph editor controllers", () => {
         canInteractWithEditor: true,
         draftState,
         editableGraph,
+        hiddenNodeClasses: new Set(),
         saveEditableDefinition: {
           reset,
         } as never,

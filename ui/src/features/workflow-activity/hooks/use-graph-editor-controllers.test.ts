@@ -100,6 +100,7 @@ describe("useGraphEditorControllers", () => {
         currentFactoryDefinition: null,
         draftState: buildEditableGraph().draftState,
         editableGraph: buildEditableGraph(),
+        hiddenNodeClasses: new Set(),
         locale: "en",
         saveEditableDefinition: {
           error: null,

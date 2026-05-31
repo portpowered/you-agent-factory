@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import {
   buildFactoryGraphEdgeRemovalIntent,
@@ -14,6 +15,7 @@ export function useFactoryGraphRemovalController({
   canInteractWithEditor,
   draftState,
   editableGraph,
+  hiddenNodeClasses,
   locale,
   onNodeRemovedFromDraft,
   saveEditableDefinition,
@@ -22,6 +24,7 @@ export function useFactoryGraphRemovalController({
   canInteractWithEditor: boolean;
   draftState: EditableFactoryGraphViewModel["draftState"];
   editableGraph: EditableFactoryGraphViewModel;
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   locale?: string | null;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
   saveEditableDefinition: EditableFactoryGraphSaveMutation;
@@ -72,6 +75,7 @@ export function useFactoryGraphRemovalController({
     applyConfirmedNodeRemoval,
     canInteractWithEditor,
     draftState,
+    hiddenNodeClasses,
     locale,
     saveEditableDefinition,
     setBlockedRemovalReason,
@@ -163,6 +167,7 @@ function useFactoryGraphNodeRemovalRequest({
   applyConfirmedNodeRemoval,
   canInteractWithEditor,
   draftState,
+  hiddenNodeClasses,
   locale,
   saveEditableDefinition,
   setBlockedRemovalReason,
@@ -172,6 +177,7 @@ function useFactoryGraphNodeRemovalRequest({
   applyConfirmedNodeRemoval: (nodeId: string) => boolean;
   canInteractWithEditor: boolean;
   draftState: EditableFactoryGraphViewModel["draftState"];
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   locale?: string | null;
   saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setBlockedRemovalReason: (reason: string | null) => void;
@@ -181,6 +187,11 @@ function useFactoryGraphNodeRemovalRequest({
   return useCallback(
     (nodeId: string) => {
       if (!canInteractWithEditor || !draftState.latestDocument) {
+        return;
+      }
+
+      const node = draftState.graph.nodes.find((entry) => entry.id === nodeId);
+      if (node && hiddenNodeClasses.has(node.kind)) {
         return;
       }
 
@@ -212,7 +223,9 @@ function useFactoryGraphNodeRemovalRequest({
       applyConfirmedNodeRemoval,
       canInteractWithEditor,
       draftState.draft,
+      draftState.graph.nodes,
       draftState.latestDocument,
+      hiddenNodeClasses,
       locale,
       saveEditableDefinition,
       setBlockedRemovalReason,

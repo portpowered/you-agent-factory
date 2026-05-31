@@ -57,6 +57,7 @@ export function useCurrentActivityGraphEditor(
     currentFactoryDefinition: session.currentFactoryDefinition,
     draftState,
     editableGraph,
+    hiddenNodeClasses,
     locale,
     onNodeRemovedFromDraft,
     saveEditableDefinition,

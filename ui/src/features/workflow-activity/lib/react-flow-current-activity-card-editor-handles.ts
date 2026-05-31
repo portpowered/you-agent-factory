@@ -7,6 +7,7 @@ import {
 import type {
   FactoryGraphEdgeKind,
   FactoryGraphNodeKind,
+  WorkstationToWorkStateRouteKind,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   type FactoryGraphConnectionAnchorContext,
@@ -60,6 +61,18 @@ export function supportedSemanticHandleIdsForEdge(
   );
   if (!edgeKind || !sourceKind || !targetKind) {
     return null;
+  }
+
+  if (edgeKind === "work-state-visibility-bypass") {
+    const outcomeRouteKind = visibilityBypassOutcomeRouteKind(edge.edgeId);
+    if (!outcomeRouteKind) {
+      return null;
+    }
+
+    return {
+      sourceHandleId: visibilityBypassSourceHandleId(outcomeRouteKind),
+      targetHandleId: "workstation-input-target",
+    };
   }
 
   const sourceHandleId = connectionAnchorId(sourceKind, edgeKind, "source");
@@ -356,8 +369,51 @@ function isFactoryGraphEdgeKind(value: string): value is FactoryGraphEdgeKind {
     value === "workstation-on-rejection" ||
     value === "workstation-output" ||
     value === "workstation-resource" ||
+    value === "work-state-visibility-bypass" ||
     value === "work-type-state"
   );
+}
+
+function visibilityBypassOutcomeRouteKind(
+  edgeId: string,
+): WorkstationToWorkStateRouteKind | null {
+  if (!edgeId.startsWith("work-state-visibility-bypass:")) {
+    return null;
+  }
+
+  const outcomeRouteKind = edgeId.split(":")[1];
+  return isWorkstationToWorkStateRouteKind(outcomeRouteKind)
+    ? outcomeRouteKind
+    : null;
+}
+
+function isWorkstationToWorkStateRouteKind(
+  value: string | undefined,
+): value is WorkstationToWorkStateRouteKind {
+  return (
+    value === "workstation-input" ||
+    value === "workstation-on-continue" ||
+    value === "workstation-on-failure" ||
+    value === "workstation-on-rejection" ||
+    value === "workstation-output"
+  );
+}
+
+function visibilityBypassSourceHandleId(
+  outcomeRouteKind: WorkstationToWorkStateRouteKind,
+): string {
+  switch (outcomeRouteKind) {
+    case "workstation-on-continue":
+      return "workstation-on-continue-source";
+    case "workstation-on-failure":
+      return "workstation-on-failure-source";
+    case "workstation-on-rejection":
+      return "workstation-on-rejection-source";
+    case "workstation-output":
+      return "workstation-output-source";
+    case "workstation-input":
+      return "workstation-input-source";
+  }
 }
 
 function connectionAnchorId(

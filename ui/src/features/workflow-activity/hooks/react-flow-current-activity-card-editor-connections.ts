@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   createFactoryGraphWorkstationResolver,
@@ -35,6 +36,7 @@ function handleFactoryGraphConnectionAnchorClick(
     commitConnection,
     draftNodes,
     locale,
+    hiddenNodeClasses,
     pendingConnectionSource,
     setConnectionNotice,
     setPendingConnectionSource,
@@ -44,6 +46,7 @@ function handleFactoryGraphConnectionAnchorClick(
     canInteractWithEditor: boolean;
     commitConnection: FactoryGraphConnectionCommit;
     draftNodes: EditableFactoryGraphViewModel["draftState"]["graph"]["nodes"];
+    hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
     locale?: string | null;
     pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
     setConnectionNotice: (notice: string | null) => void;
@@ -58,7 +61,7 @@ function handleFactoryGraphConnectionAnchorClick(
   }
 
   const node = draftNodes.find((entry) => entry.id === endpoint.nodeId);
-  if (!node) {
+  if (!node || hiddenNodeClasses.has(node.kind)) {
     return;
   }
 
@@ -106,12 +109,14 @@ export function useFactoryGraphConnectionController({
   canInteractWithEditor,
   draftState,
   editableGraph,
+  hiddenNodeClasses,
   locale,
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: EditableFactoryGraphViewModel["draftState"];
   editableGraph: EditableFactoryGraphViewModel;
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   locale?: string | null;
 }) {
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
@@ -162,6 +167,20 @@ export function useFactoryGraphConnectionController({
       ) {
         return;
       }
+
+      const sourceNode = draftState.graph.nodes.find(
+        (entry) => entry.id === connection.source,
+      );
+      const targetNode = draftState.graph.nodes.find(
+        (entry) => entry.id === connection.target,
+      );
+      if (
+        (sourceNode && hiddenNodeClasses.has(sourceNode.kind)) ||
+        (targetNode && hiddenNodeClasses.has(targetNode.kind))
+      ) {
+        return;
+      }
+
       commitConnection({
         sourceAnchorId: connection.sourceHandle,
         sourceNodeId: connection.source,
@@ -169,7 +188,13 @@ export function useFactoryGraphConnectionController({
         targetNodeId: connection.target,
       });
     },
-    [activeTool, canInteractWithEditor, commitConnection],
+    [
+      activeTool,
+      canInteractWithEditor,
+      commitConnection,
+      draftState.graph.nodes,
+      hiddenNodeClasses,
+    ],
   );
   const handleConnectionAnchorClick = useCallback(
     (endpoint: FactoryGraphConnectionEndpoint) => {
@@ -178,6 +203,7 @@ export function useFactoryGraphConnectionController({
         canInteractWithEditor,
         commitConnection,
         draftNodes: draftState.graph.nodes,
+        hiddenNodeClasses,
         locale,
         pendingConnectionSource,
         setConnectionNotice,
@@ -190,6 +216,7 @@ export function useFactoryGraphConnectionController({
       canInteractWithEditor,
       commitConnection,
       draftState.graph.nodes,
+      hiddenNodeClasses,
       locale,
       pendingConnectionSource,
       workstationResolver,

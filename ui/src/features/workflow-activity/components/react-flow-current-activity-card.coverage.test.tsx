@@ -628,6 +628,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         canInteractWithEditor: true,
         draftState: createConnectionDraftState(),
         editableGraph,
+        hiddenNodeClasses: new Set(),
       }),
     );
 
@@ -665,6 +666,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
           canInteractWithEditor,
           draftState: createConnectionDraftState(),
           editableGraph,
+          hiddenNodeClasses: new Set(),
         }),
       {
         initialProps: {
