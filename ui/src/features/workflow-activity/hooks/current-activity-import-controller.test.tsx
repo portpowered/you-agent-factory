@@ -2,14 +2,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import { activateImportedFactoryForSession } from "../../../api/named-factory";
+import { activateImportedFactoryForSession } from "../../../api/session-factory";
 import { createFactoryImportConfirmInput } from "../../import/lib/factory-import-confirm-input.test-helpers";
 import { PORT_OS_FACTORY_PNG_SCHEMA_VERSION } from "../../import/lib/factory-png-import";
 import { useCurrentActivityImportController } from "./current-activity-import-controller";
 
-vi.mock("../../../api/named-factory", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/named-factory")>(
-    "../../../api/named-factory",
+vi.mock("../../../api/session-factory", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/session-factory")>(
+    "../../../api/session-factory",
   );
   return {
     ...actual,

@@ -12,7 +12,7 @@ import type {
   DashboardActiveExecution,
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
-import type { FactoryValue } from "../../../api/named-factory";
+import type { ImportFactoryValue } from "../../../api/session-factory";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
@@ -105,7 +105,7 @@ function useCurrentActivityAccessibilityIDs(widgetInstanceID?: string) {
   };
 }
 interface ReactFlowCurrentActivityCardProps {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
+  activateFactory?: (input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>;
   importController?: CurrentActivityImportController;
   locale?: string;
   now: number;

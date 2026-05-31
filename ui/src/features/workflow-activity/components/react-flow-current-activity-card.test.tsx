@@ -15,9 +15,9 @@ import type {
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
 import {
-  type FactoryValue,
-  NamedFactoryAPIError,
-} from "../../../api/named-factory";
+  type ImportFactoryValue,
+  SessionFactoryAPIError,
+} from "../../../api/session-factory";
 import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
@@ -111,7 +111,7 @@ vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () =>
 const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
 
 interface RenderCurrentActivityOptions {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
+  activateFactory?: (input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>;
   importController?: CurrentActivityImportController;
   locale?: string;
   onFactoryActivated?: () => void;
@@ -2143,12 +2143,12 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
   it("activates the dropped factory, closes the preview, and requests an active-view refresh", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
-    let resolveActivation: ((value: FactoryValue) => void) | null = null;
+    let resolveActivation: ((value: ImportFactoryValue) => void) | null = null;
     const activateFactory = vi
-      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
+      .fn<(input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>>()
       .mockImplementation(
         () =>
-          new Promise<FactoryValue>((resolve) => {
+          new Promise<ImportFactoryValue>((resolve) => {
             resolveActivation = resolve;
           }),
       );
@@ -2229,9 +2229,9 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const activateFactory = vi
-      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
+      .fn<(input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>>()
       .mockRejectedValue(
-        new NamedFactoryAPIError("Named factory already exists.", {
+        new SessionFactoryAPIError("Named factory already exists.", {
           code: "FACTORY_ALREADY_EXISTS",
           status: 409,
         }),
@@ -2287,9 +2287,9 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const activateFactory = vi
-      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
+      .fn<(input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>>()
       .mockRejectedValue(
-        new NamedFactoryAPIError(
+        new SessionFactoryAPIError(
           "Current factory runtime must be idle before activation.",
           {
             code: "FACTORY_NOT_IDLE",
@@ -3811,9 +3811,9 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const activateFactory = vi
-      .fn<(input: FactoryImportConfirmInput) => Promise<FactoryValue>>()
+      .fn<(input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>>()
       .mockRejectedValue(
-        new NamedFactoryAPIError("Named factory already exists.", {
+        new SessionFactoryAPIError("Named factory already exists.", {
           code: "FACTORY_ALREADY_EXISTS",
           status: 409,
         }),
