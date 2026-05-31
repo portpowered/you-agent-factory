@@ -6,6 +6,7 @@ import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
   expectNoBrowserErrors,
+  fillWorkstationPromptBody,
   openBrowserPage,
   startBrowserPreview,
   startFactoryApiServer,
@@ -294,7 +295,7 @@ async function addWorkstation(page, toolbar, { body, name }) {
     timeout: uiInteractionTimeoutMs,
   });
   await addDialog.getByLabel("Identifier").fill(name);
-  await addDialog.getByLabel("Prompt body").fill(body);
+  await fillWorkstationPromptBody(addDialog, body);
   await addDialog.getByRole("button", { name: "Add entity" }).click();
 }
 
