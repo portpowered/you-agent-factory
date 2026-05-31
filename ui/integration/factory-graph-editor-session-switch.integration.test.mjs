@@ -266,6 +266,151 @@ async function expectEditorModeOff(page) {
   expect(await graphCard.getByText("Unsaved changes").count()).toBe(0);
 }
 
+async function runSessionSwitchClearsDirtyEditorScenario(preview) {
+  const server = await startFactoryApiServer({
+    apiPort: preview.apiPort,
+    currentFactory: alphaGraphFactoryDefinition,
+    currentFactoryBySessionID: {
+      [betaSessionID]: betaGraphFactoryDefinition,
+    },
+    eventLines: alphaGraphReplayLines,
+    eventLinesBySessionID: {
+      [betaSessionID]: betaGraphReplayLines,
+    },
+    sessions: [defaultSession, betaSession],
+  });
+  const browserPage = await openBrowserPage();
+
+  try {
+    await browserPage.page.goto(preview.previewURL, {
+      waitUntil: "domcontentloaded",
+    });
+    await server.replayCompleted;
+
+    const rootTab = browserPage.page.getByRole("tab", { name: "root" });
+    const betaTab = browserPage.page.getByRole("tab", { name: "beta" });
+    await rootTab.waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    await betaTab.waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+
+    await enterGraphEditor(browserPage.page);
+    await addUnsavedWorkType(browserPage.page, "essay");
+    expect(
+      await browserPage.page.getByTestId("rf__node-work-type:essay").count(),
+    ).toBe(1);
+
+    await betaTab.click();
+    await expect
+      .poll(async () => betaTab.getAttribute("aria-selected"), {
+        timeout: uiInteractionTimeoutMs,
+      })
+      .toBe("true");
+
+    await expectEditorModeOff(browserPage.page);
+    expect(
+      await browserPage.page.getByTestId("rf__node-work-type:essay").count(),
+    ).toBe(0);
+    await browserPage.page
+      .getByTestId("rf__node-workstation:beta-station")
+      .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+    expect(
+      await browserPage.page.getByTestId("rf__node-workstation:draft").count(),
+    ).toBe(0);
+
+    await rootTab.click();
+    await expect
+      .poll(async () => rootTab.getAttribute("aria-selected"), {
+        timeout: uiInteractionTimeoutMs,
+      })
+      .toBe("true");
+
+    await expectEditorModeOff(browserPage.page);
+    await browserPage.page
+      .getByTestId("rf__node-workstation:draft")
+      .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+    expect(
+      await browserPage.page.getByTestId("rf__node-work-type:essay").count(),
+    ).toBe(0);
+
+    expectNoBrowserErrors(
+      browserPage.pageErrors,
+      browserPage.consoleErrors,
+      expect,
+    );
+  } finally {
+    await server.stop();
+    await browserPage.close();
+  }
+}
+
+async function runLeaveEditorUnsavedPromptScenario(preview) {
+  const server = await startFactoryApiServer({
+    apiPort: preview.apiPort,
+    currentFactory: alphaGraphFactoryDefinition,
+    eventLines: alphaGraphReplayLines,
+  });
+  const browserPage = await openBrowserPage();
+
+  try {
+    await browserPage.page.goto(preview.previewURL, {
+      waitUntil: "domcontentloaded",
+    });
+    await server.replayCompleted;
+
+    await enterGraphEditor(browserPage.page);
+    await addUnsavedWorkType(browserPage.page, "memo");
+
+    const graphCard = factoryGraphCardScope(browserPage.page);
+    await graphCard
+      .getByRole("button", { name: "Leave factory graph editor" })
+      .click();
+
+    const leaveDialog = browserPage.page.getByRole("dialog", {
+      name: "Leave graph editor with unsaved changes?",
+    });
+    await leaveDialog.waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    await leaveDialog.getByRole("button", { name: "Keep editing" }).click();
+    await leaveDialog.waitFor({
+      state: "hidden",
+      timeout: uiInteractionTimeoutMs,
+    });
+    await graphCard
+      .getByRole("region", { name: "Factory graph editor tools" })
+      .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+    await graphCard
+      .getByRole("button", { name: "Leave factory graph editor" })
+      .click();
+    await leaveDialog.waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    await leaveDialog.getByRole("button", { name: "Discard changes" }).click();
+    await leaveDialog.waitFor({
+      state: "hidden",
+      timeout: uiInteractionTimeoutMs,
+    });
+    await expectEditorModeOff(browserPage.page);
+
+    expectNoBrowserErrors(
+      browserPage.pageErrors,
+      browserPage.consoleErrors,
+      expect,
+    );
+  } finally {
+    await server.stop();
+    await browserPage.close();
+  }
+}
+
 describe.sequential("factory graph editor session switch browser integration", () => {
   let preview = null;
 
@@ -280,162 +425,13 @@ describe.sequential("factory graph editor session switch browser integration", (
 
   it(
     "clears unsaved graph editor chrome and session A topology when switching to session B",
-    async () => {
-      const server = await startFactoryApiServer({
-        apiPort: preview.apiPort,
-        currentFactory: alphaGraphFactoryDefinition,
-        currentFactoryBySessionID: {
-          [betaSessionID]: betaGraphFactoryDefinition,
-        },
-        eventLines: alphaGraphReplayLines,
-        eventLinesBySessionID: {
-          [betaSessionID]: betaGraphReplayLines,
-        },
-        sessions: [defaultSession, betaSession],
-      });
-      const browserPage = await openBrowserPage();
-
-      try {
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await server.replayCompleted;
-
-        const rootTab = browserPage.page.getByRole("tab", { name: "root" });
-        const betaTab = browserPage.page.getByRole("tab", { name: "beta" });
-        await rootTab.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
-        await betaTab.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
-
-        await enterGraphEditor(browserPage.page);
-        await addUnsavedWorkType(browserPage.page, "essay");
-        expect(
-          await browserPage.page
-            .getByTestId("rf__node-work-type:essay")
-            .count(),
-        ).toBe(1);
-
-        await betaTab.click();
-        await expect
-          .poll(async () => betaTab.getAttribute("aria-selected"), {
-            timeout: uiInteractionTimeoutMs,
-          })
-          .toBe("true");
-
-        await expectEditorModeOff(browserPage.page);
-        expect(
-          await browserPage.page
-            .getByTestId("rf__node-work-type:essay")
-            .count(),
-        ).toBe(0);
-        await browserPage.page
-          .getByTestId("rf__node-workstation:beta-station")
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        expect(
-          await browserPage.page
-            .getByTestId("rf__node-workstation:draft")
-            .count(),
-        ).toBe(0);
-
-        await rootTab.click();
-        await expect
-          .poll(async () => rootTab.getAttribute("aria-selected"), {
-            timeout: uiInteractionTimeoutMs,
-          })
-          .toBe("true");
-
-        await expectEditorModeOff(browserPage.page);
-        await browserPage.page
-          .getByTestId("rf__node-workstation:draft")
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        expect(
-          await browserPage.page
-            .getByTestId("rf__node-work-type:essay")
-            .count(),
-        ).toBe(0);
-
-        expectNoBrowserErrors(
-          browserPage.pageErrors,
-          browserPage.consoleErrors,
-          expect,
-        );
-      } finally {
-        await server.stop();
-        await browserPage.close();
-      }
-    },
+    async () => runSessionSwitchClearsDirtyEditorScenario(preview),
     browserScenarioTimeoutMs,
   );
 
   it(
     "prompts before leaving graph editor with unsaved edits within one session",
-    async () => {
-      const server = await startFactoryApiServer({
-        apiPort: preview.apiPort,
-        currentFactory: alphaGraphFactoryDefinition,
-        eventLines: alphaGraphReplayLines,
-      });
-      const browserPage = await openBrowserPage();
-
-      try {
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await server.replayCompleted;
-
-        await enterGraphEditor(browserPage.page);
-        await addUnsavedWorkType(browserPage.page, "memo");
-
-        const graphCard = factoryGraphCardScope(browserPage.page);
-        await graphCard
-          .getByRole("button", { name: "Leave factory graph editor" })
-          .click();
-
-        const leaveDialog = browserPage.page.getByRole("dialog", {
-          name: "Leave graph editor with unsaved changes?",
-        });
-        await leaveDialog.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
-        await leaveDialog.getByRole("button", { name: "Keep editing" }).click();
-        await leaveDialog.waitFor({
-          state: "hidden",
-          timeout: uiInteractionTimeoutMs,
-        });
-        await graphCard
-          .getByRole("region", { name: "Factory graph editor tools" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-
-        await graphCard
-          .getByRole("button", { name: "Leave factory graph editor" })
-          .click();
-        await leaveDialog.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
-        await leaveDialog.getByRole("button", { name: "Discard changes" }).click();
-        await leaveDialog.waitFor({
-          state: "hidden",
-          timeout: uiInteractionTimeoutMs,
-        });
-        await expectEditorModeOff(browserPage.page);
-
-        expectNoBrowserErrors(
-          browserPage.pageErrors,
-          browserPage.consoleErrors,
-          expect,
-        );
-      } finally {
-        await server.stop();
-        await browserPage.close();
-      }
-    },
+    async () => runLeaveEditorUnsavedPromptScenario(preview),
     browserScenarioTimeoutMs,
   );
 });

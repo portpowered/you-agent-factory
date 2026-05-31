@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: focused hook coverage keeps the mergeability-only save/leave branches in one seam.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: focused hook coverage keeps session-reset and in-session save/leave branches on one harness seam.
 import { act, renderHook } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
