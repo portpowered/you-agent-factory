@@ -146,14 +146,12 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
   });
 
   it("surfaces network failures from the prompt-template contract query", async () => {
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockRejectedValue(
-      {
-        code: "NETWORK_ERROR",
-        message:
-          "The dashboard could not reach the current factory prompt-template contract API.",
-        name: "CurrentFactoryPromptTemplateAPIError",
-      },
-    );
+    getCurrentFactoryWorkstationPromptTemplateContractMock.mockRejectedValue({
+      code: "NETWORK_ERROR",
+      message:
+        "The dashboard could not reach the current factory prompt-template contract API.",
+      name: "CurrentFactoryPromptTemplateAPIError",
+    });
 
     const { result } = renderHook(
       () => useCurrentWorkstationPromptTemplateContract("Review"),
