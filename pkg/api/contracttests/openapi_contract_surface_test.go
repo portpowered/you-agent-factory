@@ -178,6 +178,48 @@ func TestOpenAPIContract_DefinesWorkMoveOperationProjectionSlice(t *testing.T) {
 	assertWorkMoveOperationViewSchema(t, schemas)
 }
 
+func assertWorkMoveOperationProjectionSchemasPresent(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	for _, schema := range []string{
+		"FactoryWorldWorkMoveOperationProjectionSlice",
+		"FactoryWorldWorkMoveOperationView",
+	} {
+		if _, ok := schemas[schema]; !ok {
+			t.Fatalf("components.schemas.%s is missing", schema)
+		}
+	}
+}
+
+func assertWorkMoveOperationProjectionSliceSchema(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	projectionSlice := schemaObject(t, schemas, "FactoryWorldWorkMoveOperationProjectionSlice")
+	sliceProperties := schemaProperties(t, projectionSlice, "FactoryWorldWorkMoveOperationProjectionSlice")
+	workMoveOperationsByWorkID, ok := sliceProperties["workMoveOperationsByWorkId"].(map[string]any)
+	if !ok {
+		t.Fatalf("FactoryWorldWorkMoveOperationProjectionSlice.properties.workMoveOperationsByWorkId is missing")
+	}
+	additionalProperties, ok := workMoveOperationsByWorkID["additionalProperties"].(map[string]any)
+	if !ok {
+		t.Fatalf("FactoryWorldWorkMoveOperationProjectionSlice.properties.workMoveOperationsByWorkId.additionalProperties is missing")
+	}
+	items, ok := additionalProperties["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("FactoryWorldWorkMoveOperationProjectionSlice work move map items is missing")
+	}
+	if got, ok := items["$ref"].(string); !ok || got != "#/components/schemas/FactoryWorldWorkMoveOperationView" {
+		t.Fatalf("FactoryWorldWorkMoveOperationProjectionSlice work move map item ref = %v, want %s", items["$ref"], "#/components/schemas/FactoryWorldWorkMoveOperationView")
+	}
+}
+
+func assertWorkMoveOperationViewSchema(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	moveView := schemaObject(t, schemas, "FactoryWorldWorkMoveOperationView")
+	assertRequiredFields(t, moveView, "workId", "fromState", "toState", "fromPlaceId", "toPlaceId", "source", "tick", "sequence")
+	moveViewProperties := schemaProperties(t, moveView, "FactoryWorldWorkMoveOperationView")
+	assertPropertyRef(t, moveViewProperties, "source", "#/components/schemas/WorkStateChangeSource")
+	assertDateTimeStringProperty(t, moveViewProperties, "eventTime")
+}
+
 func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	doc := loadBundledOpenAPIDocument(t)

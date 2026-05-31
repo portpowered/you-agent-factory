@@ -191,6 +191,19 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
   return value;
 }
 
+function getWorkOperationsSection(container: HTMLElement): HTMLElement {
+  const heading = within(container).getByRole("heading", {
+    name: "Work operations",
+  });
+  const section = heading.closest("section");
+
+  if (!(section instanceof HTMLElement)) {
+    throw new Error("expected work operations section");
+  }
+
+  return section;
+}
+
 function getDispatchHistoryCard(
   container: HTMLElement,
   dispatchId: string,
@@ -487,7 +500,7 @@ describe("App current selection", () => {
     ).toBe(DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace);
     expect(
       within(currentSelection).getByRole("heading", {
-        name: "Workstation dispatches",
+        name: "Work operations",
       }),
     ).toBeTruthy();
     expect(
@@ -522,13 +535,11 @@ describe("App current selection", () => {
     const currentSelection = await screen.findByRole("article", {
       name: "Current selection",
     });
-    const dispatchHistory = within(currentSelection).getByRole("region", {
-      name: "Workstation dispatches",
-    });
+    const dispatchHistory = getWorkOperationsSection(currentSelection);
 
     expect(
       within(currentSelection).getByRole("heading", {
-        name: "Workstation dispatches",
+        name: "Work operations",
       }),
     ).toBeTruthy();
     expect(
@@ -801,12 +812,12 @@ describe("App current selection", () => {
     expectDefinitionValue(currentSelection, "Workstation dispatches", "0");
     expect(
       within(currentSelection).getByText(
-        "No workstation dispatch has been recorded yet for this work item.",
+        "No move or workstation operations have been recorded yet for this work item.",
       ),
     ).toBeTruthy();
     expect(
       within(currentSelection).getByRole("heading", {
-        name: "Workstation dispatches",
+        name: "Work operations",
       }),
     ).toBeTruthy();
     expect(
