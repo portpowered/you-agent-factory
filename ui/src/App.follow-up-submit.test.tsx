@@ -7,10 +7,10 @@ import {
   activeWorkLabel,
   submitWorkCardControls,
 } from "./testing/app-shell-submit-follow-up-test-utils";
+import { mockExportCurrentFactoryDocumentNotFound } from "./testing/app-shell-export-test-utils";
 import {
   activeSnapshot,
   baselineSnapshot,
-  jsonResponse,
   MockEventSource,
   nonPromptTemplateFetchPaths,
   registerAppDashboardTestLifecycle,
@@ -49,18 +49,8 @@ describe("App follow-up flows", () => {
   });
 
   it("keeps the export toolbar action available alongside the submit-work card", async () => {
-    const { fetchMock } = renderApp({ snapshot: terminalSnapshot });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(
-        {
-          code: "NOT_FOUND",
-          family: "NOT_FOUND",
-          message: "Current named factory not found.",
-        },
-        404,
-        "Not Found",
-      ),
-    );
+    mockExportCurrentFactoryDocumentNotFound();
+    renderApp({ snapshot: terminalSnapshot });
 
     await screen.findByRole("button", { name: "Export PNG" });
     fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));

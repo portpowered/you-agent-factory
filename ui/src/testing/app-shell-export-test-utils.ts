@@ -1,6 +1,9 @@
 import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
-import type { CurrentFactoryDocument } from "../api/current-factory-definition";
+import {
+  CurrentFactoryDefinitionError,
+  type CurrentFactoryDocument,
+} from "../api/current-factory-definition";
 import type { FactoryValue } from "../api/named-factory";
 import type { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
 import { defaultSessionFactoryVersion } from "./session-factory-mocks";
@@ -60,6 +63,23 @@ export function createCurrentFactoryDocumentQueryResult(
     status: isSuccess ? "success" : "pending",
     ...overrides,
   } as CurrentFactoryDocumentQuery;
+}
+
+/** Seed the mocked session-factory document hook with a not-found export failure. */
+export function mockExportCurrentFactoryDocumentNotFound(
+  message = "Current named factory not found.",
+): void {
+  mockCurrentFactoryDocument(
+    createCurrentFactoryDocumentQueryResult({
+      data: undefined,
+      error: new CurrentFactoryDefinitionError(message, { code: "NOT_FOUND" }),
+      isError: true,
+      isFetching: false,
+      isPending: false,
+      isSuccess: false,
+      status: "error",
+    }),
+  );
 }
 
 /** Seed the mocked session-factory document hook for App-shell export flows. */

@@ -296,8 +296,10 @@ else
 endif
 
 ui-test:
+ifeq ($(findstring bun run,$(UI_SCRIPT)),bun run)
 ifeq ($(BUN_BIN),)
 	$(error UI unit tests require Bun 1.3.12+ on PATH. Install from https://bun.sh and retry.)
+endif
 endif
 	cd ui && $(UI_SCRIPT) test:unit
 
@@ -309,8 +311,10 @@ else
 endif
 
 ui-test-coverage:
+ifeq ($(findstring bun run,$(UI_SCRIPT)),bun run)
 ifeq ($(BUN_BIN),)
 	$(error UI coverage requires Bun 1.3.12+ on PATH. Install from https://bun.sh and retry.)
+endif
 endif
 	cd ui && $(UI_SCRIPT) test:coverage
 
