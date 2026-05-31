@@ -18,6 +18,16 @@ status API fields, and `--server` / `--session` on HTTP client commands), see
 - Keep watched work inputs under `inputs/<work-type-or-BATCH>/<channel>/`.
 - Inline runtime fields in `factory.json` are still supported for portable
   single-file configs, but the split layout is the recommended authoring path.
+- **Live saves** (dashboard graph editor, `PUT /factory-sessions/{id}/factory`,
+  import replace-current, `you factory save <name>`, and named-factory upsert)
+  always persist the split layout: a thin `factory.json` plus
+  `workers/<name>/`, `workstations/<name>/`, bundled files, and default
+  `inputs/` channels when definitions exist. Runtime `body` and
+  `promptTemplate` values materialized under split dirs are omitted from the
+  on-disk `factory.json`.
+- **Portable export** (`config flatten`, PNG export) is the explicit opt-in path
+  for a single-file `factory.json` that inlines runtime bodies and bundled
+  content. That inline-only shape is not what session/API saves write by default.
 - Use factory-level `runner` in `factory.json` to set the default runner for
   the factory. Supported built-in runner IDs are `codex`, `gemini`, `kiro`,
   `cursor-cli`, and `opencode`.
@@ -261,6 +271,38 @@ loop-breaker routes use `{ "workType": "<name>", "state": "<name>" }`. Top-level
   runtime-capacity `resources` with bundled files or external tool checks.
 - Treat `inputs/` as submission data, not as part of the topology. The runtime
   watches the path and turns those files into work requests.
+
+## Live Saves Vs Portable Export
+
+Session and API factory writes share one on-disk persist pipeline. Whether you
+save the default session factory (`REPLACE_CURRENT` on the root-as-factory
+layout) or a named factory (`UPSERT_NAMED_AND_ACTIVATE` or named
+`REPLACE_CURRENT`), the server normalizes the submitted factory JSON, writes a
+thin `factory.json`, expands `workers/` and `workstations/` runtime files,
+validates with `LoadRuntimeConfig`, and commits atomically.
+
+| Path | On-disk result |
+|------|----------------|
+| Dashboard graph editor save | Split layout under the session factory root |
+| `PUT /factory-sessions/{id}/factory` | Same split layout as dashboard save |
+| Import replace-current / create-named | Same split layout for equivalent content |
+| `you factory save <name>` | Split layout under the named factory directory |
+| `config flatten` / PNG portable export | Opt-in single-file `factory.json` with inlined runtime and bundled content |
+
+`GET` current-factory responses may still return a fully inlined `Factory` for
+editing even though live saves persist split files on disk. Clients continue to
+send inlined JSON; the split layout is a server-side persist detail.
+
+### Upgrading From Monolithic-Only `factory.json`
+
+Older deployments may have only a monolithic `factory.json` at the session
+factory root (inline `body` / `promptTemplate` with no `workers/` or
+`workstations/` trees). The first live save after upgrade runs the same split
+expansion as named-factory persist: expect a one-time diff that adds
+`workers/<name>/` and `workstations/<name>/` directories, thins `factory.json`,
+and prunes stale split dirs for entities removed from the submitted config.
+Subsequent saves refresh split files in place without re-inflating
+`factory.json`.
 
 ## Portable Bundled Files
 
