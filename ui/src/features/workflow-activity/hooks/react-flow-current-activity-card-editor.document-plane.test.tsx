@@ -65,7 +65,7 @@ function resetDivergentDocumentFixtureState() {
   };
 }
 
-vi.mock("../../current-factory-definition/public", () => ({
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", () => ({
   useCurrentFactoryDocument: () => fixtureState.currentFactoryQuery,
   useSaveCurrentFactory: () => fixtureState.saveEditableDefinition,
 }));
