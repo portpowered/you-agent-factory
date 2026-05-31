@@ -9,7 +9,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { DashboardSelection } from "../../current-selection/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
@@ -17,9 +17,9 @@ import type { CurrentActivityImportController } from "../hooks/current-activity-
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 
-vi.mock("../../current-factory-definition/public", async () => {
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
   const actual = await vi.importActual(
-    "../../current-factory-definition/public",
+    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   );
 
   return {
