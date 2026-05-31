@@ -598,6 +598,51 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("sessions")
+	if err != nil {
+		t.Fatalf("Markdown(sessions) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Sessions and Runtime",
+		"## Session list",
+		"you session list",
+		"you session list --json",
+		"you session list --port 9090",
+		"## Factory query",
+		"you factory query",
+		"you --json factory query",
+		"you --server http://localhost:9090 factory query",
+		"GET /factory-sessions/{session_id}/status",
+		"factoryState",
+		"runtimeStatus",
+		"categories",
+		"totalTokens",
+		"http://localhost:7437/dashboard/ui",
+		"## `--server` and `--session` routing",
+		"you submit --session session-beta",
+		"you run --continuously",
+		"[Agents](agents.md)",
+		"[Work](work.md)",
+		"[Config](config.md)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(sessions) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs sessions`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(sessions) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	t.Parallel()
 
