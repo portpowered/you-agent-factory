@@ -79,8 +79,12 @@ const workerDetailMessagesByLocale = {
       "Resolve the highlighted fields before saving this worker.",
     executorProviderLabel: "Executor provider",
     expandAction: "Expand",
+    modelFieldHelp:
+      "Optional. Leave blank to use the provider default model identifier.",
     modelLabel: "Model",
     modelLocalityLabel: "Model locality",
+    modelProviderFieldHelp:
+      "Required for model workers. The provider selects routing and default model behavior.",
     modelProviderLabel: "Model provider",
     notConfiguredOptionLabel: "Not configured",
     notConfiguredValue: "Not configured",
@@ -155,8 +159,12 @@ const workerDetailMessagesByLocale = {
       "このワーカーを保存する前にハイライトされた項目を修正してください。",
     executorProviderLabel: "実行プロバイダー",
     expandAction: "展開",
+    modelFieldHelp:
+      "任意です。空のままにするとプロバイダーの既定モデル識別子が使われます。",
     modelLabel: "モデル",
     modelLocalityLabel: "モデルローカリティ",
+    modelProviderFieldHelp:
+      "モデルワーカーでは必須です。プロバイダーがルーティングと既定モデル動作を決定します。",
     modelProviderLabel: "モデルプロバイダー",
     notConfiguredOptionLabel: "未設定",
     notConfiguredValue: "未設定",
@@ -231,8 +239,12 @@ const workerDetailMessagesByLocale = {
       "이 워커를 저장하기 전에 강조된 필드를 해결하세요.",
     executorProviderLabel: "실행자 제공자",
     expandAction: "펼치기",
+    modelFieldHelp:
+      "선택 사항입니다. 비워 두면 제공자 기본 모델 식별자가 사용됩니다.",
     modelLabel: "모델",
     modelLocalityLabel: "모델 지역성",
+    modelProviderFieldHelp:
+      "모델 워커에 필수입니다. 제공자가 라우팅과 기본 모델 동작을 선택합니다.",
     modelProviderLabel: "모델 제공자",
     notConfiguredOptionLabel: "구성되지 않음",
     notConfiguredValue: "구성되지 않음",
@@ -296,8 +308,11 @@ const workerDetailMessagesByLocale = {
     editableConfigurationValidationStatus: "保存此 worker 前请修正高亮字段。",
     executorProviderLabel: "执行器 provider",
     expandAction: "展开",
+    modelFieldHelp: "可选。留空将使用 provider 默认模型标识符。",
     modelLabel: "模型",
     modelLocalityLabel: "模型位置",
+    modelProviderFieldHelp:
+      "模型 worker 必填。provider 决定路由和默认模型行为。",
     modelProviderLabel: "模型 provider",
     notConfiguredOptionLabel: "未配置",
     notConfiguredValue: "未配置",

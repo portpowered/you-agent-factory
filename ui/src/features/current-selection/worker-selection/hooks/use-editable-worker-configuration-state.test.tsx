@@ -77,7 +77,7 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
-  it("blocks save when required model worker fields are cleared", () => {
+  it("blocks save when model provider is cleared", () => {
     const { result } = renderHook(() =>
       useEditableWorkerConfigurationState(workerSelection, "reviewer"),
     );
@@ -96,9 +96,29 @@ describe("useEditableWorkerConfigurationState", () => {
       hasValidationErrors: true,
       isDirty: true,
       validationErrors: {
-        model: expect.any(String),
         modelProvider: expect.any(String),
       },
+    });
+  });
+
+  it("allows save when model is cleared but model provider remains set", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onModelChange("");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      hasValidationErrors: false,
+      isDirty: true,
+      validationErrors: {},
     });
   });
 

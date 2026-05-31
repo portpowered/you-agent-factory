@@ -477,11 +477,16 @@ function ModelWorkerEditableFields({
         }
         label={messages.modelProviderLabel}
         supportingContent={
-          <WorkerEditableConfigurationServerChangedHint
-            fieldName="modelProvider"
-            messages={messages}
-            state={state}
-          />
+          <>
+            <WorkerEditableConfigurationFieldHelp>
+              {messages.modelProviderFieldHelp}
+            </WorkerEditableConfigurationFieldHelp>
+            <WorkerEditableConfigurationServerChangedHint
+              fieldName="modelProvider"
+              messages={messages}
+              state={state}
+            />
+          </>
         }
       />
       <WorkerEditableConfigurationField
@@ -502,11 +507,16 @@ function ModelWorkerEditableFields({
         }
         label={messages.modelLabel}
         supportingContent={
-          <WorkerEditableConfigurationServerChangedHint
-            fieldName="model"
-            messages={messages}
-            state={state}
-          />
+          <>
+            <WorkerEditableConfigurationFieldHelp>
+              {messages.modelFieldHelp}
+            </WorkerEditableConfigurationFieldHelp>
+            <WorkerEditableConfigurationServerChangedHint
+              fieldName="model"
+              messages={messages}
+              state={state}
+            />
+          </>
         }
       />
       <WorkerEditableConfigurationField
@@ -749,6 +759,23 @@ function WorkerOptionalEnumSelect<T extends string>({
         </option>
       ))}
     </Select>
+  );
+}
+
+function WorkerEditableConfigurationFieldHelp({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <p
+      className={cn(
+        "m-0 text-af-text-subtle",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
+    >
+      {children}
+    </p>
   );
 }
 

@@ -788,6 +788,84 @@ describe("WorkerDetailCard", () => {
     );
   });
 
+  it("shows model worker field help and allows save with provider only", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: true,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: true,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Required for model workers. The provider selects routing and default model behavior.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Optional. Leave blank to use the provider default model identifier.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Enter a model before saving this worker."),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Save worker" }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
   it("disables save and shows field errors while validation is unresolved", () => {
     const editableConfigurationState: EditableWorkerConfigurationState = {
       canSave: false,
@@ -832,7 +910,6 @@ describe("WorkerDetailCard", () => {
       pendingFactoryDefinition: buildFactoryDocument(),
       status: "ready",
       validationErrors: {
-        model: "Enter a model before saving this worker.",
         modelProvider: "Select a model provider before saving this worker.",
       },
     };
@@ -857,8 +934,11 @@ describe("WorkerDetailCard", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText("Enter a model before saving this worker."),
+      screen.getByText("Select a model provider before saving this worker."),
     ).toBeTruthy();
+    expect(
+      screen.queryByText("Enter a model before saving this worker."),
+    ).toBeNull();
     expect(
       screen
         .getByRole("button", { name: "Save worker" })

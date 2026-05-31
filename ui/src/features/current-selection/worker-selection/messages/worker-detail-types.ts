@@ -41,8 +41,10 @@ export interface WorkerDetailMessages {
   editableConfigurationValidationStatus: string;
   executorProviderLabel: string;
   expandAction: string;
+  modelFieldHelp: string;
   modelLabel: string;
   modelLocalityLabel: string;
+  modelProviderFieldHelp: string;
   modelProviderLabel: string;
   notConfiguredOptionLabel: string;
   notConfiguredValue: string;
