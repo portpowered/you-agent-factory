@@ -194,7 +194,10 @@ describe("useEditableFactoryGraph", () => {
           currentFactoryDocument: draftWorkstationFactoryDocument,
           factoryDocumentScopeKey: null,
         }),
-      { wrapper: createEditableFactoryGraphHookWrapper() },
+      {
+        wrapper: createEditableFactoryGraphHookWrapper()
+          .EditableFactoryGraphHookWrapper,
+      },
     );
 
     let didSave = true;

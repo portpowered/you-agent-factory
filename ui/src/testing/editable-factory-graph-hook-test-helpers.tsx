@@ -28,12 +28,12 @@ export function setupEditableFactoryGraphSaveTestEnvironment(
   return saveMutation;
 }
 
-export function createEditableFactoryGraphHookWrapper() {
-  const queryClient = new QueryClient({
+export function createEditableFactoryGraphHookWrapper(
+  queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
-  });
-
-  return function EditableFactoryGraphHookWrapper({
+  }),
+) {
+  function EditableFactoryGraphHookWrapper({
     children,
   }: {
     children: ReactNode;
@@ -43,18 +43,24 @@ export function createEditableFactoryGraphHookWrapper() {
         <DashboardSessionProvider>{children}</DashboardSessionProvider>
       </QueryClientProvider>
     );
-  };
+  }
+
+  return { EditableFactoryGraphHookWrapper, queryClient };
 }
 
 export function renderEditableFactoryGraphHook(
   options: UseEditableFactoryGraphOptions = {},
+  queryClient?: QueryClient,
 ) {
+  const { EditableFactoryGraphHookWrapper } =
+    createEditableFactoryGraphHookWrapper(queryClient);
+
   return renderHook(
     () =>
       useEditableFactoryGraph({
         factoryDocumentScopeKey: defaultGraphDocumentScopeKey,
         ...options,
       }),
-    { wrapper: createEditableFactoryGraphHookWrapper() },
+    { wrapper: EditableFactoryGraphHookWrapper },
   );
 }

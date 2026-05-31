@@ -111,7 +111,8 @@ describe("useEditableFactoryGraph document plane", () => {
           currentFactoryDocument: documentFactory,
           factoryDocumentScopeKey: "session-alpha",
         },
-        wrapper: createEditableFactoryGraphHookWrapper(),
+        wrapper: createEditableFactoryGraphHookWrapper()
+          .EditableFactoryGraphHookWrapper,
       },
     );
 
@@ -165,7 +166,8 @@ describe("useEditableFactoryGraph document plane", () => {
         initialProps: {
           currentFactoryDocument: documentFactory,
         },
-        wrapper: createEditableFactoryGraphHookWrapper(),
+        wrapper: createEditableFactoryGraphHookWrapper()
+          .EditableFactoryGraphHookWrapper,
       },
     );
 

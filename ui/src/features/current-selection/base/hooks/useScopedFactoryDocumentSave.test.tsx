@@ -145,6 +145,98 @@ describe("useScopedFactoryDocumentSave scope isolation", () => {
 
     expect(result.current.saveState).toEqual({ status: "idle" });
   });
+
+  it("does not apply success state or onSaved when scopeKey changes during an in-flight save", async () => {
+    const pendingSave = mockPendingFactoryDocumentSave();
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(pendingSave.saveMutation as never);
+    const onSaved = vi.fn();
+
+    const { rerender, result } = renderHook(
+      ({ scopeKey }) =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey,
+        }),
+      {
+        initialProps: { scopeKey: "review:transition:Review" },
+        wrapper: createQueryClientWrapper(),
+      },
+    );
+
+    let savePromise: Promise<void> | undefined;
+    await act(async () => {
+      savePromise = result.current.saveNow({
+        ...defaultSaveRequest,
+        onSaved,
+      });
+      await Promise.resolve();
+    });
+
+    expect(result.current.saveState).toEqual({ status: "submitting" });
+
+    rerender({ scopeKey: "worker:reviewer" });
+    expect(result.current.saveState).toEqual({ status: "idle" });
+
+    pendingSave.deferred.resolve({
+      name: "Current Factory",
+      version: {
+        logical: "8",
+        physical: "2026-05-23T15:52:00.001Z",
+      },
+      workers: [],
+      workstations: [],
+    });
+
+    await act(async () => {
+      await savePromise;
+    });
+
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(result.current.saveState).toEqual({ status: "idle" });
+  });
+
+  it("does not apply error state when scopeKey changes during an in-flight save", async () => {
+    const pendingSave = mockPendingFactoryDocumentSave();
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(pendingSave.saveMutation as never);
+
+    const { rerender, result } = renderHook(
+      ({ scopeKey }) =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey,
+        }),
+      {
+        initialProps: { scopeKey: "review:transition:Review" },
+        wrapper: createQueryClientWrapper(),
+      },
+    );
+
+    let savePromise: Promise<void> | undefined;
+    await act(async () => {
+      savePromise = result.current.saveNow(defaultSaveRequest);
+      await Promise.resolve();
+    });
+
+    rerender({ scopeKey: "worker:reviewer" });
+
+    pendingSave.deferred.reject(
+      new CurrentFactoryDefinitionError("Save failed.", {
+        code: "BAD_REQUEST",
+      }),
+    );
+
+    await act(async () => {
+      await savePromise;
+    });
+
+    expect(result.current.saveState).toEqual({ status: "idle" });
+  });
 });
 
 describe("useScopedFactoryDocumentSave in-flight deduplication", () => {
