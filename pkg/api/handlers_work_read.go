@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
@@ -92,13 +93,12 @@ func (s *Server) listWork(
 	}
 
 	// Collect, filter, and sort public work for deterministic pagination.
-	workNamesByID := publicWorkNamesByID(snapshot.Marking.Tokens)
-	items := make([]listWorkItem, 0, len(snapshot.Marking.Tokens))
-	for _, t := range snapshot.Marking.Tokens {
-		if !publicWorkToken(t) {
-			continue
-		}
-		work := tokenToWork(t, snapshot.Topology)
+	materialized := materialize.CollectPublicWorkTokens(&snapshot.Marking, snapshot.Dispatches)
+	workNamesByID := publicWorkNamesByID(materialized.Tokens)
+	items := make([]listWorkItem, 0, len(materialized.Tokens))
+	for _, t := range materialized.Tokens {
+		_, inFlightOnly := materialized.InFlightOnlyByID[t.ID]
+		work := tokenToWork(t, snapshot.Topology, inFlightOnly)
 		work.Relations = generatedWorkRelations(t, work.Name, workNamesByID)
 		if !workMatchesListFilters(work, params) {
 			continue
@@ -321,39 +321,44 @@ func (s *Server) getWork(
 		return
 	}
 
-	token, ok := findPublicWorkToken(snapshot.Marking.Tokens, string(id))
+	materialized := materialize.CollectPublicWorkTokens(&snapshot.Marking, snapshot.Dispatches)
+	token, inFlightOnly, ok := findPublicWorkToken(materialized, string(id))
 	if !ok {
 		s.writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
 		return
 	}
 
-	workNamesByID := publicWorkNamesByID(snapshot.Marking.Tokens)
-	work := tokenToWork(token, snapshot.Topology)
+	workNamesByID := publicWorkNamesByID(materialized.Tokens)
+	work := tokenToWork(token, snapshot.Topology, inFlightOnly)
 	work.Relations = generatedWorkRelations(token, work.Name, workNamesByID)
 	s.writeJSON(w, http.StatusOK, work)
 }
 
-func findPublicWorkToken(tokens map[string]*interfaces.Token, id string) (*interfaces.Token, bool) {
-	if token, ok := tokens[id]; ok && publicWorkToken(token) {
-		return token, true
+func findPublicWorkToken(materialized materialize.PublicWorkTokens, id string) (*interfaces.Token, bool, bool) {
+	for _, token := range materialized.Tokens {
+		if token.ID == id && publicWorkToken(token) {
+			_, inFlightOnly := materialized.InFlightOnlyByID[token.ID]
+			return token, inFlightOnly, true
+		}
 	}
-	for _, token := range tokens {
+	for _, token := range materialized.Tokens {
 		if !publicWorkToken(token) {
 			continue
 		}
 		if token.Color.WorkID == id {
-			return token, true
+			_, inFlightOnly := materialized.InFlightOnlyByID[token.ID]
+			return token, inFlightOnly, true
 		}
 	}
-	return nil, false
+	return nil, false, false
 }
-func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
+func tokenToWork(t *interfaces.Token, net *state.Net, inFlightOnly bool) factoryapi.Work {
 	name := firstNonEmptyString(t.Color.Name, t.Color.WorkID, t.ID)
 	return factoryapi.Work{
 		Name:                     name,
 		WorkId:                   stringPtrIfNotEmpty(t.Color.WorkID),
 		WorkTypeName:             stringPtrIfNotEmpty(t.Color.WorkTypeID),
-		State:                    workStateForToken(t, net),
+		State:                    workStateForMaterializedToken(t, net, inFlightOnly),
 		ChainingTraceDepth:       intPtrIfPositive(t.Color.ChainingTraceDepth),
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
@@ -363,10 +368,10 @@ func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
 	}
 }
 
-func publicWorkNamesByID(tokens map[string]*interfaces.Token) map[string]string {
+func publicWorkNamesByID(tokens []*interfaces.Token) map[string]string {
 	names := make(map[string]string, len(tokens))
 	for _, token := range tokens {
-		if !publicWorkToken(token) || token.Color.WorkID == "" {
+		if !materialize.IsPublicWorkToken(token) || token.Color.WorkID == "" {
 			continue
 		}
 		names[token.Color.WorkID] = firstNonEmptyString(token.Color.Name, token.Color.WorkID, token.ID)
@@ -391,6 +396,32 @@ func generatedWorkRelations(token *interfaces.Token, sourceWorkName string, work
 		})
 	}
 	return &relations
+}
+
+func workStateForMaterializedToken(t *interfaces.Token, net *state.Net, inFlightOnly bool) *factoryapi.WorkState {
+	if inFlightOnly {
+		return workStateForInFlightToken(t, net)
+	}
+	return workStateForToken(t, net)
+}
+
+func workStateForInFlightToken(t *interfaces.Token, net *state.Net) *factoryapi.WorkState {
+	if t == nil {
+		return nil
+	}
+	_, stateName := state.SplitPlaceID(t.PlaceID)
+	if net != nil {
+		if place, ok := net.Places[t.PlaceID]; ok && place.State != "" {
+			stateName = place.State
+		}
+	}
+	if stateName == "" {
+		return nil
+	}
+	return &factoryapi.WorkState{
+		Name: stateName,
+		Type: factoryapi.WorkStateTypePROCESSING,
+	}
 }
 
 func workStateForToken(t *interfaces.Token, net *state.Net) *factoryapi.WorkState {
@@ -424,9 +455,7 @@ func workTypesFromNet(net *state.Net) map[string]*state.WorkType {
 }
 
 func publicWorkToken(token *interfaces.Token) bool {
-	return token != nil &&
-		token.Color.DataType != interfaces.DataTypeResource &&
-		!interfaces.IsSystemTimeToken(token)
+	return materialize.IsPublicWorkToken(token)
 }
 func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
 	return workcontent.GeneratedPtrFromParts(parts)
