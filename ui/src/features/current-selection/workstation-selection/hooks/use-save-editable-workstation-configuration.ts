@@ -5,7 +5,7 @@ import type {
   CurrentFactoryDefinitionError,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import { useSaveCurrentFactory } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
@@ -57,7 +57,7 @@ export function useSaveEditableWorkstationConfiguration({
     null,
   );
   const saveInFlightRef = useRef(false);
-  const mutation = useSaveCurrentFactory();
+  const { isPending, saveAsync } = useFactoryDocumentSave();
 
   useResetExitedSaveScope({
     scopeKey,
@@ -78,7 +78,7 @@ export function useSaveEditableWorkstationConfiguration({
     editableConfigurationState.isDirty &&
     !editableConfigurationState.hasValidationErrors &&
     editableConfigurationState.pendingFactoryDefinition != null &&
-    !mutation.isPending;
+    !isPending;
 
   const beginSaveConfirmation = useCallback(() => {
     setLastSuccessfulScopeKey(null);
@@ -110,7 +110,7 @@ export function useSaveEditableWorkstationConfiguration({
     beginSaveConfirmation,
     canSave,
     cancelSaveConfirmation: () => {
-      if (!mutation.isPending) {
+      if (!isPending) {
         setIsConfirming(false);
       }
     },
@@ -135,9 +135,9 @@ export function useSaveEditableWorkstationConfiguration({
         value: editableConfigurationState.pendingFactoryDefinition,
       };
       try {
-        await mutation.mutateAsync({
+        await saveAsync({
           baseVersion: request.baseVersion,
-          factoryDefinition: request.value,
+          factory: request.value,
         });
         request.markChangesSaved?.();
         setIsConfirming(false);
