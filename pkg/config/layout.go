@@ -739,6 +739,22 @@ type factorySplitLayoutReplaceHooks struct {
 	afterStageWrite func(stagingDir string) error
 }
 
+// FactoryLayoutReplaceOptions configures ReplaceFactoryLayoutAtDir.
+type FactoryLayoutReplaceOptions struct {
+	LayoutWrite FactorySplitLayoutWriteOptions
+}
+
+// DefaultFactoryLayoutReplaceOptions returns persist-from-save layout options for
+// an existing factory directory at targetDir.
+func DefaultFactoryLayoutReplaceOptions(targetDir string) FactoryLayoutReplaceOptions {
+	return FactoryLayoutReplaceOptions{
+		LayoutWrite: FactorySplitLayoutWriteOptions{
+			SourceDir:                   strings.TrimSpace(targetDir),
+			OverwriteExistingSplitFiles: true,
+		},
+	}
+}
+
 // FactorySplitLayoutReplaceResult holds rollback and backup-discard callbacks
 // returned by ReplaceFactorySplitLayout after a successful commit.
 type FactorySplitLayoutReplaceResult struct {
@@ -746,12 +762,50 @@ type FactorySplitLayoutReplaceResult struct {
 	DiscardBackup func()
 }
 
+// ReplaceFactoryLayoutAtDir atomically replaces targetDir from payload using
+// normalizeNamedFactoryPayload, staging, writeFactorySplitLayout, LoadRuntimeConfig
+// validation, and an atomic swap. restore reverts to the pre-replace directory
+// tree when downstream activation fails.
+func ReplaceFactoryLayoutAtDir(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (restore func(), err error) {
+	result, err := replaceFactoryLayoutAtDir(targetDir, payload, opts, factorySplitLayoutReplaceHooks{})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.Restore == nil {
+		return func() {}, nil
+	}
+	return result.Restore, nil
+}
+
+// ReplaceFactoryLayoutAtDirWithAfterStageHook runs ReplaceFactoryLayoutAtDir and
+// invokes afterStageWrite on the staged directory before validation. It exists for
+// tests that assert validation failures leave the committed target unchanged.
+func ReplaceFactoryLayoutAtDirWithAfterStageHook(
+	targetDir string,
+	payload []byte,
+	opts FactoryLayoutReplaceOptions,
+	afterStageWrite func(stagingDir string) error,
+) (restore func(), err error) {
+	hooks := factorySplitLayoutReplaceHooks{}
+	if afterStageWrite != nil {
+		hooks.afterStageWrite = afterStageWrite
+	}
+	result, err := replaceFactoryLayoutAtDir(targetDir, payload, opts, hooks)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.Restore == nil {
+		return func() {}, nil
+	}
+	return result.Restore, nil
+}
+
 // ReplaceFactorySplitLayout atomically replaces an existing factory directory at
 // targetDir with a split-layout materialization of canonicalFactoryJSON. Call
 // Restore to reinstate the pre-replace tree when downstream steps fail; call
 // DiscardBackup after successful activation to remove the on-disk backup.
 func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (*FactorySplitLayoutReplaceResult, error) {
-	return replaceFactorySplitLayout(targetDir, canonicalFactoryJSON, factorySplitLayoutReplaceHooks{})
+	return replaceFactoryLayoutAtDir(targetDir, canonicalFactoryJSON, DefaultFactoryLayoutReplaceOptions(targetDir), factorySplitLayoutReplaceHooks{})
 }
 
 // ReplaceFactorySplitLayoutWithAfterStageHook runs split-layout replace and invokes
@@ -766,20 +820,25 @@ func ReplaceFactorySplitLayoutWithAfterStageHook(
 	if afterStageWrite != nil {
 		hooks.afterStageWrite = afterStageWrite
 	}
-	return replaceFactorySplitLayout(targetDir, canonicalFactoryJSON, hooks)
+	return replaceFactoryLayoutAtDir(targetDir, canonicalFactoryJSON, DefaultFactoryLayoutReplaceOptions(targetDir), hooks)
 }
 
-func replaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte, hooks factorySplitLayoutReplaceHooks) (*FactorySplitLayoutReplaceResult, error) {
+func replaceFactoryLayoutAtDir(
+	targetDir string,
+	payload []byte,
+	opts FactoryLayoutReplaceOptions,
+	hooks factorySplitLayoutReplaceHooks,
+) (*FactorySplitLayoutReplaceResult, error) {
 	if strings.TrimSpace(targetDir) == "" {
 		return nil, fmt.Errorf("factory directory is required")
 	}
 	if err := requireFactoryConfig(targetDir); err != nil {
-		return nil, fmt.Errorf("replace factory split layout: %w", err)
+		return nil, fmt.Errorf("replace factory layout at dir: %w", err)
 	}
 
 	segment := filepath.Base(targetDir)
 	parentDir := filepath.Dir(targetDir)
-	stagingDir, cleanupStaging, err := stageFactorySplitLayoutReplace(targetDir, segment, parentDir, canonicalFactoryJSON, hooks)
+	stagingDir, cleanupStaging, err := stageFactorySplitLayoutReplace(targetDir, segment, parentDir, payload, opts, hooks)
 	if err != nil {
 		return nil, err
 	}
@@ -802,10 +861,11 @@ func replaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte, ho
 
 func stageFactorySplitLayoutReplace(
 	targetDir, segment, parentDir string,
-	canonicalFactoryJSON []byte,
+	payload []byte,
+	opts FactoryLayoutReplaceOptions,
 	hooks factorySplitLayoutReplaceHooks,
 ) (stagingDir string, cleanup func(), err error) {
-	factoryCfg, canonical, err := normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
+	factoryCfg, canonical, err := normalizeNamedFactoryPayload(segment, payload)
 	if err != nil {
 		return "", func() {}, err
 	}
@@ -819,9 +879,11 @@ func stageFactorySplitLayoutReplace(
 		_ = os.RemoveAll(stagingDir)
 	}
 
-	if _, err := writeFactorySplitLayout(stagingDir, factoryCfg, canonical, sourcePath, FactorySplitLayoutWriteOptions{
-		OverwriteExistingSplitFiles: true,
-	}); err != nil {
+	layoutWrite := opts.LayoutWrite
+	if strings.TrimSpace(layoutWrite.SourceDir) == "" {
+		layoutWrite.SourceDir = targetDir
+	}
+	if _, err := writeFactorySplitLayout(stagingDir, factoryCfg, canonical, sourcePath, layoutWrite); err != nil {
 		return "", cleanup, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 	}
 	if hooks.afterStageWrite != nil {

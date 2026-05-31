@@ -48,6 +48,20 @@ func ReplaceNamedFactoryWithReport(rootDir, name string, canonicalFactoryJSON []
 	return config.ReplaceNamedFactoryWithReport(rootDir, name, canonicalFactoryJSON)
 }
 
+// FactoryLayoutReplaceOptions configures ReplaceFactoryLayoutAtDir.
+type FactoryLayoutReplaceOptions = config.FactoryLayoutReplaceOptions
+
+// DefaultFactoryLayoutReplaceOptions returns persist-from-save layout options.
+func DefaultFactoryLayoutReplaceOptions(targetDir string) FactoryLayoutReplaceOptions {
+	return config.DefaultFactoryLayoutReplaceOptions(targetDir)
+}
+
+// ReplaceFactoryLayoutAtDir atomically replaces targetDir from payload using the
+// shared split-layout persist pipeline.
+func ReplaceFactoryLayoutAtDir(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (restore func(), err error) {
+	return config.ReplaceFactoryLayoutAtDir(targetDir, payload, opts)
+}
+
 // ReplaceFactorySplitLayout atomically replaces an existing factory directory
 // with a split-layout materialization of canonicalFactoryJSON.
 func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (*config.FactorySplitLayoutReplaceResult, error) {
