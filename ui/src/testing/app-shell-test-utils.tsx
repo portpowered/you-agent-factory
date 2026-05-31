@@ -266,7 +266,7 @@ export async function renderAppWithDashboardShell(
   return result;
 }
 
-function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
+export function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
   return fetchMock.mock.calls.map(([input]) =>
     typeof input === "string"
       ? input
