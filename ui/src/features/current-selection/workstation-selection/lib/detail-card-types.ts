@@ -17,6 +17,7 @@ import type { EditableWorkstationBehavior } from "../../../current-factory-defin
 import type { EditableWorkstationValues } from "../../../current-factory-definition/lib/workstation-editable-values";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import type { RunnerID } from "../editing/runner-metadata";
+import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
 export interface WorkstationDetailCardProps {
@@ -38,19 +39,19 @@ export interface WorkstationDetailCardProps {
   widgetId?: string;
 }
 
-export interface EditableWorkstationValidationErrors {
+export type EditableWorkstationValidationErrors = {
   behavior?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
-}
+} & Record<string, string | undefined>;
 
-export interface EditableWorkstationSaveValidationErrors {
+export type EditableWorkstationSaveValidationErrors = {
   behavior?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
-}
+} & Record<string, string>;
 
 export interface EditableWorkstationPromptDiagnostic {
   endOffset?: number;
@@ -120,16 +121,7 @@ export type EditableWorkstationConfigurationState =
     };
 
 export type EditableWorkstationSaveState =
-  | { status: "idle" }
-  | { status: "confirming" }
-  | { status: "submitting" }
-  | { status: "success" }
-  | { message: string; status: "warning" }
-  | {
-      errorMessage: string;
-      fieldErrors?: EditableWorkstationSaveValidationErrors;
-      status: "error";
-    };
+  DetailCardSaveState<EditableWorkstationSaveValidationErrors>;
 
 export interface WorkstationActiveWorkListProps {
   executions: DashboardActiveExecution[];
