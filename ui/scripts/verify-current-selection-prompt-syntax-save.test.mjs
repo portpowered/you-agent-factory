@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest"; // Playwright fixture stubs mirror responsive harness
 
 import { verifyCurrentSelectionPromptSyntaxSave } from "./verify-current-selection-storybook-responsive.mjs";
 
