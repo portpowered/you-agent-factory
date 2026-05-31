@@ -1,6 +1,7 @@
 import { expect, within } from "storybook/test";
 
 import "../../../styles.css";
+import { expectSingleWorkOutcomeCardHeader } from "../../work-outcome/lib/work-outcome-card-header-story-contract";
 import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
@@ -48,6 +49,7 @@ export const WorkOutcomeChart = {
 
     await expect(chart).toBeVisible();
     expectBentoHeaderDragSurface(card, "Work outcome chart");
+    expectSingleWorkOutcomeCardHeader(card);
     expectWorkChartCompactLegendContract(chart);
     expectWorkChartAxisLabelsVisible(chart);
     expectWorkChartLegendClearOfCardTitle(card);
@@ -79,6 +81,7 @@ export const WorkOutcomeChartNarrow = {
       name: "Work outcome chart for Session",
     });
 
+    expectSingleWorkOutcomeCardHeader(card);
     expectWorkChartCompactLegendContract(chart);
     expectWorkChartAxisLabelsVisible(chart);
     expectWorkChartLegendClearOfCardTitle(card);
@@ -108,6 +111,7 @@ export const WorkOutcomeChartLoading = {
     await expect(await within(card).findByRole("status")).toHaveTextContent(
       "Loading work outcome samples",
     );
+    expectSingleWorkOutcomeCardHeader(card);
   },
 };
 
@@ -126,6 +130,7 @@ export const WorkOutcomeChartEmpty = {
     await expect(await within(card).findByRole("status")).toHaveTextContent(
       "No work outcome samples",
     );
+    expectSingleWorkOutcomeCardHeader(card);
   },
 };
 
@@ -145,5 +150,6 @@ export const WorkOutcomeChartError = {
     await expect(await within(card).findByRole("alert")).toHaveTextContent(
       "Work outcome chart unavailable",
     );
+    expectSingleWorkOutcomeCardHeader(card);
   },
 };

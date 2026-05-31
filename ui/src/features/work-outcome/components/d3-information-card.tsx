@@ -74,6 +74,7 @@ export function WorkChartCard({
           className="h-full"
           locale={locale}
           model={model}
+          presentation="embedded"
           series={chartSeries}
           state={chartState}
         />

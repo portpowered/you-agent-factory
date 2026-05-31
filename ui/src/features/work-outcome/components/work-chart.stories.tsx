@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { expect, fireEvent, userEvent, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
@@ -7,6 +7,7 @@ import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
 } from "../lib/work-chart-legend-story-contract";
+import { dragWorkChart } from "../lib/work-chart-zoom-story-contract";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 
 const populatedModel = {
@@ -185,21 +186,6 @@ function renderWorkChartStoryShell(
       <WorkChart {...args} />
     </div>
   );
-}
-
-async function dragWorkChart(
-  chart: HTMLElement,
-  startFraction: number,
-  endFraction: number,
-) {
-  const rect = chart.getBoundingClientRect();
-  const startX = rect.left + rect.width * startFraction;
-  const endX = rect.left + rect.width * endFraction;
-  const y = rect.top + rect.height * 0.7;
-
-  fireEvent.mouseDown(chart, { clientX: startX, clientY: y });
-  fireEvent.mouseMove(chart, { clientX: endX, clientY: y });
-  fireEvent.mouseUp(chart, { clientX: endX, clientY: y });
 }
 
 export default {

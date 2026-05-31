@@ -8,10 +8,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/ui/widget-frame";
+import type { LegendPayload } from "recharts/types/component/DefaultLegendContent";
 import { Button } from "../../../components/ui/button";
 import {
   ChartContainer,
@@ -19,8 +16,11 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "../../../components/ui/chart";
-import type { LegendPayload } from "recharts/types/component/DefaultLegendContent";
 import { Skeleton } from "../../../components/ui/skeleton";
+import {
+  EMPTY_STATE_CLASS,
+  EMPTY_STATE_COMPACT_CLASS,
+} from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
 import { DASHBOARD_CHART_AXIS_LABEL_CLASS } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
@@ -35,14 +35,21 @@ import {
   useReadyWorkChartInteractions,
   type WorkChartZoomRange,
 } from "./work-chart-interactions";
+import {
+  WORK_CHART_EMBEDDED_STATUS_PANEL_CLASS,
+  type WorkChartPresentation,
+  workChartPresentationClasses,
+} from "./work-chart-presentation";
 
 export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
 
+export {
+  WORK_CHART_EMBEDDED_READY_CLASS,
+  WORK_CHART_READY_CLASS,
+  type WorkChartPresentation,
+} from "./work-chart-presentation";
 export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
 export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };
-// tailwind-exception: intrinsic-sizing
-const WORK_CHART_READY_CLASS =
-  "flex h-full min-h-[14rem] min-w-0 w-full flex-col px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5";
 export const WORK_CHART_LEGEND_CONTENT_CLASS =
   "flex-nowrap justify-center gap-x-2 gap-y-1 pt-0 sm:justify-start";
 export const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";
@@ -54,8 +61,6 @@ const WORK_CHART_SHELL_CLASS =
   "flex h-full min-h-0 min-w-0 w-full flex-1 flex-col gap-3";
 const WORK_CHART_TOOLBAR_CLASS =
   "flex flex-wrap items-center justify-end gap-2";
-const WORK_CHART_OVERLAY_CLASS =
-  "flex h-full flex-col gap-2 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
 
 export type WorkChartState =
@@ -70,6 +75,7 @@ export interface WorkChartProps {
   emptyTitle?: string;
   locale?: string;
   model?: WorkChartModel;
+  presentation?: WorkChartPresentation;
   series: readonly WorkChartSeriesDefinition[];
   state?: WorkChartState;
   xAxisLabel?: string;
@@ -85,6 +91,7 @@ export function WorkChart({
   emptyTitle,
   locale,
   model,
+  presentation = "standalone",
   series,
   state = READY_WORK_CHART_STATE,
   xAxisLabel,
@@ -109,6 +116,7 @@ export function WorkChart({
         ariaBusy={true}
         loading={true}
         message={state.message ?? messages.loadingMessage}
+        presentation={presentation}
         role="status"
         title={state.title ?? messages.loadingTitle}
       />
@@ -123,6 +131,7 @@ export function WorkChart({
             ? (state.message ?? messages.errorMessage)
             : messages.errorMessage
         }
+        presentation={presentation}
         role="alert"
         title={
           state.status === "error"
@@ -137,6 +146,7 @@ export function WorkChart({
     return (
       <WorkChartStatusPanel
         message={resolvedEmptyMessage}
+        presentation={presentation}
         role="status"
         title={resolvedEmptyTitle}
       />
@@ -147,6 +157,7 @@ export function WorkChart({
     return (
       <WorkChartStatusPanel
         message={messages.errorMessage}
+        presentation={presentation}
         role="alert"
         title={messages.errorTitle}
       />
@@ -159,6 +170,7 @@ export function WorkChart({
       chartData={chartData.data}
       className={className}
       locale={locale}
+      presentation={presentation}
       xAxisLabel={resolvedXAxisLabel}
       yAxisLabel={resolvedYAxisLabel}
     />
@@ -170,6 +182,7 @@ interface ReadyWorkChartProps {
   chartData: WorkChartData;
   className: string;
   locale?: string;
+  presentation: WorkChartPresentation;
   xAxisLabel: string;
   yAxisLabel: string;
 }
@@ -179,9 +192,12 @@ function ReadyWorkChart({
   chartData,
   className,
   locale,
+  presentation,
   xAxisLabel,
   yAxisLabel,
 }: ReadyWorkChartProps) {
+  const { overlayClassName, readyClassName } =
+    workChartPresentationClasses(presentation);
   const chartMessages = getWorkOutcomeMessages(locale).chart;
   const {
     beginSelection,
@@ -215,7 +231,7 @@ function ReadyWorkChart({
         </div>
       )}
       <ChartContainer
-        className={WORK_CHART_READY_CLASS}
+        className={readyClassName}
         config={chartData.config}
         footer={
           <WorkChartLegendRow
@@ -230,9 +246,13 @@ function ReadyWorkChart({
           onMouseMove: updateSelection,
           onMouseUp: commitSelection,
         }}
+        presentation={presentation}
         rootAttributes={{
           "data-work-chart-legend-placement": "shell-row",
-          "data-work-chart-plot-margin-bottom": String(WORK_CHART_MARGIN.bottom),
+          "data-work-chart-plot-margin-bottom": String(
+            WORK_CHART_MARGIN.bottom,
+          ),
+          "data-work-chart-presentation": presentation,
           "data-work-chart-ready": "true",
           "data-work-chart-hidden-series": [...hiddenSeriesKeys].join(","),
           "data-work-chart-visible-series": visibleSeriesKeys.join(","),
@@ -240,7 +260,12 @@ function ReadyWorkChart({
             .map((row) => row.tick)
             .join(","),
         }}
-        overlay={<WorkChartAxisOverlay yAxisLabel={yAxisLabel} />}
+        overlay={
+          <WorkChartAxisOverlay
+            className={overlayClassName}
+            yAxisLabel={yAxisLabel}
+          />
+        }
         style={{ minHeight: "14rem" }}
         title={ariaLabel}
       >
@@ -349,9 +374,15 @@ function WorkChartLegendRow({
   );
 }
 
-function WorkChartAxisOverlay({ yAxisLabel }: { yAxisLabel: string }) {
+function WorkChartAxisOverlay({
+  className,
+  yAxisLabel,
+}: {
+  className: string;
+  yAxisLabel: string;
+}) {
   return (
-    <div className={WORK_CHART_OVERLAY_CLASS} data-work-chart-overlay="true">
+    <div className={className} data-work-chart-overlay="true">
       <span className={WORK_CHART_AXIS_LABEL_CLASS}>{yAxisLabel}</span>
     </div>
   );
@@ -419,6 +450,7 @@ interface WorkChartStatusPanelProps {
   ariaBusy?: boolean;
   loading?: boolean;
   message: string;
+  presentation: WorkChartPresentation;
   role: "alert" | "status";
   title: string;
 }
@@ -427,18 +459,22 @@ function WorkChartStatusPanel({
   ariaBusy = false,
   loading = false,
   message,
+  presentation,
   role,
   title,
 }: WorkChartStatusPanelProps) {
+  const embedded = presentation === "embedded";
   return (
     <div
       aria-busy={ariaBusy || undefined}
       aria-live={role === "alert" ? "assertive" : "polite"}
       className={cn(
-        EMPTY_STATE_CLASS,
-        EMPTY_STATE_COMPACT_CLASS,
-        WORK_CHART_STATUS_PANEL_CLASS,
+        embedded ? WORK_CHART_EMBEDDED_STATUS_PANEL_CLASS : EMPTY_STATE_CLASS,
+        embedded ? null : EMPTY_STATE_COMPACT_CLASS,
+        embedded ? null : WORK_CHART_STATUS_PANEL_CLASS,
+        embedded ? WORK_CHART_STATUS_PANEL_CLASS : null,
       )}
+      data-work-chart-presentation={presentation}
       role={role}
     >
       {loading ? (
