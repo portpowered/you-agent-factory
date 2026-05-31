@@ -226,6 +226,14 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 
 	for _, want := range []string{
 		"# Agents",
+		"Autonomous agents must submit work only through the CLI",
+		"## Submitting Work",
+		"### Batch submit for agents",
+		"### Idempotency and duplicate work",
+		"you submit batch",
+		"requestId",
+		"duplicate batches",
+		"you submit batch ./batches/release-story-set.json",
 		"## Is the factory running?",
 		"you session list",
 		"you factory query",
@@ -240,6 +248,8 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"--name driver-incident-review",
 		"--work-type-name task",
 		"--payload request.md",
+		"## Command Matrix",
+		"Operator-only",
 		"you docs sessions",
 		"[Is the factory running?](#is-the-factory-running?)",
 	} {
