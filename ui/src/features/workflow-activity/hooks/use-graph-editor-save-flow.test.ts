@@ -120,30 +120,32 @@ function renderSaveFlow(activeWorkCount = 0) {
   };
 }
 
+function resetSaveFlowFixture() {
+  fixtureState.addEntityController.reset.mockReset();
+  fixtureState.saveStateIsStale = false;
+  fixtureState.draftState = {
+    baseDocument: fixtureState.baseDocument,
+    draft: fixtureState.emptyDraft,
+    hasChanges: false,
+    latestDocument: fixtureState.baseDocument,
+    pendingFactoryDefinition: fixtureState.baseDocument,
+    replaceDraft: vi.fn(),
+    resetDraft: vi.fn(),
+    validationErrors: [],
+  };
+  fixtureState.saveEditableDefinition = {
+    error: null,
+    isPending: false,
+    reset: vi.fn(),
+    saveAsync: vi.fn(async () => undefined),
+  };
+  fixtureState.transientControllerReset.setConnectionNotice.mockReset();
+  fixtureState.transientControllerReset.setPendingRemovalEdgeId.mockReset();
+  fixtureState.transientControllerReset.setPendingRemovalNodeId.mockReset();
+}
+
 describe("useGraphEditorSaveFlow", () => {
-  beforeEach(() => {
-    fixtureState.addEntityController.reset.mockReset();
-    fixtureState.saveStateIsStale = false;
-    fixtureState.draftState = {
-      baseDocument: fixtureState.baseDocument,
-      draft: fixtureState.emptyDraft,
-      hasChanges: false,
-      latestDocument: fixtureState.baseDocument,
-      pendingFactoryDefinition: fixtureState.baseDocument,
-      replaceDraft: vi.fn(),
-      resetDraft: vi.fn(),
-      validationErrors: [],
-    };
-    fixtureState.saveEditableDefinition = {
-      error: null,
-      isPending: false,
-      reset: vi.fn(),
-      saveAsync: vi.fn(async () => undefined),
-    };
-    fixtureState.transientControllerReset.setConnectionNotice.mockReset();
-    fixtureState.transientControllerReset.setPendingRemovalEdgeId.mockReset();
-    fixtureState.transientControllerReset.setPendingRemovalNodeId.mockReset();
-  });
+  beforeEach(resetSaveFlowFixture);
 
   it("blocks saving while active work is in flight", () => {
     fixtureState.draftState.hasChanges = true;
@@ -207,50 +209,6 @@ describe("useGraphEditorSaveFlow", () => {
     expect(result.current.isConfirmingSave).toBe(false);
   });
 
-  it("starts saveAttemptRevision at zero", () => {
-    const { result } = renderSaveFlow(0);
-
-    expect(result.current.saveAttemptRevision).toBe(0);
-  });
-
-  it("increments saveAttemptRevision when each save starts", async () => {
-    fixtureState.draftState.hasChanges = true;
-    const { result } = renderSaveFlow(0);
-
-    await act(async () => {
-      await result.current.handleSaveDraft();
-    });
-    expect(result.current.saveAttemptRevision).toBe(1);
-
-    fixtureState.draftState.hasChanges = true;
-    await act(async () => {
-      await result.current.handleSaveBeforeLeavingEditor();
-    });
-    expect(result.current.saveAttemptRevision).toBe(2);
-  });
-
-  it("does not increment saveAttemptRevision on rerender alone", () => {
-    fixtureState.draftState.hasChanges = true;
-    const { result, rerender } = renderSaveFlow(0);
-
-    expect(result.current.saveAttemptRevision).toBe(0);
-
-    rerender();
-
-    expect(result.current.saveAttemptRevision).toBe(0);
-  });
-
-  it("does not increment saveAttemptRevision when save is blocked", async () => {
-    fixtureState.draftState.hasChanges = true;
-    const { result } = renderSaveFlow(2);
-
-    await act(async () => {
-      await result.current.handleSaveDraft();
-    });
-
-    expect(result.current.saveAttemptRevision).toBe(0);
-  });
-
   it("saves and leaves editor mode when asked to save before leaving", async () => {
     fixtureState.draftState.hasChanges = true;
     const { result, setActiveTool, setEditorMode } = renderSaveFlow(0);
@@ -274,5 +232,53 @@ describe("useGraphEditorSaveFlow", () => {
     expect(setActiveTool).toHaveBeenCalledWith(null);
     expect(result.current.isConfirmingSave).toBe(false);
     expect(result.current.isConfirmingLeaveEditor).toBe(false);
+  });
+});
+
+describe("useGraphEditorSaveFlow saveAttemptRevision", () => {
+  beforeEach(resetSaveFlowFixture);
+
+  it("starts at zero", () => {
+    const { result } = renderSaveFlow(0);
+
+    expect(result.current.saveAttemptRevision).toBe(0);
+  });
+
+  it("increments when each save starts", async () => {
+    fixtureState.draftState.hasChanges = true;
+    const { result } = renderSaveFlow(0);
+
+    await act(async () => {
+      await result.current.handleSaveDraft();
+    });
+    expect(result.current.saveAttemptRevision).toBe(1);
+
+    fixtureState.draftState.hasChanges = true;
+    await act(async () => {
+      await result.current.handleSaveBeforeLeavingEditor();
+    });
+    expect(result.current.saveAttemptRevision).toBe(2);
+  });
+
+  it("does not increment on rerender alone", () => {
+    fixtureState.draftState.hasChanges = true;
+    const { result, rerender } = renderSaveFlow(0);
+
+    expect(result.current.saveAttemptRevision).toBe(0);
+
+    rerender();
+
+    expect(result.current.saveAttemptRevision).toBe(0);
+  });
+
+  it("does not increment when save is blocked", async () => {
+    fixtureState.draftState.hasChanges = true;
+    const { result } = renderSaveFlow(2);
+
+    await act(async () => {
+      await result.current.handleSaveDraft();
+    });
+
+    expect(result.current.saveAttemptRevision).toBe(0);
   });
 });

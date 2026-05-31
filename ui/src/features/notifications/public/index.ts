@@ -1,5 +1,10 @@
 export { AppNotificationToaster } from "../components/app-notification-toaster";
 export {
+  type AppNotificationToastKind,
+  getAppNotificationToasterProps,
+  resolveAppNotificationToastDuration,
+} from "../lib/notification-toaster-config";
+export {
   buildSaveErrorStableIdentity,
   buildSaveErrorToastOptions,
   buildSaveInfoToastOptions,
