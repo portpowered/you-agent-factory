@@ -45,6 +45,16 @@ export function useFactoryGraphRemovalController({
       setPendingRemovalNodeId,
     });
 
+  const handleCancelRemoval = useCallback(() => {
+    setBlockedRemovalReason(null);
+    setPendingRemovalEdgeId(null);
+    setPendingRemovalNodeId(null);
+  }, [
+    setBlockedRemovalReason,
+    setPendingRemovalEdgeId,
+    setPendingRemovalNodeId,
+  ]);
+
   const handleConfirmRemoval = useCallback(() => {
     if (!pendingRemovalIntent) {
       return;
@@ -54,12 +64,18 @@ export function useFactoryGraphRemovalController({
       const result = editableGraph.actions.removeNode(pendingRemovalNodeId);
       if (!result.ok) {
         setBlockedRemovalReason(result.message);
+        setPendingRemovalEdgeId(null);
+        setPendingRemovalNodeId(null);
+        saveEditableDefinition.reset();
         return;
       }
     } else if (pendingRemovalEdgeId) {
       const result = editableGraph.actions.disconnectEdge(pendingRemovalEdgeId);
       if (!result.ok) {
         setBlockedRemovalReason(result.message);
+        setPendingRemovalEdgeId(null);
+        setPendingRemovalNodeId(null);
+        saveEditableDefinition.reset();
         return;
       }
     } else {
@@ -68,11 +84,13 @@ export function useFactoryGraphRemovalController({
     setBlockedRemovalReason(null);
     setPendingRemovalEdgeId(null);
     setPendingRemovalNodeId(null);
+    saveEditableDefinition.reset();
   }, [
     editableGraph.actions,
-    pendingRemovalIntent,
     pendingRemovalEdgeId,
+    pendingRemovalIntent,
     pendingRemovalNodeId,
+    saveEditableDefinition,
     setBlockedRemovalReason,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
@@ -80,6 +98,7 @@ export function useFactoryGraphRemovalController({
 
   return {
     blockedRemovalReason,
+    handleCancelRemoval,
     handleConfirmRemoval,
     handleEditorEdgeDelete,
     handleEditorNodeDelete,
@@ -136,6 +155,13 @@ function useFactoryGraphDeleteTargetHandlers({
         return;
       }
 
+      if (intent.requiresConfirmation) {
+        setBlockedRemovalReason(null);
+        setPendingRemovalEdgeId(null);
+        setPendingRemovalNodeId(nodeId);
+        return;
+      }
+
       const result = editableGraph.actions.removeNode(nodeId);
       if (!result.ok) {
         setBlockedRemovalReason(result.message);
@@ -182,6 +208,13 @@ function useFactoryGraphDeleteTargetHandlers({
       if (intent.ineligibleReason) {
         setBlockedRemovalReason(intent.ineligibleReason);
         saveEditableDefinition.reset();
+        return;
+      }
+
+      if (intent.requiresConfirmation) {
+        setBlockedRemovalReason(null);
+        setPendingRemovalNodeId(null);
+        setPendingRemovalEdgeId(edgeId);
         return;
       }
 

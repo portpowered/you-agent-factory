@@ -253,7 +253,7 @@ describe("current activity graph editor controllers", () => {
     {
       edgeId: "worker-assignment:worker:writer->workstation:review",
     },
-  ])("immediately applies removable $edgeId draft edge removals", ({
+  ])("opens confirmation before applying removable $edgeId draft edge removals", ({
     edgeId,
   }) => {
     const reset = vi.fn();
@@ -274,6 +274,15 @@ describe("current activity graph editor controllers", () => {
 
     act(() => {
       result.current.handleEditorEdgeDelete(edgeId);
+    });
+
+    expect(editableGraph.actions.disconnectEdge).not.toHaveBeenCalled();
+    expect(result.current.pendingRemovalIntent).toMatchObject({
+      requiresConfirmation: true,
+    });
+
+    act(() => {
+      result.current.handleConfirmRemoval();
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
@@ -316,7 +325,21 @@ describe("current activity graph editor controllers", () => {
   it("surfaces blocked node-removal from removeNode without mutating the draft", () => {
     const reset = vi.fn();
     const initialDraft = createEmptyFactoryGraphDraft();
-    const draftState = createDraftState({ draft: initialDraft });
+    const unassignedDefinition: CanonicalFactoryDefinition = {
+      ...baseFactoryDefinition,
+      workers: [
+        ...(baseFactoryDefinition.workers ?? []),
+        {
+          model: "gpt-5",
+          name: "editor",
+          type: "MODEL_WORKER",
+        },
+      ],
+    };
+    const draftState = createDraftState({
+      baseFactoryDefinition: unassignedDefinition,
+      draft: initialDraft,
+    });
     const editableGraph = createEditableGraph({
       removeNode: vi.fn(() => ({
         message: "Removal blocked by graph operation layer.",
@@ -338,15 +361,52 @@ describe("current activity graph editor controllers", () => {
     );
 
     act(() => {
-      result.current.handleEditorNodeDelete("resource:gpu");
+      result.current.handleEditorNodeDelete("worker:editor");
     });
 
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith("resource:gpu");
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith("worker:editor");
     expect(draftState.replaceDraft).not.toHaveBeenCalled();
     expect(draftState.draft).toBe(initialDraft);
     expect(result.current.blockedRemovalReason).toBe(
       "Removal blocked by graph operation layer.",
     );
+  });
+
+  it("opens confirmation before deleting a work type with owned states", () => {
+    const reset = vi.fn();
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete("work-type:story");
+    });
+
+    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(result.current.pendingRemovalIntent).toMatchObject({
+      confirmDescription: expect.stringContaining("2 work states"),
+      requiresConfirmation: true,
+      title: "Remove story work-type?",
+    });
+
+    act(() => {
+      result.current.handleCancelRemoval();
+    });
+
+    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(draftState.replaceDraft).not.toHaveBeenCalled();
+    expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
   it.each([

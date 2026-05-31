@@ -94,6 +94,7 @@ export function useCurrentActivityGraphEditor(
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,
     editorMode,
+    handleCancelRemoval: controllers.handleCancelRemoval,
     handleDiscardPendingChanges: saveFlow.handleDiscardPendingChanges,
     handleConfirmRemoval: controllers.handleConfirmRemoval,
     handleConnectionAnchorClick: controllers.handleConnectionAnchorClick,

@@ -150,6 +150,8 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     canSaveDraft: true,
     currentFactoryDefinition: null,
     handleAddEntitySubmit: vi.fn(),
+    handleCancelRemoval: vi.fn(),
+    handleConfirmRemoval: vi.fn(),
     handleDiscardEditorChanges: vi.fn(),
     handleSaveBeforeLeavingEditor: vi.fn(),
     handleSaveDraft: vi.fn(),
@@ -257,6 +259,42 @@ describe("CurrentActivityGraphEditorDialogs", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger add submit" }));
     expect(editor.handleAddEntitySubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("wires removal confirmation actions on the shared editor surface", () => {
+    const editor = createEditorStub({
+      isConfirmingSave: false,
+      leaveDialogOpen: false,
+      pendingRemovalIntent: {
+        confirmDescription: "This will remove 2 graph edges.",
+        confirmLabel: "Delete story work-type",
+        title: "Remove story work-type?",
+      },
+    });
+
+    render(
+      <CurrentActivityGraphEditorDialogs
+        currentSessionFactoryName="alpha"
+        editor={editor as never}
+        imports={createImportsStub() as never}
+        readyImportPreviewState={null}
+        shouldRenderImportPreviewDialog={false}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Remove story work-type\? cancel/i,
+      }),
+    );
+    expect(editor.handleCancelRemoval).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Remove story work-type\? confirm/i,
+      }),
+    );
+    expect(editor.handleConfirmRemoval).toHaveBeenCalledTimes(1);
   });
 
   it("suppresses save-dismiss callbacks while a save is pending and skips optional import chrome when disabled", () => {

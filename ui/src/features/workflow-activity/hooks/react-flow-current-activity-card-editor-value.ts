@@ -25,6 +25,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   >;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
+  handleCancelRemoval: () => void;
   handleDiscardPendingChanges: () => void;
   handleConfirmRemoval: () => void;
   handleConnectionAnchorClick: ReturnType<
@@ -80,6 +81,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     editorUnavailableClassifierWorkstationName:
       args.editorUnavailableClassifierWorkstationName,
     editorMode: args.editorMode,
+    handleCancelRemoval: args.handleCancelRemoval,
     handleDiscardPendingChanges: args.handleDiscardPendingChanges,
     handleAddEntityAction: args.addEntityController.handleAddEntityAction,
     handleAddEntitySubmit: args.addEntityController.handleAddEntitySubmit,
