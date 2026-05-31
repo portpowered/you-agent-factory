@@ -1,6 +1,38 @@
 import type { DashboardFailedWorkDetail, DashboardPlaceRef } from "../../../../api/dashboard/types";
+import type {
+  CanonicalFactoryDefinition,
+  CurrentFactoryVersion,
+} from "../../../../api/current-factory-definition";
+import type {
+  EditableWorkStateDraft,
+  EditableWorkStateValues,
+} from "../../../current-factory-definition/lib/work-state-editable-values";
 import type { CurrentSelectionDetailMessages } from "../../base/messages/current-selection-detail";
 import type { StatePositionWorkItem } from "../../base/state/selection-types";
+import type { EditableWorkStateValidationErrors } from "./work-state-editable-validation";
+
+export type EditableWorkStateConfigurationState =
+  | { status: "loading" }
+  | { status: "error"; errorMessage: string }
+  | { status: "empty"; message?: string }
+  | {
+      baseVersion: CurrentFactoryVersion;
+      canSave: boolean;
+      draft: EditableWorkStateDraft;
+      hasValidationErrors: boolean;
+      initialValues: EditableWorkStateValues;
+      isDirty: boolean;
+      markChangesSaved: () => void;
+      onNameChange: (value: string) => void;
+      onResetToLatest: () => void;
+      originalStateName: string;
+      pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      status: "ready";
+      validationErrors: EditableWorkStateValidationErrors;
+      workTypeName: string;
+    };
+
+export type { EditableWorkStateValidationErrors } from "./work-state-editable-validation";
 
 export interface StatePositionWorkListProps {
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
