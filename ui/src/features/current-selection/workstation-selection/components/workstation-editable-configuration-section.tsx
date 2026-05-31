@@ -15,6 +15,10 @@ import {
 import { formatList } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
 import {
+  DetailCardFactorySaveFeedback,
+  mergeDetailCardSaveFieldErrors,
+} from "../../base/components/detail-card-factory-save-feedback";
+import {
   CurrentSelectionSectionHeader,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
@@ -24,6 +28,7 @@ import {
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
+  EditableWorkstationSaveValidationErrors,
   EditableWorkstationValidationErrors,
   WorkstationDetailCardProps,
   WorkstationSummaryItemProps,
@@ -123,10 +128,10 @@ function EditableConfigurationReadyForm({
     { status: "ready" }
   >;
 }) {
-  const validationErrors = mergeEditableValidationErrors(
-    state.validationErrors,
-    saveState,
-  );
+  const validationErrors = mergeDetailCardSaveFieldErrors<
+    EditableWorkstationValidationErrors & Record<string, string | undefined>,
+    EditableWorkstationSaveValidationErrors
+  >(state.validationErrors, saveState);
   const renderState = {
     ...state,
     validationErrors,
@@ -134,8 +139,12 @@ function EditableConfigurationReadyForm({
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
-      <EditableConfigurationSaveFeedback
-        messages={messages}
+      <DetailCardFactorySaveFeedback<EditableWorkstationSaveValidationErrors>
+        messages={{
+          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
+          staleVersionDetail: messages.editableConfigurationSaveStaleVersionDetail,
+          successMessage: messages.editableConfigurationSaveSuccess,
+        }}
         saveState={saveState}
       />
       <EditableConfigurationOverwriteWarning
@@ -240,68 +249,6 @@ function EditableConfigurationReadyForm({
   );
 }
 
-
-function EditableConfigurationSaveFeedback({
-  messages,
-  saveState,
-}: {
-  messages: ReturnType<typeof getWorkstationDetailMessages>;
-  saveState?: EditableWorkstationSaveState;
-}) {
-  if (saveState?.status === "success") {
-    return (
-      <p
-        className={cn("m-0 text-af-success-text", DASHBOARD_BODY_TEXT_CLASS)}
-        role="status"
-      >
-        {messages.editableConfigurationSaveSuccess}
-      </p>
-    );
-  }
-
-  if (saveState?.status === "warning") {
-    return (
-      <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
-        <p
-          className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
-          role="alert"
-        >
-          {saveState.message}
-        </p>
-        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-          {messages.editableConfigurationSaveStaleVersionDetail}
-        </p>
-      </div>
-    );
-  }
-
-  if (saveState?.status === "error") {
-    return (
-      <p
-        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
-        role="alert"
-      >
-        {messages.editableConfigurationSaveErrorPrefix} {saveState.errorMessage}
-      </p>
-    );
-  }
-
-  return null;
-}
-
-function mergeEditableValidationErrors(
-  validationErrors: EditableWorkstationValidationErrors,
-  saveState?: EditableWorkstationSaveState,
-): EditableWorkstationValidationErrors {
-  if (saveState?.status !== "error" || !saveState.fieldErrors) {
-    return validationErrors;
-  }
-
-  return {
-    ...validationErrors,
-    ...saveState.fieldErrors,
-  };
-}
 
 function EditableConfigurationDraftStatus({
   messages,

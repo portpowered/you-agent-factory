@@ -9,6 +9,8 @@ describe("current-selection base public barrel", () => {
     expect(currentSelectionBasePublic.resetSelectionHistoryStore).toBeTypeOf("function");
     expect(currentSelectionBasePublic.SelectionDetailLayout).toBeTypeOf("function");
     expect(currentSelectionBasePublic.NoSelectionDetailCard).toBeTypeOf("function");
+    expect(currentSelectionBasePublic.DetailCardFactorySaveFeedback).toBeTypeOf("function");
+    expect(currentSelectionBasePublic.mergeDetailCardSaveFieldErrors).toBeTypeOf("function");
     expect(currentSelectionBasePublic.PROVIDER_SESSION_CARD_CLASS).toBeTypeOf("string");
   });
 });
