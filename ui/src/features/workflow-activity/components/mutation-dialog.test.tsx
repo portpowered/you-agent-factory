@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
-import { DashboardMutationDialog } from "../public";
+import { DashboardMutationDialog } from "./mutation-dialog";
 
 describe("DashboardMutationDialog", () => {
   it("assigns unique accessible title and description ids per dialog instance", () => {
