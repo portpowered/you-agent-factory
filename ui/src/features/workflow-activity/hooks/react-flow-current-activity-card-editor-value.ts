@@ -42,7 +42,6 @@ export function buildCurrentActivityGraphEditorValue(args: {
   handleEditorNodeDelete: (nodeId: string) => void;
   handleSaveDraft: () => Promise<boolean>;
   handleSaveBeforeLeavingEditor: () => Promise<boolean>;
-  graphDraftSaveSucceeded: boolean;
   hasActiveWork: boolean;
   isConfirmingLeaveEditor: boolean;
   isConfirmingSave: boolean;
@@ -98,7 +97,6 @@ export function buildCurrentActivityGraphEditorValue(args: {
     handleEditorNodeDelete: args.handleEditorNodeDelete,
     handleSaveDraft: args.handleSaveDraft,
     handleSaveBeforeLeavingEditor: args.handleSaveBeforeLeavingEditor,
-    graphDraftSaveSucceeded: args.graphDraftSaveSucceeded,
     hasActiveWork: args.hasActiveWork,
     isConfirmingLeaveEditor: args.isConfirmingLeaveEditor,
     isConfirmingSave: args.isConfirmingSave,

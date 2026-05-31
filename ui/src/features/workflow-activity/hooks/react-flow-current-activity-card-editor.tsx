@@ -108,8 +108,6 @@ export function useCurrentActivityGraphEditor(
     handleEditorNodeDelete: controllers.handleEditorNodeDelete,
     handleSaveDraft: saveFlow.handleSaveDraft,
     handleSaveBeforeLeavingEditor: saveFlow.handleSaveBeforeLeavingEditor,
-    graphDraftSaveSucceeded:
-      editableGraph.saveState.documentSave.status === "success",
     hasActiveWork: saveFlow.hasActiveWork,
     isConfirmingLeaveEditor: saveFlow.isConfirmingLeaveEditor,
     isConfirmingSave: saveFlow.isConfirmingSave,
