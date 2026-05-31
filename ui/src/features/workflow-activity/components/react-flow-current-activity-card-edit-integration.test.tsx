@@ -671,6 +671,7 @@ function renderCurrentActivity(snapshot = createSnapshot()) {
       onSelectStateNode={vi.fn()}
       onSelectWorkID={vi.fn()}
       onSelectWorker={vi.fn()}
+      onSelectWorkType={vi.fn()}
       onSelectWorkstation={vi.fn()}
       selection={null}
       snapshot={snapshot}

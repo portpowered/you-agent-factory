@@ -328,7 +328,23 @@ describe("resolveDashboardSelection", () => {
     expect(resolved).toEqual({ kind: "node", nodeId: "work-type:story" });
   });
 
-  it("falls back to the default dashboard selection when the selected work type disappears", () => {
+  it("retains work-type selections while the authored work type remains in the factory document", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+
+    const selection = {
+      kind: "work-type" as const,
+      workTypeName: "story",
+    };
+
+    expect(
+      resolveDashboardSelection({
+        selection,
+        snapshot,
+      }),
+    ).toEqual(selection);
+  });
+
+  it("falls back to the default dashboard selection when the selected factory-graph work type disappears", () => {
     const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
     snapshot.factory = {
       ...snapshot.factory,
@@ -337,6 +353,23 @@ describe("resolveDashboardSelection", () => {
 
     const resolved = resolveDashboardSelection({
       selection: { kind: "node", nodeId: "work-type:story" },
+      snapshot,
+    });
+
+    expect(resolved).toEqual({
+      kind: "node",
+      nodeId: "review",
+    });
+  });
+
+  it("falls back to the default dashboard selection when the selected work type disappears", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+
+    const resolved = resolveDashboardSelection({
+      selection: {
+        kind: "work-type",
+        workTypeName: "removed-type",
+      },
       snapshot,
     });
 

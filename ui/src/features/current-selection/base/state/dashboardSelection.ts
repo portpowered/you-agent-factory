@@ -6,7 +6,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
-import type { FactoryWorker } from "../../../../api/events/types";
+import type { FactoryWorker, FactoryWorkType } from "../../../../api/events/types";
 import { parseFactoryGraphWorkTypeNodeId } from "../../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { hasDashboardStatePlace } from "./dashboardStatePlaces";
 
@@ -40,12 +40,18 @@ export interface DashboardWorkerSelection {
   workerName: string;
 }
 
+export interface DashboardWorkTypeSelection {
+  kind: "work-type";
+  workTypeName: string;
+}
+
 export type DashboardSelection =
   | DashboardNodeSelection
   | DashboardStateNodeSelection
   | DashboardWorkItemSelection
   | DashboardWorkstationRequestSelection
-  | DashboardWorkerSelection;
+  | DashboardWorkerSelection
+  | DashboardWorkTypeSelection;
 
 export function selectDefaultSelection(snapshot: DashboardSnapshot): DashboardSelection | null {
   const firstActiveNodeId = snapshot.runtime.active_workstation_node_ids?.[0];
@@ -117,6 +123,12 @@ export function resolveDashboardSelection({
 
   if (selection.kind === "worker") {
     return workerExistsInFactory(factory, selection.workerName)
+      ? selection
+      : selectDefaultSelection(snapshot);
+  }
+
+  if (selection.kind === "work-type") {
+    return workTypeExistsInSnapshotFactory(snapshot, selection.workTypeName)
       ? selection
       : selectDefaultSelection(snapshot);
   }
@@ -517,6 +529,22 @@ export function findFactoryWorkerInSnapshot(
   workerName: string,
 ): FactoryWorker | undefined {
   return snapshot.factory?.workers?.find((worker) => worker.name === workerName);
+}
+
+function workTypeExistsInSnapshotFactory(
+  snapshot: DashboardSnapshot,
+  workTypeName: string,
+): boolean {
+  return findFactoryWorkTypeInSnapshot(snapshot, workTypeName) !== undefined;
+}
+
+export function findFactoryWorkTypeInSnapshot(
+  snapshot: DashboardSnapshot,
+  workTypeName: string,
+): FactoryWorkType | undefined {
+  return snapshot.factory?.workTypes?.find(
+    (workType) => workType.name === workTypeName,
+  );
 }
 
 export function workstationNamesReferencingWorkerInSnapshot(

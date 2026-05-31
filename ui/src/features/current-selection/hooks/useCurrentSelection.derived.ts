@@ -8,6 +8,7 @@ import type {
 } from "../../../api/dashboard/types";
 import type { FactoryWorker } from "../../../api/events/types";
 import {
+  findFactoryWorkTypeInSnapshot,
   findFactoryWorkerInSnapshot,
   resolveDashboardSelection,
   workstationNamesReferencingWorkerInSnapshot,
@@ -250,6 +251,15 @@ export function useCurrentSelectionDerivedState({
         ? selection.request.work_items[0]?.work_id ?? null
         : terminalWorkDetail?.traceWorkID ?? null;
   const selectedWorkerName = selection?.kind === "worker" ? selection.workerName : null;
+  const selectedWorkTypeName =
+    selection?.kind === "work-type" ? selection.workTypeName : null;
+  const selectedWorkType = useMemo(() => {
+    if (!snapshot || !selectedWorkTypeName) {
+      return null;
+    }
+
+    return findFactoryWorkTypeInSnapshot(snapshot, selectedWorkTypeName) ?? null;
+  }, [selectedWorkTypeName, snapshot]);
   const selectedWorker = useMemo((): FactoryWorker | null => {
     if (!snapshot || !selectedWorkerName) {
       return null;
@@ -313,6 +323,8 @@ export function useCurrentSelectionDerivedState({
     selectedWorker,
     selectedWorkerName,
     selectedWorkerWorkstationNames,
+    selectedWorkType,
+    selectedWorkTypeName,
     selectedWorkstationRequest,
   };
 }
