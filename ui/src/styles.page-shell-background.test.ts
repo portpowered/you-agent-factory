@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,16 +11,17 @@ const stylesSourcePath = path.join(
   "styles.css",
 );
 
-function extractPageShellRootBlock(css: string): string {
-  const blocks = css.match(/:root\s*\{[^}]*\}/g) ?? [];
-  return (
-    blocks.find((block) => block.includes("background-color: var(--color-af-bg)")) ?? ""
-  );
+/** Canonical foundation blue from @theme (--color-af-foundation-background). */
+const FOUNDATION_BACKGROUND = "#0a1117";
+
+function injectCompiledRootRules(compiledCss: string): void {
+  const rootBlocks = compiledCss.match(/:root[^{]*\{[^}]*\}/g) ?? [];
+  const style = document.createElement("style");
+  style.textContent = rootBlocks.join("\n");
+  document.head.appendChild(style);
 }
 
 describe("page-shell background", () => {
-  let compiledStyles = "";
-
   beforeAll(async () => {
     const source = readFileSync(stylesSourcePath, "utf8");
     const compiled = await compile(source, {
@@ -26,23 +29,14 @@ describe("page-shell background", () => {
       from: stylesSourcePath,
       onDependency: () => {},
     });
-    compiledStyles = compiled.build([]);
+    injectCompiledRootRules(compiled.build([]));
   });
 
-  it("keeps :root on a flat --color-af-bg fill without gradient layers", () => {
-    const source = readFileSync(stylesSourcePath, "utf8");
-    const rootBlock = extractPageShellRootBlock(compiledStyles);
-
-    expect(source).toContain("background-color: var(--color-af-bg);");
-    expect(source).toContain("background-image: none;");
-    expect(source).not.toMatch(
-      /@layer base\s*\{[^}]*:root\s*\{[^}]*(?:linear-gradient|radial-gradient)/s,
+  it("renders a flat token-backed fill on the document root", () => {
+    const root = getComputedStyle(document.documentElement);
+    expect(root.backgroundImage === "none" || root.backgroundImage === "").toBe(
+      true,
     );
-
-    expect(rootBlock).toContain("background-color: var(--color-af-bg)");
-    expect(rootBlock).toContain("background-image: none");
-    expect(rootBlock).not.toMatch(/gradient/i);
-    expect(rootBlock).not.toContain("linear-gradient");
-    expect(rootBlock).not.toContain("radial-gradient");
+    expect(root.backgroundColor.toLowerCase()).toBe(FOUNDATION_BACKGROUND);
   });
 });
