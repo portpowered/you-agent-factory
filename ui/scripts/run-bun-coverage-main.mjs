@@ -149,9 +149,18 @@ function buildFeatureCoverageBatches(relativePath) {
         ],
       },
       {
+        label: "./src/features/import/import-activation-target-hook",
+        paths: [
+          "./src/features/import/hooks/use-factory-import-activation-target.test.tsx",
+        ],
+      },
+      {
         label: relativePath,
         paths: [relativePath],
-        pathIgnorePatterns: ["**/use-factory-import-activation.test.tsx"],
+        pathIgnorePatterns: [
+          "**/use-factory-import-activation.test.tsx",
+          "**/use-factory-import-activation-target.test.tsx",
+        ],
       },
     ];
   }

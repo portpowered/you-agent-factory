@@ -1,4 +1,4 @@
-import type { FactoryValue } from "../../../api/session-factory";
+import type { ImportFactoryValue } from "../../../api/session-factory";
 import { getFactoryPngExportMessages } from "../messages/factory-png-export";
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -8,12 +8,12 @@ const PNG_INTERNATIONAL_TEXT_CHUNK = "iTXt";
 export const PORT_OS_FACTORY_PNG_METADATA_KEYWORD = "portos.agent-factory";
 export const PORT_OS_FACTORY_PNG_SCHEMA_VERSION = "portos.agent-factory.png.v1";
 
-export interface FactoryPngMetadata extends FactoryValue {
+export interface FactoryPngMetadata extends ImportFactoryValue {
   schemaVersion: typeof PORT_OS_FACTORY_PNG_SCHEMA_VERSION;
 }
 
 export interface WriteFactoryExportPngOptions {
-  factory: FactoryValue;
+  factory: ImportFactoryValue;
   image: Blob;
   locale?: string | null;
   rasterizeImageToPngBytes?: (image: Blob) => Promise<Uint8Array>;

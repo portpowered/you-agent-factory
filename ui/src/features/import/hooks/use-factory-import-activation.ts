@@ -3,8 +3,8 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   activateImportedFactoryForSession,
+  type ImportFactoryValue,
   SessionFactoryAPIError,
-  type FactoryValue,
 } from "../../../api/session-factory";
 import type { FactoryImportConfirmInput } from "../lib/factory-import-save-choice";
 
@@ -14,8 +14,8 @@ export type FactoryImportActivationState =
   | { error: SessionFactoryAPIError; status: "error" };
 
 export interface UseFactoryImportActivationOptions {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<FactoryValue>;
-  onActivated?: (value: FactoryValue) => void;
+  activateFactory?: (input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>;
+  onActivated?: (value: ImportFactoryValue) => void;
   sessionID?: string | null;
 }
 

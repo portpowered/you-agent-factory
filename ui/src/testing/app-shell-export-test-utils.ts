@@ -4,7 +4,7 @@ import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
 } from "../api/current-factory-definition";
-import type { FactoryValue } from "../api/session-factory";
+import type { ImportFactoryValue } from "../api/session-factory";
 import type { useCurrentFactoryDocument } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { defaultSessionFactoryVersion } from "./session-factory-mocks";
 
@@ -181,7 +181,7 @@ export const currentNamedFactoryExportResponse = {
       worker: "reviewer",
     },
   ],
-} satisfies FactoryValue;
+} satisfies ImportFactoryValue;
 
 /** Session factory GET mock payload (includes version required by session-factory normalization). */
 export const currentSessionFactoryExportAPIResponse = {

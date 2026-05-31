@@ -4,7 +4,7 @@ import type {
   CurrentFactoryVersion,
 } from "../api/current-factory-definition";
 import type { components } from "../api/generated/openapi";
-import type { FactoryValue } from "../api/session-factory";
+import type { ImportFactoryValue } from "../api/session-factory";
 import { currentFactorySessionPath } from "../api/session-routing";
 import { baseFactoryDefinition } from "./graph-editor-harness";
 
@@ -57,7 +57,7 @@ export interface MockPutSessionFactoryOptions {
 
 export interface SessionFactoryActivationPutBodyOptions {
   sessionName: string;
-  importedFactory: FactoryValue;
+  importedFactory: ImportFactoryValue;
   version?: SessionFactoryVersion;
 }
 
