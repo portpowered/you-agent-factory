@@ -285,10 +285,22 @@ func TestFlattenFactoryConfig_CheckedInFactoryBundlesOverviewDoc(t *testing.T) {
 		"thoughts:init",
 		"factory/inputs/BATCH/default/",
 		"you docs agents",
+		"## Agent submission policy",
+		"## Submission recipes (this factory)",
+		"## Operator loop (maintainer factory)",
 	} {
 		if !strings.Contains(overview.Content.Inline, want) {
 			t.Fatalf("overview inline missing %q:\n%s", want, overview.Content.Inline)
 		}
+	}
+
+	overviewPath := testpath.MustRepoPathFromCaller(t, 0, "factory", "docs", "overview.md")
+	onDisk, err := os.ReadFile(overviewPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", overviewPath, err)
+	}
+	if overview.Content.Inline != string(onDisk) {
+		t.Fatalf("bundled overview inline does not match on-disk %s", overviewPath)
 	}
 }
 
