@@ -69,10 +69,6 @@ const TERMINAL_ROW_HEADER_CLASS =
 const TERMINAL_ROW_TITLE_CLASS = "flex min-w-0 flex-1 items-center gap-2";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_LIST_CLASS = "grid gap-2";
-const TERMINAL_ITEM_LAYOUT_CLASS = cn(
-  "px-2.5 py-2 [overflow-wrap:anywhere]",
-  DASHBOARD_BODY_TEXT_CLASS,
-);
 const TERMINAL_BUTTON_LABEL_CLASS = "font-bold";
 const TERMINAL_BUTTON_META_CLASS = cn(
   "leading-snug text-current",
@@ -225,7 +221,10 @@ function TerminalWorkRow({
               {items.map((item) => (
                 <StandardListSelectionItem
                   aria-label={item.label}
-                  className={TERMINAL_ITEM_LAYOUT_CLASS}
+                  className={cn(
+                    "px-2.5 py-2 [overflow-wrap:anywhere]",
+                    DASHBOARD_BODY_TEXT_CLASS,
+                  )}
                   key={`${status}-${item.label}`}
                   onClick={() => onSelectItem(item)}
                   selected={selectedLabel === item.label}
