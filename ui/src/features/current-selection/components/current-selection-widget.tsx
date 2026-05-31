@@ -155,6 +155,7 @@ function renderCurrentSelectionDetailCard({
     selectedStateTokenCount,
     selectedWorkDispatchAttempts,
     selectedWorkID,
+    selectedWorkOperationHistory,
     selectedWorkRequestHistory,
     selectedResourceName,
     selectedResourceTokenCount,
@@ -178,6 +179,11 @@ function renderCurrentSelectionDetailCard({
         onSelectProviderSession={setSelectedProviderSession}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={selectWorkByID}
+        operationCount={
+          selectedWorkOperationHistory?.length ??
+          selectedWorkRequestHistory.length
+        }
+        operationHistory={selectedWorkOperationHistory}
         relationshipGraph={selectedWorkRelationshipGraph}
         selectedNode={selectedNode}
         selectedProviderSessionKey={selectedProviderSessionKey}

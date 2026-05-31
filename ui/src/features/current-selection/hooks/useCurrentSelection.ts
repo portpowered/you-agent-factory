@@ -10,7 +10,6 @@ import type {
 } from "../../../api/dashboard/types";
 import type { FactoryWorker, FactoryWorkType } from "../../../api/events/types";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
@@ -20,21 +19,29 @@ import type {
   StatePositionWorkItem,
   TerminalWorkDetail,
 } from "../state/selection-types";
-import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
+import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
+import type { SelectedWorkOperationHistoryItem } from "./selected-work-operation-history";
 import type { WorkSelectionHint } from "./useCurrentSelection.actions";
+import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
 import {
   useCurrentSelectionDerivedState,
   useSelectionSynchronization,
   useTerminalWorkDetailCleanup,
 } from "./useCurrentSelection.derived";
-import { resolveProjectedWorkstationRequestsByDispatchID, type WorkstationRequestLike } from "./useCurrentSelection.helpers";
+import {
+  resolveProjectedWorkstationRequestsByDispatchID,
+  type WorkstationRequestLike,
+} from "./useCurrentSelection.helpers";
 
 export interface CurrentSelectionState {
   canRedoSelection: boolean;
   canUndoSelection: boolean;
   completedWorkItems: TerminalWorkItem[];
   failedWorkItems: TerminalWorkItem[];
-  openTerminalWorkDetail: (status: TerminalWorkStatus, item: TerminalWorkItem) => void;
+  openTerminalWorkDetail: (
+    status: TerminalWorkStatus,
+    item: TerminalWorkItem,
+  ) => void;
   redoSelection: () => void;
   selectedNode: DashboardWorkstationNode | null;
   selectedNodeActiveExecutions: DashboardActiveExecution[];
@@ -46,6 +53,7 @@ export interface CurrentSelectionState {
   selectedStateTokenCount: number;
   selectedWorkDispatchAttempts: DashboardProviderSessionAttempt[];
   selectedWorkID: string | null;
+  selectedWorkOperationHistory: SelectedWorkOperationHistoryItem[];
   selectedWorkProviderSessions: DashboardProviderSessionAttempt[];
   selectedWorkRequestHistory: WorkstationRequestLike[];
   selectedWorkWorkstationRequests: DashboardWorkstationRequest[];
@@ -59,7 +67,10 @@ export interface CurrentSelectionState {
   selectedWorkstationRequest: DashboardWorkstationRequest | null;
   selection: DashboardSelection | null;
   selectStateNode: (placeId: string) => void;
-  selectStateWorkItem: (place: DashboardPlaceRef, workItem: StatePositionWorkItem) => void;
+  selectStateWorkItem: (
+    place: DashboardPlaceRef,
+    workItem: StatePositionWorkItem,
+  ) => void;
   selectWorkByID: (workID: string, hint?: WorkSelectionHint) => void;
   selectWorkItem: (
     dispatchId: string,
@@ -81,14 +92,22 @@ export interface CurrentSelectionState {
 
 function useCurrentSelectionStoreState() {
   return {
-    canRedoSelection: useSelectionHistoryStore((state) => state.future.length > 0),
-    canUndoSelection: useSelectionHistoryStore((state) => state.past.length > 0),
-    commitSelectionState: useSelectionHistoryStore((state) => state.commitSelectionState),
+    canRedoSelection: useSelectionHistoryStore(
+      (state) => state.future.length > 0,
+    ),
+    canUndoSelection: useSelectionHistoryStore(
+      (state) => state.past.length > 0,
+    ),
+    commitSelectionState: useSelectionHistoryStore(
+      (state) => state.commitSelectionState,
+    ),
     redoSelection: useSelectionHistoryStore((state) => state.redo),
     replacePresent: useSelectionHistoryStore((state) => state.replacePresent),
     resetSelectionHistory: useSelectionHistoryStore((state) => state.clear),
     selection: useSelectionHistoryStore((state) => state.present.selection),
-    terminalWorkDetail: useSelectionHistoryStore((state) => state.present.terminalWorkDetail),
+    terminalWorkDetail: useSelectionHistoryStore(
+      (state) => state.present.terminalWorkDetail,
+    ),
     undoSelection: useSelectionHistoryStore((state) => state.undo),
   };
 }
@@ -107,10 +126,11 @@ export function useCurrentSelection({
   const sessionChanged = previousSessionIDRef.current !== sessionID;
   const selection = sessionChanged ? null : store.selection;
   const terminalWorkDetail = sessionChanged ? null : store.terminalWorkDetail;
-  const projectedWorkstationRequestsByDispatchID = resolveProjectedWorkstationRequestsByDispatchID(
-    snapshot,
-    workstationRequestsByDispatchID,
-  );
+  const projectedWorkstationRequestsByDispatchID =
+    resolveProjectedWorkstationRequestsByDispatchID(
+      snapshot,
+      workstationRequestsByDispatchID,
+    );
   const currentFactoryDocumentQuery = useCurrentFactoryDocument();
   const topologyFactory = currentFactoryDocumentQuery.data ?? undefined;
 
@@ -169,10 +189,12 @@ export function useCurrentSelection({
     selectedNodeWorkstationRequests: derived.selectedNodeWorkstationRequests,
     selectedStateCurrentWorkItems: derived.selectedStateCurrentWorkItems,
     selectedStatePlace: derived.selectedStatePlace,
-    selectedStateTerminalHistoryWorkItems: derived.selectedStateTerminalHistoryWorkItems,
+    selectedStateTerminalHistoryWorkItems:
+      derived.selectedStateTerminalHistoryWorkItems,
     selectedStateTokenCount: derived.selectedStateTokenCount,
     selectedWorkDispatchAttempts: derived.selectedWorkDispatchAttempts,
     selectedWorkID: derived.selectedWorkID,
+    selectedWorkOperationHistory: derived.selectedWorkOperationHistory,
     selectedWorkProviderSessions: derived.selectedWorkProviderSessions,
     selectedWorkRequestHistory: derived.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: derived.selectedWorkWorkstationRequests,

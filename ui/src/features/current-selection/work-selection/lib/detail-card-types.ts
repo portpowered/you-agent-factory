@@ -44,6 +44,7 @@ export interface WorkItemDetailCardProps {
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
+  operationCount?: number;
   relationshipGraph?: SelectedWorkRelationshipGraph;
   selectedNode?: DashboardWorkstationNode | null;
   selectedProviderSessionKey?: string | null;
