@@ -1,15 +1,6 @@
-import {
-  activateImportedFactoryForSession,
-  discoverSessionNamedFactoryNames,
-} from "./import-activation";
-import { SessionFactoryAPIError } from "./errors";
+import { activateImportedFactoryForSession } from "./import-activation";
 
-const defaultSessionFactoryVersion = {
-  logical: "9",
-  physical: "2026-05-18T14:25:00Z",
-} as const;
-
-describe("session factory import activation create-new-named", () => {
+describe("session factory import activation create-new-named new names", () => {
   it("activates create-new-named imports through UPSERT_NAMED_AND_ACTIVATE without version for new names", async () => {
     const fetchMock = vi
       .fn()
@@ -93,7 +84,9 @@ describe("session factory import activation create-new-named", () => {
       }),
     );
   });
+});
 
+describe("session factory import activation create-new-named listed existing name", () => {
   it("includes version when create-new-named upserts a name listed in existingFactoryNames", async () => {
     const fetchMock = vi
       .fn()
@@ -173,7 +166,9 @@ describe("session factory import activation create-new-named", () => {
       }),
     );
   });
+});
 
+describe("session factory import activation create-new-named current session name", () => {
   it("includes version when create-new-named upserts the current session factory name", async () => {
     const fetchMock = vi
       .fn()

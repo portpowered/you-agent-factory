@@ -1,15 +1,6 @@
-import {
-  activateImportedFactoryForSession,
-  discoverSessionNamedFactoryNames,
-} from "./import-activation";
-import { SessionFactoryAPIError } from "./errors";
+import { discoverSessionNamedFactoryNames } from "./import-activation";
 
-const defaultSessionFactoryVersion = {
-  logical: "9",
-  physical: "2026-05-18T14:25:00Z",
-} as const;
-
-describe("session factory import activation discover integration", () => {
+describe("session factory import activation discover integration success", () => {
   it("discovers sorted named factories for the active session folder", async () => {
     const fetchMock = vi
       .fn()
@@ -106,7 +97,9 @@ describe("session factory import activation discover integration", () => {
       }),
     );
   });
+});
 
+describe("session factory import activation discover integration empty results", () => {
   it("returns no discovered names when the session id is unknown", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

@@ -1,15 +1,6 @@
-import {
-  activateImportedFactoryForSession,
-  discoverSessionNamedFactoryNames,
-} from "./import-activation";
-import { SessionFactoryAPIError } from "./errors";
+import { activateImportedFactoryForSession } from "./import-activation";
 
-const defaultSessionFactoryVersion = {
-  logical: "9",
-  physical: "2026-05-18T14:25:00Z",
-} as const;
-
-describe("session factory import activation create-new-named errors", () => {
+describe("session factory import activation create-new-named validation errors", () => {
   it("requires a factory name for create-new-named activation", async () => {
     await expect(
       activateImportedFactoryForSession(
@@ -64,7 +55,9 @@ describe("session factory import activation create-new-named errors", () => {
       code: "FACTORY_NOT_IDLE",
     });
   });
+});
 
+describe("session factory import activation create-new-named save errors", () => {
   it("maps session-factory PUT failures during create-new-named activation", async () => {
     const fetchMock = vi
       .fn()
