@@ -12,6 +12,12 @@ export {
   WORKSTATION_PROMPT_THEME_ID,
 } from "./monaco-prompt-setup";
 export type {
+  PromptEditorDiagnosticsPanelLabels,
+  PromptEditorDiagnosticsPanelProps,
+  PromptEditorValidationFeedbackState,
+} from "./prompt-editor-diagnostics-panel";
+export { PromptEditorDiagnosticsPanel } from "./prompt-editor-diagnostics-panel";
+export type {
   PromptEditorAutocompleteState,
   PromptEditorDiagnostic,
 } from "./prompt-editor-types";

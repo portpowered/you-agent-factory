@@ -1,5 +1,8 @@
 import { useId, useState } from "react";
-import { MonacoPromptEditor } from "../../../../components/prompt-editor";
+import {
+  MonacoPromptEditor,
+  PromptEditorDiagnosticsPanel,
+} from "../../../../components/prompt-editor";
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,7 +15,6 @@ import {
 import { DisclosureButton } from "../../../../components/ui/disclosure-button";
 import { cn } from "../../../../lib/cn";
 import {
-  CURRENT_SELECTION_ALERT_PANEL_CLASS,
   CURRENT_SELECTION_CODE_SUBTLE_CLASS,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
@@ -281,104 +283,26 @@ function EditableConfigurationPromptValidationFeedback({
     { status: "ready" }
   >;
 }) {
-  if (state.promptValidationState.status === "loading") {
-    return (
-      <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
-        {messages.editableConfigurationPromptValidationLoading}
-      </p>
-    );
-  }
-
-  if (state.promptValidationState.status === "error") {
-    return (
-      <p
-        className={cn(
-          "m-0 text-af-danger-text",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-        role="alert"
-      >
-        {messages.editableConfigurationPromptValidationErrorPrefix}{" "}
-        {state.promptValidationState.errorMessage}
-      </p>
-    );
-  }
-
-  if (state.promptDiagnostics.length === 0) {
-    return null;
-  }
-
   return (
-    <div
-      className={CURRENT_SELECTION_ALERT_PANEL_CLASS}
+    <PromptEditorDiagnosticsPanel
+      diagnostics={state.promptDiagnostics}
       id={diagnosticsId}
-      role="alert"
-    >
-      <p className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}>
-        {messages.editableConfigurationPromptDiagnosticsSummary}
-      </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationPromptValidationDetail}
-      </p>
-      <div className="grid gap-2">
-        <h5 className={cn("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
-          {messages.editableConfigurationPromptDiagnosticsHeading}
-        </h5>
-        <ul className="m-0 grid list-none gap-2 p-0">
-          {state.promptDiagnostics.map((diagnostic) => (
-            <li
-              className="grid gap-1 rounded-lg border border-af-danger-border bg-af-surface-raised p-2"
-              key={[
-                diagnostic.kind,
-                diagnostic.path ?? "",
-                diagnostic.sourceText ?? "",
-                diagnostic.startOffset ?? "",
-                diagnostic.endOffset ?? "",
-                diagnostic.message,
-              ].join(":")}
-            >
-              <p
-                className={cn(
-                  "m-0 text-af-danger-text",
-                  DASHBOARD_BODY_TEXT_CLASS,
-                )}
-              >
-                {diagnosticLabel(diagnostic.kind, messages)}:{" "}
-                {diagnostic.message}
-              </p>
-              {diagnostic.path ? (
-                <code
-                  className={cn(
-                    CURRENT_SELECTION_CODE_SUBTLE_CLASS,
-                    "[overflow-wrap:anywhere]",
-                  )}
-                >
-                  {diagnostic.path}
-                </code>
-              ) : null}
-              {diagnostic.sourceText ? (
-                <pre className="m-0 whitespace-pre-wrap rounded-lg border border-af-border bg-af-surface-subtle p-2 text-xs text-af-text-muted [overflow-wrap:anywhere]">
-                  {diagnostic.sourceText}
-                </pre>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
+      labels={{
+        diagnosticsHeading:
+          messages.editableConfigurationPromptDiagnosticsHeading,
+        diagnosticsSummary:
+          messages.editableConfigurationPromptDiagnosticsSummary,
+        syntaxDiagnosticLabel:
+          messages.editableConfigurationPromptSyntaxDiagnosticLabel,
+        validationDetail: messages.editableConfigurationPromptValidationDetail,
+        validationErrorPrefix:
+          messages.editableConfigurationPromptValidationErrorPrefix,
+        validationLoading:
+          messages.editableConfigurationPromptValidationLoading,
+        variableDiagnosticLabel:
+          messages.editableConfigurationPromptVariableDiagnosticLabel,
+      }}
+      validationState={state.promptValidationState}
+    />
   );
-}
-
-function diagnosticLabel(
-  kind: string,
-  messages: ReturnType<typeof getWorkstationDetailMessages>,
-) {
-  return kind === "SYNTAX_ERROR"
-    ? messages.editableConfigurationPromptSyntaxDiagnosticLabel
-    : messages.editableConfigurationPromptVariableDiagnosticLabel;
 }
