@@ -1,19 +1,10 @@
+import "../../../../../testing/bun-current-factory-definition-public-mocks";
+import { beforeEach, describe, expect, it, vi } from "bun:test";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
+import { useCurrentFactoryDocumentMock } from "../../../../../testing/bun-current-factory-definition-public-mocks";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import { useEditableWorkerConfigurationState } from "./use-editable-worker-configuration-state";
-
-vi.mock("../../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../../../current-factory-definition/public",
-  );
-
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
 
 function buildFactoryDocument(
   overrides?: Partial<CurrentFactoryDocument>,
@@ -46,7 +37,7 @@ describe("useEditableWorkerConfigurationState", () => {
   };
 
   beforeEach(() => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: buildFactoryDocument(),
       error: null,
       isError: false,
@@ -139,7 +130,7 @@ describe("useEditableWorkerConfigurationState", () => {
       expect(result.current?.status).toBe("ready");
     });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: buildFactoryDocument({
         workers: [
           {
@@ -188,7 +179,7 @@ describe("useEditableWorkerConfigurationState", () => {
       result.current.onModelChange("Keep this local model draft.");
     });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: buildFactoryDocument({
         workers: [
           {
@@ -215,13 +206,15 @@ describe("useEditableWorkerConfigurationState", () => {
           type: "MODEL_WORKER",
         },
         isDirty: true,
-        overwriteFieldNames: expect.arrayContaining(["model", "modelProvider"]),
         status: "ready",
       });
+      if (result.current?.status === "ready") {
+        expect(result.current.overwriteFieldNames).toEqual(
+          expect.arrayContaining(["model", "modelProvider"]),
+        );
+        expect(result.current.overwriteFieldNames).toHaveLength(2);
+      }
     });
-    if (result.current?.status === "ready") {
-      expect(result.current.overwriteFieldNames).toHaveLength(2);
-    }
   });
 
   it("resets dirty worker drafts to the latest server-backed values", async () => {
@@ -240,7 +233,7 @@ describe("useEditableWorkerConfigurationState", () => {
       result.current.onModelChange("Keep this local model draft.");
     });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: buildFactoryDocument({
         workers: [
           {
@@ -262,10 +255,12 @@ describe("useEditableWorkerConfigurationState", () => {
     await waitFor(() => {
       expect(result.current).toMatchObject({
         isDirty: true,
-        overwriteFieldNames: expect.arrayContaining(["model", "modelProvider"]),
         status: "ready",
       });
       if (result.current?.status === "ready") {
+        expect(result.current.overwriteFieldNames).toEqual(
+          expect.arrayContaining(["model", "modelProvider"]),
+        );
         expect(result.current.overwriteFieldNames).toHaveLength(2);
       }
     });
@@ -353,7 +348,7 @@ describe("useEditableWorkerConfigurationState", () => {
       workerName: "planner",
     };
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    useCurrentFactoryDocumentMock.mockReturnValue({
       data: buildFactoryDocument({
         workers: [
           {

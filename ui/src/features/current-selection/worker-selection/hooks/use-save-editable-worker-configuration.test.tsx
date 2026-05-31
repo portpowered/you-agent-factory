@@ -8,7 +8,7 @@ import {
   mockPendingFactoryDocumentSave,
 } from "../../../../testing/factory-document-save-mocks";
 import { workerFieldValidationTarget } from "../../../../testing/factory-validation-target-fixtures";
-import * as currentFactoryFeature from "../../../current-factory-definition/public";
+import * as currentFactoryHooks from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { useSaveEditableWorkerConfiguration } from "./use-save-editable-worker-configuration";
@@ -25,7 +25,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
       mode: "error",
       rejectedError: "network unavailable",
     });
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue(
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue(
       saveMutation as never,
     );
     const mutateAsync = saveMutation.mutateAsync;
@@ -93,7 +93,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
         workTypes: [],
       },
     });
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue(
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue(
       saveMutation as never,
     );
     const mutateAsync = saveMutation.mutateAsync;
@@ -140,7 +140,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
 
   it("ignores repeated save requests while the current save is still in flight", async () => {
     const pendingSave = mockPendingFactoryDocumentSave();
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue(
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue(
       pendingSave.saveMutation as never,
     );
     const mutateAsync = pendingSave.mutateAsync;
@@ -190,7 +190,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
       mode: "error",
       errorMode: "stale_version",
     });
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue(
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue(
       saveMutation as never,
     );
 
@@ -234,7 +234,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
       ],
       workstations: [],
     });
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);
@@ -279,7 +279,7 @@ describe("useSaveEditableWorkerConfiguration", () => {
         ],
       }),
     );
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);
@@ -317,46 +317,43 @@ describe("useSaveEditableWorkerConfiguration", () => {
     ["factory.workers[0].provider", "provider"],
     ["factory.workers[0].type", "type"],
     ["factory.workers[0].model", "model"],
-  ] as const)(
-    "maps save validation target %s onto %s",
-    async (_field, expectedField) => {
-      const message = `Invalid ${expectedField}.`;
-      const mutateAsync = vi.fn().mockRejectedValue(
-        new CurrentFactoryDefinitionError(message, {
-          code: "BAD_REQUEST",
-          status: 400,
-          targets: [workerFieldValidationTarget(expectedField, message)],
+  ] as const)("maps save validation target %s onto %s", async (_field, expectedField) => {
+    const message = `Invalid ${expectedField}.`;
+    const mutateAsync = vi.fn().mockRejectedValue(
+      new CurrentFactoryDefinitionError(message, {
+        code: "BAD_REQUEST",
+        status: 400,
+        targets: [workerFieldValidationTarget(expectedField, message)],
+      }),
+    );
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkerConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState(),
+          scopeKey: "reviewer",
         }),
-      );
-      vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
-        isPending: false,
-        mutateAsync,
-      } as never);
+      { wrapper: createQueryClientWrapper() },
+    );
 
-      const { result } = renderHook(
-        () =>
-          useSaveEditableWorkerConfiguration({
-            editableConfigurationState: buildReadyEditableConfigurationState(),
-            scopeKey: "reviewer",
-          }),
-        { wrapper: createQueryClientWrapper() },
-      );
+    await act(async () => {
+      await result.current.save();
+    });
 
-      await act(async () => {
-        await result.current.save();
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({
+        errorMessage: message,
+        fieldErrors: {
+          [expectedField]: message,
+        },
+        status: "error",
       });
-
-      await waitFor(() => {
-        expect(result.current.saveState).toEqual({
-          errorMessage: message,
-          fieldErrors: {
-            [expectedField]: message,
-          },
-          status: "error",
-        });
-      });
-    },
-  );
+    });
+  });
 });
 
 function createQueryClientWrapper() {

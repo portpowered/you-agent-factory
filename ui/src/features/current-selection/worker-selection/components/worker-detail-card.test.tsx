@@ -1,24 +1,15 @@
+import "../../../../../testing/bun-current-factory-definition-public-mocks";
+import { beforeEach, describe, expect, it, vi } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
+import { useCurrentFactoryDocumentMock } from "../../../../../testing/bun-current-factory-definition-public-mocks";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
 
-vi.mock("../../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../../../current-factory-definition/public",
-  );
-
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
-
 function mockFactoryDocumentQuery(
-  overrides: Partial<ReturnType<typeof useCurrentFactoryDocument>> = {},
+  overrides: Partial<ReturnType<typeof useCurrentFactoryDocumentMock>> = {},
 ) {
-  vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+  useCurrentFactoryDocumentMock.mockReturnValue({
     data: undefined,
     error: null,
     failureCount: 0,
@@ -218,9 +209,9 @@ describe("WorkerDetailCard", () => {
     });
 
     expect(onModelProviderChange).toHaveBeenCalledWith("CODEX");
-    expect(editableConfigurationState.onModelLocalityChange).toHaveBeenCalledWith(
-      "LOCAL",
-    );
+    expect(
+      editableConfigurationState.onModelLocalityChange,
+    ).toHaveBeenCalledWith("LOCAL");
     expect(screen.queryByLabelText("Command")).toBeNull();
 
     fireEvent.click(
@@ -442,9 +433,7 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(
-      screen.getByText(/overwrite newer server values for/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/overwrite newer server values for/i)).toBeTruthy();
     expect(
       screen.getByText(
         /The running factory changed this field while you were editing/i,

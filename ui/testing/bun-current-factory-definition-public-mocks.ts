@@ -6,8 +6,14 @@ import { mock } from "bun:test";
 const FACTORY_DEFINITION_PUBLIC_MODULE =
   "../src/features/current-factory-definition/public";
 
+const FACTORY_DEFINITION_HOOKS_MODULE =
+  "../src/features/current-factory-definition/hooks/useCurrentFactoryDefinition";
+
 const factoryDefinitionPublicActual = await import(
   FACTORY_DEFINITION_PUBLIC_MODULE,
+);
+const factoryDefinitionHooksActual = await import(
+  FACTORY_DEFINITION_HOOKS_MODULE,
 );
 
 function idleQueryResult() {
@@ -32,9 +38,18 @@ export const useSaveCurrentFactoryMock = mock(() => ({
   status: "idle",
 }));
 
+const factoryDefinitionHookMocks = {
+  ...factoryDefinitionHooksActual,
+  useCurrentFactoryDocument: useCurrentFactoryDocumentMock,
+  useCurrentFactoryDefinition: useCurrentFactoryDefinitionMock,
+  useSaveCurrentFactory: useSaveCurrentFactoryMock,
+};
+
 mock.module(FACTORY_DEFINITION_PUBLIC_MODULE, () => ({
   ...factoryDefinitionPublicActual,
   useCurrentFactoryDocument: useCurrentFactoryDocumentMock,
   useCurrentFactoryDefinition: useCurrentFactoryDefinitionMock,
   useSaveCurrentFactory: useSaveCurrentFactoryMock,
 }));
+
+mock.module(FACTORY_DEFINITION_HOOKS_MODULE, () => factoryDefinitionHookMocks);

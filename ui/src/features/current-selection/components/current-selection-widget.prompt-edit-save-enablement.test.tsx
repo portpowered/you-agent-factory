@@ -1,17 +1,18 @@
+import "../../../../testing/bun-current-selection-isolated-hook-mocks";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 
-import {
-  getCurrentFactoryWorkstationPromptTemplateContract,
-  validateCurrentFactoryWorkstationPromptTemplate,
-  type PromptTemplateContract,
-  type PromptTemplateValidationResult,
-} from "../../../api/current-factory-prompt-template";
+import type { PromptTemplateContract } from "../../../api/current-factory-prompt-template";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
-  useCurrentFactoryDocument,
-  useSaveCurrentFactory,
-} from "../../current-factory-definition/public";
+  useCurrentFactoryDocumentMock,
+  useSaveCurrentFactoryMock,
+} from "../../../../testing/bun-current-factory-definition-public-mocks";
+import {
+  useCurrentWorkstationPromptTemplateContractMock,
+  useCurrentWorkstationPromptTemplateValidationMock,
+} from "../../../../testing/bun-current-selection-isolated-hook-mocks";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { CurrentSelectionWidget } from "./current-selection-widget";
@@ -32,32 +33,10 @@ const promptTemplateContract: PromptTemplateContract = {
   unavailableAccessPatterns: [],
 };
 
-const validPromptValidation: PromptTemplateValidationResult = {
+const validPromptValidation = {
   diagnostics: [],
   valid: true,
 };
-
-vi.mock("../../../api/current-factory-prompt-template", async () => {
-  const actual = await vi.importActual<
-    typeof import("../../../api/current-factory-prompt-template")
-  >("../../../api/current-factory-prompt-template");
-
-  return {
-    ...actual,
-    getCurrentFactoryWorkstationPromptTemplateContract: vi.fn(),
-    validateCurrentFactoryWorkstationPromptTemplate: vi.fn(),
-  };
-});
-
-vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../current-factory-definition/public");
-
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
-  };
-});
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -65,22 +44,35 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     saveCurrentFactoryMutation.mockReset();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+    useCurrentFactoryDocumentMock.mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
+    useSaveCurrentFactoryMock.mockReturnValue({
       isPending: false,
       mutateAsync: saveCurrentFactoryMutation,
     } as never);
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockImplementation(
-      async () => promptTemplateContract,
-    );
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockImplementation(
-      async (_workstationName, prompt) => ({
-        ...validPromptValidation,
-        diagnostics: [],
-        valid: prompt.trim().length > 0,
-      }),
+    useCurrentWorkstationPromptTemplateContractMock.mockReturnValue({
+      data: promptTemplateContract,
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+    useCurrentWorkstationPromptTemplateValidationMock.mockImplementation(
+      (_workstationName: string, prompt?: string) =>
+        ({
+          data: {
+            ...validPromptValidation,
+            diagnostics: [],
+            valid: (prompt ?? "").trim().length > 0,
+          },
+          error: null,
+          isError: false,
+          isPending: false,
+          isSuccess: true,
+          status: "success",
+        }) as never,
     );
   });
 
@@ -249,4 +241,3 @@ function buildEditableFactoryDefinition(): CurrentFactoryDocument {
     workTypes: [],
   };
 }
-

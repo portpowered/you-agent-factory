@@ -1,23 +1,14 @@
+import "../../../../../testing/bun-current-factory-definition-public-mocks";
+import { describe, expect, it, vi } from "bun:test";
 import { renderHook } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
+import { useCurrentFactoryDocumentMock } from "../../../../../testing/bun-current-factory-definition-public-mocks";
 import { useWorkerDetailState } from "./use-worker-detail-state";
 
-vi.mock("../../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../../../current-factory-definition/public",
-  );
-
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
-
 function mockFactoryDocumentQuery(
-  overrides: Partial<ReturnType<typeof useCurrentFactoryDocument>> = {},
+  overrides: Partial<ReturnType<typeof useCurrentFactoryDocumentMock>> = {},
 ) {
-  vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+  useCurrentFactoryDocumentMock.mockReturnValue({
     data: undefined,
     error: null,
     failureCount: 0,
