@@ -94,6 +94,34 @@ describe("validateFactoryDefinition error mapping", () => {
     });
   });
 
+  it("forwards abort signals to the validation request", async () => {
+    const controller = new AbortController();
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          targets: [],
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await validateFactoryDefinition(emptyFactory, {
+      fetch,
+      signal: controller.signal,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/factory-validations"),
+      expect.objectContaining({
+        signal: controller.signal,
+      }),
+    );
+  });
+
   it("rejects validation payloads with malformed targets", async () => {
     await expect(
       validateFactoryDefinition(emptyFactory, {

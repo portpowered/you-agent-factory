@@ -1,4 +1,5 @@
 import { getSessionFactory, saveSessionFactory } from "./api";
+import { SessionFactoryAPIError } from "./errors";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
 
@@ -37,7 +38,9 @@ describe("getSessionFactory version normalization", () => {
       ),
     );
 
-    await expect(getSessionFactory("~default", { fetch })).resolves.toMatchObject({
+    await expect(
+      getSessionFactory("~default", { fetch }),
+    ).resolves.toMatchObject({
       name: "Numeric Version Factory",
       version: {
         logical: "12",
@@ -77,18 +80,40 @@ describe("getSessionFactory version normalization", () => {
   });
 });
 
+describe("getSessionFactory transport", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("throws NETWORK_ERROR when fetch is unavailable in the environment", async () => {
+    vi.stubGlobal("fetch", undefined);
+
+    await expect(getSessionFactory("~default")).rejects.toEqual(
+      new SessionFactoryAPIError(
+        sessionFactoryAPIErrorMessages.unavailableInEnvironment,
+        {
+          code: "NETWORK_ERROR",
+        },
+      ),
+    );
+  });
+});
+
 describe("getSessionFactory invalid responses", () => {
   it("rejects GET payloads that are not editable factory documents", async () => {
     await expect(
       getSessionFactory("~default", {
         fetch: vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ workers: [], workstations: [], workTypes: [] }), {
-            headers: {
-              "Content-Type": "application/json",
+          new Response(
+            JSON.stringify({ workers: [], workstations: [], workTypes: [] }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
             },
-            status: 200,
-            statusText: "OK",
-          }),
+          ),
         ),
       }),
     ).rejects.toMatchObject({
@@ -161,11 +186,58 @@ describe("getSessionFactory HTTP error mapping", () => {
       "INVALID_FACTORY_NAME",
       sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
     ],
-  ] as const)(
-    "maps %s GET failures to canonical operator copy",
-    async (code, message) => {
-      await expect(
-        getSessionFactory("~default", {
+  ] as const)("maps %s GET failures to canonical operator copy", async (code, message) => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code,
+              message: "Ignored API diagnostic.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 400,
+              statusText: "Bad Request",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code,
+      message,
+      status: 400,
+    });
+  });
+});
+
+describe("saveSessionFactory HTTP error mapping", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    [
+      "STALE_FACTORY_VERSION",
+      sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
+    ],
+    ["FACTORY_NOT_IDLE", sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE],
+    ["INVALID_FACTORY", sessionFactoryOperatorErrorMessages.INVALID_FACTORY],
+    [
+      "INVALID_FACTORY_NAME",
+      sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
+    ],
+  ] as const)("maps %s PUT failures to canonical operator copy", async (code, message) => {
+    await expect(
+      saveSessionFactory(
+        {
+          sessionID: "session-review",
+          factory: sessionFactoryFixture,
+          mode: "REPLACE_CURRENT",
+        },
+        {
           fetch: vi.fn().mockResolvedValue(
             new Response(
               JSON.stringify({
@@ -176,67 +248,17 @@ describe("getSessionFactory HTTP error mapping", () => {
                 headers: {
                   "Content-Type": "application/json",
                 },
-                status: 400,
-                statusText: "Bad Request",
+                status: 409,
+                statusText: "Conflict",
               },
             ),
           ),
-        }),
-      ).rejects.toMatchObject({
-        code,
-        message,
-        status: 400,
-      });
-    },
-  );
-});
-
-describe("saveSessionFactory HTTP error mapping", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+        },
+      ),
+    ).rejects.toMatchObject({
+      code,
+      message,
+      status: 409,
+    });
   });
-
-  it.each([
-    ["STALE_FACTORY_VERSION", sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION],
-    ["FACTORY_NOT_IDLE", sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE],
-    ["INVALID_FACTORY", sessionFactoryOperatorErrorMessages.INVALID_FACTORY],
-    [
-      "INVALID_FACTORY_NAME",
-      sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
-    ],
-  ] as const)(
-    "maps %s PUT failures to canonical operator copy",
-    async (code, message) => {
-      await expect(
-        saveSessionFactory(
-          {
-            sessionID: "session-review",
-            factory: sessionFactoryFixture,
-            mode: "REPLACE_CURRENT",
-          },
-          {
-            fetch: vi.fn().mockResolvedValue(
-              new Response(
-                JSON.stringify({
-                  code,
-                  message: "Ignored API diagnostic.",
-                }),
-                {
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  status: 409,
-                  statusText: "Conflict",
-                },
-              ),
-            ),
-          },
-        ),
-      ).rejects.toMatchObject({
-        code,
-        message,
-        status: 409,
-      });
-    },
-  );
 });
