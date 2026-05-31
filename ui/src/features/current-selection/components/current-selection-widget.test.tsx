@@ -793,6 +793,8 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
+    useCurrentFactoryDocumentMock.mockClear();
+
     rerender(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
@@ -804,9 +806,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(
-      useCurrentFactoryDocumentMock,
-    ).toHaveBeenLastCalledWith(true);
+    expect(useCurrentFactoryDocumentMock).toHaveBeenCalledWith(true);
   });
 
   it("loads editable workstation inputs when a workstation is already selected on mount", () => {

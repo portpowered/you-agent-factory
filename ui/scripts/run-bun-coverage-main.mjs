@@ -71,6 +71,27 @@ function buildBrowserLaneBatches() {
     }
 
     const relativePath = `./src/features/${dirent.name}`;
+    if (relativePath === "./src/features/header") {
+      batches.push({
+        label: "./src/features/header/dashboard-session-tabs",
+        paths: [
+          "./src/features/header/components/dashboard-session-tabs.test.tsx",
+          "./src/features/header/components/dashboard-session-tabs.launch-target-selection.test.tsx",
+          "./src/features/header/lib/dashboard-session-tabs-utils.test.ts",
+        ],
+      });
+      batches.push({
+        label: relativePath,
+        paths: [relativePath],
+        pathIgnorePatterns: [
+          "**/dashboard-session-tabs.test.tsx",
+          "**/dashboard-session-tabs.launch-target-selection.test.tsx",
+          "**/dashboard-session-tabs-utils.test.ts",
+        ],
+      });
+      continue;
+    }
+
     if (relativePath === "./src/features/export") {
       batches.push({
         label: "./src/features/export/hooks/use-current-factory-export.test.tsx",
