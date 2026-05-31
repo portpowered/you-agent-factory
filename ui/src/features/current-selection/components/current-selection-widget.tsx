@@ -27,6 +27,9 @@ import {
   EditableWorkstationSaveHeaderAction,
   WorkstationDetailCard,
 } from "../workstation-selection/public";
+import { useEditableWorkStateConfigurationState } from "../work-state-selection/hooks/use-editable-work-state-configuration-state";
+import { useSaveEditableWorkStateConfiguration } from "../work-state-selection/hooks/use-save-editable-work-state-configuration";
+import { EditableWorkStateSaveHeaderAction } from "../work-state-selection/public";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
@@ -56,6 +59,7 @@ function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
   editableConfigurationState,
+  editableWorkStateConfigurationState,
   editableWorkerConfigurationState,
   failedWorkDetailsByWorkID,
   headerAction,
@@ -63,6 +67,8 @@ function renderCurrentSelectionDetailCard({
   now,
   onSelectTraceID,
   saveState,
+  workStateHeaderAction,
+  workStateSaveState,
   workerHeaderAction,
   workerSaveState,
   selectedProviderSessionKey,
@@ -77,6 +83,9 @@ function renderCurrentSelectionDetailCard({
   editableConfigurationState: ReturnType<
     typeof useEditableWorkstationConfigurationState
   >;
+  editableWorkStateConfigurationState: ReturnType<
+    typeof useEditableWorkStateConfigurationState
+  >;
   editableWorkerConfigurationState: ReturnType<
     typeof useEditableWorkerConfigurationState
   >;
@@ -85,6 +94,10 @@ function renderCurrentSelectionDetailCard({
   locale?: string;
   now: number;
   onSelectTraceID?: (traceID: string) => void;
+  workStateHeaderAction: ReactNode;
+  workStateSaveState: ReturnType<
+    typeof useSaveEditableWorkStateConfiguration
+  >["saveState"];
   workerHeaderAction: ReactNode;
   saveState: ReturnType<
     typeof useSaveEditableWorkstationConfiguration
@@ -156,12 +169,15 @@ function renderCurrentSelectionDetailCard({
     return (
       <StateNodeDetailCard
         currentWorkItems={selectedStateCurrentWorkItems}
+        editableConfigurationState={editableWorkStateConfigurationState}
         failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
+        headerAction={workStateHeaderAction}
         locale={locale}
         onSelectWorkItem={(workItem) =>
           selectStateWorkItem(selectedStatePlace, workItem)
         }
         place={selectedStatePlace}
+        saveState={workStateSaveState}
         terminalHistoryWorkItems={selectedStateTerminalHistoryWorkItems}
         tokenCount={selectedStateTokenCount}
         widgetId={widgetId}
@@ -222,6 +238,7 @@ function renderCurrentSelectionDetailCard({
   return <NoSelectionDetailCard widgetId={widgetId} />;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: widget wires editable workstation, worker, and work-state save hooks into one selection detail surface.
 export function CurrentSelectionWidget({
   activeTraceID,
   currentSelection,
@@ -250,6 +267,10 @@ export function CurrentSelectionWidget({
     selectedNode,
     locale,
   );
+  const workStatePlaceId =
+    selection?.kind === "state-node" ? selection.placeId : null;
+  const editableWorkStateConfigurationState =
+    useEditableWorkStateConfigurationState(selection, workStatePlaceId, locale);
   const editableWorkerConfigurationState = useEditableWorkerConfigurationState(
     selection,
     selectedWorkerName,
@@ -268,6 +289,12 @@ export function CurrentSelectionWidget({
     selection?.kind === "worker" && selectedWorkerName
       ? selectedWorkerName
       : null;
+  const workStateSave = useSaveEditableWorkStateConfiguration({
+    editableConfigurationState: editableWorkStateConfigurationState,
+    locale,
+    onWorkStateRenamed: currentSelection.selectStateNode,
+    scopeKey: workStatePlaceId,
+  });
   const workerSave = useSaveEditableWorkerConfiguration({
     editableConfigurationState: editableWorkerConfigurationState,
     locale,
@@ -294,6 +321,14 @@ export function CurrentSelectionWidget({
       saveState={workstationSave.saveState}
     />
   );
+  const workStateHeaderAction = (
+    <EditableWorkStateSaveHeaderAction
+      canSave={workStateSave.canSave}
+      locale={locale ?? undefined}
+      onClick={() => void workStateSave.save()}
+      saveState={workStateSave.saveState}
+    />
+  );
   const workerHeaderAction = (
     <EditableWorkerSaveHeaderAction
       canSave={workerSave.canSave}
@@ -306,12 +341,15 @@ export function CurrentSelectionWidget({
     activeTraceID,
     currentSelection,
     editableConfigurationState,
+    editableWorkStateConfigurationState,
     editableWorkerConfigurationState,
     failedWorkDetailsByWorkID,
     headerAction: workstationHeaderAction,
     locale: locale ?? undefined,
     now,
     onSelectTraceID,
+    workStateHeaderAction,
+    workStateSaveState: workStateSave.saveState,
     workerHeaderAction,
     saveState: workstationSave.saveState,
     selectedProviderSessionKey,

@@ -241,6 +241,28 @@ export function buildDetailCardCurrentSelection(
   };
 }
 
+export function buildDetailCardWorkStateFactoryDocument(
+  overrides?: Partial<CurrentFactoryDocument>,
+): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
+    workers: [],
+    workstations: [],
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          { name: "implemented", type: "PROCESSING" },
+          { name: "complete", type: "TERMINAL" },
+          { name: "blocked", type: "FAILED" },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
 export function buildDetailCardWorkstationNodeSelection(
   nodeId = semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id
     .review.node_id,
