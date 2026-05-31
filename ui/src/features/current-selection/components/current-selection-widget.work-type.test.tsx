@@ -3,6 +3,7 @@ import type { CurrentFactoryDocument } from "../../../api/current-factory-defini
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
+import { useSaveEditableWorkTypeConfiguration } from "../work-type-selection/hooks/use-save-editable-work-type-configuration";
 import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { CurrentSelectionWidget } from "./current-selection-widget";
@@ -26,6 +27,13 @@ vi.mock(
   "../workstation-selection/hooks/use-save-editable-workstation-configuration",
   () => ({
     useSaveEditableWorkstationConfiguration: vi.fn(),
+  }),
+);
+
+vi.mock(
+  "../work-type-selection/hooks/use-save-editable-work-type-configuration",
+  () => ({
+    useSaveEditableWorkTypeConfiguration: vi.fn(),
   }),
 );
 
@@ -103,6 +111,13 @@ describe("CurrentSelectionWidget work-type selection", () => {
       confirmSave: vi.fn(),
       saveState: { status: "idle" },
     });
+    vi.mocked(useSaveEditableWorkTypeConfiguration).mockReturnValue({
+      beginSaveConfirmation: vi.fn(),
+      canSave: false,
+      cancelSaveConfirmation: vi.fn(),
+      confirmSave: vi.fn(),
+      saveState: { status: "idle" },
+    });
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
       error: null,
@@ -153,7 +168,9 @@ describe("CurrentSelectionWidget work-type selection", () => {
         "Select a workstation, work item, or state node to inspect live details.",
       ),
     ).toBeNull();
-    expect(within(currentSelection).getByText("story")).toBeTruthy();
+    expect(
+      within(currentSelection).getByLabelText("Work type").getAttribute("value"),
+    ).toBe("story");
     expect(
       within(currentSelection).getByRole("heading", { name: "States" }),
     ).toBeTruthy();

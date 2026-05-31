@@ -11,6 +11,7 @@ export function WorkTypeDetailCard({
   editableConfigurationState,
   headerAction,
   locale,
+  saveState,
   widgetId = "current-selection",
   workTypeName,
 }: WorkTypeDetailCardProps) {
@@ -43,7 +44,9 @@ export function WorkTypeDetailCard({
       {editableConfigurationState?.status === "ready" ? (
         <WorkTypeReadySection
           messages={messages}
+          saveState={saveState}
           state={editableConfigurationState}
+          workTypeName={workTypeName}
         />
       ) : null}
       <WorkTypeTopologyDeleteSection

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useEditableWorkTypeConfigurationState } from "../hooks/use-editable-work-type-configuration-state";
@@ -126,17 +126,37 @@ describe("WorkTypeDetailCard", () => {
     ).toBeTruthy();
   });
 
-  it("renders the work type name and read-only state rows when ready", () => {
+  it("renders editable name and handling behavior fields with read-only state rows when ready", () => {
     render(<WorkTypeDetailCardHarness workTypeName="story" />);
 
     const panel = screen.getByRole("article", { name: "Current selection" });
+    const nameInput = within(panel).getByLabelText("Work type");
 
-    expect(within(panel).getByText("Work type")).toBeTruthy();
-    expect(within(panel).getByText("story")).toBeTruthy();
+    expect(nameInput.getAttribute("value")).toBe("story");
+    expect(
+      within(panel).getByRole("checkbox", { name: "Default CLI handling" })
+        .checked,
+    ).toBe(false);
     expect(within(panel).getByRole("heading", { name: "States" })).toBeTruthy();
     expect(within(panel).getByText("queued")).toBeTruthy();
     expect(within(panel).getByText("Initial")).toBeTruthy();
     expect(within(panel).getByText("done")).toBeTruthy();
     expect(within(panel).getByText("Completed")).toBeTruthy();
+  });
+
+  it("surfaces name validation errors with aria-invalid and role alert", () => {
+    render(<WorkTypeDetailCardHarness workTypeName="story" />);
+
+    const panel = screen.getByRole("article", { name: "Current selection" });
+    const nameInput = within(panel).getByLabelText("Work type");
+
+    fireEvent.change(nameInput, { target: { value: "   " } });
+
+    expect(nameInput.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      within(panel).getByText(
+        "Enter a work type name before saving this work type.",
+      ),
+    ).toBeTruthy();
   });
 });
