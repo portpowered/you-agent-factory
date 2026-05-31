@@ -171,6 +171,13 @@ func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) 
 	assertWorkstationRequestScriptBoundarySchemas(t, schemas)
 }
 
+func TestOpenAPIContract_DefinesWorkMoveOperationProjectionSlice(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	assertWorkMoveOperationProjectionSchemasPresent(t, schemas)
+	assertWorkMoveOperationProjectionSliceSchema(t, schemas)
+	assertWorkMoveOperationViewSchema(t, schemas)
+}
+
 func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	doc := loadBundledOpenAPIDocument(t)
@@ -221,6 +228,8 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 		"Work",
 		"WorkRequest",
 		"FactoryWorldWorkstationRequestProjectionSlice",
+		"FactoryWorldWorkMoveOperationProjectionSlice",
+		"FactoryWorldWorkMoveOperationView",
 		"FactoryWorldRenderedPromptDiagnostic",
 		"FactoryWorldProviderDiagnostic",
 		"FactoryWorldWorkDiagnostics",

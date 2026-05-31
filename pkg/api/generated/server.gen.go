@@ -935,6 +935,28 @@ type FactoryWorldWorkItemRefLineageSourceKind string
 // FactoryWorldWorkItemRefPayloadStatus defines model for FactoryWorldWorkItemRef.PayloadStatus.
 type FactoryWorldWorkItemRefPayloadStatus string
 
+// FactoryWorldWorkMoveOperationProjectionSlice Additive dashboard read-model contract slice that publishes per-work move operations derived from canonical WORK_STATE_CHANGE events without reintroducing removed `/dashboard` endpoints.
+type FactoryWorldWorkMoveOperationProjectionSlice struct {
+	WorkMoveOperationsByWorkId *map[string][]FactoryWorldWorkMoveOperationView `json:"workMoveOperationsByWorkId,omitempty"`
+}
+
+// FactoryWorldWorkMoveOperationView defines model for FactoryWorldWorkMoveOperationView.
+type FactoryWorldWorkMoveOperationView struct {
+	EventTime   *time.Time `json:"eventTime,omitempty"`
+	FromPlaceId string     `json:"fromPlaceId"`
+	FromState   string     `json:"fromState"`
+	RequestId   *string    `json:"requestId,omitempty"`
+	Sequence    int        `json:"sequence"`
+
+	// Source Origin of a WORK_STATE_CHANGE event.
+	Source       WorkStateChangeSource `json:"source"`
+	Tick         int                   `json:"tick"`
+	ToPlaceId    string                `json:"toPlaceId"`
+	ToState      string                `json:"toState"`
+	WorkId       string                `json:"workId"`
+	WorkTypeName *string               `json:"workTypeName,omitempty"`
+}
+
 // FactoryWorldWorkstationRequestCountView defines model for FactoryWorldWorkstationRequestCountView.
 type FactoryWorldWorkstationRequestCountView struct {
 	DispatchedCount int `json:"dispatchedCount"`

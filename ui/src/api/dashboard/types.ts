@@ -340,6 +340,23 @@ export interface DashboardThrottlePause {
   affected_work_type_ids?: string[];
 }
 
+export type DashboardWorkMoveOperationSource =
+  components["schemas"]["WorkStateChangeSource"];
+
+export interface DashboardWorkMoveOperation {
+  work_id: string;
+  work_type_name?: string;
+  from_state: string;
+  to_state: string;
+  from_place_id: string;
+  to_place_id: string;
+  source: DashboardWorkMoveOperationSource;
+  request_id?: string;
+  tick: number;
+  sequence: number;
+  event_time?: string;
+}
+
 export interface DashboardSessionRuntime {
   has_data: boolean;
   dispatched_count: number;
@@ -367,6 +384,7 @@ export interface DashboardRuntime {
     string,
     DashboardRuntimeWorkstationRequest
   >;
+  work_move_operations_by_work_id?: Record<string, DashboardWorkMoveOperation[]>;
   workstation_activity_by_node_id?: Record<
     string,
     DashboardWorkstationActivity

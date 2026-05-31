@@ -102,7 +102,9 @@ func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T)
 	doc := loadAuthoredOpenAPIDoc(t)
 	schemas := componentSchemas(t, doc)
 	expectedRefs := map[string]string{
-		"FactoryWorldWorkstationRequestProjectionSlice": "./components/schemas/factory-world/FactoryWorldWorkstationRequestProjectionSlice.yaml",
+		"FactoryWorldWorkstationRequestProjectionSlice":   "./components/schemas/factory-world/FactoryWorldWorkstationRequestProjectionSlice.yaml",
+		"FactoryWorldWorkMoveOperationProjectionSlice":  "./components/schemas/factory-world/FactoryWorldWorkMoveOperationProjectionSlice.yaml",
+		"FactoryWorldWorkMoveOperationView":           "./components/schemas/factory-world/FactoryWorldWorkMoveOperationView.yaml",
 		"FactoryWorldRenderedPromptDiagnostic":          "./components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml",
 		"FactoryWorldProviderDiagnostic":                "./components/schemas/factory-world/FactoryWorldProviderDiagnostic.yaml",
 		"FactoryWorldWorkDiagnostics":                   "./components/schemas/factory-world/FactoryWorldWorkDiagnostics.yaml",
