@@ -11,6 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+type splitRuntimeExpansionOptions struct {
+	overwriteExisting bool
+}
+
 func writeExpandedFactoryLayout(sourceDir, targetDir string, cfg *interfaces.FactoryConfig, canonical []byte, sourcePath string) (LayoutExpansionReport, error) {
 	if _, err := preparePortableBundledFileWrites(targetDir, cfg); err != nil {
 		return LayoutExpansionReport{}, err
@@ -29,13 +33,13 @@ func writeExpandedFactoryLayout(sourceDir, targetDir string, cfg *interfaces.Fac
 	}
 	report := LayoutExpansionReport{FactoryConfigPaths: 1}
 
-	workerAgentPaths, err := writeExpandedWorkerFiles(targetDir, cfg.Workers)
+	workerAgentPaths, err := writeExpandedWorkerFiles(targetDir, cfg.Workers, splitRuntimeExpansionOptions{})
 	if err != nil {
 		return LayoutExpansionReport{}, err
 	}
 	report.WorkerAgentPaths = workerAgentPaths
 
-	workstationAgentPaths, promptPaths, err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations)
+	workstationAgentPaths, promptPaths, err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations, splitRuntimeExpansionOptions{})
 	if err != nil {
 		return LayoutExpansionReport{}, err
 	}
@@ -132,7 +136,7 @@ func resolvePortableBundledCopyTarget(
 	return target, true, nil
 }
 
-func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.WorkerConfig) (int, error) {
+func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.WorkerConfig, opts splitRuntimeExpansionOptions) (int, error) {
 	workersDir := filepath.Join(targetDir, interfaces.WorkersDir)
 	if err := os.MkdirAll(workersDir, 0o755); err != nil {
 		return 0, fmt.Errorf("create workers directory %s: %w", workersDir, err)
@@ -151,12 +155,14 @@ func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.Worke
 		}
 		workerDir := filepath.Join(workersDir, segment)
 		if workerCfg.Type == "" {
-			exists, err := agentsFileExists(workerDir)
-			if err != nil {
-				return 0, fmt.Errorf("check worker %q AGENTS.md: %w", workerCfg.Name, err)
-			}
-			if exists {
-				continue
+			if !opts.overwriteExisting {
+				exists, err := agentsFileExists(workerDir)
+				if err != nil {
+					return 0, fmt.Errorf("check worker %q AGENTS.md: %w", workerCfg.Name, err)
+				}
+				if exists {
+					continue
+				}
 			}
 			def := workerDefForExpansion(workerCfg)
 			agents, err := renderAgentsMarkdown(workerFrontmatterForExpansion(def), def.Body)
@@ -178,7 +184,7 @@ func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.Worke
 	return written, nil
 }
 
-func writeExpandedWorkstationFiles(targetDir string, workstationConfigs []interfaces.FactoryWorkstationConfig) (int, int, error) {
+func writeExpandedWorkstationFiles(targetDir string, workstationConfigs []interfaces.FactoryWorkstationConfig, opts splitRuntimeExpansionOptions) (int, int, error) {
 	workstationsDir := filepath.Join(targetDir, interfaces.WorkstationsDir)
 	if err := os.MkdirAll(workstationsDir, 0o755); err != nil {
 		return 0, 0, fmt.Errorf("create workstations directory %s: %w", workstationsDir, err)
@@ -197,7 +203,7 @@ func writeExpandedWorkstationFiles(targetDir string, workstationConfigs []interf
 			return 0, 0, err
 		}
 		workstationDir := filepath.Join(workstationsDir, segment)
-		if !hasInlineWorkstationRuntime(workstationCfg) {
+		if !hasInlineWorkstationRuntime(workstationCfg) && !opts.overwriteExisting {
 			exists, err := agentsFileExists(workstationDir)
 			if err != nil {
 				return 0, 0, fmt.Errorf("check workstation %q AGENTS.md: %w", workstationCfg.Name, err)
@@ -502,6 +508,79 @@ func copyFactoryRelativeFile(sourceDir, targetDir, relativePath string) error {
 	}
 	if err := os.WriteFile(targetPath, data, mode); err != nil {
 		return fmt.Errorf("write target file %s: %w", targetPath, err)
+	}
+	return nil
+}
+
+func pruneStaleSplitRuntimeDirs(targetDir string, cfg *interfaces.FactoryConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	if err := pruneStaleRuntimeEntityDirs(
+		targetDir,
+		interfaces.WorkersDir,
+		"worker",
+		len(cfg.Workers),
+		func(i int) (string, error) {
+			return safeFactoryLayoutSegment("worker", cfg.Workers[i].Name)
+		},
+	); err != nil {
+		return err
+	}
+	return pruneStaleRuntimeEntityDirs(
+		targetDir,
+		interfaces.WorkstationsDir,
+		"workstation",
+		len(cfg.Workstations),
+		func(i int) (string, error) {
+			return safeFactoryLayoutSegment("workstation", cfg.Workstations[i].Name)
+		},
+	)
+}
+
+func pruneStaleRuntimeEntityDirs(
+	targetDir string,
+	parentDirName string,
+	kind string,
+	count int,
+	segmentAt func(int) (string, error),
+) error {
+	parentDir := filepath.Join(targetDir, parentDirName)
+	info, err := os.Stat(parentDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("stat %s directory: %w", parentDirName, err)
+	}
+	if !info.IsDir() {
+		return nil
+	}
+
+	keep := make(map[string]struct{}, count)
+	for i := 0; i < count; i++ {
+		segment, err := segmentAt(i)
+		if err != nil {
+			return err
+		}
+		keep[segment] = struct{}{}
+	}
+
+	children, err := os.ReadDir(parentDir)
+	if err != nil {
+		return fmt.Errorf("read %s directory: %w", parentDirName, err)
+	}
+	for _, child := range children {
+		if !child.IsDir() {
+			continue
+		}
+		if _, ok := keep[child.Name()]; ok {
+			continue
+		}
+		entityDir := filepath.Join(parentDir, child.Name())
+		if err := os.RemoveAll(entityDir); err != nil {
+			return fmt.Errorf("prune %s %q: %w", kind, child.Name(), err)
+		}
 	}
 	return nil
 }
