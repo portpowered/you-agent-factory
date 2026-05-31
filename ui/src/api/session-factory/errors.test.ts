@@ -1,9 +1,9 @@
 import { sessionFactoryAPIErrorMessages } from "./messages";
 import {
   normalizeSessionFactoryAPIErrorCode,
-  resolveSessionFactoryAPIErrorMessage,
   SessionFactoryAPIError,
 } from "./errors";
+import { resolveSessionFactoryAPIErrorMessage } from "./operator-errors";
 
 describe("normalizeSessionFactoryAPIErrorCode", () => {
   it.each([
