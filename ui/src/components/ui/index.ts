@@ -11,6 +11,8 @@ export * from "./dashboard-typography";
 export * from "./data-table";
 export * from "./dialog";
 export * from "./disclosure-button";
+export * from "./expandable-panel-icon";
+export * from "./expandable-panel-trigger";
 export * from "./formatters";
 export * from "./graph-node-button";
 export * from "./input";
