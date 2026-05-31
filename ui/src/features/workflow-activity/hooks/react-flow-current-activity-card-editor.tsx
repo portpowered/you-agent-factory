@@ -293,11 +293,13 @@ function useFactoryGraphEditorSessionState({
     draftState.latestDocument ??
     draftState.baseDocument ??
     null;
+  const classifierEvaluationDefinition =
+    editorMode || editableDefinitionQuery.status === "success"
+      ? (currentFactoryDefinition ?? null)
+      : (projectedFactory ?? currentFactoryDefinition ?? null);
   const editorUnavailableClassifierWorkstationName =
     findClassifierGraphEditorUnsupportedWorkstationName(
-      editorMode
-        ? (currentFactoryDefinition ?? null)
-        : (projectedFactory ?? currentFactoryDefinition ?? null),
+      classifierEvaluationDefinition,
     );
   const isStaleDraft = editableGraph.saveState.isStale;
   const canInteractWithEditor =
