@@ -254,13 +254,14 @@ function buildOverviewWidgetCard({
             locale={locale}
             now={now}
             onNodeRemovedFromDraft={(nodeId) => {
-              if (!nodeId.startsWith("worker:")) {
+              if (nodeId.startsWith("worker:")) {
+                currentSelection.clearSelectedWorkerIfMatching(
+                  nodeId.slice("worker:".length),
+                );
                 return;
               }
 
-              currentSelection.clearSelectedWorkerIfMatching(
-                nodeId.slice("worker:".length),
-              );
+              currentSelection.clearSelectedFactoryGraphNodeIfMatching(nodeId);
             }}
             onSelectStateNode={currentSelection.selectStateNode}
             onSelectWorkID={currentSelection.selectWorkByID}

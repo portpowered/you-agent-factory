@@ -25,10 +25,12 @@ import {
 } from "../base/public";
 import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
+import { parseFactoryGraphWorkTypeNodeId } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
   WorkerDetailCard,
+  WorkTypeDetailCard,
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
 
@@ -173,6 +175,20 @@ function renderCurrentSelectionDetailCard({
         saveState={workerSaveState}
         widgetId={widgetId}
         workerName={selectedWorkerName}
+      />
+    );
+  }
+
+  const selectedWorkTypeName =
+    selection?.kind === "node"
+      ? parseFactoryGraphWorkTypeNodeId(selection.nodeId)
+      : null;
+  if (selectedWorkTypeName) {
+    return (
+      <WorkTypeDetailCard
+        locale={locale}
+        widgetId={widgetId}
+        workTypeName={selectedWorkTypeName}
       />
     );
   }

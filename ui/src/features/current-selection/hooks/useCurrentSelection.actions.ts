@@ -83,6 +83,17 @@ export function useCurrentSelectionActions({
     });
   };
 
+  const clearSelectedFactoryGraphNodeIfMatching = (nodeId: string) => {
+    if (selection?.kind !== "node" || selection.nodeId !== nodeId) {
+      return;
+    }
+
+    commitSelectionState({
+      selection: snapshot ? selectDefaultSelection(snapshot) : null,
+      terminalWorkDetail: null,
+    });
+  };
+
   const selectWorkItem = (
     dispatchId: string,
     nodeId: string,
@@ -182,6 +193,7 @@ export function useCurrentSelectionActions({
   };
 
   return {
+    clearSelectedFactoryGraphNodeIfMatching,
     clearSelectedWorkerIfMatching,
     openTerminalWorkDetail,
     selectStateNode,

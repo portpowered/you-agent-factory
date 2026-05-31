@@ -50,6 +50,17 @@ export function factoryGraphNodeIdForWorkType(subjectId: string): string {
   return `${WORK_TYPE_GRAPH_NODE_PREFIX}${subjectId}`;
 }
 
+export function parseFactoryGraphWorkTypeNodeId(
+  nodeId: string,
+): string | null {
+  if (!nodeId.startsWith(WORK_TYPE_GRAPH_NODE_PREFIX)) {
+    return null;
+  }
+
+  const workTypeName = nodeId.slice(WORK_TYPE_GRAPH_NODE_PREFIX.length);
+  return workTypeName.length > 0 ? workTypeName : null;
+}
+
 export function factoryGraphNodeIdForWorkState(subjectId: string): string {
   const separatorIndex = subjectId.indexOf(":");
   if (separatorIndex <= 0 || separatorIndex >= subjectId.length - 1) {

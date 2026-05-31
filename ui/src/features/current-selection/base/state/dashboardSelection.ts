@@ -6,6 +6,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
 import type { FactoryWorker } from "../../../../api/events/types";
+import { parseFactoryGraphWorkTypeNodeId } from "../../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { hasDashboardStatePlace } from "./dashboardStatePlaces";
 
 export interface DashboardNodeSelection {
@@ -71,9 +72,19 @@ export function resolveDashboardSelection({
   }
 
   if (selection.kind === "node") {
-    return snapshot.topology.workstation_nodes_by_id[selection.nodeId]
-      ? selection
-      : selectDefaultSelection(snapshot);
+    if (snapshot.topology.workstation_nodes_by_id[selection.nodeId]) {
+      return selection;
+    }
+
+    const workTypeName = parseFactoryGraphWorkTypeNodeId(selection.nodeId);
+    if (
+      workTypeName &&
+      workTypeExistsInSnapshotFactory(snapshot, workTypeName)
+    ) {
+      return selection;
+    }
+
+    return selectDefaultSelection(snapshot);
   }
 
   if (selection.kind === "state-node") {
@@ -444,6 +455,25 @@ function workerExistsInSnapshotFactory(
   workerName: string,
 ): boolean {
   return findFactoryWorkerInSnapshot(snapshot, workerName) !== undefined;
+}
+
+function workTypeExistsInSnapshotFactory(
+  snapshot: DashboardSnapshot,
+  workTypeName: string,
+): boolean {
+  const factory = snapshot.factory;
+  if (!factory) {
+    return false;
+  }
+
+  type LegacyDashboardFactoryDefinition = NonNullable<
+    DashboardSnapshot["factory"]
+  > & {
+    work_types?: NonNullable<DashboardSnapshot["factory"]>["workTypes"];
+  };
+  const legacyFactory = factory as LegacyDashboardFactoryDefinition;
+  const workTypes = factory.workTypes ?? legacyFactory.work_types ?? [];
+  return workTypes.some((workType) => workType.name === workTypeName);
 }
 
 export function findFactoryWorkerInSnapshot(
