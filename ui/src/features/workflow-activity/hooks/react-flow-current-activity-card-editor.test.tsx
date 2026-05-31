@@ -102,9 +102,9 @@ const hookState = vi.hoisted(() => ({
   },
   saveEditableDefinition: {
     error: null,
-    mutateAsync: vi.fn(async () => undefined),
+    isPending: false,
     reset: vi.fn(),
-    status: "idle" as const,
+    saveAsync: vi.fn(async () => undefined),
   },
   unsupportedFromDefinition: undefined as string | undefined,
   saveStateIsStale: false,
@@ -112,7 +112,7 @@ const hookState = vi.hoisted(() => ({
 
 vi.mock("../../current-factory-definition/public", () => ({
   useCurrentFactoryDocument: () => hookState.currentFactoryQuery,
-  useSaveCurrentFactory: () => hookState.saveEditableDefinition,
+  useFactoryDocumentSave: () => hookState.saveEditableDefinition,
 }));
 
 vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
@@ -123,9 +123,9 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
         if (!hookState.draftState.pendingFactoryDefinition) {
           return false;
         }
-        await hookState.saveEditableDefinition.mutateAsync({
+        await hookState.saveEditableDefinition.saveAsync({
           baseVersion: hookState.draftState.latestDocument?.version,
-          factoryDefinition: hookState.draftState.pendingFactoryDefinition,
+          factory: hookState.draftState.pendingFactoryDefinition,
         });
         hookState.draftState.replaceDraft(createEmptyFactoryGraphDraft());
         return true;
@@ -139,6 +139,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
         hookState.draftState.latestDocument !== null &&
         !hookState.saveStateIsStale,
       isStale: hookState.saveStateIsStale,
+      lastSuccess: false,
     },
   }),
 }));
@@ -224,9 +225,9 @@ describe("useCurrentActivityGraphEditor", () => {
     hookState.removalController.setPendingRemovalNodeId.mockReset();
     hookState.saveEditableDefinition = {
       error: null,
-      mutateAsync: vi.fn(async () => undefined),
+      isPending: false,
       reset: vi.fn(),
-      status: "idle",
+      saveAsync: vi.fn(async () => undefined),
     };
     hookState.unsupportedFromDefinition = undefined;
     hookState.saveStateIsStale = false;
@@ -301,7 +302,7 @@ describe("useCurrentActivityGraphEditor", () => {
     });
 
     expect(didSave).toBe(false);
-    expect(hookState.saveEditableDefinition.mutateAsync).not.toHaveBeenCalled();
+    expect(hookState.saveEditableDefinition.saveAsync).not.toHaveBeenCalled();
   });
 
   it("blocks saving while snapshot runtime reports in-flight dispatches", () => {
@@ -339,7 +340,7 @@ describe("useCurrentActivityGraphEditor", () => {
 
   it("closes the save confirmation when saving fails", async () => {
     hookState.draftState.hasChanges = true;
-    hookState.saveEditableDefinition.mutateAsync = vi.fn(async () => {
+    hookState.saveEditableDefinition.saveAsync = vi.fn(async () => {
       throw new Error("Save failed");
     });
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
@@ -384,9 +385,9 @@ describe("useCurrentActivityGraphEditor", () => {
     });
 
     expect(didSave).toBe(true);
-    expect(hookState.saveEditableDefinition.mutateAsync).toHaveBeenCalledWith({
+    expect(hookState.saveEditableDefinition.saveAsync).toHaveBeenCalledWith({
       baseVersion: fixtureState.editableDocument.version,
-      factoryDefinition: fixtureState.baseFactoryDefinition,
+      factory: fixtureState.baseFactoryDefinition,
     });
     expect(hookState.draftState.replaceDraft).toHaveBeenCalledWith(
       createEmptyFactoryGraphDraft(),

@@ -1,16 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import {
+import type {
   useCurrentFactoryDocument,
-  useSaveCurrentFactory,
+  useFactoryDocumentSave,
 } from "../../current-factory-definition/public";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import { useCurrentActivityEditableGraph } from "./react-flow-current-activity-card-editor-editable-graph";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import { findClassifierGraphEditorUnsupportedWorkstationName } from "./factory-graph-editor-availability";
@@ -36,7 +36,6 @@ export function useCurrentActivityGraphEditor(
       locale,
       snapshot,
     });
-  const editableDefinitionQuery = currentFactoryQuery;
   const draftState = editableGraph.draftState;
   const structuralValidation = useDraftAppliedFactoryValidation(
     draftState,
@@ -94,7 +93,7 @@ export function useCurrentActivityGraphEditor(
     connectionNotice: controllers.connectionNotice,
     currentFactoryDefinition,
     draftState,
-    editableDefinitionQuery,
+    editableDefinitionQuery: currentFactoryQuery,
     editorUnavailableClassifierWorkstationName,
     editorMode,
     handleDiscardPendingChanges: leaveHandlers.handleDiscardPendingChanges,
@@ -107,6 +106,7 @@ export function useCurrentActivityGraphEditor(
     handleEditorNodeDelete: controllers.handleEditorNodeDelete,
     handleSaveDraft: leaveHandlers.handleSaveDraft,
     handleSaveBeforeLeavingEditor: leaveHandlers.handleSaveBeforeLeavingEditor,
+    graphDraftSaveSucceeded: editableGraph.saveState.lastSuccess,
     hasActiveWork,
     isConfirmingLeaveEditor,
     isConfirmingSave,
@@ -169,7 +169,7 @@ function useFactoryGraphEditorInteraction({
   editorMode: boolean;
   editorUnavailableClassifierWorkstationName?: string;
   locale?: string | null;
-  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
+  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setEditorMode: (mode: boolean) => void;
   setIsConfirmingLeaveEditor: (open: boolean) => void;
@@ -203,34 +203,6 @@ function useFactoryGraphEditorInteraction({
   return { controllers, ...leaveHandlers };
 }
 
-function useCurrentActivityEditableGraph({
-  editorMode,
-  factoryDocumentScopeKey,
-  locale,
-  snapshot,
-}: {
-  editorMode: boolean;
-  factoryDocumentScopeKey?: string | null;
-  locale?: string | null;
-  snapshot: DashboardSnapshot;
-}) {
-  const currentFactoryQuery = useCurrentFactoryDocument(editorMode);
-  const saveEditableDefinition = useSaveCurrentFactory();
-  const editableGraph = useEditableFactoryGraph({
-    activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
-    currentFactoryDocument: currentFactoryQuery.data,
-    factoryDocumentScopeKey,
-    locale,
-    saveFactoryDefinition: saveEditableDefinition.mutateAsync,
-  });
-
-  return {
-    currentFactoryQuery,
-    editableGraph,
-    saveEditableDefinition,
-  };
-}
-
 function useFactoryGraphEditorControllers({
   activeTool,
   canInteractWithEditor,
@@ -244,7 +216,7 @@ function useFactoryGraphEditorControllers({
   draftState: EditableFactoryGraphViewModel["draftState"];
   editableGraph: EditableFactoryGraphViewModel;
   locale?: string | null;
-  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
+  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
 }) {
   const connectionController = useFactoryGraphConnectionController({
     activeTool,
@@ -285,7 +257,7 @@ function useFactoryGraphEditorSessionState({
   editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
   locale?: string | null;
   projectedFactory?: CanonicalFactoryDefinition;
-  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
+  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
 }) {
   const hasActiveWork = activeWorkCount > 0;
   const currentFactoryDefinition =
@@ -304,7 +276,7 @@ function useFactoryGraphEditorSessionState({
     editorMode &&
     editableDefinitionQuery.status === "success" &&
     editorUnavailableClassifierWorkstationName === undefined &&
-    saveEditableDefinition.status !== "pending";
+    !saveEditableDefinition.isPending;
   const canSaveDraft =
     editableGraph.saveState.canSave &&
     editorUnavailableClassifierWorkstationName === undefined &&
@@ -354,7 +326,7 @@ function useFactoryGraphEditorLeaveHandlers({
   editableGraph: EditableFactoryGraphViewModel;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
-  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
+  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setConnectionNotice: ReturnType<
     typeof useFactoryGraphConnectionController

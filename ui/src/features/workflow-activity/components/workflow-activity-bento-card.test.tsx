@@ -8,7 +8,7 @@ import { installDashboardBrowserTestShims } from "../../../components/dashboard/
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
   useCurrentFactoryDocument,
-  useSaveCurrentFactory,
+  useFactoryDocumentSave,
 } from "../../current-factory-definition/public";
 import type { DashboardSelection } from "../../current-selection/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
@@ -25,7 +25,7 @@ vi.mock("../../current-factory-definition/public", async () => {
   return {
     ...actual,
     useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
+    useFactoryDocumentSave: vi.fn(),
   };
 });
 
@@ -197,10 +197,12 @@ function registerWorkflowActivityBentoCardTestSetup() {
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
-      mutateAsync: vi.fn(),
+    vi.mocked(useFactoryDocumentSave).mockReturnValue({
+      error: null,
+      isPending: false,
       reset: vi.fn(),
-      status: "idle",
+      save: vi.fn(),
+      saveAsync: vi.fn(),
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue(
       defaultDraftState as never,

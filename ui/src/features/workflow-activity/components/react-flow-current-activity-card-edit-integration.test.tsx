@@ -20,7 +20,7 @@ import { installDashboardBrowserTestShims } from "../../../components/dashboard/
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
   useCurrentFactoryDocument,
-  useSaveCurrentFactory,
+  useFactoryDocumentSave,
 } from "../../current-factory-definition/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -155,7 +155,7 @@ vi.mock("../../current-factory-definition/public", async () => {
   return {
     ...actual,
     useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
+    useFactoryDocumentSave: vi.fn(),
   };
 });
 
@@ -246,7 +246,7 @@ const importController: CurrentActivityImportController = {
 };
 
 let restoreBrowserTestShims: (() => void) | null = null;
-let mutateAsync: ReturnType<typeof vi.fn>;
+let saveAsync: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -257,11 +257,13 @@ beforeEach(() => {
     error: null,
     status: "success",
   } as never);
-  mutateAsync = vi.fn().mockResolvedValue(editableFactoryDocument);
-  vi.mocked(useSaveCurrentFactory).mockReturnValue({
-    mutateAsync,
+  saveAsync = vi.fn().mockResolvedValue(editableFactoryDocument);
+  vi.mocked(useFactoryDocumentSave).mockReturnValue({
+    error: null,
+    isPending: false,
     reset: vi.fn(),
-    status: "idle",
+    save: vi.fn(),
+    saveAsync,
   } as never);
 });
 
@@ -470,7 +472,7 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
         },
       ],
     } satisfies CurrentFactoryDocument;
-    mutateAsync.mockResolvedValue(factoryDocumentWithDistinctWorkstationId);
+    saveAsync.mockResolvedValue(factoryDocumentWithDistinctWorkstationId);
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: factoryDocumentWithDistinctWorkstationId,
       error: null,
@@ -514,9 +516,9 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
     );
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledWith({
+      expect(saveAsync).toHaveBeenCalledWith({
         baseVersion: factoryDocumentWithDistinctWorkstationId.version,
-        factoryDefinition: {
+        factory: {
           ...factoryDocumentWithDistinctWorkstationId,
           resources: [],
           workstations: [

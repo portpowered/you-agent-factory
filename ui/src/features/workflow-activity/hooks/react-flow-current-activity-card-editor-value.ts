@@ -4,7 +4,7 @@ import type { FactoryGraphEditorTool } from "../../factory-graph-editor/componen
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
-import type { useSaveCurrentFactory } from "../../current-factory-definition/public";
+import type { useFactoryDocumentSave } from "../../current-factory-definition/public";
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
@@ -39,6 +39,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   handleEditorNodeDelete: (nodeId: string) => void;
   handleSaveDraft: () => Promise<boolean>;
   handleSaveBeforeLeavingEditor: () => Promise<boolean>;
+  graphDraftSaveSucceeded: boolean;
   hasActiveWork: boolean;
   isConfirmingLeaveEditor: boolean;
   isConfirmingSave: boolean;
@@ -50,9 +51,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     typeof useFactoryGraphRemovalController
   >["pendingRemovalIntent"];
   saveBlockedReason?: string;
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentFactory
-  >;
+  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
   saveSummary: ReturnType<typeof buildFactoryGraphSaveSummary>;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setBlockedRemovalReason: (reason: string | null) => void;
@@ -93,6 +92,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     handleEditorNodeDelete: args.handleEditorNodeDelete,
     handleSaveDraft: args.handleSaveDraft,
     handleSaveBeforeLeavingEditor: args.handleSaveBeforeLeavingEditor,
+    graphDraftSaveSucceeded: args.graphDraftSaveSucceeded,
     hasActiveWork: args.hasActiveWork,
     isConfirmingLeaveEditor: args.isConfirmingLeaveEditor,
     isConfirmingSave: args.isConfirmingSave,

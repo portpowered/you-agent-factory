@@ -15,14 +15,15 @@ export function CurrentActivityGraphSaveNotifications({
   const messages = getFactoryGraphEditorMessages(locale);
   const lastToastKeyRef = useRef<string | null>(null);
   const saveErrorMessage = editor.saveEditableDefinition.error?.message ?? null;
-  const saveStatus = editor.saveEditableDefinition.status;
   const hasDraftChanges = editor.draftState.hasChanges;
+  const showSaveSuccessToast =
+    editor.graphDraftSaveSucceeded && !hasDraftChanges;
 
   useEffect(() => {
     const toastKey =
       saveErrorMessage !== null
         ? `error:${saveErrorMessage}`
-        : saveStatus === "success" && !hasDraftChanges
+        : showSaveSuccessToast
           ? "success"
           : null;
 
@@ -50,7 +51,7 @@ export function CurrentActivityGraphSaveNotifications({
     messages.noticeSaveSuccessDescription,
     messages.noticeSaveSuccessTitle,
     saveErrorMessage,
-    saveStatus,
+    showSaveSuccessToast,
   ]);
 
   return null;

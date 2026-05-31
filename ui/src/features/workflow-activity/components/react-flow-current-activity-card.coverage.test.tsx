@@ -16,7 +16,7 @@ import {
 } from "../../../components/dashboard/test-fixtures";
 import {
   useCurrentFactoryDocument,
-  useSaveCurrentFactory,
+  useFactoryDocumentSave,
 } from "../../current-factory-definition/public";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
@@ -212,7 +212,7 @@ vi.mock("../../current-factory-definition/public", async () => {
   return {
     ...actual,
     useCurrentFactoryDocument: vi.fn(),
-    useSaveCurrentFactory: vi.fn(),
+    useFactoryDocumentSave: vi.fn(),
   };
 });
 
@@ -328,10 +328,12 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
-      mutateAsync: vi.fn(),
+    vi.mocked(useFactoryDocumentSave).mockReturnValue({
+      error: null,
+      isPending: false,
       reset: vi.fn(),
-      status: "idle",
+      save: vi.fn(),
+      saveAsync: vi.fn(),
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue(
       defaultDraftState as never,
