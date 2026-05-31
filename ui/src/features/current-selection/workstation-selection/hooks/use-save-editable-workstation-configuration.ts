@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 
-import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import { mapWorkstationSaveErrorToFieldErrors } from "../lib/workstation-save-validation-field-mapping";
 import { useScopedFactoryDocumentSave } from "../../base/hooks/useScopedFactoryDocumentSave";
 import type {
   EditableWorkstationConfigurationState,
@@ -42,7 +42,7 @@ export function useSaveEditableWorkstationConfiguration({
   } = useScopedFactoryDocumentSave<EditableWorkstationSaveValidationErrors>({
     fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
     isDirty,
-    mapSaveErrorToFieldErrors: resolveSaveFieldErrors,
+    mapSaveErrorToFieldErrors: mapWorkstationSaveErrorToFieldErrors,
     scopeKey,
   });
 
@@ -86,54 +86,4 @@ export function useSaveEditableWorkstationConfiguration({
       saveState,
     ],
   );
-}
-
-function resolveSaveFieldErrors(
-  error: Pick<CurrentFactoryDefinitionError, "message" | "targets">,
-): EditableWorkstationSaveValidationErrors | undefined {
-  const fieldErrors: EditableWorkstationSaveValidationErrors = {};
-
-  for (const target of error.targets ?? []) {
-    const fieldName = resolveTargetFieldName(target);
-    if (fieldName === null) {
-      continue;
-    }
-    fieldErrors[fieldName] ??= error.message;
-  }
-
-  return Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined;
-}
-
-function resolveTargetFieldName(
-  target: NonNullable<CurrentFactoryDefinitionError["targets"]>[number],
-): keyof EditableWorkstationSaveValidationErrors | null {
-  const subjectID = target.subject.id.trim().toLowerCase();
-  const subjectType = target.subject.type;
-  const subjectLocation = target.subject.location;
-
-  if (
-    target.code === "factory.worker.danglingReference" &&
-    subjectType === "WORKSTATION"
-  ) {
-    return "workerName";
-  }
-  if (
-    subjectType === "WORKSTATION" &&
-    (subjectLocation === "REFERENCE" || subjectLocation === "DEFINITION")
-  ) {
-    if (subjectID.endsWith("worker") || subjectID === "worker") {
-      return "workerName";
-    }
-    if (subjectID === "behavior") {
-      return "behavior";
-    }
-    if (subjectID === "body" || subjectID === "prompt") {
-      return "prompt";
-    }
-    if (subjectID === "runner" || subjectID === "runnername") {
-      return "runnerName";
-    }
-  }
-
-  return null;
 }
