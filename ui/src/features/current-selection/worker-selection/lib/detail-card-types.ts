@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryVersion,
@@ -12,8 +14,8 @@ import type { EditableWorkerValidationErrors } from "./worker-editable-validatio
 
 export interface WorkerDetailCardProps {
   editableConfigurationState?: EditableWorkerConfigurationState;
+  headerAction?: ReactNode;
   locale?: string | null;
-  onSaveWorker?: () => void;
   saveState?: EditableWorkerSaveState;
   widgetId?: string;
   workerName: string;

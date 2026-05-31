@@ -1,8 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
+import type {
+  EditableWorkerConfigurationState,
+  EditableWorkerSaveState,
+} from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
+import { EditableWorkerSaveHeaderAction } from "./worker-save-controls";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -46,6 +50,24 @@ function mockFactoryDocumentQuery(
     status: "pending",
     ...overrides,
   } as never);
+}
+
+function buildWorkerHeaderSaveAction({
+  canSave,
+  onClick = vi.fn(),
+  saveState = { status: "idle" },
+}: {
+  canSave: boolean;
+  onClick?: () => void;
+  saveState?: EditableWorkerSaveState;
+}) {
+  return (
+    <EditableWorkerSaveHeaderAction
+      canSave={canSave}
+      onClick={onClick}
+      saveState={saveState}
+    />
+  );
 }
 
 function buildFactoryDocument(
@@ -319,6 +341,7 @@ describe("WorkerDetailCard", () => {
     render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
         workerName="reviewer"
       />,
     );
@@ -327,6 +350,81 @@ describe("WorkerDetailCard", () => {
       "Saving reviewer updates every workstation",
     );
     expect(screen.getByRole("button", { name: "Save worker" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    ).toBeTruthy();
+  });
+
+  it("renders header save and omits a footer Save button", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: true,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: true,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: "Save worker" })).toHaveLength(
+      1,
+    );
+    expect(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    ).toBeTruthy();
   });
 
   it("shows scoped save success feedback for the selected worker", () => {
@@ -843,6 +941,7 @@ describe("WorkerDetailCard", () => {
     render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
         workerName="reviewer"
       />,
     );
@@ -926,6 +1025,7 @@ describe("WorkerDetailCard", () => {
     render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkerHeaderSaveAction({ canSave: false })}
         workerName="reviewer"
       />,
     );

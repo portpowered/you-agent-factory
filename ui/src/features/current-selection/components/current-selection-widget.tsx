@@ -25,6 +25,7 @@ import {
 } from "../base/public";
 import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
+import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
@@ -57,9 +58,9 @@ function renderCurrentSelectionDetailCard({
   headerAction,
   locale,
   now,
-  onSaveWorker,
   onSelectTraceID,
   saveState,
+  workerHeaderAction,
   workerSaveState,
   selectedProviderSessionKey,
   selectedTrace,
@@ -80,8 +81,8 @@ function renderCurrentSelectionDetailCard({
   headerAction: ReactNode;
   locale?: string;
   now: number;
-  onSaveWorker?: () => void;
   onSelectTraceID?: (traceID: string) => void;
+  workerHeaderAction: ReactNode;
   saveState: ReturnType<
     typeof useSaveEditableWorkstationConfiguration
   >["saveState"];
@@ -168,8 +169,8 @@ function renderCurrentSelectionDetailCard({
     return (
       <WorkerDetailCard
         editableConfigurationState={editableWorkerConfigurationState}
+        headerAction={workerHeaderAction}
         locale={locale}
-        onSaveWorker={onSaveWorker}
         saveState={workerSaveState}
         widgetId={widgetId}
         workerName={selectedWorkerName}
@@ -275,6 +276,14 @@ export function CurrentSelectionWidget({
       saveState={workstationSave.saveState}
     />
   );
+  const workerHeaderAction = (
+    <EditableWorkerSaveHeaderAction
+      canSave={workerSave.canSave}
+      locale={locale ?? undefined}
+      onClick={() => void workerSave.save()}
+      saveState={workerSave.saveState}
+    />
+  );
   const detailCard = renderCurrentSelectionDetailCard({
     activeTraceID,
     currentSelection,
@@ -284,8 +293,8 @@ export function CurrentSelectionWidget({
     headerAction: workstationHeaderAction,
     locale: locale ?? undefined,
     now,
-    onSaveWorker: () => void workerSave.save(),
     onSelectTraceID,
+    workerHeaderAction,
     saveState: workstationSave.saveState,
     selectedProviderSessionKey,
     workerSaveState: workerSave.saveState,

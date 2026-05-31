@@ -44,13 +44,11 @@ import type { getWorkerDetailMessages } from "../messages/worker-detail";
 
 export function WorkerEditableConfigurationSection({
   messages,
-  onSaveWorker,
   saveState,
   state,
   workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
-  onSaveWorker?: () => void;
   saveState?: EditableWorkerSaveState;
   state?: WorkerDetailCardProps["editableConfigurationState"];
   workerName: string;
@@ -121,7 +119,6 @@ export function WorkerEditableConfigurationSection({
           {state?.status === "ready" ? (
             <WorkerEditableConfigurationReadyForm
               messages={messages}
-              onSaveWorker={onSaveWorker}
               saveState={saveState}
               state={state}
               workerName={workerName}
@@ -135,13 +132,11 @@ export function WorkerEditableConfigurationSection({
 
 function WorkerEditableConfigurationReadyForm({
   messages,
-  onSaveWorker,
   saveState,
   state,
   workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
-  onSaveWorker?: () => void;
   saveState?: EditableWorkerSaveState;
   state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
   workerName: string;
@@ -252,31 +247,19 @@ function WorkerEditableConfigurationReadyForm({
           validationErrors={validationErrors}
         />
       </div>
-      <DashboardActionRow
-        actions={
-          <>
+      {state.isDirty ? (
+        <DashboardActionRow
+          actions={
             <DashboardActionButton
-              aria-busy={isSaving ? "true" : undefined}
-              disabled={!state.canSave || isSaving}
-              onClick={onSaveWorker}
+              disabled={isSaving}
+              onClick={state.onResetToLatest}
               type="button"
             >
-              {isSaving
-                ? messages.editableConfigurationSaveBusyAction
-                : messages.editableConfigurationSaveAction}
+              {messages.discardDraftAction}
             </DashboardActionButton>
-            {state.isDirty ? (
-              <DashboardActionButton
-                disabled={isSaving}
-                onClick={state.onResetToLatest}
-                type="button"
-              >
-                {messages.discardDraftAction}
-              </DashboardActionButton>
-            ) : null}
-          </>
-        }
-      />
+          }
+        />
+      ) : null}
     </form>
   );
 }

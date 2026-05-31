@@ -9,8 +9,8 @@ import { WorkerEditableConfigurationSection } from "./worker-editable-configurat
 
 export function WorkerDetailCard({
   editableConfigurationState,
+  headerAction,
   locale,
-  onSaveWorker,
   saveState,
   widgetId = "current-selection",
   workerName,
@@ -19,7 +19,7 @@ export function WorkerDetailCard({
   const detailState = useWorkerDetailState(workerName);
 
   return (
-    <SelectionDetailLayout widgetId={widgetId}>
+    <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       {editableConfigurationState?.status !== "ready" ? (
         <p className={WIDGET_SUBTITLE_CLASS}>{workerName}</p>
       ) : null}
@@ -44,7 +44,6 @@ export function WorkerDetailCard({
       {detailState.status === "ready" ? (
         <WorkerEditableConfigurationSection
           messages={messages}
-          onSaveWorker={onSaveWorker}
           saveState={saveState}
           state={editableConfigurationState}
           workerName={workerName}
