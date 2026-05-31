@@ -5,6 +5,7 @@ import {
   systemTimeGraphNodeId,
 } from "./factory-graph-customer-display";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
+import { buildNode } from "./factory-graph-draft-types";
 import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
 import { maintainerRuntimeShapedFactory } from "./maintainer-runtime-shaped-factory.fixture";
 
@@ -235,5 +236,36 @@ describe("filterFactoryGraphTopologyForCustomerDisplay", () => {
     expect(
       edgeIds(filtered).some((edgeId) => edgeId.startsWith("worker-assignment:")),
     ).toBe(true);
+  });
+
+  it("drops stale empty-name worker nodes during customer-display filtering", () => {
+    const filteredTopology = filterFactoryGraphTopologyForCustomerDisplay(
+      buildFactoryGraphTopologyFromDefinition(maintainerRuntimeShapedFactory),
+    );
+    const withStalePhantomWorker = {
+      ...filteredTopology,
+      nodes: [
+        ...filteredTopology.nodes,
+        buildNode({ kind: "worker", name: "" }),
+      ],
+      edges: [
+        ...filteredTopology.edges,
+        {
+          id: "worker-assignment:worker:->workstation:process",
+          kind: "worker-assignment" as const,
+          sourceId: "worker:",
+          targetId: "workstation:process",
+        },
+      ],
+    };
+
+    const filtered = filterFactoryGraphTopologyForCustomerDisplay(
+      withStalePhantomWorker,
+    );
+
+    expect(nodeIds(filtered)).not.toContain("worker:");
+    expect(edgeIds(filtered)).not.toContain(
+      "worker-assignment:worker:->workstation:process",
+    );
   });
 });

@@ -165,7 +165,7 @@ function appendWorkstationWorkerEdge(
 
   const workerKey: FactoryGraphNodeReference = {
     kind: "worker",
-    name: workstation.worker,
+    name: workerName,
   };
   nodes.set(nodeKeyId(workerKey), buildNode(workerKey));
   const workerEdge = buildEdge("worker-assignment", workerKey, workstationKey);

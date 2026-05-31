@@ -44,6 +44,18 @@ export function isHiddenSystemTimeGraphNode(node: FactoryGraphNode): boolean {
   );
 }
 
+function isEmptyWorkerGraphNode(node: FactoryGraphNode): boolean {
+  return (
+    node.key.kind === "worker" && (node.key.name ?? "").trim().length === 0
+  );
+}
+
+export function isHiddenCustomerDisplayGraphNode(
+  node: FactoryGraphNode,
+): boolean {
+  return isHiddenSystemTimeGraphNode(node) || isEmptyWorkerGraphNode(node);
+}
+
 export function systemTimeGraphNodeId(
   kind: "work-type" | "work-state" | "workstation",
   ...parts: string[]
@@ -66,7 +78,9 @@ export function filterFactoryGraphTopologyForCustomerDisplay(
   topology: FactoryGraphTopology,
 ): FactoryGraphTopology {
   const hiddenNodeIds = new Set(
-    topology.nodes.filter(isHiddenSystemTimeGraphNode).map((node) => node.id),
+    topology.nodes
+      .filter(isHiddenCustomerDisplayGraphNode)
+      .map((node) => node.id),
   );
 
   return {
