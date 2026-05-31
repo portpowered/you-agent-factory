@@ -86,6 +86,62 @@ and `workTypeName` fields. See [Batch Inputs](batch-inputs.md) for batch shape,
 `DEPENDS_ON`, and `PARENT_CHILD`; see [Work](work.md) for submitted-work tags and
 verification after CLI submit.
 
+### Batch submit for agents
+
+When a factory is already running, upsert multi-item work with `you submit batch`
+against the live session. The JSON body must set `"type": "FACTORY_REQUEST_BATCH"`
+and a **stable, non-empty `requestId`**. The CLI validates locally, then issues
+`PUT` to `/factory-sessions/{session}/work-requests/{requestId}` (same upsert
+semantics as operator HTTP batch ingress in [Batch Inputs](batch-inputs.md)).
+
+**Idempotency:** Re-submitting the **same** batch JSON with the **same**
+`requestId` is an idempotent batch upsert—the factory updates that work-request
+instead of creating a parallel batch. Changing `requestId` (or issuing a new unary
+`you submit` call) creates a **new** submission. Keep `requestId` stable across
+retries when you intend to replace or refresh the same batch, not fork duplicate work.
+
+For `DEPENDS_ON`, `PARENT_CHILD`, relation field names, and full batch shape, read
+[Batch Inputs](batch-inputs.md) (`you docs batch-inputs`)—do not duplicate that
+contract here.
+
+Minimal batch (save to a file or pipe inline):
+
+```json
+{
+  "requestId": "release-story-set",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "story-auth",
+      "workTypeName": "story",
+      "payload": { "title": "Harden auth session handling" }
+    }
+  ]
+}
+```
+
+File path (primary form):
+
+```bash
+you submit batch ./batches/release-story-set.json
+```
+
+Pipe or stdin without a temp file:
+
+```bash
+cat batch.json | you submit batch
+```
+
+Inline JSON positional (small batches; mind shell length limits):
+
+```bash
+you submit batch '{"requestId":"release-story-set","type":"FACTORY_REQUEST_BATCH","works":[{"name":"story-auth","workTypeName":"story","payload":{"title":"Harden auth session handling"}}]}'
+```
+
+Use `you submit batch --dry-run <path>` to validate without contacting the server.
+Run `you submit batch --help` for `--file`, explicit stdin (`you submit batch -`),
+`--server`, `--session`, and `--json` flags.
+
 ### Pre-Submit Checklist
 
 - [ ] Confirm a factory service is running — run `you session list` or follow
