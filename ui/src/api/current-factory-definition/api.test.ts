@@ -2,11 +2,13 @@ import {
   factoryRuntimeNotIdleTarget,
   staleFactoryVersionTarget,
 } from "../../testing/factory-validation-target-fixtures";
+import { sessionFactoryOperatorErrorMessages } from "../session-factory/operator-errors";
 import {
   CurrentFactoryDefinitionError,
   getCurrentFactoryDefinition,
   getCurrentFactoryDocument,
   saveCurrentFactoryDocument,
+  saveFactoryForSessionDocument,
 } from "./api";
 
 describe("getCurrentFactoryDefinition", () => {
@@ -178,12 +180,9 @@ describe("getCurrentFactoryDefinition", () => {
       sessionID: "session-2",
     });
 
-    expect(fetch).toHaveBeenCalledWith(
-      "/factory-sessions/session-2/factory",
-      {
-        method: "GET",
-      },
-    );
+    expect(fetch).toHaveBeenCalledWith("/factory-sessions/session-2/factory", {
+      method: "GET",
+    });
   });
 
   it("surfaces current-factory transport failures with the original API error code", async () => {
@@ -217,9 +216,7 @@ describe("getCurrentFactoryDefinition", () => {
   it("surfaces the existing unavailable-environment fallback when fetch is missing", async () => {
     vi.stubGlobal("fetch", undefined);
 
-    await expect(
-      getCurrentFactoryDocument(),
-    ).rejects.toMatchObject({
+    await expect(getCurrentFactoryDocument()).rejects.toMatchObject({
       code: "NETWORK_ERROR",
       message: "Current factory editing is unavailable in this environment.",
       name: "CurrentFactoryDefinitionError",
@@ -233,8 +230,7 @@ describe("getCurrentFactoryDefinition", () => {
       }),
     ).rejects.toMatchObject({
       code: "NETWORK_ERROR",
-      message:
-        "The dashboard could not reach the current factory editing API.",
+      message: "The dashboard could not reach the current factory editing API.",
       name: "CurrentFactoryDefinitionError",
       responseBody: expect.any(Error),
     });
@@ -281,7 +277,8 @@ describe("getCurrentFactoryDefinition", () => {
       }),
     ).rejects.toMatchObject({
       code: "INVALID_FACTORY_DEFINITION",
-      message: "The factory definition was rejected by the session factory API.",
+      message:
+        "The factory definition was rejected by the session factory API.",
       name: "CurrentFactoryDefinitionError",
       responseBody: {
         code: "INVALID_FACTORY",
@@ -637,9 +634,7 @@ describe("getCurrentFactoryDefinition", () => {
     expect(fetch).toHaveBeenCalledWith(
       "/factory-sessions/~default/factory",
       expect.objectContaining({
-        body: expect.stringContaining(
-          '"factory":{"name":"Current Factory"',
-        ),
+        body: expect.stringContaining('"factory":{"name":"Current Factory"'),
       }),
     );
     expect(fetch).toHaveBeenCalledWith(
@@ -651,9 +646,7 @@ describe("getCurrentFactoryDefinition", () => {
     expect(fetch).toHaveBeenCalledWith(
       "/factory-sessions/~default/factory",
       expect.objectContaining({
-        body: expect.stringContaining(
-          '"physical":"2026-05-28T04:11:21.570Z"',
-        ),
+        body: expect.stringContaining('"physical":"2026-05-28T04:11:21.570Z"'),
       }),
     );
   });
@@ -695,8 +688,9 @@ describe("getCurrentFactoryDefinition", () => {
 
     const putBody = JSON.parse(
       String(
-        vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "PUT")?.[1]
-          ?.body,
+        vi
+          .mocked(fetch)
+          .mock.calls.find(([, init]) => init?.method === "PUT")?.[1]?.body,
       ),
     ) as { mode?: string };
 
@@ -861,7 +855,8 @@ describe("getCurrentFactoryDefinition", () => {
             new Response(
               JSON.stringify({
                 code: "FACTORY_NOT_IDLE",
-                message: "Current factory runtime must be idle before activation.",
+                message:
+                  "Current factory runtime must be idle before activation.",
                 targets: [
                   factoryRuntimeNotIdleTarget(
                     "Current factory runtime must be idle before activation.",
@@ -907,8 +902,7 @@ describe("getCurrentFactoryDefinition", () => {
       ),
     ).rejects.toMatchObject({
       code: "NETWORK_ERROR",
-      message:
-        "The dashboard could not reach the current factory editing API.",
+      message: "The dashboard could not reach the current factory editing API.",
       name: "CurrentFactoryDefinitionError",
       responseBody: expect.any(Error),
     });
@@ -1009,5 +1003,144 @@ describe("getCurrentFactoryDefinition", () => {
       status: 200,
       statusText: "OK",
     });
+  });
+
+  it("surfaces session-factory operator copy for stale-version save failures", async () => {
+    await expect(
+      saveCurrentFactoryDocument(
+        {
+          baseVersion: {
+            logical: "9",
+            physical: "2026-05-18T14:25:00Z",
+          },
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code: "STALE_FACTORY_VERSION",
+                message: "ignored api message",
+                targets: [staleFactoryVersionTarget()],
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 409,
+                statusText: "Conflict",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "STALE_FACTORY_VERSION",
+      message: sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
+      name: "CurrentFactoryDefinitionError",
+    });
+  });
+
+  it("surfaces session-factory operator copy for not-idle save failures", async () => {
+    await expect(
+      saveCurrentFactoryDocument(
+        {
+          baseVersion: {
+            logical: "9",
+            physical: "2026-05-18T14:25:00Z",
+          },
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code: "FACTORY_NOT_IDLE",
+                message: "ignored api message",
+                targets: [factoryRuntimeNotIdleTarget()],
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 409,
+                statusText: "Conflict",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "FACTORY_NOT_IDLE",
+      message: sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE,
+      name: "CurrentFactoryDefinitionError",
+    });
+  });
+
+  it("delegates saveFactoryForSessionDocument to session-factory with explicit save mode", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Imported Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "2",
+            physical: "2026-05-18T14:42:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveFactoryForSessionDocument(
+      {
+        factoryDefinition: {
+          name: "Imported Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+        includeVersion: false,
+        mode: "UPSERT_NAMED_AND_ACTIVATE",
+      },
+      {
+        fetch,
+        sessionID: "session-2",
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/factory-sessions/session-2/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mode: "UPSERT_NAMED_AND_ACTIVATE",
+          factory: {
+            name: "Imported Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        }),
+        method: "PUT",
+      }),
+    );
   });
 });

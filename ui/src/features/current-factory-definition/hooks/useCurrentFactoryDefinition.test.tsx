@@ -1,15 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-
-import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import {
   type CanonicalFactoryDefinition,
+  CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
   getCurrentFactoryDefinition,
   getCurrentFactoryDocument,
   saveCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
+import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import { sessionFactoryOperatorErrorMessages } from "../../../api/session-factory/operator-errors";
+import { factoryRuntimeNotIdleTarget } from "../../../testing/factory-validation-target-fixtures";
 import { syncCurrentFactoryDefinition } from "../../dashboard/lib/dashboard-event-stream";
 import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
@@ -393,11 +395,13 @@ describe("useSaveCurrentFactory", () => {
   });
 
   it("preserves current-factory save API errors through the mutation", async () => {
-    const error = {
-      code: "STALE_FACTORY_VERSION",
-      message: "The editable definition is stale.",
-      name: "CurrentFactoryDefinitionError",
-    };
+    const error = new CurrentFactoryDefinitionError(
+      sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
+      {
+        code: "STALE_FACTORY_VERSION",
+        status: 409,
+      },
+    );
     vi.mocked(saveCurrentFactoryDocument).mockRejectedValue(error);
 
     const { result } = renderHook(() => useSaveCurrentFactory(), {
@@ -413,6 +417,35 @@ describe("useSaveCurrentFactory", () => {
         factoryDefinition: editableFactoryDefinition,
       }),
     ).rejects.toEqual(error);
+  });
+
+  it("preserves not-idle operator-facing save failures through the mutation", async () => {
+    const error = new CurrentFactoryDefinitionError(
+      sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE,
+      {
+        code: "FACTORY_NOT_IDLE",
+        status: 409,
+        targets: [factoryRuntimeNotIdleTarget()],
+      },
+    );
+    vi.mocked(saveCurrentFactoryDocument).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useSaveCurrentFactory(), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await expect(
+      result.current.mutateAsync({
+        baseVersion: {
+          logical: "7",
+          physical: "2026-05-27T07:59:00Z",
+        },
+        factoryDefinition: editableFactoryDefinition,
+      }),
+    ).rejects.toMatchObject({
+      code: "FACTORY_NOT_IDLE",
+      message: sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE,
+    });
   });
 });
 
