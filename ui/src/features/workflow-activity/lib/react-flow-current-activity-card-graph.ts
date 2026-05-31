@@ -366,6 +366,7 @@ interface BuildCurrentActivityNodesInput {
   graphLayout: GraphLayout;
   locale?: string;
   now: number;
+  onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (
     workID: string,
@@ -477,10 +478,22 @@ function buildPlaceNode(
   }
 
   if (place.kind === "resource") {
+    const resolvedResourceName =
+      typeof place.type_id === "string" && place.type_id.trim().length > 0
+        ? place.type_id
+        : place.place_id.replace(/:available$/, "");
     return {
       ...basePlaceNode,
-      data: { ...basePlaceData, kind: "resource" as const, place },
-      selectable: false,
+      data: {
+        ...basePlaceData,
+        kind: "resource" as const,
+        onSelectResource: input.onSelectResource,
+        place,
+        selectedResource:
+          input.selection?.kind === "resource" &&
+          input.selection.resourceName === resolvedResourceName,
+      },
+      selectable: true,
       type: "resource",
     };
   }
@@ -640,6 +653,7 @@ export function buildCurrentActivityNodes({
   graphLayout,
   locale,
   now,
+  onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
@@ -670,6 +684,7 @@ export function buildCurrentActivityNodes({
     graphLayout,
     locale,
     now,
+    onSelectResource,
     onSelectStateNode,
     onSelectWorkID,
     onSelectWorker,

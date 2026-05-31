@@ -253,6 +253,7 @@ function buildOverviewWidgetCard({
             importController={importController}
             locale={locale}
             now={now}
+            onSelectResource={currentSelection.selectResource}
             onSelectStateNode={currentSelection.selectStateNode}
             onSelectWorkID={currentSelection.selectWorkByID}
             onSelectWorker={currentSelection.selectWorker}

@@ -10,6 +10,7 @@ export interface WorkflowActivityWidgetProps {
   importController: CurrentActivityImportController;
   locale?: string;
   now: number;
+  onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (
     workID: string,
@@ -27,6 +28,7 @@ export function WorkflowActivityWidget({
   importController,
   locale,
   now,
+  onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
@@ -45,6 +47,7 @@ export function WorkflowActivityWidget({
       snapshot={snapshot}
       widgetInstanceID={widgetInstanceID}
       onSelectWorkID={onSelectWorkID}
+      onSelectResource={onSelectResource}
       onSelectStateNode={onSelectStateNode}
       onSelectWorker={onSelectWorker}
       onSelectWorkstation={onSelectWorkstation}

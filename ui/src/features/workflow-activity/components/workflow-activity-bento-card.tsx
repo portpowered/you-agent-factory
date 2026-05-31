@@ -24,6 +24,7 @@ interface WorkflowActivityBentoCardProps {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorker: (workerName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
@@ -39,6 +40,7 @@ export function WorkflowActivityBentoCard({
   snapshot,
   widgetInstanceID,
   onSelectWorkID,
+  onSelectResource,
   onSelectStateNode,
   onSelectWorker,
   onSelectWorkstation,
@@ -80,6 +82,7 @@ export function WorkflowActivityBentoCard({
           snapshot={snapshot}
           widgetInstanceID={widgetInstanceID}
           onSelectWorkID={onSelectWorkID}
+          onSelectResource={onSelectResource}
           onSelectStateNode={onSelectStateNode}
           onSelectWorker={onSelectWorker}
           onSelectWorkstation={onSelectWorkstation}

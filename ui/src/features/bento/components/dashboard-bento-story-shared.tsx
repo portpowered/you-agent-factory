@@ -559,6 +559,7 @@ export function WorkflowGraphCardStory() {
       <WorkflowActivityWidget
         importController={importController}
         now={STORY_NOW}
+        onSelectResource={currentSelection.selectResource}
         onSelectStateNode={currentSelection.selectStateNode}
         onSelectWorkID={currentSelection.selectWorkByID}
         onSelectWorker={currentSelection.selectWorker}
@@ -1290,7 +1291,8 @@ function responsiveCatalogSelectionCards({
         <WorkflowActivityWidget
           importController={importController}
           now={STORY_NOW}
-          onSelectStateNode={currentSelection.selectStateNode}
+          onSelectResource={currentSelection.selectResource}
+        onSelectStateNode={currentSelection.selectStateNode}
           onSelectWorkID={currentSelection.selectWorkByID}
           onSelectWorker={currentSelection.selectWorker}
           onSelectWorkstation={currentSelection.selectWorkstation}

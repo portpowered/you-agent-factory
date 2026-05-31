@@ -126,6 +126,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: resolvedSelection,
@@ -366,6 +367,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
@@ -416,6 +418,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
@@ -457,6 +460,8 @@ describe("current activity graph editor handles", () => {
         expect.objectContaining({ id: "workstation-resource-source" }),
       ]),
       kind: "resource",
+      onSelectResource: expect.any(Function),
+      selectedResource: false,
     });
     expect(
       nodes.find((node) => node.id === "worker:writer")?.data,
@@ -472,6 +477,42 @@ describe("current activity graph editor handles", () => {
       kind: "worker",
       onSelectWorker: expect.any(Function),
       selectedWorker: false,
+    });
+  });
+
+  it("marks the selected resource node while resource selection is active", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      resources: [{ capacity: 1, name: "gpu" }],
+    };
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "resource", resourceName: "gpu" },
+      snapshot: {
+        factory,
+        runtime: { place_token_counts: {} },
+        topology: { workstation_nodes_by_id: {} },
+      } as never,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(
+      nodes.find((node) => node.id === "resource:gpu")?.data,
+    ).toMatchObject({
+      kind: "resource",
+      selectedResource: true,
     });
   });
 
@@ -497,6 +538,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: { kind: "worker", workerName: "writer" },
@@ -564,6 +606,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
@@ -602,6 +645,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
@@ -691,6 +735,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
@@ -1074,6 +1119,7 @@ describe("current activity graph active item labels", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
@@ -1132,6 +1178,7 @@ describe("current activity graph active item labels", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
@@ -1208,6 +1255,7 @@ describe("current activity graph active item labels", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,

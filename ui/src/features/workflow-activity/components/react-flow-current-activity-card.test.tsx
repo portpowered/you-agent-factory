@@ -362,6 +362,7 @@ function renderCurrentActivity({
       (workID: string, hint?: { dispatchID?: string; nodeID?: string }) => void
     >();
   const onSelectStateNode = vi.fn<(placeId: string) => void>();
+  const onSelectResource = vi.fn<(resourceName: string) => void>();
   const onSelectWorker = vi.fn<(workerName: string) => void>();
   const onSelectWorkstation = vi.fn<(nodeId: string) => void>();
 
@@ -374,6 +375,7 @@ function renderCurrentActivity({
       onFactoryActivated={onFactoryActivated}
       onFactoryImportReady={onFactoryImportReady}
       onSelectWorkID={onSelectWorkID}
+      onSelectResource={onSelectResource}
       onSelectStateNode={onSelectStateNode}
       onSelectWorker={onSelectWorker}
       onSelectWorkstation={onSelectWorkstation}
@@ -385,6 +387,7 @@ function renderCurrentActivity({
   );
 
   return {
+    onSelectResource,
     onSelectStateNode,
     onSelectWorkID,
     onSelectWorker,
@@ -2383,6 +2386,33 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     ).toBe(true);
   });
 
+  it("selects resource nodes from the live activity graph", async () => {
+    const { onSelectResource } = renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    const resourceButton = await screen.findByRole("button", {
+      name: "Select agent-slot resource",
+    });
+
+    fireEvent.click(resourceButton);
+
+    expect(onSelectResource).toHaveBeenCalledWith("agent-slot");
+  });
+
+  it("shows selected styling for the active resource selection", async () => {
+    renderCurrentActivity({
+      selection: { kind: "resource", resourceName: "agent-slot" },
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    const resourceButton = await screen.findByRole("button", {
+      name: "Select agent-slot resource",
+    });
+    expect(resourceButton.getAttribute("aria-pressed")).toBe("true");
+    expect(resourceButton.getAttribute("data-selected-resource")).toBe("true");
+  });
+
   it("selects worker nodes from the live activity graph", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
@@ -3366,6 +3396,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
         selection={null}
         snapshot={dashboardSnapshotWithActiveWorkItemCount(0)}
         onSelectStateNode={vi.fn()}
+        onSelectResource={vi.fn()}
         onSelectWorker={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />,
@@ -3390,6 +3421,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
               selection={null}
               snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
               onSelectStateNode={vi.fn()}
+              onSelectResource={vi.fn()}
               onSelectWorker={vi.fn()}
               onSelectWorkstation={vi.fn()}
             />
@@ -3426,6 +3458,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     const callbacks = {
       onSelectWorkID: vi.fn(),
       onSelectStateNode: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
     };
@@ -3482,8 +3515,8 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     expect(secondKey).toBe(firstKey);
   });
 
-  it("selects work-state nodes without making resource nodes selectable", async () => {
-    const { onSelectStateNode } = renderCurrentActivity({
+  it("selects work-state nodes and exposes resource nodes as resource selectors", async () => {
+    const { onSelectResource, onSelectStateNode } = renderCurrentActivity({
       snapshot: semanticWorkflowDashboardSnapshot,
       selection: { kind: "state-node", placeId: "story:implemented" },
     });
@@ -3499,12 +3532,21 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
         name: "Select agent-slot state",
       }),
     ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Select agent-slot resource" }),
+    ).toBeTruthy();
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Select story:ready state" }),
     );
 
     expect(onSelectStateNode).toHaveBeenCalledWith("story:ready");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select agent-slot resource" }),
+    );
+
+    expect(onSelectResource).toHaveBeenCalledWith("agent-slot");
   });
 
   it("keeps long workstation and active work labels from hiding the duration", async () => {

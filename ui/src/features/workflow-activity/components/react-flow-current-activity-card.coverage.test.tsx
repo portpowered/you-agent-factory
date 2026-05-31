@@ -297,6 +297,7 @@ const defaultDraftState = {
 
 interface ReactFlowCurrentActivityCardProps {
   now: number;
+  onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (workID: string) => void;
   onSelectWorker: (workerName: string) => void;
@@ -312,6 +313,7 @@ function createProps(
     now: Date.parse("2026-04-08T12:00:00Z"),
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
+    onSelectResource: vi.fn(),
     onSelectWorker: vi.fn(),
     onSelectWorkstation: vi.fn(),
     selection: null,
