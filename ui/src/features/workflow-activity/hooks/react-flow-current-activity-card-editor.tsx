@@ -1,16 +1,13 @@
 import { useMemo, useRef, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
-import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
-import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-apply";
 import { useFactoryValidation } from "../../factory-graph-editor/hooks/use-factory-validation";
 import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activity-card-editor-value";
 import { useCurrentActivityEditableGraph } from "./react-flow-current-activity-card-editor-editable-graph";
+import { useGraphEditorControllers } from "./use-graph-editor-controllers";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 import { useGraphEditorSession } from "./use-graph-editor-session";
 
@@ -52,19 +49,17 @@ export function useCurrentActivityGraphEditor(
     setActiveTool,
     setEditorMode,
   });
-  const addEntityController = useFactoryGraphAddEntityController({
-    currentFactoryDefinition: session.currentFactoryDefinition,
-    editableGraph,
-    setActiveTool,
-  });
-  const controllers = useFactoryGraphEditorControllers({
+  const controllers = useGraphEditorControllers({
     activeTool,
     canInteractWithEditor: session.canInteractWithEditor,
+    currentFactoryDefinition: session.currentFactoryDefinition,
     draftState,
     editableGraph,
     locale,
     saveEditableDefinition,
+    setActiveTool,
   });
+  const { addEntityController } = controllers;
   const saveFlow = useGraphEditorSaveFlow({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     addEntityController,
@@ -145,41 +140,4 @@ function useDraftAppliedFactoryValidation(
   }, [draftState.baseDocument, draftState.draft, draftState.latestDocument]);
 
   return useFactoryValidation(draftAppliedFactoryDefinition, editorMode);
-}
-
-function useFactoryGraphEditorControllers({
-  activeTool,
-  canInteractWithEditor,
-  draftState,
-  editableGraph,
-  locale,
-  saveEditableDefinition,
-}: {
-  activeTool: FactoryGraphEditorTool;
-  canInteractWithEditor: boolean;
-  draftState: EditableFactoryGraphViewModel["draftState"];
-  editableGraph: EditableFactoryGraphViewModel;
-  locale?: string | null;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
-}) {
-  const connectionController = useFactoryGraphConnectionController({
-    activeTool,
-    canInteractWithEditor,
-    draftState,
-    editableGraph,
-    locale,
-  });
-  const removalController = useFactoryGraphRemovalController({
-    activeTool,
-    canInteractWithEditor,
-    draftState,
-    editableGraph,
-    locale,
-    saveEditableDefinition,
-  });
-
-  return {
-    ...connectionController,
-    ...removalController,
-  };
 }
