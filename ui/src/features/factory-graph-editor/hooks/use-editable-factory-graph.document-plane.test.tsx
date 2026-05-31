@@ -53,6 +53,7 @@ const documentFactory: CurrentFactoryDocument = {
   ],
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: document-plane regressions share one editable-graph fixture seam.
 describe("useEditableFactoryGraph document plane", () => {
   it("projects editable graph nodes from the loaded factory document only", () => {
     const { result } = renderHook(() =>

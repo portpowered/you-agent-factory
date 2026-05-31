@@ -33,6 +33,7 @@ export type WorkSelectionHint = {
   nodeID?: string;
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection actions stay grouped so graph, worker, and work-item clears share one commit seam.
 export function useCurrentSelectionActions({
   commitSelectionState,
   completedWorkItems,

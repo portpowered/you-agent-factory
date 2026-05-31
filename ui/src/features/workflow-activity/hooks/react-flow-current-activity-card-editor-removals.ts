@@ -8,6 +8,7 @@ import {
   buildFactoryGraphRemovalIntent,
 } from "../../factory-graph-editor/lib/factory-graph-editor-removals";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: removal controller keeps confirm, cancel, and graph/selection delete entry points aligned.
 export function useFactoryGraphRemovalController({
   activeTool,
   canInteractWithEditor,

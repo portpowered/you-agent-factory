@@ -185,6 +185,7 @@ function createImportsStub(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: dialog wiring cases share one mocked editor surface harness.
 describe("CurrentActivityGraphEditorDialogs", () => {
   it("wires import, save, discard, and add-entity dialog actions on the shared editor surface", () => {
     const editor = createEditorStub();

@@ -26,6 +26,7 @@ interface UseFactoryGraphDraftStateOptions {
   locale?: string | null;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: draft session callbacks and derived projection state share one hook boundary.
 export function useFactoryGraphDraftState(
   options: UseFactoryGraphDraftStateOptions,
 ): FactoryGraphDraftDerivedState {

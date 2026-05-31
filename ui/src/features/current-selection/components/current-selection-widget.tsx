@@ -50,6 +50,7 @@ export interface CurrentSelectionWidgetProps {
   widgetId?: string;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection detail routing keeps one switch over dashboard selection kinds.
 function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,

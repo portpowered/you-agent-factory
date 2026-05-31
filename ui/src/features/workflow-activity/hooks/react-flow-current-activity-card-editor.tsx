@@ -11,6 +11,7 @@ import { useGraphEditorControllers } from "./use-graph-editor-controllers";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 import { useGraphEditorSession } from "./use-graph-editor-session";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph editor hook wires session, controllers, and save flow into one card value model.
 export function useCurrentActivityGraphEditor(
   snapshot: DashboardSnapshot,
   locale?: string | null,

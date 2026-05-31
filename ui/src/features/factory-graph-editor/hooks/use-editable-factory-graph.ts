@@ -1,10 +1,10 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: editable graph view-model keeps draft, mutation, and save orchestration on one hook seam.
 import { useCallback, useMemo, useState } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
-import {
-  type CanonicalFactoryDefinition,
-  createEmptyFactoryGraphDraft,
-  type FactoryGraphDraft,
+import type {
+  CanonicalFactoryDefinition,
+  FactoryGraphDraft,
 } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
 import type { FactoryGraphNodeFieldUpdate } from "../lib/factory-graph-field-operations";
@@ -22,6 +22,7 @@ import {
 } from "../lib/factory-graph-operations";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {
   EditableFactoryGraphSaveInput,
   EditableFactoryGraphViewModel,
@@ -425,7 +426,7 @@ function useSaveEditableFactoryGraph({
       setLastSaveSuccess(true);
       return true;
     } catch (error) {
-      setLastSaveError(resolveFactoryGraphSaveErrorMessage(error));
+      setLastSaveError(resolveFactoryGraphSaveErrorMessage(error, locale));
       return false;
     } finally {
       setIsSaving(false);
@@ -457,14 +458,17 @@ function isFactoryGraphDraftStale(
   );
 }
 
-function resolveFactoryGraphSaveErrorMessage(error: unknown): string {
+function resolveFactoryGraphSaveErrorMessage(
+  error: unknown,
+  locale?: string | null,
+): string {
   if (error instanceof CurrentFactoryDefinitionError) {
     return error.message;
   }
   if (error instanceof Error) {
     return error.message;
   }
-  return "Factory graph save failed.";
+  return getFactoryGraphEditorMessages(locale).noticeSaveFailedTitle;
 }
 
 function missingFactoryResult(

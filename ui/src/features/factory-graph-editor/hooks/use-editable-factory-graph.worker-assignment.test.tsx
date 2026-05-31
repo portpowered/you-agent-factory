@@ -6,6 +6,19 @@ import {
   currentFactoryDocument,
 } from "../lib/factory-graph-draft.test-helpers";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
+import type { EditableFactoryGraphSaveInput } from "./use-editable-factory-graph-types";
+
+function createSaveFactoryDefinitionMock(
+  baseVersion: CurrentFactoryDocument["version"],
+) {
+  return vi.fn(async (input: EditableFactoryGraphSaveInput) => ({
+    ...input.factoryDefinition,
+    version: {
+      logical: String(Number(baseVersion.logical) + 1),
+      physical: "2026-05-31T12:00:00Z",
+    },
+  }));
+}
 
 const logicalMoveFactoryDocument: CurrentFactoryDocument = {
   ...baseFactoryDefinition,
@@ -48,7 +61,9 @@ function anchorIdsForWorkstation(
 
 describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", () => {
   it("allows worker-assignment disconnect and reconnect while save stays blocked until reassigned", async () => {
-    const saveFactoryDefinition = vi.fn(async () => undefined);
+    const saveFactoryDefinition = createSaveFactoryDefinitionMock(
+      currentFactoryDocument.version,
+    );
     const { result } = renderHook(() =>
       useEditableFactoryGraph({
         currentFactoryDocument,
@@ -140,7 +155,9 @@ describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", (
 
 describe("useEditableFactoryGraph logical-move worker handles", () => {
   it("omits worker-assignment handles on LOGICAL_MOVE stations and allows save without a worker", async () => {
-    const saveFactoryDefinition = vi.fn(async () => undefined);
+    const saveFactoryDefinition = createSaveFactoryDefinitionMock(
+      logicalMoveFactoryDocument.version,
+    );
     const { result } = renderHook(() =>
       useEditableFactoryGraph({
         currentFactoryDocument: logicalMoveFactoryDocument,

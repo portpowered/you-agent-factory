@@ -16,6 +16,7 @@ import type { CurrentActivitySelection } from "./react-flow-current-activity-car
 import type { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph surface keeps editor notices, validation, and viewport wiring together.
 export function CurrentActivityGraphSurface({
   editor,
   graph,

@@ -376,13 +376,6 @@ function shouldRemoveEdgeForNode(
   );
 }
 
-function matchesExplicitEdgeRemoval(
-  edge: FactoryGraphEdge,
-  removals: FactoryGraphDraftEdgeChange[],
-) {
-  return removals.some((removal) => edgeChangeId(removal) === edge.id);
-}
-
 function toDraftEdgeRemoval(
   edge: FactoryGraphEdge,
 ): FactoryGraphDraftEdgeChange | null {
