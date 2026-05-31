@@ -7,14 +7,6 @@ import {
 import { cn } from "../../lib/cn";
 import type { PromptEditorDiagnostic } from "./prompt-editor-types";
 
-const PROMPT_EDITOR_NOTICE_SUBTLE_CLASS = cn(
-  "m-0 text-af-text-muted",
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
-
-const PROMPT_EDITOR_ALERT_PANEL_CLASS =
-  "grid gap-2 rounded-xl border border-af-danger-border bg-af-danger-surface p-3";
-
 const PROMPT_EDITOR_CODE_SUBTLE_CLASS = cn(
   "text-xs text-af-text-muted",
   DASHBOARD_BODY_CODE_CLASS,
@@ -51,7 +43,9 @@ export function PromptEditorDiagnosticsPanel({
 }: PromptEditorDiagnosticsPanelProps) {
   if (validationState.status === "loading") {
     return (
-      <p className={PROMPT_EDITOR_NOTICE_SUBTLE_CLASS}>
+      <p
+        className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      >
         {labels.validationLoading}
       </p>
     );
@@ -76,7 +70,11 @@ export function PromptEditorDiagnosticsPanel({
   }
 
   return (
-    <div className={PROMPT_EDITOR_ALERT_PANEL_CLASS} id={id} role="alert">
+    <div
+      className="grid gap-2 rounded-xl border border-af-danger-border bg-af-danger-surface p-3"
+      id={id}
+      role="alert"
+    >
       <p className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}>
         {labels.diagnosticsSummary}
       </p>
