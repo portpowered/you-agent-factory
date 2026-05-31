@@ -9,6 +9,7 @@ import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activ
 import { useGraphEditorControllers } from "./use-graph-editor-controllers";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 import { useGraphEditorSession } from "./use-graph-editor-session";
+import { useHiddenFactoryGraphNodeClasses } from "./use-hidden-factory-graph-node-classes";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph editor hook wires session, controllers, and save flow into one card value model.
 export function useCurrentActivityGraphEditor(
@@ -19,6 +20,12 @@ export function useCurrentActivityGraphEditor(
 ) {
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
+  const {
+    hiddenNodeClasses,
+    hideShowMenuOpen,
+    setHideShowMenuOpen,
+    toggleHiddenNodeClass,
+  } = useHiddenFactoryGraphNodeClasses();
   const leaveEditorBridge = useGraphEditorLeaveEditorBridge();
   const { currentFactoryQuery, editableGraph, saveEditableDefinition } =
     useCurrentActivityEditableGraph({
@@ -123,5 +130,9 @@ export function useCurrentActivityGraphEditor(
     setPendingRemovalEdgeId: controllers.setPendingRemovalEdgeId,
     setPendingRemovalNodeId: controllers.setPendingRemovalNodeId,
     structuralValidation,
+    hiddenNodeClasses,
+    hideShowMenuOpen,
+    setHideShowMenuOpen,
+    toggleHiddenNodeClass,
   });
 }

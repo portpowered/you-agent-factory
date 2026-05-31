@@ -1,7 +1,10 @@
 import type { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type {
+  CanonicalFactoryDefinition,
+  FactoryGraphNodeKind,
+} from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
@@ -68,6 +71,10 @@ export function buildCurrentActivityGraphEditorValue(args: {
   setPendingRemovalEdgeId: (edgeId: string | null) => void;
   setPendingRemovalNodeId: (nodeId: string | null) => void;
   structuralValidation: ReturnType<typeof useFactoryValidation>;
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
+  hideShowMenuOpen: boolean;
+  setHideShowMenuOpen: (open: boolean) => void;
+  toggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
 }) {
   return {
     activeTool: args.activeTool,
@@ -123,5 +130,9 @@ export function buildCurrentActivityGraphEditorValue(args: {
     setPendingRemovalEdgeId: args.setPendingRemovalEdgeId,
     setPendingRemovalNodeId: args.setPendingRemovalNodeId,
     structuralValidation: args.structuralValidation,
+    hiddenNodeClasses: args.hiddenNodeClasses,
+    hideShowMenuOpen: args.hideShowMenuOpen,
+    setHideShowMenuOpen: args.setHideShowMenuOpen,
+    toggleHiddenNodeClass: args.toggleHiddenNodeClass,
   };
 }

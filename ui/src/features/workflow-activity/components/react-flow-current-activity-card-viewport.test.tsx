@@ -66,6 +66,19 @@ const importController: CurrentActivityImportController = {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: viewport coverage keeps related mocked React Flow click paths together.
 describe("CurrentActivityGraphViewport", () => {
+  it("renders hide/show controls in observer mode without editor tools", () => {
+    renderViewport({ editorMode: false });
+
+    expect(
+      screen.getByRole("button", {
+        name: "Open hide or show node classes menu",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Open add entity menu" }),
+    ).toBeNull();
+  });
+
   it.each([{ editorMode: false }, { editorMode: true }])(
     "does not render the top-right work-state phase legend when editorMode is $editorMode",
     ({ editorMode }) => {
@@ -290,6 +303,8 @@ function renderViewport({
       handleNodesChange={vi.fn()}
       handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
+      hiddenNodeClasses={new Set()}
+      hideShowMenuOpen={false}
       headingID="test-heading"
       imports={importController}
       initialFitViewKey="full-graph"
@@ -298,6 +313,8 @@ function renderViewport({
       nodes={nodes}
       onEditorEdgeClick={onEditorEdgeClick}
       onEditorNodeClick={onEditorNodeClick}
+      onHideShowMenuOpenChange={vi.fn()}
+      onToggleHiddenNodeClass={vi.fn()}
       onSelectTool={vi.fn()}
       setStoredNodePosition={vi.fn()}
     />,

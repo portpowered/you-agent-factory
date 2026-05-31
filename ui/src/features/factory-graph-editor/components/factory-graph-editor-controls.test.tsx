@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
+import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
 import {
   FactoryGraphEditorActionPopover,
   FactoryGraphEditorConfirmationDialog,
@@ -14,12 +15,21 @@ import {
 
 function renderToolbar({
   hasPendingChanges = true,
+  hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
+  hideShowVisible = true,
+  onToggleHiddenNodeClass = vi.fn(),
+  visible = true,
 }: {
   hasPendingChanges?: boolean;
+  hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
+  hideShowVisible?: boolean;
+  onToggleHiddenNodeClass?: (kind: FactoryGraphNodeKind) => void;
+  visible?: boolean;
 } = {}) {
   function ToolbarHarness() {
     const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [hideShowMenuOpen, setHideShowMenuOpen] = useState(false);
 
     return (
       <div className="relative min-h-48">
@@ -36,13 +46,18 @@ function renderToolbar({
           canSave={true}
           canDiscard={true}
           hasPendingChanges={hasPendingChanges}
+          hiddenNodeClasses={hiddenNodeClasses}
+          hideShowMenuOpen={hideShowMenuOpen}
+          hideShowVisible={hideShowVisible}
           onDiscard={() => {}}
           onAddAction={() => {}}
           onAddMenuOpenChange={setMenuOpen}
+          onHideShowMenuOpenChange={setHideShowMenuOpen}
           onSave={() => {}}
           onSelectTool={setActiveTool}
+          onToggleHiddenNodeClass={onToggleHiddenNodeClass}
           openAddMenu={menuOpen}
-          visible={true}
+          visible={visible}
         />
       </div>
     );
@@ -63,7 +78,7 @@ describe("factory graph editor toolbar controls", () => {
     expect(addMenuButton.textContent).toBe("");
     expect(addMenuButton.getAttribute("aria-expanded")).toBe("false");
 
-    await user.tab();
+    addMenuButton.focus();
     await user.keyboard("{Enter}");
 
     const menu = await screen.findByLabelText("Add graph entity menu");
@@ -317,6 +332,65 @@ describe("factory graph editor status and popover controls", () => {
     const menu = await screen.findByText("Node actions");
     expect(menu).toBeTruthy();
     expect(screen.getByRole("button", { name: "Rename node" })).toBeTruthy();
+  });
+});
+
+describe("factory graph editor hide/show controls", () => {
+  it("opens the hide/show menu from the keyboard and toggles node class visibility", async () => {
+    const user = userEvent.setup();
+    const onToggleHiddenNodeClass = vi.fn();
+
+    renderToolbar({ onToggleHiddenNodeClass });
+
+    const hideShowButton = screen.getByRole("button", {
+      name: "Open hide or show node classes menu",
+    });
+    expect(hideShowButton.getAttribute("aria-pressed")).toBe("false");
+    expect(hideShowButton.getAttribute("aria-expanded")).toBe("false");
+
+    await user.tab();
+    await user.keyboard("{Enter}");
+
+    const menu = await screen.findByLabelText(
+      "Factory graph node class visibility menu",
+    );
+    expect(menu).toBeTruthy();
+    expect(hideShowButton.getAttribute("aria-expanded")).toBe("true");
+    expect(hideShowButton.getAttribute("aria-pressed")).toBe("true");
+
+    const workStateToggle = within(menu).getByRole("menuitemcheckbox", {
+      name: "Work state",
+    });
+    expect(workStateToggle.getAttribute("aria-checked")).toBe("true");
+
+    await user.click(workStateToggle);
+    expect(onToggleHiddenNodeClass).toHaveBeenCalledWith("work-state");
+  });
+
+  it("marks the hide/show button pressed when any node class is hidden", () => {
+    renderToolbar({
+      hiddenNodeClasses: new Set<FactoryGraphNodeKind>(["worker"]),
+    });
+
+    expect(
+      screen
+        .getByRole("button", { name: "Open hide or show node classes menu" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("renders hide/show in observer mode without editor tools", () => {
+    renderToolbar({ hideShowVisible: true, visible: false });
+
+    expect(
+      screen.getByRole("button", {
+        name: "Open hide or show node classes menu",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Open add entity menu" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
   });
 });
 

@@ -175,6 +175,10 @@ export function CurrentActivityGraphSurface({
         nodes={graph.nodes}
         onAddAction={editor.handleAddEntityAction}
         onAddMenuOpenChange={editor.setAddMenuOpen}
+        hiddenNodeClasses={editor.hiddenNodeClasses}
+        hideShowMenuOpen={editor.hideShowMenuOpen}
+        onHideShowMenuOpenChange={editor.setHideShowMenuOpen}
+        onToggleHiddenNodeClass={editor.toggleHiddenNodeClass}
         onConnect={editor.handleEditorConnect}
         onEditorEdgeClick={editor.handleEditorEdgeDelete}
         onEditorNodeClick={editor.handleEditorNodeDelete}

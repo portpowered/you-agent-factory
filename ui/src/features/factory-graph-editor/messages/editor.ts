@@ -116,7 +116,14 @@ export interface FactoryGraphEditorMessages {
   toolbarConnectLabel: string;
   toolbarDeleteDescription: string;
   toolbarDeleteLabel: string;
+  toolbarHideShowDescription: string;
+  toolbarHideShowLabel: string;
+  toolbarHideShowMenuAriaLabel: string;
+  toolbarHideShowMenuDescription: string;
+  toolbarHideShowMenuTitle: string;
   toolbarOpenAddMenuLabel: string;
+  toolbarOpenHideShowMenuLabel: string;
+  nodeClassVisibilityDescription: (kind: FactoryGraphNodeKind) => string;
   toolbarVisibilityMenuAriaLabel: string;
   toolbarVisibilityMenuDescription: string;
   toolbarVisibilityMenuTitle: string;
@@ -212,6 +219,10 @@ function describeEnglishKind(kind: FactoryGraphNodeKind) {
     case "work-state":
       return "Work state";
   }
+}
+
+function describeEnglishNodeClassVisibility(kind: FactoryGraphNodeKind) {
+  return `Show ${describeEnglishKind(kind).toLowerCase()} nodes on the graph.`;
 }
 
 function describeEnglishWorkerStatus(status: FactoryGraphWorkerRuntimeStatus) {
@@ -526,7 +537,15 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "Connect",
       toolbarDeleteDescription: "Remove nodes or edges from the draft",
       toolbarDeleteLabel: "Delete",
+      toolbarHideShowDescription: "Show or hide node classes on the graph",
+      toolbarHideShowLabel: "Hide or show",
+      toolbarHideShowMenuAriaLabel: "Factory graph node class visibility menu",
+      toolbarHideShowMenuDescription:
+        "Toggle which node classes appear on the graph. Hidden classes stay out of the view until you show them again.",
+      toolbarHideShowMenuTitle: "Hide or show node classes",
       toolbarOpenAddMenuLabel: "Open add entity menu",
+      toolbarOpenHideShowMenuLabel: "Open hide or show node classes menu",
+      nodeClassVisibilityDescription: describeEnglishNodeClassVisibility,
       toolbarVisibilityMenuAriaLabel: "Add graph entity menu",
       toolbarVisibilityMenuDescription:
         "Choose a supported entity to add to the current draft.",
@@ -903,7 +922,18 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "连接",
       toolbarDeleteDescription: "从草稿中移除节点或边",
       toolbarDeleteLabel: "删除",
+      toolbarHideShowDescription: "在图上显示或隐藏节点类别",
+      toolbarHideShowLabel: "隐藏或显示",
+      toolbarHideShowMenuAriaLabel: "工厂图节点类别可见性菜单",
+      toolbarHideShowMenuDescription:
+        "切换哪些节点类别显示在图上。隐藏的类别会保持不可见，直到你再次显示它们。",
+      toolbarHideShowMenuTitle: "隐藏或显示节点类别",
       toolbarOpenAddMenuLabel: "打开添加实体菜单",
+      toolbarOpenHideShowMenuLabel: "打开隐藏或显示节点类别菜单",
+      nodeClassVisibilityDescription: (kind) => {
+        const label = getFactoryGraphEditorMessages("zh-CN").kindLabel(kind);
+        return `在图上显示${label}节点。`;
+      },
       toolbarVisibilityMenuAriaLabel: "添加图实体菜单",
       toolbarVisibilityMenuDescription: "选择要添加到当前草稿的受支持实体。",
       toolbarVisibilityMenuTitle: "添加图实体",

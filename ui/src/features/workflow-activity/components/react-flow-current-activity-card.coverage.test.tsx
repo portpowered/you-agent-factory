@@ -782,6 +782,8 @@ function renderViewport({
       graphKey={graphKey}
       handleNodesChange={vi.fn()}
       hasPendingChanges={false}
+      hiddenNodeClasses={new Set()}
+      hideShowMenuOpen={false}
       imports={mockImportController}
       initialFitViewKey="full-graph"
       initialFitViewOptions={{ padding: 0.18 }}
@@ -791,6 +793,8 @@ function renderViewport({
       onConnect={onConnect}
       onEditorEdgeClick={onEditorEdgeClick}
       onEditorNodeClick={onEditorNodeClick}
+      onHideShowMenuOpenChange={vi.fn()}
+      onToggleHiddenNodeClass={vi.fn()}
       onSelectTool={vi.fn()}
       setStoredNodePosition={mockSetStoredNodePosition}
     />,
