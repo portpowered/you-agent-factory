@@ -98,7 +98,7 @@ function useCurrentActivityBaseNodes({
           editorMode: editor.editorMode,
           onConnectionAnchorClick: editor.handleConnectionAnchorClick,
           pendingConnectionSource: editor.pendingConnectionSource,
-          validationProjection: editor.structuralValidation.projection,
+          validationTargets: editor.structuralValidation.targets,
         },
         factoryDefinition,
         graphLayout,
