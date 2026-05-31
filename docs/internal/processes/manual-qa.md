@@ -117,6 +117,10 @@ Use this checklist when the open-session flow changes and reviewers need proof a
 
 ## Latest Evidence
 
+Date: `2026-05-31` (UTC)
+
+- `cd ui && bun run vitest run integration/factory-graph-editor.integration.test.mjs -t "discards pending"` passed in Playwright against the dashboard preview harness, covering current-activity card enter editor → add work type → discard pending changes → leave editor with zero session factory PUTs (story `ui-graph-editor-orchestration-split-004` browser gate).
+
 Date: `2026-05-19`
 
 - `cd ui && bun run build-storybook` passed.
