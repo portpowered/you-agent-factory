@@ -146,7 +146,6 @@ const COLLAPSE_BUTTON_CLASS =
   "dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-border bg-af-surface-subtle px-3 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const ITEMS_LIST_CLASS =
   "m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2";
-const LEGEND_SECTIONS_CLASS = "flex flex-col gap-3";
 const PHASE_SWATCH_CLASS = "h-3 w-3 shrink-0 rounded-sm border";
 
 function normalizeLabelForAction(ariaLabel: string): string {
@@ -198,7 +197,7 @@ function DashboardFlowAxisLegendItems({
   const editorMessages = getFactoryGraphEditorMessages(locale);
 
   return (
-    <div className={LEGEND_SECTIONS_CLASS}>
+    <div className="flex flex-col gap-3">
       {edgeItems.length > 0 ? (
         <ul className={ITEMS_LIST_CLASS}>
           {edgeItems.map((item) => (
