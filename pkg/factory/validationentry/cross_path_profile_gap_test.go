@@ -4,9 +4,26 @@ import (
 	"context"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 )
+
+// topologyDeferredOutcomeRouteCodes are validate-only structural findings that
+// ProfilePrePersist intentionally omits after canonical load / blocking-load.
+var topologyDeferredOutcomeRouteCodes = map[string]struct{}{
+	factoryvalidation.CodeWorkstationMissingFailureRoute:   {},
+	factoryvalidation.CodeWorkstationMissingRejectionRoute: {},
+	factoryvalidation.CodeWorkTypeMissingCompletionState:   {},
+	factoryvalidation.CodeWorkTypeMissingFailureState:      {},
+	factoryvalidation.CodeWorkStateMissingTerminalPath:     {},
+}
+
+// prePersistDisallowedOutcomeRouteCodes must not appear on the save pre-check path.
+var prePersistDisallowedOutcomeRouteCodes = map[string]struct{}{
+	factoryvalidation.CodeWorkstationMissingFailureRoute:   {},
+	factoryvalidation.CodeWorkstationMissingRejectionRoute: {},
+}
 
 // TestCrossPathInvalidFixture_ProfileTopologyDiffersFromPrePersistDocumentsValidateEndpointGap
 // guards the intentional product gap: POST /factory-validations uses ProfileTopology
@@ -22,18 +39,25 @@ func TestCrossPathInvalidFixture_ProfileTopologyDiffersFromPrePersistDocumentsVa
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
 
-	topologyResult, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfileTopology,
+	topologyResult := mustValidateFactoryAPI(t, factory, factoryvalidation.ProfileTopology)
+	prePersistResult := mustValidateFactoryAPI(t, factory, factoryvalidation.ProfilePrePersist)
+	assertCrossPathInvalidProfileGap(t, topologyResult, prePersistResult)
+}
+
+func mustValidateFactoryAPI(t *testing.T, factory factoryapi.Factory, profile factoryvalidation.Profile) factoryvalidation.Result {
+	t.Helper()
+
+	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
+		Profile: profile,
 	})
 	if err != nil {
-		t.Fatalf("ValidateFactoryAPI topology: %v", err)
+		t.Fatalf("ValidateFactoryAPI(%s): %v", profile, err)
 	}
-	prePersistResult, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfilePrePersist,
-	})
-	if err != nil {
-		t.Fatalf("ValidateFactoryAPI pre-persist: %v", err)
-	}
+	return result
+}
+
+func assertCrossPathInvalidProfileGap(t *testing.T, topologyResult, prePersistResult factoryvalidation.Result) {
+	t.Helper()
 
 	if !topologyResult.HasTargets() || !prePersistResult.HasTargets() {
 		t.Fatal("expected both profiles to reject cross-path invalid fixture")
@@ -45,32 +69,25 @@ func TestCrossPathInvalidFixture_ProfileTopologyDiffersFromPrePersistDocumentsVa
 		t.Fatal("expected ProfileTopology and ProfilePrePersist to differ on cross-path invalid fixture")
 	}
 
-	hasDeferredOutcomeRoute := false
-	for _, target := range topologyResult.Targets {
-		if target.Code == factoryvalidation.CodeWorkstationMissingFailureRoute ||
-			target.Code == factoryvalidation.CodeWorkstationMissingRejectionRoute ||
-			target.Code == factoryvalidation.CodeWorkTypeMissingCompletionState ||
-			target.Code == factoryvalidation.CodeWorkTypeMissingFailureState ||
-			target.Code == factoryvalidation.CodeWorkStateMissingTerminalPath {
-			hasDeferredOutcomeRoute = true
-			break
-		}
-	}
-	if !hasDeferredOutcomeRoute {
+	if !targetsContainAnyCode(topologyResult.Targets, topologyDeferredOutcomeRouteCodes) {
 		t.Fatalf("topology targets = %#v, want deferred outcome-route codes documenting validate-only gap", topologyResult.Targets)
 	}
-
-	for _, target := range prePersistResult.Targets {
-		if target.Code == factoryvalidation.CodeWorkstationMissingFailureRoute ||
-			target.Code == factoryvalidation.CodeWorkstationMissingRejectionRoute {
-			t.Fatalf("pre-persist targets = %#v, want save path without deferred outcome-route codes", prePersistResult.Targets)
-		}
+	if targetsContainAnyCode(prePersistResult.Targets, prePersistDisallowedOutcomeRouteCodes) {
+		t.Fatalf("pre-persist targets = %#v, want save path without deferred outcome-route codes", prePersistResult.Targets)
 	}
-
 	if !canonicalTargetSignaturesSubset(prePersistSignatures, topologySignatures) {
 		t.Fatalf("pre-persist signatures = %#v, want subset of topology signatures %#v",
 			prePersistSignatures, topologySignatures)
 	}
+}
+
+func targetsContainAnyCode(targets []factoryvalidation.Target, codes map[string]struct{}) bool {
+	for _, target := range targets {
+		if _, ok := codes[target.Code]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func canonicalTargetSignaturesSubset(subset, superset []string) bool {
