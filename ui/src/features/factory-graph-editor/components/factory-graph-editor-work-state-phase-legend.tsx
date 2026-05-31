@@ -11,8 +11,6 @@ const WORK_STATE_PHASE_LEGEND_LIST_CLASS =
   "m-0 flex list-none flex-wrap items-center gap-2 p-0";
 const WORK_STATE_PHASE_LEGEND_ITEM_CLASS =
   "flex items-center gap-1.5 text-xs leading-5 text-af-text-muted";
-const WORK_STATE_PHASE_LEGEND_SWATCH_CLASS =
-  "h-3 w-3 shrink-0 rounded-sm border";
 
 export function FactoryGraphEditorWorkStatePhaseLegend({
   locale,
@@ -38,7 +36,7 @@ export function FactoryGraphEditorWorkStatePhaseLegend({
             <span
               aria-hidden="true"
               className={cn(
-                WORK_STATE_PHASE_LEGEND_SWATCH_CLASS,
+                "h-3 w-3 shrink-0 rounded-sm border",
                 workStatePhaseSwatchClassName(phase),
               )}
             />

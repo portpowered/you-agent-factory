@@ -20,7 +20,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/factory-graph-editor/components/factory-graph-editor-work-state-phase-legend.tsx#WORK_STATE_PHASE_LEGEND_CLASS",
   "src/features/factory-graph-editor/components/factory-graph-editor-work-state-phase-legend.tsx#WORK_STATE_PHASE_LEGEND_LIST_CLASS",
   "src/features/factory-graph-editor/components/factory-graph-editor-work-state-phase-legend.tsx#WORK_STATE_PHASE_LEGEND_ITEM_CLASS",
-  "src/features/factory-graph-editor/components/factory-graph-editor-work-state-phase-legend.tsx#WORK_STATE_PHASE_LEGEND_SWATCH_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_TOOLBAR_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_HEADER_ROWS_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_PRIMARY_ROW_CLASS",
