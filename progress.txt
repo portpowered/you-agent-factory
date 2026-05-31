@@ -2,6 +2,8 @@
 - Graph editor worker add drafts live in `factory-graph-editor-additions.ts`; reuse `parseWorkerArgsText` from `worker-editable-values.ts` for script args parsing.
 - `FactoryGraphAddEntityDraft` worker branch uses `workerType` (`MODEL_WORKER` | `SCRIPT_WORKER`) with separate model vs script fields; validation is type-specific in `validateFactoryGraphAddEntityDraft`.
 - `addNode` and add-dialog tests must include full worker draft fields (`workerType`, `command`, `argsText`) when constructing worker adds.
+- Add-worker dialog gates fields on `draft.workerType`; reuse `getWorkerDetailMessages` for worker type, provider, model, command, and args labels; clearing deselected-type values on type change keeps validation aligned with `validateFactoryGraphAddEntityDraft`.
+- Save path tests should chain `addFactoryGraphNode` → `applyFactoryGraphPendingEdits` in `factory-graph-save-input.test.ts`; poller validation uses `workerSupportsPollerBehavior` against the pending factory definition that includes newly added script workers.
 
 ## 2026-05-31T00:02:00Z - issues2-factory-worker-add-script-toggle-001
 - Extended `FactoryGraphAddEntityDraft` worker branch with `workerType`, `command`, and `argsText`; default seed is `MODEL_WORKER` with empty script fields.
@@ -13,4 +15,27 @@
   - Reuse `parseWorkerArgsText` rather than reimplementing newline arg parsing in graph-editor additions.
   - Story 002 should gate add-dialog fields on `draft.workerType` and clear deselected-type values on toggle.
   - Any test calling `addNode` with `kind: "worker"` must pass the full worker draft object after story 001.
+---
+
+## 2026-06-01T00:20:00Z - issues2-factory-worker-add-script-toggle-002
+- Added worker type select (Model worker / Script worker) to the graph editor Add worker dialog with conditional model vs script fields.
+- Switching worker type clears deselected-type field values; parent `onChange` already clears validation errors.
+- Reused `getWorkerDetailMessages` for type, provider, model, command, and args labels; script args use `Textarea`.
+- Extended `factory-graph-editor-add-dialog.test.tsx` for visibility toggling and onChange payloads for both types.
+- Files changed: `ui/src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx`, `factory-graph-editor-add-dialog.test.tsx`
+- **Learnings for future iterations:**
+  - `react-flow-current-activity-card-editor-dialogs.tsx` clears `addEntityErrors` on every draft `onChange`, so dialog field clearing on type switch is enough for validation reset.
+  - Story 003 should verify save-input projection for script workers added through this dialog path.
+  - Browser verification of Add Worker toggle was not run (no dev-browser skill in session).
+---
+
+## 2026-06-01T00:32:00Z - issues2-factory-worker-add-script-toggle-003
+- Verified script workers added through the graph editor save via existing `buildDraftAppliedFactoryDefinition` merge of `draft.additions.workers`.
+- Added save-input tests for script worker persistence (trimmed command, parsed args) and script worker + poller workstation end-to-end save.
+- Added additions validation test confirming poller workstations accept script workers from the pending factory definition.
+- Files changed: `ui/src/features/factory-graph-editor/lib/factory-graph-save-input.test.ts`, `factory-graph-editor-additions.test.ts`
+- **Learnings for future iterations:**
+  - No save-path code changes were required; story 001 additions already produce canonical `SCRIPT_WORKER` entries and `buildDraftAppliedFactoryDefinition` merges them unchanged.
+  - Poller assignment validation resolves workers from the pending definition (`draftState.pendingFactoryDefinition`), so script workers added earlier in the same draft session are eligible.
+  - Story 004 should update add-menu and dialog copy in localized editor message catalogs.
 ---
