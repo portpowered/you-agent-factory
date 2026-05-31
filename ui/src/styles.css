@@ -136,10 +136,8 @@
 @layer base {
   :root {
     @apply bg-af-background text-af-text font-sans leading-normal;
-    background:
-      radial-gradient(circle at top left, rgb(from var(--color-af-accent-glow) r g b / 0.18), transparent 34%),
-      radial-gradient(circle at bottom right, rgb(from var(--color-af-info-glow) r g b / 0.14), transparent 28%),
-      linear-gradient(145deg, var(--color-af-bg-start) 0%, var(--color-af-bg-mid) 44%, var(--color-af-bg) 100%);
+    background-color: var(--color-af-bg);
+    background-image: none;
   }
 
   * {
