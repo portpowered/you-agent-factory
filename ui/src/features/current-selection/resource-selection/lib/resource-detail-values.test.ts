@@ -1,6 +1,8 @@
 import {
   findResourceInFactoryDefinition,
   resourceAvailablePlaceId,
+  resourceShowsModelFields,
+  resourceShowsProviderQuotaFields,
   resourceTokenCountFromSnapshot,
   workerNamesReferencingResourceInFactoryDefinition,
   workstationNamesReferencingResourceInFactoryDefinition,
@@ -72,6 +74,37 @@ describe("resource-detail-values", () => {
 
   it("returns undefined when the resource is missing from the factory document", () => {
     expect(findResourceInFactoryDefinition(factory, "missing")).toBeUndefined();
+  });
+
+  it("classifies model and provider quota resources for conditional field display", () => {
+    expect(
+      resourceShowsModelFields({
+        capacity: 1,
+        model: "OMNIVOICE_Q4_K_M",
+        name: "voice-model",
+        type: "MODEL",
+      }),
+    ).toBe(true);
+    expect(
+      resourceShowsProviderQuotaFields({
+        capacity: 1,
+        name: "anthropic-quota",
+        provider: "anthropic",
+        type: "PROVIDER_QUOTA",
+      }),
+    ).toBe(true);
+    expect(
+      resourceShowsModelFields({
+        capacity: 2,
+        name: "agent-slot",
+        type: "INVOCATION_SLOT",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns null token counts when snapshot data is unavailable", () => {
+    expect(resourceTokenCountFromSnapshot(null, "agent-slot")).toBeNull();
+    expect(resourceTokenCountFromSnapshot(undefined, "agent-slot")).toBeNull();
   });
 
   it("resolves runtime token counts from the resource available place id", () => {
