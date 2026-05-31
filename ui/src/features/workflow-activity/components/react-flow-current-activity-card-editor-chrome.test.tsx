@@ -58,7 +58,7 @@ describe("CurrentActivityGraphHeaderActions", () => {
         name: "Leave factory graph editor",
       }),
     ).toBeTruthy();
-    expect(screen.getByText("Unsaved graph changes")).toBeTruthy();
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
   it("keeps custom header actions in the actions section after the mode toggle", () => {

@@ -75,8 +75,6 @@ export interface FactoryGraphEditorMessages {
   modeEnterEditor: string;
   modeLeaveEditor: string;
   modeLoadingDefinition: string;
-  modeNoDraftChanges: string;
-  modePendingChanges: string;
   modeUnavailablePrefix: string;
   modeUnsavedChanges: string;
   modeObserve: string;
@@ -462,10 +460,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       modeEnterEditor: "Enter factory graph editor",
       modeLeaveEditor: "Leave factory graph editor",
       modeLoadingDefinition: "Loading editor definition",
-      modeNoDraftChanges: "No draft changes",
-      modePendingChanges: "Draft changes pending",
       modeUnavailablePrefix: "Editor unavailable",
-      modeUnsavedChanges: "Unsaved graph changes",
+      modeUnsavedChanges: "Unsaved changes",
       modeObserve: "Observe mode",
       noticeConnectionBlockedTitle: "Connection blocked",
       noticeEmptyMessage:
@@ -810,10 +806,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       modeEnterEditor: "进入工厂图编辑器",
       modeLeaveEditor: "离开工厂图编辑器",
       modeLoadingDefinition: "正在加载编辑器定义",
-      modeNoDraftChanges: "没有草稿更改",
-      modePendingChanges: "草稿更改待处理",
       modeUnavailablePrefix: "编辑器不可用",
-      modeUnsavedChanges: "存在未保存的图更改",
+      modeUnsavedChanges: "未保存的更改",
       modeObserve: "观察模式",
       noticeConnectionBlockedTitle: "连接被阻止",
       noticeEmptyMessage: "该工厂尚未发布任何工作站图。",

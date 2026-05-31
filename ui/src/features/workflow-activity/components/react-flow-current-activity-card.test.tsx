@@ -1547,7 +1547,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
         name: "Select Review workstation",
       }),
     ).toBeTruthy();
-    expect(screen.getByText("Unsaved graph changes")).toBeTruthy();
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
   it("shows a loading editor state while the editable definition is still fetching", async () => {
@@ -2637,7 +2637,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       );
 
       await screen.findByRole("button", { name: "Save changes" });
-      expect(await screen.findByText("Unsaved graph changes")).toBeTruthy();
+      expect(await screen.findByText("Unsaved changes")).toBeTruthy();
       expect(screen.queryByText("Topology edits are blocked")).toBeNull();
       await waitFor(() => {
         expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(

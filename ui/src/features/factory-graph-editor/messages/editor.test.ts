@@ -19,6 +19,9 @@ describe("getFactoryGraphEditorMessages", () => {
     expect(messages.toolbarAriaLabel).toBe(expectedToolbarLabel);
     expect(messages.addDialogAddEntityAction).toBe(expectedAddEntityAction);
     expect(messages.modeObserve).toBe(expectedObserveMode);
+    expect(messages.modeUnsavedChanges).toBe(
+      locale === "en" ? "Unsaved changes" : "未保存的更改",
+    );
   });
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
