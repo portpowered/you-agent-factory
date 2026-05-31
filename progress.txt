@@ -39,3 +39,13 @@
   - Poller assignment validation resolves workers from the pending definition (`draftState.pendingFactoryDefinition`), so script workers added earlier in the same draft session are eligible.
   - Story 004 should update add-menu and dialog copy in localized editor message catalogs.
 ---
+
+## 2026-06-01T00:48:00Z - issues2-factory-worker-add-script-toggle-004
+- Updated English and zh-CN add-menu worker descriptions to mention model or script workers.
+- Added explicit worker branch in `describeEnglishAddDialog` and zh-CN `addDialogDescription` for dual-type add-dialog copy.
+- Extended `editor.test.ts` with English add-menu worker assertions and zh-CN worker dialog/menu expectations.
+- Files changed: `ui/src/features/factory-graph-editor/messages/editor.ts`, `editor.test.ts`
+- **Learnings for future iterations:**
+  - Worker add-dialog English copy uses a dedicated `worker` branch in `describeEnglishAddDialog`; other kinds still use the generic pending-entity template.
+  - zh-CN `addDialogDescription` mirrors English with explicit per-kind branches for workstation, work-type, work-state, and worker.
+---
