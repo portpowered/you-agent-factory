@@ -106,14 +106,4 @@ export const approvedButtonUsageAllowlist = [
       "The workflow mutation dialog keeps structural overlay-dismiss and close-icon button semantics in its shared shell.",
     relativeFilePath: "src/features/workflow-activity/components/mutation-dialog.tsx",
   },
-  {
-    rawButtonFingerprints: [
-      'aria-expanded="true"',
-      'aria-expanded="false"',
-    ],
-    rawButtonReason:
-      "The dashboard flow-axis legend uses narrow disclosure-toggle semantics for its collapsible chrome.",
-    relativeFilePath:
-      "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx",
-  },
 ];
