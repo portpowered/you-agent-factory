@@ -69,8 +69,9 @@ backends live under `factory/workers/<name>/AGENTS.md`.
 1. Run `you docs agents` for the end-to-end agent playbook.
 2. Open `factory.json` in this directory.
 3. Read this overview and the workstation `AGENTS.md` for the step you will run.
-4. Confirm the target `workTypeName` and inbox path from the tables below — do
-   not infer names from other repositories or examples.
+4. Confirm the target `workTypeName` and inbox path from **Agent submission
+   policy** and the tables below — do not infer names from other repositories or
+   examples.
 5. For batch JSON, follow `you docs batch-inputs` (`you docs batch-work` is a
    byte-identical alias).
 
@@ -129,7 +130,9 @@ repository-local working state, not generated starter payloads from
 
 Authoring guidance:
 
-- Default to **one standalone markdown idea file** under `factory/inputs/idea/default/`.
+- Default to **one standalone markdown idea file** under
+  `factory/inputs/idea/default/` (see **Agent submission policy** — new work is
+  **`idea`**, not **`task`**).
 - Use `factory/inputs/BATCH/default/` only when the request needs `DEPENDS_ON`,
   `PARENT_CHILD`, or multiple work types in one batch (see `you docs
   relationships`).
@@ -181,6 +184,7 @@ status and the dashboard until work appears in the list, then use
 |------|---------|
 | Agent orientation | `you docs agents` |
 | `factory.json` topology and portability | `you docs config` |
+| Factory sessions and liveness | `you session list` (`you docs sessions` not packaged yet — see **Operator loop** and `you docs agents`) |
 | Submitted work and `POST /work` | `you docs work` |
 | Batch ingress and inboxes | `you docs batch-inputs` |
 | Relations in batch JSON | `you docs relationships` |
