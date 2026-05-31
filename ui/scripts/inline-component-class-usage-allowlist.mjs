@@ -7,7 +7,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/export/components/export-factory-dialog.tsx#DIALOG_TITLE_CLASS",
   "src/features/export/components/export-factory-dialog.tsx#DIALOG_BODY_CLASS",
   "src/features/export/components/export-factory-dialog.tsx#DIALOG_FORM_CLASS",
-  "src/features/export/components/export-factory-dialog.tsx#DIALOG_FILE_INPUT_CLASS",
   "src/features/export/components/export-factory-dialog.tsx#DIALOG_SUCCESS_PANEL_CLASS",
   "src/features/export/components/export-factory-dialog.tsx#DIALOG_CONTENT_CLASS",
   "src/features/factory-graph-editor/components/factory-graph-editor-controls.tsx#TOOLBAR_SHELL_CLASS",
