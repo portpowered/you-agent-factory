@@ -65,6 +65,26 @@ describe("resolveSessionFactoryAPIErrorMessage", () => {
       }),
     ).toBe("Factory payload could not be parsed.");
   });
+
+  it("falls back to the API message for codes without operator copy", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        apiMessage: "Named factory already exists in this session.",
+        code: "FACTORY_ALREADY_EXISTS",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedSaveRequest,
+        status: 409,
+      }),
+    ).toBe("Named factory already exists in this session.");
+  });
+
+  it("falls back to the rejected request copy when no operator or API message exists", () => {
+    expect(
+      resolveSessionFactoryAPIErrorMessage({
+        code: "NOT_FOUND",
+        rejectedMessage: sessionFactoryAPIErrorMessages.rejectedRequest,
+      }),
+    ).toBe(sessionFactoryAPIErrorMessages.rejectedRequest);
+  });
 });
 
 describe("session factory HTTP error mapping", () => {

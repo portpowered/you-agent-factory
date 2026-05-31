@@ -98,6 +98,32 @@ describe("saveSessionFactory error mapping", () => {
     });
   });
 
+  it("surfaces FACTORY_ALREADY_EXISTS", async () => {
+    await expect(
+      saveSessionFactory(baseSaveParams, {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "FACTORY_ALREADY_EXISTS",
+              message: "A factory with that name already exists.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 409,
+              statusText: "Conflict",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "FACTORY_ALREADY_EXISTS",
+      message: "A factory with that name already exists.",
+      name: "SessionFactoryAPIError",
+    });
+  });
+
   it("surfaces INVALID_FACTORY_NAME", async () => {
     await expect(
       saveSessionFactory(baseSaveParams, {
