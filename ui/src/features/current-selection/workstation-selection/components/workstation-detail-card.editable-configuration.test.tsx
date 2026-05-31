@@ -537,6 +537,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           onResetToLatest,
         }}
         now={DETAIL_CARD_NOW}
+        onSaveConfiguration={vi.fn()}
         providerSessions={[]}
         selectedNode={selectedNode}
       />,
@@ -554,7 +555,11 @@ describe("WorkstationDetailCard editable configuration", () => {
       ),
     ).toHaveLength(2);
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset to latest" }));
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Reset to latest",
+      }),
+    );
 
     expect(onResetToLatest).toHaveBeenCalledTimes(1);
   });

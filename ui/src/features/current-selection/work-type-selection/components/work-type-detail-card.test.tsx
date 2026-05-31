@@ -2,13 +2,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
+import { useEditableWorkTypeConfigurationState } from "../hooks/use-editable-work-type-configuration-state";
 import type {
   EditableWorkTypeConfigurationState,
   EditableWorkTypeSaveState,
 } from "../lib/detail-card-types";
-import { useEditableWorkTypeConfigurationState } from "../hooks/use-editable-work-type-configuration-state";
-import { EditableWorkTypeSaveHeaderAction } from "./work-type-save-controls";
 import { WorkTypeDetailCard } from "./work-type-detail-card";
+import { EditableWorkTypeSaveHeaderAction } from "./work-type-save-controls";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -101,6 +101,7 @@ function WorkTypeDetailCardHarness({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: WorkTypeDetailCard coverage keeps loading, ready, and editable state regressions together.
 describe("WorkTypeDetailCard", () => {
   beforeEach(() => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({

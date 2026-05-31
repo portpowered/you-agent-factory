@@ -1287,11 +1287,12 @@ describe("App current selection", () => {
       target: { value: "REPEATER" },
     });
     expect(kindSelect.value).toBe("REPEATER");
-    expect(
+    const footerSaveButton =
       within(currentSelection)
-        .getByRole("button", { name: "保存更改" })
-        .getAttribute("disabled"),
-    ).toBeNull();
+        .getAllByRole("button", { name: "保存更改" })
+        .at(-1) ??
+      within(currentSelection).getAllByRole("button", { name: "保存更改" })[0];
+    expect(footerSaveButton?.getAttribute("disabled")).toBeNull();
   });
 
   it("shows selected state node details from the graph", async () => {
