@@ -356,9 +356,13 @@ PNG export
 and import reuse that exact payload through
 
 Use [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md)
-as the detailed contract reference. Keep the dashboard on the authored API
-boundary. Do not rebuild sharing payloads from `/events`, runtime-only
-projections, or export-only field aliases.
+as the detailed backend contract reference and
+[UI Factory API Module Ownership](ui-factory-api-module-ownership.md) for
+dashboard module boundaries (`session-factory`, `factory-definition`,
+`current-factory-definition`). Keep the dashboard on the authored API boundary.
+Do not rebuild sharing payloads from `/events`, runtime-only projections, or
+export-only field aliases. Do not import deleted `ui/src/api/named-factory` from
+feature code.
 
 ## Package-Specific Verification
 
@@ -395,7 +399,7 @@ Use **card-level `render(...)`** (or a feature-local test helper) when the behav
 | Concern | Harness module | Typical consumers |
 | --- | --- | --- |
 | Editable factory graph mocks and fixtures | `ui/src/testing/graph-editor-harness.ts` | `react-flow-current-activity-card.test.tsx`, `use-editable-factory-graph.test.tsx` |
-| Session factory GET/PUT fetch doubles | `ui/src/testing/session-factory-mocks.ts` | `App.import.test.tsx`, `ui/src/api/named-factory/api.test.ts` |
+| Session factory GET/PUT fetch doubles | `ui/src/testing/session-factory-mocks.ts` | `App.import.test.tsx`, `ui/src/api/session-factory/*.test.ts` |
 | Dashboard session store pinning | `ui/src/testing/dashboard-session-test-provider.tsx` | `renderApp({ sessionID })`, `ui/.storybook/dashboard-story-runtime.tsx` |
 | Bento catalog Storybook fixtures | `ui/src/features/bento/components/dashboard-bento-story-shared.tsx` | `dashboard-bento-*-catalog.stories.tsx` |
 | Factory document save mutation states | `ui/src/testing/factory-document-save-mocks.ts` | `current-selection-widget.save.test.tsx`, worker save hook tests |
