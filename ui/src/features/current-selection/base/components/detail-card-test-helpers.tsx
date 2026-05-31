@@ -1,14 +1,14 @@
-import {
-  buildDashboardInferenceAttemptFixture,
-  buildDashboardWorkstationRequestFixture,
-} from "../../../../components/dashboard/fixtures";
-import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import type {
   DashboardInferenceAttempt,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import type { components } from "../../../../api/generated/openapi";
+import {
+  buildDashboardInferenceAttemptFixture,
+  buildDashboardWorkstationRequestFixture,
+} from "../../../../components/dashboard/fixtures";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 
 export type MultimodalSelectedWorkPayloadContent =
   components["schemas"]["WorkContent"];
@@ -41,12 +41,15 @@ export const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 export function getSelectedWorkItemFixture() {
   const snapshot = semanticWorkflowDashboardSnapshot;
   const dispatchID = snapshot.runtime.active_dispatch_ids?.[0] ?? "";
-  const execution = snapshot.runtime.active_executions_by_dispatch_id?.[dispatchID];
+  const execution =
+    snapshot.runtime.active_executions_by_dispatch_id?.[dispatchID];
   const workItem = execution?.work_items?.[0];
   const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
   if (!execution || !workItem || !selectedNode) {
-    throw new Error("expected semantic workflow fixture to include an active selected work item");
+    throw new Error(
+      "expected semantic workflow fixture to include an active selected work item",
+    );
   }
 
   return {
@@ -72,3 +75,15 @@ export function workstationRequest(
   return buildDashboardWorkstationRequestFixture(dispatchID, overrides);
 }
 
+export {
+  buildDetailCardCurrentSelection,
+  buildDetailCardEditableFactoryDocument,
+  buildDetailCardFactoryDocumentQueryResult,
+  buildDetailCardFactoryDocumentSaveHookReturn,
+  buildDetailCardMultiWorkstationFactoryDocument,
+  buildDetailCardSharedWorkerFactoryDocument,
+  buildDetailCardWorkstationNodeSelection,
+  createDetailCardDeferredFactoryDocumentSave,
+  DETAIL_CARD_SAVE_FACTORY_VERSION,
+  expandDetailCardWorkstationConfiguration,
+} from "./detail-card-save-test-helpers";

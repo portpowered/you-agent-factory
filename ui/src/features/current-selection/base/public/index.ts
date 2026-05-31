@@ -13,4 +13,18 @@ export * from "../components/current-selection-detail-layout";
 export * from "../components/current-selection-header-actions";
 export * from "../components/detail-card-shared";
 export * from "../components/detail-card-types";
+export {
+  DetailCardFactorySaveFeedback,
+  mergeDetailCardSaveFieldErrors,
+  type DetailCardFactorySaveFeedbackMessages,
+  type DetailCardFactorySaveFeedbackProps,
+} from "../components/detail-card-factory-save-feedback";
 export { NoSelectionDetailCard } from "../components/no-selection-detail-card";
+
+export * from "../hooks/detail-card-save-types";
+export {
+  useScopedFactoryDocumentSave,
+  type ScopedFactoryDocumentSaveRequest,
+  type UseScopedFactoryDocumentSaveOptions,
+  type UseScopedFactoryDocumentSaveResult,
+} from "../hooks/useScopedFactoryDocumentSave";

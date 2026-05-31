@@ -7,6 +7,7 @@ import type {
   EditableWorkerDraft,
   EditableWorkerValues,
 } from "../../../current-factory-definition/lib/worker-editable-values";
+import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 import type { EditableWorkerValidationErrors } from "./worker-editable-validation";
 
 export interface WorkerDetailCardProps {
@@ -18,20 +19,17 @@ export interface WorkerDetailCardProps {
   workerName: string;
 }
 
-export type EditableWorkerSaveValidationErrors = Partial<
-  Record<
-    | "args"
-    | "body"
-    | "command"
-    | "executorProvider"
-    | "model"
-    | "modelLocality"
-    | "modelProvider"
-    | "provider"
-    | "type",
-    string
-  >
->;
+export type EditableWorkerSaveValidationErrors = {
+  args?: string;
+  body?: string;
+  command?: string;
+  executorProvider?: string;
+  model?: string;
+  modelLocality?: string;
+  modelProvider?: string;
+  provider?: string;
+  type?: string;
+} & Record<string, string>;
 
 export type EditableWorkerOverwriteField =
   | "args"
@@ -45,15 +43,7 @@ export type EditableWorkerOverwriteField =
   | "type";
 
 export type EditableWorkerSaveState =
-  | { status: "idle" }
-  | { status: "submitting" }
-  | { status: "success" }
-  | { message: string; status: "warning" }
-  | {
-      errorMessage: string;
-      fieldErrors?: EditableWorkerSaveValidationErrors;
-      status: "error";
-    };
+  DetailCardSaveState<EditableWorkerSaveValidationErrors>;
 
 export type EditableWorkerConfigurationState =
   | { status: "loading" }

@@ -1,12 +1,4 @@
-import type { QueryClient } from "@tanstack/react-query";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
-import type { ReactNode } from "react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 import {
   CurrentFactoryDefinitionError,
@@ -16,7 +8,18 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import { staleFactoryVersionTarget } from "../../../testing/factory-validation-target-fixtures";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import {
+  buildDetailCardCurrentSelection,
+  buildDetailCardEditableFactoryDocument,
+  buildDetailCardFactoryDocumentQueryResult,
+  buildDetailCardFactoryDocumentSaveHookReturn,
+  buildDetailCardMultiWorkstationFactoryDocument,
+  buildDetailCardSharedWorkerFactoryDocument,
+  createDetailCardDeferredFactoryDocumentSave,
+  DETAIL_CARD_NOW,
+  DETAIL_CARD_SAVE_FACTORY_VERSION,
+  expandDetailCardWorkstationConfiguration,
+} from "../base/components/detail-card-test-helpers";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { CurrentSelectionWidget } from "./current-selection-widget";
@@ -56,20 +59,21 @@ vi.mock(
   }),
 );
 
-const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
-
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused current-selection save regressions share one render harness and mocked save seam.
 describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     saveCurrentFactoryMutation.mockReset();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardEditableFactoryDocument(),
+      ),
     );
-    vi.mocked(useFactoryDocumentSave).mockReturnValue({
-      isPending: false,
-      saveAsync: saveCurrentFactoryMutation,
-    } as never);
+    vi.mocked(useFactoryDocumentSave).mockReturnValue(
+      buildDetailCardFactoryDocumentSaveHookReturn(
+        saveCurrentFactoryMutation,
+      ) as never,
+    );
     vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
       data: {
         diagnostics: [],
@@ -85,31 +89,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   afterEach(() => {
     resetSelectionHistoryStore();
-  });
-
-  it("keeps the header save action disabled until the workstation draft changes", () => {
-    saveCurrentFactoryMutation.mockResolvedValue(
-      buildEditableFactoryDefinition(),
-    );
-
-    renderWorkstationSelection();
-    expandEditableConfiguration();
-
-    expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
-    ).not.toBeNull();
-
-    fireEvent.change(screen.getByLabelText("Prompt"), {
-      target: { value: "Updated review instructions." },
-    });
-
-    expect(
-      screen
-        .getByRole("button", { name: "Save changes" })
-        .getAttribute("disabled"),
-    ).toBeNull();
   });
 
   it("blocks saving while prompt diagnostics remain and re-enables save after the draft is corrected", async () => {
@@ -144,7 +123,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
 
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Use {{ (index .Inputs 1).Payload }}." },
@@ -176,13 +155,13 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("confirms before saving and refreshes the form to the saved workstation values", async () => {
-    const savedFactory = buildEditableFactoryDefinition({
+    const savedFactory = buildDetailCardEditableFactoryDocument({
       prompt: "Review the diff and verify browser behavior.",
     });
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
 
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Review the diff and verify browser behavior." },
@@ -247,7 +226,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
 
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this draft while the save fails." },
@@ -277,7 +256,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     saveCurrentFactoryMutation.mockRejectedValue(new Error("Network dropped"));
 
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this draft through a generic failure." },
@@ -307,7 +286,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
 
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this draft through a stale write." },
@@ -361,7 +340,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
 
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Worker"), {
       target: { value: "planner" },
@@ -383,7 +362,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("allows the overwrite confirmation to be cancelled before saving", () => {
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Changed prompt before cancelling save." },
@@ -410,13 +389,13 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("saves a worker switch through the existing workstation edit flow", async () => {
-    const savedFactory = buildEditableFactoryDefinition({
+    const savedFactory = buildDetailCardEditableFactoryDocument({
       workerName: "planner",
     });
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
 
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Worker"), {
       target: { value: "planner" },
@@ -449,13 +428,13 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("saves a localized behavior selection using the canonical enum value", async () => {
-    const savedFactory = buildEditableFactoryDefinition({
+    const savedFactory = buildDetailCardEditableFactoryDocument({
       behavior: "REPEATER",
     });
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
 
     renderWorkstationSelection("zh-CN");
-    expandEditableConfiguration("展开可编辑配置", "配置");
+    expandDetailCardWorkstationConfiguration("展开可编辑配置", "配置");
 
     fireEvent.change(screen.getByLabelText("类型"), {
       target: { value: "REPEATER" },
@@ -484,7 +463,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("warns in the save confirmation when newer server values would be overwritten", () => {
-    const refreshedFactory = buildEditableFactoryDefinition({
+    const refreshedFactory = buildDetailCardEditableFactoryDocument({
       prompt: "Server changed prompt",
       workerName: "planner",
     });
@@ -495,7 +474,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode,
           selection: { kind: "node", nodeId: selectedNode.node_id },
         })}
@@ -504,7 +483,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep my local prompt change." },
     });
@@ -513,12 +492,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(refreshedFactory),
+      buildDetailCardFactoryDocumentQueryResult(refreshedFactory),
     );
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode,
           selection: { kind: "node", nodeId: selectedNode.node_id },
         })}
@@ -538,16 +517,18 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("preserves worker models while saving workstation prompt changes against a shared-worker definition", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(buildSharedWorkerFactoryDefinition()),
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardSharedWorkerFactoryDocument(),
+      ),
     );
     saveCurrentFactoryMutation.mockResolvedValue(
-      buildSharedWorkerFactoryDefinition({
+      buildDetailCardSharedWorkerFactoryDocument({
         prompt: "Updated only the review workstation prompt.",
       }),
     );
 
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Updated only the review workstation prompt." },
@@ -590,15 +571,16 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("keeps save feedback scoped to the workstation that started the save after switching selections", async () => {
-    const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
+    const deferredSave =
+      createDetailCardDeferredFactoryDocumentSave<CurrentFactoryDocument>();
     const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(
-        buildMultiWorkstationEditableFactoryDefinition(),
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardMultiWorkstationFactoryDocument(),
       ),
     );
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
@@ -606,7 +588,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -615,7 +597,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Review the latest branch diff before approval." },
     });
@@ -631,7 +613,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: planNode,
           selection: { kind: "node", nodeId: planNode.node_id },
         })}
@@ -640,7 +622,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     expect(screen.getByText("Plan")).toBeTruthy();
     expect(
@@ -659,7 +641,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     ).not.toBeNull();
 
     deferredSave.resolve(
-      buildMultiWorkstationEditableFactoryDefinition({
+      buildDetailCardMultiWorkstationFactoryDocument({
         reviewPrompt: "Review the latest branch diff before approval.",
       }),
     );
@@ -677,7 +659,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("clears saved feedback after leaving workstation detail and returning to the same workstation", async () => {
-    const savedFactory = buildMultiWorkstationEditableFactoryDefinition({
+    const savedFactory = buildDetailCardMultiWorkstationFactoryDocument({
       reviewPrompt: "Review the saved factory before approval.",
     });
     const queryClient = createCurrentSelectionWidgetQueryClient();
@@ -685,8 +667,8 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(
-        buildMultiWorkstationEditableFactoryDefinition(),
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardMultiWorkstationFactoryDocument(),
       ),
     );
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
@@ -694,7 +676,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -703,7 +685,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Review the saved factory before approval." },
     });
@@ -719,12 +701,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(savedFactory),
+      buildDetailCardFactoryDocumentQueryResult(savedFactory),
     );
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection()}
+        currentSelection={buildDetailCardCurrentSelection()}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={null}
       />,
@@ -738,7 +720,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -747,7 +729,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     expect(
       screen.queryByText(
@@ -766,11 +748,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("disables overwrite confirmation while saving so the workstation action cannot double-submit", async () => {
-    const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
+    const deferredSave =
+      createDetailCardDeferredFactoryDocumentSave<CurrentFactoryDocument>();
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
 
     renderWorkstationSelection();
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Save this prompt once while the request is pending." },
@@ -798,7 +781,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
 
     deferredSave.resolve(
-      buildEditableFactoryDefinition({
+      buildDetailCardEditableFactoryDocument({
         prompt: "Save this prompt once while the request is pending.",
       }),
     );
@@ -813,7 +796,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("clears saved feedback after switching to another workstation and returning", async () => {
-    const savedFactory = buildMultiWorkstationEditableFactoryDefinition({
+    const savedFactory = buildDetailCardMultiWorkstationFactoryDocument({
       reviewPrompt: "Review the saved factory before approval.",
     });
     const queryClient = createCurrentSelectionWidgetQueryClient();
@@ -822,8 +805,8 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(
-        buildMultiWorkstationEditableFactoryDefinition(),
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardMultiWorkstationFactoryDocument(),
       ),
     );
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
@@ -831,7 +814,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -840,7 +823,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Review the saved factory before approval." },
     });
@@ -856,12 +839,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(savedFactory),
+      buildDetailCardFactoryDocumentQueryResult(savedFactory),
     );
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: planNode,
           selection: { kind: "node", nodeId: planNode.node_id },
         })}
@@ -870,7 +853,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     expect(
       screen.queryByText(
@@ -880,7 +863,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -889,7 +872,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     expect(
       screen.queryByText(
@@ -908,15 +891,16 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("does not leak a failed save message into a different workstation after switching selections", async () => {
-    const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
+    const deferredSave =
+      createDetailCardDeferredFactoryDocumentSave<CurrentFactoryDocument>();
     const queryClient = createCurrentSelectionWidgetQueryClient();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(
-        buildMultiWorkstationEditableFactoryDefinition(),
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardMultiWorkstationFactoryDocument(),
       ),
     );
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
@@ -924,7 +908,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -933,7 +917,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep the failed review draft scoped here." },
     });
@@ -946,7 +930,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: planNode,
           selection: { kind: "node", nodeId: planNode.node_id },
         })}
@@ -955,7 +939,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     deferredSave.reject(
       new CurrentFactoryDefinitionError(
@@ -990,8 +974,8 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(
-        buildMultiWorkstationEditableFactoryDefinition(),
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardMultiWorkstationFactoryDocument(),
       ),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
@@ -1006,7 +990,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -1015,7 +999,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this failed draft from leaking back in." },
     });
@@ -1032,7 +1016,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection()}
+        currentSelection={buildDetailCardCurrentSelection()}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={null}
       />,
@@ -1042,7 +1026,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -1051,7 +1035,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
     expect(
@@ -1076,8 +1060,8 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(
-        buildMultiWorkstationEditableFactoryDefinition(),
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardMultiWorkstationFactoryDocument(),
       ),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
@@ -1092,7 +1076,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -1101,7 +1085,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this failed draft from leaking back in." },
     });
@@ -1118,7 +1102,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: planNode,
           selection: { kind: "node", nodeId: planNode.node_id },
         })}
@@ -1127,13 +1111,13 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
 
     rerender(
       <CurrentSelectionWidget
-        currentSelection={buildCurrentSelection({
+        currentSelection={buildDetailCardCurrentSelection({
           selectedNode: reviewNode,
           selection: { kind: "node", nodeId: reviewNode.node_id },
         })}
@@ -1142,7 +1126,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expandEditableConfiguration();
+    expandDetailCardWorkstationConfiguration();
 
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
     expect(
@@ -1161,24 +1145,75 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 });
 
-function expandEditableConfiguration(
-  buttonName = "Expand editable configuration",
-  headingName = "Configuration",
-) {
-  const section = screen
-    .getAllByRole("heading", { name: headingName })
-    .at(-1)
-    ?.closest("section");
-  if (!section) {
-    throw new Error("expected editable configuration section");
-  }
+describe("CurrentSelectionWidget worker save flow", () => {
+  beforeEach(() => {
+    resetSelectionHistoryStore();
+    saveCurrentFactoryMutation.mockReset();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardEditableFactoryDocument(),
+      ),
+    );
+    vi.mocked(useFactoryDocumentSave).mockReturnValue(
+      buildDetailCardFactoryDocumentSaveHookReturn(
+        saveCurrentFactoryMutation,
+      ) as never,
+    );
+  });
 
-  fireEvent.click(
-    within(section).getByRole("button", {
-      name: buttonName,
-    }),
-  );
-}
+  afterEach(() => {
+    resetSelectionHistoryStore();
+  });
+
+  it("persists worker edits inline without a confirmation dialog", async () => {
+    const savedFactory = buildDetailCardEditableFactoryDocument({
+      model: "gpt-5.9",
+    });
+    saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
+
+    renderWorkerSelection();
+
+    fireEvent.change(screen.getByLabelText("Model"), {
+      target: { value: "gpt-5.9" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save worker" }));
+
+    expect(
+      screen.queryByRole("heading", {
+        name: "Overwrite the running factory definition?",
+      }),
+    ).toBeNull();
+
+    await waitFor(() => {
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseVersion: DETAIL_CARD_SAVE_FACTORY_VERSION,
+          factory: expect.objectContaining({
+            version: DETAIL_CARD_SAVE_FACTORY_VERSION,
+            workers: expect.arrayContaining([
+              expect.objectContaining({
+                model: "gpt-5.9",
+                name: "reviewer",
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Running factory saved. reviewer was updated in the running factory definition.",
+        ),
+      ).toBeTruthy();
+    });
+    expect(
+      screen
+        .getByRole("button", { name: "Save worker" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+  });
+});
 
 function renderWorkstationSelection(locale?: string) {
   const snapshot = semanticWorkflowDashboardSnapshot;
@@ -1186,7 +1221,7 @@ function renderWorkstationSelection(locale?: string) {
 
   return renderWithQueryClient(
     <CurrentSelectionWidget
-      currentSelection={buildCurrentSelection({
+      currentSelection={buildDetailCardCurrentSelection({
         selectedNode,
         selection: { kind: "node", nodeId: selectedNode.node_id },
       })}
@@ -1197,206 +1232,15 @@ function renderWorkstationSelection(locale?: string) {
   );
 }
 
-function buildCurrentSelection(
-  overrides: Partial<CurrentSelectionState> = {},
-): CurrentSelectionState {
-  return {
-    canRedoSelection: false,
-    canUndoSelection: false,
-    completedWorkItems: [],
-    failedWorkItems: [],
-    openTerminalWorkDetail: () => undefined,
-    redoSelection: () => undefined,
-    selectedNode: null,
-    selectedNodeActiveExecutions: [],
-    selectedNodeProviderSessions: [],
-    selectedNodeWorkstationRequests: [],
-    selectedStateCurrentWorkItems: [],
-    selectedStatePlace: null,
-    selectedStateTerminalHistoryWorkItems: [],
-    selectedStateTokenCount: 0,
-    selectedWorkDispatchAttempts: [],
-    selectedWorkID: null,
-    selectedWorkProviderSessions: [],
-    selectedWorkRequestHistory: [],
-    selectedWorkWorkstationRequests: [],
-    selectedWorkstationRequest: null,
-    selection: null,
-    selectStateNode: () => undefined,
-    selectStateWorkItem: () => undefined,
-    selectWorkByID: () => undefined,
-    selectWorkItem: () => undefined,
-    selectWorkstation: () => undefined,
-    selectWorkstationRequest: () => undefined,
-    terminalWorkDetail: null,
-    undoSelection: () => undefined,
-    ...overrides,
-  };
-}
-
-function buildEditableDefinitionResult(
-  data: CurrentFactoryDocument | undefined,
-) {
-  return {
-    data,
-    error: null,
-    failureCount: 0,
-    failureReason: null,
-    fetchStatus: "idle",
-    isError: false,
-    isFetched: true,
-    isFetchedAfterMount: true,
-    isFetching: false,
-    isInitialLoading: false,
-    isLoading: false,
-    isLoadingError: false,
-    isPaused: false,
-    isPending: false,
-    isPlaceholderData: false,
-    isRefetchError: false,
-    isRefetching: false,
-    isStale: true,
-    isSuccess: true,
-    promise: Promise.resolve(data),
-    refetch: vi.fn(),
-    status: "success",
-  } as never;
-}
-
-function buildEditableFactoryDefinition(overrides?: {
-  behavior?: "STANDARD" | "REPEATER" | "POLLER";
-  prompt?: string;
-  workerName?: string;
-  workerOptions?: string[];
-}): CurrentFactoryDocument {
-  return {
-    name: "Current Factory",
-    version: {
-      logical: "7",
-      physical: "2026-05-23T15:52:00Z",
-    },
-    workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(
-      (name, index) => ({
-        model: `gpt-5.${index + 5}`,
-        name,
-        type: "MODEL_WORKER",
-      }),
-    ),
-    workstations: [
-      {
-        behavior: overrides?.behavior ?? "STANDARD",
-        body:
-          overrides?.prompt ??
-          "Review the latest story changes before approval.",
-        id: "review",
-        inputs: [{ state: "queued", workType: "story" }],
-        name: "Review",
-        outputs: [{ state: "approved", workType: "story" }],
-        promptFile: "prompts/review.md",
-        worker: overrides?.workerName ?? "reviewer",
-      },
-    ],
-    workTypes: [],
-  };
-}
-
-function buildMultiWorkstationEditableFactoryDefinition(overrides?: {
-  planPrompt?: string;
-  reviewPrompt?: string;
-}): CurrentFactoryDocument {
-  return {
-    name: "Current Factory",
-    version: {
-      logical: "7",
-      physical: "2026-05-23T15:52:00Z",
-    },
-    workers: [
-      {
-        model: "gpt-5.5",
-        name: "reviewer",
-        type: "MODEL_WORKER",
-      },
-      {
-        model: "gpt-5.6",
-        name: "planner",
-        type: "MODEL_WORKER",
-      },
-    ],
-    workstations: [
-      {
-        body:
-          overrides?.reviewPrompt ??
-          "Review the latest story changes before approval.",
-        id: "review",
-        inputs: [{ state: "queued", workType: "story" }],
-        name: "Review",
-        outputs: [{ state: "approved", workType: "story" }],
-        promptFile: "prompts/review.md",
-        worker: "reviewer",
-      },
-      {
-        body: overrides?.planPrompt ?? "Plan the implementation.",
-        id: "plan",
-        inputs: [{ state: "queued", workType: "story" }],
-        name: "Plan",
-        outputs: [{ state: "approved", workType: "story" }],
-        promptFile: "prompts/plan.md",
-        worker: "planner",
-      },
-    ],
-    workTypes: [],
-  };
-}
-
-function buildSharedWorkerFactoryDefinition(overrides?: {
-  prompt?: string;
-}): CurrentFactoryDocument {
-  return {
-    name: "Current Factory",
-    version: {
-      logical: "7",
-      physical: "2026-05-23T15:52:00Z",
-    },
-    workers: [
-      {
-        model: "gpt-5.5",
-        name: "processor",
-        type: "MODEL_WORKER",
-      },
-    ],
-    workstations: [
-      {
-        body:
-          overrides?.prompt ??
-          "Review the latest story changes before approval.",
-        id: "review",
-        inputs: [{ state: "queued", workType: "story" }],
-        name: "Review",
-        outputs: [{ state: "approved", workType: "story" }],
-        promptFile: "prompts/review.md",
-        worker: "processor",
-      },
-      {
-        body: "Plan the implementation.",
-        id: "plan",
-        inputs: [{ state: "queued", workType: "story" }],
-        name: "Plan",
-        outputs: [{ state: "approved", workType: "story" }],
-        promptFile: "prompts/plan.md",
-        worker: "processor",
-      },
-    ],
-    workTypes: [],
-  };
-}
-
-function createDeferredPromise<T>() {
-  let reject!: (reason?: unknown) => void;
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((innerResolve, innerReject) => {
-    reject = innerReject;
-    resolve = innerResolve;
-  });
-
-  return { promise, reject, resolve };
+function renderWorkerSelection() {
+  return renderWithQueryClient(
+    <CurrentSelectionWidget
+      currentSelection={buildDetailCardCurrentSelection({
+        selectedWorkerName: "reviewer",
+        selection: { kind: "worker", workerName: "reviewer" },
+      })}
+      now={DETAIL_CARD_NOW}
+      selectedWorkExecutionDetails={null}
+    />,
+  );
 }

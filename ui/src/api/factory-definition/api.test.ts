@@ -4,6 +4,25 @@ import {
   normalizeFactoryDefinition,
 } from "./api";
 
+describe("factory-definition normalization boundary", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("does not call fetch while validating or rejecting payloads", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "agent-factory",
+        project: "legacy",
+      }),
+    ).toThrow(FactoryDefinitionAPIError);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe("normalizeFactoryDefinition", () => {
   it("accepts canonical generated factory payloads", () => {
     expect(
