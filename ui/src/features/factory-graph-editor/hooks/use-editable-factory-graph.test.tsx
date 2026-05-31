@@ -39,6 +39,7 @@ describe("useEditableFactoryGraph", () => {
       result.current.actions.addNode({
         kind: "worker",
         model: "gpt-5-mini",
+        modelProvider: "CURSOR",
         name: "reviewer",
       });
     });
@@ -53,6 +54,7 @@ describe("useEditableFactoryGraph", () => {
       result.current.actions.addNode({
         kind: "worker",
         model: "gpt-5-mini",
+        modelProvider: "CURSOR",
         name: "writer",
       });
     });
