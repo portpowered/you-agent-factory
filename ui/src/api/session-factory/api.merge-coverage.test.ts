@@ -7,6 +7,58 @@ describe("saveSessionFactory environment and version edge cases", () => {
     vi.unstubAllGlobals();
   });
 
+  it("issues PUT without version in the factory payload when baseVersion is absent", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "1",
+            physical: "2026-05-18T14:25:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveSessionFactory(
+      {
+        sessionID: "~default",
+        factory: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+      },
+      { fetch },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          factory: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        }),
+        method: "PUT",
+      }),
+    );
+  });
+
   it("throws NETWORK_ERROR when fetch is unavailable in the environment", async () => {
     vi.stubGlobal("fetch", undefined);
 
@@ -90,6 +142,109 @@ describe("saveSessionFactory environment and version edge cases", () => {
         method: "PUT",
       }),
     );
+  });
+});
+
+describe("getSessionFactory environment errors", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("throws when fetch is unavailable in the environment", async () => {
+    vi.stubGlobal("fetch", undefined);
+
+    await expect(getSessionFactory("~default")).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      name: "SessionFactoryAPIError",
+    });
+  });
+});
+
+describe("getSessionFactory response validation", () => {
+  it("throws for invalid session factory response shape", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              version: {
+                logical: "1",
+                physical: "2026-05-18T14:25:00Z",
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      name: "SessionFactoryAPIError",
+    });
+  });
+
+  it("maps invalid factory definitions to INVALID_FACTORY", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              name: "Current Factory",
+              workers: "not-an-array",
+              workstations: [],
+              workTypes: [],
+              version: {
+                logical: "1",
+                physical: "2026-05-18T14:25:00Z",
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY",
+      name: "SessionFactoryAPIError",
+    });
+  });
+});
+
+describe("getSessionFactory API errors", () => {
+  it("surfaces NOT_FOUND from the session factory API", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "NOT_FOUND",
+              message: "Session factory not found.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 404,
+              statusText: "Not Found",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      name: "SessionFactoryAPIError",
+      status: 404,
+    });
   });
 });
 

@@ -1,8 +1,12 @@
 package interfaces
 
 import (
+	"errors"
 	"time"
 )
+
+// ErrMoveWorkRequestAlreadyApplied reports a duplicate operator move requestId.
+var ErrMoveWorkRequestAlreadyApplied = errors.New("operator move request was already applied")
 
 // WorkDispatch is the canonical dispatch-owned runtime payload.
 //
@@ -266,6 +270,53 @@ type FailureRecord struct {
 	Timestamp    time.Time `json:"timestamp"`
 	Error        string    `json:"error"`
 	Attempt      int       `json:"attempt"`
+}
+
+// ClearGuardBlockingFields resets visit and failure-count guard counters while
+// preserving customer-visible failure history during operator recovery moves.
+func ClearGuardBlockingFields(history *TokenHistory) {
+	if history == nil {
+		return
+	}
+	history.TotalVisits = make(map[string]int)
+	history.ConsecutiveFailures = make(map[string]int)
+	history.PlaceVisits = make(map[string]int)
+}
+
+// WorkStateChangeSource identifies who initiated a WORK_STATE_CHANGE event.
+type WorkStateChangeSource string
+
+const (
+	WorkStateChangeSourceAPI              WorkStateChangeSource = "api"
+	WorkStateChangeSourceCLI              WorkStateChangeSource = "cli"
+	WorkStateChangeSourceCascadingFailure WorkStateChangeSource = "cascading-failure"
+)
+
+// WorkStateChangeRecord captures one operator or cascade marking relocation for
+// canonical event history emission.
+type WorkStateChangeRecord struct {
+	WorkID        string
+	WorkTypeID    string
+	WorkTypeName  string
+	FromState     string
+	ToState       string
+	FromPlaceID   string
+	ToPlaceID     string
+	Source        WorkStateChangeSource
+	RequestID     string
+	TriggerWorkID string
+	Reason        string
+}
+
+// OperatorMoveResult is the engine outcome of a successful manual work relocation.
+type OperatorMoveResult struct {
+	WorkID      string
+	WorkTypeID  string
+	FromState   string
+	ToState     string
+	FromPlaceID string
+	ToPlaceID   string
+	TokenID     string
 }
 
 // Relation defines a typed relationship between work items.

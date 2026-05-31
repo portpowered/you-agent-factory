@@ -1,0 +1,13 @@
+{
+  "requestId": "cli-work-move-smoke",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "smoke-move-task",
+      "workTypeName": "task",
+      "payload": {
+        "title": "CLI work move smoke"
+      }
+    }
+  ]
+}

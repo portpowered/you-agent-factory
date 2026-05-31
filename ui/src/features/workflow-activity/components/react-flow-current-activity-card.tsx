@@ -274,7 +274,8 @@ export function useCurrentActivityGraphViewModel({
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
     editor,
-    factoryDefinition: editorModeFactoryDefinition(editor) ?? snapshot.factory,
+    factoryDefinition:
+      currentActivityCardFactoryDefinition(editor, snapshot) ?? undefined,
     graphLayout,
     locale,
     now,
@@ -370,17 +371,28 @@ function useEditorCurrentActivityGraphLayout(
 ) {
   return useCurrentActivityGraphLayoutForFactory(
     snapshot,
-    editorModeFactoryDefinition(editor),
+    currentActivityCardFactoryDefinition(editor, snapshot),
   );
+}
+
+function currentActivityCardFactoryDefinition(
+  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+  snapshot: DashboardSnapshot,
+): DashboardSnapshot["factory"] | null | undefined {
+  if (!editor.editorMode) {
+    return undefined;
+  }
+
+  if (editor.editableDefinitionQuery.status !== "success") {
+    return null;
+  }
+
+  return editorModeFactoryDefinition(editor) ?? null;
 }
 
 function editorModeFactoryDefinition(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
-  if (!editor.editorMode) {
-    return undefined;
-  }
-
   return (
     editor.draftState.pendingFactoryDefinition ??
     editor.draftState.latestDocument ??

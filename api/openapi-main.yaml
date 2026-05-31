@@ -287,6 +287,39 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /work/{id}/move:
+    post:
+      tags:
+        - Work
+      operationId: moveWork
+      summary: Move work to another state
+      description: >-
+        Moves an existing work item to a named authored marking state in the
+        default factory session. Rejects moves while the work item is consumed
+        by an active dispatch.
+      parameters:
+        - $ref: '#/components/parameters/WorkOrTokenID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveWorkRequest'
+      responses:
+        '200':
+          description: Work item at the new marking position.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Work'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/MoveWorkConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work/{id}:
     get:
       tags:
@@ -306,6 +339,40 @@ paths:
                 $ref: '#/components/schemas/Work'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/work/{id}/move:
+    post:
+      tags:
+        - Work
+      operationId: moveWorkBySessionId
+      summary: Move work to another state for one session
+      description: >-
+        Moves an existing work item to a named authored marking state in the
+        selected live factory session. Rejects moves while the work item is
+        consumed by an active dispatch.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkOrTokenID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveWorkRequest'
+      responses:
+        '200':
+          description: Work item at the new marking position for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Work'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/MoveWorkConflict'
         '500':
           $ref: '#/components/responses/InternalError'
   /events:
@@ -829,6 +896,8 @@ components:
       $ref: './components/responses/SaveCurrentFactoryBadRequest.yaml'
     SaveCurrentFactoryConflict:
       $ref: './components/responses/SaveCurrentFactoryConflict.yaml'
+    MoveWorkConflict:
+      $ref: './components/responses/MoveWorkConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
   schemas:
@@ -864,6 +933,8 @@ components:
       $ref: './components/schemas/api/UpsertWorkRequestSubmittedWork.yaml'
     UpsertWorkRequestResponse:
       $ref: './components/schemas/api/UpsertWorkRequestResponse.yaml'
+    MoveWorkRequest:
+      $ref: './components/schemas/api/MoveWorkRequest.yaml'
     ListWorkResponse:
       $ref: './components/schemas/api/ListWorkResponse.yaml'
     PaginationContext:
@@ -1012,6 +1083,8 @@ components:
       $ref: './components/schemas/events/FactoryEventType.yaml'
     FactoryEventContext:
       $ref: './components/schemas/events/FactoryEventContext.yaml'
+    WorkStateChangeSource:
+      $ref: './components/schemas/events/WorkStateChangeSource.yaml'
     DispatchConsumedWorkRef:
       $ref: './components/schemas/events/DispatchConsumedWorkRef.yaml'
     DispatchRequestEventMetadata:
@@ -1042,6 +1115,8 @@ components:
       $ref: './components/schemas/events/payloads/ScriptResponseEventPayload.yaml'
     DispatchResponseEventPayload:
       $ref: './components/schemas/events/payloads/DispatchResponseEventPayload.yaml'
+    WorkStateChangeEventPayload:
+      $ref: './components/schemas/events/payloads/WorkStateChangeEventPayload.yaml'
     FactoryStateResponseEventPayload:
       $ref: './components/schemas/events/payloads/FactoryStateResponseEventPayload.yaml'
     RunResponseEventPayload:
