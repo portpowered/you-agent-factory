@@ -52,6 +52,9 @@ describe("CurrentActivityGraphHeaderActions", () => {
     });
 
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(toggle.className).toContain("border-af-warning-border");
+    expect(toggle.className).toContain("bg-af-warning-surface");
+    expect(toggle.className).toContain("text-af-warning-text");
     await user.hover(toggle);
     expect(
       await screen.findByRole("tooltip", {
@@ -59,6 +62,27 @@ describe("CurrentActivityGraphHeaderActions", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
+  });
+
+  it("applies warning styling on the compact header toggle when dirty", () => {
+    render(
+      <CurrentActivityGraphHeaderActions
+        compact
+        editorMode={true}
+        hasChanges={true}
+        isDefinitionLoading={false}
+        onToggle={() => {}}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", {
+      name: "Leave factory graph editor",
+    });
+
+    expect(toggle.className).toContain("border-af-warning-border");
+    expect(toggle.className).toContain("bg-af-warning-surface");
+    expect(toggle.className).toContain("text-af-warning-text");
+    expect(toggle.className).not.toContain("text-af-text-muted");
   });
 
   it("keeps custom header actions in the actions section after the mode toggle", () => {

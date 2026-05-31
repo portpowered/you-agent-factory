@@ -144,6 +144,46 @@ describe("factory graph editor toolbar controls", () => {
     ).toBeTruthy();
   });
 
+  it("applies warning styling when there are unsaved changes", () => {
+    render(
+      <FactoryGraphEditorModeToggle
+        editorMode={true}
+        hasChanges={true}
+        onClick={() => {}}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", {
+      name: "Leave factory graph editor",
+    });
+
+    expect(toggle.className).toContain("border-af-warning-border");
+    expect(toggle.className).toContain("bg-af-warning-surface");
+    expect(toggle.className).toContain("text-af-warning-text");
+  });
+
+  it("keeps default enter and leave tones when there are no unsaved changes", () => {
+    const { rerender } = render(
+      <FactoryGraphEditorModeToggle editorMode={false} onClick={() => {}} />,
+    );
+
+    const enterToggle = screen.getByRole("button", {
+      name: "Enter factory graph editor",
+    });
+    expect(enterToggle.className).toContain("border-af-border");
+    expect(enterToggle.className).not.toContain("border-af-warning-border");
+
+    rerender(
+      <FactoryGraphEditorModeToggle editorMode={true} onClick={() => {}} />,
+    );
+
+    const leaveToggle = screen.getByRole("button", {
+      name: "Leave factory graph editor",
+    });
+    expect(leaveToggle.className).toContain("border-af-border-strong");
+    expect(leaveToggle.className).not.toContain("border-af-warning-border");
+  });
+
   it("shows the mode-toggle tooltip on hover", async () => {
     const user = userEvent.setup();
 
