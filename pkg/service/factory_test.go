@@ -1931,6 +1931,86 @@ func TestFactoryService_GetCurrentFactory_InlinesPortableFilesAndStarterInputs(t
 	}
 }
 
+func TestFactoryService_SaveDefaultCurrentFactory_PersistsSplitLayout(t *testing.T) {
+	rootDir := t.TempDir()
+	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
+	}
+	staleWorkerDir := filepath.Join(rootDir, interfaces.WorkersDir, "stale-worker")
+	if err := os.MkdirAll(staleWorkerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(stale-worker): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(staleWorkerDir, interfaces.FactoryAgentsFileName), []byte("stale"), 0o644); err != nil {
+		t.Fatalf("WriteFile(stale AGENTS.md): %v", err)
+	}
+
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
+
+	current, err := harness.svc.GetCurrentFactoryForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
+	}
+	if current.Version == nil {
+		t.Fatal("expected default current factory version metadata")
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "root-runtime", "story")
+	replacement.Name = apisurface.DefaultCurrentFactoryName
+	replacement.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  current.Version.Logical + 1,
+		Physical: current.Version.Physical.Add(time.Second),
+	}
+	if _, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		replacement,
+	); err != nil {
+		t.Fatalf("SaveFactoryForSession(replace default): %v", err)
+	}
+
+	assertServiceSplitLayoutAtRoot(t, rootDir, "root-runtime", "You are worker root-runtime.")
+	if _, err := os.Stat(staleWorkerDir); !os.IsNotExist(err) {
+		t.Fatalf("stale worker dir after save: stat err=%v, want removed", err)
+	}
+}
+
+func assertServiceSplitLayoutAtRoot(t *testing.T, rootDir, project, wantWorkerBody string) {
+	t.Helper()
+
+	factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	if strings.Contains(string(factoryJSON), wantWorkerBody) {
+		t.Fatalf("factory.json should omit inlined worker body %q, got %s", wantWorkerBody, factoryJSON)
+	}
+
+	agentsPath := filepath.Join(rootDir, interfaces.WorkersDir, "worker-a", interfaces.FactoryAgentsFileName)
+	agents, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(worker AGENTS.md): %v", err)
+	}
+	if !strings.Contains(string(agents), wantWorkerBody) {
+		t.Fatalf("worker AGENTS.md = %q, want body %q", agents, wantWorkerBody)
+	}
+
+	workstationPath := filepath.Join(rootDir, interfaces.WorkstationsDir, "process", interfaces.FactoryAgentsFileName)
+	if _, err := os.Stat(workstationPath); err != nil {
+		t.Fatalf("expected workstation AGENTS.md at %s: %v", workstationPath, err)
+	}
+
+	loaded, err := config.LoadRuntimeConfig(rootDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	if loaded.FactoryConfig().Project != project {
+		t.Fatalf("project = %q, want %q", loaded.FactoryConfig().Project, project)
+	}
+}
+
 func TestFactoryService_GetCurrentFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {
 	rootDir := t.TempDir()
 	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)

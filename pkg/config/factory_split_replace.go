@@ -13,15 +13,22 @@ type factorySplitLayoutReplaceHooks struct {
 	afterStageWrite func(stagingDir string) error
 }
 
+// FactorySplitLayoutReplaceResult holds rollback and backup-discard callbacks
+// returned by ReplaceFactorySplitLayout after a successful commit.
+type FactorySplitLayoutReplaceResult struct {
+	Restore       func()
+	DiscardBackup func()
+}
+
 // ReplaceFactorySplitLayout atomically replaces an existing factory directory at
-// targetDir with a split-layout materialization of canonicalFactoryJSON. The
-// returned restore function reinstates the pre-replace directory tree when
-// activation or downstream steps fail after persist.
-func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (func(), error) {
+// targetDir with a split-layout materialization of canonicalFactoryJSON. Call
+// Restore to reinstate the pre-replace tree when downstream steps fail; call
+// DiscardBackup after successful activation to remove the on-disk backup.
+func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (*FactorySplitLayoutReplaceResult, error) {
 	return replaceFactorySplitLayout(targetDir, canonicalFactoryJSON, factorySplitLayoutReplaceHooks{})
 }
 
-func replaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte, hooks factorySplitLayoutReplaceHooks) (func(), error) {
+func replaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte, hooks factorySplitLayoutReplaceHooks) (*FactorySplitLayoutReplaceResult, error) {
 	if strings.TrimSpace(targetDir) == "" {
 		return nil, fmt.Errorf("factory directory is required")
 	}
@@ -87,10 +94,14 @@ func replaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte, ho
 	keepStaging = true
 	committed = true
 
-	restore := func() {
-		restoreFactorySplitLayoutReplace(targetDir, backupDir)
-	}
-	return restore, nil
+	return &FactorySplitLayoutReplaceResult{
+		Restore: func() {
+			restoreFactorySplitLayoutReplace(targetDir, backupDir)
+		},
+		DiscardBackup: func() {
+			_ = os.RemoveAll(backupDir)
+		},
+	}, nil
 }
 
 func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {

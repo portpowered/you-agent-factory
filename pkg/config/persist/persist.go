@@ -56,7 +56,7 @@ func ReplaceDefaultFactoryDefinition(rootDir string, payload []byte) (func(), er
 
 // ReplaceFactorySplitLayout atomically replaces an existing factory directory
 // with a split-layout materialization of canonicalFactoryJSON.
-func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (func(), error) {
+func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (*config.FactorySplitLayoutReplaceResult, error) {
 	return config.ReplaceFactorySplitLayout(targetDir, canonicalFactoryJSON)
 }
 

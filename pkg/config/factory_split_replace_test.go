@@ -18,14 +18,14 @@ func TestReplaceFactorySplitLayout_WritesSplitLayoutAndRestores(t *testing.T) {
 	}
 
 	updated := rollbackNamedFactoryPayload(t, "alpha-v2")
-	restore, err := config.ReplaceFactorySplitLayout(targetDir, updated)
+	result, err := config.ReplaceFactorySplitLayout(targetDir, updated)
 	if err != nil {
 		t.Fatalf("ReplaceFactorySplitLayout: %v", err)
 	}
 
 	assertSplitLayoutPersisted(t, targetDir, "alpha-v2")
 
-	restore()
+	result.Restore()
 	assertMonolithicFactoryJSON(t, targetDir, initial)
 }
 

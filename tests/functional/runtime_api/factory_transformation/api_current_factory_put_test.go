@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,6 +105,38 @@ func TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacemen
 		t.Fatal("expected non-empty trace ID for saved default factory submission")
 	}
 	submitWorkAndExpectStatus(t, server.URL(), "root-task", "old-default", http.StatusBadRequest)
+
+	assertFunctionalSplitLayoutAtRoot(t, rootDir, "root-runtime")
+}
+
+func assertFunctionalSplitLayoutAtRoot(t *testing.T, rootDir, project string) {
+	t.Helper()
+
+	factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	if strings.Contains(string(factoryJSON), "You are the planner.") {
+		t.Fatalf("factory.json should omit inlined planner body after split save, got %s", factoryJSON)
+	}
+
+	agentsPath := filepath.Join(rootDir, interfaces.WorkersDir, "planner", interfaces.FactoryAgentsFileName)
+	if _, err := os.Stat(agentsPath); err != nil {
+		t.Fatalf("expected planner AGENTS.md at %s: %v", agentsPath, err)
+	}
+
+	workstationPath := filepath.Join(rootDir, interfaces.WorkstationsDir, "plan-task", interfaces.FactoryAgentsFileName)
+	if _, err := os.Stat(workstationPath); err != nil {
+		t.Fatalf("expected plan-task AGENTS.md at %s: %v", workstationPath, err)
+	}
+
+	loaded, err := config.LoadRuntimeConfig(rootDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	if loaded.FactoryConfig().Project != project {
+		t.Fatalf("project = %q, want %q", loaded.FactoryConfig().Project, project)
+	}
 }
 
 func TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocument(t *testing.T) {
@@ -854,8 +887,8 @@ func functionalDefaultFactorySaveBody(id, workType string, version factoryapi.Hy
 		"id":"` + id + `",
 		"version":{"physical":"` + version.Physical.UTC().Format(time.RFC3339Nano) + `","logical":"` + strconv.FormatInt(version.Logical.Int64(), 10) + `"},
 		"workTypes":[{"name":"` + workType + `","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
-		"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],
-		"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"planner","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"done"}]}]
+		"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514","body":"You are the planner."}],
+		"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"planner","body":"Plan the work.","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"done"}]}]
 	}`
 }
 

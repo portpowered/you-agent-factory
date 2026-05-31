@@ -24,8 +24,12 @@ func TestReplaceFactorySplitLayout_PrunesRemovedWorkerAndOverwritesAgents(t *tes
 	}
 
 	updated := splitLayoutRefreshPayload(t, "alpha-v2")
-	if _, err := ReplaceFactorySplitLayout(targetDir, updated); err != nil {
+	result, err := ReplaceFactorySplitLayout(targetDir, updated)
+	if err != nil {
 		t.Fatalf("ReplaceFactorySplitLayout: %v", err)
+	}
+	if result != nil && result.DiscardBackup != nil {
+		result.DiscardBackup()
 	}
 
 	if _, err := os.Stat(oldWorkerDir); !os.IsNotExist(err) {

@@ -140,11 +140,11 @@ func TestReplaceFactorySplitLayout_MatchesConfigPackage(t *testing.T) {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 
-	facadeRestore, err := persist.ReplaceFactorySplitLayout(targetDir, payload)
+	facadeResult, err := persist.ReplaceFactorySplitLayout(targetDir, payload)
 	if err != nil {
 		t.Fatalf("persist.ReplaceFactorySplitLayout: %v", err)
 	}
-	if facadeRestore == nil {
+	if facadeResult == nil || facadeResult.Restore == nil {
 		t.Fatal("expected restore callback from persist facade")
 	}
 
@@ -152,11 +152,11 @@ func TestReplaceFactorySplitLayout_MatchesConfigPackage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(rootDir2, interfaces.FactoryConfigFile), payload, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
-	configRestore, err := config.ReplaceFactorySplitLayout(rootDir2, payload)
+	configResult, err := config.ReplaceFactorySplitLayout(rootDir2, payload)
 	if err != nil {
 		t.Fatalf("config.ReplaceFactorySplitLayout: %v", err)
 	}
-	if configRestore == nil {
+	if configResult == nil || configResult.Restore == nil {
 		t.Fatal("expected restore callback from config package")
 	}
 
