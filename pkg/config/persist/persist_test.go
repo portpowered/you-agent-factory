@@ -133,6 +133,43 @@ func TestReadWriteCurrentFactoryPointer_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestReplaceFactorySplitLayout_MatchesConfigPackage(t *testing.T) {
+	targetDir := t.TempDir()
+	payload := namedFactoryPayload(t, "alpha")
+	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), payload, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	facadeRestore, err := persist.ReplaceFactorySplitLayout(targetDir, payload)
+	if err != nil {
+		t.Fatalf("persist.ReplaceFactorySplitLayout: %v", err)
+	}
+	if facadeRestore == nil {
+		t.Fatal("expected restore callback from persist facade")
+	}
+
+	rootDir2 := t.TempDir()
+	if err := os.WriteFile(filepath.Join(rootDir2, interfaces.FactoryConfigFile), payload, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+	configRestore, err := config.ReplaceFactorySplitLayout(rootDir2, payload)
+	if err != nil {
+		t.Fatalf("config.ReplaceFactorySplitLayout: %v", err)
+	}
+	if configRestore == nil {
+		t.Fatal("expected restore callback from config package")
+	}
+
+	agentsPath := filepath.Join(targetDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName)
+	if _, err := os.Stat(agentsPath); err != nil {
+		t.Fatalf("expected split worker file from facade path: %v", err)
+	}
+	agentsPath = filepath.Join(rootDir2, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName)
+	if _, err := os.Stat(agentsPath); err != nil {
+		t.Fatalf("expected split worker file from config path: %v", err)
+	}
+}
+
 func TestReplaceDefaultFactoryDefinition_StagesAndRestores(t *testing.T) {
 	rootDir := t.TempDir()
 	initial := namedFactoryPayload(t, "legacy")

@@ -54,6 +54,12 @@ func ReplaceDefaultFactoryDefinition(rootDir string, payload []byte) (func(), er
 	return config.ReplaceDefaultFactoryDefinition(rootDir, payload)
 }
 
+// ReplaceFactorySplitLayout atomically replaces an existing factory directory
+// with a split-layout materialization of canonicalFactoryJSON.
+func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (func(), error) {
+	return config.ReplaceFactorySplitLayout(targetDir, canonicalFactoryJSON)
+}
+
 // ReadCurrentFactoryPointer returns the current named factory selected for the
 // root directory's named-factory layout.
 func ReadCurrentFactoryPointer(rootDir string) (string, error) {
