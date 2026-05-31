@@ -1,5 +1,15 @@
-import { Button, Input, Select, Textarea } from "../../../components/ui";
-import { DashboardMutationDialog } from "../../workflow-activity/components/mutation-dialog";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Select,
+  Textarea,
+} from "../../../components/ui";
 import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
 import type {
   FactoryGraphAddEntityDraft,
@@ -33,36 +43,44 @@ export function FactoryGraphEditorAddEntityDialog({
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  if (!isOpen || draft === null) {
-    return null;
-  }
   const messages = getFactoryGraphEditorMessages(locale);
+  const isDialogOpen = isOpen && draft !== null;
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      onClose();
+    }
+  };
 
   return (
-    <DashboardMutationDialog
-      description={messages.addDialogDescription(draft.kind)}
-      onClose={onClose}
-      title={messages.addDialogTitle(draft.kind)}
-      footer={
-        <>
-          <Button onClick={onClose} tone="outline" type="button">
-            {messages.addDialogCancelAction}
-          </Button>
-          <Button onClick={onSubmit} type="button">
-            {messages.addDialogAddEntityAction}
-          </Button>
-        </>
-      }
-    >
-      <FactoryGraphEditorAddEntityFields
-        currentFactoryDefinition={currentFactoryDefinition}
-        draft={draft}
-        errors={errors}
-        locale={locale}
-        onChange={onChange}
-        onSubmit={onSubmit}
-      />
-    </DashboardMutationDialog>
+    <Dialog onOpenChange={handleOpenChange} open={isDialogOpen}>
+      {draft ? (
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{messages.addDialogTitle(draft.kind)}</DialogTitle>
+            <DialogDescription>
+              {messages.addDialogDescription(draft.kind)}
+            </DialogDescription>
+          </DialogHeader>
+          <FactoryGraphEditorAddEntityFields
+            currentFactoryDefinition={currentFactoryDefinition}
+            draft={draft}
+            errors={errors}
+            locale={locale}
+            onChange={onChange}
+            onSubmit={onSubmit}
+          />
+          <DialogFooter>
+            <Button onClick={onClose} tone="outline" type="button">
+              {messages.addDialogCancelAction}
+            </Button>
+            <Button onClick={onSubmit} type="button">
+              {messages.addDialogAddEntityAction}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      ) : null}
+    </Dialog>
   );
 }
 

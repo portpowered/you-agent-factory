@@ -22,6 +22,7 @@ describe("FactoryGraphEditorLeaveDialog", () => {
     const dialog = screen.getByRole("dialog", {
       name: "Leave graph editor with unsaved changes?",
     });
+    expect(document.body.contains(dialog)).toBe(true);
     expect(
       within(dialog).getByText(
         "This graph editor session still has local topology changes.",
@@ -67,6 +68,7 @@ describe("FactoryGraphEditorLeaveDialog", () => {
     const dialog = screen.getByRole("dialog", {
       name: "Leave graph editor with unsaved changes?",
     });
+    expect(document.body.contains(dialog)).toBe(true);
     expect(
       within(dialog)
         .getByRole("button", { name: "Keep editing" })
