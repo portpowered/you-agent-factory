@@ -238,6 +238,7 @@ function renderCurrentSelectionDetailCard({
   return <NoSelectionDetailCard widgetId={widgetId} />;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: widget wires editable workstation, worker, and work-state save hooks into one selection detail surface.
 export function CurrentSelectionWidget({
   activeTraceID,
   currentSelection,

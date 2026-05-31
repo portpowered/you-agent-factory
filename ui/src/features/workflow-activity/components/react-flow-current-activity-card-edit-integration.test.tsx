@@ -525,8 +525,11 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       ).toBeNull();
     });
     expect(
-      within(toolbar).getByText("No draft changes", { exact: true }),
-    ).toBeTruthy();
+      within(toolbar).queryByRole("button", { name: "Save changes" }),
+    ).toBeNull();
+    expect(
+      within(toolbar).queryByRole("button", { name: "Discard changes" }),
+    ).toBeNull();
   });
 
   it("opens save confirmation from the activity card host portaled to document.body", async () => {
