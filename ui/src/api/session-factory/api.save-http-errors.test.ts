@@ -12,6 +12,68 @@ const sessionFactoryFixture = {
   },
 };
 
+describe("saveSessionFactory version metadata", () => {
+  it("preserves non-timestamp physical values when incrementing version metadata", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "2",
+            physical: "legacy-physical",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveSessionFactory(
+      {
+        sessionID: "~default",
+        factory: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+        baseVersion: {
+          logical: "1",
+          physical: "legacy-physical",
+        },
+      },
+      { fetch },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mode: "REPLACE_CURRENT",
+          factory: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+            version: {
+              logical: "2",
+              physical: "legacy-physical",
+            },
+          },
+        }),
+      }),
+    );
+  });
+});
+
 describe("saveSessionFactory transport errors", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

@@ -77,6 +77,27 @@ describe("getSessionFactory version normalization", () => {
   });
 });
 
+describe("getSessionFactory invalid responses", () => {
+  it("rejects GET payloads that are not editable factory documents", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ workers: [], workstations: [], workTypes: [] }), {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          }),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      name: "SessionFactoryAPIError",
+    });
+  });
+});
+
 describe("getSessionFactory HTTP error mapping", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

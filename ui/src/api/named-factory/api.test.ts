@@ -725,6 +725,41 @@ describe("factory API", () => {
     );
   });
 
+  it("returns no discovered names when the session id is unknown", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sessions: [
+            {
+              factoryDir: "/workspace/project/beta",
+              folderPath: "/workspace/project",
+              id: "session-beta",
+              isDefault: false,
+              project: "beta",
+              target: {
+                kind: "named",
+                name: "beta",
+              },
+            },
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+
+    await expect(
+      discoverSessionNamedFactoryNames({
+        fetch: fetchMock,
+        sessionID: "session-missing",
+      }),
+    ).resolves.toEqual([]);
+  });
+
   it("returns no discovered names when the session folder path is missing", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
