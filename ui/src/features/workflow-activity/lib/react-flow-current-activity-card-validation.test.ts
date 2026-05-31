@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: selection validation scenarios stay grouped around shared projection fixtures.
 import { describe, expect, it } from "vitest";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";

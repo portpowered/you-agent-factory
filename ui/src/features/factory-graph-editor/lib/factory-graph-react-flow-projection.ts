@@ -17,6 +17,7 @@ import type {
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
 import type {
+  FactoryGraphConnectionAnchor,
   FactoryGraphConnectionEndpoint,
   FactoryGraphConnectionResolver,
 } from "./factory-graph-editor-connections";
@@ -470,6 +471,61 @@ export function resolveFactoryGraphZAxisIncompleteHints(input: {
   };
 }
 
+function projectEditorConnectionAnchorHandle(input: {
+  anchor: FactoryGraphConnectionAnchor;
+  canEditConnections: boolean;
+  compatible: boolean;
+  editor?: FactoryGraphReactFlowEditorOverlay;
+  handleValidation?: { message: string };
+  messages: ReturnType<typeof getFactoryGraphEditorMessages>;
+  node: FactoryGraphNode;
+  nodeIsPendingRemoval: boolean;
+  rendersHandleValidation: boolean;
+  selected: boolean;
+}): ActivityGraphNodeHandle {
+  const handleValidation = input.handleValidation;
+  const showHandleValidation =
+    handleValidation !== undefined && input.rendersHandleValidation;
+  const validationMessage = showHandleValidation
+    ? handleValidation.message
+    : undefined;
+
+  return {
+    buttonAriaLabel: showHandleValidation
+      ? validationMessage
+      : `${input.messages.toolbarConnectLabel}: ${input.node.label} ${input.anchor.label}`,
+    buttonDisabled: !input.canEditConnections || input.nodeIsPendingRemoval,
+    buttonPressed: input.selected || undefined,
+    buttonTitle: showHandleValidation ? validationMessage : input.anchor.description,
+    connectable: input.canEditConnections && !input.nodeIsPendingRemoval,
+    id: input.anchor.id,
+    label: input.anchor.label,
+    onButtonClick:
+      input.editor?.onConnectionAnchorClick &&
+      input.canEditConnections &&
+      !input.nodeIsPendingRemoval
+        ? () =>
+            input.editor?.onConnectionAnchorClick?.({
+              anchorId: input.anchor.id,
+              nodeId: input.node.id,
+            })
+        : undefined,
+    side: input.anchor.side,
+    type: input.anchor.role,
+    validationError: showHandleValidation || undefined,
+    validationMessage,
+    variant: showHandleValidation
+      ? "error"
+      : input.selected
+        ? "selected"
+        : input.compatible
+          ? "valid-target"
+          : input.canEditConnections
+            ? "default"
+            : "muted",
+  } satisfies ActivityGraphNodeHandle;
+}
+
 function buildNodeHandles(input: {
   editor?: FactoryGraphReactFlowEditorOverlay;
   locale?: string;
@@ -544,49 +600,19 @@ function buildNodeHandles(input: {
         anchorContext,
         anchor.id,
       );
-    const showHandleValidation =
-      handleValidation !== undefined && rendersHandleValidation;
 
-    return {
-      buttonAriaLabel: showHandleValidation
-        ? handleValidation.message
-        : anchor.role === "source"
-          ? `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`
-          : `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`,
-      buttonDisabled: !canEditConnections || nodeIsPendingRemoval,
-      buttonPressed: selected || undefined,
-      buttonTitle: showHandleValidation
-        ? handleValidation.message
-        : anchor.description,
-      connectable: canEditConnections && !nodeIsPendingRemoval,
-      id: anchor.id,
-      label: anchor.label,
-      onButtonClick:
-        input.editor?.onConnectionAnchorClick &&
-        canEditConnections &&
-        !nodeIsPendingRemoval
-          ? () =>
-              input.editor?.onConnectionAnchorClick?.({
-                anchorId: anchor.id,
-                nodeId: input.node.id,
-              })
-          : undefined,
-      side: anchor.side,
-      type: anchor.role,
-      validationError: showHandleValidation || undefined,
-      validationMessage: showHandleValidation
-        ? handleValidation.message
-        : undefined,
-      variant: showHandleValidation
-        ? "error"
-        : selected
-          ? "selected"
-          : compatible
-            ? "valid-target"
-            : canEditConnections
-              ? "default"
-              : "muted",
-    } satisfies ActivityGraphNodeHandle;
+    return projectEditorConnectionAnchorHandle({
+      anchor,
+      canEditConnections,
+      compatible,
+      editor: input.editor,
+      handleValidation,
+      messages,
+      node: input.node,
+      nodeIsPendingRemoval,
+      rendersHandleValidation,
+      selected,
+    });
   });
 }
 

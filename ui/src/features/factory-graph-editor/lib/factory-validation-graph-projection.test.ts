@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: validation projection scenarios stay grouped around shared workstation fixtures.
 import { describe, expect, it } from "vitest";
 
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
