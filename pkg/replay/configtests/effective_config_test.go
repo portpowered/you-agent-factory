@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
@@ -482,8 +483,10 @@ func TestRuntimeConfigFromGeneratedFactory_PreservesGuardedLoopBreakerRoundTrip(
 	if err != nil {
 		t.Fatalf("Map replay factory: %v", err)
 	}
-	assertReplayGuardedLoopBreakerTransition(t, net.Transitions["review-story-loop-breaker"], "story:init", "story:failed", "review-story", 3)
-	assertReplayHasNoTransitionExhaustion(t, net.Transitions)
+	testutil.AssertGuardedLoopBreakerTransition(t, net.Transitions["review-story-loop-breaker"], "story:init", "story:failed", "review-story", 3)
+	testutil.AssertNoTransitionExhaustion(t, net.Transitions, testutil.PetriTransitionAssertOptions{
+		ExhaustionContext: "replay-mapped customer config",
+	})
 }
 
 func writeGuardedLoopBreakerFactoryJSON(t *testing.T, factoryDir string) {
@@ -621,44 +624,6 @@ func assertRuntimeInputGuard(t *testing.T, workstation interfaces.FactoryWorksta
 		return
 	}
 	t.Fatalf("%s has no runtime input for work type %q", workstation.Name, workType)
-}
-
-func assertReplayGuardedLoopBreakerTransition(t *testing.T, transition *petri.Transition, inputPlace string, outputPlace string, watchedWorkstation string, maxVisits int) {
-	t.Helper()
-	if transition == nil {
-		t.Fatal("expected guarded loop-breaker transition to exist")
-	}
-	if transition.Type != petri.TransitionNormal {
-		t.Fatalf("loop-breaker transition type = %s, want %s", transition.Type, petri.TransitionNormal)
-	}
-	if len(transition.InputArcs) != 1 {
-		t.Fatalf("loop-breaker input arcs = %#v, want one input arc", transition.InputArcs)
-	}
-	if transition.InputArcs[0].PlaceID != inputPlace {
-		t.Fatalf("loop-breaker input place = %q, want %q", transition.InputArcs[0].PlaceID, inputPlace)
-	}
-	guard, ok := transition.InputArcs[0].Guard.(*petri.VisitCountGuard)
-	if !ok {
-		t.Fatalf("loop-breaker guard = %T, want *petri.VisitCountGuard", transition.InputArcs[0].Guard)
-	}
-	if guard.TransitionID != watchedWorkstation || guard.MaxVisits != maxVisits {
-		t.Fatalf("loop-breaker visit guard = %#v, want transition=%q maxVisits=%d", guard, watchedWorkstation, maxVisits)
-	}
-	if len(transition.OutputArcs) != 1 {
-		t.Fatalf("loop-breaker output arcs = %#v, want one output arc", transition.OutputArcs)
-	}
-	if transition.OutputArcs[0].PlaceID != outputPlace {
-		t.Fatalf("loop-breaker output place = %q, want %q", transition.OutputArcs[0].PlaceID, outputPlace)
-	}
-}
-
-func assertReplayHasNoTransitionExhaustion(t *testing.T, transitions map[string]*petri.Transition) {
-	t.Helper()
-	for name, transition := range transitions {
-		if transition != nil && transition.Type == petri.TransitionExhaustion {
-			t.Fatalf("unexpected TransitionExhaustion transition %q in replay-mapped customer config", name)
-		}
-	}
 }
 
 func assertDynamicFanInGuard(t *testing.T, transition *petri.Transition, childPlaceID string, want petri.Guard) {

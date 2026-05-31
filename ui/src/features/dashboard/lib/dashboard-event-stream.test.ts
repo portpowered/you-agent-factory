@@ -5,7 +5,7 @@ import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import {
   currentFactoryDocumentQueryKey,
   currentFactoryDefinitionQueryKey,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   clearQueuedFlush,
   pausedDashboardStreamState,
@@ -135,7 +135,7 @@ describe("syncCurrentFactoryDefinition", () => {
     expect(setQueryData).not.toHaveBeenCalled();
   });
 
-  it("updates definition cache and invalidates the document query", async () => {
+  it("updates definition cache and invalidates the document query when version is absent", async () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
     syncCurrentFactoryDefinition(queryClient, {
@@ -151,6 +151,35 @@ describe("syncCurrentFactoryDefinition", () => {
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: currentFactoryDocumentQueryKey(sessionID),
+    });
+  });
+
+  it("updates both definition and document caches when FACTORY_CHANGE includes version", () => {
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    syncCurrentFactoryDefinition(queryClient, {
+      context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+      id: "event-1",
+      payload: {
+        factory: {
+          ...validFactory,
+          version: {
+            logical: "9",
+            physical: "2026-05-31T12:00:00Z",
+          },
+        },
+      },
+      type: FACTORY_EVENT_TYPES.factoryChange,
+    }, sessionID);
+    expect(invalidateQueries).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey(sessionID)),
+    ).toMatchObject({
+      version: {
+        logical: "9",
+        physical: "2026-05-31T12:00:00Z",
+      },
+      workers: [expect.objectContaining({ model: "gpt-5.6" })],
     });
   });
 

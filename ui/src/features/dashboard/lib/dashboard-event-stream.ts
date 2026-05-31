@@ -3,11 +3,13 @@ import type { RefObject } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
+import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import {
   currentFactoryDocumentQueryKey,
   currentFactoryDefinitionQueryKey,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 
 export function clearQueuedFlush(flushHandleRef: RefObject<number | null>): void {
   if (flushHandleRef.current === null) {
@@ -69,14 +71,47 @@ export function syncCurrentFactoryDefinition(
     return;
   }
   try {
+    const normalizedFactory = normalizeFactoryDefinition(payloadFactory);
     queryClient.setQueryData(
       currentFactoryDefinitionQueryKey(sessionID),
-      normalizeFactoryDefinition(payloadFactory),
+      normalizedFactory,
     );
+    const document = toCurrentFactoryDocumentFromNormalizedFactory(
+      normalizedFactory,
+    );
+    if (document) {
+      queryClient.setQueryData(
+        currentFactoryDocumentQueryKey(sessionID),
+        document,
+      );
+      return;
+    }
     void queryClient.invalidateQueries({
       queryKey: currentFactoryDocumentQueryKey(sessionID),
     });
   } catch {
     return;
   }
+}
+
+function toCurrentFactoryDocumentFromNormalizedFactory(
+  normalizedFactory: CanonicalFactoryDefinition,
+): CurrentFactoryDocument | null {
+  const version = normalizedFactory.version;
+  if (
+    version == null ||
+    typeof version !== "object" ||
+    (typeof version.logical !== "string" && typeof version.logical !== "number") ||
+    typeof version.physical !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    ...normalizedFactory,
+    version: {
+      logical: String(version.logical),
+      physical: version.physical,
+    },
+  };
 }

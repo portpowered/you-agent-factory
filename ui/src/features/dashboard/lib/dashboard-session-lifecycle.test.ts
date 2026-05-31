@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX } from "../../current-factory-definition/public";
+import { CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   dashboardSessionKey,
   resetDashboardSessionScopedState,

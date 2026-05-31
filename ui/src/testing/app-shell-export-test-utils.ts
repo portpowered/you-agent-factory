@@ -60,6 +60,7 @@ export const currentNamedFactoryExportResponse = {
   },
   id: "authored-current-factory",
   name: "semantic-workflow",
+  version: defaultSessionFactoryVersion,
   workers: [
     {
       executorProvider: "SCRIPT_WRAP",

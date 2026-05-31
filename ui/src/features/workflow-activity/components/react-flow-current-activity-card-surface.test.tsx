@@ -257,6 +257,7 @@ describe("CurrentActivityGraphSurface", () => {
           createEditorStub({
             blockedRemovalReason: null,
             connectionNotice: null,
+            currentFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
             draftState: { hasChanges: false },
             hasActiveWork: false,
             isStaleDraft: false,
@@ -299,6 +300,7 @@ describe("CurrentActivityGraphSurface", () => {
           createEditorStub({
             blockedRemovalReason: null,
             connectionNotice: null,
+            currentFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
             draftState: { hasChanges: false },
             hasActiveWork: false,
             isStaleDraft: false,
@@ -341,6 +343,7 @@ describe("CurrentActivityGraphSurface", () => {
           createEditorStub({
             blockedRemovalReason: null,
             connectionNotice: null,
+            currentFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
             draftState: { hasChanges: false },
             hasActiveWork: false,
             isStaleDraft: false,

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { AgentBentoCard } from "../../bento/public";
 import type { DashboardSelection } from "../../current-selection/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
@@ -43,7 +44,8 @@ export function WorkflowActivityBentoCard({
   onSelectWorkstation,
 }: WorkflowActivityBentoCardProps) {
   const messages = getWorkflowActivityShellMessages(locale);
-  const editor = useCurrentActivityGraphEditor(snapshot, locale);
+  const { sessionID } = useDashboardSession();
+  const editor = useCurrentActivityGraphEditor(snapshot, locale, sessionID);
 
   return (
     <AgentBentoCard
