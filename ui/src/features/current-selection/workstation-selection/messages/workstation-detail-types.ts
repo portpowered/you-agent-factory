@@ -54,6 +54,7 @@ export interface WorkstationDetailMessages {
   editableConfigurationPromptHelpExpandActionLabel: string;
   editableConfigurationPromptAvailableVariablesHeading: string;
   editableConfigurationPromptUnavailableAccessHeading: string;
+  editableConfigurationPromptResizeHandleLabel: string;
   editableConfigurationSaveFallbackError: string;
   editableConfigurationWorkerMissing: string;
   editableConfigurationWorkerOptionsEmpty: string;

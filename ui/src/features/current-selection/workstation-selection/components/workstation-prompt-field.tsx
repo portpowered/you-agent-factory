@@ -3,6 +3,7 @@ import {
   MonacoPromptEditor,
   PromptEditorDiagnosticsPanel,
 } from "../../../../components/prompt-editor";
+import { HorizontalResizableWidth } from "../../../../components/prompt-editor/horizontal-resizable-width";
 import {
   Collapsible,
   CollapsibleContent,
@@ -46,8 +47,12 @@ export function EditableConfigurationPromptInput({
     .join(" ");
 
   return (
-    <div className="grid gap-2">
-      <div>
+    <div className="grid min-w-0 gap-2">
+      <HorizontalResizableWidth
+        resizeHandleLabel={
+          messages.editableConfigurationPromptResizeHandleLabel
+        }
+      >
         <MonacoPromptEditor
           ariaLabel={messages.promptFieldLabel}
           ariaDescribedBy={describedBy || undefined}
@@ -67,7 +72,7 @@ export function EditableConfigurationPromptInput({
           startupErrorMessage={messages.editableConfigurationPromptEditorError}
           value={state.draft.prompt}
         />
-      </div>
+      </HorizontalResizableWidth>
       <EditableConfigurationPromptAutocompleteFeedback
         messages={messages}
         state={state}
