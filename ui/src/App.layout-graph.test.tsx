@@ -203,6 +203,12 @@ describe("App layout and graph behavior", () => {
   it("renders distinct graph semantics for topology places, active work, and retry outcomes", async () => {
     await renderAppWithDashboardShell({ snapshot: activeSnapshot });
 
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("button", { name: /Select .* workstation/ }).length,
+      ).toBeGreaterThan(0);
+    });
+
     fireEvent.click(screen.getByRole("button", { name: "Select work item Active Story" }));
     expect(screen.getAllByRole("button", { name: /Select .* workstation/ })).toHaveLength(5);
     expect(screen.getByLabelText("agent-slot")).toBeTruthy();

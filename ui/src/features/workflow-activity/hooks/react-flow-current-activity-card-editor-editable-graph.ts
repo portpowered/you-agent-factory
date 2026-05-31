@@ -13,7 +13,7 @@ export function useCurrentActivityEditableGraph({
   locale?: string | null;
   snapshot: DashboardSnapshot;
 }) {
-  const currentFactoryQuery = useCurrentFactoryDocument(editorMode);
+  const currentFactoryQuery = useCurrentFactoryDocument(true);
   const editableGraph = useEditableFactoryGraph({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     currentFactoryDocument: currentFactoryQuery.data,

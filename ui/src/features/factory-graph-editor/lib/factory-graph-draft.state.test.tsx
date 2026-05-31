@@ -1,8 +1,4 @@
 import { act, renderHook } from "@testing-library/react";
-
-import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
-import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
 import {
   syncFactoryGraphDraftSession,
   useFactoryGraphDraftState,
@@ -11,6 +7,9 @@ import {
   baseFactoryDefinition,
   currentFactoryDocument,
 } from "./factory-graph-draft.test-helpers";
+import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
 
 it("replaces workstation worker assignments in the pending definition without introducing validation errors", () => {
   const draft = createEmptyFactoryGraphDraft();
@@ -196,14 +195,27 @@ it("keeps a dirty draft while newer editable-definition versions arrive", () => 
 });
 
 it("clears draft state when the factory document scope key changes", () => {
+  const betaFactoryDocument = {
+    ...currentFactoryDocument,
+    name: "Beta Session Factory",
+  };
   const { result, rerender } = renderHook(
-    ({ factoryDocumentScopeKey }: { factoryDocumentScopeKey: string }) =>
+    ({
+      currentFactoryDocument: scopedDocument,
+      factoryDocumentScopeKey,
+    }: {
+      currentFactoryDocument: typeof currentFactoryDocument;
+      factoryDocumentScopeKey: string;
+    }) =>
       useFactoryGraphDraftState({
-        currentFactoryDocument,
+        currentFactoryDocument: scopedDocument,
         factoryDocumentScopeKey,
       }),
     {
-      initialProps: { factoryDocumentScopeKey: "session-alpha" },
+      initialProps: {
+        currentFactoryDocument,
+        factoryDocumentScopeKey: "session-alpha",
+      },
     },
   );
 
@@ -228,12 +240,88 @@ it("clears draft state when the factory document scope key changes", () => {
 
   expect(result.current.hasChanges).toBe(true);
 
-  rerender({ factoryDocumentScopeKey: "session-beta" });
+  rerender({
+    currentFactoryDocument,
+    factoryDocumentScopeKey: "session-beta",
+  });
+
+  expect(result.current.hasChanges).toBe(false);
+  expect(result.current.source).toBe("projection");
+  expect(result.current.latestDocument).toBeNull();
+
+  rerender({
+    currentFactoryDocument: betaFactoryDocument,
+    factoryDocumentScopeKey: "session-beta",
+  });
 
   expect(result.current.hasChanges).toBe(false);
   expect(result.current.source).toBe("current-factory");
-  expect(result.current.latestDocument).toEqual(currentFactoryDocument);
-  expect(result.current.baseDocument).toEqual(currentFactoryDocument);
+  expect(result.current.latestDocument).toEqual(betaFactoryDocument);
+  expect(result.current.baseDocument).toEqual(betaFactoryDocument);
+});
+
+it("does not rehydrate from a stale document while the new scope document is pending", () => {
+  const betaFactoryDocument = {
+    ...currentFactoryDocument,
+    name: "Beta Session Factory",
+  };
+  const { result, rerender } = renderHook(
+    ({
+      currentFactoryDocument: scopedDocument,
+      factoryDocumentScopeKey,
+    }: {
+      currentFactoryDocument: typeof currentFactoryDocument | undefined;
+      factoryDocumentScopeKey: string;
+    }) =>
+      useFactoryGraphDraftState({
+        currentFactoryDocument: scopedDocument,
+        factoryDocumentScopeKey,
+      }),
+    {
+      initialProps: {
+        currentFactoryDocument,
+        factoryDocumentScopeKey: "session-alpha",
+      },
+    },
+  );
+
+  act(() => {
+    result.current.replaceDraft({
+      ...createEmptyFactoryGraphDraft(),
+      additions: {
+        resources: [],
+        workers: [
+          {
+            model: "gpt-5-mini",
+            name: "reviewer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workStates: [],
+        workTypes: [],
+        workstations: [],
+      },
+    });
+  });
+
+  rerender({
+    currentFactoryDocument,
+    factoryDocumentScopeKey: "session-beta",
+  });
+
+  expect(result.current.hasChanges).toBe(false);
+  expect(result.current.source).toBe("projection");
+  expect(result.current.latestDocument).toBeNull();
+  expect(result.current.graph.nodes.map((node) => node.id)).toEqual([]);
+
+  rerender({
+    currentFactoryDocument: betaFactoryDocument,
+    factoryDocumentScopeKey: "session-beta",
+  });
+
+  expect(result.current.source).toBe("current-factory");
+  expect(result.current.latestDocument?.name).toBe("Beta Session Factory");
+  expect(result.current.hasChanges).toBe(false);
 });
 
 it("resets draft state when the loaded factory document identity changes", () => {

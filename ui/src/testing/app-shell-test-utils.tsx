@@ -40,6 +40,11 @@ import {
   seedTimelineSnapshots,
 } from "./app-shell-timeline-seed-utils";
 import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
+import {
+  isSessionFactoryRequest,
+  mockGetSessionFactory,
+  sessionFactoryNamedExportDocument,
+} from "./session-factory-mocks";
 
 export {
   renderWithDashboardSessionTest,
@@ -84,6 +89,7 @@ interface RenderAppOptions {
   browserLanguage?: string | null;
   browserLanguages?: readonly string[] | null;
   factorySessions?: FactorySessionSummary[];
+  fetchOverride?: RenderAppFetchOverride;
   initialLocale?: string | null;
   locationSearch?: string | null;
   sessionID?: string | null;
@@ -193,6 +199,7 @@ export function renderApp({
   browserLanguage,
   browserLanguages,
   factorySessions,
+  fetchOverride,
   initialLocale,
   locationSearch,
   seedTimelineFromSnapshot = true,
@@ -215,8 +222,9 @@ export function renderApp({
 
   const fetchMock: FetchMock = vi
     .fn()
-    .mockImplementation(async (input: RequestInfo | URL) => {
+    .mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = fetchRequestPath(input);
+      const method = (init?.method ?? "GET").toUpperCase();
 
       if (path === "/factory-sessions") {
         return jsonResponse({
@@ -224,8 +232,21 @@ export function renderApp({
         });
       }
 
+      if (
+        method === "GET" &&
+        isSessionFactoryRequest(path, method, sessionID ?? undefined)
+      ) {
+        return mockGetSessionFactory({
+          document: sessionFactoryNamedExportDocument,
+        });
+      }
+
       throw new Error(`unexpected fetch for ${path}`);
     });
+
+  if (fetchOverride) {
+    chainRenderAppFetchMock(fetchMock, fetchOverride);
+  }
 
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("EventSource", MockEventSource);
@@ -282,9 +303,56 @@ export function nonPromptTemplateFetchPaths(
   return fetchCallPaths(fetchMock).filter(
     (path) =>
       !path.includes("/prompt-template-contract") &&
+      !path.includes("/prompt-template-validation") &&
       path !== "/factory-sessions" &&
       !path.endsWith("/factory"),
   );
+}
+
+export type RenderAppFetchOverride = (
+  path: string,
+  method: string,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response | undefined>;
+
+export function chainRenderAppFetchMock(
+  fetchMock: FetchMock,
+  override: RenderAppFetchOverride,
+): void {
+  const defaultHandler = fetchMock.getMockImplementation();
+  if (defaultHandler == null) {
+    throw new Error("fetchMock has no default implementation");
+  }
+
+  fetchMock.mockImplementation(async (input, init) => {
+    const path = fetchRequestPath(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    const overridden = await override(path, method, input, init);
+    if (overridden !== undefined) {
+      return overridden;
+    }
+
+    return defaultHandler(input, init);
+  });
+}
+
+export function lastFetchCallBody(
+  fetchMock: FetchMock,
+  predicate: (path: string, method: string) => boolean,
+): unknown {
+  for (let index = fetchMock.mock.calls.length - 1; index >= 0; index -= 1) {
+    const [input, init] = fetchMock.mock.calls[index] ?? [];
+    const path = fetchRequestPath(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (!predicate(path, method)) {
+      continue;
+    }
+
+    return JSON.parse(String(init?.body ?? "{}"));
+  }
+
+  throw new Error("No matching fetch call found");
 }
 
 export function jsonResponse(

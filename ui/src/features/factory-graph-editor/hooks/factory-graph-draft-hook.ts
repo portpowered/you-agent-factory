@@ -33,9 +33,15 @@ export function useFactoryGraphDraftState(
   const currentFactoryDocument = options.currentFactoryDocument;
   const factoryDocumentScopeKey = options.factoryDocumentScopeKey ?? null;
   const lastFactoryDocumentScopeKeyRef = useRef<string | null>(null);
+  const lastSyncedFactoryDocumentRef = useRef<
+    CurrentFactoryDocument | undefined
+  >(undefined);
+  const staleDocumentBlockedForScopeChangeRef = useRef<
+    CurrentFactoryDocument | undefined
+  >(undefined);
   const emptyDraft = useMemo(() => createEmptyFactoryGraphDraft(), []);
   const emptyGraph = useMemo(
-    () => ({ edges: [], nodes: [] } as FactoryGraphDraftDerivedState["graph"]),
+    () => ({ edges: [], nodes: [] }) as FactoryGraphDraftDerivedState["graph"],
     [],
   );
   const [sessionState, setSessionState] =
@@ -113,25 +119,49 @@ export function useFactoryGraphDraftState(
   useEffect(() => {
     const previousScopeKey = lastFactoryDocumentScopeKeyRef.current;
     const scopeChanged =
-      previousScopeKey !== null &&
-      previousScopeKey !== factoryDocumentScopeKey;
+      previousScopeKey !== null && previousScopeKey !== factoryDocumentScopeKey;
     lastFactoryDocumentScopeKeyRef.current = factoryDocumentScopeKey;
 
+    if (scopeChanged) {
+      const staleDocument = lastSyncedFactoryDocumentRef.current;
+      lastSyncedFactoryDocumentRef.current = undefined;
+      setSessionState(null);
+
+      if (
+        !currentFactoryDocument ||
+        (staleDocument !== undefined &&
+          staleDocument === currentFactoryDocument)
+      ) {
+        staleDocumentBlockedForScopeChangeRef.current = staleDocument;
+        return;
+      }
+
+      staleDocumentBlockedForScopeChangeRef.current = undefined;
+      setSessionState(
+        syncFactoryGraphDraftSession(null, currentFactoryDocument),
+      );
+      lastSyncedFactoryDocumentRef.current = currentFactoryDocument;
+      return;
+    }
+
     if (!currentFactoryDocument) {
+      staleDocumentBlockedForScopeChangeRef.current = undefined;
       setSessionState(null);
       return;
     }
 
-    if (scopeChanged) {
-      setSessionState(
-        syncFactoryGraphDraftSession(null, currentFactoryDocument),
-      );
+    if (
+      staleDocumentBlockedForScopeChangeRef.current !== undefined &&
+      staleDocumentBlockedForScopeChangeRef.current === currentFactoryDocument
+    ) {
       return;
     }
+    staleDocumentBlockedForScopeChangeRef.current = undefined;
 
     setSessionState((currentState) =>
       syncFactoryGraphDraftSession(currentState, currentFactoryDocument),
     );
+    lastSyncedFactoryDocumentRef.current = currentFactoryDocument;
   }, [currentFactoryDocument, factoryDocumentScopeKey]);
 
   const currentFactoryState = useMemo<FactoryGraphDraftDerivedState | null>(

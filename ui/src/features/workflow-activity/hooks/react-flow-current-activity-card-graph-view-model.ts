@@ -164,14 +164,14 @@ function useActiveGraphHighlights({
 
 export function currentActivityCardFactoryDefinition(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-  snapshot: DashboardSnapshot,
+  _snapshot: DashboardSnapshot,
 ): DashboardSnapshot["factory"] | null | undefined {
-  if (!editor.editorMode) {
-    return undefined;
+  if (editor.editableDefinitionQuery?.status !== "success") {
+    return null;
   }
 
-  if (editor.editableDefinitionQuery.status !== "success") {
-    return null;
+  if (!editor.editorMode) {
+    return undefined;
   }
 
   return editorModeFactoryDefinition(editor) ?? null;
@@ -198,7 +198,6 @@ function useEditorCurrentActivityGraphLayout(
   );
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates graph layout, editor draft, and selection handler wiring in one hook.
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,

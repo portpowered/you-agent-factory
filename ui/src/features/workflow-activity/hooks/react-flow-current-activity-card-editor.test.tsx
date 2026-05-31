@@ -1,9 +1,10 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: focused hook coverage keeps the mergeability-only save/leave branches in one seam.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: focused hook coverage keeps session-reset and in-session save/leave branches on one harness seam.
 import { act, renderHook } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
 import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 
 const fixtureState = vi.hoisted(() => {
@@ -158,6 +159,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
         hookState.draftState.hasChanges &&
         hookState.draftState.pendingFactoryDefinition !== null &&
         hookState.draftState.latestDocument !== null &&
+        hookState.draftState.validationErrors.length === 0 &&
         !hookState.saveStateIsStale,
       documentSave: hookState.saveStateIsStale
         ? {
@@ -226,6 +228,7 @@ vi.mock("./react-flow-current-activity-card-editor-value", () => ({
 
 describe("useCurrentActivityGraphEditor", () => {
   beforeEach(() => {
+    useFactoryGraphTopologyEditorBridge.setState({ handlers: null });
     hookState.addEntityController.reset.mockReset();
     hookState.connectionController.handleConnectionAnchorClick.mockReset();
     hookState.connectionController.handleEditorConnect.mockReset();
@@ -394,6 +397,55 @@ describe("useCurrentActivityGraphEditor", () => {
     expect(result.current.isConfirmingSave).toBe(false);
   });
 
+  it("resets editor chrome and topology bridge when factory document scope changes", () => {
+    const { result, rerender } = renderHook(
+      ({ factoryDocumentScopeKey }: { factoryDocumentScopeKey: string }) =>
+        useCurrentActivityGraphEditor(
+          semanticWorkflowDashboardSnapshot,
+          "en",
+          factoryDocumentScopeKey,
+        ),
+      {
+        initialProps: { factoryDocumentScopeKey: "session-alpha" },
+      },
+    );
+
+    act(() => {
+      result.current.handleEditorModeToggle();
+      result.current.setActiveTool("connect");
+      result.current.setIsConfirmingLeaveEditor(true);
+      result.current.setIsConfirmingSave(true);
+    });
+    hookState.draftState.hasChanges = true;
+    useFactoryGraphTopologyEditorBridge.setState({
+      handlers: {
+        blockedRemovalReason: null,
+        canInteractWithEditor: true,
+        editorMode: true,
+        requestNodeRemoval: vi.fn(),
+      },
+    });
+
+    rerender({ factoryDocumentScopeKey: "session-beta" });
+
+    expect(result.current.editorMode).toBe(false);
+    expect(result.current.activeTool).toBeNull();
+    expect(result.current.isConfirmingLeaveEditor).toBe(false);
+    expect(result.current.isConfirmingSave).toBe(false);
+    expect(hookState.addEntityController.reset).toHaveBeenCalled();
+    expect(hookState.saveEditableDefinition.reset).toHaveBeenCalled();
+    expect(
+      hookState.connectionController.setConnectionNotice,
+    ).toHaveBeenCalledWith(null);
+    expect(
+      hookState.removalController.setPendingRemovalEdgeId,
+    ).toHaveBeenCalledWith(null);
+    expect(
+      hookState.removalController.setPendingRemovalNodeId,
+    ).toHaveBeenCalledWith(null);
+    expect(useFactoryGraphTopologyEditorBridge.getState().handlers).toBeNull();
+  });
+
   it("saves the draft and leaves editor mode when asked to save before leaving", async () => {
     hookState.draftState.hasChanges = true;
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
@@ -424,5 +476,135 @@ describe("useCurrentActivityGraphEditor", () => {
     );
     expect(result.current.editorMode).toBe(false);
     expect(result.current.activeTool).toBeNull();
+  });
+});
+
+const inSessionScopeKey = "session-in-session";
+
+function renderEditorWithConstantScope(
+  snapshot = semanticWorkflowDashboardSnapshot,
+) {
+  return renderHook(() =>
+    useCurrentActivityGraphEditor(snapshot, "en", inSessionScopeKey),
+  );
+}
+
+describe("useCurrentActivityGraphEditor in-session save and discard", () => {
+  beforeEach(() => {
+    useFactoryGraphTopologyEditorBridge.setState({ handlers: null });
+    hookState.addEntityController.reset.mockReset();
+    hookState.connectionController.setConnectionNotice.mockReset();
+    hookState.currentFactoryQuery = {
+      data: fixtureState.editableDocument,
+      status: "success",
+    };
+    hookState.draftState = {
+      baseDocument: fixtureState.editableDocument,
+      draft: fixtureState.emptyDraft(),
+      hasChanges: false,
+      latestDocument: fixtureState.editableDocument,
+      pendingFactoryDefinition: fixtureState.baseFactoryDefinition,
+      replaceDraft: vi.fn(),
+      resetDraft: vi.fn(),
+      validationErrors: [],
+    };
+    hookState.saveEditableDefinition = {
+      error: null,
+      isPending: false,
+      reset: vi.fn(),
+      saveAsync: vi.fn(async () => undefined),
+    };
+    hookState.documentSave = { status: "idle" };
+    hookState.saveStateIsStale = false;
+  });
+
+  it("keeps leave confirmation and editor mode when the draft is dirty within a constant scope", () => {
+    const { result } = renderEditorWithConstantScope();
+
+    act(() => {
+      result.current.handleEditorModeToggle();
+    });
+    hookState.draftState.hasChanges = true;
+
+    act(() => {
+      result.current.handleEditorModeToggle();
+    });
+
+    expect(result.current.editorMode).toBe(true);
+    expect(result.current.isConfirmingLeaveEditor).toBe(true);
+    expect(hookState.addEntityController.reset).not.toHaveBeenCalled();
+    expect(useFactoryGraphTopologyEditorBridge.getState().handlers).toBeNull();
+  });
+
+  it("discards pending changes without leaving editor mode within a constant scope", () => {
+    hookState.draftState.hasChanges = true;
+    const { result } = renderEditorWithConstantScope();
+
+    act(() => {
+      result.current.handleEditorModeToggle();
+      result.current.setActiveTool("connect");
+      result.current.handleDiscardPendingChanges();
+    });
+
+    expect(hookState.draftState.resetDraft).toHaveBeenCalledTimes(1);
+    expect(hookState.addEntityController.reset).toHaveBeenCalledTimes(1);
+    expect(result.current.editorMode).toBe(true);
+    expect(result.current.activeTool).toBe("connect");
+    expect(result.current.isConfirmingLeaveEditor).toBe(false);
+  });
+
+  it("saves pending edits and clears the draft within a constant scope", async () => {
+    hookState.draftState.hasChanges = true;
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.runtime.in_flight_dispatch_count = 0;
+
+    const { result } = renderEditorWithConstantScope(snapshot);
+
+    act(() => {
+      result.current.handleEditorModeToggle();
+    });
+
+    let didSave = false;
+    await act(async () => {
+      didSave = await result.current.handleSaveDraft();
+    });
+
+    expect(didSave).toBe(true);
+    expect(hookState.saveEditableDefinition.saveAsync).toHaveBeenCalledWith({
+      baseVersion: fixtureState.editableDocument.version,
+      factory: fixtureState.baseFactoryDefinition,
+    });
+    expect(hookState.draftState.replaceDraft).toHaveBeenCalledWith(
+      createEmptyFactoryGraphDraft(),
+    );
+    expect(result.current.editorMode).toBe(true);
+  });
+
+  it("blocks save when draft validation errors are present within a constant scope", async () => {
+    hookState.draftState.hasChanges = true;
+    hookState.draftState.validationErrors = [
+      {
+        code: "MISSING_REQUIRED_FIELD",
+        field: "worker",
+        message: "Workstation draft requires a worker assignment.",
+        target: {
+          id: "workstation:review",
+          kind: "node",
+        },
+      },
+    ];
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.runtime.in_flight_dispatch_count = 0;
+
+    const { result } = renderEditorWithConstantScope(snapshot);
+
+    let didSave = true;
+    await act(async () => {
+      didSave = await result.current.handleSaveDraft();
+    });
+
+    expect(didSave).toBe(false);
+    expect(result.current.canSaveDraft).toBe(false);
+    expect(hookState.saveEditableDefinition.saveAsync).not.toHaveBeenCalled();
   });
 });

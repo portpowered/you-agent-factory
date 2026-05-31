@@ -201,9 +201,9 @@ function registerWorkflowActivityBentoCardTestSetup() {
   beforeEach(() => {
     restoreBrowserTestShims = installDashboardBrowserTestShims();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
+      data: baseFactoryDefinitionDocument,
       error: null,
-      status: "pending",
+      status: "success",
     } as never);
     vi.mocked(useFactoryDocumentSave).mockReturnValue({
       error: null,
@@ -305,6 +305,12 @@ describe("WorkflowActivityBentoCard", () => {
     expect(
       within(graphCard).queryByRole("heading", { name: shellMessages.title }),
     ).toBeNull();
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+      error: null,
+      status: "pending",
+    } as never);
 
     await user.click(
       headerScope.getByRole("button", { name: editorMessages.modeEnterEditor }),
