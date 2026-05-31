@@ -433,4 +433,134 @@ describe("saveSessionFactory — throws SessionFactoryAPIError for network failu
       ),
     ).rejects.toBeInstanceOf(SessionFactoryAPIError);
   });
+
+  it("throws NETWORK_ERROR when fetch is unavailable in the environment", async () => {
+    vi.stubGlobal("fetch", undefined);
+
+    await expect(
+      saveSessionFactory({
+        sessionID: "~default",
+        factory: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+      }),
+    ).rejects.toEqual(
+      new SessionFactoryAPIError(
+        sessionFactoryAPIErrorMessages.unavailableInEnvironment,
+        {
+          code: "NETWORK_ERROR",
+        },
+      ),
+    );
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("saveSessionFactory version increment edge cases", () => {
+  it("preserves non-ISO physical timestamps when incrementing version on save", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "10",
+            physical: "not-a-date",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveSessionFactory(
+      {
+        sessionID: "~default",
+        mode: "REPLACE_CURRENT",
+        factory: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+        baseVersion: {
+          logical: "9",
+          physical: "not-a-date",
+        },
+      },
+      { fetch },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mode: "REPLACE_CURRENT",
+          factory: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+            version: {
+              logical: "10",
+              physical: "not-a-date",
+            },
+          },
+        }),
+        method: "PUT",
+      }),
+    );
+  });
+});
+
+describe("getSessionFactory structured error targets", () => {
+  it("preserves validation targets on structured API error responses", async () => {
+    const targets = [
+      {
+        code: "STALE_FACTORY_VERSION",
+        message: "The session factory is stale.",
+        severity: "ERROR",
+        subject: {
+          id: "factory",
+          location: "factory.version",
+          type: "FACTORY",
+        },
+      },
+    ];
+
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "STALE_FACTORY_VERSION",
+              message: "The session factory is stale.",
+              targets,
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 409,
+              statusText: "Conflict",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "STALE_FACTORY_VERSION",
+      targets,
+    });
+  });
 });

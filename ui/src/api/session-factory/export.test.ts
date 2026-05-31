@@ -78,6 +78,62 @@ describe("session factory export API", () => {
     );
   });
 
+  it("maps NOT_FOUND current-factory failures to SessionFactoryAPIError", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "NOT_FOUND",
+              message: "Session factory not found.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 404,
+              statusText: "Not Found",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "Session factory not found.",
+      status: 404,
+    });
+  });
+
+  it("maps INVALID_FACTORY_DEFINITION current-factory failures to INVALID_FACTORY", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              name: "Broken Factory",
+              workers: [],
+              workstations: [],
+              workTypes: [],
+              version: {
+                logical: "1",
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY",
+      name: "SessionFactoryAPIError",
+    });
+  });
+
   it("rejects retired named-factory wrapper responses from the current factory endpoint", async () => {
     await expect(
       getCurrentFactory({
