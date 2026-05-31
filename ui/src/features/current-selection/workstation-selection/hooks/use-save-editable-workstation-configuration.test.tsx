@@ -6,7 +6,7 @@ import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-d
 import {
   staleFactoryVersionTarget,
 } from "../../../../testing/factory-validation-target-fixtures";
-import * as currentFactoryFeature from "../../../current-factory-definition/public";
+import * as currentFactoryHooks from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
@@ -21,7 +21,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
 
   it("uses localized fallback copy for unknown save errors", async () => {
     const mutateAsync = vi.fn().mockRejectedValue("network unavailable");
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);
@@ -152,7 +152,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
   it("ignores repeated save confirmations while the current save is still in flight", async () => {
     const deferredSave = createDeferredPromise<unknown>();
     const mutateAsync = vi.fn().mockReturnValue(deferredSave.promise);
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);
@@ -207,7 +207,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         targets: [staleFactoryVersionTarget()],
       }),
     );
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);
@@ -257,7 +257,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         ],
       }),
     );
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);
