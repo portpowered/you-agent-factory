@@ -159,7 +159,7 @@ function useActiveGraphHighlights({
 
 export function currentActivityCardFactoryDefinition(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-  snapshot: DashboardSnapshot,
+  _snapshot: DashboardSnapshot,
 ): DashboardSnapshot["factory"] | null | undefined {
   if (!editor.editorMode) {
     return undefined;
