@@ -1630,6 +1630,49 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(resetDraft).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps editor mode when choosing Keep editing on the leave dialog", async () => {
+    const resetDraft = vi.fn();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: baseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      hasChanges: true,
+      resetDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Leave factory graph editor" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Leave graph editor with unsaved changes?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Keep editing" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(resetDraft).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole("button", { name: "Leave factory graph editor" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+  });
+
   it("shows explicit save and discard actions for pending graph changes", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: baseFactoryDefinitionDocument,

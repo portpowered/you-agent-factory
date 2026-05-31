@@ -207,6 +207,20 @@ describe("useGraphEditorSaveFlow", () => {
     expect(result.current.isConfirmingSave).toBe(false);
   });
 
+  it("discards pending changes and leaves editor mode from the leave dialog path", () => {
+    fixtureState.draftState.hasChanges = true;
+    const { result, setActiveTool, setEditorMode } = renderSaveFlow(0);
+
+    act(() => {
+      result.current.handleDiscardEditorChanges();
+    });
+
+    expect(fixtureState.draftState.resetDraft).toHaveBeenCalledTimes(1);
+    expect(setEditorMode).toHaveBeenCalledWith(false);
+    expect(setActiveTool).toHaveBeenCalledWith(null);
+    expect(result.current.isConfirmingLeaveEditor).toBe(false);
+  });
+
   it("saves and leaves editor mode when asked to save before leaving", async () => {
     fixtureState.draftState.hasChanges = true;
     const { result, setActiveTool, setEditorMode } = renderSaveFlow(0);
