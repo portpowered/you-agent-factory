@@ -1,13 +1,19 @@
 package factory
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 )
 
 type persistFromFileMode int
@@ -42,13 +48,16 @@ func persistFromFile(cfg persistFromFileConfig) (persistFromFileResult, error) {
 	if strings.TrimSpace(cfg.Dir) == "" {
 		return persistFromFileResult{}, fmt.Errorf("factory root is required")
 	}
+	if err := apisurface.ValidateWritableNamedFactoryName(factoryapi.FactoryName(name)); err != nil {
+		return persistFromFileResult{}, err
+	}
 
 	payload, err := os.ReadFile(from)
 	if err != nil {
 		return persistFromFileResult{}, fmt.Errorf("read factory config %s: %w", from, err)
 	}
 
-	if _, err := configload.LoadFromCanonicalJSON(payload, configload.LoadOptions{}); err != nil {
+	if err := validatePersistFromFilePayload(payload); err != nil {
 		return persistFromFileResult{}, err
 	}
 
@@ -80,12 +89,51 @@ func persistFromFileNamedFactory(cfg persistFromFileConfig, name string, payload
 	}
 }
 
+func validatePersistFromFilePayload(payload []byte) error {
+	var factory factoryapi.Factory
+	if err := json.Unmarshal(payload, &factory); err != nil {
+		return fmt.Errorf("%w: parse factory config: %w", configload.ErrInvalidNamedFactory, err)
+	}
+
+	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
+		Profile: factoryvalidation.ProfilePrePersist,
+	})
+	if err != nil {
+		if configload.IsInvalidNamedFactory(err) {
+			return err
+		}
+		return fmt.Errorf("%w: %v", configload.ErrInvalidNamedFactory, err)
+	}
+	if result.HasTargets() {
+		return persistFromFileValidationTargetsError(result.Targets)
+	}
+	return nil
+}
+
+func persistFromFileValidationTargetsError(targets []factoryvalidation.Target) error {
+	detail := factoryvalidation.DefaultTopologyValidationMessage
+	if len(targets) > 0 {
+		if msg := strings.TrimSpace(targets[0].Message); msg != "" {
+			detail = msg
+		} else if code := strings.TrimSpace(targets[0].Code); code != "" {
+			detail = code
+		}
+	}
+	if len(targets) > 1 {
+		detail = fmt.Sprintf("%s (%d validation issues)", detail, len(targets))
+	}
+	return fmt.Errorf("%w: %s", configload.ErrInvalidNamedFactory, detail)
+}
+
 func renderPersistFromFileError(mode persistFromFileMode, err error) error {
 	if mode == persistFromFileModeSave && errors.Is(err, configpersist.ErrNamedFactoryAlreadyExists) {
 		return fmt.Errorf("factory already exists: %w", err)
 	}
 	if mode == persistFromFileModeUpdate && errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("factory not found: %w", err)
+	}
+	if errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
+		return err
 	}
 	if configload.IsInvalidNamedFactory(err) || configpersist.IsInvalidNamedFactory(err) {
 		return fmt.Errorf("invalid factory config: %w", err)

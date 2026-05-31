@@ -170,6 +170,8 @@ export interface FactoryGraphEditorMessages {
     workerLabel: string,
   ) => string;
   workerStatusLabel: (status: FactoryGraphWorkerRuntimeStatus) => string;
+  workStatePhaseLegendAriaLabel: string;
+  workStatePhaseLegendLabel: (stateType: FactoryWorkState["type"]) => string;
   zAxisIncompleteConnectionHint: string;
 }
 
@@ -397,6 +399,21 @@ function describeEnglishStateType(stateType: FactoryWorkState["type"]) {
   return stateType;
 }
 
+function describeEnglishWorkStatePhaseLegendLabel(
+  stateType: FactoryWorkState["type"],
+) {
+  switch (stateType) {
+    case "INITIAL":
+      return "Initial";
+    case "PROCESSING":
+      return "Processing";
+    case "TERMINAL":
+      return "Completed";
+    case "FAILED":
+      return "Failed";
+  }
+}
+
 const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEditorMessages> =
   {
     en: {
@@ -615,6 +632,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
           "workstation",
         )}. Reassign or remove those workstations before deleting ${workerLabel}.`,
       workerStatusLabel: describeEnglishWorkerStatus,
+      workStatePhaseLegendAriaLabel: "Work state lifecycle colors",
+      workStatePhaseLegendLabel: describeEnglishWorkStatePhaseLegendLabel,
       zAxisIncompleteConnectionHint:
         "Configure stop words on this workstation before connecting Continue or Reject routes.",
     },
@@ -993,6 +1012,19 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "空闲";
           case "unavailable":
             return "不可用";
+        }
+      },
+      workStatePhaseLegendAriaLabel: "工作状态生命周期颜色",
+      workStatePhaseLegendLabel: (stateType) => {
+        switch (stateType) {
+          case "INITIAL":
+            return "初始";
+          case "PROCESSING":
+            return "处理中";
+          case "TERMINAL":
+            return "已完成";
+          case "FAILED":
+            return "失败";
         }
       },
       zAxisIncompleteConnectionHint:

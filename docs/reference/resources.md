@@ -1,7 +1,10 @@
-# Resources Reference
+# Resources
+
+`you docs resources` prints this guide from the packaged CLI topic list. The
+repository file is `docs/reference/resources.md`.
 
 Use this page when you need the current you-agent-factory resource contract for
-bounded concurrency.
+bounded concurrency across workstations.
 
 Use [Config](config.md) for the overall
 `factory.json` topology and field ownership. This page owns the bounded
@@ -129,4 +132,4 @@ should be throttled.
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)
-- [Workstation guards and guarded loop breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
+- [Guards](guards.md)

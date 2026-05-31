@@ -95,22 +95,39 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
   it("renders worker and work-type specific fields", () => {
     const workerChange = vi.fn();
     const { rerender } = renderDialog({
-      draft: { kind: "worker", model: "", name: "writer" },
-      errors: { model: "Enter a model identifier for the new worker." },
+      draft: { kind: "worker", model: "", modelProvider: "", name: "writer" },
+      errors: {
+        modelProvider: "Select a model provider for the new worker.",
+      },
       onChange: workerChange,
     });
 
+    fireEvent.change(screen.getByRole("combobox", { name: "Model provider" }), {
+      target: { value: "CURSOR" },
+    });
     fireEvent.change(screen.getByRole("textbox", { name: "Model" }), {
       target: { value: "gpt-5.5" },
     });
 
-    expect(workerChange).toHaveBeenCalledWith({
+    expect(workerChange).toHaveBeenNthCalledWith(1, {
+      kind: "worker",
+      model: "",
+      modelProvider: "CURSOR",
+      name: "writer",
+    });
+    expect(workerChange).toHaveBeenNthCalledWith(2, {
       kind: "worker",
       model: "gpt-5.5",
+      modelProvider: "",
       name: "writer",
     });
     expect(
-      screen.getByText("Enter a model identifier for the new worker."),
+      screen.getByText("Select a model provider for the new worker."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Optional. Leave blank to use the provider default model identifier.",
+      ),
     ).toBeTruthy();
 
     const workTypeChange = vi.fn();

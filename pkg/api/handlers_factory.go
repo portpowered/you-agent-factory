@@ -10,10 +10,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )
 
+// ValidateFactory handles POST /factory-validations using validationentry.ValidateFactoryAPI
+// with ProfileTopology (structural checks only; no canonical JSON load).
 func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	req, err := decodeNamedFactoryBody(r.Body)
 	if err != nil {
@@ -25,7 +28,9 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPI(req)
+	result, err := validationentry.ValidateFactoryAPI(r.Context(), req, factoryvalidation.Options{
+		Profile: factoryvalidation.ProfileTopology,
+	})
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -35,10 +40,7 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := factoryvalidation.Validate(&cfg)
-	s.writeJSON(w, http.StatusOK, factoryapi.FactoryValidationResult{
-		Targets: factoryvalidation.ToValidationTargets(result.Targets),
-	})
+	s.writeJSON(w, http.StatusOK, result.FactoryValidationResult())
 }
 
 func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {

@@ -11,6 +11,7 @@ import {
   type GraphSemanticIconKind,
 } from "../../flowchart/components/graph-semantic-icon";
 import type {
+  CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
   FactoryGraphTopology,
   FactoryWorkstation,
@@ -22,6 +23,12 @@ import {
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../lib/factory-graph-react-flow-projection";
+import type { FactoryGraphWorkStateType } from "../lib/factory-graph-work-state-type";
+import {
+  workStatePhaseSemanticIconClassName,
+  workStatePhaseSemanticIconKind,
+  workStatePhaseSurfaceClassName,
+} from "../lib/factory-graph-work-state-phase-styling";
 import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "./factory-graph-editor-edge";
 
 type FactoryGraphEditorNode = FactoryGraphReactFlowNode;
@@ -41,6 +48,7 @@ export { FACTORY_GRAPH_EDITOR_EDGE_TYPES };
 
 export function buildFactoryGraphEditorFlowModel(input: {
   canEditConnections: boolean;
+  factoryDefinition?: CanonicalFactoryDefinition | null;
   layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
   onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
@@ -57,6 +65,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
   nodes: FactoryGraphEditorNode[];
 } {
   const projection = projectFactoryGraphToReactFlow({
+    factoryDefinition: input.factoryDefinition,
     editor: {
       canEditConnections: input.canEditConnections,
       onConnectionAnchorClick: input.onConnectionAnchorClick,
@@ -84,11 +93,16 @@ export function buildFactoryGraphEditorFlowModel(input: {
 function FactoryGraphEditorNodeView({
   data,
 }: NodeProps<FactoryGraphEditorNode>) {
+  const surfaceClassName =
+    data.kind === "work-state"
+      ? workStatePhaseSurfaceClassName(data.workStateType)
+      : KIND_CLASS[data.kind];
+
   return (
     <ActivityGraphNodeShell
       className={cn(
         "min-w-0 w-full justify-start overflow-hidden text-left shadow-none",
-        KIND_CLASS[data.kind],
+        surfaceClassName,
         data.draftStatus === "addition" && "ring-2 ring-af-warning-border",
         data.draftStatus === "removal" &&
           "border-af-danger-border bg-af-danger-surface ring-2 ring-af-danger-border",
@@ -106,8 +120,11 @@ function FactoryGraphEditorNodeView({
               title={data.kindLabel}
             >
               <GraphSemanticIcon
-                className={cn("h-4 w-4", semanticIconClassName(data.kind))}
-                kind={semanticIconKind(data.kind)}
+                className={cn(
+                  "h-4 w-4",
+                  semanticIconClassName(data.kind, data.workStateType),
+                )}
+                kind={semanticIconKind(data.kind, data.workStateType)}
                 label={data.kindLabel}
               />
             </span>
@@ -167,7 +184,14 @@ function FactoryGraphEditorNodeView({
   );
 }
 
-function semanticIconKind(kind: FactoryGraphNodeKind): GraphSemanticIconKind {
+function semanticIconKind(
+  kind: FactoryGraphNodeKind,
+  workStateType?: FactoryGraphWorkStateType,
+): GraphSemanticIconKind {
+  if (kind === "work-state") {
+    return workStatePhaseSemanticIconKind(workStateType);
+  }
+
   switch (kind) {
     case "resource":
       return "resource";
@@ -177,12 +201,17 @@ function semanticIconKind(kind: FactoryGraphNodeKind): GraphSemanticIconKind {
       return "workstation";
     case "work-type":
       return "constraint";
-    case "work-state":
-      return "queue";
   }
 }
 
-function semanticIconClassName(kind: FactoryGraphNodeKind) {
+function semanticIconClassName(
+  kind: FactoryGraphNodeKind,
+  workStateType?: FactoryGraphWorkStateType,
+) {
+  if (kind === "work-state") {
+    return workStatePhaseSemanticIconClassName(workStateType);
+  }
+
   switch (kind) {
     case "resource":
       return "text-af-success";
@@ -192,8 +221,6 @@ function semanticIconClassName(kind: FactoryGraphNodeKind) {
       return "text-af-text";
     case "work-type":
       return "text-af-info";
-    case "work-state":
-      return "text-af-text-muted";
   }
 }
 

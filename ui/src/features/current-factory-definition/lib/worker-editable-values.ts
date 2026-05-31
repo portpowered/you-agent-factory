@@ -46,6 +46,7 @@ export interface EditableWorkerDraft {
   argsText: string;
   body: string;
   command: string;
+  name: string;
   executorProvider: ExecutorProvider | null;
   model: string;
   modelLocality: ModelLocality | null;
@@ -87,6 +88,7 @@ export function editableWorkerDraftFromValues(
     argsText: formatWorkerArgsText(values.args),
     body: values.body ?? "",
     command: values.command ?? "",
+    name: values.workerName,
     executorProvider: values.executorProvider,
     model: values.model ?? "",
     modelLocality: values.modelLocality,
@@ -106,15 +108,18 @@ export function applyEditableWorkerDraft(
     return null;
   }
 
-  const nextWorker = buildWorkerFromDraft(
-    workerResolution.worker,
-    draft,
-  );
+  const trimmedName = draft.name.trim();
+  const nextWorker = buildWorkerFromDraft(workerResolution.worker, draft);
 
   return {
     ...factory,
     workers: factory.workers.map((worker, index) =>
       index === workerResolution.workerIndex ? nextWorker : worker,
+    ),
+    workstations: (factory.workstations ?? []).map((workstation) =>
+      workstation.worker === workerName
+        ? { ...workstation, worker: trimmedName }
+        : workstation,
     ),
   };
 }
@@ -137,7 +142,7 @@ function buildWorkerFromDraft(
   const preserved = pickPreservedWorkerFields(existingWorker);
   const base: CanonicalWorker = {
     ...preserved,
-    name: existingWorker.name,
+    name: draft.name.trim(),
     type: draft.type,
   };
 

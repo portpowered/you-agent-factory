@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryVersion,
@@ -12,8 +14,8 @@ import type { EditableWorkerValidationErrors } from "./worker-editable-validatio
 
 export interface WorkerDetailCardProps {
   editableConfigurationState?: EditableWorkerConfigurationState;
+  headerAction?: ReactNode;
   locale?: string | null;
-  onSaveWorker?: () => void;
   saveState?: EditableWorkerSaveState;
   widgetId?: string;
   workerName: string;
@@ -27,6 +29,7 @@ export type EditableWorkerSaveValidationErrors = {
   model?: string;
   modelLocality?: string;
   modelProvider?: string;
+  name?: string;
   provider?: string;
   type?: string;
 } & Record<string, string>;
@@ -39,6 +42,7 @@ export type EditableWorkerOverwriteField =
   | "model"
   | "modelLocality"
   | "modelProvider"
+  | "name"
   | "provider"
   | "type";
 
@@ -69,6 +73,7 @@ export type EditableWorkerConfigurationState =
       onModelProviderChange: (
         value: EditableWorkerDraft["modelProvider"],
       ) => void;
+      onNameChange: (value: string) => void;
       onProviderChange: (value: EditableWorkerDraft["provider"]) => void;
       markChangesSaved: () => void;
       onResetToLatest: () => void;

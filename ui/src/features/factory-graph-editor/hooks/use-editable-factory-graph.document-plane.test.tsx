@@ -110,6 +110,7 @@ describe("useEditableFactoryGraph document plane", () => {
       result.current.actions.addNode({
         kind: "worker",
         model: "gpt-5",
+        modelProvider: "CURSOR",
         name: "extra",
       });
     });
@@ -160,6 +161,7 @@ describe("useEditableFactoryGraph document plane", () => {
       result.current.actions.addNode({
         kind: "worker",
         model: "gpt-5",
+        modelProvider: "CURSOR",
         name: "extra",
       });
     });
