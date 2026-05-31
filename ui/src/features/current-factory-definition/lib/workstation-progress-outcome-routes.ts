@@ -52,3 +52,27 @@ export function workstationSupportsProgressOutcomeRoutes(
 
   return workstationHasConfiguredStopWords(workstation.stopWords);
 }
+
+/** True when Continue/Reject connect anchors are omitted for missing stopWords on a standard model processor. */
+export function workstationHasZAxisIncompleteForConnections(
+  workstation: WorkstationProgressOutcomeRouteContext,
+): boolean {
+  if (isClassifierWorkstation(workstation)) {
+    return false;
+  }
+
+  const behavior = resolveEditableWorkstationBehavior(workstation);
+  if (behavior !== "STANDARD") {
+    return false;
+  }
+
+  const workstationType = resolveEditableWorkstationType(workstation);
+  if (
+    workstationType !== "MODEL_WORKSTATION" &&
+    workstationType !== "MODEL_INVOKE"
+  ) {
+    return false;
+  }
+
+  return !workstationHasConfiguredStopWords(workstation.stopWords);
+}

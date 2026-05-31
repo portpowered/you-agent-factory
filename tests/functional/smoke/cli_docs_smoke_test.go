@@ -21,6 +21,12 @@ type docsSmokeTopic struct {
 	absent  []string
 }
 
+// retiredDuplicateTreePaths are legacy maintainer paths removed by docs-embed-consolidation.
+var retiredDuplicateTreePaths = []string{
+	"pkg/cli/docs/reference/",
+	"pkg/cli/docs/reference",
+}
+
 var docsSmokeTopics = []docsSmokeTopic{
 	{name: "agents", heading: "# Agents", markers: []string{"## Start Here", "you docs agents", "factory/docs/overview.md", "factory/docs/README.md", "## Read Order (Any Factory)", "## Is the factory running?", "you session list", "you factory query", "/factory-sessions/", "factoryState", "runtimeStatus", "dashboard/ui", "## Planner vs Executor", "## Topic Router", "`you docs config`", "`you docs templates`", "`you docs resources`", "`you docs models`", "`you docs batch-inputs`", "[Config](config.md)", "[Work](work.md)", "[Batch Inputs](batch-inputs.md)", "[Relationships](relationships.md)", "[Authoring Factories](authoring-factories.md)", "FACTORY_REQUEST_BATCH", "POST /work"}, absent: []string{"thoughts:init", "idea:init", "plan:init", "task:in-review"}},
 	{name: "authoring-factories", heading: "# Authoring Factories", markers: []string{"factory.json", "workers/<name>/AGENTS.md", "workstations/<name>/AGENTS.md", "you run --factory ./factory.json \"Fix the lint issues\"", "handlingBehavior: [\"DEFAULT\"]", "you run --dir ./factory --with-mock-workers", "you docs mock-workers", "you docs record-replay", "[Agents](agents.md)", "--no-record", "requestId", "workTypeName"}, absent: []string{"work_type_name", "source_work_name", `"request_id"`}},
@@ -40,7 +46,7 @@ var docsSmokeTopics = []docsSmokeTopic{
 	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "docs/reference/templates.md", "text/template", "you docs guards", "you docs relationships"}, absent: []string{"docs/reference/prompt-variables.md"}},
 }
 
-func TestAuthoringFactoriesDocs_LinkMockWorkerReplayExamplesFromCustomerPath(t *testing.T) {
+func TestDocsCommandSmoke_AuthoringFactoriesLinkCoverageFromCanonicalTree(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	path := filepath.Join(repoRoot, "docs", "reference", "authoring-factories.md")
 	content, err := os.ReadFile(path)
@@ -75,7 +81,7 @@ var retiredDocsInvocationPatterns = []*regexp.Regexp{
 	regexp.MustCompile("(^|[^[:alnum:]-])agent-factory config([^[:alnum:]-]|$)"),
 }
 
-func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *testing.T) {
+func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *testing.T) {
 	workingDir := t.TempDir()
 	missingDocsTree := filepath.Join(workingDir, "docs")
 	if _, err := os.Stat(missingDocsTree); !os.IsNotExist(err) {
@@ -128,6 +134,11 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 			for _, unwanted := range topic.absent {
 				if strings.Contains(output, unwanted) {
 					t.Fatalf("you-agent-factory docs %s still references retired path %q:\n%s", topic.name, unwanted, output)
+				}
+			}
+			for _, retiredPath := range retiredDuplicateTreePaths {
+				if strings.Contains(output, retiredPath) {
+					t.Fatalf("you-agent-factory docs %s still references removed duplicate-tree path %q:\n%s", topic.name, retiredPath, output)
 				}
 			}
 			for _, oldInvocation := range retiredDocsInvocationPatterns {

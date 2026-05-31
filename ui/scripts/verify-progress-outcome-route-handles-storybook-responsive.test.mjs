@@ -12,7 +12,21 @@ function createButtonLocator(name, visible = true) {
   };
 }
 
-function createPage(buttons) {
+function createHintLocator(count) {
+  return {
+    count: vi.fn().mockResolvedValue(count),
+  };
+}
+
+function createPage(buttons, hintCount = 0) {
+  const hints = createHintLocator(hintCount);
+  const continueHint = createHintLocator(
+    hintCount > 0 ? 1 : 0,
+  );
+  const rejectHint = createHintLocator(
+    hintCount > 0 ? 1 : 0,
+  );
+
   return {
     getByRole: vi.fn((role, options) => {
       if (role !== "button") {
@@ -23,6 +37,20 @@ function createPage(buttons) {
         throw new Error(`Unexpected button ${String(options?.name)}`);
       }
       return locator;
+    }),
+    locator: vi.fn((selector) => {
+      if (selector === "[data-z-axis-incomplete-hint]") {
+        return hints;
+      }
+      if (
+        selector ===
+          '[data-z-axis-incomplete-hint="workstation-on-continue-source"]' ||
+        selector ===
+          '[data-z-axis-incomplete-hint="workstation-on-rejection-source"]'
+      ) {
+        return selector.includes("continue") ? continueHint : rejectHint;
+      }
+      throw new Error(`Unexpected locator selector: ${selector}`);
     }),
   };
 }
@@ -39,11 +67,11 @@ describe("verifyProgressOutcomeRouteHandlesStorybookResponsive", () => {
 
     await verifyProgressOutcomeRoutesWithoutStopWords(
       { expectVisible },
-      createPage(buttons),
+      createPage(buttons, 2),
       { label: "desktop" },
     );
 
-    expect(expectVisible).toHaveBeenCalledTimes(2);
+    expect(expectVisible).toHaveBeenCalledTimes(4);
   });
 
   test("fails when continue handles remain visible without stopWords", async () => {
@@ -75,10 +103,46 @@ describe("verifyProgressOutcomeRouteHandlesStorybookResponsive", () => {
 
     await verifyProgressOutcomeRoutesWithStopWords(
       { expectVisible },
-      createPage(buttons),
+      createPage(buttons, 0),
       { label: "desktop" },
     );
 
     expect(expectVisible).toHaveBeenCalledTimes(4);
+  });
+
+  test("fails when z-axis hints remain visible without stopWords", async () => {
+    const buttons = new Map([
+      ["Connect: draft Success", createButtonLocator("success")],
+      ["Connect: draft Failure", createButtonLocator("failure")],
+      ["Connect: draft Continue", createButtonLocator("continue", false)],
+      ["Connect: draft Reject", createButtonLocator("reject", false)],
+    ]);
+    const expectVisible = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      verifyProgressOutcomeRoutesWithoutStopWords(
+        { expectVisible },
+        createPage(buttons, 0),
+        { label: "desktop" },
+      ),
+    ).rejects.toThrow(/Expected 2 z-axis incomplete hints/);
+  });
+
+  test("fails when z-axis hints remain visible with stopWords configured", async () => {
+    const buttons = new Map([
+      ["Connect: draft Success", createButtonLocator("success")],
+      ["Connect: draft Failure", createButtonLocator("failure")],
+      ["Connect: draft Continue", createButtonLocator("continue")],
+      ["Connect: draft Reject", createButtonLocator("reject")],
+    ]);
+    const expectVisible = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      verifyProgressOutcomeRoutesWithStopWords(
+        { expectVisible },
+        createPage(buttons, 2),
+        { label: "desktop" },
+      ),
+    ).rejects.toThrow(/Z-axis incomplete hints should be absent/);
   });
 });

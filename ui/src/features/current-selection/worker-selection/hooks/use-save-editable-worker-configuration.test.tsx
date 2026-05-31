@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: focused save-hook regressions share one mocked mutation seam.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -13,7 +14,6 @@ import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSess
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { useSaveEditableWorkerConfiguration } from "./use-save-editable-worker-configuration";
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused save-hook regressions share one mocked mutation seam.
 describe("useSaveEditableWorkerConfiguration", () => {
   beforeEach(() => {
     useDashboardSessionStore.setState({ selectedSessionID: "~default" });
@@ -138,6 +138,57 @@ describe("useSaveEditableWorkerConfiguration", () => {
         workstations: [],
       },
     });
+  });
+
+  it("updates worker selection after a successful rename save", async () => {
+    const markChangesSaved = vi.fn();
+    const onWorkerRenamed = vi.fn();
+    const saveMutation = mockFactoryDocumentSave({ mode: "success" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const renamedState = buildReadyEditableConfigurationState({
+      markChangesSaved,
+    });
+    if (renamedState.status === "ready") {
+      renamedState.draft = {
+        ...renamedState.draft,
+        name: "senior-reviewer",
+      };
+      renamedState.pendingFactoryDefinition = {
+        name: "Current Factory",
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CODEX",
+            name: "senior-reviewer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [
+          { id: "review", name: "Review", worker: "senior-reviewer" },
+        ],
+      };
+    }
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkerConfiguration({
+          editableConfigurationState: renamedState,
+          onWorkerRenamed,
+          scopeKey: "reviewer",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(markChangesSaved).toHaveBeenCalledTimes(1);
+    expect(onWorkerRenamed).toHaveBeenCalledWith("senior-reviewer");
   });
 
   it("ignores repeated save requests while the current save is still in flight", async () => {
@@ -399,6 +450,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       model: "gpt-5.5",
       modelLocality: null,
       modelProvider: "CODEX",
+      name: "reviewer",
       provider: null,
       type: "MODEL_WORKER",
     },
@@ -425,6 +477,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     onModelChange: vi.fn(),
     onModelLocalityChange: vi.fn(),
     onModelProviderChange: vi.fn(),
+    onNameChange: vi.fn(),
     onProviderChange: vi.fn(),
     onResetToLatest: vi.fn(),
     onTypeChange: vi.fn(),

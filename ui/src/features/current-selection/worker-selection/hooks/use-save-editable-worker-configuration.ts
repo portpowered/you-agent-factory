@@ -12,6 +12,7 @@ import { getWorkerDetailMessages } from "../messages/worker-detail";
 interface UseSaveEditableWorkerConfigurationOptions {
   editableConfigurationState?: EditableWorkerConfigurationState;
   locale?: string | null;
+  onWorkerRenamed?: (workerName: string) => void;
   scopeKey: string | null;
 }
 
@@ -24,6 +25,7 @@ interface UseSaveEditableWorkerConfigurationResult {
 export function useSaveEditableWorkerConfiguration({
   editableConfigurationState,
   locale,
+  onWorkerRenamed,
   scopeKey,
 }: UseSaveEditableWorkerConfigurationOptions): UseSaveEditableWorkerConfigurationResult {
   const messages = getWorkerDetailMessages(locale);
@@ -57,10 +59,21 @@ export function useSaveEditableWorkerConfiguration({
     await saveNow({
       baseVersion: editableConfigurationState.baseVersion,
       factory: editableConfigurationState.pendingFactoryDefinition,
-      onSaved: editableConfigurationState.markChangesSaved,
+      onSaved: () => {
+        editableConfigurationState.markChangesSaved();
+        const savedWorkerName =
+          editableConfigurationState.draft.name.trim();
+        if (
+          scopeKey != null &&
+          savedWorkerName.length > 0 &&
+          savedWorkerName !== scopeKey
+        ) {
+          onWorkerRenamed?.(savedWorkerName);
+        }
+      },
       scopeKey,
     });
-  }, [editableConfigurationState, saveNow, scopeKey]);
+  }, [editableConfigurationState, onWorkerRenamed, saveNow, scopeKey]);
 
   return useMemo(
     () => ({
@@ -123,6 +136,9 @@ function resolveTargetFieldName(
   }
   if (subjectID === "provider") {
     return "provider";
+  }
+  if (subjectID === "name") {
+    return "name";
   }
 
   return null;

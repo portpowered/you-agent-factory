@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { workstationSupportsProgressOutcomeRoutes } from "./workstation-progress-outcome-routes";
+import {
+  workstationHasZAxisIncompleteForConnections,
+  workstationSupportsProgressOutcomeRoutes,
+} from "./workstation-progress-outcome-routes";
 
 describe("workstationSupportsProgressOutcomeRoutes", () => {
   it("returns false for a standard model processor without stopWords", () => {
@@ -56,6 +59,51 @@ describe("workstationSupportsProgressOutcomeRoutes", () => {
   it("returns false for classifier workstations", () => {
     expect(
       workstationSupportsProgressOutcomeRoutes({
+        type: "CLASSIFIER_WORKSTATION",
+        behavior: "STANDARD",
+        classificationRoutes: [
+          {
+            label: "ready",
+            outputs: [{ state: "done", workType: "story" }],
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("workstationHasZAxisIncompleteForConnections", () => {
+  it("returns true for a standard model processor without stopWords", () => {
+    expect(
+      workstationHasZAxisIncompleteForConnections({
+        type: "MODEL_WORKSTATION",
+        behavior: "STANDARD",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for a standard model processor with configured stopWords", () => {
+    expect(
+      workstationHasZAxisIncompleteForConnections({
+        type: "MODEL_WORKSTATION",
+        behavior: "STANDARD",
+        stopWords: ["DONE"],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for a repeater workstation without stopWords", () => {
+    expect(
+      workstationHasZAxisIncompleteForConnections({
+        type: "MODEL_WORKSTATION",
+        behavior: "REPEATER",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for classifier workstations", () => {
+    expect(
+      workstationHasZAxisIncompleteForConnections({
         type: "CLASSIFIER_WORKSTATION",
         behavior: "STANDARD",
         classificationRoutes: [

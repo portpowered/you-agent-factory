@@ -65,6 +65,12 @@ export function resolveEditableWorkerOverwriteFields(
   ) {
     fields.push("provider");
   }
+  if (
+    sessionStartDraft.name !== latestDefinitionDraft.name &&
+    draft.name !== latestDefinitionDraft.name
+  ) {
+    fields.push("name");
+  }
 
   return fields;
 }
@@ -80,6 +86,7 @@ export function formatEditableWorkerOverwriteFieldLabels(
     | "modelLabel"
     | "modelLocalityLabel"
     | "modelProviderLabel"
+    | "nameFieldLabel"
     | "providerFieldLabel"
     | "typeFieldLabel"
   >,
@@ -100,6 +107,7 @@ function fieldLabel(
     | "modelLabel"
     | "modelLocalityLabel"
     | "modelProviderLabel"
+    | "nameFieldLabel"
     | "providerFieldLabel"
     | "typeFieldLabel"
   >,
@@ -123,5 +131,7 @@ function fieldLabel(
       return messages.bodyFieldLabel.toLowerCase();
     case "provider":
       return messages.providerFieldLabel.toLowerCase();
+    case "name":
+      return messages.nameFieldLabel.toLowerCase();
   }
 }

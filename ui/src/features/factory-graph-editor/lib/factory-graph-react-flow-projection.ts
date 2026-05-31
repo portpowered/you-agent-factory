@@ -1,10 +1,15 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: React Flow projection keeps node, edge, and handle mapping together for one adapter seam.
 import { type Edge, MarkerType, type Node } from "@xyflow/react";
 
-import type { ActivityGraphNodeHandle } from "../../flowchart/components/current-activity-node-shell";
+import { workstationHasZAxisIncompleteForConnections } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import type {
+  ActivityGraphNodeHandle,
+  ZAxisIncompleteHints,
+} from "../../flowchart/components/current-activity-node-shell";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "./factory-graph-customer-display";
 import type {
+  CanonicalFactoryDefinition,
   FactoryGraphDraftValidationError,
   FactoryGraphEdge,
   FactoryGraphNode,
@@ -22,6 +27,10 @@ import {
   resolveFactoryGraphConnectionAnchorContext,
 } from "./factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
+import {
+  type FactoryGraphWorkStateType,
+  resolveWorkStateTypeForGraphNode,
+} from "./factory-graph-work-state-type";
 
 export type FactoryGraphReactFlowMode = "editor" | "observer";
 
@@ -44,8 +53,10 @@ export type FactoryGraphReactFlowNode = Node<
     selectedWorkId: string | null;
     tokenCount: number | null;
     validationMessage: string | null;
+    workStateType?: FactoryGraphWorkStateType;
     workerStatus?: FactoryGraphWorkerRuntimeStatus;
     workerStatusLabel?: string;
+    zAxisIncompleteHints?: ZAxisIncompleteHints | null;
   },
   "factoryEntity"
 >;
@@ -87,6 +98,7 @@ export interface FactoryGraphReactFlowEditorOverlay {
 
 export interface ProjectFactoryGraphToReactFlowOptions {
   editor?: FactoryGraphReactFlowEditorOverlay;
+  factoryDefinition?: CanonicalFactoryDefinition | null;
   layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
   mode?: FactoryGraphReactFlowMode;
@@ -150,6 +162,18 @@ export function projectFactoryGraphToReactFlow(
           node.kind === "worker"
             ? (input.runtime?.workerStatusByName?.get(node.label) ?? "idle")
             : undefined;
+        const canEditConnections = input.editor?.canEditConnections ?? false;
+        const anchorContext = resolveFactoryGraphConnectionAnchorContext(
+          node,
+          input.workstationResolver,
+        );
+        const workStateType =
+          node.kind === "work-state" && node.key.kind === "work-state"
+            ? resolveWorkStateTypeForGraphNode(
+                input.factoryDefinition,
+                node.key,
+              )
+            : undefined;
 
         return {
           className: nodeClassName(node.id, input),
@@ -157,7 +181,7 @@ export function projectFactoryGraphToReactFlow(
             active: input.runtime?.activeNodeIds?.has(node.id) ?? false,
             activeFlow: input.runtime?.activeNodeIds?.has(node.id) ?? false,
             activeTool: input.editor?.activeTool ?? null,
-            canEditConnections: input.editor?.canEditConnections ?? false,
+            canEditConnections,
             connectionAnchors: buildNodeHandles({
               editor: input.editor,
               locale: input.locale,
@@ -178,10 +202,17 @@ export function projectFactoryGraphToReactFlow(
             tokenCount:
               input.runtime?.placeTokenCountsByNodeId?.get(node.id) ?? null,
             validationMessage: validationMessages.get(node.id) ?? null,
+            ...(node.kind === "work-state" ? { workStateType } : {}),
             workerStatus,
             workerStatusLabel: workerStatus
               ? messages.workerStatusLabel(workerStatus)
               : undefined,
+            zAxisIncompleteHints: resolveFactoryGraphZAxisIncompleteHints({
+              anchorContext,
+              canEditConnections,
+              locale: input.locale,
+              nodeKind: node.kind,
+            }),
           },
           draggable: true,
           id: node.id,
@@ -362,6 +393,30 @@ function getNodeHandleId(
         (anchor.edgeKinds ?? [anchor.edgeKind]).includes(edgeKind),
     )?.id ?? null
   );
+}
+
+export function resolveFactoryGraphZAxisIncompleteHints(input: {
+  anchorContext?: ReturnType<typeof resolveFactoryGraphConnectionAnchorContext>;
+  canEditConnections: boolean;
+  locale?: string;
+  nodeKind: FactoryGraphNodeKind;
+}): ZAxisIncompleteHints | null {
+  if (
+    input.nodeKind !== "workstation" ||
+    !input.canEditConnections ||
+    !input.anchorContext?.workstation ||
+    !workstationHasZAxisIncompleteForConnections(input.anchorContext.workstation)
+  ) {
+    return null;
+  }
+
+  const hint = getFactoryGraphEditorMessages(
+    input.locale,
+  ).zAxisIncompleteConnectionHint;
+  return {
+    accessibleLabel: hint,
+    title: hint,
+  };
 }
 
 function buildNodeHandles(input: {

@@ -16,6 +16,7 @@ import {
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
+export { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-work-state-phase-legend";
 export {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,

@@ -1,4 +1,7 @@
-# Workers Reference
+# Workers
+
+`you docs workers` prints this guide from the packaged CLI topic list. The
+repository file is `docs/reference/workers.md`.
 
 Use this page when you need the current worker contract, the canonical
 `workers/<name>/AGENTS.md` placement, and the split between worker-owned and

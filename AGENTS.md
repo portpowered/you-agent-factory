@@ -21,7 +21,7 @@ docs/internal/development/ -> active engineering notes, inventories, audits, and
 docs/internal/processes/ -> process-specific reference docs and relevant-file maps
 docs/internal/resources/ -> internal documentation assets and screenshots
 docs/internal/standards/ -> coding and workflow standards that should guide changes
-docs/reference/ -> reference material for config, resources, workers, and templates
+docs/reference/ -> canonical reference markdown (also embedded for `you docs <topic>`; edit here only)
 
 pkg/ -> golang codebase for backend server, CLI
 pkg/api/ -> API-facing server code, generated contracts, and API test data

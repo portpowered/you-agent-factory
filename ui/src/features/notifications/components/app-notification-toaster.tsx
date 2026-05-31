@@ -1,14 +1,18 @@
 import { Toaster } from "sonner";
 
-export const GLOBAL_TOAST_DURATION_MS = 3000;
+import {
+  GLOBAL_TOAST_DURATION_MS,
+  getAppNotificationToasterProps,
+  PERSISTENT_TOAST_DURATION_MS,
+  resolveAppNotificationToastDuration,
+} from "../lib/notification-toaster-config";
+
+export {
+  GLOBAL_TOAST_DURATION_MS,
+  PERSISTENT_TOAST_DURATION_MS,
+  resolveAppNotificationToastDuration,
+};
 
 export function AppNotificationToaster() {
-  return (
-    <Toaster
-      closeButton
-      duration={GLOBAL_TOAST_DURATION_MS}
-      position="top-right"
-      richColors
-    />
-  );
+  return <Toaster {...getAppNotificationToasterProps()} />;
 }

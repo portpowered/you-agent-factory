@@ -1,4 +1,11 @@
-# Config Reference
+# Config
+
+`you docs config` is the canonical packaged guide for `factory.json` topology:
+work types, states, workers, workstations, resources, and routing.
+
+`factory.json` declares the workflow topology for a you-agent-factory run. It
+defines the work types, states, workers, workstations, resources, and routing
+behavior that the runtime turns into a Petri-net execution model.
 
 Use this page when you need the canonical factory directory layout, the
 field-by-field `factory.json` topology contract, and where each authored file
@@ -236,13 +243,39 @@ Validation rejects more than one `DEFAULT` work type. Factories used with
 `you run --factory <factory.json> <prompt>` must declare `DEFAULT` on exactly
 one work type.
 
-## Workstation IO And Resources
+## Workstation IO
 
 Workstation inputs, outputs, rejection routes, failure routes, and guarded
-loop-breaker routes use `{ "workType": "<name>", "state": "<name>" }`. Top-level
-`resources` declare bounded concurrency pools that workstations reference through
-`resources` entries. See [Workstations](workstations.md), [Workers](workers.md),
-[Resources](resources.md), and [Guards](guards.md) for field-level contracts.
+loop-breaker routes use `{ "workType": "<name>", "state": "<name>" }`. See
+[Workstations](workstations.md) and [Guards](guards.md) for field-level
+contracts.
+
+## Resources
+
+Resources limit concurrent dispatches across workstations:
+
+```json
+{
+  "resources": [
+    { "name": "agent-slot", "capacity": 2 }
+  ],
+  "workstations": [
+    {
+      "name": "execute",
+      "worker": "executor",
+      "inputs": [{ "workType": "story", "state": "init" }],
+      "outputs": [{ "workType": "story", "state": "complete" }],
+      "onFailure": { "workType": "story", "state": "failed" },
+      "resources": [{ "name": "agent-slot", "capacity": 1 }]
+    }
+  ]
+}
+```
+
+Each declared resource creates `<resource>:available` tokens equal to
+`capacity`. Runtime `resources` entries consume the requested capacity while the
+workstation is in flight. See [Resources](resources.md) for typed model pools
+and [Workers](workers.md) for worker-side requirement metadata.
 
 ## Topology Authoring Checklist
 
@@ -356,18 +389,71 @@ Canonical guides: [Mock workers](mock-workers.md) and
 [Record and replay](record-replay.md). For an end-to-end authoring walkthrough,
 see [Author factories](authoring-factories.md).
 
+## Factory validation matrix
+
+Pre-mutation validation for OpenAPI `Factory` payloads is centralized in
+`validationentry.ValidateFactoryAPI` (`pkg/factory/validationentry`). Each call
+maps the payload once with `FactoryConfigFromOpenAPI`, then runs the profile
+selected in `validation.Options`. Post-persist and prompt-run paths stay separate
+on purpose: they validate disk layout or a narrowed prompt-run contract instead of
+reusing the OpenAPI pre-check profiles.
+
+| Entry point | When it runs | Profile / mechanism | Uses `ValidateFactoryAPI`? |
+|-------------|--------------|---------------------|----------------------------|
+| `POST /factory-validations` | Validate-only; no persist | `ProfileTopology` — structural checks on the mapped config (duplicates, dangling references, outcome routes, work-type completion) | Yes |
+| Editable save pre-check (`factorysave.validateEditableFactoryTopology`) | Before `PUT` / graph save writes split layout | `ProfilePrePersist` — `LoadFromCanonicalJSON` normalization (bundled files, blocking load) then full `Validate()` | Yes |
+| `you factory save` / `update --from` | Before `configpersist` writes named factory | `ProfilePrePersist` (same as editable save) | Yes |
+| Persist post-write (`LoadRuntimeConfig` on staged split layout) | After files are materialized on disk, before commit | Disk-backed load: merge `workers/` / `workstations/` AGENTS.md, materialize bundled files, `validateBlockingFactoryLoad`, runtime definition maps | No — intentional second gate |
+| `you run --factory` prompt submission | Before writing temporary prompt work file | `factoryrun.ValidateFactoryForPromptRun` — structural `Validate()` plus exactly one `handlingBehavior: ["DEFAULT"]` work type | No — v1 intentional subset (see below) |
+| Runtime session / engine startup | When activating or loading a factory directory | `configload.LoadRuntimeConfigFromFactoryDir` (same core as `LoadRuntimeConfig`) | No |
+
+### Profiles (`pkg/factory/validation`)
+
+- **`ProfileTopology`** — Matches validate-only dashboard checks. One OpenAPI map,
+  then `validation.Validate(&cfg)`. Does not call `LoadFromCanonicalJSON`.
+- **`ProfilePrePersist`** — Matches editable save and CLI save-from-file
+  pre-checks. One OpenAPI map, then marshal → `LoadFromCanonicalJSON` → on
+  invalid-named-factory, blocking-load subset → otherwise full `Validate()`.
+  Pass `WorkstationLoader` when split worker/workstation bodies must resolve.
+
+Validate-only and save pre-check can disagree on the same JSON when save uses
+`ProfilePrePersist` but the client only called validate with the default topology
+profile. Regression tests in `pkg/service/factorysave` and
+`pkg/factory/validationentry` lock pre-persist parity between save and
+`ValidateFactoryAPI`; use `ProfilePrePersist` when comparing to save.
+
+### Post-persist `LoadRuntimeConfig`
+
+Live saves and named-factory persist stage a split layout, then call
+`LoadRuntimeConfig` on the staging directory before commit (`pkg/config/layout.go`).
+That pass proves the on-disk factory (thin `factory.json`, AGENTS.md trees,
+bundled files) is runnable, including checks that require filesystem state. It is
+not folded into `ValidateFactoryAPI` in v1.
+
+### Prompt-run exception
+
+`factoryrun.ValidateFactoryForPromptRun` validates an already-expanded
+`*interfaces.FactoryConfig` from a portable `factory.json` path. It requires
+structural validity and exactly one `DEFAULT` handling work type for
+`you run --factory <path> <prompt>`. It does **not** call `ValidateFactoryAPI` in
+v1: prompt runs load from disk, not from an editable OpenAPI payload, and the
+product contract is intentionally narrower than full pre-persist save checks.
+Converging prompt-run onto `ValidateFactoryAPI` is a future option if prompt and
+save paths need identical failure codes for the same file.
+
 ## Related
 
-- [Agents](agents.md)
-- [Guards](guards.md)
-- [Relationships](relationships.md)
-- [Mock workers](mock-workers.md)
-- [Record and replay](record-replay.md)
+- `you docs agents`
+- `you docs work`
+- `you docs mock-workers`
+- `you docs record-replay`
+- `you docs guards`
+- `you docs relationships`
+- `you docs authoring-factories`
+- `you docs workstations`
+- `you docs workers`
+- `you docs resources`
+- `you docs batch-work`
+- `you docs templates`
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Author factories](authoring-factories.md)
-- [Submitted work](work.md)
-- [Workstations](workstations.md)
-- [Workers](workers.md)
-- [Author AGENTS.md](authoring-agents-md.md)
-- [Batch inputs](batch-inputs.md)

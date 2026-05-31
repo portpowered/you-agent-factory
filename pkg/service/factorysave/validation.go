@@ -1,6 +1,7 @@
 package factorysave
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -9,8 +10,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 )
 
 func requireFreshEditableFactoryVersionAtRoot(
@@ -74,28 +75,14 @@ func isEditableFactoryVersionAdvanced(candidate, current factoryapi.HybridLogica
 }
 
 func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLoader factoryconfig.WorkstationLoader) error {
-	payload, err := json.Marshal(submitted)
-	if err != nil {
-		return fmt.Errorf("marshal editable factory payload: %w", err)
-	}
-	_, loadErr := configload.LoadFromCanonicalJSON(payload, configload.LoadOptions{
-		WorkstationLoader: workstationLoader,
+	result, err := validationentry.ValidateFactoryAPI(context.Background(), submitted, factoryvalidation.Options{
+		Profile:             factoryvalidation.ProfilePrePersist,
+		WorkstationLoader:   workstationLoader,
 	})
-	cfg, mapErr := factoryconfig.FactoryConfigFromOpenAPI(submitted)
-	if mapErr != nil {
-		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, mapErr)
+	if err != nil {
+		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
 	}
-	if loadErr != nil {
-		if configload.IsInvalidNamedFactory(loadErr) {
-			blocking := factoryvalidation.ValidateBlockingLoad(&cfg)
-			if len(blocking.Targets) > 0 {
-				return topologyValidationErrorFromTargets(blocking.Targets)
-			}
-		}
-		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, loadErr)
-	}
-	result := factoryvalidation.Validate(&cfg)
-	if len(result.Targets) == 0 {
+	if !result.HasTargets() {
 		return nil
 	}
 	return topologyValidationErrorFromTargets(result.Targets)

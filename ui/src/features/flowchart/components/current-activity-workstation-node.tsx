@@ -5,13 +5,13 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationNode,
 } from "../../../api/dashboard/types";
-import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import {
   REPEATER_WORKSTATION_KIND,
@@ -22,7 +22,10 @@ import {
   ActivityGraphNodeBadge,
   activityGraphNodeTitleClassName,
 } from "./current-activity-node-chrome";
-import type { ActivityGraphNodeHandle } from "./current-activity-node-shell";
+import type {
+  ActivityGraphNodeHandle,
+  ZAxisIncompleteHints,
+} from "./current-activity-node-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
 
@@ -40,6 +43,7 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   selectedWorkID: string | null;
   selectedWorkstation: boolean;
   workstation: DashboardWorkstationNode;
+  zAxisIncompleteHints?: ZAxisIncompleteHints | null;
   onSelectWorkstation: (nodeId: string) => void;
   onSelectWorkID: (
     workID: string,
@@ -109,6 +113,7 @@ export function WorkstationNodeView({
       className={nodeClassName}
       handles={data.handles}
       nodeType="workstation"
+      zAxisIncompleteHints={data.zAxisIncompleteHints}
     >
       {exhaustionRule ? (
         <ExhaustionRuleNodeButton

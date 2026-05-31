@@ -10,6 +10,18 @@ describe("getFactoryGraphEditorMessages", () => {
     );
   });
 
+  it("resolves English work state phase legend labels", () => {
+    const messages = getFactoryGraphEditorMessages("en");
+
+    expect(messages.workStatePhaseLegendAriaLabel).toBe(
+      "Work state lifecycle colors",
+    );
+    expect(messages.workStatePhaseLegendLabel("INITIAL")).toBe("Initial");
+    expect(messages.workStatePhaseLegendLabel("PROCESSING")).toBe("Processing");
+    expect(messages.workStatePhaseLegendLabel("TERMINAL")).toBe("Completed");
+    expect(messages.workStatePhaseLegendLabel("FAILED")).toBe("Failed");
+  });
+
   it.each([
     ["en", "Factory graph editor tools", "Add entity", "Observe mode"],
     ["zh-CN", "工厂图编辑器工具", "添加实体", "观察模式"],
@@ -91,6 +103,18 @@ describe("getFactoryGraphEditorMessages", () => {
     );
   });
 
+  it("resolves z-axis incomplete connection hint copy in English and zh-CN", () => {
+    const english = getFactoryGraphEditorMessages("en");
+    const chinese = getFactoryGraphEditorMessages("zh-CN");
+
+    expect(english.zAxisIncompleteConnectionHint).toMatch(/stop words/i);
+    expect(english.zAxisIncompleteConnectionHint).toMatch(/Continue|Reject/i);
+    expect(english.zAxisIncompleteConnectionHint.length).toBeGreaterThan(0);
+
+    expect(chinese.zAxisIncompleteConnectionHint.length).toBeGreaterThan(0);
+    expect(chinese.zAxisIncompleteConnectionHint).toMatch(/停止词/);
+  });
+
   it("resolves localized function-backed labels", () => {
     const messages = getFactoryGraphEditorMessages("zh-CN");
 
@@ -132,6 +156,8 @@ describe("getFactoryGraphEditorMessages", () => {
       label: "工作站",
     });
     expect(messages.stateTypeLabel("PROCESSING")).toBe("处理中");
+    expect(messages.workStatePhaseLegendAriaLabel).toBe("工作状态生命周期颜色");
+    expect(messages.workStatePhaseLegendLabel("TERMINAL")).toBe("已完成");
     expect(
       messages.connectionIncompatibleNotice(
         "失败",
@@ -252,6 +278,9 @@ describe("getFactoryGraphEditorMessages", () => {
         "FAILED",
       ] as const) {
         expect(messages.stateTypeLabel(stateType)).toEqual(expect.any(String));
+        expect(messages.workStatePhaseLegendLabel(stateType)).toEqual(
+          expect.any(String),
+        );
       }
 
       for (const status of [
@@ -307,6 +336,8 @@ describe("getFactoryGraphEditorMessages", () => {
       expect(messages.removalWorkerAssignedReason(2, "writer")).toEqual(
         expect.any(String),
       );
+      expect(messages.zAxisIncompleteConnectionHint).toEqual(expect.any(String));
+      expect(messages.zAxisIncompleteConnectionHint.length).toBeGreaterThan(0);
     },
   );
 });

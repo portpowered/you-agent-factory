@@ -118,16 +118,18 @@ The overall system of how __you-agent-factory__ works is relatively simple.
 3. When the workstations complete the, work is converted to other work.  
 4. __you-agent-factory__ stops when no work remains.
 
-For packaged terminal docs, use the fixed `you docs <topic>` topics:
-`config`, `workstation`, `workers`, `resources`, `batch-work`, and
-`templates`. Those packaged pages point back to the maintained canonical docs
-in [`docs/reference/work.md`](./docs/reference/work.md),
+For packaged terminal docs, run `you docs` to list topics or `you docs <topic>`
+for embedded reference output. Maintainers edit only
+[`docs/reference/`](./docs/reference/) (see
+[`docs/reference/README.md`](./docs/reference/README.md)); run
+`make docs-reference-smoke` before shipping doc changes. Customer guides such as
 [`docs/reference/config.md`](./docs/reference/config.md),
+[`docs/reference/work.md`](./docs/reference/work.md),
 [`docs/reference/workstations.md`](./docs/reference/workstations.md),
 [`docs/reference/workers.md`](./docs/reference/workers.md),
 [`docs/reference/resources.md`](./docs/reference/resources.md),
 [`docs/reference/batch-inputs.md`](./docs/reference/batch-inputs.md), and
-[`docs/reference/templates.md`](./docs/reference/templates.md).
+[`docs/reference/templates.md`](./docs/reference/templates.md) live in that tree.
 
 
 ## Shipped example factories

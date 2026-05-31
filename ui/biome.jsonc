@@ -128,7 +128,7 @@
         "src/features/current-selection/worker-selection/hooks/use-worker-detail-state.test.tsx",
         "src/features/current-selection/workstation-selection/components/workstation-detail-card.editable-configuration.test.tsx",
         "src/features/current-selection/workstation-selection/components/workstation-detail-card.test.tsx",
-        "src/features/current-selection/workstation-selection/components/workstation-prompt-monaco.test.ts",
+        "src/components/prompt-editor/monaco-prompt-setup.test.ts",
         "src/features/current-selection/workstation-selection/editing/editable-workstation-prompt-state.test.ts",
         "src/features/current-selection/workstation-selection/hooks/use-editable-workstation-configuration-state.test.tsx",
         "src/features/current-selection/hooks/useCurrentSelection.actions.test.ts",

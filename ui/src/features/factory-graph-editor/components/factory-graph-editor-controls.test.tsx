@@ -12,7 +12,11 @@ import {
   FactoryGraphEditorVisibilityPanel,
 } from "./factory-graph-editor-controls";
 
-function renderToolbar({ hasPendingChanges = true }: { hasPendingChanges?: boolean } = {}) {
+function renderToolbar({
+  hasPendingChanges = true,
+}: {
+  hasPendingChanges?: boolean;
+} = {}) {
   function ToolbarHarness() {
     const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -90,7 +94,9 @@ describe("factory graph editor toolbar controls", () => {
     const connectButton = screen.getByRole("button", { name: "Connect" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
     const saveButton = screen.getByRole("button", { name: "Save changes" });
-    const addButton = screen.getByRole("button", { name: "Open add entity menu" });
+    const addButton = screen.getByRole("button", {
+      name: "Open add entity menu",
+    });
 
     expect(addButton.textContent).toBe("");
     expect(connectButton.textContent).toBe("");
@@ -143,7 +149,9 @@ describe("factory graph editor toolbar controls", () => {
       within(dialog).getByRole("button", { name: "Delete review workstation" }),
     ).toBeTruthy();
   });
+});
 
+describe("factory graph editor mode toggle controls", () => {
   it("applies warning styling when there are unsaved changes", () => {
     render(
       <FactoryGraphEditorModeToggle
@@ -202,7 +210,6 @@ describe("factory graph editor toolbar controls", () => {
     expect(tooltip.className).toContain("bg-af-surface-raised");
     expect(tooltip.className).toContain("text-af-text");
   });
-
 });
 
 describe("factory graph editor toolbar action-row composition", () => {
@@ -212,7 +219,9 @@ describe("factory graph editor toolbar action-row composition", () => {
     const toolbar = screen.getByRole("region", {
       name: "Factory graph editor tools",
     });
-    const sections = toolbar.querySelectorAll("[data-dashboard-action-row-section]");
+    const sections = toolbar.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
 
     expect(sections).toHaveLength(1);
     expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
@@ -241,7 +250,9 @@ describe("factory graph editor toolbar action-row composition", () => {
     expect(
       toolbar.querySelectorAll("[data-dashboard-action-row-section]"),
     ).toHaveLength(0);
-    expect(within(toolbar).queryByRole("button", { name: "Discard changes" })).toBeNull();
+    expect(
+      within(toolbar).queryByRole("button", { name: "Discard changes" }),
+    ).toBeNull();
     expect(within(toolbar).queryByRole("status")).toBeNull();
   });
 });

@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
-import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
+import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
 
 const currentFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -95,22 +95,39 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
   it("renders worker and work-type specific fields", () => {
     const workerChange = vi.fn();
     const { rerender } = renderDialog({
-      draft: { kind: "worker", model: "", name: "writer" },
-      errors: { model: "Enter a model identifier for the new worker." },
+      draft: { kind: "worker", model: "", modelProvider: "", name: "writer" },
+      errors: {
+        modelProvider: "Select a model provider for the new worker.",
+      },
       onChange: workerChange,
     });
 
+    fireEvent.change(screen.getByRole("combobox", { name: "Model provider" }), {
+      target: { value: "CURSOR" },
+    });
     fireEvent.change(screen.getByRole("textbox", { name: "Model" }), {
       target: { value: "gpt-5.5" },
     });
 
-    expect(workerChange).toHaveBeenCalledWith({
+    expect(workerChange).toHaveBeenNthCalledWith(1, {
+      kind: "worker",
+      model: "",
+      modelProvider: "CURSOR",
+      name: "writer",
+    });
+    expect(workerChange).toHaveBeenNthCalledWith(2, {
       kind: "worker",
       model: "gpt-5.5",
+      modelProvider: "",
       name: "writer",
     });
     expect(
-      screen.getByText("Enter a model identifier for the new worker."),
+      screen.getByText("Select a model provider for the new worker."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Optional. Leave blank to use the provider default model identifier.",
+      ),
     ).toBeTruthy();
 
     const workTypeChange = vi.fn();
@@ -190,7 +207,9 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         name: "review",
         workerName: "",
       },
-      errors: { behavior: "Poller workstations must use a script or hosted worker." },
+      errors: {
+        behavior: "Poller workstations must use a script or hosted worker.",
+      },
       onChange,
       onClose,
     });
@@ -204,7 +223,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         target: { value: "writer" },
       },
     );
-    fireEvent.change(screen.getByRole("textbox", { name: "Prompt body" }), {
+    const promptBodyInput = getAddDialogPromptBodyInput();
+    fireEvent.change(promptBodyInput, {
       target: { value: "Review the draft." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -238,6 +258,18 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+function getAddDialogPromptBodyInput() {
+  const monacoSurface = document.querySelector(
+    '[data-monaco-editor="workstation-prompt"]',
+  );
+  expect(monacoSurface).toBeTruthy();
+  const promptBodyInput = monacoSurface?.querySelector(
+    'textarea[aria-label="Prompt body"]',
+  );
+  expect(promptBodyInput).toBeTruthy();
+  return promptBodyInput as HTMLTextAreaElement;
+}
 
 function renderDialog({
   draft,

@@ -39,4 +39,14 @@ describe("workstation-selection/public", () => {
       "useCurrentWorkstationPromptTemplateValidation",
     );
   });
+
+  it("does not export shared Monaco prompt editor setup helpers", () => {
+    expect(workstationSelectionPublic).not.toHaveProperty("MonacoPromptEditor");
+    expect(workstationSelectionPublic).not.toHaveProperty(
+      "registerWorkstationPromptMonaco",
+    );
+    expect(workstationSelectionPublic).not.toHaveProperty(
+      "WORKSTATION_PROMPT_LANGUAGE_ID",
+    );
+  });
 });

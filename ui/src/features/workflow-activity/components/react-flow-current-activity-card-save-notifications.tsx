@@ -2,8 +2,28 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { GLOBAL_TOAST_DURATION_MS } from "../../notifications/components/app-notification-toaster";
+import {
+  buildSaveErrorStableIdentity,
+  buildSaveErrorToastOptions,
+  buildSaveNotificationDeliveryKey,
+  buildSaveSuccessStableIdentity,
+  buildSaveSuccessToastOptions,
+  type SaveNotificationDeliveryKey,
+  shouldDeliverSaveNotification,
+} from "../../notifications/public";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+
+function readSaveErrorCode(error: unknown): string | null {
+  if (
+    error !== null &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+  return null;
+}
 
 export function CurrentActivityGraphSaveNotifications({
   editor,
@@ -13,42 +33,69 @@ export function CurrentActivityGraphSaveNotifications({
   locale?: string;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
-  const lastToastKeyRef = useRef<string | null>(null);
-  const saveErrorMessage = editor.saveEditableDefinition.error?.message ?? null;
+  const lastDeliveredDeliveryKeyRef =
+    useRef<SaveNotificationDeliveryKey | null>(null);
+  const saveError = editor.saveEditableDefinition.error ?? null;
+  const saveErrorMessage = saveError?.message ?? null;
+  const saveAttemptRevision = editor.saveAttemptRevision;
   const hasDraftChanges = editor.draftState.hasChanges;
   const showSaveSuccessToast =
     editor.graphDraftSaveSucceeded && !hasDraftChanges;
 
   useEffect(() => {
-    const toastKey =
-      saveErrorMessage !== null
-        ? `error:${saveErrorMessage}`
-        : showSaveSuccessToast
-          ? "success"
-          : null;
+    let deliveryKey: SaveNotificationDeliveryKey | null = null;
+    let emitError = false;
+    let emitSuccess = false;
 
-    if (toastKey === null || toastKey === lastToastKeyRef.current) {
+    if (saveErrorMessage !== null) {
+      const identity = buildSaveErrorStableIdentity({
+        message: saveErrorMessage,
+        code: readSaveErrorCode(saveError),
+      });
+      deliveryKey = buildSaveNotificationDeliveryKey(
+        identity,
+        saveAttemptRevision,
+      );
+      emitError = true;
+    } else if (showSaveSuccessToast) {
+      const identity = buildSaveSuccessStableIdentity();
+      deliveryKey = buildSaveNotificationDeliveryKey(
+        identity,
+        saveAttemptRevision,
+      );
+      emitSuccess = true;
+    }
+
+    if (
+      deliveryKey === null ||
+      !shouldDeliverSaveNotification(
+        deliveryKey,
+        lastDeliveredDeliveryKeyRef.current,
+      )
+    ) {
       return;
     }
 
-    lastToastKeyRef.current = toastKey;
+    lastDeliveredDeliveryKeyRef.current = deliveryKey;
 
-    if (saveErrorMessage !== null) {
+    if (emitError && saveErrorMessage !== null) {
       toast.error(messages.noticeSaveFailedTitle, {
-        description: saveErrorMessage,
-        duration: GLOBAL_TOAST_DURATION_MS,
+        ...buildSaveErrorToastOptions(saveErrorMessage),
       });
       return;
     }
 
-    toast.success(messages.noticeSaveSuccessTitle, {
-      description: messages.noticeSaveSuccessDescription,
-      duration: GLOBAL_TOAST_DURATION_MS,
-    });
+    if (emitSuccess) {
+      toast.success(messages.noticeSaveSuccessTitle, {
+        ...buildSaveSuccessToastOptions(messages.noticeSaveSuccessDescription),
+      });
+    }
   }, [
     messages.noticeSaveFailedTitle,
     messages.noticeSaveSuccessDescription,
     messages.noticeSaveSuccessTitle,
+    saveAttemptRevision,
+    saveError,
     saveErrorMessage,
     showSaveSuccessToast,
   ]);

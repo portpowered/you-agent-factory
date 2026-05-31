@@ -41,6 +41,7 @@ export function useGraphEditorSaveFlow({
 }) {
   const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
   const [isConfirmingSave, setIsConfirmingSave] = useState(false);
+  const [saveAttemptRevision, setSaveAttemptRevision] = useState(0);
   const hasActiveWork = activeWorkCount > 0;
   const isStaleDraft = editableGraph.saveState.isStale;
   const canSaveDraft =
@@ -91,6 +92,8 @@ export function useGraphEditorSaveFlow({
         return false;
       }
 
+      setSaveAttemptRevision((revision) => revision + 1);
+
       try {
         const didSave = await editableGraph.actions.save();
         if (!didSave) {
@@ -131,6 +134,7 @@ export function useGraphEditorSaveFlow({
     isConfirmingSave,
     isStaleDraft,
     leaveEditor,
+    saveAttemptRevision,
     saveBlockedReason,
     saveSummary,
     setIsConfirmingLeaveEditor,
