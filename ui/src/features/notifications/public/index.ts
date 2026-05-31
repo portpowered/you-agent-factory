@@ -7,7 +7,6 @@ export {
 export {
   buildSaveErrorStableIdentity,
   buildSaveErrorToastOptions,
-  buildSaveInfoToastOptions,
   buildSaveNotificationDeliveryKey,
   buildSaveSuccessStableIdentity,
   buildSaveSuccessToastOptions,

@@ -98,16 +98,6 @@ export function buildSaveSuccessToastOptions(
   };
 }
 
-/** Sonner options for save info toasts (existing global TTL). */
-export function buildSaveInfoToastOptions(
-  description: string,
-): SaveNotificationToastOptions {
-  return {
-    description,
-    duration: GLOBAL_TOAST_DURATION_MS,
-  };
-}
-
 export {
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,
