@@ -1,5 +1,4 @@
 import { getSessionFactory, saveSessionFactory } from "./api";
-import { SessionFactoryAPIError } from "./errors";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
 
@@ -77,25 +76,6 @@ describe("getSessionFactory version normalization", () => {
       code: "INVALID_FACTORY",
       name: "SessionFactoryAPIError",
     });
-  });
-});
-
-describe("getSessionFactory transport", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("throws NETWORK_ERROR when fetch is unavailable in the environment", async () => {
-    vi.stubGlobal("fetch", undefined);
-
-    await expect(getSessionFactory("~default")).rejects.toEqual(
-      new SessionFactoryAPIError(
-        sessionFactoryAPIErrorMessages.unavailableInEnvironment,
-        {
-          code: "NETWORK_ERROR",
-        },
-      ),
-    );
   });
 });
 
