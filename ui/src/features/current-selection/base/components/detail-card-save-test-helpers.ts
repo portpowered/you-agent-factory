@@ -230,6 +230,7 @@ export function buildDetailCardCurrentSelection(
     selectWorkByID: () => undefined,
     selectWorkItem: () => undefined,
     clearSelectedFactoryGraphNodeIfMatching: () => undefined,
+    clearSelectedStateNodeIfMatching: () => undefined,
     clearSelectedWorkerIfMatching: () => undefined,
     selectWorker: () => undefined,
     selectWorkstation: () => undefined,

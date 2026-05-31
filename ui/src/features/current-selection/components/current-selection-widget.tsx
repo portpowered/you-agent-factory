@@ -155,6 +155,7 @@ function renderCurrentSelectionDetailCard({
       <StateNodeDetailCard
         currentWorkItems={selectedStateCurrentWorkItems}
         failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
+        locale={locale}
         onSelectWorkItem={(workItem) =>
           selectStateWorkItem(selectedStatePlace, workItem)
         }

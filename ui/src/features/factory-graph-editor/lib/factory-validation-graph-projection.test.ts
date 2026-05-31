@@ -5,6 +5,7 @@ import {
   factoryGraphNodeIdForWorkState,
   factoryGraphNodeIdForWorkstation,
   factoryGraphNodeIdForWorkType,
+  parseFactoryGraphWorkStateNodeId,
   parseFactoryGraphWorkTypeNodeId,
   projectFactoryValidationTargets,
   validationHandleErrorsForNode,
@@ -34,6 +35,10 @@ describe("factory-validation-graph-projection", () => {
     );
     expect(parseFactoryGraphWorkTypeNodeId("work-type:story")).toBe("story");
     expect(parseFactoryGraphWorkTypeNodeId("workstation:review")).toBeNull();
+    expect(parseFactoryGraphWorkStateNodeId("work-state:story:queued")).toBe(
+      "story:queued",
+    );
+    expect(parseFactoryGraphWorkStateNodeId("work-state:invalid")).toBeNull();
   });
 
   it("projects workstation validation targets onto graph node handles", () => {

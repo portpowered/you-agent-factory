@@ -61,6 +61,22 @@ export function parseFactoryGraphWorkTypeNodeId(
   return workTypeName.length > 0 ? workTypeName : null;
 }
 
+export function parseFactoryGraphWorkStateNodeId(
+  nodeId: string,
+): string | null {
+  if (!nodeId.startsWith(WORK_STATE_GRAPH_NODE_PREFIX)) {
+    return null;
+  }
+
+  const placeId = nodeId.slice(WORK_STATE_GRAPH_NODE_PREFIX.length);
+  const separatorIndex = placeId.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex >= placeId.length - 1) {
+    return null;
+  }
+
+  return placeId;
+}
+
 export function factoryGraphNodeIdForWorkState(subjectId: string): string {
   const separatorIndex = subjectId.indexOf(":");
   if (separatorIndex <= 0 || separatorIndex >= subjectId.length - 1) {

@@ -66,6 +66,7 @@ export interface CurrentSelectionState {
   selectWorkstationRequest: (request: DashboardWorkstationRequest) => void;
   selectWorker: (workerName: string) => void;
   clearSelectedFactoryGraphNodeIfMatching: (nodeId: string) => void;
+  clearSelectedStateNodeIfMatching: (placeId: string) => void;
   clearSelectedWorkerIfMatching: (workerName: string) => void;
   terminalWorkDetail: TerminalWorkDetail | null;
   undoSelection: () => void;
@@ -178,6 +179,7 @@ export function useCurrentSelection({
     selectWorkstationRequest: actions.selectWorkstationRequest,
     clearSelectedFactoryGraphNodeIfMatching:
       actions.clearSelectedFactoryGraphNodeIfMatching,
+    clearSelectedStateNodeIfMatching: actions.clearSelectedStateNodeIfMatching,
     clearSelectedWorkerIfMatching: actions.clearSelectedWorkerIfMatching,
     selectWorker: actions.selectWorker,
     terminalWorkDetail,

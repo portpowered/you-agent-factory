@@ -261,6 +261,13 @@ function buildOverviewWidgetCard({
                 return;
               }
 
+              if (nodeId.startsWith("work-state:")) {
+                currentSelection.clearSelectedStateNodeIfMatching(
+                  nodeId.slice("work-state:".length),
+                );
+                return;
+              }
+
               currentSelection.clearSelectedFactoryGraphNodeIfMatching(nodeId);
             }}
             onSelectStateNode={currentSelection.selectStateNode}
