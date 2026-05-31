@@ -1,44 +1,48 @@
 {
-  "project": "Consolidate Petri Net Test Assertions",
-  "branchName": "ralph/consolidate-petri-net-test-assertions",
-  "description": "Move duplicated Petri net transition exhaustion and guarded loop-breaker assertion helpers from pkg/config/maptests and pkg/replay/configtests into pkg/testutil, retarget call sites, and delete local copies without changing which transitions, guards, or places each test verifies.",
+  "project": "UI Session Factory Client",
+  "branchName": "ralph/ui-session-factory-client",
+  "description": "Consolidate dashboard factory GET/PUT behind one session-scoped client with save modes (REPLACE_CURRENT and UPSERT_NAMED_AND_ACTIVATE), migrate editor save and import confirm flows off POST /factories, and centralize error mapping—after backend session-factory-save-modes (S1) ships.",
   "context": {
-    "customerAsk": "Consolidate duplicated Petri transition assertion helpers (no TransitionExhaustion, guarded loop-breaker VisitCountGuard wiring) from maptests and replay/configtests into pkg/testutil as part of backend pkg/ duplication cleanup.",
-    "problem": "assertNoTransitionExhaustion/assertGuardedLoopBreakerTransition in maptests and assertReplayHasNoTransitionExhaustion/assertReplayGuardedLoopBreakerTransition in replay/configtests are near-identical copies that differ only in failure-message wording and minor guard formatting, increasing drift risk during Petri mapping test maintenance.",
-    "solution": "Add exported AssertNoTransitionExhaustion and AssertGuardedLoopBreakerTransition helpers in pkg/testutil with a small options value for exhaustion-context phrasing, migrate both test packages to import them, delete local helpers, and verify with go test ./pkg/config/maptests/... and go test ./pkg/replay/configtests/... without changing production mapper or replay behavior."
+    "customerAsk": "One GET/PUT session factory client with mode + factory; import dialog; remove POST /factories. Program dependency: complete backend session-factory-save-modes (S1) before implementation.",
+    "problem": "Factory definition I/O is split across current-factory-definition, named-factory (POST /factories), and factory-definition normalization. Import cannot offer create-new-named without the legacy POST path, save modes are not represented in the UI, and overlapping modules make session-scoped behavior hard to verify.",
+    "solution": "Add a session-factory API client aligned with S1 OpenAPI, delegate current-factory get/save through it, restrict editor saves to REPLACE_CURRENT, add import confirm UX for replace vs create-new-named with correct mode/name/version rules, remove createFactory, and unify API error mapping for save and import."
   },
   "acceptanceCriteria": [
-    "Exactly one implementation of AssertNoTransitionExhaustion and AssertGuardedLoopBreakerTransition lives under pkg/testutil",
-    "pkg/config/maptests and pkg/replay/configtests import the shared helpers and contain no duplicate local exhaustion or loop-breaker assertion definitions",
-    "Existing test expectations are unchanged: same transitions, guard transition/workstation IDs, max-visit counts, and place IDs at each call site",
-    "Maptests exhaustion failures still use customer-authored mapping context; replay exhaustion failures still use replay-mapped customer config context",
-    "go test ./pkg/config/maptests/... and go test ./pkg/replay/configtests/... pass",
-    "Typecheck, lint, and tests pass for all touched backend areas"
+    "Dashboard factory definition writes use only GET/PUT on /factory-sessions/{session_id}/factory with { mode?, factory } bodies after S1.",
+    "Editor Save uses REPLACE_CURRENT (or omitted default mode) only; no editor path calls UPSERT_NAMED_AND_ACTIVATE.",
+    "Import confirm offers Replace current factory (default) and Create new named factory, driving the correct PUT mode, name, and version rules per choice.",
+    "No dashboard save or import flow calls POST /factories; createFactory is removed from the UI API surface.",
+    "selectedSessionID from the dashboard session store threads to session factory GET/PUT for the active tab.",
+    "Canonical factory normalization remains in factory-definition; session transport does not reshape topology.",
+    "Quality gate: UI typecheck, lint, and affected unit and integration tests pass before merge."
   ],
   "userStories": [
     {
-      "id": "consolidate-petri-net-test-assertions-001",
-      "title": "Shared Petri transition assertion helpers in testutil",
-      "description": "As a backend maintainer, I want shared Petri transition assertion helpers in pkg/testutil so exhaustion and loop-breaker checks are defined once and reused across mapping and replay tests.",
+      "id": "ui-session-factory-client-001",
+      "title": "Session factory transport client",
+      "description": "As a frontend maintainer, I want one module that performs session factory GET/PUT against the regenerated OpenAPI contract so all features share one HTTP shape.",
       "acceptanceCriteria": [
-        "AssertNoTransitionExhaustion(t, transitions, opts) fails on TransitionExhaustion transitions and embeds opts.ExhaustionContext (or equivalent) in the fatal message",
-        "AssertGuardedLoopBreakerTransition(t, transition, inputPlace, outputPlace, watchedTransitionID, maxVisits) asserts normal type, single input/output arcs, VisitCountGuard transition ID and max visits, and expected place IDs",
-        "Both helpers call t.Helper() and live in pkg/testutil (assertions.go or petriassert.go in the same package)",
-        "Typecheck passes"
+        "After S1 lands, regenerate ui/src/api/generated/openapi.ts so PUT accepts mode and factory per backend contract.",
+        "ui/src/api/session-factory/ exports getSessionFactory(sessionID) and saveSessionFactory({ sessionID, mode?, factory }).",
+        "PUT body is { mode?: REPLACE_CURRENT | UPSERT_NAMED_AND_ACTIVATE, factory: Factory } with version inside factory when supplied.",
+        "GET and PUT use currentFactorySessionPath(sessionID) and shared transport.ts helpers.",
+        "Unit tests assert HTTP method, path, and JSON body for default and non-default session IDs for GET and PUT with each save mode.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "consolidate-petri-net-test-assertions-002",
-      "title": "maptests use shared Petri transition assertions",
-      "description": "As a config-mapping test author, I want maptests to call shared testutil helpers so local duplicate definitions are removed without changing what the mapper tests verify.",
+      "id": "ui-session-factory-client-002",
+      "title": "Current factory document delegates to session client",
+      "description": "As a feature developer, I want existing getCurrentFactoryDocument and saveCurrentFactoryDocument to call the session factory client so hooks do not duplicate fetch logic.",
       "acceptanceCriteria": [
-        "config_mapper_test.go uses testutil.AssertNoTransitionExhaustion and testutil.AssertGuardedLoopBreakerTransition with customer-authored mapping exhaustion context and unchanged transition/place/guard arguments",
-        "Local assertNoTransitionExhaustion and assertGuardedLoopBreakerTransition are removed from config_mapper_resources_test.go",
-        "TestConfigMapping_RejectionLoopWithGuardedLoopBreaker and TestConfigMapping_GuardedLogicalMoveLoopBreaker still verify reviewer/process loop-breaker transitions with task:init, task:failed, watched transition IDs, and max visits 3",
-        "go test ./pkg/config/maptests/... passes",
+        "getCurrentFactoryDocument and saveCurrentFactoryDocument delegate to getSessionFactory and saveSessionFactory with unchanged observable behavior.",
+        "SaveCurrentFactoryInput.baseVersion maps to factory.version on the PUT body only.",
+        "React Query keys and useSaveCurrentFactory / useCurrentFactoryDefinition hook signatures are unchanged unless documented as breaking.",
+        "Existing current-factory-definition unit tests pass or are updated to mock the session client.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -47,18 +51,85 @@
       "notes": ""
     },
     {
-      "id": "consolidate-petri-net-test-assertions-003",
-      "title": "replay configtests use shared Petri transition assertions",
-      "description": "As a replay-mapping test author, I want replay/configtests to call the same shared helpers so effective-config tests stay aligned without duplicate assertion code.",
+      "id": "ui-session-factory-client-003",
+      "title": "Editor save always replaces current factory",
+      "description": "As a factory editor, I want Save to update the factory I am editing in the active session without switching named factories or save modes.",
       "acceptanceCriteria": [
-        "effective_config_test.go uses testutil.AssertNoTransitionExhaustion and testutil.AssertGuardedLoopBreakerTransition with replay-mapped customer config exhaustion context and unchanged review-story-loop-breaker arguments (story:init, story:failed, review-story, max visits 3)",
-        "Local assertReplayHasNoTransitionExhaustion and assertReplayGuardedLoopBreakerTransition are deleted",
-        "Exhaustion assertion still ignores nil transitions and only fails on non-nil TransitionExhaustion transitions",
-        "go test ./pkg/replay/configtests/... passes",
+        "useSaveCurrentFactory sends mode REPLACE_CURRENT or omits mode on every editor save path.",
+        "No graph editor, activity card, worker, or workstation save path sends UPSERT_NAMED_AND_ACTIVATE.",
+        "STALE_FACTORY_VERSION and FACTORY_NOT_IDLE errors surface in the same UI states as before migration.",
+        "Save on a non-default session tab PUTs to that session factory endpoint when selectedSessionID is set.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-factory-client-004",
+      "title": "Import confirm dialog with replace vs create choice",
+      "description": "As a dashboard operator, I want to choose on import confirm whether to replace the current factory or create a new named factory, with accessible defaults and loading/error states.",
+      "acceptanceCriteria": [
+        "Import preview confirm dialog appears on all session tabs and defaults to Replace current factory.",
+        "Operator can select Create new named factory before confirming via keyboard-accessible controls.",
+        "Dialog shows the resolved factory name for the create path once derived, including numeric suffix when applicable.",
+        "Confirm shows submitting state during activation; errors use the existing import error panel pattern.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-factory-client-005",
+      "title": "Import activation uses session PUT save modes",
+      "description": "As a dashboard operator, I want import confirm to persist via the correct save mode so replace keeps my current name and create adds or upserts a new named factory in this session.",
+      "acceptanceCriteria": [
+        "Replace path: GET current factory, set factory.name to session current name ignoring PNG name, PUT REPLACE_CURRENT with factory.version from GET.",
+        "Create path: derive factory.name from PNG metadata, allocate suffixed name on conflict, PUT UPSERT_NAMED_AND_ACTIVATE with version omitted for new names and included when upserting an existing name.",
+        "useFactoryImportActivation uses session factory client only; no POST /factories.",
+        "App.import.test.tsx and factory-import-second-session.integration.test.mjs assert PUT mode and body per dialog choice and session.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-factory-client-006",
+      "title": "Remove legacy named-factory create path",
+      "description": "As a maintainer, I want dead POST /factories client surface removed so the dashboard cannot regress to global create.",
+      "acceptanceCriteria": [
+        "createFactory is removed from ui/src/api/named-factory/api.ts after call-site migration.",
+        "No dashboard import or save code references POST /factories.",
+        "Contract tests for named-factory flows expect session PUT only.",
+        "Storybook fetchMocks for current-factory and import stories use session factory paths and modes.",
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 3,
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "ui-session-factory-client-007",
+      "title": "Unified session factory error mapping",
+      "description": "As a dashboard operator, I want consistent, actionable error messages in save and import dialogs when the session factory API rejects a request.",
+      "acceptanceCriteria": [
+        "Session factory client maps STALE_FACTORY_VERSION, FACTORY_NOT_IDLE, INVALID_FACTORY, INVALID_FACTORY_NAME, and related codes to one error surface for save and import without duplicate switch logic in hooks.",
+        "Import preview shows stale-version guidance when the API returns STALE_FACTORY_VERSION.",
+        "Network and 5xx failures use the same recoverable copy patterns as before migration.",
+        "Unit tests cover stale, not-idle, and invalid-factory mappings from mocked HTTP responses.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
       "passes": true,
       "notes": ""
     }

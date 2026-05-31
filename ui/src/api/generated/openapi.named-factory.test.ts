@@ -3,56 +3,55 @@ import { describe, expect, it } from "vitest";
 import type { components, operations, paths } from "./openapi";
 
 describe("generated factory OpenAPI types", () => {
-  it("exposes typed session save operations, payloads, and machine-readable error codes", () => {
-    const request: operations["saveCurrentFactoryBySessionId"]["requestBody"]["content"]["application/json"] =
-      {
-        mode: "UPSERT_NAMED_AND_ACTIVATE",
-        factory: {
-          name: "customer-support-triage",
-          workTypes: [
-            {
-              name: "task",
-              states: [
-                { name: "init", type: "INITIAL" },
-                { name: "done", type: "TERMINAL" },
-              ],
-            },
-          ],
-          workers: [
-            {
-              executorProvider: "SCRIPT_WRAP",
-              model: "claude-sonnet-4-20250514",
-              modelProvider: "CLAUDE",
-              name: "planner",
-              type: "MODEL_WORKER",
-            },
-          ],
-          workstations: [
-            {
-              inputs: [{ state: "init", workType: "task" }],
-              name: "plan-task",
-              onContinue: [
-                { state: "init", workType: "task" },
-                { state: "queued", workType: "task" },
-              ],
-              onRejection: [
-                { state: "rejected", workType: "task" },
-                { state: "backlog", workType: "task" },
-              ],
-              onFailure: [
-                { state: "failed", workType: "task" },
-                { state: "blocked", workType: "task" },
-              ],
-              outputs: [{ state: "done", workType: "task" }],
-              worker: "planner",
-            },
+  it("exposes typed session factory save payloads and machine-readable error codes", () => {
+    const factory: components["schemas"]["Factory"] = {
+      name: "customer-support-triage",
+      workTypes: [
+        {
+          name: "task",
+          states: [
+            { name: "init", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
           ],
         },
+      ],
+      workers: [
+        {
+          executorProvider: "SCRIPT_WRAP",
+          model: "claude-sonnet-4-20250514",
+          modelProvider: "CLAUDE",
+          name: "planner",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          inputs: [{ state: "init", workType: "task" }],
+          name: "plan-task",
+          onContinue: [
+            { state: "init", workType: "task" },
+            { state: "queued", workType: "task" },
+          ],
+          onRejection: [
+            { state: "rejected", workType: "task" },
+            { state: "backlog", workType: "task" },
+          ],
+          onFailure: [
+            { state: "failed", workType: "task" },
+            { state: "blocked", workType: "task" },
+          ],
+          outputs: [{ state: "done", workType: "task" }],
+          worker: "planner",
+        },
+      ],
+    };
+    const saveRequest: operations["saveCurrentFactoryBySessionId"]["requestBody"]["content"]["application/json"] =
+      {
+        mode: "REPLACE_CURRENT",
+        factory,
       };
-    const created: operations["saveCurrentFactoryBySessionId"]["responses"][200]["content"]["application/json"] =
-      request.factory;
     const current: paths["/factory-sessions/{session_id}/factory"]["get"]["responses"][200]["content"]["application/json"] =
-      created;
+      factory;
     const invalidName: components["schemas"]["ErrorResponse"]["code"] =
       "INVALID_FACTORY_NAME";
     const invalidFactory: components["schemas"]["ErrorResponse"]["code"] =
@@ -74,9 +73,10 @@ describe("generated factory OpenAPI types", () => {
         message: "factory session not found",
       };
 
+    expect(saveRequest.mode).toBe("REPLACE_CURRENT");
+    expect(saveRequest.factory.name).toBe("customer-support-triage");
     expect(current.name).toBe("customer-support-triage");
     expect(current.workstations?.[0]?.worker).toBe("planner");
-    expect(request.mode).toBe("UPSERT_NAMED_AND_ACTIVATE");
     expect(currentNotFound.code).toBe("NOT_FOUND");
     expect(currentNotFound.family).toBe("NOT_FOUND");
     expect([invalidName, invalidFactory, duplicateName, runtimeBusy]).toEqual([

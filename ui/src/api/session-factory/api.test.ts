@@ -1,9 +1,23 @@
 import { getSessionFactory, saveSessionFactory } from "./api";
 import { SessionFactoryAPIError } from "./errors";
+import { sessionFactoryAPIErrorMessages } from "./messages";
 
 describe("getSessionFactory", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("throws NETWORK_ERROR when fetch is unavailable in the environment", async () => {
+    vi.stubGlobal("fetch", undefined);
+
+    await expect(getSessionFactory("~default")).rejects.toEqual(
+      new SessionFactoryAPIError(
+        sessionFactoryAPIErrorMessages.unavailableInEnvironment,
+        {
+          code: "NETWORK_ERROR",
+        },
+      ),
+    );
   });
 
   it("issues GET to the default session factory route", async () => {

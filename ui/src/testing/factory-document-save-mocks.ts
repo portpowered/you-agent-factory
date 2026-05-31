@@ -53,7 +53,7 @@ export function factoryDocumentSaveError(
     case "factory_not_idle":
       return new CurrentFactoryDefinitionError(
         overrides?.message ??
-          "Current factory runtime must be idle before activation.",
+          "The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
         {
           code: "FACTORY_NOT_IDLE",
         },
@@ -61,7 +61,7 @@ export function factoryDocumentSaveError(
     case "stale_version":
       return new CurrentFactoryDefinitionError(
         overrides?.message ??
-          "Current factory definition is stale. Refresh the graph before saving.",
+          "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
         {
           code: "STALE_FACTORY_VERSION",
           status: 409,

@@ -17,7 +17,7 @@ export function workerFieldValidationTarget(
 }
 
 export function staleFactoryVersionTarget(
-  message = "Current factory definition is stale. Refresh the graph before saving.",
+  message = "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
 ): FactoryValidationTarget {
   return {
     code: "factory.version.stale",

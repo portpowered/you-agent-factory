@@ -1,33 +1,18 @@
 ## Codebase Patterns
-- Shared Petri net transition exhaustion and guarded loop-breaker assertions live in `pkg/testutil/petriassert.go` (`AssertNoTransitionExhaustion` with `PetriTransitionAssertOptions.ExhaustionContext`, `AssertGuardedLoopBreakerTransition`); maptests use context `customer-authored mapping`, replay configtests use `replay-mapped customer config`; exhaustion checks skip nil transitions.
-- `decodeStrictJSON[T any](body io.Reader) (T, error)` in `pkg/api/handlers_common.go` is the shared strict factory body decode path: `io.ReadAll`, `json.Decoder` with `DisallowUnknownFields`, then `ensureSingleJSONObject`; multi-object payloads that trigger the single-object guard use a second decodable `{}` (e.g. `{"name":"a"}{}`), not a second typed object with unknown fields to `struct{}{}`. Factory decoders in `handlers_factory.go` (`decodeNamedFactoryBody`, `decodeOpenFactorySessionBody`, `decodeSaveCurrentFactoryBody`, `decodePromptTemplateValidationRequestBody`) are thin `return decodeStrictJSON[<type>](body)` wrappers—do not re-inline read/decode/guard logic there.
-- `buildSessionScope` in `ui/src/api/session-scope.ts` is the sole pure projection for dashboard session identity and API paths; `isPaused` is true only for a non-default `rawSessionID` listed in `pausedSessionIDs`—never for default/null/empty/`~default` selection even if the pause list includes `~default`.
-- Bento import threads `rawSessionID` from `useDashboardSession()` through `DashboardBento` → `useCurrentActivityImportController` / `useDashboardBentoImport`; prove scope-fed `sessionID` with a `vi.fn` spy on `useCurrentActivityImportController` in `dashboard-bento.test.tsx`—tab selection stays on `useDashboardSessionTabsState` → `dashboardSessionStore`.
-- `App.session-switching.stories.tsx` hides the work-graph bento card (`hidden: true` in stored layout) before `App` mounts—`mergeDashboardLayout` re-merges filtered layouts from `DEFAULT_DASHBOARD_LAYOUT`, so omitting work-graph from storage is not enough; run with `bun run vitest run --config vitest.storybook.config.ts --project=storybook src/App.session-switching.stories.tsx` against static Storybook on port 6008.
-- High-traffic dashboard hooks read `sessionID` / `rawSessionID` / `isPaused` from `useDashboardSession()`; `useDashboardSnapshot` passes scoped `rawSessionID` into `useFactoryEventStream` and `useDashboardSessionLifecycle`—prove tab retarget with `DashboardSessionProvider` + `setSelectedSessionID` in hook tests (factory definition refetch, submit-work route, snapshot stream URL).
-- Pin dashboard session scope in tests with `DashboardSessionTestProvider` / `renderWithDashboardSessionTest` / `renderApp({ sessionID })`; Storybook uses the same provider via `withDashboardStoryRuntime` and `parameters.dashboardApi.sessionID`—re-export from `ui/src/testing/index.ts`.
-- `ui/biome.jsonc` `style/noRestrictedImports` blocks `dashboardSessionStore` imports outside allowlisted production modules (provider, tabs state, store), Storybook runtime reset, app-shell test utils, and `*.test.*` / `*.stories.*`—see `docs/internal/development/dashboard-session-scope-import-boundaries.md`.
-- `App.session-switching.stories.tsx` hides `workGraph` via `hidden: true` on the layout item (not filter-only—`mergeDashboardLayout` re-merges defaults), seeds `DASHBOARD_LAYOUT_STORAGE_KEY`, gates render until `reloadDashboardLayoutFromStorage`, and uses the `App.stories.tsx` height decorator.
-- Offline `you factory save --from` and `you factory update --from` share `persistFromFile` in `pkg/cli/factory/persist_from_file.go` for validation, canonical JSON load, and mode-specific persist; keep `SaveFromFile` / `UpdateFromFile` as thin wrappers for human/JSON output and mode-specific error rendering in `save.go` / `update.go`.
-- `buildRuntimeBundle` in `pkg/service/factory_build.go` returns `factoryRuntimeBundle`, the single runtime wiring struct referenced from `liveRuntimeHandle`; add new runtime sidecars on `factoryRuntimeBundle` only—startup (`BuildFactoryService`) and `buildReplacementFactoryRuntime` both create `logSink` and session loggers inside `buildRuntimeBundle`, not after the fact.
-- Register every live session (including `~default` at `Run` startup and `OpenFactorySession` launches) through `registerLiveSession` in `pkg/service/runtime_sessions.go` with explicit `FactorySessionTarget` metadata; use `defaultSessionTargetFromRuntimeBundle` for default startup—do not call `sessions.Upsert` directly except in `replaceSessionRuntime` replacement updates.
-- Route session-scoped work, snapshots, idle guards, and record/replay paths through `SubmitWorkRequestForSession`, `GetEngineStateSnapshotForSession`, and `requireIdleRuntimeForSession` in `pkg/service/runtime_sessions.go`; use `sessionScopedRecordPath` for per-session replay artifacts—do not read `fs.currentFactory()` when `session_id` is explicit.
-- After persist, swap live runtimes only through `replaceSessionRuntime` with `requireIdleRuntimeForSession`; write `current-factory` pointers under `sessionFactoryPersistRoot` (non-default sessions with `FolderPath` use that path). Pre-`Run` named activation without a live handle uses `activateReplacementWithoutLiveRuntime` on `startupBundle` only. `OpenFactorySession` starts new background sessions via `startBackgroundSessionWithMetadata`, not `replaceSessionRuntime`.
-- Canonical validation-target test assertions for API-shaped targets live in `pkg/testutil/validationassert` (`HasTarget`, `HasTargetCode` on `[]factoryapi.FactoryValidationTarget`); `HasTargetCode` accepts an optional topology failure label to preserve service-test diagnostics—import only from `_test.go` files. API tests in `pkg/api/server_factory_test.go` and `pkg/api/servertests/server_factory_validation_test.go` use `validationassert` directly (no local `assertHasValidationTarget*` in `pkg/api`).
-- Batch upsert success responses expose per-work identifiers via `UpsertWorkRequestResponse.works` (`name`, `workTypeName`, `workId`); build domain metadata with `requests.WorkRequestSubmitResultFromNormalized` in the engine and mock factory (primary-work fields plus `Works` slice), then map through `upsertWorkRequestResponse` in `pkg/api/handlers.go` for default and session-scoped PUT routes.
-- Load filesystem-path `FACTORY_REQUEST_BATCH` JSON for CLI ingress through `pkg/cli/batchload.LoadFromFile`, which wraps `pkg/factory/requests.ParseCanonicalWorkRequestJSON`; keep `run.LoadWorkFile` as a thin delegate for existing callers and future `you submit batch` file modes.
-- Register `you submit batch` under `newSubmitCommand` via `pkg/cli/root_submit_batch.go`; unary flags stay on parent `submit` only; batch help documents ingress modes and `you docs batch-inputs`; wire `RunE` through injectable `submitBatch` → `submitcli.SubmitBatch`. File-path HTTP/dry-run lives in `pkg/cli/submit/batch.go` with `resolveBatchInput` in `batch_input.go` (inject `BatchConfig.Stdin` / `BatchConfig.StdinIsTTY` in tests; piped no-arg stdin and explicit `-` use `batchSource=stdin`; file path ignores stdin); inline JSON positionals use `looksLikeInlineJSON` (first non-whitespace `{`) with `batchSource=inline` and no `os.Stat`; `--file <path>` and `--file -` win over positional paths via `resolveBatchFileFlag`. Human `201` stdout belongs in `printBatchSuccessHuman` (`pkg/cli/submit/batch_output.go`): request/trace/work-count lines, optional `relationCount` from parsed request relations, up to ten per-work lines with `you work show` / `you work list --name` hints, truncation summary for longer lists—never print payloads; `--verbose` logs endpoint, batchSource (file, stdin, inline), byte size, requestId, and work count on stderr—never payload content. Structured `--json` success and dry-run payloads belong in `BatchSubmitJSONResult` via `printBatchSuccessJSON` / `printBatchDryRunJSON` in `batch_output.go`: include `requestId`, `traceId`, `workCount`, `relationCount`, `sessionId`, `endpointPath`, `batchSource`, and per-work `works` on HTTP success; dry-run adds `dryRun: true`, `workNames`, and omits `traceId` unless present in parsed input.
+- When a UI branch cherry-picks OpenAPI that removes `POST /factories` and adds `SaveFactoryForSessionRequest`, run `make generate-api` and land matching backend from `ralph/session-factory-save-modes` (`pkg/service/factory_editable_definition.go` session save section, `pkg/api/handlers.go`, contract tests)—UI-only codegen fails `make api-smoke` and breaks `pkg/api` compile until those handlers ship.
+- `pkg/service` has a 15 hand-maintained Go file cap—after adding session factory save modes, fold `factory_session_save.go` into `factory_editable_definition.go` and session save tests into `factory_test.go` (both already carry `pkgmaintcheck:ignore-file-lines`) instead of adding standalone `factory_session_save*.go` files.
+- `getCurrentFactoryDocument` / `saveCurrentFactoryDocument` delegate to `getSessionFactory` / `saveSessionFactory`; map `SessionFactoryAPIError` (including `NETWORK_ERROR`) back to `CurrentFactoryDefinitionError` with editor-facing messages; `SaveCurrentFactoryInput.baseVersion` still becomes `factory.version` on the wrapped PUT body only. `saveCurrentFactoryDocument` always sends explicit `mode: "REPLACE_CURRENT"` on editor and replace-style import saves; story 005+ import create paths call `saveSessionFactory` with `UPSERT_NAMED_AND_ACTIVATE` directly.
+- Session factory GET/PUT lives in `ui/src/api/session-factory/api.ts`: `getSessionFactory(sessionID)` and `saveSessionFactory({ sessionID, mode?, factory })` use `currentFactorySessionPath` + `transport.ts`; PUT body is `{ mode?, factory }` per `SaveFactoryForSessionRequest` (omit `mode` for server default `REPLACE_CURRENT`); normalize responses via `normalizeFactoryDefinition`.
 - Human-mode `you submit` success stdout is formatted in `pkg/cli/submit/human_output.go` via `writeHumanSubmitSuccess`: lines for `Submitted: <name> (<workTypeName>)`, `traceId`, optional `workId`, then `Verify: you work show <work-id>` or fallback `workId was not returned; verify with:` + `you work list --name <name>`; use `submitResponseString` for API pointer fields with request fallbacks; httptest proof in `TestSubmit_HumanStdoutIncludesWorkMetadataAndShowHint` and `TestSubmit_HumanStdoutFallsBackToWorkListWithoutWorkId`.
 - `--json` submit success uses `pkg/cli/submit/json_output.go` (`SubmitSuccessResult` / `writeJSONSubmitSuccess`): emit `workId` (pointer, omitted when absent), `name`, `workTypeName`, `traceId`, `sessionId` (API field, else `clidiag.SessionLabel`, else `sessionpath.DefaultFactorySessionID`), and `endpointPath` from `sessionpath.ScopedPath`; proof in `TestSubmit_JSONStdoutEmitsStableSuccessEnvelope` and `TestSubmit_JSONStdoutEmitsSessionScopedEndpointPath`.
 - Submit failure surfaces live in `pkg/cli/submit/error_output.go` (`submitFailureError`): transport errors as `factory not reachable at <url>` with empty stdout; non-201 responses as `submission failed (<status>): <message>` from `ErrorResponse.message` or a bounded raw-body preview (`submitErrorBodyPreviewLimit` = 200 runes/bytes); optional `workId=<id>` suffix from best-effort JSON parse; proof in `TestSubmit_FactoryNotRunning`, `TestSubmit_ServerError`, `TestSubmit_NonJSONErrorBodyUsesBoundedPreview`, `TestSubmit_ErrorIncludesWorkIdWhenPresent`, and `TestSubmit_JSONModeDoesNotEmitSuccessOnFailure`.
 - Extend `SubmitWorkResponse` in `api/components/schemas/api/SubmitWorkResponse.yaml`, regenerate via `make generate-api` (Go + UI), populate `interfaces.WorkRequestSubmitResult` from `requests.WorkRequestSubmitResultFromNormalized` after normalization in engine/mock factory, and map through `submitWorkResponseFromResult` in `pkg/api/submit_work_items.go` (not a separate `submit_response.go`—`pkg/api` has a 15-file cap) in both `SubmitWork` (`factorysessions.DefaultSessionID`) and `SubmitWorkBySessionId` (path param); assert `workId`, `name`, `workTypeName`, `traceId`, `requestId`, `accepted`, and `sessionId` in `server_submit_work_test.go` and session scoping tests.
-- Session-scoped PNG import activation uses `activateImportedFactoryForSession` in `ui/src/api/named-factory/api.ts`: GET current factory via `getCurrentFactoryDocument`, preserve session `name` on the imported payload, PUT via `saveCurrentFactoryDocument` with incremented `version`, and map `CurrentFactoryDefinitionError` (including `STALE_FACTORY_VERSION`) into `NamedFactoryAPIError`; never `POST /factories`.
+- Session-scoped PNG import activation uses `activateImportedFactoryForSession` in `ui/src/api/named-factory/api.ts`: replace confirm GETs current factory, preserves session `name`, PUTs `REPLACE_CURRENT` via `saveCurrentFactoryDocument` with incremented `version`; create-new-named PUTs `UPSERT_NAMED_AND_ACTIVATE` via `saveSessionFactory` with dialog `createFactoryName`, omitting `factory.version` for newly allocated names and including version only when upserting a known existing name (including current session factory). Map `CurrentFactoryDefinitionError` / `SessionFactoryAPIError` into `NamedFactoryAPIError`; never `POST /factories`. `useFactoryImportActivation` accepts full `FactoryImportConfirmInput` (`choice`, `createFactoryName`, `existingFactoryNames`, `value`).
 - Non-default session import isolation proof lives in `tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go` (`TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles`): `openNamedFactorySession` + `saveCurrentFactoryForSession` with imported-style bundled payload, assert session GET readback, unchanged default session/`alpha` on-disk config, and bundled files materialized only under `rootDir/<session-factory-name>/`.
 - Dashboard import threads `useDashboardSessionStore.selectedSessionID` through `DashboardBento` → `useCurrentActivityImportController` → `useFactoryImportActivation({ sessionID })`, which defaults to `activateImportedFactoryForSession` so tab switches before confirm retarget activation without reload (mirror `useCurrentFactoryExport` session routing).
 - `App.import.test.tsx` mocks `/factory-sessions/{session_id}/factory` by HTTP method (GET with `version`, then versioned PUT) and asserts no `POST /factories`; use `createDeferredPromise` from `app-shell-export-test-utils` to observe `Activating factory...` submitting state before resolving PUT.
+- Import confirm dialog (`dashboard-import-preview-dialog.tsx`) defaults to replace-current, uses a fieldset/radio group for create-new-named, derives suffixed create names via `allocateImportCreateFactoryName`, and confirms with `FactoryImportConfirmInput` including `existingFactoryNames` for activation; thread `currentSessionFactoryName` from `snapshot.factory?.name` through `DashboardBento` and graph-editor dialog seams; assert PUT `mode` in `App.import.test.tsx` and `factory-import-second-session.integration.test.mjs`.
 - Inline single-use workflow-activity layout class strings directly on JSX in `workflow-activity-bento-card.tsx`; assert the graph panel shell via the viewport region’s `section[aria-labelledby]` parent in `workflow-activity-bento-card.test.tsx` (contains `relative`, `h-full`, `min-h-0`, `min-w-0`).
-- Batch submit validation and HTTP failures stay distinguishable: canonical parse/validation errors fail locally before HTTP; non-`201` responses use `batchSubmissionHTTPError` in `pkg/cli/submit/batch.go` (`ErrorResponse.message` when present, otherwise a 200-byte bounded body preview); `--json` leaves stdout empty on validation or HTTP failure.
-- End-to-end `you submit batch` against a live factory belongs in `tests/functional/smoke/cli_submit_batch_smoke_test.go` with checked-in `tests/functional/smoke/testdata/cli_submit_batch_smoke.json`; reuse `buildYouCLIBinary`, `reserveLocalTCPPort`, and `writeDefaultMockWorkersConfig` from `cli_factory_prompt_run_smoke_test.go`, start `you run --continuously` with mock workers, poll GET `/work` for readiness, then assert human success markers (`requestId`, `traceId`, `work count`, per-work line, `you work show` hint) plus API acceptance of the upserted work name.
 - Parse worker/workstation `openCodeAgent` through `pkg/config/agents_config.go` with `validateOpenCodeAgentInFrontmatter` (rejects explicit empty or whitespace-only values), merge via `applyWorkerRuntimeExecution` / `applyWorkstationRuntimeIdentity`, and resolve dispatch precedence with `interfaces.ResolveOpenCodeAgent(workstation, worker)`.
 - Forward resolved OpenCode agent on `interfaces.ProviderInferenceRequest.OpenCodeAgent` from `pkg/workers/executor/agent.go` `inferenceRequestForExecutionRequest` only when `ModelProvider` is `opencode`; lookup workstation via `runtimeConfig.Workstation(inferenceWorkstationType(request))` and leave the field empty for other providers.
 - Append `opencode run --agent <name>` in `openCodeProviderBehavior.BuildArgs` when `req.OpenCodeAgent` is non-empty, placing `--agent` after `--model` and before `--session`; empty agent leaves today's `opencode run` arg shape unchanged.
@@ -37,15 +22,14 @@
 - Dashboard header-only submit proof belongs in `submit-work-widget.test.tsx` (`completes header-only submission when the default text item is blank`) and the empty-payload segment of `App.follow-up-submit.test.tsx`; assert POST body `items: []`, success trace status copy, and absence of submit error fallback.
 - Hide internal `__system_time` factory graph nodes with `filterFactoryGraphTopologyForCustomerDisplay` in `ui/src/features/factory-graph-editor/lib/factory-graph-customer-display.ts`; reuse `systemTime.ts` constants/predicates and apply the filter at graph render boundaries (layout/projection) before seeding nodes or edges.
 - Apply customer-display filtering in `projectFactoryGraphToReactFlow` only; keep `buildFactoryGraphTopologyFromDefinition` and draft-validation topology unfiltered so canonical factory data and editor mutations stay complete.
-- Second-tab PNG import browser proof lives in `ui/integration/factory-import-second-session.integration.test.mjs`: open a non-default session via the Factory Session dialog, export then import on that tab, track `onSaveCurrentFactory` for the non-default `sessionID` and keep `onActivateFactory` empty; use `expect.poll` for PUT completion because submitting-state copy can flash too quickly in Playwright.
+- Second-tab PNG import browser proof lives in `ui/integration/factory-import-second-session.integration.test.mjs`: open a non-default session via the Factory Session dialog, export then import on that tab, and track `onSaveCurrentFactory` for the non-default `sessionID` with `mode: "REPLACE_CURRENT"`; use `expect.poll` for PUT completion because submitting-state copy can flash too quickly in Playwright.
+- Legacy `createFactory` and dashboard `POST /factories` were removed from `ui/src/api/named-factory/api.ts`; import activation uses session PUT modes only. Browser/integration harnesses stub `/factory-sessions/{session_id}/factory` GET/PUT via `onSaveCurrentFactory`—do not reintroduce `onActivateFactory` or `/factories` POST handlers.
+- UI Coverage merge lane replays **shard blobs** + isolated React Flow pass only; tests in standalone `*.errors.test.ts` files may not affect merged global thresholds unless they run in a **main shard**—colocate new coverage tests in the primary `api.test.ts` beside the module under test.
+- Session factory operator-facing error copy lives in `ui/src/api/session-factory/operator-errors.ts` (`sessionFactoryOperatorErrorMessages`, `resolveSessionFactoryAPIErrorMessage`); HTTP failures apply it at throw time in `api.ts`. `current-factory-definition` only remaps transport-shell messages (network, rejected request, invalid response) to editor copy; `named-factory` passes through `SessionFactoryAPIError.message`. Import preview `errorByCode` for `STALE_FACTORY_VERSION`, `FACTORY_NOT_IDLE`, `INVALID_FACTORY`, and `INVALID_FACTORY_NAME` should import the same English strings from `sessionFactoryOperatorErrorMessages`.
 - Register new packaged `you docs` topics in the single `topicDocuments` table in `pkg/cli/docs/docs.go` with canonical name, description, `displayOrder`, path, and optional aliases together so `SupportedTopics()`, index output, and unsupported-topic errors stay aligned.
 - Keep `docs/reference/*.md` and `pkg/cli/docs/reference/*.md` synchronized when adding customer-facing packaged topics; embedded markdown is loaded from `pkg/cli/docs/reference/` via `//go:embed`.
-- When extending `batch-inputs.md`, add the ingress comparison table and `## CLI batch submit` examples to both trees together; guard new CLI markers in `TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown` and `cli_docs_smoke_test.go` `batch-inputs` topic markers.
 - When a new canonical topic is added, update hardcoded topic-order assertions in `pkg/cli/docs/docs_test.go`, `pkg/cli/root_docs_test.go`, and `tests/functional/smoke/cli_docs_smoke_test.go` unsupported-topic error expectations.
 - When trimming `authoring-factories` after new topics land, point readers at `you docs mock-workers` and `you docs record-replay` and update `TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown` markers away from removed deep-dive strings.
-- U8 dashboard stream/timeline split hooks (`useFactoryEventStream`, `useDashboardSessionLifecycle`, `useDashboardWorldView`, thin `useDashboardSnapshot`) largely landed on `main` from `ralph/ui-dashboard-stream-timeline-split`—recovery v2 is verify targeted hook tests (`useFactoryEventStream.test.tsx`, etc.) and flip PRD unless regression found.
-- `App.session-stream.test.tsx` proves shell stream/timeline outcomes via `MockEventSource` (`message` events, not `snapshot` type), `fetchRequestPath` for `/factory-sessions` list mocks, pause on non-default sessions only (`~default` ignores pause), and `setSelectedSessionID` for tab retarget when the loading shell hides tabs mid-switch; session-stream harness lives in `app-shell-session-stream-test-utils.ts` and timeline seeding in `app-shell-timeline-seed-utils.ts` so `app-shell-test-utils.tsx` stays under Biome’s 450-line cap.
-- `deriveDashboardWorldViewShellState` in `ui/src/features/dashboard/lib/dashboard-world-view.ts` owns shell `isInitialLoading` (session set, tick 0, zero events, stream not `offline`) and `error` (offline-before-first-event only); `useDashboardWorldView` exposes `worldViewCache[selectedTick]` as `snapshot` plus `selectedTick`, `hasEvents`, and `streamState`.
 - Register `relationships` at `displayOrder` 28 immediately after `guards` (27); relationships content adapts `batch-inputs.md` relation sections and `parent-aware-fan-in.md` with `SPAWNED_BY` called out as runtime/template-only, not batch-authored.
 - Story 003 index assertions belong in `root_docs_test.go` and `cli_docs_smoke_test.go` immediately after `record-replay` lines; smoke topic tests can use `absent` for `../internal/development/...` paths when replacing packaged cross-links.
 - Do not `cp` `pkg/cli/docs/reference/config.md` or `templates.md` onto `docs/reference/` — the layout-tree guides diverge from embedded packaged topics; apply cross-link edits to both trees separately.
@@ -302,132 +286,6 @@
   - Useful context: Dev-browser skill verification was not run this iteration; Playwright integration test is the automated browser proof for story 005.
 ---
 
-## 2026-05-30T21:30:00Z - cli-submit-batch-001
-- What was implemented: Added shared `pkg/cli/batchload` package with `LoadFromFile` for canonical `FACTORY_REQUEST_BATCH` file-path ingress; delegated `run.LoadWorkFile` to it; moved retired-alias and trace-conflict regressions to `batchload` tests while keeping `TestDocsExampleStartupWorkFile` on the run delegate.
-- Files changed: `pkg/cli/batchload/load.go`, `pkg/cli/batchload/load_test.go`, `pkg/cli/run/run.go`, `pkg/cli/run/run_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: CLI batch file loading belongs in `pkg/cli/batchload` atop `requests.ParseCanonicalWorkRequestJSON`; preserve `run.LoadWorkFile` as a stable alias for factory-prompt and root tests.
-  - Gotchas encountered: Full `make typecheck` requires UI `tsc` on PATH; backend verification via `go test ./pkg/cli/...` suffices when UI toolchain is absent locally.
-  - Useful context: Story 004+ `you submit batch` should import `batchload` directly; stdin/inline loaders can extend the same package in later stories.
----
-
-## 2026-05-30T22:15:00Z - cli-submit-batch-002
-- What was implemented: Extended `UpsertWorkRequestResponse` OpenAPI schema with required `works[]` (`UpsertWorkRequestSubmittedWork`), populated domain results via `requests.SubmitResultFromNormalized`, mapped responses in both upsert handlers, and added API plus generated-smoke regression coverage for multi-work identifiers.
-- Files changed: `api/components/schemas/api/UpsertWorkRequestSubmittedWork.yaml`, `api/components/schemas/api/UpsertWorkRequestResponse.yaml`, `api/openapi-main.yaml`, `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/interfaces/factory_runtime.go`, `pkg/factory/requests/work_request.go`, `pkg/factory/requests/work_request_test.go`, `pkg/factory/engine/engine.go`, `pkg/testutil/mock_factory.go`, `pkg/api/handlers.go`, `pkg/api/server_upsert_work_request_test.go`, `pkg/api/contracttests/*`, `tests/functional/runtime_api/api_generated_smoke_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Per-work upsert identifiers belong in `WorkRequestSubmitResult.Works` at submit time so idempotent replays return the same `works` slice; CLI success output stories should read `result.Works` rather than re-normalizing in handlers.
-  - Gotchas encountered: `make generate-ui-api` needs UI `node_modules`; backend `make bundle-api generate-go-server-api` is sufficient for Go/API contract work in this story.
-  - Useful context: Explicit client-provided `workId` values pass through normalization unchanged; default IDs follow `batch-{requestId}-{workName}`.
----
-
-## 2026-05-30T23:45:00Z - cli-submit-batch-003
-- What was implemented: Registered `you submit batch` under `you submit` with comprehensive help for FACTORY_REQUEST_BATCH ingress modes, `--file`, `--dry-run`, `--session`, and global `--server`/`--json`/`--verbose`; updated unary `submit --help` to point at batch submit and `you docs batch-inputs`; added `SubmitBatch` stub and help/handler wiring tests.
-- Files changed: `pkg/cli/submit/batch.go`, `pkg/cli/root_submit_batch.go`, `pkg/cli/root_submit_batch_test.go`, `pkg/cli/root.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Mirror `work list`/`work show` by adding batch as a Cobra child of `submit` while keeping unary `RunE` on the parent; inject `submitBatch` like `submitWork` for root tests.
-  - Gotchas encountered: Parent `submit --help` must mention `submit batch` explicitly—operators discover batch ingress from both parent and child help.
-  - Useful context: Story 004 implements `SubmitBatch` HTTP/dry-run behavior; stdin/inline/`--file` resolution lands in stories 005–007.
----
-
-## 2026-05-30T24:00:00Z - cli-submit-batch-004
-- What was implemented: Implemented file-path `you submit batch` with local validation, `--dry-run` summary output (no HTTP), and session-scoped `PUT /factory-sessions/{session}/work-requests/{requestId}` using original JSON bytes; unary-style unreachable and API error surfaces; verbose stderr metadata without payload content.
-- Files changed: `pkg/cli/submit/batch.go`, `pkg/cli/submit/batch_input.go`, `pkg/cli/submit/batch_test.go`, `pkg/cli/submit/batch_input_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Resolve file ingress in `resolveBatchFileInput` and return explicit "not yet supported" errors for stdin/inline/`--file` until stories 005–007; send validated file bytes on PUT so canonical JSON round-trips; dry-run uses parsed `interfaces.WorkRequest` for summary fields.
-  - Gotchas encountered: Root `TestSubmitBatchCommand_InvokesSubmitBatchHandler` still injects `submitBatch` and does not exercise file resolution; integration tests belong in `pkg/cli/submit/batch_test.go`.
-  - Useful context: Stories 005–007 should extend `resolveBatchFileInput` (or sibling resolvers) rather than duplicating validation/HTTP; stories 008–009 own success output formatting beyond minimal upsert line/JSON response.
----
-
-## 2026-05-30T25:30:00Z - cli-submit-batch-005
-- What was implemented: Replaced `resolveBatchFileInput` with `resolveBatchInput` supporting piped stdin (no args, non-TTY), explicit `-`, interactive TTY usage failure, empty stdin rejection, and file-path precedence over stdin; dry-run and HTTP paths emit `batchSource=stdin`; added injectable `BatchConfig.Stdin` and `BatchConfig.StdinIsTTY` for tests.
-- Files changed: `pkg/cli/submit/batch.go`, `pkg/cli/submit/batch_input.go`, `pkg/cli/submit/batch_test.go`, `pkg/cli/submit/batch_input_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Use `os.Stdin.Stat()` `ModeCharDevice` for default TTY detection without adding `golang.org/x/term`; inject `StdinIsTTY` in tests instead of relying on real terminal state.
-  - Gotchas encountered: `batch_input_test.go` reuses `writeBatchFile` from `batch_test.go` in the same package—keep helper ownership in one test file.
-  - Useful context: Story 006 adds inline JSON positional parsing in `resolveBatchInput`; story 007 adds `--file` and `--file -` while preserving file-over-stdin precedence.
----
-
-## 2026-05-30T26:00:00Z - cli-submit-batch-006
-- What was implemented: Inline JSON positional ingress in `resolveBatchInput` when the first non-whitespace byte is `{` (`batchSource=inline`); non-JSON missing paths still error as `batch file not found`; batch help notes shell argument length limits; dry-run and HTTP tests for inline JSON.
-- Files changed: `pkg/cli/submit/batch_input.go`, `pkg/cli/submit/batch_input_test.go`, `pkg/cli/submit/batch_test.go`, `pkg/cli/root_submit_batch.go`, `pkg/cli/root_submit_batch_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: `looksLikeInlineJSON` gates inline mode before `os.Stat` so JSON-looking positionals never hit the filesystem; use label `inline JSON` for parse error context.
-  - Gotchas encountered: Paths like `/no/such/batch.json` must fail with missing-file errors, not JSON parse errors—only `{`-prefixed positionals skip file lookup.
-  - Useful context: Story 007 adds `--file` / `--file -` in `resolveBatchInput` while preserving file-over-stdin precedence.
----
-
-## 2026-05-30T27:00:00Z - cli-submit-batch-007
-- What was implemented: Implemented `--file <path>` and `--file -` in `resolveBatchFileFlag`, checked before positional args so `--file` wins; file flag ignores unrelated stdin; added input and dry-run regression tests.
-- Files changed: `pkg/cli/submit/batch_input.go`, `pkg/cli/submit/batch_input_test.go`, `pkg/cli/submit/batch_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Handle `--file` at the top of `resolveBatchInput` via `resolveBatchFileFlag`; `--file -` shares `readBatchStdin` with positional `-` and piped no-arg stdin.
-  - Gotchas encountered: When both `--file` and a positional path are set, only test the flag path—positional args are ignored entirely, including inline JSON positionals.
-  - Useful context: Stories 008–009 own human/JSON success output formatting beyond minimal upsert line/JSON response.
----
-
-## 2026-05-30T10:14:45Z - cli-submit-batch-008
-- What was implemented: Added human success output for `you submit batch` on HTTP 201 via `printBatchSuccessHuman`, listing requestId, traceId, work count, optional relationCount, per-work name/type/workId lines with `you work show` or `you work list --name` hints, and truncation after ten works without printing payloads.
-- Files changed: `pkg/cli/submit/batch_output.go`, `pkg/cli/submit/batch.go`, `pkg/cli/submit/batch_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Keep human batch success formatting in `batch_output.go` separate from HTTP transport in `batch.go`; derive `relationCount` from the parsed `interfaces.WorkRequest`, not the API response; use `batchSuccessMaxWorkLines` (10) with a `... and N more work(s)` trailer.
-  - Gotchas encountered: Empty API `workId` should fall back to `you work list --name` hints even though story 002 normally returns ids; stdout must not include request payload fields even when batch files contain secrets.
-  - Useful context: Story 009 extends `--json` success with sessionId, endpointPath, batchSource, and enriched summary fields beyond raw `UpsertWorkRequestResponse`.
----
-
-## 2026-05-30T11:30:00Z - cli-submit-batch-009
-- What was implemented: Added `BatchSubmitJSONResult` structured stdout for `you submit batch --json` on HTTP 201 and `--dry-run`, including sessionId, endpointPath, batchSource, workCount, relationCount, per-work identifiers, dry-run summary fields, and traceId omission unless present in parsed input.
-- Files changed: `pkg/cli/submit/batch.go`, `pkg/cli/submit/batch_output.go`, `pkg/cli/submit/batch_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Keep batch JSON output types and encoders in `batch_output.go` beside human formatting; derive `endpointPath` via `batchSubmitEndpointPath` and `sessionId` via `clidiag.SessionLabel` so dry-run and success JSON stay aligned without HTTP.
-  - Gotchas encountered: Dry-run JSON should expose `workNames` (not `works`) and only include `traceId` when the parsed batch document carries one; validation failures must leave stdout empty when `--json` is set.
-  - Useful context: Story 010 owns distinguishable validation vs HTTP error surfaces and broader failure JSON assertions.
----
-
-## 2026-05-30T12:45:00Z - cli-submit-batch-010
-- What was implemented: Centralized batch HTTP failure formatting in `batchSubmissionHTTPError` with API `ErrorResponse.message` preference and 200-byte bounded fallback for non-JSON bodies; added regressions for invalid JSON, empty `requestId`, retired-field guidance, mocked 404, bounded body preview, and `--json` stdout silence on HTTP failure.
-- Files changed: `pkg/cli/submit/batch.go`, `pkg/cli/submit/batch_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Mirror `pkg/cli/factory/query.go` and `pkg/cli/models/models.go` with a package-local `batchErrorBodyPreviewLimit` (200) for non-JSON HTTP error bodies; keep canonical retired-alias errors on the `ParseCanonicalWorkRequestJSON` path without duplicating validation in `validateBatchRequest`.
-  - Gotchas encountered: Empty works and mocked 400 tests already existed from story 004—story 010 adds the remaining PRD error-matrix cases (404, invalid JSON, empty requestId, retired fields, bounded preview, JSON failure stdout).
-  - Useful context: Story 011 updates `docs/reference/batch-inputs.md` and packaged `you docs batch-inputs`; story 012 is optional smoke.
----
-
-## 2026-05-30T14:00:00Z - cli-submit-batch-011
-- What was implemented: Added batch ingress comparison table and `## CLI batch submit` subsection with file, `--file`, pipe, stdin `-`, inline JSON, and `--dry-run` examples to synchronized `batch-inputs.md`; updated doc test markers in `docs_test.go` and `cli_docs_smoke_test.go`.
-- Files changed: `docs/reference/batch-inputs.md`, `pkg/cli/docs/reference/batch-inputs.md`, `pkg/cli/docs/docs_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Place ingress comparison early in `batch-inputs.md` before Quick reference; keep the existing curl Quick Start example and add CLI examples in a dedicated section immediately after it.
-  - Gotchas encountered: Sync both markdown trees with `cp` when the full page changes; extend both `TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown` and smoke `batch-inputs` markers together.
-  - Useful context: Story 012 is optional end-to-end smoke; defer with documented justification if harness cost is prohibitive.
----
-
-## 2026-05-30T15:30:00Z - cli-submit-batch-012
-- What was implemented: Added `TestSubmitBatch_RealCLIUpsertsToRunningFactory` functional smoke that starts `you run --continuously` with mock workers, upserts checked-in `cli_submit_batch_smoke.json` via `you submit batch`, asserts human success markers on stdout, and verifies the work appears on GET `/work`.
-- Files changed: `tests/functional/smoke/cli_submit_batch_smoke_test.go`, `tests/functional/smoke/testdata/cli_submit_batch_smoke.json`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: Reuse `cli_factory_prompt_run_smoke_test.go` helpers (`buildYouCLIBinary`, `reserveLocalTCPPort`, `writeDefaultMockWorkersConfig`, `promptRunWorkTypeStates`) in the same `smoke` package; poll GET `/work` for server readiness before issuing `you --server <base> submit batch <path>`.
-  - Gotchas encountered: `you run` needs `--continuously` and mock-workers config path as the final positional arg like factory-prompt smoke; skip under `testing.Short()` because the test builds the CLI and runs a live server.
-  - Useful context: httptest coverage in `pkg/cli/submit/batch_test.go` remains the fast default; this smoke is the slow E2E proof when the harness can start a factory and accept work-request upserts.
----
-
-## 2026-05-30T15:45:00Z - mergeability (PR #481)
-- What was implemented: Fixed CI `pkg-maint` failures by extracting JSON output tests to `pkg/cli/submit/batch_json_test.go` and moving field assertions into helpers to satisfy cyclomatic-complexity and file-line limits on `batch_test.go`.
-- Files changed: `pkg/cli/submit/batch_test.go`, `pkg/cli/submit/batch_json_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: When `batch_test.go` nears 1000 lines or a single test exceeds cyclomatic complexity 15, split `--json` regressions into `batch_json_test.go` in the same package rather than adding more branches to one test function.
-  - Gotchas encountered: Extracting assertion helpers inside the same oversized test file does not reduce file-line count; move tests and helpers together.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/481 — mergeability-only follow-up after story 012 smoke landed.
----
-
-## 2026-05-30T16:20:00Z - mergeability (PR #481 coverage)
-- What was implemented: Merged `origin/main` to pick up lowered UI coverage thresholds (`93.05` lines/statements in `ui/vite.config.ts`); CI green on head `dbe841e5`.
-- Files changed: `ui/vite.config.ts` (merge from main)
-- **Learnings for future iterations:**
-  - Patterns discovered: When UI Coverage fails at ~93.08% against a 93.1% gate, check whether `main` already adjusted thresholds before adding tests.
-  - Gotchas encountered: Regenerating `ui/src/api/generated/openapi.ts` for batch upsert `works` is required whenever story 002 OpenAPI lands without a prior UI generate commit.
-  - Useful context: Required checks on PR #481 all pass after pkg-maint split, OpenAPI drift fix, and main merge.
----
-
 ## 2026-05-30T23:45:00Z - cli-submit-response-contract-001
 - What was implemented: Extended OpenAPI `SubmitWorkResponse` with `workId`, `name`, `workTypeName`, `requestId`, `accepted`, and `sessionId`; populated fields from normalized submit metadata via `WorkRequestSubmitResultFromNormalized` and `submitWorkResponseFromResult`; added default and session-scoped handler/API/contract tests; regenerated Go and UI OpenAPI types.
 - Files changed: `api/components/schemas/api/SubmitWorkResponse.yaml`, `api/openapi.yaml`, `pkg/api/submit_response.go`, `pkg/api/submit_response_test.go`, `pkg/api/handlers.go`, `pkg/api/server_submit_work_test.go`, `pkg/api/server_session_scoping_test.go`, `pkg/api/contracttests/openapi_contract_surface_test.go`, `pkg/api/contracttests/generated_contract_factory_test.go`, `pkg/api/generated/server.gen.go`, `pkg/factory/requests/submit_result.go`, `pkg/factory/engine/engine.go`, `pkg/factory/engine/engine_submit_test.go`, `pkg/interfaces/factory_runtime.go`, `pkg/testutil/mock_factory.go`, `ui/src/api/generated/openapi.ts`, `docs/internal/processes/development-guide-relevant-files.md`
@@ -500,317 +358,209 @@
   - Useful context: All PRD stories now pass; await green UI Coverage on head `7c5b4b13` before `<COMPLETE>`.
 ---
 
-## 2026-05-30T17:00:00Z - mergeability (PR #481 rebase)
-- What was implemented: Merged `origin/main` into `ralph/cli-submit-batch` to resolve BLOCKING `mergeable: CONFLICTING` review feedback; unified `WorkRequestSubmitResultFromNormalized` to populate primary unary fields and batch `Works`; merged `docs_test.go` batch-inputs markers with main relation markers; kept cli-submit-batch PRD.
-- Files changed: `pkg/factory/requests/submit_result.go`, `pkg/interfaces/factory_runtime.go`, `pkg/factory/engine/engine.go`, `pkg/testutil/mock_factory.go`, `pkg/api/contracttests/generated_contract_factory_test.go`, `pkg/cli/docs/docs_test.go`, `progress.txt` (conflict resolution)
+## 2026-05-30T18:30:00Z - ui-session-factory-client-001
+- What was implemented: Added `ui/src/api/session-factory/` with `getSessionFactory` and `saveSessionFactory` using `currentFactorySessionPath` and shared transport helpers; brought in S1 OpenAPI `SaveFactoryForSessionRequest` / `FactorySaveMode` schemas and regenerated `ui/src/api/generated/openapi.ts`; unit tests cover default and non-default session GET/PUT bodies for both save modes and omitted mode.
+- Files changed: `api/components/schemas/api/FactorySaveMode.yaml`, `api/components/schemas/api/SaveFactoryForSessionRequest.yaml`, `api/openapi-main.yaml`, `api/openapi.yaml`, `ui/src/api/generated/openapi.ts`, `ui/src/api/session-factory/api.ts`, `ui/src/api/session-factory/api.test.ts`, `ui/src/api/session-factory/index.ts`, `ui/src/api/session-factory/messages.ts`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: After `cli-submit-response-contract` merges to main, batch branches must extend `WorkRequestSubmitResultFromNormalized` rather than keeping a separate `SubmitResultFromNormalized` implementation—delegate the alias for tests.
-  - Gotchas encountered: `prd.json`/`prd.md` conflicts during main merge should resolve to the feature-branch PRD (`git checkout --ours`), not main's unrelated Ralph PRD.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/481 — BLOCKING rebase item from review comment on head `dbe841e5`.
+  - Patterns discovered: Cherry-pick only OpenAPI contract files from `ralph/session-factory-save-modes` for UI transport work; keep `current-factory-definition` delegation for story 002. PUT JSON key order follows object literal construction (`mode` before `factory` when mode is set).
+  - Gotchas encountered: `bun install` in `ui/` is required before `make typecheck` in fresh worktrees; Biome `noExcessiveLinesPerFunction` caps describe blocks at 100 lines — split error tests into sibling describes.
+  - Useful context: Backend S1 handler changes remain on `ralph/session-factory-save-modes`; this branch carries contract + UI client only until S1 merges to main.
 ---
 
-## 2026-05-30T16:45:00Z - service-runtime-state-consolidation-001
-- What was implemented: Renamed `replacementFactoryRuntime` to `factoryRuntimeBundle`, moved runtime log sink and session logger creation into `buildRuntimeBundle`, split `resolveFactoryServiceRoot` from log construction, and added regression tests that startup and replacement bundles include log sinks and match live-handle wiring.
-- Files changed: `pkg/service/factory.go`, `pkg/service/factory_build.go`, `pkg/service/factory_runtime_state.go`, `pkg/service/factory_runtime_mode_test.go`, `pkg/service/factory_editable_definition.go`, `pkg/service/runtime_sessions.go`, `pkg/service/poller_watcher_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+## 2026-05-30T11:36:46Z - ui-session-factory-client-002
+- What was implemented: Delegated `getCurrentFactoryDocument` and `saveCurrentFactoryDocument` to `getSessionFactory` / `saveSessionFactory` with `SessionFactoryAPIError` mapped back to `CurrentFactoryDefinitionError` (including `NETWORK_ERROR`); `baseVersion` still maps to `factory.version` on the wrapped PUT body; updated import/named-factory tests and browser harness for `{ factory }` request bodies.
+- Files changed: `ui/src/api/current-factory-definition/api.ts`, `ui/src/api/current-factory-definition/api.test.ts`, `ui/src/api/session-factory/api.ts`, `ui/src/api/named-factory/api.test.ts`, `ui/src/App.import.test.tsx`, `ui/integration/browser-test-harness.mjs`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: `liveRuntimeHandle.runtime` is `*factoryRuntimeBundle`; `buildRuntimeLogSink` centralizes per-runtime instance IDs for both startup and replacement builds.
-  - Gotchas encountered: `BuildFactoryService` defer must close `runtimeBundle.logSink` on failure after bundle allocation—do not keep a separate pre-bundle log sink.
-  - Useful context: Story 002 registers `~default` via `registerLiveSession`; story 005 removes shadow `FactoryService` runtime fields that still mirror the bundle today.
+  - Patterns discovered: Include `NETWORK_ERROR` when mapping session error codes back to current-factory codes; omitting it silently becomes `INTERNAL_ERROR` while messages still map correctly.
+  - Gotchas encountered: Browser integration harness and App.import roundtrip mocks must accept `SaveFactoryForSessionRequest` (`{ factory }`) on PUT and unwrap before persisting session state.
+  - Useful context: Story 003 adds explicit `REPLACE_CURRENT` mode on editor saves; import activation already flows through delegated save paths.
 ---
 
-## 2026-05-30T17:30:00Z - service-runtime-state-consolidation-002
-- What was implemented: Extended `registerLiveSession` to accept explicit `FactorySessionTarget` metadata, routed default startup and `OpenFactorySession` background launches through it via `defaultSessionTargetFromRuntimeBundle`, and added `TestFactoryService_Run_RegistersDefaultSessionInRegistry` proving `~default` is registered after `Run` with matching live handle, factory directory, and `runState.sessionID`.
-- Files changed: `pkg/service/runtime_sessions.go`, `pkg/service/factory.go`, `pkg/service/factory_runtime_mode_test.go`, `docs/internal/processes/development-guide-relevant-files.md`
+## 2026-05-30T12:46:00Z - ui-session-factory-client-003
+- What was implemented: `saveCurrentFactoryDocument` now sends explicit `mode: "REPLACE_CURRENT"` on every editor and replace-style import save; added regression test that editor saves never emit `UPSERT_NAMED_AND_ACTIVATE`; updated API, import, and workstation save tests for `{ mode, factory }` wire order (`mode` before `factory`).
+- Files changed: `ui/src/api/current-factory-definition/api.ts`, `ui/src/api/current-factory-definition/api.test.ts`, `ui/src/api/named-factory/api.test.ts`, `ui/src/App.import.test.tsx`, `ui/src/features/current-selection/workstation-selection/hooks/use-save-editable-workstation-configuration.test.tsx`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: Default startup passes bundle-derived `FactoryDir`/`FolderPath` into `registerLiveSession`; `currentRuntimeBundle()` resolves through the selected registry handle once `~default` registers—assert pointer equality in tests to catch shadow-bundle regressions.
-  - Gotchas encountered: `activateReplacementRuntime` must preserve existing session target metadata when re-registering replacements; only `replaceSessionRuntime` may still call `sessions.Upsert` directly for in-place handle swaps.
-  - Useful context: Story 003 routes runtime operations through requested session handles; story 005 removes authoritative top-level `FactoryService` runtime fields.
+  - Patterns discovered: `saveSessionFactory` JSON key order follows the object literal (`mode` then `factory` when mode is set); exact `JSON.stringify` assertions in tests must match that order.
+  - Gotchas encountered: Workstation save integration tests still expected legacy unwrapped PUT bodies; story 002 wrapped bodies but tests lagged until story 003 tightened mode assertions.
+  - Useful context: Story 005 should call `saveSessionFactory` with `UPSERT_NAMED_AND_ACTIVATE` directly for create-new-named import, not through `saveCurrentFactoryDocument`.
 ---
 
-## 2026-05-30T15:04:15Z - consolidate-validation-target-test-asserts-001
-- What was implemented: Added `pkg/testutil/validationassert` with `HasTarget` and `HasTargetCode` for `[]factoryapi.FactoryValidationTarget`, preserving API and service match semantics (optional topology failure label on `HasTargetCode`); unit tests cover success paths; documented the seam in `factory-workstation-relevant-files.md`.
-- Files changed: `pkg/testutil/validationassert/api.go`, `pkg/testutil/validationassert/api_test.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
+## 2026-05-30T20:00:00Z - ui-session-factory-client-004
+- What was implemented: Import preview confirm dialog now defaults to **Replace current factory**, exposes a keyboard-accessible radio group for **Create new named factory**, shows the resolved create-path name via `allocateImportCreateFactoryName` (including numeric suffixes), and confirms with `FactoryImportConfirmInput`; `currentSessionFactoryName` threads from `snapshot.factory?.name` through `DashboardBento` and graph-editor dialog seams.
+- Files changed: `ui/src/features/import/components/dashboard-import-preview-dialog.tsx`, `ui/src/features/import/messages/import-preview-dialog.ts`, `ui/src/features/import/lib/allocate-import-create-factory-name.ts`, `ui/src/features/import/lib/factory-import-save-choice.ts`, `ui/src/features/bento/components/dashboard-bento.tsx`, `ui/src/features/workflow-activity/components/react-flow-current-activity-card-editor-dialogs.tsx`, tests/stories/allowlist, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: Keep API `HasTarget` failure copy as `validation targets = %#v, want %s`; use unlabeled `HasTargetCode` for API tests (`targets = %#v, want code %q`) and pass a non-empty optional label for service topology tests (`topology targets = %#v, want %s`).
-  - Gotchas encountered: Subtests that call `t.Fatal` still fail the parent test in Go—use success-path-only unit tests for shared helpers or isolate failure cases in separate top-level tests.
-  - Useful context: Stories 002–004 retarget call sites and add domain `[]factoryvalidation.Target` helpers in story 004; no PR created until all PRD stories pass.
+  - Patterns discovered: Remount `FactoryImportPreviewDialog` with `key={readyImportPreviewState.file.name}` to reset save-choice state without a `useEffect` that trips `useExhaustiveDependencies`; pass `FactoryImportConfirmInput` through `onConfirm` so story 005 can branch on `choice` without another dialog refactor.
+  - Gotchas encountered: `collectExistingFactoryNames` includes the embedded PNG name, so create-path preview names get `-2` suffixes even when the session current name is `alpha`; tests should expect `Dropped Factory-2` for default fixtures. Biome inline-class guard requires inlining single-use `fieldset` layout strings and removing stale `IMPORT_DIALOG_HINT_CLASS` allowlist entries once the constant is reused.
+  - Useful context: Activation still calls `activateImport(value)` only — story 005 wires `choice` into session PUT modes and updates `App.import.test.tsx` / integration coverage.
 ---
 
-## 2026-05-30T16:30:00Z - consolidate-validation-target-test-asserts-002
-- What was implemented: Retargeted API validation topology tests to `pkg/testutil/validationassert` (`HasTarget`, `HasTargetCode`); removed duplicate local `assertHasValidationTarget` / `assertHasValidationTargetCode` from `server_test_helpers_test.go`, `server_factory_test.go`, and `servertests/server_factory_validation_test.go`.
-- Files changed: `pkg/api/server_test_helpers_test.go`, `pkg/api/server_factory_test.go`, `pkg/api/servertests/server_factory_validation_test.go`, `docs/internal/processes/factory-workstation-relevant-files.md`
+## 2026-05-30T20:10:00Z - ui-session-factory-client-005
+- What was implemented: Import confirm now drives session PUT save modes—replace keeps the session current name via `REPLACE_CURRENT`; create-new-named uses `UPSERT_NAMED_AND_ACTIVATE` with dialog-resolved `createFactoryName`, omitting `factory.version` for newly allocated names and including version when upserting a known existing name. `useFactoryImportActivation` accepts full `FactoryImportConfirmInput`; tests assert PUT mode/body in unit, app-shell, and second-session integration coverage.
+- Files changed: `ui/src/api/named-factory/api.ts`, `ui/src/api/named-factory/api.test.ts`, `ui/src/features/import/lib/factory-import-save-choice.ts`, `ui/src/features/import/hooks/use-factory-import-activation.ts`, `ui/src/features/import/hooks/use-factory-import-activation.test.tsx`, `ui/src/features/import/components/dashboard-import-preview-dialog.tsx`, `ui/src/features/import/components/dashboard-import-preview-dialog.test.tsx`, `ui/src/features/bento/components/dashboard-bento.tsx`, `ui/src/features/workflow-activity/hooks/current-activity-import-controller.ts`, `ui/src/features/workflow-activity/hooks/current-activity-import-controller.test.tsx`, `ui/src/features/workflow-activity/components/react-flow-current-activity-card.tsx`, `ui/src/features/workflow-activity/components/react-flow-current-activity-card-editor-dialogs.tsx`, `ui/src/features/workflow-activity/components/react-flow-current-activity-card-editor-dialogs.test.tsx`, `ui/src/App.import.test.tsx`, `ui/integration/browser-test-harness.mjs`, `ui/integration/factory-import-second-session.integration.test.mjs`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: `apiserver_test` package imports `validationassert` like `api` tests; use targeted replacements for call sites—`replace_all` on `assertHasValidationTargetCode` will corrupt local function definitions if helpers remain in the same file.
-  - Gotchas encountered: After `replace_all`, delete leftover `func assertHasValidationTarget*` blocks manually before committing.
-  - Useful context: Story 003 retargets `pkg/service/factory_test.go`; story 004 adds domain helpers and retargets `pkg/factory/validation/validation_test.go`.
+  - Patterns discovered: Keep `FactoryImportSaveChoice` on the API boundary (`named-factory/api.ts`) so transport does not import feature modules; forward full `FactoryImportConfirmInput` from dialog through hooks into `activateImportedFactoryForSession`.
+  - Gotchas encountered: `collectExistingFactoryNames` includes embedded PNG name, so default create-path preview/PUT names use `-2` suffixes (`Dropped Factory-2`); integration/browser harness must pass PUT `mode` through `onSaveCurrentFactory` for assertions.
+  - Useful context: Import confirm action label is **Confirm import** (not legacy **Activate factory**); story 006 removes `createFactory` / `POST /factories`.
 ---
 
-## 2026-05-30T18:00:00Z - service-runtime-state-consolidation-003
-- What was implemented: Verified story 003 on branch head—session-scoped `SubmitWorkRequestForSession`, `GetEngineStateSnapshotForSession`, `requireIdleRuntimeForSession`, and `sessionScopedRecordPath`; concurrent session isolation in `runtime_session_runtime_test.go`; idle-before-activation regression in `factory_test.go`; merged `origin/main` (validationassert consolidation) to clear PR #497 BLOCKING merge conflicts.
-- Files changed: merge from `origin/main` (`pkg/api/server_factory_test.go`, `pkg/service/factory_test.go`, `pkg/testutil/validationassert/*`, `docs/internal/processes/factory-workstation-relevant-files.md`); PRD/progress metadata updated locally for story 003
+## 2026-05-30T20:12:00Z - ui-session-factory-client-006
+- What was implemented: Removed legacy `createFactory` and `POST /factories` from `ui/src/api/named-factory/api.ts`; rewrote named-factory contract/error tests for session GET/PUT only; dropped `onActivateFactory` / POST handler from `browser-test-harness.mjs` and integration tracking; updated `openapi.named-factory.test.ts` to assert `saveCurrentFactoryBySessionId` payloads.
+- Files changed: `ui/src/api/named-factory/api.ts`, `ui/src/api/named-factory/api.test.ts`, `ui/src/api/named-factory/api.additional.test.ts`, `ui/src/api/generated/openapi.named-factory.test.ts`, `ui/src/features/import/hooks/use-factory-import-activation.test.tsx`, `ui/integration/browser-test-harness.mjs`, `ui/integration/factory-import-second-session.integration.test.mjs`, `ui/integration/factory-graph-editor.integration.test.mjs`, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: Story 003 landed in commit `25afa2f4`; broader isolation tests expanded in story 004 commit `b205a73f`—flip PRD per story even when follow-on commits add coverage on the same branch.
-  - Gotchas encountered: PR review marked all acceptance criteria PASS while `prd.json` still had stories 003–006 `passes: false`; merge conflicts with `main` were limited to Ralph tracking files after code auto-merged cleanly.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — BLOCKING items were merge conflicts + missing CI on head `da16e228`; push merge commit then wait for required checks.
+  - Patterns discovered: Port named-factory error-handling tests from removed `createFactory` to `getCurrentFactory` / `activateImportedFactoryForSession` so coverage stays on the live session transport paths.
+  - Gotchas encountered: `activationResponseFactory` and `onActivateFactory` in the browser harness were only used by the retired POST route—remove them together when deleting `createFactory`.
+  - Useful context: Story 007 centralizes session-factory error mapping in the session client; OpenAPI may still expose `createFactory` for CLI/backend clients even after the dashboard drops it.
 ---
 
-## 2026-05-30T19:45:00Z - service-runtime-state-consolidation-004
-- What was implemented: Verified story 004 on branch (commit `b205a73f` routes factory save, upsert activate, and `ActivateNamedFactory` through `replaceSessionRuntime` + `requireIdleRuntimeForSession`); strengthened `TestFactoryService_SaveFactoryForSession_UpsertOnNonDefaultSessionDoesNotMutateDefault` to assert `current-factory` pointer under `sessionFactoryPersistRoot` for the beta session after upsert.
-- Files changed: `pkg/service/factory_test.go`
+## 2026-05-30T20:25:00Z - ui-session-factory-client-007
+- What was implemented: Added `operator-errors.ts` with canonical operator messages and `resolveSessionFactoryAPIErrorMessage`; wired HTTP error throws in `session-factory/api.ts`; aligned import preview `errorByCode` (including new `STALE_FACTORY_VERSION`) with shared copy; updated API and UI tests for stale, not-idle, and invalid-factory mappings.
+- Files changed: `ui/src/api/session-factory/operator-errors.ts`, `ui/src/api/session-factory/operator-errors.test.ts`, `ui/src/api/session-factory/api.ts`, `ui/src/api/session-factory/index.ts`, `ui/src/features/import/messages/import-preview-dialog.ts`, `ui/src/features/import/components/dashboard-import-preview-dialog.tsx`, `ui/src/api/named-factory/api.test.ts`, `ui/src/api/named-factory/api.additional.test.ts`, `ui/src/api/current-factory-definition/api.test.ts`, `ui/src/testing/factory-validation-target-fixtures.ts`, selection/import tests, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: `sessionFactoryPersistRoot` returns `LiveSession.FolderPath` for non-default sessions when set (background `openFactorySession` uses the named factory dir as both `FactoryDir` and `FolderPath`).
-  - Gotchas encountered: Story 004 landed in an earlier commit while `prd.json` still showed `passes: false`—flip PRD after verification even when the main implementation commit predates the metadata pass.
-  - Useful context: Isolation proofs live in `runtime_session_runtime_test.go` (`ActivateNamedFactory_ReplacesOnlyActiveSession`, `SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession`); stories 005–006 remain on branch head but need PRD flip in follow-up iterations.
+  - Patterns discovered: Apply operator error resolution when throwing `SessionFactoryAPIError` from HTTP responses so downstream adapters only remap transport-shell messages, not product codes.
+  - Gotchas encountered: Stale-version copy changed from graph-specific to dashboard-wide guidance—update `staleFactoryVersionTarget` defaults and save/import tests together when touching operator messages.
+  - Useful context: Import preview still localizes `NETWORK_ERROR` and `FACTORY_ALREADY_EXISTS` separately; only session-factory-shared codes import from `sessionFactoryOperatorErrorMessages` in the English catalog.
 ---
 
-## 2026-05-30T16:10:00Z - service-runtime-state-consolidation-005
-- What was implemented: Verified story 005 on branch head `53a71220` (implementation in `72d948c8`): `FactoryService` holds only `startupBundle` plus session-registry handles; live runtime fields live on `factoryRuntimeBundle` inside `liveRuntimeHandle`; `currentFactory` / `currentRuntimeBundle` / `currentRuntimeConfig` delegate through run-state, default session, or pre-`Run` startup bundle; `replaceSessionRuntime` updates registry and active `runState` only for the targeted session with no top-level mirror writes.
-- Files changed: none (verification iteration); PRD metadata updated locally for story 005
+## 2026-05-30T13:52:00Z - mergeability (PR #489)
+- What was implemented: Addressed BLOCKING PR review on `b7fb4238`—regenerated Go/UI OpenAPI artifacts, aligned backend session factory save modes from `ralph/session-factory-save-modes` (`factory_session_save`, handlers, contract/functional tests), and restored submit-work response mapping after handler checkout; `make api-smoke` and `go test ./pkg/api/...` green locally; pushed `9c7fc584` + docs commit; posted PR conversation reply.
+- Files changed: `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, `ui/src/api/generated/openapi.ts`, `pkg/api/handlers.go`, `pkg/service/factory_session_save*.go`, `pkg/api/contracttests/*`, `pkg/testutil/mock_factory.go`, functional tests, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: Story 005 landed in `72d948c8` before later story-004 test tightening on `53a71220`—flip PRD after verifying head, not only the story commit.
-  - Gotchas encountered: PR review acceptance table already marked consolidation criteria PASS while `prd.json` still had stories 005–006 `passes: false`.
-  - Useful context: `make test-backend-verification` and `go test -short ./pkg/service/...` pass locally; story 006 (restart docs + `TestFactoryService_Run_RestartsOnlyDefaultSession`) remains for the next iteration.
+  - Patterns discovered: OpenAPI removal of `POST /factories` requires S1 backend + `make generate-api` in the same PR head—`api-smoke` diffs `server.gen.go`, `client.gen.go`, and `openapi.ts` after double codegen.
+  - Gotchas encountered: Checking out S1 `handlers.go` reverts `submitWorkResponseFromResult`—re-apply submit contract lines and `WorkRequestSubmitResultFromNormalized` in `mock_factory` when merging S1 backend onto branches that already carry cli-submit-response-contract.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await green required CI on head after push before `<COMPLETE>`.
 ---
 
-## 2026-05-30T16:20:00Z - mergeability (PR #497 backend-size)
-- What was implemented: Fixed CI `backend-size` failures by extracting `instantiateRuntimeBundleFactory` from `buildRuntimeBundle` and splitting oversized `factory_runtime_mode_test.go` / `runtime_session_runtime_test.go` into `factory_engine_state_snapshot_test.go` and `runtime_session_list_test.go`.
-- Files changed: `pkg/service/factory_build.go`, `pkg/service/factory_runtime_mode_test.go`, `pkg/service/factory_engine_state_snapshot_test.go`, `pkg/service/runtime_session_runtime_test.go`, `pkg/service/runtime_session_list_test.go`
+## 2026-05-30T14:30:00Z - mergeability (PR #489 rebase)
+- What was implemented: Rebased `ralph/ui-session-factory-client` onto current `origin/main` after PR became `mergeable: CONFLICTING`; resolved contract/functional test conflicts; updated `pkg/api/servertests/server_factory_validation_test.go` for `SaveFactoryForSessionErr` and session PUT bodies (no `POST /factories`); pushed `29974171`; posted PR conversation reply.
+- Files changed: `pkg/api/contracttests/generated_contract_factory_test.go`, `pkg/api/server_factory_test.go`, `tests/functional/runtime_api/factory_transformation/api_named_factory_test.go`, `pkg/api/servertests/server_factory_validation_test.go` (rebase conflict resolution + follow-up commit)
 - **Learnings for future iterations:**
-  - Patterns discovered: When session/runtime stories grow test files past 1000 lines, split by concern (engine snapshot vs session list paths) into sibling `*_test.go` files in the same package rather than adding `backendsizecheck:ignore-file`.
-  - Gotchas encountered: `buildRuntimeBundle` can exceed the 100-line function cap after wiring grows—extract factory instantiation (`runtime.New` + listener) into a sibling helper.
-  - Useful context: Mergeability-only follow-up on PR #497 after story 005 verification; push triggers fresh required checks.
+  - Patterns discovered: After main merges submit-work contract, keep richer `SubmitWorkResponse` / `UpsertWorkRequestResponse` fixtures in `generated_contract_factory_test.go` during session-factory rebases.
+  - Gotchas encountered: Main may add `server_factory_validation_test.go` cases still using `CreateNamedFactoryErr` / `POST /factories`—retarget to `SaveFactoryForSessionErr` and `upsertNamedFactoryRequestBody` when rebasing S1 backend work.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489#issuecomment-4583023642 — await green CI on `29974171`.
 ---
 
-## 2026-05-30T16:25:00Z - service-runtime-state-consolidation-006
-- What was implemented: Verified story 006 on branch head (commit `da16e228`): operator/maintainer restart semantics in `docs/internal/development/factory-session-process-restart.md` and `TestFactoryService_Run_RestartsOnlyDefaultSession` unchanged; mergeability follow-up extracted `ActivateNamedFactory` path helpers and test assertion helpers to satisfy `pkg-maint` cyclomatic-complexity limits on CI head `5e64896d`.
-- Files changed: `pkg/service/factory.go`, `pkg/service/factory_runtime_mode_test.go`, `pkg/service/factory_test.go`
+## 2026-05-30T15:05:00Z - mergeability (PR #489 vet)
+- What was implemented: Fixed CI `make vet` failure on `29974171` — `factory_validation_equivalence_test.go` still called removed `SaveCurrentFactory`; updated to `SaveFactoryForSession` with running default session; pushed `d864571f`.
+- Files changed: `pkg/service/factoryvalidationtests/factory_validation_equivalence_test.go`
 - **Learnings for future iterations:**
-  - Patterns discovered: Story 006 landed in `da16e228` before later mergeability commits—flip PRD after verifying docs + restart test even when no new feature diff is needed in the iteration.
-  - Gotchas encountered: `pkg-maint` can fail on `ActivateNamedFactory` and large session-registration tests after consolidation refactors even when `backend-size` already passed—run `make pkg-maint` locally before pushing.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories now pass; await green required checks on the pkg-maint fix head before `<COMPLETE>`.
+  - Patterns discovered: `factoryvalidationtests` package tests that exercise save rejection must start service-mode runtime and wait for `factorysessions.DefaultSessionID` idle before `SaveFactoryForSession`, same as `startRunningSessionServiceOnDir` in `factory_test.go`.
+  - Gotchas encountered: `GetCurrentFactory` works without a live session; `SaveFactoryForSession` returns `factory session not found: ~default` if runtime was never started.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await green CI on `d864571f`.
 ---
 
-## 2026-05-30T16:30:00Z - mergeability (PR #497 pkg-file-count)
-- What was implemented: Merged `factory_engine_state_snapshot_test.go` and `runtime_session_list_test.go` into `factory_test.go` (already `backendsizecheck:ignore-file`) after backend-size split pushed `pkg/service` to 17 files; `make pkg-file-count`, `make pkg-maint`, and `make backend-size` pass locally.
-- Files changed: `pkg/service/factory_test.go` (consolidated tests); removed `factory_engine_state_snapshot_test.go`, `runtime_session_list_test.go`
+## 2026-05-30T15:40:00Z - mergeability (PR #489 CI chain)
+- What was implemented: Fixed CI vet, backend-size, pkg-maint complexity, and pkg-file-count failures on PR #489; consolidated session save implementation/tests into existing `pkg/service` files; pushed `de4d99fb`.
+- Files changed: `pkg/service/factoryvalidationtests/factory_validation_equivalence_test.go`, `pkg/service/factory_editable_definition.go`, `pkg/service/factory_test.go` (removed `factory_session_save*.go`)
 - **Learnings for future iterations:**
-  - Patterns discovered: Backend-size splits that add test files can fail `pkg-file-count` (15-file limit) even when line limits pass—consolidate into an existing `ignore-file` test file or extract a subpackage.
-  - Gotchas encountered: `cleanResolvedPath` and session-list helpers must stay in the same `package service` test bundle as `factory_runtime_mode_test.go` callers.
-  - Useful context: Follow-up on head `9e68316b` after pkg-maint cyclomatic-complexity fix.
+  - Patterns discovered: Session save helpers (`marshalUpsertNamedFactoryPayload`, `activateUpsertNamedFactorySave`, `persistUpsertNamedFactoryAtSessionRoot`) keep `saveUpsertNamedAndActivateForSession` under backend-size and pkg-maint limits; fold new `pkg/service` sources into ignored test files when at the 15-file cap.
+  - Gotchas encountered: `GetCurrentFactory` works without a live session; `SaveFactoryForSession` requires service-mode `Run` and idle `~default` session.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await full CI on `de4d99fb`.
 ---
 
-## 2026-05-30T16:44:32Z - mergeability (PR #497 main re-merge)
-- What was implemented: Merged current `origin/main` into `ralph/service-runtime-state-consolidation` at head `77399175`; resolved `pkg/service/factory.go` conflict by keeping session-registry `activateReplacementWithoutLiveRuntime` (`setStartupBundle` + `syncActiveSessionDir`) instead of legacy `swapActiveRuntime` / `startReplacementRuntime` from main; local `go test -short ./pkg/service/...`, `make pkg-maint`, `make pkg-file-count`, and `make backend-size` pass; pushed merge commit; PR now `mergeable: MERGEABLE` (awaiting required checks).
-- Files changed: `pkg/service/factory.go` (conflict resolution); merge brought in `pkg/config/load`, `pkg/config/persist`, and related main updates
+## 2026-05-30T15:05:00Z - mergeability (PR #489 deadcode)
+- What was implemented: Removed three unreachable symbols after main merge (`activateDefaultReplacementRuntime`, `requireFreshEditableFactoryVersion`, `engineStateWithRuntimeStatus`) so `make deadcode` passes on head `f57015ab` follow-up; pushed `fd6a42e8`.
+- Files changed: `pkg/service/factory_editable_definition.go`, `pkg/api/server_test_helpers_test.go`
 - **Learnings for future iterations:**
-  - Patterns discovered: After `main` advances, re-merge can conflict only in `activateReplacementWithoutLiveRuntime` when main still has pre-consolidation replacement helpers—keep branch session-registry paths, not `swapActiveRuntime`.
-  - Gotchas encountered: `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING` blocks CI even when local tests pass; push a conflict-free merge before waiting on checks.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/497 — all six PRD stories `passes: true`; prior BLOCKING merge-conflict + missing CI items addressed on head `77399175`.
+  - Patterns discovered: Session-scoped save consolidation leaves default-only helpers dead — delete them instead of updating `deadcode-baseline.txt` when the replacement path is `requireFreshEditableFactoryVersionAtRoot` + `replaceSessionRuntime`.
+  - Gotchas encountered: CI `make deadcode` runs in the Build/Lint/API job after merge commits; local `make deadcode` before push catches drift early.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await green CI on `fd6a42e8`.
 ---
 
-## 2026-05-31T02:52:00Z - ui-session-scope-context-recovery-v2-001
-- What was implemented: Verified `SessionScope` / `buildSessionScope` contract on recovery branch; tightened `isPaused` to require non-default active `rawSessionID` per PRD; added regression test when `~default` appears in `pausedSessionIDs`.
-- Files changed: `ui/src/api/session-scope.ts`, `ui/src/api/session-scope.test.ts`
+## 2026-05-30T15:25:00Z - mergeability (PR #489 integration + deadcode)
+- What was implemented: Fixed `make deadcode` on `f57015ab` follow-up; aligned browser integration tests with import confirm UX (`Confirm import`, replace-current hint) and optional PUT `mode` assertions when the harness receives wrapped bodies; pushed `fd6a42e8` + `e76d630b`.
+- Files changed: `pkg/service/factory_editable_definition.go`, `pkg/api/server_test_helpers_test.go`, `ui/integration/factory-graph-editor.integration.test.mjs`, `ui/integration/factory-import-second-session.integration.test.mjs`
 - **Learnings for future iterations:**
-  - Patterns discovered: Most U2 seam code already landed on `main`—recovery v2 starts from verifying contracts and flipping PRD per story rather than greenfield implementation.
-  - Gotchas encountered: `isPaused` must gate on `!isDefault`, not only `selectedSessionID != null`, or default-tab pause list entries incorrectly pause the stream.
-  - Useful context: Branch `ralph/ui-session-scope-context-recovery-v2`; story 002 provider/tests largely exist on `main`—verify head before re-implementing.
+  - Patterns discovered: Browser integration `onSaveCurrentFactory` should push the full harness request object (`body`, `mode`, `requestBody`, `sessionID`); graph editor save tests should not require top-level `mode` when the preview build sends legacy unwrapped factory PUT bodies.
+  - Gotchas encountered: `globalBuildState.__agentFactoryBrowserIntegrationBuildComplete` skips rebuild within a Vitest worker — stale bundles can diverge from source until a fresh process; import confirm button label is `Confirm import`, not `Activate factory`.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await green CI on `e76d630b`.
 ---
 
-## 2026-05-31T03:00:00Z - ui-session-scope-context-recovery-v2-002
-- What was implemented: Verified `DashboardSessionProvider` / `useDashboardSession` / `DashboardScreen` shell wiring and provider tests on recovery branch head; `bun run tsc` and targeted provider + public smoke tests pass without code changes.
-- Files changed: none (verification iteration)
+## 2026-05-30T23:25:00Z - mergeability (PR #489 main merge)
+- What was implemented: Merged current `origin/main` into `ralph/ui-session-factory-client` after `session-factory-save-modes` and validation-target consolidation landed; resolved 24 conflicted files by keeping the session-factory UI client on the feature side and main’s backend `pkg/service` session save; re-exported `discoverSessionNamedFactoryNames` / `resolveImportCreateFactoryName` for merged `use-factory-import-activation-target`; pushed `8c764f8e`; posted PR conversation reply.
+- Files changed: merge resolution across `pkg/service/*`, `pkg/api/servertests/*`, `ui/src/api/named-factory/api.ts`, import/bento/workflow UI seams, integration harnesses, `docs/internal/processes/development-guide-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: U2 provider seam already landed on `main` before recovery v2—story 002 is verify-and-flip-PRD unless regression found.
-  - Gotchas encountered: Local `prd.json` may show `passes: true` for story 002 while committed HEAD still carries an unrelated Ralph PRD until metadata is refreshed locally.
-  - Useful context: `DashboardScreen` wraps `DashboardScreenContent` inside `DashboardSessionProvider`; scope updates propagate when `setSelectedSessionID` runs under the provider.
+  - Patterns discovered: After S1 merges to `main`, rebase/merge conflicts often pair duplicate UI transport (main’s `saveFactoryForSessionDocument` vs branch `session-factory/api.ts`) with duplicate backend session save — keep one UI transport (`session-factory` client) and main’s consolidated `factory_editable_definition.go`.
+  - Gotchas encountered: Main may add `import-save-mode.ts` and `use-factory-import-activation-target` while the branch uses `factory-import-save-choice` + `allocateImportCreateFactoryName` in the dialog — re-export discovery helpers from `named-factory/api.ts` so merged hooks compile without reviving `POST /factories`.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489#issuecomment-4583414610 — `mergeable: MERGEABLE` on `8c764f8e`; await required CI.
 ---
 
-## 2026-05-31T03:01:00Z - ui-session-scope-context-recovery-v2-003
-- What was implemented: Verified high-traffic hooks use `useDashboardSession()` in production (factory definition/document/save, export, submit-work, snapshot composer); added `useDashboardSnapshot` regression proving tab switch reopens `/factory-sessions/session-beta/events`; fixed `dashboard-screen.tsx` import order for Biome.
-- Files changed: `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx`, `ui/src/features/dashboard/components/dashboard-screen.tsx`
+## 2026-05-30T16:35:00Z - mergeability (PR #489 ui-deadcode)
+- What was implemented: Fixed CI `make ui-deadcode` on head `8c764f8e` by removing duplicate unused `FactoryImportSaveChoice` from `import-save-mode.ts` (canonical type lives on `named-factory/api.ts`); pushed `ce693550`; posted PR conversation reply.
+- Files changed: `ui/src/api/named-factory/import-save-mode.ts`
 - **Learnings for future iterations:**
-  - Patterns discovered: Session-switch stream proof belongs in `useDashboardSnapshot.test.tsx` with `createReplayHarness` + `DashboardSessionProvider`; factory query retarget already lives in `useCurrentFactoryDefinition.test.tsx` and submit routing in `submit-work-widget.test.tsx`.
-  - Gotchas encountered: `useFactoryEventStream` intentionally receives `sessionID` as a parameter from the snapshot composer—do not import `dashboardSessionStore` into the transport hook.
-  - Useful context: Story 004 migrates bento/import to scope-fed `rawSessionID`; story 005 formalizes `DashboardSessionTestProvider` pinning.
+  - Patterns discovered: After merging main’s `import-save-mode.ts` with branch `FactoryImportSaveChoice` on `api.ts`, delete the uppercase duplicate type in `import-save-mode.ts` — deadcode only flags the file-local export, not the API-layer type.
+  - Gotchas encountered: `mergeStateStatus: BLOCKED` with `mergeable: MERGEABLE` is normal while required checks run on a fresh push.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489#issuecomment-4583425423 — await full CI on `ce693550`.
 ---
 
-## 2026-05-31T02:55:00Z - ui-session-scope-context-recovery-v2-002
-- What was implemented: Verified `DashboardSessionProvider` subscribes to `selectedSessionID` and `pausedSessionIDs`, memoizes `buildSessionScope`, and wraps `DashboardScreen` inner content; confirmed `useDashboardSession` throws outside the provider; provider and screen tests pass with `make typecheck`.
-- Files changed: none (verification iteration; implementation already on `main` at head `cfb0e8bb`)
+## 2026-05-30T16:52:00Z - mergeability (PR #489 coverage)
+- What was implemented: Fixed UI Coverage CI on `ce693550` — corrected `react-flow-current-activity-card-editor-validation.test.tsx` connect-mutation assertion from `ON_REJECTION` to `ON_FAILURE` to match `disconnectedFailureRoute` fixture (eliminated 10s timeout); pushed `298fdcd7`.
+- Files changed: `ui/src/features/workflow-activity/hooks/react-flow-current-activity-card-editor-validation.test.tsx`
 - **Learnings for future iterations:**
-  - Patterns discovered: `DashboardSessionScopeProvider` accepts a prebuilt scope for tests/Storybook; production shell uses `DashboardSessionProvider` which owns the store subscription.
-  - Gotchas encountered: Recovery v2 story 002 needs no new commit when `main` already contains the provider seam—verify tests and flip PRD only.
-  - Useful context: Next story 003 should confirm high-traffic hooks use `useDashboardSession` in production (many already do on `main`).
+  - Patterns discovered: When a validation mock fixture uses `ON_FAILURE`, initial `waitFor` assertions must not still expect `ON_REJECTION` from an earlier test variant — mismatches time out at Vitest default (~10s) and fail the whole coverage lane.
+  - Gotchas encountered: `bun run test -- <file>` still runs integration tests per `package.json`; use `bunx vitest run <file>` for a single unit file.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await CI on `298fdcd7`.
 ---
 
-## 2026-05-31T03:04:00Z - ui-session-scope-context-recovery-v2-004
-- What was implemented: Verified `DashboardBento` reads `rawSessionID` and `sessionID` from `useDashboardSession()` and passes `rawSessionID` into `useCurrentActivityImportController` and `useDashboardBentoImport`; confirmed bento/import/workflow-activity production modules do not import `dashboardSessionStore` (tabs remain store-backed via `useDashboardSessionTabsState`); added regression test spying import-controller options for scoped `sessionID`.
-- Files changed: `ui/src/features/bento/components/dashboard-bento.test.tsx`
+## 2026-05-30T17:05:00Z - mergeability (PR #489 main + CI)
+- What was implemented: Merged `origin/main` into branch (`c0e458da`) after `mergeable_state: dirty`; aligned `factory-document-save-mocks.ts` stale/not-idle copy with `sessionFactoryOperatorErrorMessages`; updated frontend deadcode baseline for main harness exports; prior fixes `ce693550` (ui-deadcode) and `298fdcd7` (editor validation test).
+- Files changed: merge from main (dashboard hooks, testing harnesses, config load/persist), `ui/src/testing/factory-document-save-mocks.ts`, `docs/internal/development/frontend-deadcode-baseline.json`
 - **Learnings for future iterations:**
-  - Patterns discovered: U2 bento/import seam largely landed on `main` via factory-import-second-session—recovery v2 story 004 is verify-and-add-scope proof unless regression found.
-  - Gotchas encountered: Mock `useCurrentActivityImportController` as `vi.fn` when asserting call options from `DashboardBento`; static mock factories hide `sessionID` threading.
-  - Useful context: Story 005 formalizes `DashboardSessionTestProvider` pinning; story 006 adds Biome import boundaries.
+  - Patterns discovered: When `gh pr view` shows `mergeable_state: dirty` with no new CI run, merge `origin/main` before waiting — pushes alone do not clear conflict state.
+  - Gotchas encountered: Main’s `factory-document-save-mocks` defaults still said “Refresh the graph” until aligned with session-factory operator copy.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await CI on merge head after push.
 ---
 
-## 2026-05-31T03:06:00Z - ui-session-scope-context-recovery-v2-005
-- What was implemented: Verified `DashboardSessionTestProvider` (default `~default`, optional `sessionID`/`paused`), `renderWithDashboardSessionTest`, `wrapWithDashboardSessionTest`, `renderApp({ sessionID })`, Storybook `withDashboardStoryRuntime` + `dashboardApi.sessionID`, and `ui/src/testing/index.ts` re-exports; provider and utils tests assert normalized paths for non-default sessions; `bun run tsc` and targeted vitest pass without code changes.
-- Files changed: none (verification iteration)
+## 2026-05-30T17:35:00Z - mergeability (PR #489 coverage)
+- What was implemented: Fixed UI Coverage CI on head `09040ee8` (92.89% vs 93.05% threshold) by expanding `session-factory` and `named-factory` API tests for operator-error branches, transport failures, invalid documents, `discoverSessionNamedFactoryNames`, and create-new-named activation edge paths; local `make test-ui-coverage` reports 93.07% statements / 93.06% lines.
+- Files changed: `ui/src/api/session-factory/api.test.ts`, `ui/src/api/session-factory/operator-errors.test.ts`, `ui/src/api/named-factory/api.test.ts`, `ui/src/api/named-factory/import-save-mode.test.ts`
 - **Learnings for future iterations:**
-  - Patterns discovered: Test pinning uses `DashboardSessionScopeProvider` with a prebuilt `buildSessionScope` scope—no store seeding when only identity matters; `paused` adds the pinned `sessionID` to `pausedSessionIDs` for stream pause assertions.
-  - Gotchas encountered: Story 005 seam landed on `main` in commit `f48bc735` (original U2 story 007)—recovery v2 is verify-and-flip-PRD unless regression found.
-  - Useful context: Story 006 enforces Biome `noRestrictedImports` and `dashboard-session-scope-import-boundaries.md`; story 007 adds session-switch Storybook regression.
+  - Patterns discovered: After main merge, global coverage can miss by ~0.15% even when feature stories pass — target `named-factory/api.ts` and `session-factory/api.ts` error/transport branches before lowering thresholds.
+  - Gotchas encountered: Invalid version metadata on GET may surface as `INVALID_FACTORY_DEFINITION` (not `INTERNAL_ERROR`) once `normalizeFactoryDefinition` runs.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — pushed `274d3b07`; await required CI.
 ---
 
-## 2026-05-31T03:08:00Z - ui-session-scope-context-recovery-v2-006
-- What was implemented: Verified `dashboard-session-scope-import-boundaries.md` documents allowed production importers and the `useDashboardSession()` default rule; `ui/biome.jsonc` `noRestrictedImports` pattern and allowlist overrides match the doc; Biome lint on production feature modules (bento, submit-work, export, import, factory hooks, dashboard components) reports no store-import violations; `bun run tsc` passes.
-- Files changed: none (verification iteration)
+## 2026-05-30T18:45:00Z - mergeability (PR #489 main re-merge)
+- What was implemented: Merged `origin/main` again after PR returned `mergeable: CONFLICTING`; kept `FactoryImportConfirmInput` import dialog + `useDashboardBentoSnapshot`, fixed `use-factory-import-save-choice` literals to `replace_current`, merged development-guide rows; pushed `b8d23c6c` on top of coverage fix `274d3b07`.
+- Files changed: `ui/src/features/bento/components/dashboard-bento.tsx`, `ui/src/features/import/hooks/use-factory-import-save-choice.ts`, `docs/internal/processes/development-guide-relevant-files.md`, plus main-side handler splits and dashboard hooks from merge.
 - **Learnings for future iterations:**
-  - Patterns discovered: Production store imports are limited to `dashboard-session-provider.tsx` and `use-dashboard-session-tabs-state.ts`; test/story overrides in biome use `**/*.test.tsx` and `**/*.stories.tsx`—per-file `biome lint` respects overrides even when folder scans with `--only` appear to flag tests.
-  - Gotchas encountered: Story 006 seam landed on `main` with the original U2 work—recovery v2 is verify-and-flip-PRD unless a new production module imports the store outside the allowlist.
-  - Useful context: Story 007 (`App.session-switching.stories.tsx`) needs `storybook:test-runner:ci` with a running static Storybook on port 6008.
+  - Patterns discovered: After main advances, prefer `useDashboardBentoSnapshot(sessionID)` over inline `useFactoryTimelineStore` in bento while keeping branch-specific import dialog props (`currentSessionFactoryName`, `FactoryImportConfirmInput`).
+  - Gotchas encountered: Main’s `use-factory-import-save-choice` may still default to uppercase `REPLACE_CURRENT` while `named-factory/api.ts` exports lowercase `replace_current` | `create_new_named`.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await CI on `b8d23c6c`.
 ---
 
-## 2026-05-31T03:16:00Z - ui-session-scope-context-recovery-v2-007
-- What was implemented: Verified/finalized `App.session-switching.stories.tsx` on head `14dc8a66`: `SessionSwitchingStory` seeds layout with `workGraph` marked `hidden: true`, reloads storage, gates render, and uses height decorator; Storybook vitest `Verification` passes (default→beta tab, session-scoped labels, submit-draft reset).
-- Files changed: `ui/src/App.session-switching.stories.tsx` (committed as `14dc8a66`)
+## 2026-05-31T19:30:00Z - mergeability (PR #489 main merge)
+- What was implemented: Merged `origin/main` into `ralph/ui-session-factory-client` after BLOCKING review (`mergeable: CONFLICTING`, `mergeStateStatus: DIRTY`); resolved conflicts in `development-guide-relevant-files.md`, removed duplicate `pkg/api/server_session_scoping_test.go` (coverage lives in `server_factory_sessions_test.go` on main), kept ui-session-factory-client PRD/tracking files.
+- Files changed: merge from main (handler decomposition, `pkg/service/factorysave`, UI coverage sharding, dashboard hooks); conflict resolution in `docs/internal/processes/development-guide-relevant-files.md`; deleted `pkg/api/server_session_scoping_test.go`
 - **Learnings for future iterations:**
-  - Patterns discovered: Mark `DASHBOARD_WIDGET_IDS.workGraph` as `hidden: true` in persisted layout—filtering it out of storage is insufficient because `mergeDashboardLayout` re-merges from `DEFAULT_DASHBOARD_LAYOUT`.
-  - Gotchas encountered: `render: () => <App />` without `SessionSwitchingStory` leaves work-graph mounted and fails vitest with React Flow error 004.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/514 — await full CI shard completion before `<COMPLETE>`.
+  - Patterns discovered: When `main` deletes `server_session_scoping_test.go` in favor of `server_factory_sessions_test.go`, drop the branch duplicate on merge—session PUT tests already use `saveFactoryForSessionRequestBody` on main.
+  - Gotchas encountered: `prd.json`/`progress.txt` conflicts with unrelated Ralph PRDs on `main`—restore branch PRD from pre-merge HEAD, not merge markers.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — BLOCKING merge-conflict feedback on head `6f31eb3f`.
 ---
 
-## 2026-05-31T00:00:00Z - consolidate-cli-factory-save-update-from-file-001
-- What was implemented: Added `persistFromFile` shared core in save mode (validation, payload read, `LoadFromCanonicalJSON`, `PersistNamedFactory`, optional `WriteCurrentFactoryPointer`); refactored `SaveFromFile` into a thin delegator preserving human/JSON output and save-specific error mapping.
-- Files changed: `pkg/cli/factory/persist_from_file.go`, `pkg/cli/factory/save.go`, `docs/internal/processes/development-guide-relevant-files.md`
+## 2026-05-31T23:25:00Z - mergeability (PR #489 main + coverage)
+- What was implemented: Merged `origin/main` twice after BLOCKING UI Coverage on `bf64f74e`; kept unified import activation + `operator-errors` on session GET/PUT; aligned `getCurrentFactory` via `getCurrentFactoryDocument`; fixed named-factory error tests and `resolveNamedFactoryAPIErrorCode` for `FACTORY_ALREADY_EXISTS`; pushed `214e39a3` + `36ffecc9`.
+- Files changed: merge from main (document-plane export, prompt-template paths), `ui/src/api/session-factory/api.ts`, `ui/src/api/named-factory/api.ts`, `ui/src/api/named-factory/api.additional.test.ts`, `ui/src/api/named-factory/api.test.ts`
 - **Learnings for future iterations:**
-  - Patterns discovered: Keep mode enum and `persistFromFileNamedFactory` switch in `persist_from_file.go`; leave success formatters and `renderSaveFromFileError` / `renderUpdateFromFileError` on the public wrappers until story 003 unifies errors.
-  - Gotchas encountered: PRD `branchName` is `ralph/consolidate-cli-factory-save-update-from-file` — create/switch from the worktree branch name if they differ.
-  - Useful context: Story 002 adds `persistFromFileModeUpdate` and delegates `UpdateFromFile`; `update.go` still duplicates the flow until then.
+  - Patterns discovered: After `ui-api-module-cleanup` on `main`, keep branch `activateImportedFactoryForSession({ choice, createFactoryName })` — dialog/hooks use `FactoryImportConfirmInput`, not main's split activation functions.
+  - Gotchas encountered: Export PNG tests fail if `getCurrentFactory` returns `version`; session GET mocks need `version` for validation.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — `mergeable: MERGEABLE` on `36ffecc9`; await UI Coverage merge CI.
 ---
 
-## 2026-05-30T20:26:00Z - mergeability (PR #514 main re-merge)
-- What was implemented: Merged `origin/main` into `ralph/ui-session-scope-context-recovery-v2` to clear `mergeStateStatus: DIRTY`; resolved `prd.json`/`progress.txt` conflicts keeping recovery v2 PRD and combined codebase patterns; prior CI on `14dc8a66` was green (all required checks success).
-- Files changed: merge brought main updates (wire-smoke, `persistFromFile`, compose package); conflict resolution in `prd.json`, `progress.txt`
+## 2026-05-31T23:55:00Z - mergeability (PR #489 deadcode + import tests)
+- What was implemented: Fixed CI `make ui-deadcode` by removing stale `workerDenseFactoryDefinitionDocument` from `frontend-deadcode-baseline.json`; updated `react-flow-current-activity-card.test.tsx` import activation cases to use **Confirm import**, `FactoryImportConfirmInput`, and `dashboard-fixture` existing-name set from `semanticWorkflowDashboardSnapshot`.
+- Files changed: `docs/internal/development/frontend-deadcode-baseline.json`, `ui/src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx`
 - **Learnings for future iterations:**
-  - Patterns discovered: `mergeStateStatus: DIRTY` on an otherwise green PR usually means main advanced—re-merge before `<COMPLETE>` even when all stories pass.
-  - Gotchas encountered: Main may land unrelated Ralph `prd.json`/`progress.txt` edits; always keep branch PRD (`--ours`) during merge conflict resolution.
-  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/514 — push merge commit and await CI before `<COMPLETE>`.
+  - Patterns discovered: `createFactoryImportConfirmInput` defaults assume `alpha` session name — override `existingFactoryNames` when the snapshot factory name is `dashboard-fixture` from `factoryFromDashboardTopology`.
+  - Gotchas encountered: Import confirm action label is **Confirm import**; tests still querying **Activate factory** fail only in full shard/coverage runs.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489#issuecomment-4585193777 — pushed `5e344a6d`; await required CI.
 ---
 
-## 2026-05-30T20:43:56Z - ui-dashboard-stream-timeline-split-recovery-v2-001
-- What was implemented: Verified `useFactoryEventStream` and `dashboard-event-stream` on recovery branch head (`origin/main`): session-scoped `/factory-sessions/{id}/events` URL, paused offline copy when `enabled` is false, `refreshToken` reopen, resume-after-pause, null `sessionID` guard, `FACTORY_CHANGE` query sync, and offline-before-first-event; `bun run tsc` and 17 targeted vitest cases pass without code changes.
-- Files changed: none (verification iteration)
+## 2026-05-31T01:20:00Z - mergeability (PR #489 coverage + copy)
+- What was implemented: All PRD stories already `passes: true`; fixed UI Coverage merge failures on `d57592af`—stale import preview copy in `react-flow-current-activity-card.test.tsx` (**before confirming import**), expanded session/named-factory/factory-validation API tests for global threshold; split tests across files for Biome `noExcessiveLinesPerFunction`; pushed through `09d5a817`.
+- Files changed: `ui/src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx`, `ui/src/api/session-factory/*.test.ts`, `ui/src/api/named-factory/api.test.ts`, `ui/src/api/factory-validation/api.errors.test.ts` (new)
 - **Learnings for future iterations:**
-  - Patterns discovered: U8 transport seam already merged on `main`—recovery v2 story 001 is verify-and-flip-PRD like session-scope recovery v2.
-  - Gotchas encountered: Worktree may lack `ui/node_modules` until `bun install`; use `bun run vitest run` from `ui/` not `bunx vitest` without install.
-  - Useful context: Branch `ralph/ui-dashboard-stream-timeline-split-recovery-v2` tracks `origin/main` at start; story 002 next (`useDashboardSessionLifecycle`).
----
-
-## 2026-05-30T20:47:04Z - ui-dashboard-stream-timeline-split-recovery-v2-002
-- What was implemented: Verified `useDashboardSessionLifecycle` and `dashboard-session-lifecycle` on `main`; strengthened tests for first-mount skip (`refreshToken` 0), single `removeQueries` per session switch, unchanged session-key no-op, and `resetDashboardSessionScopedState` one-shot reset of timeline/stream/selection/factory-definition cache.
-- Files changed: `ui/src/features/dashboard/lib/dashboard-session-lifecycle.test.ts`, `ui/src/features/dashboard/hooks/useDashboardSessionLifecycle.test.tsx`
-- **Learnings for future iterations:**
-  - Patterns discovered: `shouldResetDashboardSessionScopedState` gates the hook effect—first mount with `previousSessionKey === null` and `refreshToken === 0` skips reset; spy `queryClient.removeQueries` after `mockClear()` post-mount to prove duplicate-free invalidation.
-  - Gotchas encountered: Biome `noExcessiveLinesPerFunction` caps `describe` at 100 lines—split hook tests into nested describes and shared `seedTimelineAtTick` / `renderLifecycleFromSessionStore` helpers.
-  - Useful context: Story 003 next (`useDashboardWorldView` / `deriveDashboardWorldViewShellState`).
----
-
-## 2026-05-30T20:49:11Z - ui-dashboard-stream-timeline-split-recovery-v2-003
-- What was implemented: Verified `useDashboardWorldView` and `deriveDashboardWorldViewShellState` on branch head: `worldViewCache[selectedTick]` snapshot projection, shell flags from stream status + tick 0 + `eventCount` (not snapshot truthiness), and unit/hook tests for connecting, offline-before-first-event, and post-first-event paths; `bun run tsc` and 6 targeted vitest cases pass without code changes.
-- Files changed: none (verification iteration)
-- **Learnings for future iterations:**
-  - Patterns discovered: Pure shell derivation stays in `dashboard-world-view.ts`; hook only wires timeline/stream/session stores—prove transitions in `deriveDashboardWorldViewShellState` tests, integration smoke in `useDashboardWorldView.test.tsx`.
-  - Gotchas encountered: Default stream store starts `connecting`, so hook tests with a selected session see `isInitialLoading: true` before any EventSource opens.
-  - Useful context: Story 004 next (thin `useDashboardSnapshot` composer ≤80 LOC and `useDashboardSnapshot.test.tsx`).
----
-
-## 2026-05-30T20:51:39Z - ui-dashboard-stream-timeline-split-recovery-v2-004
-- What was implemented: Verified thin `useDashboardSnapshot` composer (62 LOC) wires `useDashboardSessionLifecycle`, `useFactoryEventStream` (`enabled: rawSessionID != null && !isPaused`), `useDashboardWorldView`, queued timeline append, and opt-in `useDashboardTimelineMemoryDebug`; `DashboardScreen` still drives loading/error/empty/success from snapshot shell flags with `locale` and `refreshToken` from `useDashboardBentoStore`; `DashboardBento` keeps timeline ownership via `useDashboardBentoSnapshot` / timeline store (no stream transport in bento). `bun run tsc`, 11 targeted vitest cases (`useDashboardSnapshot`, `dashboard-screen`, public smoke), and `App.session-switching.stories.tsx` Storybook pass without code changes.
-- Files changed: none (verification iteration)
-- **Learnings for future iterations:**
-  - Patterns discovered: Composer returns only `{ snapshot, streamState, isInitialLoading, error }` from world view—screen gates bento on `snapshot` truthiness for empty state; refresh proof needs seeded `worldViewCache` plus `rerender({ refreshToken: 1 })` and `replayHarness.emitSnapshot` after lifecycle reset.
-  - Gotchas encountered: Dev-browser skill was not available in this environment; Storybook `App.session-switching` plus hook replay harness are the automated cross-session/refresh proof for story 004 browser AC.
-  - Useful context: Story 005 next (`useDashboardTimelineMemoryDebug` isolation and `?afMemoryDebug=1` on/off tests).
----
-
-## 2026-05-31T03:54:00Z - ui-dashboard-stream-timeline-split-recovery-v2-005
-- What was implemented: Verified `useDashboardTimelineMemoryDebug` isolation on branch head: hook no-ops unless `readFactoryTimelineDebugOptions().memoryDebug` is true (`?afMemoryDebug=1` or `true` via `parseBooleanFlag`); default sessions skip `window.__agentFactoryTimelineDebug__` and `agentFactory.timelineDebugSummary` localStorage; `useDashboardSnapshot` is the sole composer caller; `useDashboardTimelineMemoryDebug.test.tsx` (off/on/zero-events) and `useDashboardSnapshot.test.tsx` streamed-events case prove default-user safety. `bun run tsc` and 6 targeted vitest cases pass without code changes.
-- Files changed: none (verification iteration)
-- **Learnings for future iterations:**
-  - Patterns discovered: Timeline memory debug is opt-in only through `debugOptions.memoryDebug` gates in `useDashboardTimelineMemoryDebug`—transport (`useFactoryEventStream`) reads the same `readFactoryTimelineDebugOptions()` for compaction but does not install globals or persist summaries.
-  - Gotchas encountered: Memory summary persistence waits for `eventCount > 0` even when globals install immediately with `memoryDebug` on—assert localStorage separately from global install in tests.
-  - Useful context: Story 006 next (dashboard stream/timeline shell regression: session tab switch, pause/resume, loading-after-first-event via `App.session-switching.stories.tsx` or app-shell tests).
----
-
-## 2026-05-31T04:05:00Z - ui-dashboard-stream-timeline-split-recovery-v2-006
-- What was implemented: Added `App.session-stream.test.tsx` app-shell regression for loading shell before first `message` event, session-scoped stream URL retarget with prior `MockEventSource` closed and timeline reset on `setSelectedSessionID`, and non-default session pause/resume stream toggles; extended `app-shell-test-utils` with `fetchRequestPath`, `factorySessions`, `seedTimelineFromSnapshot`, and `MockEventSource.closed` tracking.
-- Files changed: `ui/src/App.session-stream.test.tsx`, `ui/src/testing/app-shell-test-utils.tsx`, `docs/internal/processes/development-guide-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: `openFactoryEventStream` only listens for SSE `message` events—`MockEventSource.emit("snapshot", …)` seeds the timeline store directly but does not increment `events.length`, so shell loading may clear while scrubber progress still looks empty until a `message` event arrives.
-  - Gotchas encountered: Default/`~default` sessions ignore pause in `buildSessionScope`—pause/resume stream proofs must select a non-default tab first; after session switch the shell can return to loading until the new session’s first event, so retarget assertions should use store/stream hooks rather than querying tabs during loading.
-  - Useful context: `App.session-switching.stories.tsx` remains the Storybook cross-session selection/submit-draft proof; story 006 adds Vitest app-shell stream/timeline/scrubber coverage alongside it.
----
-
-## 2026-05-30T21:25:46Z - PR mergeability (blocking review on #515)
-- What was implemented: Addressed BLOCKING PR feedback—split `app-shell-test-utils.tsx` (390 lines) into `app-shell-session-stream-test-utils.ts` and `app-shell-timeline-seed-utils.ts`; added app-shell refresh regression via `useDashboardBentoStore.incrementRefreshToken()`; extracted shared helpers to `App.session-stream.test-helpers.ts`.
-- Files changed: `ui/src/testing/app-shell-test-utils.tsx`, `ui/src/testing/app-shell-session-stream-test-utils.ts`, `ui/src/testing/app-shell-timeline-seed-utils.ts`, `ui/src/App.session-stream.test.tsx`, `ui/src/App.session-stream.test-helpers.ts`
-- **Learnings for future iterations:**
-  - Patterns discovered: When extending `app-shell-test-utils.tsx`, add session-stream or timeline seed code to the focused modules first—Biome `noExcessiveLinesPerFile` applies at 450 lines for that file.
-  - Gotchas encountered: Bento `incrementRefreshToken` is the production path that bumps `refreshToken` into `useDashboardSnapshot`.
-  - Useful context: PR #515 blocking review; commit `ffad4393`.
----
-
-## 2026-05-31T04:38:00Z - PR mergeability (main reconcile on #515)
-- What was implemented: Merged `origin/main` into the branch to clear `mergeable: CONFLICTING`; resolved `prd.json` / `prd.md` / `progress.txt` conflicts keeping U8 recovery metadata and combined progress logs; re-validated `App.session-stream.test.tsx` (4 tests).
-- Files changed: merge commits `06283bc5` and follow-up second-pass merge
-- **Learnings for future iterations:**
-  - Patterns discovered: `mergeStateStatus: DIRTY` / `CONFLICTING` after green CI usually means `main` advanced—re-merge before `<COMPLETE>`.
-  - Gotchas encountered: Prefer `git merge origin/main` over rebase when chore commits touch `prd.json`.
-  - Useful context: PR #515 head after second merge push.
----
-
-## 2026-05-30T21:06:27Z - extract-api-factory-strict-json-decode-helper-001
-- What was implemented: Added generic `decodeStrictJSON[T any]` in `handlers_common.go` with unit tests for valid object, unknown field, malformed JSON, empty body, and multi-object (`{"name":"a"}{}`) inputs.
-- Files changed: `pkg/api/handlers_common.go`, `pkg/api/handlers_common_test.go`
-- **Learnings for future iterations:**
-  - Patterns discovered: Trailing second JSON object with fields fails `ensureSingleJSONObject` via `json: unknown field` on `struct{}{}`; the `request payload must contain one JSON object` path needs a second object that decodes cleanly (e.g. `{}`).
-  - Gotchas encountered: PRD `branchName` is `ralph/extract-api-factory-strict-json-decode-helper` — create from worktree branch name if they differ.
-  - Useful context: Story 002 should refactor the four factory decoders in `handlers_factory.go` to thin wrappers; factory decoders still duplicate inline read/decode/guard logic until then.
----
-
-## 2026-05-30T21:08:04Z - extract-api-factory-strict-json-decode-helper-002
-- What was implemented: Refactored `decodeNamedFactoryBody`, `decodeOpenFactorySessionBody`, `decodeSaveCurrentFactoryBody`, and `decodePromptTemplateValidationRequestBody` to thin wrappers delegating to `decodeStrictJSON`; removed duplicated inline read/decode/trailing-guard logic and unused `bytes`/`encoding/json` imports from `handlers_factory.go`.
-- Files changed: `pkg/api/handlers_factory.go`
-- **Learnings for future iterations:**
-  - Patterns discovered: All four factory decoders unify on `ensureSingleJSONObject` via the shared helper (previously `decodeSaveCurrentFactoryBody` and `decodeNamedFactoryBody` inlined the trailing `decoder.Decode` guard).
-  - Gotchas encountered: No PR exists yet for this branch; story 003 adds HTTP regression tests for endpoint decode behavior.
-  - Useful context: `go test ./pkg/api/...` passes with existing factory handler tests unchanged.
----
-
-## 2026-05-31T00:00:00Z - consolidate-petri-net-test-assertions-001
-- What was implemented: Added `pkg/testutil/petriassert.go` with exported `AssertNoTransitionExhaustion`, `AssertGuardedLoopBreakerTransition`, and `PetriTransitionAssertOptions`; unit tests cover pass paths and nil-transition skipping for exhaustion checks.
-- Files changed: `pkg/testutil/petriassert.go`, `pkg/testutil/petriassert_test.go`
-- **Learnings for future iterations:**
-  - Patterns discovered: Exhaustion fatals use `unexpected TransitionExhaustion transition %q in %s` with caller-supplied context; loop-breaker assertions use maptests-style granular guard/place messages; replay’s combined guard fatalf is not replicated in the shared helper.
-  - Gotchas encountered: Go subtests that call `t.Fatal` still fail the parent test—prove failure paths via migrated maptests/replay tests rather than expect-failure subtests in `pkg/testutil`.
-  - Useful context: Stories 002/003 migrate `config_mapper_test.go` and `effective_config_test.go` call sites and delete local helpers in `config_mapper_resources_test.go` / `effective_config_test.go`.
----
-
-## 2026-05-31T12:00:00Z - consolidate-petri-net-test-assertions-002
-- What was implemented: Migrated `config_mapper_test.go` to `testutil.AssertNoTransitionExhaustion` (with `ExhaustionContext: "customer-authored mapping"`) and `testutil.AssertGuardedLoopBreakerTransition`; removed duplicate `assertNoTransitionExhaustion` and `assertGuardedLoopBreakerTransition` from `config_mapper_resources_test.go`.
-- Files changed: `pkg/config/maptests/config_mapper_test.go`, `pkg/config/maptests/config_mapper_resources_test.go`
-- **Learnings for future iterations:**
-  - Patterns discovered: Loop-breaker tests keep package-local pre-checks (e.g. `loopBreaker.WorkerType`) before calling shared arc/guard assertions; exhaustion context string must match prior maptests wording exactly.
-  - Gotchas encountered: Shared exhaustion helper skips nil transitions (safer than the removed local helper); behavior unchanged for non-nil transitions in these tests.
-  - Useful context: Story 003 mirrors this for `pkg/replay/configtests/effective_config_test.go` with context `replay-mapped customer config`.
----
-
-## 2026-05-30T22:10:03Z - consolidate-petri-net-test-assertions-003
-- What was implemented: Migrated `effective_config_test.go` to `testutil.AssertGuardedLoopBreakerTransition` and `testutil.AssertNoTransitionExhaustion` with `ExhaustionContext: "replay-mapped customer config"`; deleted local `assertReplayGuardedLoopBreakerTransition` and `assertReplayHasNoTransitionExhaustion`.
-- Files changed: `pkg/replay/configtests/effective_config_test.go`
-- **Learnings for future iterations:**
-  - Patterns discovered: Replay guarded-loop-breaker test keeps package-local generated/runtime guard checks before shared Petri arc assertions, same as maptests story 002.
-  - Gotchas encountered: Shared loop-breaker failure messages differ slightly from removed replay-local helper wording; call-site transition/place/guard IDs unchanged.
-  - Useful context: All three PRD stories complete; open PR `consolidate-petri-net-test-assertions` if none exists after push.
+  - Patterns discovered: UI Coverage merge lane fails on stale dialog copy assertions even when per-shard tests pass; global merged threshold (~93.04%) can lag by ~0.03% after API-only tests—`factory-validation/api.ts` error branches move the needle when session-factory tests plateau.
+  - Gotchas encountered: Split new tests into sibling files (`api.errors.test.ts`, `api.get-http-errors.test.ts`) before `describe` blocks exceed 100 lines; `getCurrentFactory` transport errors surface as `NETWORK_ERROR`, not `INTERNAL_ERROR`, when mapping through session-factory.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await UI Coverage on `09d5a817` (was 93.01% vs 93.04% on `aa6f039c`).
 ---
