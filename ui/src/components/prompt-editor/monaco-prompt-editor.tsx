@@ -1,19 +1,14 @@
 import Editor, { loader } from "@monaco-editor/react";
-import { useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
-import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
-
+import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
+import { cn } from "../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
-import type {
-  EditableWorkstationPromptDiagnostic,
-  EditableWorkstationPromptHelpState,
-} from "../lib/detail-card-types";
+} from "../ui/dashboard-typography";
 import {
   buildWorkstationPromptMarkers,
   isInsideTemplate,
@@ -21,7 +16,11 @@ import {
   registerWorkstationPromptMonaco,
   WORKSTATION_PROMPT_LANGUAGE_ID,
   WORKSTATION_PROMPT_THEME_ID,
-} from "./workstation-prompt-monaco";
+} from "./monaco-prompt-setup";
+import type {
+  PromptEditorAutocompleteState,
+  PromptEditorDiagnostic,
+} from "./prompt-editor-types";
 
 const PROMPT_EDITOR_OPTIONS = {
   automaticLayout: true,
@@ -55,6 +54,11 @@ const PROMPT_EDITOR_OPTIONS = {
   wrappingIndent: "same",
 } as const;
 
+export const CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH =
+  "inmemory://model/current-selection/workstation-prompt";
+export const FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH =
+  "inmemory://model/factory-graph-add/workstation-prompt";
+
 let monacoSetupState: "error" | "ready" = "ready";
 
 if (import.meta.env.MODE !== "test") {
@@ -66,24 +70,28 @@ if (import.meta.env.MODE !== "test") {
   }
 }
 
-interface WorkstationPromptEditorProps {
+interface MonacoPromptEditorProps {
   ariaLabel: string;
   ariaDescribedBy?: string;
   ariaInvalid?: boolean;
-  autocompleteState: EditableWorkstationPromptHelpState;
+  autocompleteState: PromptEditorAutocompleteState;
   className?: string;
-  diagnostics?: EditableWorkstationPromptDiagnostic[];
+  diagnostics?: PromptEditorDiagnostic[];
   hasDiagnostics?: boolean;
   loadingMessage: string;
+  modelPath: string;
   onChange: (value: string) => void;
   onMount?: (editorInstance: MonacoEditorAPI.IStandaloneCodeEditor) => void;
   onReadyChange?: (isReady: boolean) => void;
-  onScrollChange?: (scrollPosition: { scrollLeft: number; scrollTop: number }) => void;
+  onScrollChange?: (scrollPosition: {
+    scrollLeft: number;
+    scrollTop: number;
+  }) => void;
   startupErrorMessage: string;
   value: string;
 }
 
-export function WorkstationPromptEditor({
+export function MonacoPromptEditor({
   ariaLabel,
   ariaDescribedBy,
   ariaInvalid = false,
@@ -92,13 +100,14 @@ export function WorkstationPromptEditor({
   diagnostics = [],
   hasDiagnostics = false,
   loadingMessage,
+  modelPath,
   onChange,
   onMount,
   onReadyChange,
   onScrollChange,
   startupErrorMessage,
   value,
-}: WorkstationPromptEditorProps) {
+}: MonacoPromptEditorProps) {
   const autocompleteStateRef = useRef(autocompleteState);
   const onChangeRef = useRef(onChange);
   const editorRef = useRef<MonacoEditorAPI.IStandaloneCodeEditor | null>(null);
@@ -181,7 +190,7 @@ export function WorkstationPromptEditor({
         onScrollChange,
       })}
       options={{ ...options, ariaLabel }}
-      path="inmemory://model/current-selection/workstation-prompt"
+      path={modelPath}
       theme={WORKSTATION_PROMPT_THEME_ID}
       value={value}
       width="100%"
@@ -202,12 +211,15 @@ function createPromptEditorMountHandler({
   onMount,
   onScrollChange,
 }: {
-  autocompleteStateRef: RefObject<EditableWorkstationPromptHelpState>;
+  autocompleteStateRef: RefObject<PromptEditorAutocompleteState>;
   editorRef: RefObject<MonacoEditorAPI.IStandaloneCodeEditor | null>;
   monacoRef: RefObject<typeof import("monaco-editor") | null>;
   onChangeRef: RefObject<(value: string) => void>;
   onMount?: (editorInstance: MonacoEditorAPI.IStandaloneCodeEditor) => void;
-  onScrollChange?: (scrollPosition: { scrollLeft: number; scrollTop: number }) => void;
+  onScrollChange?: (scrollPosition: {
+    scrollLeft: number;
+    scrollTop: number;
+  }) => void;
 }) {
   return (
     editorInstance: MonacoEditorAPI.IStandaloneCodeEditor,
@@ -299,7 +311,12 @@ function PromptEditorFallbackState({
       data-monaco-editor-fallback="workstation-prompt"
       role={status}
     >
-      <p className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p
+        className={cn(
+          "m-0 text-af-text-muted",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
         {message}
       </p>
       <pre
