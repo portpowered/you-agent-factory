@@ -785,3 +785,22 @@ func DeleteNamedFactory(rootDir, name string) error {
 	}
 	return nil
 }
+
+func ensureDefaultInputChannelDirectories(targetDir string, cfg *interfaces.FactoryConfig) error {
+	if cfg == nil {
+		return nil
+	}
+
+	for _, workType := range cfg.WorkTypes {
+		workTypeName := strings.TrimSpace(workType.Name)
+		if workTypeName == "" {
+			continue
+		}
+
+		channelDir := filepath.Join(targetDir, interfaces.InputsDir, workTypeName, interfaces.DefaultChannelName)
+		if err := os.MkdirAll(channelDir, 0o755); err != nil {
+			return fmt.Errorf("create inputs/%s/%s directory: %w", workTypeName, interfaces.DefaultChannelName, err)
+		}
+	}
+	return nil
+}
