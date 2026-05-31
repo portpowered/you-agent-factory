@@ -5,9 +5,10 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import type { WorkChartModel } from "../lib/trends";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { D3CompletionInformationCard } from "./d3-information-card";
 
 const populatedTrend: WorkChartModel = {
@@ -122,6 +123,40 @@ describe("D3CompletionInformationCard", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("exposes exactly one bento header with the card title outside the chart region", () => {
+    const messages = getWorkOutcomeMessages();
+    render(
+      <D3CompletionInformationCard
+        headerAction={<button type="button">Remove chart</button>}
+        model={populatedTrend}
+        widgetId="work-outcome-chart"
+      />,
+    );
+
+    const card = screen.getByRole("article", {
+      name: messages.chart.cardTitle,
+    });
+    const headers = card.querySelectorAll("header");
+    expect(headers).toHaveLength(1);
+
+    const cardHeader = headers[0] as HTMLElement;
+    const titleHeading = within(cardHeader).getByRole("heading", {
+      level: 3,
+      name: messages.chart.cardTitle,
+    });
+    expect(titleHeading.className).toContain(DASHBOARD_SECTION_HEADING_CLASS);
+
+    const chartRegion = within(card).getByLabelText(
+      messages.chart.cardRegionLabel,
+    );
+    expect(
+      within(chartRegion).queryByRole("heading", {
+        level: 3,
+        name: messages.chart.cardTitle,
+      }),
+    ).toBeNull();
   });
 
   it("renders a shared-chart accessible work outcome visualization from dashboard samples", () => {
