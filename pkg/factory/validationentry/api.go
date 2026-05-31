@@ -15,9 +15,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-// ValidateFactoryAPI validates a factoryapi.Factory payload using the profile in
-// opts. Callers receive aggregated canonical targets in factoryvalidation.Result;
-// map errors are returned when OpenAPI mapping fails.
+// ValidateFactoryAPI is the single pre-mutation validator for OpenAPI factory
+// payloads. Each invocation maps the payload once via FactoryConfigFromOpenAPI,
+// then runs profile-specific checks without writing disk.
+//
+// ProfileTopology matches POST /factory-validations (structural validation only).
+// ProfilePrePersist matches editable save and CLI save-from-file pre-checks
+// (canonical JSON load plus blocking-load fallback, then structural validation).
 func ValidateFactoryAPI(ctx context.Context, factory factoryapi.Factory, opts factoryvalidation.Options) (factoryvalidation.Result, error) {
 	_ = ctx
 

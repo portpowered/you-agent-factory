@@ -51,3 +51,12 @@ func DecodeCrossPathInvalidFactory() (factoryapi.Factory, error) {
 	}
 	return factory, nil
 }
+
+// DecodeCrossPathValidAlphaFactory decodes the shared valid alpha factory fixture.
+func DecodeCrossPathValidAlphaFactory() (factoryapi.Factory, error) {
+	var factory factoryapi.Factory
+	if err := json.Unmarshal([]byte(CrossPathValidAlphaFactoryJSON), &factory); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return factory, nil
+}
