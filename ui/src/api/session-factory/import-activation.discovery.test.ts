@@ -1,9 +1,4 @@
-import { SessionFactoryAPIError } from "./errors";
-import {
-  activateImportedFactoryForSession,
-  discoverSessionNamedFactoryNames,
-} from "./import-activation";
-import { defaultSessionFactoryVersion } from "./import-activation.test-helpers";
+import { discoverSessionNamedFactoryNames } from "./import-activation";
 
 describe("session factory import activation discovery — discovers sorted named factories for the active session folder", () => {
   it("discovers sorted named factories for the active session folder", async () => {

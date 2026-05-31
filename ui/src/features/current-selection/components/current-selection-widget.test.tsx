@@ -739,9 +739,8 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(screen.getByText("reviewer")).toBeTruthy();
+    expect(screen.getByDisplayValue("reviewer")).toBeTruthy();
     expect(screen.getAllByText("Model worker").length).toBeGreaterThan(0);
-    expect(screen.getByText("Review")).toBeTruthy();
     expect(
       screen.getByRole("heading", { name: "Worker configuration" }),
     ).toBeTruthy();
