@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
+import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
@@ -120,7 +121,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     isStaleDraft: true,
     saveBlockedReason: "Stop active work before saving this draft.",
     saveEditableDefinition: {
-      error: new Error("Save failed"),
+      error: null,
       isPending: false,
     },
     setActiveTool: vi.fn(),
@@ -238,18 +239,20 @@ describe("CurrentActivityGraphSurface", () => {
   });
 
   it("renders workstation validation messages in the failure notice when a marked workstation is selected", () => {
-    const validationProjection = projectFactoryValidationTargets([
+    const validationTargets = [
       {
         code: "factory.workstation.missingFailureRoute",
         message: 'Workstation "review" must define a failure route.',
-        severity: "error",
+        severity: "error" as const,
         subject: {
           id: "review",
-          location: "ON_FAILURE",
-          type: "WORKSTATION",
+          location: "ON_FAILURE" as const,
+          type: "WORKSTATION" as const,
         },
       },
-    ]);
+    ];
+    const validationProjection =
+      projectFactoryValidationTargets(validationTargets);
 
     render(
       <CurrentActivityGraphSurface
@@ -263,7 +266,7 @@ describe("CurrentActivityGraphSurface", () => {
             isStaleDraft: false,
             structuralValidation: {
               projection: validationProjection,
-              targets: [],
+              targets: validationTargets,
             },
           }) as never
         }
@@ -281,18 +284,20 @@ describe("CurrentActivityGraphSurface", () => {
   });
 
   it("renders work type validation messages in the failure notice when a marked work type is selected", () => {
-    const validationProjection = projectFactoryValidationTargets([
+    const validationTargets = [
       {
         code: "factory.workType.missingCompletionState",
         message: 'work type "story" must declare a completion state.',
-        severity: "error",
+        severity: "error" as const,
         subject: {
           id: "story",
-          location: "STATES",
-          type: "WORK_TYPE",
+          location: "STATES" as const,
+          type: "WORK_TYPE" as const,
         },
       },
-    ]);
+    ];
+    const validationProjection =
+      projectFactoryValidationTargets(validationTargets);
 
     render(
       <CurrentActivityGraphSurface
@@ -306,7 +311,7 @@ describe("CurrentActivityGraphSurface", () => {
             isStaleDraft: false,
             structuralValidation: {
               projection: validationProjection,
-              targets: [],
+              targets: validationTargets,
             },
           }) as never
         }
@@ -324,18 +329,20 @@ describe("CurrentActivityGraphSurface", () => {
   });
 
   it("renders work state validation messages in the failure notice when a marked work state is selected", () => {
-    const validationProjection = projectFactoryValidationTargets([
+    const validationTargets = [
       {
         code: "factory.workState.missingTerminalCompletionPath",
         message: 'work state "story:queued" has no terminal completion path.',
-        severity: "error",
+        severity: "error" as const,
         subject: {
           id: "story:queued",
-          location: "TERMINAL",
-          type: "WORK_STATE",
+          location: "TERMINAL" as const,
+          type: "WORK_STATE" as const,
         },
       },
-    ]);
+    ];
+    const validationProjection =
+      projectFactoryValidationTargets(validationTargets);
 
     render(
       <CurrentActivityGraphSurface
@@ -349,7 +356,7 @@ describe("CurrentActivityGraphSurface", () => {
             isStaleDraft: false,
             structuralValidation: {
               projection: validationProjection,
-              targets: [],
+              targets: validationTargets,
             },
           }) as never
         }
@@ -366,6 +373,65 @@ describe("CurrentActivityGraphSurface", () => {
         'work state "story:queued" has no terminal completion path.',
       ),
     ).toBeTruthy();
+  });
+
+  it("renders save rejection messages for referenced-entity removals in the save failure notice", () => {
+    const saveError = new CurrentFactoryDefinitionError(
+      "The factory definition is invalid.",
+      {
+        code: "INVALID_FACTORY_DEFINITION",
+        status: 400,
+        targets: [
+          {
+            code: "factory.route.danglingPlaceReference",
+            message:
+              'Workstation "process" references missing place "story:missing-state".',
+            severity: "error",
+            subject: {
+              id: "process",
+              location: "OUTPUTS",
+              type: "WORKSTATION",
+            },
+          },
+        ],
+      },
+    );
+
+    render(
+      <CurrentActivityGraphSurface
+        editor={
+          createEditorStub({
+            blockedRemovalReason: null,
+            connectionNotice: null,
+            currentFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
+            draftState: { hasChanges: true },
+            hasActiveWork: false,
+            isStaleDraft: false,
+            saveEditableDefinition: {
+              error: saveError,
+              isPending: false,
+            },
+            structuralValidation: {
+              projection: projectFactoryValidationTargets([]),
+              targets: [],
+            },
+          }) as never
+        }
+        graph={createGraphStub() as never}
+        imports={{} as never}
+        selection={{ kind: "node", nodeId: "workstation:process" }}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.getByText("Topology save failed")).toBeTruthy();
+    expect(screen.getByText("The factory definition is invalid.")).toBeTruthy();
+    expect(screen.getByText("Factory validation issue")).toBeTruthy();
+    expect(
+      screen.getAllByText(
+        'Workstation "process" references missing place "story:missing-state".',
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("does not render save success inside the graph card", () => {

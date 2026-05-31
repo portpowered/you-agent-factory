@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
+import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import {
   type CanonicalFactoryDefinition,
   createEmptyFactoryGraphDraft,
@@ -423,9 +424,7 @@ function useSaveEditableFactoryGraph({
       setLastSaveSuccess(true);
       return true;
     } catch (error) {
-      setLastSaveError(
-        error instanceof Error ? error.message : "Factory graph save failed.",
-      );
+      setLastSaveError(resolveFactoryGraphSaveErrorMessage(error));
       return false;
     } finally {
       setIsSaving(false);
@@ -455,6 +454,16 @@ function isFactoryGraphDraftStale(
       draftState.baseDocument.version.physical !==
         draftState.latestDocument.version.physical)
   );
+}
+
+function resolveFactoryGraphSaveErrorMessage(error: unknown): string {
+  if (error instanceof CurrentFactoryDefinitionError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "Factory graph save failed.";
 }
 
 function missingFactoryResult(
