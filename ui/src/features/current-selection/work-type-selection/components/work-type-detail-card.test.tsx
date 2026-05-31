@@ -1,30 +1,142 @@
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { useFactoryGraphTopologyEditorBridge } from "../../../workflow-activity/state/factory-graph-topology-editor-bridge";
+import { render, screen, within } from "@testing-library/react";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useEditableWorkTypeConfigurationState } from "../hooks/use-editable-work-type-configuration-state";
 import { WorkTypeDetailCard } from "./work-type-detail-card";
 
-describe("WorkTypeDetailCard", () => {
-  const requestNodeRemoval = vi.fn();
+vi.mock(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  beforeEach(() => {
-    requestNodeRemoval.mockReset();
-    useFactoryGraphTopologyEditorBridge.setState({
-      handlers: {
-        blockedRemovalReason: null,
-        canInteractWithEditor: true,
-        editorMode: true,
-        requestNodeRemoval,
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
+
+function buildFactoryDocument(
+  overrides?: Partial<CurrentFactoryDocument>,
+): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    version: {
+      logical: "7",
+      physical: "2026-05-23T16:22:24Z",
+    },
+    workers: [
+      {
+        model: "gpt-5.5",
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        type: "MODEL_WORKER",
       },
-    });
+    ],
+    workstations: [
+      {
+        id: "review",
+        inputs: [],
+        name: "Review",
+        worker: "reviewer",
+      },
+    ],
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          { name: "queued", type: "INITIAL" },
+          { name: "done", type: "TERMINAL" },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function WorkTypeDetailCardHarness({ workTypeName }: { workTypeName: string }) {
+  const editableConfigurationState = useEditableWorkTypeConfigurationState(
+    { kind: "work-type", workTypeName },
+    workTypeName,
+  );
+
+  return (
+    <WorkTypeDetailCard
+      editableConfigurationState={editableConfigurationState}
+      workTypeName={workTypeName}
+    />
+  );
+}
+
+describe("WorkTypeDetailCard", () => {
+  beforeEach(() => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument(),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
   });
 
-  it("shows the selected work type name and topology delete control", () => {
-    render(<WorkTypeDetailCard workTypeName="story" />);
+  it("renders a loading message while the factory document is pending", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+      error: null,
+      isError: false,
+      isPending: true,
+      status: "pending",
+    } as never);
 
-    expect(screen.getByText("story")).toBeTruthy();
+    render(<WorkTypeDetailCardHarness workTypeName="story" />);
+
     expect(
-      screen.getByRole("button", { name: "Delete story work type" }),
+      screen.getByText(
+        "Loading the current factory definition for this work type.",
+      ),
     ).toBeTruthy();
+  });
+
+  it("renders an error alert when the factory document fails to load", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+      error: new Error("factory offline"),
+      isError: true,
+      isPending: false,
+      status: "error",
+    } as never);
+
+    render(<WorkTypeDetailCardHarness workTypeName="story" />);
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Work type definition unavailable.",
+    );
+    expect(screen.getByText(/factory offline/)).toBeTruthy();
+  });
+
+  it("renders empty guidance when the selected work type is missing", () => {
+    render(<WorkTypeDetailCardHarness workTypeName="missing" />);
+
+    expect(
+      screen.getByText(
+        "This running factory definition does not include the selected work type.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("renders the work type name and read-only state rows when ready", () => {
+    render(<WorkTypeDetailCardHarness workTypeName="story" />);
+
+    const panel = screen.getByRole("article", { name: "Current selection" });
+
+    expect(within(panel).getByText("Work type")).toBeTruthy();
+    expect(within(panel).getByText("story")).toBeTruthy();
+    expect(within(panel).getByRole("heading", { name: "States" })).toBeTruthy();
+    expect(within(panel).getByText("queued")).toBeTruthy();
+    expect(within(panel).getByText("Initial")).toBeTruthy();
+    expect(within(panel).getByText("done")).toBeTruthy();
+    expect(within(panel).getByText("Completed")).toBeTruthy();
   });
 });

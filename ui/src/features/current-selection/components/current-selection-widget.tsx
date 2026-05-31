@@ -4,7 +4,6 @@ import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../../api/dashboard/types";
-import { parseFactoryGraphWorkTypeNodeId } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 import {
   CurrentSelectionHeaderActionProvider,
@@ -17,6 +16,7 @@ import type {
   SelectedWorkRelationshipGraph,
 } from "../work-selection/public";
 import { WorkItemDetailCard } from "../work-selection/public";
+import { useEditableWorkTypeConfigurationState } from "../work-type-selection/hooks/use-editable-work-type-configuration-state";
 import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
 import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
@@ -54,13 +54,14 @@ export interface CurrentSelectionWidgetProps {
   widgetId?: string;
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection detail routing keeps one switch over dashboard selection kinds.
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection routing keeps each detail card branch explicit for review.
 function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
   editableConfigurationState,
   editableWorkStateConfigurationState,
   editableWorkerConfigurationState,
+  editableWorkTypeConfigurationState,
   failedWorkDetailsByWorkID,
   headerAction,
   locale,
@@ -88,6 +89,9 @@ function renderCurrentSelectionDetailCard({
   >;
   editableWorkerConfigurationState: ReturnType<
     typeof useEditableWorkerConfigurationState
+  >;
+  editableWorkTypeConfigurationState: ReturnType<
+    typeof useEditableWorkTypeConfigurationState
   >;
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
   headerAction: ReactNode;
@@ -125,6 +129,7 @@ function renderCurrentSelectionDetailCard({
     selectedWorkID,
     selectedWorkRequestHistory,
     selectedWorkerName,
+    selectedWorkTypeName,
     selectedWorkstationRequest,
     selection,
     selectWorkByID,
@@ -198,13 +203,10 @@ function renderCurrentSelectionDetailCard({
     );
   }
 
-  const selectedWorkTypeName =
-    selection?.kind === "node"
-      ? parseFactoryGraphWorkTypeNodeId(selection.nodeId)
-      : null;
-  if (selectedWorkTypeName) {
+  if (selection?.kind === "work-type" && selectedWorkTypeName) {
     return (
       <WorkTypeDetailCard
+        editableConfigurationState={editableWorkTypeConfigurationState}
         locale={locale}
         widgetId={widgetId}
         workTypeName={selectedWorkTypeName}
@@ -260,6 +262,7 @@ export function CurrentSelectionWidget({
     selectedWorkDispatchAttempts,
     selectedWorkRequestHistory,
     selectedWorkerName,
+    selectedWorkTypeName,
     selection,
   } = currentSelection;
   const editableConfigurationState = useEditableWorkstationConfigurationState(
@@ -276,6 +279,12 @@ export function CurrentSelectionWidget({
     selectedWorkerName,
     locale,
   );
+  const editableWorkTypeConfigurationState =
+    useEditableWorkTypeConfigurationState(
+      selection,
+      selectedWorkTypeName,
+      locale,
+    );
   const workstationSaveScopeKey =
     selection?.kind === "node" && selectedNode
       ? `${selectedNode.node_id}:${selectedNode.transition_id}:${selectedNode.workstation_name}`
@@ -343,6 +352,7 @@ export function CurrentSelectionWidget({
     editableConfigurationState,
     editableWorkStateConfigurationState,
     editableWorkerConfigurationState,
+    editableWorkTypeConfigurationState,
     failedWorkDetailsByWorkID,
     headerAction: workstationHeaderAction,
     locale: locale ?? undefined,

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryVersion,
@@ -31,3 +33,11 @@ export type EditableWorkTypeConfigurationState =
     };
 
 export type { EditableWorkTypeValidationErrors };
+
+export interface WorkTypeDetailCardProps {
+  editableConfigurationState?: EditableWorkTypeConfigurationState;
+  headerAction?: ReactNode;
+  locale?: string | null;
+  widgetId?: string;
+  workTypeName: string;
+}
