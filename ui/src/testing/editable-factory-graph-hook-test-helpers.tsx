@@ -3,7 +3,7 @@ import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { vi } from "vitest";
 
-import * as factoryDocumentSaveHooks from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
+import * as factoryDocumentSaveHooks from "../features/current-factory-definition/public";
 import type { UseEditableFactoryGraphOptions } from "../features/factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { useEditableFactoryGraph } from "../features/factory-graph-editor/hooks/use-editable-factory-graph";
 import { DashboardSessionProvider } from "../features/dashboard/session/dashboard-session-provider";

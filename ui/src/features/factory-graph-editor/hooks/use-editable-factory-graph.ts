@@ -1,8 +1,10 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: editable graph hook keeps draft, projection, save, and mutation wiring in one view-model seam.
 import { useCallback, useMemo, useState } from "react";
 
-import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/hooks/factory-document-save-types";
-import { useScopedFactoryDocumentSave } from "../../current-selection/base/hooks/useScopedFactoryDocumentSave";
+import {
+  isFactoryDocumentSaveSubmitting,
+  useScopedFactoryDocumentSave,
+} from "../../current-selection/base/public";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { mapGraphSaveOutcomeToDocumentSaveState } from "../lib/graph-document-save-state";
 import {

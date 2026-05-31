@@ -8,7 +8,7 @@ import {
   mockPendingFactoryDocumentSave,
 } from "../../../../testing/factory-document-save-mocks";
 import { staleFactoryVersionTarget } from "../../../../testing/factory-validation-target-fixtures";
-import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
+import * as factoryDocumentSaveHooks from "../../../current-factory-definition/public";
 import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { ScopedFactoryDocumentSaveRequest } from "./useScopedFactoryDocumentSave";

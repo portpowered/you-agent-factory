@@ -5,7 +5,7 @@ import type {
   CurrentFactoryDefinitionError,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
+import { useFactoryDocumentSave } from "../../../current-factory-definition/public";
 import type { FactoryDocumentSaveState } from "./factory-document-save-types";
 
 export interface ScopedFactoryDocumentSaveRequest {

@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 
 import { mapWorkerSaveErrorToFieldErrors } from "../lib/worker-save-validation-field-mapping";
-import { useScopedFactoryDocumentSave } from "../../base/hooks/useScopedFactoryDocumentSave";
+import { useScopedFactoryDocumentSave } from "../../base/public";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,

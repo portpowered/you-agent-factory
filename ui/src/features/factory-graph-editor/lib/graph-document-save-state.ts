@@ -1,4 +1,4 @@
-import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
 
 export const STALE_FACTORY_GRAPH_DRAFT_WARNING =
   "The factory definition changed while you were editing. Refresh or discard your draft before saving.";
