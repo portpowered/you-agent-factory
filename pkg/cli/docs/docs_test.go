@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestTopicDocuments_ExplicitMetadataRemainsDeterministic(t *testing.T) {
@@ -110,8 +112,8 @@ func TestTopicRegistry_OrdersTopicsAndClonesAliases(t *testing.T) {
 	t.Parallel()
 
 	source := []topicDocument{
-		{topic: TopicTemplates, description: "templates", path: "reference/templates.md", displayOrder: 20},
-		{topic: TopicConfig, description: "config", path: "reference/config.md", displayOrder: 10, aliases: []Topic{TopicBatchWorkAlias}},
+		{topic: TopicTemplates, description: "templates", path: "templates.md", displayOrder: 20},
+		{topic: TopicConfig, description: "config", path: "config.md", displayOrder: 10, aliases: []Topic{TopicBatchWorkAlias}},
 	}
 
 	registry := newTopicRegistry(source)
@@ -198,9 +200,10 @@ func TestMarkdown_ReturnsRawPackagedMarkdownForEachSupportedTopic(t *testing.T) 
 				t.Fatalf("Markdown(%q) error = %v", doc.topic, err)
 			}
 
-			want, err := os.ReadFile(filepath.FromSlash(doc.path))
+			wantPath := filepath.Join(testutil.MustRepoRoot(t), "docs", "reference", doc.path)
+			want, err := os.ReadFile(wantPath)
 			if err != nil {
-				t.Fatalf("ReadFile(%q) error = %v", doc.path, err)
+				t.Fatalf("ReadFile(%q) error = %v", wantPath, err)
 			}
 
 			if got != string(want) {
