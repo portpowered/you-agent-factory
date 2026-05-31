@@ -908,8 +908,16 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     expect(
       screen.getByRole("button", { name: "Enter factory graph editor" }),
     ).toBeTruthy();
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
     expect(
-      screen.queryByRole("region", { name: "Factory graph editor tools" }),
+      within(toolbar).getByRole("button", {
+        name: "Open hide or show node classes menu",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).queryByRole("button", { name: "Open add entity menu" }),
     ).toBeNull();
     expect(screen.getByText("Observe mode")).toBeTruthy();
   });
@@ -981,12 +989,18 @@ function registerCurrentActivityCardEditorChromeTests(): void {
 
     fireEvent.click(enterEditorButton);
 
-    await waitFor(() => {
-      expect(
-        screen.queryByRole("region", { name: "Factory graph editor tools" }),
-      ).toBeNull();
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
     });
-    expect(screen.queryByText("Observe mode")).toBeNull();
+    expect(
+      within(toolbar).getByRole("button", {
+        name: "Open hide or show node classes menu",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).queryByRole("button", { name: "Open add entity menu" }),
+    ).toBeNull();
+    expect(screen.queryByText("Editor mode active")).toBeNull();
   });
 
   it("lists the supported add-entity options and validates duplicate worker names before mutating the draft", async () => {
