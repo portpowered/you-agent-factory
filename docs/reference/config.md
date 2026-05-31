@@ -356,6 +356,16 @@ Canonical guides: [Mock workers](mock-workers.md) and
 [Record and replay](record-replay.md). For an end-to-end authoring walkthrough,
 see [Author factories](authoring-factories.md).
 
+## Validate-only API profile
+
+`POST /factory-validations` validates an OpenAPI `Factory` payload without
+persisting it. The handler delegates to `validationentry.ValidateFactoryAPI` with
+`ProfileTopology`: one `FactoryConfigFromOpenAPI` map, then structural
+validation (duplicate identifiers, dangling references, outcome routes, and
+work-type completion). It does not run `LoadFromCanonicalJSON` or other
+pre-persist canonical checks; editable save and CLI save-from-file use
+`ProfilePrePersist` instead.
+
 ## Related
 
 - [Agents](agents.md)
