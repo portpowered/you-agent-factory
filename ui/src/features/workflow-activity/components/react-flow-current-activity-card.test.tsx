@@ -29,6 +29,13 @@ import {
   workstationKindParityExpectations,
 } from "../../../components/dashboard/test-fixtures";
 import {
+  baseFactoryDefinition,
+  baseFactoryDefinitionDocument,
+  createMockGraphEditorDraftState,
+  wireMockEditableFactoryGraph,
+  workerDenseFactoryDefinitionDocument,
+} from "../../../testing/graph-editor-harness";
+import {
   useCurrentFactoryDocumentMock,
   useSaveCurrentFactoryMock,
 } from "../../../../testing/bun-current-factory-definition-public-mocks";

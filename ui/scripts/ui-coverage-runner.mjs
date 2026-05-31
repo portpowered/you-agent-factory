@@ -152,42 +152,6 @@ export function buildUiCoverageMergePhases(options = {}) {
   return buildUiCoveragePhases(options).slice(1);
 }
 
-export function buildMainCoveredVitestArgs(options = {}) {
-  const shard = options.shard ?? null;
-  const mainCoveredMaxWorkers =
-    options.mainCoveredMaxWorkers ??
-    getMainCoveredMaxWorkers(options.env, { shard: Boolean(shard) });
-  const blobPath =
-    options.blobPath ?? ".vitest-reports/main.json";
-  const args = [
-    "run",
-    "--coverage",
-    "--coverage.clean=false",
-    `--maxWorkers=${mainCoveredMaxWorkers}`,
-    "--coverage.thresholds.lines=0",
-    "--coverage.thresholds.functions=0",
-    "--coverage.thresholds.statements=0",
-    "--coverage.thresholds.branches=0",
-    "--reporter=default",
-    "--reporter=blob",
-    `--outputFile.blob=${blobPath}`,
-    "--exclude",
-    "integration/*.integration.test.mjs",
-    "--exclude",
-    "scripts/dashboard-shell-storybook-responsive.test.mjs",
-    "--exclude",
-    "scripts/ui-coverage-runner.test.mjs",
-    "--exclude",
-    "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
-  ];
-
-  if (options.shard) {
-    args.push(`--shard=${options.shard.index}/${options.shard.total}`);
-  }
-
-  return args;
-}
-
 export function buildMainCoveredShardPhase(shard, _options = {}) {
   return {
     kind: mainCoveredPassKind,
@@ -197,7 +161,7 @@ export function buildMainCoveredShardPhase(shard, _options = {}) {
   };
 }
 
-export function buildUiCoveragePhases(options = {}) {
+export function buildUiCoveragePhases(_options = {}) {
   return [
     {
       kind: mainCoveredPassKind,

@@ -20,10 +20,8 @@ import {
 } from "../../../../testing/bun-current-factory-definition-public-mocks";
 import { useFactoryGraphDraftStateMock } from "../../../../testing/bun-factory-graph-editor-public-mocks";
 import { mockBuildGraphLayout } from "../../../../testing/bun-flowchart-layout-mocks";
-import {
-  createEmptyFactoryGraphDraft,
-  type EditableFactoryGraphViewModel,
-} from "../../factory-graph-editor/public";
+import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
 import {
   type CurrentActivitySelection,

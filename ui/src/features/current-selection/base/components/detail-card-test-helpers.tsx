@@ -74,16 +74,3 @@ export function workstationRequest(
 ): DashboardWorkstationRequest {
   return buildDashboardWorkstationRequestFixture(dispatchID, overrides);
 }
-
-export {
-  buildDetailCardCurrentSelection,
-  buildDetailCardEditableFactoryDocument,
-  buildDetailCardFactoryDocumentQueryResult,
-  buildDetailCardFactoryDocumentSaveHookReturn,
-  buildDetailCardMultiWorkstationFactoryDocument,
-  buildDetailCardSharedWorkerFactoryDocument,
-  buildDetailCardWorkstationNodeSelection,
-  createDetailCardDeferredFactoryDocumentSave,
-  DETAIL_CARD_SAVE_FACTORY_VERSION,
-  expandDetailCardWorkstationConfiguration,
-} from "./detail-card-save-test-helpers";
