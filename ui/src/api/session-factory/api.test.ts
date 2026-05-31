@@ -65,6 +65,35 @@ describe("getSessionFactory", () => {
     });
   });
 
+  it("accepts numeric logical versions from the session factory API", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: 9,
+            physical: "2026-05-18T14:25:00Z",
+          },
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await expect(getSessionFactory("~default", { fetch })).resolves.toMatchObject({
+      version: {
+        logical: "9",
+        physical: "2026-05-18T14:25:00Z",
+      },
+    });
+  });
+
   it("surfaces NOT_FOUND from the session factory API", async () => {
     await expect(
       getSessionFactory("~default", {

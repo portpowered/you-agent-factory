@@ -570,6 +570,39 @@ describe("readFactoryImportPng", () => {
     expect(result.value.previewImageSrc).toBe("blob:factory-preview");
   });
 
+  it("rejects truncated iTXt metadata chunks as invalid PNG metadata", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: new File(
+        [
+          toArrayBuffer(
+            injectMetadataChunk(
+              fromBase64(ONE_PIXEL_PNG_BASE64),
+              buildChunk(
+                "iTXt",
+                new TextEncoder().encode(PORT_OS_FACTORY_PNG_METADATA_KEYWORD),
+              ),
+            ),
+          ),
+        ],
+        "factory.png",
+        { type: "image/png" },
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "PNG_INVALID",
+        message: "The selected PNG image is invalid or truncated.",
+      },
+      ok: false,
+    });
+  });
+
   it("rejects compressed iTXt metadata chunks as invalid PNG metadata", async () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => {

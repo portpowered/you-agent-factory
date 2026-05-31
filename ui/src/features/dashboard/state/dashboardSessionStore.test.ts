@@ -41,4 +41,14 @@ describe("useDashboardSessionStore", () => {
       DEFAULT_FACTORY_SESSION_ID,
     );
   });
+
+  it("restores default session selection and paused sessions", () => {
+    useDashboardSessionStore.getState().setSelectedSessionID("session-beta");
+    useDashboardSessionStore.getState().setSessionPaused("session-beta", true);
+    resetDashboardSessionStore();
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      pausedSessionIDs: [],
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+  });
 });

@@ -171,6 +171,33 @@ describe("syncCurrentFactoryDefinition", () => {
     });
   });
 
+  it("coerces numeric logical versions into document cache entries", () => {
+    const queryClient = new QueryClient();
+    syncCurrentFactoryDefinition(queryClient, {
+      context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+      id: "event-1",
+      payload: {
+        factory: {
+          ...validFactory,
+          version: {
+            logical: 9,
+            physical: "2026-05-31T12:00:00Z",
+          },
+        },
+      },
+      type: FACTORY_EVENT_TYPES.factoryChange,
+    }, sessionID);
+
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey(sessionID)),
+    ).toMatchObject({
+      version: {
+        logical: "9",
+        physical: "2026-05-31T12:00:00Z",
+      },
+    });
+  });
+
   it("updates both definition and document caches when FACTORY_CHANGE includes version", () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");

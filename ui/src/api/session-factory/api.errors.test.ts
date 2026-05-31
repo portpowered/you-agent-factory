@@ -73,6 +73,54 @@ describe("saveSessionFactory error mapping", () => {
     });
   });
 
+  it("surfaces BAD_REQUEST with the API message", async () => {
+    await expect(
+      saveSessionFactory(baseSaveParams, {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "BAD_REQUEST",
+              message: "Factory name is required.",
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 400,
+              statusText: "Bad Request",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Factory name is required.",
+      name: "SessionFactoryAPIError",
+    });
+  });
+
+  it("surfaces FACTORY_ALREADY_EXISTS with the API message", async () => {
+    await expect(
+      saveSessionFactory(baseSaveParams, {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "FACTORY_ALREADY_EXISTS",
+              message: "Named factory already exists in this session.",
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 409,
+              statusText: "Conflict",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "FACTORY_ALREADY_EXISTS",
+      message: "Named factory already exists in this session.",
+      name: "SessionFactoryAPIError",
+    });
+  });
+
   it("surfaces INVALID_FACTORY", async () => {
     await expect(
       saveSessionFactory(baseSaveParams, {
