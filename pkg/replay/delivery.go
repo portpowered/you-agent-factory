@@ -18,6 +18,7 @@ import (
 )
 
 const replaySubmissionHookName = "replay-artifact-submissions"
+const replayWorkStateChangeHookName = "replay-artifact-work-state-changes"
 
 const defaultLogicalTickDuration = time.Millisecond
 
@@ -361,6 +362,98 @@ func generatedBatchesFromReplaySubmissions(records []replaySubmission) []interfa
 		})
 	}
 	return batches
+}
+
+// WorkStateChangeHook replays recorded operator WORK_STATE_CHANGE events at
+// their observed logical ticks.
+type WorkStateChangeHook struct {
+	changes []replayWorkStateChange
+	next    int
+	mu      sync.Mutex
+}
+
+var _ factory.SubmissionHook = (*WorkStateChangeHook)(nil)
+
+// NewWorkStateChangeHook builds an engine submission hook from recorded
+// operator move events in a replay artifact.
+func NewWorkStateChangeHook(artifact *interfaces.ReplayArtifact) (*WorkStateChangeHook, error) {
+	eventLog, err := reduceReplayEvents(artifact)
+	if err != nil {
+		return nil, err
+	}
+	return &WorkStateChangeHook{changes: append([]replayWorkStateChange(nil), eventLog.WorkStateChanges...)}, nil
+}
+
+func (h *WorkStateChangeHook) Name() string {
+	return replayWorkStateChangeHookName
+}
+
+func (h *WorkStateChangeHook) Priority() int {
+	return -90
+}
+
+func (h *WorkStateChangeHook) OnTick(_ context.Context, input interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.SubmissionHookResult, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	var mutations []interfaces.MarkingMutation
+	for h.next < len(h.changes) && h.changes[h.next].observedTick <= input.Snapshot.TickCount {
+		recorded := h.changes[h.next]
+		h.next++
+		mutation, ok := replayWorkStateChangeMutation(input.Snapshot, recorded.change)
+		if !ok {
+			continue
+		}
+		mutations = append(mutations, mutation)
+	}
+	keepAlive := h.next < len(h.changes)
+	if len(mutations) == 0 {
+		return interfaces.SubmissionHookResult{KeepAlive: keepAlive}, nil
+	}
+	return interfaces.SubmissionHookResult{
+		MarkingMutations: mutations,
+		KeepAlive:        keepAlive,
+	}, nil
+}
+
+func replayWorkStateChangeMutation(
+	snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	change interfaces.WorkStateChangeRecord,
+) (interfaces.MarkingMutation, bool) {
+	if change.WorkID == "" || change.FromPlaceID == "" || change.ToPlaceID == "" {
+		return interfaces.MarkingMutation{}, false
+	}
+	if change.FromPlaceID == change.ToPlaceID {
+		return interfaces.MarkingMutation{}, false
+	}
+	tokenID := replayWorkTokenID(snapshot.Marking.Tokens, change.WorkID)
+	if tokenID == "" {
+		return interfaces.MarkingMutation{}, false
+	}
+	reason := fmt.Sprintf("operator move to %s", change.ToState)
+	if change.Reason != "" {
+		reason = change.Reason
+	}
+	return interfaces.MarkingMutation{
+		Type:      interfaces.MutationMove,
+		TokenID:   tokenID,
+		FromPlace: change.FromPlaceID,
+		ToPlace:   change.ToPlaceID,
+		Reason:    reason,
+	}, true
+}
+
+func replayWorkTokenID(tokens map[string]*interfaces.Token, workID string) string {
+	for id, token := range tokens {
+		if token == nil || token.Color.WorkID != workID {
+			continue
+		}
+		if token.Color.DataType == interfaces.DataTypeResource {
+			continue
+		}
+		return id
+	}
+	return ""
 }
 
 // CompletionDeliveryPlan maps observed replay dispatches to recorded

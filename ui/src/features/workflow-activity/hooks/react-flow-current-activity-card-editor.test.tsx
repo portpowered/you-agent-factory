@@ -110,7 +110,7 @@ const hookState = vi.hoisted(() => ({
   saveStateIsStale: false,
 }));
 
-vi.mock("../../current-factory-definition/public", () => ({
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", () => ({
   useCurrentFactoryDocument: () => hookState.currentFactoryQuery,
   useSaveCurrentFactory: () => hookState.saveEditableDefinition,
 }));

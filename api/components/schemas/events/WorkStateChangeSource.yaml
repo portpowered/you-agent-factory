@@ -1,0 +1,14 @@
+type: string
+description: Origin of a WORK_STATE_CHANGE event.
+x-enum-varnames:
+  - WorkStateChangeSourceAPI
+  - WorkStateChangeSourceCLI
+  - WorkStateChangeSourceCascadingFailure
+enum:
+  - api
+  - cli
+  - cascading-failure
+x-enum-descriptions:
+  - Operator move through the HTTP API.
+  - Operator move through the CLI.
+  - Automatic cascade propagation after a dependency failure.

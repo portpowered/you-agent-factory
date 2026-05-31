@@ -12,6 +12,7 @@ func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 	}
 	workCmd.AddCommand(newWorkListCommand(globals, diagnostics))
 	workCmd.AddCommand(newWorkShowCommand(globals, diagnostics))
+	workCmd.AddCommand(newWorkMoveCommand(globals, diagnostics))
 	return workCmd
 }
 
@@ -83,5 +84,38 @@ func newWorkShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 
 	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
+	return cmd
+}
+
+func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := workcli.MoveConfig{Server: globals.server}
+
+	cmd := &cobra.Command{
+		Use:   "move <work-id> <state-name>",
+		Short: "Move one work item to another authored state",
+		Long: "Move one work item to another authored marking state on a running you-agent-factory service.\n\n" +
+			"By default the command targets the default compatibility session. " +
+			"Use --session to route the request to one specific live factory session instead. " +
+			"Run " + cliBinaryName + " session list to discover live session ids.\n\n" +
+			"Moves are rejected while the work item is in an active dispatch. " +
+			"Repeating the same --request-id after a successful move returns 409 without a second mutation.",
+		Args:    cobra.ExactArgs(2),
+		PreRunE: rejectDeprecatedPortFlag,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
+			cfg.WorkID = args[0]
+			cfg.StateName = args[1]
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
+			return moveWork(cfg)
+		},
+	}
+
+	registerDeprecatedPortFlag(cmd)
+	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
+	cmd.Flags().StringVar(&cfg.RequestID, "request-id", "", "optional client idempotency key for operator moves")
 	return cmd
 }

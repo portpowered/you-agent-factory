@@ -16,6 +16,7 @@ export const FACTORY_EVENT_TYPES = {
   scriptRequest: "SCRIPT_REQUEST",
   scriptResponse: "SCRIPT_RESPONSE",
   workRequest: "WORK_REQUEST",
+  workStateChange: "WORK_STATE_CHANGE",
 } as const satisfies Record<string, FactoryEventType>;
 
 type FactorySchemas = components["schemas"];
@@ -46,6 +47,7 @@ export type FactoryEventPayload =
   | ScriptRequestPayload
   | ScriptResponsePayload
   | DispatchResponsePayload
+  | WorkStateChangeEventPayload
   | FactoryStateResponsePayload
   | Record<string, unknown>;
 
@@ -83,6 +85,9 @@ export type ScriptRequestPayload = FactorySchemas["ScriptRequestEventPayload"];
 export type ScriptResponsePayload = FactorySchemas["ScriptResponseEventPayload"];
 
 export type DispatchResponsePayload = FactorySchemas["DispatchResponseEventPayload"];
+
+export type WorkStateChangeEventPayload =
+  FactorySchemas["WorkStateChangeEventPayload"];
 
 export type FactoryStateResponsePayload =
   FactorySchemas["FactoryStateResponseEventPayload"];

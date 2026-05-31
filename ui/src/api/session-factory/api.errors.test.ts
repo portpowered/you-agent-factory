@@ -2,7 +2,8 @@ import {
   factoryRuntimeNotIdleTarget,
   staleFactoryVersionTarget,
 } from "../../testing/factory-validation-target-fixtures";
-import { saveSessionFactory } from "./api";
+import { getSessionFactory, saveSessionFactory } from "./api";
+import { SessionFactoryAPIError } from "./errors";
 import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
 
 const baseSaveParams = {
@@ -15,7 +16,36 @@ const baseSaveParams = {
   },
 } as const;
 
-describe("saveSessionFactory error mapping", () => {
+describe("getSessionFactory transport errors", () => {
+  it("throws SessionFactoryAPIError for network failures", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockRejectedValue(new Error("connection reset")),
+      }),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      name: "SessionFactoryAPIError",
+    });
+  });
+
+  it("uses rejected message when error response omits message", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response("{}", {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 500,
+            statusText: "Internal Server Error",
+          }),
+        ),
+      }),
+    ).rejects.toBeInstanceOf(SessionFactoryAPIError);
+  });
+});
+
+describe("saveSessionFactory stale and idle errors", () => {
   it("surfaces STALE_FACTORY_VERSION with structured targets", async () => {
     await expect(
       saveSessionFactory(baseSaveParams, {
@@ -75,7 +105,9 @@ describe("saveSessionFactory error mapping", () => {
       name: "SessionFactoryAPIError",
     });
   });
+});
 
+describe("saveSessionFactory validation errors", () => {
   it("surfaces INVALID_FACTORY", async () => {
     await expect(
       saveSessionFactory(baseSaveParams, {
@@ -124,6 +156,56 @@ describe("saveSessionFactory error mapping", () => {
     ).rejects.toMatchObject({
       code: "INVALID_FACTORY_NAME",
       message: sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
+      name: "SessionFactoryAPIError",
+    });
+  });
+});
+
+describe("saveSessionFactory unknown error codes", () => {
+  it("surfaces BAD_REQUEST and maps unknown codes to INTERNAL_ERROR", async () => {
+    await expect(
+      saveSessionFactory(baseSaveParams, {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "BAD_REQUEST",
+              message: "The request payload is invalid.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 400,
+              statusText: "Bad Request",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      name: "SessionFactoryAPIError",
+    });
+
+    await expect(
+      saveSessionFactory(baseSaveParams, {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "UNEXPECTED_SERVER_CODE",
+              message: "Something went wrong.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 500,
+              statusText: "Internal Server Error",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
       name: "SessionFactoryAPIError",
     });
   });

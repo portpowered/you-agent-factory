@@ -5,6 +5,8 @@ import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
 } from "../api/current-factory-definition";
+import type { DashboardSnapshot } from "../api/dashboard/types";
+import { singleNodeDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import type {
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
@@ -360,6 +362,96 @@ export function createMockEditableFactoryGraph(
       isValid: draftState.validationErrors.length === 0,
     },
   };
+}
+
+const divergentPlaneStoryWorkType = {
+  name: "story",
+  states: [
+    {
+      name: "queued",
+      type: "INITIAL" as const,
+    },
+    {
+      name: "done",
+      type: "TERMINAL" as const,
+    },
+  ],
+};
+
+const divergentDocumentOnlyWorkstation = {
+  body: "From the persisted document plane.",
+  inputs: [
+    {
+      state: "queued",
+      workType: "story",
+    },
+  ],
+  id: "document-only",
+  name: "Document Only",
+  outputs: [
+    {
+      state: "done",
+      workType: "story",
+    },
+  ],
+  type: "MODEL_WORKSTATION" as const,
+  worker: "writer",
+};
+
+const divergentSnapshotOnlyWorkstation = {
+  body: "Only present on the live snapshot plane.",
+  inputs: [
+    {
+      state: "queued",
+      workType: "story",
+    },
+  ],
+  id: "snapshot-only",
+  name: "Snapshot Only",
+  outputs: [
+    {
+      state: "done",
+      workType: "story",
+    },
+  ],
+  type: "MODEL_WORKSTATION" as const,
+  worker: "writer",
+};
+
+/** Factory document with a workstation absent from a divergent snapshot-only node. */
+export const divergentDocumentPlaneFactoryDocument: CurrentFactoryDocument = {
+  ...baseFactoryDefinition,
+  name: "Document Factory",
+  version: {
+    logical: "7",
+    physical: "2026-05-31T12:00:00Z",
+  },
+  workTypes: [divergentPlaneStoryWorkType],
+  workstations: [divergentDocumentOnlyWorkstation],
+};
+
+/** Snapshot factory that adds a workstation missing from the document plane. */
+export function buildDivergentSnapshotPlaneFactory(): CanonicalFactoryDefinition {
+  return {
+    ...divergentDocumentPlaneFactoryDocument,
+    name: "Snapshot Factory",
+    workstations: [
+      ...(divergentDocumentPlaneFactoryDocument.workstations ?? []),
+      divergentSnapshotOnlyWorkstation,
+    ],
+  };
+}
+
+export function buildDivergentPlaneDashboardSnapshot(): DashboardSnapshot {
+  const snapshot = structuredClone(singleNodeDashboardSnapshot);
+  snapshot.factory = buildDivergentSnapshotPlaneFactory();
+  snapshot.topology = {
+    edges: [],
+    workstation_node_ids: [],
+    workstation_nodes_by_id: {},
+  };
+
+  return snapshot;
 }
 
 export function wireMockEditableFactoryGraph(

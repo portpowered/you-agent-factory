@@ -4,7 +4,7 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
@@ -293,11 +293,13 @@ function useFactoryGraphEditorSessionState({
     draftState.latestDocument ??
     draftState.baseDocument ??
     null;
+  const classifierEvaluationDefinition =
+    editorMode || editableDefinitionQuery.status === "success"
+      ? (currentFactoryDefinition ?? null)
+      : (projectedFactory ?? currentFactoryDefinition ?? null);
   const editorUnavailableClassifierWorkstationName =
     findClassifierGraphEditorUnsupportedWorkstationName(
-      editorMode
-        ? (currentFactoryDefinition ?? null)
-        : (projectedFactory ?? currentFactoryDefinition ?? null),
+      classifierEvaluationDefinition,
     );
   const isStaleDraft = editableGraph.saveState.isStale;
   const canInteractWithEditor =
