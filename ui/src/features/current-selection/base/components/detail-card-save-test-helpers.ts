@@ -22,7 +22,13 @@ export const DETAIL_CARD_SAVE_FACTORY_VERSION = {
 export type DetailCardEditableFactoryDocumentOverrides = {
   behavior?: "STANDARD" | "REPEATER" | "POLLER";
   model?: string;
-  modelProvider?: "CURSOR" | "CODEX" | "CLAUDE" | "GEMINI" | "KIRO" | "OPENCODE";
+  modelProvider?:
+    | "CURSOR"
+    | "CODEX"
+    | "CLAUDE"
+    | "GEMINI"
+    | "KIRO"
+    | "OPENCODE";
   prompt?: string;
   workerName?: string;
   workerOptions?: string[];
@@ -89,7 +95,8 @@ export function buildDetailCardEditableFactoryDocument(
     workers: workerOptions.map((name, index) => ({
       model: overrides?.model ?? `gpt-5.${index + 5}`,
       modelProvider:
-        overrides?.modelProvider ?? (index === 0 ? ("CURSOR" as const) : ("CODEX" as const)),
+        overrides?.modelProvider ??
+        (index === 0 ? ("CURSOR" as const) : ("CODEX" as const)),
       name,
       type: "MODEL_WORKER",
     })),
@@ -151,6 +158,48 @@ export function buildDetailCardMultiWorkstationFactoryDocument(
         outputs: [{ state: "approved", workType: "story" }],
         promptFile: "prompts/plan.md",
         worker: "planner",
+      },
+    ],
+    workTypes: [],
+  };
+}
+
+export function buildDetailCardMultiResourceFactoryDocument(): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
+    resources: [
+      {
+        capacity: 2,
+        name: "agent-slot",
+        type: "INVOCATION_SLOT",
+      },
+      {
+        capacity: 5,
+        model: "gpt-audio",
+        name: "voice-model",
+        type: "MODEL",
+      },
+    ],
+    workers: [
+      {
+        model: "gpt-5.5",
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body: "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        worker: "reviewer",
       },
     ],
     workTypes: [],
@@ -222,6 +271,8 @@ export function buildDetailCardCurrentSelection(
     selectedWorkWorkstationRequests: [],
     selectedWorkstationRequest: null,
     selectedWorker: null,
+    selectedResourceName: null,
+    selectedResourceTokenCount: null,
     selectedWorkerName: null,
     selectedWorkerWorkstationNames: [],
     selectedWorkType: null,
@@ -234,6 +285,7 @@ export function buildDetailCardCurrentSelection(
     clearSelectedFactoryGraphNodeIfMatching: () => undefined,
     clearSelectedStateNodeIfMatching: () => undefined,
     clearSelectedWorkerIfMatching: () => undefined,
+    selectResource: () => undefined,
     selectWorker: () => undefined,
     selectWorkType: () => undefined,
     selectWorkstation: () => undefined,
@@ -277,6 +329,26 @@ export function buildDetailCardWorkstationNodeSelection(
     selectedNode,
     selection: { kind: "node", nodeId },
   });
+}
+
+export function expandDetailCardResourceConfiguration(
+  buttonName = "Expand resource configuration editor",
+  headingName = "Resource configuration",
+) {
+  const section = screen
+    .getAllByRole("heading", { name: headingName })
+    .at(-1)
+    ?.closest("section");
+  if (!section) {
+    throw new Error("expected editable resource configuration section");
+  }
+
+  const expandButton = within(section).queryByRole("button", {
+    name: buttonName,
+  });
+  if (expandButton) {
+    fireEvent.click(expandButton);
+  }
 }
 
 export function expandDetailCardWorkstationConfiguration(

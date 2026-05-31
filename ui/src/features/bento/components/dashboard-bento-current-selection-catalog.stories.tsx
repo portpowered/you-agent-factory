@@ -4,8 +4,10 @@ import "../../../styles.css";
 import { expectNoPageHorizontalOverflow } from "../../../stories/dashboardStorySupport";
 import {
   buildEditableConfigurationDocument,
+  buildEditableResourceConfigurationDocument,
   CurrentSelectionCardStory,
   CurrentSelectionEditableConfigurationStory,
+  CurrentSelectionResourceSelectedStory,
   CurrentSelectionRunHistoryExpandStory,
   CurrentSelectionWorkContentsCardStory,
   editableConfigurationPromptTemplateContract,
@@ -13,6 +15,7 @@ import {
   expectCurrentSelectionRunHistoryExpandFlow,
   expectEditableConfigurationPromptSyntaxSaveStoryFlow,
   expectEditableConfigurationStoryFlow,
+  expectResourceSelectedStoryFlow,
   promptTemplateSyntaxValidationResponse,
   promptTemplateValidationResponse,
   semanticWorkflowDashboardSnapshot,
@@ -99,6 +102,27 @@ export const CurrentSelectionEditableConfigurationDesktop = {
   render: () => <CurrentSelectionEditableConfigurationStory width={960} />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await expectEditableConfigurationStoryFlow(canvasElement);
+  },
+};
+
+export const CurrentSelectionResourceSelected = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory",
+          response: {
+            body: buildEditableResourceConfigurationDocument(),
+          },
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => <CurrentSelectionResourceSelectedStory width={960} />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectResourceSelectedStoryFlow(canvasElement);
   },
 };
 

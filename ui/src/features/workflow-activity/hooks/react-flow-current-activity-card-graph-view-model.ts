@@ -42,6 +42,7 @@ export type CurrentActivityGraphViewModelInput = {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectResource: (resourceName: string) => void;
   onSelectWorker: (workerName: string) => void;
   onSelectWorkType: (workTypeName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
@@ -58,6 +59,7 @@ function useCurrentActivityBaseNodes({
   graphLayout,
   locale,
   now,
+  onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
@@ -69,6 +71,7 @@ function useCurrentActivityBaseNodes({
 }: Pick<
   CurrentActivityGraphViewModelInput,
   | "now"
+  | "onSelectResource"
   | "onSelectStateNode"
   | "onSelectWorkID"
   | "onSelectWorker"
@@ -107,6 +110,7 @@ function useCurrentActivityBaseNodes({
         graphLayout,
         locale,
         now,
+        onSelectResource,
         onSelectStateNode,
         onSelectWorkID,
         onSelectWorker,
@@ -125,6 +129,7 @@ function useCurrentActivityBaseNodes({
       graphLayout,
       locale,
       now,
+      onSelectResource,
       onSelectStateNode,
       onSelectWorkID,
       onSelectWorker,
@@ -198,6 +203,7 @@ export function useCurrentActivityGraphViewModel({
   editor,
   locale,
   now,
+  onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
@@ -253,6 +259,7 @@ export function useCurrentActivityGraphViewModel({
     graphLayout,
     locale,
     now,
+    onSelectResource,
     onSelectStateNode,
     onSelectWorkID,
     onSelectWorker,

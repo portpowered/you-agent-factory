@@ -7,37 +7,46 @@ import {
   useCurrentFactoryDefinition,
   useCurrentFactoryDocument,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { selectWorkItemExecutionDetails } from "../state/executionDetails";
+import type { DashboardSelection } from "../state/selection-types";
+import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
+import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
+import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import {
   createCurrentSelectionWidgetQueryClient,
   wrapCurrentSelectionWidgetView,
 } from "./current-selection-widget-test-utils";
-import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
-import type { DashboardSelection } from "../state/selection-types";
-import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDefinition: vi.fn(),
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDefinition: vi.fn(),
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../workstation-selection/hooks/use-save-editable-workstation-configuration", () => ({
-  useSaveEditableWorkstationConfiguration: vi.fn(),
-}));
+vi.mock(
+  "../workstation-selection/hooks/use-save-editable-workstation-configuration",
+  () => ({
+    useSaveEditableWorkstationConfiguration: vi.fn(),
+  }),
+);
 
-vi.mock("../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
+vi.mock(
+  "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
+  () => ({
+    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+  }),
+);
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -63,12 +72,19 @@ function buildCurrentSelection(
     selectedWorkID: null,
     selectedWorkProviderSessions: [],
     selectedWorkRequestHistory: [],
+    selectedResourceName: null,
+    selectedResourceTokenCount: null,
+    selectedWorker: null,
+    selectedWorkerName: null,
+    selectedWorkerWorkstationNames: [],
     selectedWorkstationRequest: null,
     selection: null,
+    selectResource: () => undefined,
     selectStateNode: () => undefined,
     selectStateWorkItem: () => undefined,
     selectWorkByID: () => undefined,
     selectWorkItem: () => undefined,
+    selectWorker: () => undefined,
     selectWorkstation: () => undefined,
     selectWorkstationRequest: () => undefined,
     terminalWorkDetail: null,
@@ -188,12 +204,15 @@ describe("CurrentSelectionWidget localization", () => {
     );
 
     const { rerender } = render(
-      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(
+        queryClient,
+        <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="en"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={fixture.executionDetails}
-        />),
+        />,
+      ),
     );
 
     const englishSelection = screen.getByRole("article", {
@@ -214,17 +233,18 @@ describe("CurrentSelectionWidget localization", () => {
         name: "Select provider session codex / Session ID / sess-active-story for dispatch dispatch-review-active",
       }),
     );
-    expect(
-      within(englishSelection).getByText("Session selected"),
-    ).toBeTruthy();
+    expect(within(englishSelection).getByText("Session selected")).toBeTruthy();
 
     rerender(
-      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(
+        queryClient,
+        <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="zh-CN"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={fixture.executionDetails}
-        />),
+        />,
+      ),
     );
 
     const localizedSelection = screen.getByRole("article", {
@@ -239,9 +259,7 @@ describe("CurrentSelectionWidget localization", () => {
         name: "选择调度 dispatch-review-active 的 provider session codex / 会话 ID / sess-active-story",
       }),
     ).toBeTruthy();
-    expect(
-      within(localizedSelection).getByText("会话已选中"),
-    ).toBeTruthy();
+    expect(within(localizedSelection).getByText("会话已选中")).toBeTruthy();
     expect(
       within(localizedSelection).getByText(fixture.workItem.work_id),
     ).toBeTruthy();
@@ -310,29 +328,132 @@ describe("CurrentSelectionWidget workstation localization", () => {
     });
 
     const { rerender } = render(
-      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(
+        queryClient,
+        <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="en"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />),
+        />,
+      ),
     );
 
-    expect(screen.getByRole("heading", { name: "Workstation summary" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Workstation summary" }),
+    ).toBeTruthy();
     expect(screen.getByText("Standard")).toBeTruthy();
     expect(screen.getByText("reviewer")).toBeTruthy();
 
     rerender(
-      wrapCurrentSelectionWidgetView(queryClient, <CurrentSelectionWidget
+      wrapCurrentSelectionWidgetView(
+        queryClient,
+        <CurrentSelectionWidget
           currentSelection={currentSelection}
           locale="zh-CN"
           now={DETAIL_CARD_NOW}
           selectedWorkExecutionDetails={null}
-        />),
+        />,
+      ),
     );
 
     expect(screen.getByRole("heading", { name: "工作站摘要" })).toBeTruthy();
     expect(screen.getByText("标准")).toBeTruthy();
     expect(screen.getByText("reviewer")).toBeTruthy();
+  });
+});
+
+describe("CurrentSelectionWidget resource localization", () => {
+  setupCurrentSelectionLocalizationTest();
+
+  it("switches resource detail labels to zh-CN without changing canonical values", () => {
+    const factoryDocument: CurrentFactoryDocument = {
+      name: "Current Factory",
+      version: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      resources: [
+        {
+          capacity: 2,
+          name: "agent-slot",
+          type: "INVOCATION_SLOT",
+        },
+      ],
+      workers: [
+        {
+          model: "gpt-5.5",
+          name: "reviewer",
+          resources: [{ capacity: 1, name: "agent-slot" }],
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          id: "review",
+          name: "Review",
+          resources: [{ capacity: 1, name: "agent-slot" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+      data: factoryDocument,
+      isPending: false,
+      status: "success",
+    } as never);
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: factoryDocument,
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    const queryClient = createCurrentSelectionWidgetQueryClient();
+    const currentSelection = buildCurrentSelection({
+      selectedResourceName: "agent-slot",
+      selection: { kind: "resource", resourceName: "agent-slot" },
+    });
+
+    const { rerender } = render(
+      wrapCurrentSelectionWidgetView(
+        queryClient,
+        <CurrentSelectionWidget
+          currentSelection={currentSelection}
+          locale="en"
+          now={DETAIL_CARD_NOW}
+          selectedWorkExecutionDetails={null}
+        />,
+      ),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Resource configuration" }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Capacity")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save resource" })).toBeTruthy();
+    expect(screen.getByDisplayValue("agent-slot")).toBeTruthy();
+
+    rerender(
+      wrapCurrentSelectionWidgetView(
+        queryClient,
+        <CurrentSelectionWidget
+          currentSelection={currentSelection}
+          locale="zh-CN"
+          now={DETAIL_CARD_NOW}
+          selectedWorkExecutionDetails={null}
+        />,
+      ),
+    );
+
+    expect(screen.getByRole("heading", { name: "资源配置" })).toBeTruthy();
+    expect(screen.getByLabelText("容量")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "保存资源" })).toBeTruthy();
+    expect(screen.getByDisplayValue("agent-slot")).toBeTruthy();
+    expect(screen.getByText("调用槽位")).toBeTruthy();
   });
 });

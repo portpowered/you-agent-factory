@@ -80,11 +80,13 @@ export {
   buildDetailCardEditableFactoryDocument,
   buildDetailCardFactoryDocumentQueryResult,
   buildDetailCardFactoryDocumentSaveHookReturn,
+  buildDetailCardMultiResourceFactoryDocument,
   buildDetailCardMultiWorkstationFactoryDocument,
   buildDetailCardSharedWorkerFactoryDocument,
   buildDetailCardWorkStateFactoryDocument,
   buildDetailCardWorkstationNodeSelection,
   createDetailCardDeferredFactoryDocumentSave,
   DETAIL_CARD_SAVE_FACTORY_VERSION,
+  expandDetailCardResourceConfiguration,
   expandDetailCardWorkstationConfiguration,
 } from "./detail-card-save-test-helpers";

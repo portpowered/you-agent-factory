@@ -49,6 +49,8 @@ export interface CurrentSelectionState {
   selectedWorkProviderSessions: DashboardProviderSessionAttempt[];
   selectedWorkRequestHistory: WorkstationRequestLike[];
   selectedWorkWorkstationRequests: DashboardWorkstationRequest[];
+  selectedResourceName: string | null;
+  selectedResourceTokenCount: number | null;
   selectedWorker: FactoryWorker | null;
   selectedWorkerName: string | null;
   selectedWorkerWorkstationNames: string[];
@@ -67,6 +69,7 @@ export interface CurrentSelectionState {
   ) => void;
   selectWorkstation: (nodeId: string) => void;
   selectWorkstationRequest: (request: DashboardWorkstationRequest) => void;
+  selectResource: (resourceName: string) => void;
   selectWorker: (workerName: string) => void;
   clearSelectedFactoryGraphNodeIfMatching: (nodeId: string) => void;
   clearSelectedStateNodeIfMatching: (placeId: string) => void;
@@ -173,6 +176,8 @@ export function useCurrentSelection({
     selectedWorkProviderSessions: derived.selectedWorkProviderSessions,
     selectedWorkRequestHistory: derived.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: derived.selectedWorkWorkstationRequests,
+    selectedResourceName: derived.selectedResourceName,
+    selectedResourceTokenCount: derived.selectedResourceTokenCount,
     selectedWorker: derived.selectedWorker,
     selectedWorkerName: derived.selectedWorkerName,
     selectedWorkerWorkstationNames: derived.selectedWorkerWorkstationNames,
@@ -190,6 +195,7 @@ export function useCurrentSelection({
       actions.clearSelectedFactoryGraphNodeIfMatching,
     clearSelectedStateNodeIfMatching: actions.clearSelectedStateNodeIfMatching,
     clearSelectedWorkerIfMatching: actions.clearSelectedWorkerIfMatching,
+    selectResource: actions.selectResource,
     selectWorker: actions.selectWorker,
     selectWorkType: actions.selectWorkType,
     terminalWorkDetail,
