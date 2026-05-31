@@ -124,10 +124,13 @@ describe("useEditableFactoryGraph document plane scope and persist", () => {
 
     act(() => {
       result.current.actions.addNode({
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
+        workerType: "MODEL_WORKER",
       });
     });
 
@@ -179,10 +182,13 @@ describe("useEditableFactoryGraph document plane scope and persist", () => {
 
     act(() => {
       result.current.actions.addNode({
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
+        workerType: "MODEL_WORKER",
       });
     });
 

@@ -1,3 +1,4 @@
+import { parseWorkerArgsText } from "../../current-factory-definition/lib/worker-editable-values";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
   type EditableWorkstationBehavior,
@@ -15,6 +16,11 @@ import type {
 type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
 type ModelProvider = NonNullable<CanonicalWorker["modelProvider"]>;
 
+export type FactoryGraphAddWorkerType = Extract<
+  CanonicalWorker["type"],
+  "MODEL_WORKER" | "SCRIPT_WORKER"
+>;
+
 export type FactoryGraphAddEntityKind =
   | "resource"
   | "worker"
@@ -29,10 +35,13 @@ export type FactoryGraphAddEntityDraft =
       name: string;
     }
   | {
+      argsText: string;
+      command: string;
       kind: "worker";
       model: string;
       modelProvider: string;
       name: string;
+      workerType: FactoryGraphAddWorkerType;
     }
   | {
       initialStateName: string;
@@ -55,7 +64,9 @@ export type FactoryGraphAddEntityDraft =
 
 export type FactoryGraphAddEntityFieldErrors = Partial<
   Record<
+    | "args"
     | "capacity"
+    | "command"
     | "initialStateName"
     | "model"
     | "modelProvider"
@@ -124,10 +135,13 @@ export function createFactoryGraphAddEntityDraft(
 
   if (kind === "worker") {
     return {
+      argsText: "",
+      command: "",
       kind,
       model: "",
       modelProvider: "",
       name: "",
+      workerType: "MODEL_WORKER",
     };
   }
 
@@ -184,8 +198,27 @@ export function validateFactoryGraphAddEntityDraft(
     }
   }
 
-  if (draft.kind === "worker" && draft.modelProvider.trim().length === 0) {
-    errors.modelProvider = "Select a model provider for the new worker.";
+  if (draft.kind === "worker") {
+    if (
+      draft.workerType === "MODEL_WORKER" &&
+      draft.modelProvider.trim().length === 0
+    ) {
+      errors.modelProvider = "Select a model provider for the new worker.";
+    }
+
+    if (
+      draft.workerType === "SCRIPT_WORKER" &&
+      draft.command.trim().length === 0
+    ) {
+      errors.command = "Enter a command for the new script worker.";
+    }
+
+    if (
+      draft.workerType === "SCRIPT_WORKER" &&
+      draft.argsText.includes("\0")
+    ) {
+      errors.args = "Each script argument must be a single non-empty line.";
+    }
   }
 
   if (
@@ -248,6 +281,17 @@ export function applyFactoryGraphAddEntityDraft(
   }
 
   if (entityDraft.kind === "worker") {
+    if (entityDraft.workerType === "SCRIPT_WORKER") {
+      const args = parseWorkerArgsText(entityDraft.argsText);
+      nextDraft.additions.workers.push({
+        command: entityDraft.command.trim(),
+        ...(args.length > 0 ? { args } : {}),
+        name: entityDraft.name.trim(),
+        type: "SCRIPT_WORKER",
+      });
+      return nextDraft;
+    }
+
     const modelProvider = entityDraft.modelProvider.trim() as ModelProvider;
     nextDraft.additions.workers.push({
       modelProvider,

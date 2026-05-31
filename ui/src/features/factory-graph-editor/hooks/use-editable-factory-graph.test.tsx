@@ -53,10 +53,13 @@ describe("useEditableFactoryGraph", () => {
 
     act(() => {
       result.current.actions.addNode({
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "reviewer",
+        workerType: "MODEL_WORKER",
       });
     });
     rerender();
@@ -68,10 +71,13 @@ describe("useEditableFactoryGraph", () => {
 
     act(() => {
       result.current.actions.addNode({
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "writer",
+        workerType: "MODEL_WORKER",
       });
     });
 

@@ -66,10 +66,13 @@ describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", (
 
     act(() => {
       result.current.actions.addNode({
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "reviewer",
+        workerType: "MODEL_WORKER",
       });
     });
     expect(result.current.blockedOperation).toBeNull();

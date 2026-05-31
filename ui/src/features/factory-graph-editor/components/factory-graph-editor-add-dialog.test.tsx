@@ -95,7 +95,15 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
   it("renders worker and work-type specific fields", () => {
     const workerChange = vi.fn();
     const { rerender } = renderDialog({
-      draft: { kind: "worker", model: "", modelProvider: "", name: "writer" },
+      draft: {
+        argsText: "",
+        command: "",
+        kind: "worker",
+        model: "",
+        modelProvider: "",
+        name: "writer",
+        workerType: "MODEL_WORKER",
+      },
       errors: {
         modelProvider: "Select a model provider for the new worker.",
       },
@@ -110,16 +118,22 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     });
 
     expect(workerChange).toHaveBeenNthCalledWith(1, {
+      argsText: "",
+      command: "",
       kind: "worker",
       model: "",
       modelProvider: "CURSOR",
       name: "writer",
+      workerType: "MODEL_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(2, {
+      argsText: "",
+      command: "",
       kind: "worker",
       model: "gpt-5.5",
       modelProvider: "",
       name: "writer",
+      workerType: "MODEL_WORKER",
     });
     expect(
       screen.getByText("Select a model provider for the new worker."),

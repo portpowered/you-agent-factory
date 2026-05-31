@@ -34,10 +34,13 @@ describe("factory graph operations", () => {
       baseFactoryDefinition,
       draft: expectOk(withResource),
       node: {
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "reviewer",
+        workerType: "MODEL_WORKER",
       },
     });
     const withWorkType = addFactoryGraphNode({
@@ -115,10 +118,13 @@ describe("factory graph operations", () => {
       baseFactoryDefinition,
       draft: createEmptyFactoryGraphDraft(),
       node: {
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "writer",
+        workerType: "MODEL_WORKER",
       },
     });
     expect(duplicateWorker).toMatchObject({
