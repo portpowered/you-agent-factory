@@ -11,16 +11,26 @@ import type {
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
 } from "../features/factory-graph-editor/hooks/use-editable-factory-graph-types";
+import { buildFactoryGraphTopologyFromDefinition } from "../features/factory-graph-editor/lib/factory-graph-draft-graph";
 import {
   createEmptyFactoryGraphDraft,
   type FactoryGraphDraftDerivedState,
 } from "../features/factory-graph-editor/lib/factory-graph-draft-types";
+import {
+  baseFactoryDefinition as draftWorkstationFactoryDefinition,
+  currentFactoryDocument as draftWorkstationFactoryDocument,
+} from "../features/factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import {
   addFactoryGraphNode,
   connectFactoryGraphNodes,
   disconnectFactoryGraphEdge,
   removeFactoryGraphNode,
 } from "../features/factory-graph-editor/lib/factory-graph-operations";
+
+export {
+  draftWorkstationFactoryDefinition,
+  draftWorkstationFactoryDocument,
+};
 
 export const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -208,6 +218,46 @@ export function createMockGraphEditorDraftState(
   };
 }
 
+/** Draft-state double for `useEditableFactoryGraph` hook tests with mutable replace/reset. */
+export function createHookTestGraphEditorDraftState(
+  overrides: Partial<MockGraphEditorDraftState> = {},
+): MockGraphEditorDraftState {
+  const document =
+    overrides.latestDocument ??
+    overrides.baseDocument ??
+    draftWorkstationFactoryDocument;
+  const draft = overrides.draft ?? createEmptyFactoryGraphDraft();
+  const state = createMockGraphEditorDraftState({
+    baseDocument: document,
+    draft,
+    graph: buildFactoryGraphTopologyFromDefinition(document),
+    hasChanges: overrides.hasChanges ?? false,
+    latestDocument: document,
+    pendingFactoryDefinition:
+      overrides.pendingFactoryDefinition ?? document,
+    source: overrides.source ?? "current-factory",
+    updateDraft: overrides.updateDraft ?? vi.fn(),
+    validationErrors: overrides.validationErrors ?? [],
+    ...overrides,
+  });
+
+  if (overrides.replaceDraft === undefined) {
+    state.replaceDraft = vi.fn((nextDraft) => {
+      state.draft = nextDraft;
+      state.hasChanges = true;
+    });
+  }
+
+  if (overrides.resetDraft === undefined) {
+    state.resetDraft = vi.fn(() => {
+      state.draft = createEmptyFactoryGraphDraft();
+      state.hasChanges = false;
+    });
+  }
+
+  return state;
+}
+
 function createMockEditableFactoryGraphActions(
   options: UseEditableFactoryGraphOptions,
   draftState: MockGraphEditorDraftState,
@@ -363,6 +413,9 @@ export function createMockEditableFactoryGraph(
     },
   };
 }
+
+/** PRD-facing alias for editable-graph view-model doubles in hook/card tests. */
+export const mockEditableFactoryGraph = createMockEditableFactoryGraph;
 
 const divergentPlaneStoryWorkType = {
   name: "story",
