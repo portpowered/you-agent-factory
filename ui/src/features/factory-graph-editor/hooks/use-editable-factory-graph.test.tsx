@@ -1,12 +1,18 @@
-import { act, renderHook } from "@testing-library/react";
-import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
+import { act, renderHook, waitFor } from "@testing-library/react";
+
 import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
+import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import {
   createHookTestGraphEditorDraftState,
   draftWorkstationFactoryDefinition,
   draftWorkstationFactoryDocument,
   type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
+import {
+  createEditableFactoryGraphHookWrapper,
+  renderEditableFactoryGraphHook,
+  setupEditableFactoryGraphSaveTestEnvironment,
+} from "../../../testing/editable-factory-graph-hook-test-helpers";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const hookState = vi.hoisted(() => ({
@@ -21,14 +27,13 @@ vi.mock("./factory-graph-draft-hook", () => ({
 describe("useEditableFactoryGraph", () => {
   beforeEach(() => {
     hookState.draftState = createHookTestGraphEditorDraftState();
+    setupEditableFactoryGraphSaveTestEnvironment();
   });
 
   it("exposes pending, projection, validation, and blocked operation state", () => {
-    const { result, rerender } = renderHook(() =>
-      useEditableFactoryGraph({
-        currentFactoryDocument: draftWorkstationFactoryDocument,
-      }),
-    );
+    const { result, rerender } = renderEditableFactoryGraphHook({
+      currentFactoryDocument: draftWorkstationFactoryDocument,
+    });
 
     expect(result.current.pendingState.hasChanges).toBe(false);
     expect(result.current.projection.nodes.map((node) => node.id)).toContain(
@@ -87,34 +92,52 @@ describe("useEditableFactoryGraph", () => {
       },
     };
 
-    const { result } = renderHook(() =>
-      useEditableFactoryGraph({
-        currentFactoryDocument:
-          hookState.draftState.latestDocument ?? undefined,
-        saveFactoryDefinition: async () => draftWorkstationFactoryDocument,
-      }),
-    );
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument:
+        hookState.draftState.latestDocument ?? undefined,
+    });
 
     expect(result.current.saveState.isStale).toBe(true);
     expect(result.current.saveState.canSave).toBe(false);
+    expect(result.current.saveState.documentSave).toEqual({
+      message:
+        "The factory definition changed while you were editing. Refresh or discard your draft before saving.",
+      status: "warning",
+    });
   });
 
-  it("saves pending edits through the provided save callback", async () => {
-    const savedDocument: typeof draftWorkstationFactoryDocument = {
-      ...draftWorkstationFactoryDocument,
-      resources: [
-        ...(draftWorkstationFactoryDocument.resources ?? []),
-        {
-          capacity: 1,
-          name: "review-slot",
-        },
-      ],
-      version: {
-        logical: "9",
-        physical: "2026-05-31T02:00:00Z",
-      },
-    };
-    const saveFactoryDefinition = vi.fn(async () => savedDocument);
+  it("drives save confirmation from scoped document save state", () => {
+    setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
+    );
+    hookState.draftState.hasChanges = true;
+
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument: draftWorkstationFactoryDocument,
+      factoryDocumentScopeKey: "session-graph",
+    });
+
+    act(() => {
+      result.current.documentSaveControls.beginConfirmation();
+    });
+
+    expect(result.current.saveState.documentSave).toEqual({
+      status: "confirming",
+    });
+
+    act(() => {
+      result.current.documentSaveControls.cancelConfirmation();
+    });
+
+    expect(result.current.saveState.documentSave).toEqual({
+      status: "idle",
+    });
+  });
+
+  it("delegates save to scoped factory document save", async () => {
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
+    );
     hookState.draftState.hasChanges = true;
     hookState.draftState.draft = {
       ...createEmptyFactoryGraphDraft(),
@@ -129,12 +152,10 @@ describe("useEditableFactoryGraph", () => {
       },
     };
 
-    const { result } = renderHook(() =>
-      useEditableFactoryGraph({
-        currentFactoryDocument: draftWorkstationFactoryDocument,
-        saveFactoryDefinition,
-      }),
-    );
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument: draftWorkstationFactoryDocument,
+      factoryDocumentScopeKey: "session-graph",
+    });
 
     let didSave = false;
     await act(async () => {
@@ -142,24 +163,58 @@ describe("useEditableFactoryGraph", () => {
     });
 
     expect(didSave).toBe(true);
-    expect(saveFactoryDefinition).toHaveBeenCalledWith({
+    expect(saveMutation.saveAsync).toHaveBeenCalledWith({
       baseVersion: draftWorkstationFactoryDocument.version,
-      factoryDefinition: expect.objectContaining({
+      factory: expect.objectContaining({
         resources: expect.arrayContaining([
           expect.objectContaining({ name: "review-slot" }),
         ]),
       }),
     });
-    expect(hookState.draftState.adoptSavedFactoryDocument).toHaveBeenCalledWith(
-      savedDocument,
+    expect(hookState.draftState.replaceDraft).toHaveBeenCalledWith(
+      createEmptyFactoryGraphDraft(),
     );
-    expect(result.current.saveState.lastSuccess).toBe(true);
+    await waitFor(() => {
+      expect(result.current.saveState.documentSave).toEqual({
+        status: "success",
+      });
+    });
   });
 
-  it("keeps the draft and exposes save errors when the save callback fails", async () => {
-    const saveFactoryDefinition = vi.fn(async () => {
-      throw new Error("API unavailable");
+  it("does not save when scopeKey is missing", async () => {
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
+    );
+    hookState.draftState.hasChanges = true;
+
+    const { result } = renderHook(
+      () =>
+        useEditableFactoryGraph({
+          currentFactoryDocument: draftWorkstationFactoryDocument,
+          factoryDocumentScopeKey: null,
+        }),
+      {
+        wrapper: createEditableFactoryGraphHookWrapper()
+          .EditableFactoryGraphHookWrapper,
+      },
+    );
+
+    let didSave = true;
+    await act(async () => {
+      didSave = await result.current.actions.save();
     });
+
+    expect(didSave).toBe(false);
+    expect(saveMutation.saveAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps the draft and exposes scoped save errors when persist fails", async () => {
+    setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({
+        mode: "error",
+        rejectedError: new Error("API unavailable"),
+      }),
+    );
     hookState.draftState.hasChanges = true;
     hookState.draftState.draft = {
       ...createEmptyFactoryGraphDraft(),
@@ -174,64 +229,12 @@ describe("useEditableFactoryGraph", () => {
       },
     };
 
-    const { result } = renderHook(() =>
-      useEditableFactoryGraph({
-        currentFactoryDocument: {
-          ...draftWorkstationFactoryDefinition,
-          version: draftWorkstationFactoryDocument.version,
-        },
-        saveFactoryDefinition,
-      }),
-    );
-
-    let didSave = true;
-    await act(async () => {
-      didSave = await result.current.actions.save();
-    });
-
-    expect(didSave).toBe(false);
-    expect(hookState.draftState.hasChanges).toBe(true);
-    expect(result.current.saveState.lastError).toBe("API unavailable");
-  });
-
-  it("keeps the draft and surfaces structured save validation messages", async () => {
-    const saveFactoryDefinition = vi.fn(async () => {
-      throw new CurrentFactoryDefinitionError(
-        "The factory definition is invalid.",
-        {
-          code: "INVALID_FACTORY_DEFINITION",
-          status: 400,
-          targets: [
-            {
-              code: "factory.route.danglingPlaceReference",
-              message:
-                'Workstation "process" references missing place "story:missing-state".',
-              severity: "error",
-              subject: {
-                id: "process",
-                location: "OUTPUTS",
-                type: "WORKSTATION",
-              },
-            },
-          ],
-        },
-      );
-    });
-    hookState.draftState.hasChanges = true;
-    hookState.draftState.draft = {
-      ...createEmptyFactoryGraphDraft(),
-      removals: {
-        ...createEmptyFactoryGraphDraft().removals,
-        workStates: ["story:missing-state"],
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument: {
+        ...draftWorkstationFactoryDefinition,
+        version: draftWorkstationFactoryDocument.version,
       },
-    };
-
-    const { result } = renderHook(() =>
-      useEditableFactoryGraph({
-        currentFactoryDocument: draftWorkstationFactoryDocument,
-        saveFactoryDefinition,
-      }),
-    );
+    });
 
     let didSave = true;
     await act(async () => {
@@ -240,8 +243,11 @@ describe("useEditableFactoryGraph", () => {
 
     expect(didSave).toBe(false);
     expect(hookState.draftState.hasChanges).toBe(true);
-    expect(result.current.saveState.lastError).toBe(
-      "The factory definition is invalid.",
-    );
+    await waitFor(() => {
+      expect(result.current.saveState.documentSave).toEqual({
+        errorMessage: "API unavailable",
+        status: "error",
+      });
+    });
   });
 });

@@ -1,7 +1,5 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: editable graph hook keeps draft, projection, save, and mutation wiring in one view-model seam.
 import { useCallback, useMemo, useState } from "react";
-import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
-import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
+
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -12,7 +10,6 @@ import type { FactoryGraphNodeFieldUpdate } from "../lib/factory-graph-field-ope
 import { updateFactoryGraphNodeField } from "../lib/factory-graph-field-operations";
 import {
   addFactoryGraphNode,
-  applyFactoryGraphPendingEdits,
   buildFactoryGraphState,
   connectFactoryGraphNodes,
   disconnectFactoryGraphEdge,
@@ -20,10 +17,9 @@ import {
   projectFactoryGraphToReactFlow,
   removeFactoryGraphNode,
 } from "../lib/factory-graph-operations";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
+import { useEditableFactoryGraphSaveController } from "./use-editable-factory-graph-save-controller";
 import type {
-  EditableFactoryGraphSaveInput,
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
 } from "./use-editable-factory-graph-types";
@@ -62,8 +58,8 @@ export function useEditableFactoryGraph(
   const saveController = useEditableFactoryGraphSaveController({
     activeWorkCount: options.activeWorkCount ?? 0,
     draftState,
+    factoryDocumentScopeKey: options.factoryDocumentScopeKey ?? null,
     locale: options.locale,
-    saveFactoryDefinition: options.saveFactoryDefinition,
     setBlockedOperation,
   });
   const mutationActions = useEditableFactoryGraphMutationActions({
@@ -96,12 +92,12 @@ export function useEditableFactoryGraph(
       pendingFactoryDefinition: draftState.pendingFactoryDefinition,
     },
     projection,
+    documentSaveControls: saveController.documentSaveControls,
+    saveMutation: saveController.saveMutation,
     saveState: {
       canSave: saveController.canSave,
-      isSaving: saveController.isSaving,
+      documentSave: saveController.documentSave,
       isStale: saveController.isStale,
-      lastError: saveController.lastSaveError,
-      lastSuccess: saveController.lastSaveSuccess,
     },
     validationState: {
       errors: draftState.validationErrors,
@@ -315,160 +311,6 @@ function useUpdateNodeFieldAction({
     },
     [baseFactoryDefinition, setBlockedOperation],
   );
-}
-
-function useEditableFactoryGraphSaveController({
-  activeWorkCount,
-  draftState,
-  locale,
-  saveFactoryDefinition,
-  setBlockedOperation,
-}: {
-  activeWorkCount: number;
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  locale?: string | null;
-  saveFactoryDefinition?: (
-    input: EditableFactoryGraphSaveInput,
-  ) => Promise<CurrentFactoryDocument>;
-  setBlockedOperation: (
-    result: FactoryGraphOperationResult<never> | null,
-  ) => void;
-}) {
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastSaveError, setLastSaveError] = useState<string | null>(null);
-  const [lastSaveSuccess, setLastSaveSuccess] = useState(false);
-  const isStale = isFactoryGraphDraftStale(draftState);
-  const canSave =
-    Boolean(saveFactoryDefinition) &&
-    draftState.hasChanges &&
-    draftState.pendingFactoryDefinition !== null &&
-    draftState.validationErrors.length === 0 &&
-    draftState.latestDocument !== null &&
-    activeWorkCount === 0 &&
-    !isStale &&
-    !isSaving;
-  const resetSaveState = useCallback(() => {
-    setLastSaveError(null);
-    setLastSaveSuccess(false);
-  }, []);
-  const save = useSaveEditableFactoryGraph({
-    canSave,
-    draftState,
-    locale,
-    resetSaveState,
-    saveFactoryDefinition,
-    setBlockedOperation,
-    setIsSaving,
-    setLastSaveError,
-    setLastSaveSuccess,
-  });
-
-  return {
-    canSave,
-    isSaving,
-    isStale,
-    lastSaveError,
-    lastSaveSuccess,
-    resetSaveState,
-    save,
-  };
-}
-
-function useSaveEditableFactoryGraph({
-  canSave,
-  draftState,
-  locale,
-  resetSaveState,
-  saveFactoryDefinition,
-  setBlockedOperation,
-  setIsSaving,
-  setLastSaveError,
-  setLastSaveSuccess,
-}: {
-  canSave: boolean;
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  locale?: string | null;
-  resetSaveState: () => void;
-  saveFactoryDefinition?: (
-    input: EditableFactoryGraphSaveInput,
-  ) => Promise<CurrentFactoryDocument>;
-  setBlockedOperation: (
-    result: FactoryGraphOperationResult<never> | null,
-  ) => void;
-  setIsSaving: (isSaving: boolean) => void;
-  setLastSaveError: (error: string | null) => void;
-  setLastSaveSuccess: (success: boolean) => void;
-}) {
-  return useCallback(async () => {
-    if (!saveFactoryDefinition || !canSave || !draftState.latestDocument) {
-      return false;
-    }
-
-    const saveInput = applyFactoryGraphPendingEdits({
-      baseFactoryDefinition: draftState.latestDocument,
-      draft: draftState.draft,
-      locale,
-    });
-    if (!saveInput.ok) {
-      setBlockedOperation(saveInput as FactoryGraphOperationResult<never>);
-      return false;
-    }
-
-    setIsSaving(true);
-    resetSaveState();
-    try {
-      const savedDocument = await saveFactoryDefinition({
-        baseVersion: draftState.latestDocument.version,
-        factoryDefinition: saveInput.value,
-      });
-      draftState.adoptSavedFactoryDocument(savedDocument);
-      setBlockedOperation(null);
-      setLastSaveSuccess(true);
-      return true;
-    } catch (error) {
-      setLastSaveError(resolveFactoryGraphSaveErrorMessage(error, locale));
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [
-    canSave,
-    draftState,
-    locale,
-    resetSaveState,
-    saveFactoryDefinition,
-    setBlockedOperation,
-    setIsSaving,
-    setLastSaveError,
-    setLastSaveSuccess,
-  ]);
-}
-
-function isFactoryGraphDraftStale(
-  draftState: ReturnType<typeof useFactoryGraphDraftState>,
-) {
-  return (
-    draftState.hasChanges &&
-    draftState.baseDocument !== null &&
-    draftState.latestDocument !== null &&
-    (draftState.baseDocument.version.logical !==
-      draftState.latestDocument.version.logical ||
-      draftState.baseDocument.version.physical !==
-        draftState.latestDocument.version.physical)
-  );
-}
-
-function resolveFactoryGraphSaveErrorMessage(
-  error: unknown,
-  locale?: string | null,
-): string {
-  if (error instanceof CurrentFactoryDefinitionError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return getFactoryGraphEditorMessages(locale).noticeSaveFailedTitle;
 }
 
 function missingFactoryResult(

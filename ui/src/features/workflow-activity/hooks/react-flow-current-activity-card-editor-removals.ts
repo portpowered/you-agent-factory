@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import {
@@ -24,7 +24,7 @@ export function useFactoryGraphRemovalController({
   editableGraph: EditableFactoryGraphViewModel;
   locale?: string | null;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
 }) {
   const {
     blockedRemovalReason,
@@ -173,7 +173,7 @@ function useFactoryGraphNodeRemovalRequest({
   canInteractWithEditor: boolean;
   draftState: EditableFactoryGraphViewModel["draftState"];
   locale?: string | null;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setBlockedRemovalReason: (reason: string | null) => void;
   setPendingRemovalEdgeId: (edgeId: string | null) => void;
   setPendingRemovalNodeId: (nodeId: string | null) => void;
@@ -240,7 +240,7 @@ function useFactoryGraphDeleteTargetHandlers({
   editableGraph: EditableFactoryGraphViewModel;
   locale?: string | null;
   requestNodeRemoval: (nodeId: string) => void;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setBlockedRemovalReason: (reason: string | null) => void;
   setPendingRemovalEdgeId: (edgeId: string | null) => void;
   setPendingRemovalNodeId: (nodeId: string | null) => void;

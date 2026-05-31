@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
 import {
   baseFactoryDefinitionDocument,
   createHookTestGraphEditorDraftState,
@@ -10,6 +11,11 @@ import {
   wireMockEditableFactoryGraph,
   type MockEditableFactoryGraphHooks,
 } from "./graph-editor-harness";
+import { mockFactoryDocumentSave } from "./factory-document-save-mocks";
+
+vi.mock("../features/current-factory-definition/hooks/useFactoryDocumentSave", () => ({
+  useFactoryDocumentSave: vi.fn(),
+}));
 
 describe("graph-editor-harness", () => {
   it("createMockGraphEditorDraftState seeds empty draft state with factory fixtures", () => {
@@ -35,21 +41,20 @@ describe("graph-editor-harness", () => {
   });
 
   it("createMockEditableFactoryGraph saves pending definitions when changes are allowed", async () => {
-    const saveFactoryDefinition = vi.fn().mockResolvedValue(undefined);
+    const saveMutation = mockFactoryDocumentSave({ mode: "success" });
+    vi.mocked(useFactoryDocumentSave).mockReturnValue(saveMutation);
+
     const draftState = createMockGraphEditorDraftState({
       hasChanges: true,
       pendingFactoryDefinition: baseFactoryDefinitionDocument,
     });
     const graph = createMockEditableFactoryGraph(
-      { saveFactoryDefinition },
+      { factoryDocumentScopeKey: "session-default" },
       draftState,
     );
 
     await expect(graph.actions.save()).resolves.toBe(true);
-    expect(saveFactoryDefinition).toHaveBeenCalledWith({
-      baseVersion: baseFactoryDefinitionDocument.version,
-      factoryDefinition: baseFactoryDefinitionDocument,
-    });
+    expect(saveMutation.saveAsync).toHaveBeenCalled();
     expect(draftState.replaceDraft).toHaveBeenCalled();
   });
 
@@ -83,14 +88,12 @@ describe("graph-editor-harness", () => {
       hasChanges: true,
       pendingFactoryDefinition: baseFactoryDefinitionDocument,
     });
-    const saveFactoryDefinition = vi.fn();
     const graph = createMockEditableFactoryGraph(
-      { activeWorkCount: 2, saveFactoryDefinition },
+      { activeWorkCount: 2, factoryDocumentScopeKey: "session-default" },
       draftState,
     );
 
     await expect(graph.actions.save()).resolves.toBe(false);
-    expect(saveFactoryDefinition).not.toHaveBeenCalled();
     expect(graph.saveState.canSave).toBe(false);
   });
 
@@ -129,7 +132,7 @@ describe("graph-editor-harness", () => {
       },
     });
     const graph = createMockEditableFactoryGraph(
-      { saveFactoryDefinition: vi.fn() },
+      { factoryDocumentScopeKey: "session-default" },
       draftState,
     );
 

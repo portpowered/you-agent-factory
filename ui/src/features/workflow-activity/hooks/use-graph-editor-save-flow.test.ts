@@ -42,6 +42,12 @@ const fixtureState = vi.hoisted(() => {
       reset: vi.fn(),
     },
     baseDocument,
+    documentSave: { status: "idle" as const },
+    documentSaveControls: {
+      beginConfirmation: vi.fn(),
+      cancelConfirmation: vi.fn(),
+      clearSaveFeedback: vi.fn(),
+    },
     emptyDraft,
     draftState: {
       baseDocument,
@@ -84,17 +90,19 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
         return true;
       },
     },
+    documentSaveControls: fixtureState.documentSaveControls,
     draftState: fixtureState.draftState,
+    saveMutation: fixtureState.saveEditableDefinition,
     saveState: {
       canSave:
         fixtureState.draftState.hasChanges &&
         fixtureState.draftState.pendingFactoryDefinition !== null &&
         fixtureState.draftState.latestDocument !== null &&
         !fixtureState.saveStateIsStale,
+      documentSave: fixtureState.documentSave,
       isStale: fixtureState.saveStateIsStale,
-      lastSuccess: false,
     },
-  };
+  } as EditableFactoryGraphViewModel;
 }
 
 function renderSaveFlow(activeWorkCount = 0) {
@@ -108,6 +116,8 @@ function renderSaveFlow(activeWorkCount = 0) {
       useGraphEditorSaveFlow({
         activeWorkCount,
         addEntityController: fixtureState.addEntityController,
+        documentSave: fixtureState.documentSave,
+        documentSaveControls: fixtureState.documentSaveControls,
         draftState: fixtureState.draftState,
         editableGraph: buildEditableGraph(),
         locale: "en",
@@ -122,6 +132,10 @@ function renderSaveFlow(activeWorkCount = 0) {
 
 function resetSaveFlowFixture() {
   fixtureState.addEntityController.reset.mockReset();
+  fixtureState.documentSave = { status: "idle" };
+  fixtureState.documentSaveControls.beginConfirmation.mockReset();
+  fixtureState.documentSaveControls.cancelConfirmation.mockReset();
+  fixtureState.documentSaveControls.clearSaveFeedback.mockReset();
   fixtureState.saveStateIsStale = false;
   fixtureState.draftState = {
     baseDocument: fixtureState.baseDocument,
@@ -172,6 +186,26 @@ describe("useGraphEditorSaveFlow", () => {
     );
   });
 
+  it("opens save confirmation through scoped beginConfirmation", () => {
+    const { result } = renderSaveFlow(0);
+
+    act(() => {
+      result.current.setIsConfirmingSave(true);
+    });
+
+    expect(
+      fixtureState.documentSaveControls.beginConfirmation,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it("reflects scoped confirming status for isConfirmingSave", () => {
+    fixtureState.documentSave = { status: "confirming" };
+
+    const { result } = renderSaveFlow(0);
+
+    expect(result.current.isConfirmingSave).toBe(true);
+  });
+
   it("discards pending changes without leaving editor mode", () => {
     fixtureState.draftState.hasChanges = true;
     const { result, setActiveTool, setEditorMode } = renderSaveFlow(0);
@@ -182,13 +216,15 @@ describe("useGraphEditorSaveFlow", () => {
 
     expect(fixtureState.draftState.resetDraft).toHaveBeenCalledTimes(1);
     expect(fixtureState.addEntityController.reset).toHaveBeenCalledTimes(1);
+    expect(fixtureState.documentSaveControls.clearSaveFeedback).toHaveBeenCalledTimes(
+      1,
+    );
     expect(setEditorMode).not.toHaveBeenCalled();
     expect(setActiveTool).not.toHaveBeenCalled();
-    expect(result.current.isConfirmingSave).toBe(false);
     expect(result.current.isConfirmingLeaveEditor).toBe(false);
   });
 
-  it("closes the save confirmation when saving fails", async () => {
+  it("clears scoped save feedback when saving fails", async () => {
     fixtureState.draftState.hasChanges = true;
     fixtureState.saveEditableDefinition.saveAsync = vi.fn(async () => {
       throw new Error("Save failed");
@@ -196,17 +232,13 @@ describe("useGraphEditorSaveFlow", () => {
 
     const { result } = renderSaveFlow(0);
 
-    act(() => {
-      result.current.setIsConfirmingSave(true);
-    });
-
     let didSave = true;
     await act(async () => {
       didSave = await result.current.handleSaveDraft();
     });
 
     expect(didSave).toBe(false);
-    expect(result.current.isConfirmingSave).toBe(false);
+    expect(fixtureState.documentSaveControls.clearSaveFeedback).toHaveBeenCalled();
   });
 
   it("discards pending changes and leaves editor mode from the leave dialog path", () => {
@@ -229,7 +261,6 @@ describe("useGraphEditorSaveFlow", () => {
 
     act(() => {
       result.current.setIsConfirmingLeaveEditor(true);
-      result.current.setIsConfirmingSave(true);
     });
 
     let didSave = false;
@@ -244,7 +275,6 @@ describe("useGraphEditorSaveFlow", () => {
     });
     expect(setEditorMode).toHaveBeenCalledWith(false);
     expect(setActiveTool).toHaveBeenCalledWith(null);
-    expect(result.current.isConfirmingSave).toBe(false);
     expect(result.current.isConfirmingLeaveEditor).toBe(false);
   });
 });

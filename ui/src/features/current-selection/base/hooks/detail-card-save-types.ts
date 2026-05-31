@@ -1,13 +1,8 @@
+export type {
+  FactoryDocumentSaveState,
+} from "./factory-document-save-types";
+
+/** @deprecated Use `FactoryDocumentSaveState` for new factory document save surfaces. */
 export type DetailCardSaveState<
   TFieldErrors extends Record<string, string> = Record<string, string>,
-> =
-  | { status: "idle" }
-  | { status: "confirming" }
-  | { status: "submitting" }
-  | { status: "success" }
-  | { message: string; status: "warning" }
-  | {
-      errorMessage: string;
-      fieldErrors?: TFieldErrors;
-      status: "error";
-    };
+> = import("./factory-document-save-types").FactoryDocumentSaveState<TFieldErrors>;

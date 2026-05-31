@@ -153,6 +153,8 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     handleCancelRemoval: vi.fn(),
     handleConfirmRemoval: vi.fn(),
     handleDiscardEditorChanges: vi.fn(),
+    cancelSaveConfirmation: vi.fn(),
+    documentSave: { status: "confirming" },
     handleSaveBeforeLeavingEditor: vi.fn(),
     handleSaveDraft: vi.fn(),
     isConfirmingSave: true,
@@ -240,7 +242,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
         name: /Save factory graph changes\? cancel/i,
       }),
     );
-    expect(editor.setIsConfirmingSave).toHaveBeenCalledWith(false);
+    expect(editor.cancelSaveConfirmation).toHaveBeenCalledTimes(1);
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -300,6 +302,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
 
   it("suppresses save-dismiss callbacks while a save is pending and skips optional import chrome when disabled", () => {
     const editor = createEditorStub({
+      documentSave: { status: "submitting" },
       isConfirmingSave: true,
       pendingRemovalIntent: null,
       saveEditableDefinition: { isPending: true },
@@ -331,6 +334,6 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     );
 
     expect(editor.setIsConfirmingLeaveEditor).not.toHaveBeenCalled();
-    expect(editor.setIsConfirmingSave).not.toHaveBeenCalled();
+    expect(editor.cancelSaveConfirmation).not.toHaveBeenCalled();
   });
 });

@@ -62,7 +62,8 @@
         "src/features/dashboard/session/dashboard-session-provider.tsx",
         "src/features/header/hooks/use-dashboard-session-tabs-state.ts",
         ".storybook/dashboard-story-runtime.tsx",
-        "src/testing/app-shell-test-utils.tsx"
+        "src/testing/app-shell-test-utils.tsx",
+        "src/testing/scoped-factory-document-save-test-helpers.tsx"
       ],
       "linter": {
         "rules": {
