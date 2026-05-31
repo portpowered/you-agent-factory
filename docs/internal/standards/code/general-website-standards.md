@@ -162,6 +162,7 @@ Rules:
 - Pass `expanded`, `controlsID`, and either `onClick` or `onToggle` to the trigger; keep one source of truth for expanded state in the feature. Use `variant` (`section`, `compact`, `outline`) for layout alignment instead of copying toggle class strings.
 - Icon-only triggers **MUST** supply `aria-label`; labeled triggers **MAY** pass visible expand/collapse text as `children` and still set `aria-label` when locale copy differs from visible text.
 - Full-screen or modal expand **MUST** use dialog shell primitives. Opening a dialog is not inline disclosure; do not route dialog open actions through `ExpandablePanelTrigger`.
+- Migrated dashboard inline expand paths are guarded by `ui/scripts/check-dashboard-expand-disclosure.mjs` (wired into `bun run lint` / `bun run check`); extend `dashboard-expand-disclosure-guard-paths.mjs` when adding new in-scope disclosure entry points.
 - Dialog footers and confirm/cancel rows **SHOULD** use ordinary `Button` actions per the website button policy.
 
 In-repo examples:

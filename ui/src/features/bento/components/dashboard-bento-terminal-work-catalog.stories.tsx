@@ -1,6 +1,7 @@
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
+import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
 import { TerminalWorkWidget } from "../../terminal-work/public";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
@@ -51,9 +52,28 @@ export const TerminalWork = {
     const card = await canvas.findByRole("article", {
       name: "Completed and failed work",
     });
+    const messages = getTerminalWorkMessages("en");
+    const terminalScope = within(card);
 
     await expect(
-      within(card).getByRole("button", { name: "Failed Story" }),
+      terminalScope.getByRole("button", { name: "Failed Story" }),
+    ).toBeVisible();
+
+    const completedToggle = (
+      await terminalScope.findAllByRole("button", {
+        name: messages.disclosureLabel(true),
+      })
+    )[0];
+    await expect(completedToggle).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(completedToggle);
+    await expect(completedToggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      terminalScope.queryByRole("button", { name: "Done Story" }),
+    ).toBeNull();
+    await userEvent.click(completedToggle);
+    await expect(completedToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      terminalScope.getByRole("button", { name: "Done Story" }),
     ).toBeVisible();
     expectBentoHeaderDragSurface(card, "Completed and failed work");
   },
