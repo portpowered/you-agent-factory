@@ -133,7 +133,7 @@ describe("WorkerDetailCard", () => {
     ).toBeTruthy();
   });
 
-  it("renders worker summary and referencing workstations from the factory document", () => {
+  it("omits summary and referencing-workstations sections from the worker detail panel", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument(),
       isPending: false,
@@ -144,12 +144,15 @@ describe("WorkerDetailCard", () => {
     render(<WorkerDetailCard workerName="reviewer" />);
 
     expect(screen.getByText("reviewer")).toBeTruthy();
-    expect(screen.getByText("Model worker")).toBeTruthy();
-    expect(screen.getByText("Cursor")).toBeTruthy();
-    expect(screen.getByText("gpt-5.5")).toBeTruthy();
-    expect(screen.getByText("Script wrap")).toBeTruthy();
-    expect(screen.getByText("Review")).toBeTruthy();
-    expect(screen.getByText("Plan")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Worker configuration" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Summary" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Referencing workstations" }),
+    ).toBeNull();
+    expect(screen.queryByText("Review")).toBeNull();
+    expect(screen.queryByText("Plan")).toBeNull();
   });
 
   it("renders editable worker fields for model workers", () => {
@@ -234,7 +237,7 @@ describe("WorkerDetailCard", () => {
     expect(screen.queryByLabelText("Model provider")).toBeNull();
   });
 
-  it("omits optional model fields when they are absent on the worker", () => {
+  it("does not list referencing workstations outside the editable configuration section", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument({
         workers: [{ name: "script-runner", type: "SCRIPT_WORKER" }],
@@ -247,10 +250,10 @@ describe("WorkerDetailCard", () => {
 
     render(<WorkerDetailCard workerName="script-runner" />);
 
-    expect(screen.getByText("Script worker")).toBeTruthy();
-    expect(screen.queryByText("Model provider")).toBeNull();
-    expect(screen.queryByText("Model")).toBeNull();
-    expect(screen.queryByText("Executor provider")).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Referencing workstations" }),
+    ).toBeNull();
+    expect(screen.queryByText("Run")).toBeNull();
   });
 
   it("warns when saving would affect multiple referencing workstations", () => {
@@ -618,33 +621,6 @@ describe("WorkerDetailCard", () => {
     expect(editableConfigurationState.onBodyChange).toHaveBeenCalledWith(
       "Run unit tests",
     );
-  });
-
-  it("shows empty referencing workstations copy when none reference the worker", () => {
-    mockFactoryDocumentQuery({
-      data: buildFactoryDocument({
-        workers: [
-          {
-            model: "gpt-5.5",
-            modelProvider: "CURSOR",
-            name: "orphan",
-            type: "MODEL_WORKER",
-          },
-        ],
-        workstations: [],
-      }),
-      isPending: false,
-      isSuccess: true,
-      status: "success",
-    } as never);
-
-    render(<WorkerDetailCard workerName="orphan" />);
-
-    expect(
-      screen.getByText(
-        "No workstations reference this worker in the running factory definition.",
-      ),
-    ).toBeTruthy();
   });
 
   it("shows stale-version save warning without discarding the worker draft", () => {
