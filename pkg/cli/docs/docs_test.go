@@ -209,6 +209,47 @@ func TestMarkdown_ReturnsRawPackagedMarkdownForEachSupportedTopic(t *testing.T) 
 	}
 }
 
+func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("agents")
+	if err != nil {
+		t.Fatalf("Markdown(agents) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Agents",
+		"## Is the factory running?",
+		"you session list",
+		"you factory query",
+		"GET /factory-sessions/{session_id}/status",
+		"factoryState",
+		"runtimeStatus",
+		"categories",
+		"http://localhost:7437/dashboard/ui",
+		"you run --continuously",
+		"## Operator loop",
+		"you submit",
+		"--name driver-incident-review",
+		"--work-type-name task",
+		"--payload request.md",
+		"you docs sessions",
+		"[Is the factory running?](#is-the-factory-running?)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(agents) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs agents`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(agents) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
