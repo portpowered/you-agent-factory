@@ -33,9 +33,3 @@ export function chooseFileShellClassName({
     className,
   );
 }
-
-export function chooseFileNativeInputClassName(
-  options: ChooseFileShellClassNameOptions = {},
-): string {
-  return cn(chooseFileShellClassName(options), CHOOSE_FILE_NATIVE_INPUT_CLASS);
-}
