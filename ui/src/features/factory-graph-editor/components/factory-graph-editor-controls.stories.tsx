@@ -40,6 +40,7 @@ function ObserveModeStory() {
         />
         <FactoryGraphEditorModeToggle
           editorMode={editorMode}
+          hasChanges={false}
           onClick={() => setEditorMode((current) => !current)}
         />
       </div>
@@ -65,11 +66,18 @@ function EditorModeStory() {
 
   return (
     <div className="grid gap-4 p-6">
-      <FactoryGraphEditorStatus
-        editorMode={true}
-        hasChanges={true}
-        isDefinitionLoading={false}
-      />
+      <div className="flex items-center justify-between gap-4">
+        <FactoryGraphEditorStatus
+          editorMode={true}
+          hasChanges={true}
+          isDefinitionLoading={false}
+        />
+        <FactoryGraphEditorModeToggle
+          editorMode={true}
+          hasChanges={true}
+          onClick={() => {}}
+        />
+      </div>
       <div className="relative min-h-44 rounded-[1.5rem] border border-af-border bg-af-surface-subtle">
         <FactoryGraphEditorToolbar
           activeTool={activeTool}
@@ -260,7 +268,7 @@ export const EditorMode = {
       within(toolbar).getByRole("button", { name: "Connect" }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(
-      within(toolbar).getByText("Draft changes pending"),
+      within(toolbar).getByRole("button", { name: "Discard changes" }),
     ).toBeVisible();
   },
 };
@@ -305,9 +313,6 @@ export const PendingDraftActions = {
       name: "Factory graph editor tools",
     });
 
-    await expect(
-      within(toolbar).getByText("Draft changes pending"),
-    ).toBeVisible();
     await expect(
       within(toolbar).getByRole("button", { name: "Discard changes" }),
     ).toBeVisible();

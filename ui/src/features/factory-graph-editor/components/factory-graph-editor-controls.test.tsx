@@ -12,7 +12,11 @@ import {
   FactoryGraphEditorVisibilityPanel,
 } from "./factory-graph-editor-controls";
 
-function renderToolbar({ hasPendingChanges = true }: { hasPendingChanges?: boolean } = {}) {
+function renderToolbar({
+  hasPendingChanges = true,
+}: {
+  hasPendingChanges?: boolean;
+} = {}) {
   function ToolbarHarness() {
     const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -75,10 +79,6 @@ describe("factory graph editor toolbar controls", () => {
     expect(
       within(menu).getByRole("button", { name: "Workstation" }).className,
     ).toContain("rounded-lg");
-    const pendingPill = screen.getByText("Draft changes pending");
-    expect(pendingPill).toBeTruthy();
-    expect(pendingPill.className).toContain("border-af-warning-border");
-    expect(pendingPill.className).toContain("bg-af-warning-surface");
     expect(
       screen.queryByRole("button", {
         name: "Add",
@@ -94,7 +94,9 @@ describe("factory graph editor toolbar controls", () => {
     const connectButton = screen.getByRole("button", { name: "Connect" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
     const saveButton = screen.getByRole("button", { name: "Save changes" });
-    const addButton = screen.getByRole("button", { name: "Open add entity menu" });
+    const addButton = screen.getByRole("button", {
+      name: "Open add entity menu",
+    });
 
     expect(addButton.textContent).toBe("");
     expect(connectButton.textContent).toBe("");
@@ -147,6 +149,48 @@ describe("factory graph editor toolbar controls", () => {
       within(dialog).getByRole("button", { name: "Delete review workstation" }),
     ).toBeTruthy();
   });
+});
+
+describe("factory graph editor mode toggle controls", () => {
+  it("applies warning styling when there are unsaved changes", () => {
+    render(
+      <FactoryGraphEditorModeToggle
+        editorMode={true}
+        hasChanges={true}
+        onClick={() => {}}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", {
+      name: "Leave factory graph editor",
+    });
+
+    expect(toggle.className).toContain("border-af-warning-border");
+    expect(toggle.className).toContain("bg-af-warning-surface");
+    expect(toggle.className).toContain("text-af-warning-text");
+  });
+
+  it("keeps default enter and leave tones when there are no unsaved changes", () => {
+    const { rerender } = render(
+      <FactoryGraphEditorModeToggle editorMode={false} onClick={() => {}} />,
+    );
+
+    const enterToggle = screen.getByRole("button", {
+      name: "Enter factory graph editor",
+    });
+    expect(enterToggle.className).toContain("border-af-border");
+    expect(enterToggle.className).not.toContain("border-af-warning-border");
+
+    rerender(
+      <FactoryGraphEditorModeToggle editorMode={true} onClick={() => {}} />,
+    );
+
+    const leaveToggle = screen.getByRole("button", {
+      name: "Leave factory graph editor",
+    });
+    expect(leaveToggle.className).toContain("border-af-border-strong");
+    expect(leaveToggle.className).not.toContain("border-af-warning-border");
+  });
 
   it("shows the mode-toggle tooltip on hover", async () => {
     const user = userEvent.setup();
@@ -166,31 +210,32 @@ describe("factory graph editor toolbar controls", () => {
     expect(tooltip.className).toContain("bg-af-surface-raised");
     expect(tooltip.className).toContain("text-af-text");
   });
-
 });
 
 describe("factory graph editor toolbar action-row composition", () => {
-  it("renders the pending-status pill before draft action buttons", () => {
+  it("renders discard and save actions when pending changes exist", () => {
     renderToolbar();
 
     const toolbar = screen.getByRole("region", {
       name: "Factory graph editor tools",
     });
-    const sections = toolbar.querySelectorAll("[data-dashboard-action-row-section]");
-
-    expect(sections).toHaveLength(2);
-    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
-      "statuses",
+    const sections = toolbar.querySelectorAll(
+      "[data-dashboard-action-row-section]",
     );
-    expect(sections[1]?.getAttribute("data-dashboard-action-row-section")).toBe(
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
       "actions",
     );
-    expect(within(sections[0] as HTMLElement).getByRole("status").textContent).toBe(
-      "Draft changes pending",
-    );
+    expect(within(toolbar).queryByRole("status")).toBeNull();
     expect(
-      within(sections[1] as HTMLElement).getByRole("button", {
+      within(sections[0] as HTMLElement).getByRole("button", {
         name: "Discard changes",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(sections[0] as HTMLElement).getByRole("button", {
+        name: "Save changes",
       }),
     ).toBeTruthy();
   });
@@ -201,14 +246,14 @@ describe("factory graph editor toolbar action-row composition", () => {
     const toolbar = screen.getByRole("region", {
       name: "Factory graph editor tools",
     });
-    const sections = toolbar.querySelectorAll("[data-dashboard-action-row-section]");
 
-    expect(sections).toHaveLength(1);
-    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
-      "statuses",
-    );
-    expect(within(toolbar).queryByRole("button", { name: "Discard changes" })).toBeNull();
-    expect(within(toolbar).getByRole("status").textContent).toBe("No draft changes");
+    expect(
+      toolbar.querySelectorAll("[data-dashboard-action-row-section]"),
+    ).toHaveLength(0);
+    expect(
+      within(toolbar).queryByRole("button", { name: "Discard changes" }),
+    ).toBeNull();
+    expect(within(toolbar).queryByRole("status")).toBeNull();
   });
 });
 

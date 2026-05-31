@@ -6,9 +6,13 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
-import type { FactoryResource, FactoryWorker } from "../../../../api/events/types";
-import { parseFactoryGraphWorkTypeNodeId } from "../../../factory-graph-editor/lib/factory-validation-graph-projection";
+import type {
+  FactoryResource,
+  FactoryWorker,
+  FactoryWorkType,
+} from "../../../../api/events/types";
 import { hasDashboardStatePlace } from "./dashboardStatePlaces";
+import { resolveFactoryGraphNodeSelection } from "./factoryGraphNodeSelection";
 
 export interface DashboardNodeSelection {
   kind: "node";
@@ -45,13 +49,19 @@ export interface DashboardResourceSelection {
   resourceName: string;
 }
 
+export interface DashboardWorkTypeSelection {
+  kind: "work-type";
+  workTypeName: string;
+}
+
 export type DashboardSelection =
   | DashboardNodeSelection
   | DashboardStateNodeSelection
   | DashboardWorkItemSelection
   | DashboardWorkstationRequestSelection
   | DashboardWorkerSelection
-  | DashboardResourceSelection;
+  | DashboardResourceSelection
+  | DashboardWorkTypeSelection;
 
 export function selectDefaultSelection(snapshot: DashboardSnapshot): DashboardSelection | null {
   const firstActiveNodeId = snapshot.runtime.active_workstation_node_ids?.[0];
@@ -84,27 +94,10 @@ export function resolveDashboardSelection({
   const factory = topologyFactory ?? snapshot.factory;
 
   if (selection.kind === "node") {
-    if (snapshot.topology.workstation_nodes_by_id[selection.nodeId]) {
-      const workstationName = parseFactoryGraphWorkstationNodeId(
-        selection.nodeId,
-      );
-      if (
-        workstationName &&
-        factory &&
-        !workstationExistsInFactory(factory, workstationName)
-      ) {
-        return selectDefaultSelection(snapshot);
-      }
-
-      return selection;
-    }
-
-    const workTypeName = parseFactoryGraphWorkTypeNodeId(selection.nodeId);
-    if (workTypeName && workTypeExistsInFactory(factory, workTypeName)) {
-      return selection;
-    }
-
-    return selectDefaultSelection(snapshot);
+    return (
+      resolveFactoryGraphNodeSelection(snapshot, selection, factory) ??
+      selectDefaultSelection(snapshot)
+    );
   }
 
   if (selection.kind === "state-node") {
@@ -129,6 +122,12 @@ export function resolveDashboardSelection({
 
   if (selection.kind === "resource") {
     return resourceExistsInSnapshotFactory(snapshot, selection.resourceName)
+      ? selection
+      : selectDefaultSelection(snapshot);
+  }
+
+  if (selection.kind === "work-type") {
+    return workTypeExistsInSnapshotFactory(snapshot, selection.workTypeName)
       ? selection
       : selectDefaultSelection(snapshot);
   }
@@ -476,51 +475,12 @@ function resolveRetainedRequestNodeID(
   );
 }
 
-function parseFactoryGraphWorkstationNodeId(nodeId: string): string | null {
-  const prefix = "workstation:";
-  if (!nodeId.startsWith(prefix)) {
-    return null;
-  }
-
-  const name = nodeId.slice(prefix.length);
-  return name.length > 0 ? name : null;
-}
-
 function workerExistsInFactory(
   factory: DashboardSnapshot["factory"],
   workerName: string,
 ): boolean {
   return (
     factory?.workers?.some((worker) => worker.name === workerName) ?? false
-  );
-}
-
-function workTypeExistsInFactory(
-  factory: DashboardSnapshot["factory"],
-  workTypeName: string,
-): boolean {
-  if (!factory) {
-    return false;
-  }
-
-  type LegacyDashboardFactoryDefinition = NonNullable<
-    DashboardSnapshot["factory"]
-  > & {
-    work_types?: NonNullable<DashboardSnapshot["factory"]>["workTypes"];
-  };
-  const legacyFactory = factory as LegacyDashboardFactoryDefinition;
-  const workTypes = factory.workTypes ?? legacyFactory.work_types ?? [];
-  return workTypes.some((workType) => workType.name === workTypeName);
-}
-
-function workstationExistsInFactory(
-  factory: NonNullable<DashboardSnapshot["factory"]>,
-  workstationName: string,
-): boolean {
-  return (
-    factory.workstations?.some(
-      (workstation) => workstation.name === workstationName,
-    ) ?? false
   );
 }
 
@@ -543,6 +503,22 @@ export function findFactoryWorkerInSnapshot(
   workerName: string,
 ): FactoryWorker | undefined {
   return snapshot.factory?.workers?.find((worker) => worker.name === workerName);
+}
+
+function workTypeExistsInSnapshotFactory(
+  snapshot: DashboardSnapshot,
+  workTypeName: string,
+): boolean {
+  return findFactoryWorkTypeInSnapshot(snapshot, workTypeName) !== undefined;
+}
+
+export function findFactoryWorkTypeInSnapshot(
+  snapshot: DashboardSnapshot,
+  workTypeName: string,
+): FactoryWorkType | undefined {
+  return snapshot.factory?.workTypes?.find(
+    (workType) => workType.name === workTypeName,
+  );
 }
 
 export function workstationNamesReferencingWorkerInSnapshot(

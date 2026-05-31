@@ -1,5 +1,21 @@
 import type { FactoryValidationTarget } from "../api/factory-validation";
 
+export function workStateFieldValidationTarget(
+  fieldName: string,
+  message = `Invalid ${fieldName}.`,
+): FactoryValidationTarget {
+  return {
+    code: `factory.workTypes[0].states[0].${fieldName}`,
+    message,
+    severity: "error",
+    subject: {
+      id: fieldName,
+      location: "DEFINITION",
+      type: "WORK_STATE",
+    },
+  };
+}
+
 export function workerFieldValidationTarget(
   fieldName: string,
   message = `Invalid ${fieldName}.`,

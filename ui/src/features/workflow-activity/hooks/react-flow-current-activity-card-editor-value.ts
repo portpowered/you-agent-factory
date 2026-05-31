@@ -4,7 +4,8 @@ import type { FactoryGraphEditorTool } from "../../factory-graph-editor/componen
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
-import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
+import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
@@ -15,8 +16,10 @@ export function buildCurrentActivityGraphEditorValue(args: {
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
   addMenuActions: ReturnType<typeof buildFactoryGraphAddEntityMenuActions>;
   blockedRemovalReason: string | null;
+  cancelSaveConfirmation: () => void;
   canInteractWithEditor: boolean;
   canSaveDraft: boolean;
+  documentSave: FactoryDocumentSaveState;
   connectionNotice: string | null;
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
@@ -41,7 +44,6 @@ export function buildCurrentActivityGraphEditorValue(args: {
   handleSelectionNodeDelete: (nodeId: string) => void;
   handleSaveDraft: () => Promise<boolean>;
   handleSaveBeforeLeavingEditor: () => Promise<boolean>;
-  graphDraftSaveSucceeded: boolean;
   hasActiveWork: boolean;
   isConfirmingLeaveEditor: boolean;
   isConfirmingSave: boolean;
@@ -54,7 +56,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   >["pendingRemovalIntent"];
   saveAttemptRevision: number;
   saveBlockedReason?: string;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
   saveSummary: ReturnType<typeof buildFactoryGraphSaveSummary>;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setBlockedRemovalReason: (reason: string | null) => void;
@@ -74,8 +76,10 @@ export function buildCurrentActivityGraphEditorValue(args: {
     addMenuActions: args.addMenuActions,
     addMenuOpen: args.addEntityController.addMenuOpen,
     blockedRemovalReason: args.blockedRemovalReason,
+    cancelSaveConfirmation: args.cancelSaveConfirmation,
     canInteractWithEditor: args.canInteractWithEditor,
     canSaveDraft: args.canSaveDraft,
+    documentSave: args.documentSave,
     connectionNotice: args.connectionNotice,
     currentFactoryDefinition: args.currentFactoryDefinition,
     draftState: args.draftState,
@@ -97,7 +101,6 @@ export function buildCurrentActivityGraphEditorValue(args: {
     handleSelectionNodeDelete: args.handleSelectionNodeDelete,
     handleSaveDraft: args.handleSaveDraft,
     handleSaveBeforeLeavingEditor: args.handleSaveBeforeLeavingEditor,
-    graphDraftSaveSucceeded: args.graphDraftSaveSucceeded,
     hasActiveWork: args.hasActiveWork,
     isConfirmingLeaveEditor: args.isConfirmingLeaveEditor,
     isConfirmingSave: args.isConfirmingSave,

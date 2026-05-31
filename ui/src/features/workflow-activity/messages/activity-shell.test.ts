@@ -13,6 +13,7 @@ describe("getWorkflowActivityShellMessages", () => {
     expect(messages.selectWorkstationLabel("审查")).toBe("选择 审查 工作站");
     expect(messages.selectResourceLabel("gpu")).toBe("选择 gpu 资源");
     expect(messages.selectWorkerLabel("writer")).toBe("选择 writer 工作者");
+    expect(messages.selectWorkTypeLabel("story")).toBe("选择 story 工作类型");
     expect(messages.selectExhaustionRuleLabel("审查")).toBe(
       "选择 审查 枯竭规则",
     );

@@ -401,6 +401,9 @@ function CurrentActivityStory({
         onSelectWorker={(workerName) =>
           setSelection({ kind: "worker", workerName })
         }
+        onSelectWorkType={(workTypeName) =>
+          setSelection({ kind: "work-type", workTypeName })
+        }
         onSelectWorkstation={(nodeId) => setSelection({ kind: "node", nodeId })}
         selection={selection}
         snapshot={snapshot}
@@ -436,11 +439,12 @@ function CurrentActivityImportStory({ snapshot }: CurrentActivityStoryProps) {
             setSelection({ kind: "node", nodeId })
           }
           onSelectResource={(resourceName) =>
-          setSelection({ kind: "resource", resourceName })
-        }
-        onSelectWorker={(workerName) =>
-            setSelection({ kind: "worker", workerName })
+            setSelection({ kind: "resource", resourceName })
           }
+          onSelectWorkType={(workTypeName) =>
+            setSelection({ kind: "work-type", workTypeName })
+          }
+          onSelectWorker={(workerName) =>
           onSelectStateNode={(placeId) =>
             setSelection({ kind: "state-node", placeId })
           }

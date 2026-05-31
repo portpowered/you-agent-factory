@@ -77,12 +77,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptValidationErrorPrefix:
       "Prompt validation unavailable.",
     editableConfigurationPromptDiagnosticsSummary:
-      "Resolve the highlighted prompt diagnostics before saving this workstation.",
+      "Fix highlighted issues before saving.",
+    editableConfigurationPromptFieldHint: "See prompt diagnostics below.",
     editableConfigurationPromptDiagnosticsHeading: "Prompt diagnostics",
     editableConfigurationPromptSyntaxDiagnosticLabel: "Template syntax",
     editableConfigurationPromptVariableDiagnosticLabel: "Variable access",
-    editableConfigurationPromptValidationDetail:
-      "Save stays disabled until the prompt validates cleanly for this workstation context.",
     editableConfigurationPromptHelpLoading:
       "Loading available prompt variables for this workstation.",
     editableConfigurationPromptHelpEmpty:
@@ -265,12 +264,12 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptValidationErrorPrefix:
       "プロンプト検証は利用できません。",
     editableConfigurationPromptDiagnosticsSummary:
-      "このワークステーションを保存する前に、強調表示されたプロンプト診断を修正してください。",
+      "保存前に強調表示された問題を修正してください。",
+    editableConfigurationPromptFieldHint:
+      "下のプロンプト診断を確認してください。",
     editableConfigurationPromptDiagnosticsHeading: "プロンプト診断",
     editableConfigurationPromptSyntaxDiagnosticLabel: "テンプレート構文",
     editableConfigurationPromptVariableDiagnosticLabel: "変数アクセス",
-    editableConfigurationPromptValidationDetail:
-      "このワークステーション文脈でプロンプトの検証が成功するまで保存は無効のままです。",
     editableConfigurationPromptHelpLoading:
       "このワークステーションで利用可能なプロンプト変数を読み込んでいます。",
     editableConfigurationPromptHelpEmpty:
@@ -452,12 +451,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptValidationErrorPrefix:
       "프롬프트 검증을 사용할 수 없습니다.",
     editableConfigurationPromptDiagnosticsSummary:
-      "이 워크스테이션을 저장하기 전에 강조 표시된 프롬프트 진단을 해결하세요.",
+      "저장하기 전에 강조 표시된 문제를 수정하세요.",
+    editableConfigurationPromptFieldHint: "아래 프롬프트 진단을 확인하세요.",
     editableConfigurationPromptDiagnosticsHeading: "프롬프트 진단",
     editableConfigurationPromptSyntaxDiagnosticLabel: "템플릿 구문",
     editableConfigurationPromptVariableDiagnosticLabel: "변수 접근",
-    editableConfigurationPromptValidationDetail:
-      "이 워크스테이션 문맥에서 프롬프트가 정상 검증될 때까지 저장은 비활성화됩니다.",
     editableConfigurationPromptHelpLoading:
       "이 워크스테이션에서 사용할 수 있는 프롬프트 변수를 불러오는 중입니다.",
     editableConfigurationPromptHelpEmpty:
@@ -627,12 +625,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptValidationFallbackError: "无法完成提示词校验。",
     editableConfigurationPromptValidationErrorPrefix: "提示词校验不可用。",
     editableConfigurationPromptDiagnosticsSummary:
-      "保存此工作站前，请先解决高亮显示的提示词诊断问题。",
+      "保存前请先修正高亮显示的问题。",
+    editableConfigurationPromptFieldHint: "请查看下方的提示词诊断。",
     editableConfigurationPromptDiagnosticsHeading: "提示词诊断",
     editableConfigurationPromptSyntaxDiagnosticLabel: "模板语法",
     editableConfigurationPromptVariableDiagnosticLabel: "变量访问",
-    editableConfigurationPromptValidationDetail:
-      "只有当此工作站上下文中的提示词通过校验后，保存才会重新可用。",
     editableConfigurationPromptHelpLoading:
       "正在加载此工作站可用的提示词变量。",
     editableConfigurationPromptHelpEmpty:

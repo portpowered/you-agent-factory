@@ -110,6 +110,7 @@ describe("current activity factory graph legacy replay layout", () => {
       onSelectWorkID: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,

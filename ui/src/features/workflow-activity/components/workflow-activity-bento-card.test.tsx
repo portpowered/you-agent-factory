@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { baseFactoryDefinitionDocument } from "../../../testing/graph-editor-harness";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { DashboardSelection } from "../../current-selection/public";
@@ -139,6 +140,7 @@ function renderWorkflowActivityBentoCard({
         onSelectStateNode={vi.fn()}
         onSelectResource={vi.fn()}
         onSelectWorker={vi.fn()}
+        onSelectWorkType={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />
       </DashboardSessionTestProvider>
@@ -170,7 +172,8 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
           onSelectStateNode={vi.fn()}
           onSelectResource={vi.fn()}
           onSelectWorker={vi.fn()}
-          onSelectWorkstation={vi.fn()}
+          onSelectWorkType={vi.fn()}
+        onSelectWorkstation={vi.fn()}
         />
         <WorkflowActivityBentoCard
           importController={createImportController()}
@@ -183,7 +186,8 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
           onSelectStateNode={vi.fn()}
           onSelectResource={vi.fn()}
           onSelectWorker={vi.fn()}
-          onSelectWorkstation={vi.fn()}
+          onSelectWorkType={vi.fn()}
+        onSelectWorkstation={vi.fn()}
         />
       </div>
       </DashboardSessionTestProvider>
@@ -383,5 +387,67 @@ describe("WorkflowActivityBentoCard header actions", () => {
 
     expect(actions[0]?.getAttribute("aria-label")).toBe("进入工厂图编辑器");
     expect(actions[1]?.textContent).toBe("Remove card");
+  });
+
+  it("shows consolidated unsaved chrome on the compact bento header when dirty", async () => {
+    const locale = "en";
+    const shellMessages = getWorkflowActivityShellMessages(locale);
+    const editorMessages = getFactoryGraphEditorMessages(locale);
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: baseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      draft: {
+        ...defaultDraftState.draft,
+        additions: {
+          ...defaultDraftState.draft.additions,
+          workers: [
+            {
+              model: "gpt-5-mini",
+              name: "reviewer",
+              type: "MODEL_WORKER",
+            },
+          ],
+        },
+      },
+      hasChanges: true,
+    } as never);
+
+    const user = userEvent.setup();
+    renderWorkflowActivityBentoCard({ locale });
+
+    const graphCard = await screen.findByRole("article", {
+      name: shellMessages.widgetTitle,
+    });
+    const graphHeader = graphCard.querySelector("header");
+    expect(graphHeader).toBeTruthy();
+
+    await user.click(
+      within(graphHeader as HTMLElement).getByRole("button", {
+        name: editorMessages.modeEnterEditor,
+      }),
+    );
+
+    const headerScope = within(graphHeader as HTMLElement);
+    expect(headerScope.getAllByRole("status")).toHaveLength(1);
+    expect(
+      headerScope.getByText(editorMessages.modeUnsavedChanges),
+    ).toBeTruthy();
+
+    const toggle = headerScope.getByRole("button", {
+      name: editorMessages.modeLeaveEditor,
+    });
+    expect(toggle.className).toContain("border-af-warning-border");
+    expect(toggle.className).toContain("bg-af-warning-surface");
+    expect(toggle.className).toContain("text-af-warning-text");
+    expect(toggle.className).toContain("size-8");
+
+    const toolbar = await screen.findByRole("region", {
+      name: editorMessages.toolbarAriaLabel,
+    });
+    expect(within(toolbar).queryAllByRole("status")).toHaveLength(0);
   });
 });

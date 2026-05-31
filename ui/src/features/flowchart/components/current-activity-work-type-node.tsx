@@ -3,6 +3,7 @@ import type { Node, NodeProps } from "@xyflow/react";
 import type { DashboardPlaceRef } from "../../../api/dashboard/types";
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
+import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { getActivityGraphMessages } from "../messages/activity-graph";
 import type { ActivityGraphNodeHandle } from "./current-activity-node-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
@@ -18,9 +19,9 @@ export interface WorkTypeNodeData extends Record<string, unknown> {
   kind: "work-type";
   locale?: string;
   muted: boolean;
-  onSelectGraphNode?: (nodeId: string) => void;
+  onSelectWorkType?: (workTypeName: string) => void;
   place: DashboardPlaceRef;
-  selectedGraphNode?: boolean;
+  selectedWorkType?: boolean;
   validationError?: boolean;
   validationMessage?: string;
 }
@@ -40,17 +41,19 @@ function workTypeName(place: DashboardPlaceRef): string {
 export function WorkTypeNodeView({
   data,
 }: NodeProps<CurrentActivityWorkTypeNode>) {
-  const messages = getActivityGraphMessages(data.locale);
+  const activityGraphMessages = getActivityGraphMessages(data.locale);
+  const shellMessages = getWorkflowActivityShellMessages(data.locale);
   const name = workTypeName(data.place);
   const label = `work-type:${name}`;
-  const workTypeLabel = messages.graphSemanticIconLabel("work-type");
+  const workTypeLabel = activityGraphMessages.graphSemanticIconLabel("work-type");
+  const selectable = data.onSelectWorkType !== undefined;
 
   const content = (
     <span
-      aria-hidden={data.onSelectGraphNode ? true : undefined}
+      aria-hidden={selectable ? true : undefined}
       className="flex min-w-0 items-center gap-1.5 overflow-hidden"
       data-work-type-label-zone
-      {...(data.onSelectGraphNode
+      {...(selectable
         ? {}
         : {
             "aria-label": label,
@@ -58,7 +61,7 @@ export function WorkTypeNodeView({
           })}
       title={data.validationMessage ?? label}
     >
-      {data.onSelectGraphNode ? null : <span className="sr-only">{label}</span>}
+      {selectable ? null : <span className="sr-only">{label}</span>}
       <GraphSemanticIcon
         className="h-3.5 w-3.5 shrink-0 text-af-info"
         kind="work-type"
@@ -84,22 +87,23 @@ export function WorkTypeNodeView({
         data.muted && "opacity-[0.45]",
         data.validationError &&
           "ring-2 ring-af-danger-border motion-safe:animate-pulse",
-        data.selectedGraphNode &&
+        data.selectedWorkType &&
           !data.validationError &&
           "border-af-accent-border shadow-af-accent-selected",
       )}
       handles={data.handles}
       nodeType="workType"
     >
-      {data.onSelectGraphNode && data.factoryGraphNodeId ? (
+      {selectable ? (
         <GraphNodeButton
           aria-invalid={data.validationError ? true : undefined}
-          aria-label={data.validationMessage ?? label}
-          aria-pressed={data.selectedGraphNode}
+          aria-label={shellMessages.selectWorkTypeLabel(name)}
+          aria-pressed={data.selectedWorkType}
           className={WORK_TYPE_CONTENT_CONTAINER_CLASSNAME}
+          data-selected-work-type={data.selectedWorkType ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
-            data.onSelectGraphNode?.(data.factoryGraphNodeId ?? label);
+            data.onSelectWorkType?.(name);
           }}
         >
           {content}

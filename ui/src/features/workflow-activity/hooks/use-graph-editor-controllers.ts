@@ -1,4 +1,4 @@
-import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
@@ -24,7 +24,7 @@ export function useGraphEditorControllers({
   editableGraph: EditableFactoryGraphViewModel;
   locale?: string | null;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
 }) {
   const addEntityController = useFactoryGraphAddEntityController({

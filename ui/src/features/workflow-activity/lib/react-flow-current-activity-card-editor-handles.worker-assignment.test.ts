@@ -140,6 +140,7 @@ it("builds current-activity workstation nodes without worker-assignment handles 
     onSelectWorkID: () => {},
     onSelectResource: () => {},
     onSelectWorker: () => {},
+    onSelectWorkType: () => {},
     onSelectWorkstation: () => {},
     selection: null,
     snapshot: {

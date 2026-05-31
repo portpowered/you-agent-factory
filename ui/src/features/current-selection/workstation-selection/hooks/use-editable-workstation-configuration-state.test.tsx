@@ -596,7 +596,7 @@ describe("useEditableWorkstationConfigurationState", () => {
         status: "ready",
         validationErrors: {
           prompt:
-            "Resolve the highlighted prompt diagnostics before saving this workstation.",
+            "See prompt diagnostics below.",
         },
       });
     });

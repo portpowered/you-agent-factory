@@ -5,6 +5,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
 import { cn } from "../../lib/cn";
+import { formatSyntaxDiagnosticMessage } from "./prompt-editor-diagnostic-message";
 import type { PromptEditorDiagnostic } from "./prompt-editor-types";
 
 const PROMPT_EDITOR_CODE_SUBTLE_CLASS = cn(
@@ -21,8 +22,6 @@ export type PromptEditorValidationFeedbackState =
 export interface PromptEditorDiagnosticsPanelLabels {
   diagnosticsHeading: string;
   diagnosticsSummary: string;
-  syntaxDiagnosticLabel: string;
-  validationDetail: string;
   validationErrorPrefix: string;
   validationLoading: string;
   variableDiagnosticLabel: string;
@@ -78,14 +77,6 @@ export function PromptEditorDiagnosticsPanel({
       <p className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}>
         {labels.diagnosticsSummary}
       </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {labels.validationDetail}
-      </p>
       <div className="grid gap-2">
         <h5 className={cn("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
           {labels.diagnosticsHeading}
@@ -102,8 +93,7 @@ export function PromptEditorDiagnosticsPanel({
                   DASHBOARD_BODY_TEXT_CLASS,
                 )}
               >
-                {diagnosticKindLabel(diagnostic.kind, labels)}:{" "}
-                {diagnostic.message}
+                {formatDiagnosticListMessage(diagnostic, labels)}
               </p>
               {diagnostic.path ? (
                 <code
@@ -139,11 +129,13 @@ function diagnosticListItemKey(diagnostic: PromptEditorDiagnostic) {
   ].join(":");
 }
 
-function diagnosticKindLabel(
-  kind: string,
+function formatDiagnosticListMessage(
+  diagnostic: PromptEditorDiagnostic,
   labels: PromptEditorDiagnosticsPanelLabels,
-) {
-  return kind === "SYNTAX_ERROR"
-    ? labels.syntaxDiagnosticLabel
-    : labels.variableDiagnosticLabel;
+): string {
+  if (diagnostic.kind === "SYNTAX_ERROR") {
+    return formatSyntaxDiagnosticMessage(diagnostic.message);
+  }
+
+  return `${labels.variableDiagnosticLabel}: ${diagnostic.message}`;
 }

@@ -275,6 +275,8 @@ export function buildDetailCardCurrentSelection(
     selectedResourceTokenCount: null,
     selectedWorkerName: null,
     selectedWorkerWorkstationNames: [],
+    selectedWorkType: null,
+    selectedWorkTypeName: null,
     selection: null,
     selectStateNode: () => undefined,
     selectStateWorkItem: () => undefined,
@@ -285,10 +287,33 @@ export function buildDetailCardCurrentSelection(
     clearSelectedWorkerIfMatching: () => undefined,
     selectResource: () => undefined,
     selectWorker: () => undefined,
+    selectWorkType: () => undefined,
     selectWorkstation: () => undefined,
     selectWorkstationRequest: () => undefined,
     terminalWorkDetail: null,
     undoSelection: () => undefined,
+    ...overrides,
+  };
+}
+
+export function buildDetailCardWorkStateFactoryDocument(
+  overrides?: Partial<CurrentFactoryDocument>,
+): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
+    workers: [],
+    workstations: [],
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          { name: "implemented", type: "PROCESSING" },
+          { name: "complete", type: "TERMINAL" },
+          { name: "blocked", type: "FAILED" },
+        ],
+      },
+    ],
     ...overrides,
   };
 }

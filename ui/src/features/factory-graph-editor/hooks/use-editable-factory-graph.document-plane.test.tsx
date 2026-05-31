@@ -1,6 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
+import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
+import {
+  createEditableFactoryGraphHookWrapper,
+  renderEditableFactoryGraphHook,
+  setupEditableFactoryGraphSaveTestEnvironment,
+} from "../../../testing/editable-factory-graph-hook-test-helpers";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const sharedWorkType = {
@@ -53,14 +59,15 @@ const documentFactory: CurrentFactoryDocument = {
   ],
 };
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: document-plane regressions share one editable-graph fixture seam.
-describe("useEditableFactoryGraph document plane", () => {
+describe("useEditableFactoryGraph document plane projection", () => {
+  beforeEach(() => {
+    setupEditableFactoryGraphSaveTestEnvironment();
+  });
+
   it("projects editable graph nodes from the loaded factory document only", () => {
-    const { result } = renderHook(() =>
-      useEditableFactoryGraph({
-        currentFactoryDocument: documentFactory,
-      }),
-    );
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument: documentFactory,
+    });
 
     expect(result.current.draftState.source).toBe("current-factory");
     expect(result.current.draftState.baseDocument).toEqual(documentFactory);
@@ -74,7 +81,7 @@ describe("useEditableFactoryGraph document plane", () => {
   });
 
   it("exposes an empty projection while the factory document is still unavailable", () => {
-    const { result } = renderHook(() => useEditableFactoryGraph({}));
+    const { result } = renderEditableFactoryGraphHook({});
 
     expect(result.current.draftState.source).toBe("projection");
     expect(result.current.draftState.baseDocument).toBeNull();
@@ -84,6 +91,12 @@ describe("useEditableFactoryGraph document plane", () => {
       nodes: [],
     });
     expect(result.current.graphState).toBeNull();
+  });
+});
+
+describe("useEditableFactoryGraph document plane scope and persist", () => {
+  beforeEach(() => {
+    setupEditableFactoryGraphSaveTestEnvironment();
   });
 
   it("drops a dirty draft when the factory document scope key changes", () => {
@@ -104,6 +117,8 @@ describe("useEditableFactoryGraph document plane", () => {
           currentFactoryDocument: documentFactory,
           factoryDocumentScopeKey: "session-alpha",
         },
+        wrapper: createEditableFactoryGraphHookWrapper()
+          .EditableFactoryGraphHookWrapper,
       },
     );
 
@@ -143,33 +158,22 @@ describe("useEditableFactoryGraph document plane", () => {
   });
 
   it("clears pending edits after save and resyncs latestDocument when the document cache updates", async () => {
-    const savedDocumentAfterSave: CurrentFactoryDocument = {
-      ...documentFactory,
-      version: {
-        logical: "9",
-        physical: "2026-05-31T01:30:00Z",
-      },
-      workers: [
-        ...(documentFactory.workers ?? []),
-        {
-          model: "gpt-5",
-          name: "extra",
-          type: "MODEL_WORKER",
-        },
-      ],
-    };
-    const saveFactoryDefinition = vi.fn(async () => savedDocumentAfterSave);
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
+    );
 
     const { result, rerender } = renderHook(
       ({ currentFactoryDocument }: { currentFactoryDocument: CurrentFactoryDocument }) =>
         useEditableFactoryGraph({
           currentFactoryDocument,
-          saveFactoryDefinition,
+          factoryDocumentScopeKey: "session-alpha",
         }),
       {
         initialProps: {
           currentFactoryDocument: documentFactory,
         },
+        wrapper: createEditableFactoryGraphHookWrapper()
+          .EditableFactoryGraphHookWrapper,
       },
     );
 
@@ -188,20 +192,18 @@ describe("useEditableFactoryGraph document plane", () => {
       await result.current.actions.save();
     });
 
-    expect(saveFactoryDefinition).toHaveBeenCalledWith({
+    expect(saveMutation.saveAsync).toHaveBeenCalledWith({
       baseVersion: documentFactory.version,
-      factoryDefinition: expect.objectContaining({
+      factory: expect.objectContaining({
         workers: expect.arrayContaining([
           expect.objectContaining({ name: "extra" }),
         ]),
       }),
     });
     expect(result.current.pendingState.hasChanges).toBe(false);
-    expect(result.current.draftState.latestDocument).toEqual(savedDocumentAfterSave);
-    expect(result.current.draftState.baseDocument?.version.logical).toBe("9");
 
     const savedDocument: CurrentFactoryDocument = {
-      ...savedDocumentAfterSave,
+      ...documentFactory,
       version: {
         logical: "10",
         physical: "2026-05-31T02:00:00Z",

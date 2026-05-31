@@ -1,31 +1,35 @@
 import { useEffect, useMemo } from "react";
 
 import type {
-  DashboardSnapshot,
   DashboardPlaceRef,
+  DashboardSnapshot,
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
 import type { FactoryWorker } from "../../../api/events/types";
 import {
   findFactoryWorkerInSnapshot,
+  findFactoryWorkTypeInSnapshot,
   resolveDashboardSelection,
   workstationNamesReferencingWorkerInSnapshot,
 } from "../state/dashboardSelection";
 import { resourceTokenCountFromSnapshot } from "../resource-selection/lib/resource-detail-values";
-import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
+import type {
+  DashboardSelection,
+  TerminalWorkDetail,
+} from "../state/selection-types";
 import {
   activeExecutionsForSelectedWorkstation,
+  buildSelectedWorkDispatchAttempts,
   buildTerminalWorkItems,
   currentWorkItemsForPlace,
-  findStatePlace,
   filterProviderSessionAttempts,
+  findStatePlace,
   selectLatestProviderSessionAttemptsByDispatch,
   selectWorkstationRequestsForWork,
   sortWorkstationRequests,
   terminalHistoryItemsForPlace,
   type WorkstationRequestLike,
-  buildSelectedWorkDispatchAttempts,
 } from "./useCurrentSelection.helpers";
 
 export function useSelectionSynchronization({
@@ -37,8 +41,13 @@ export function useSelectionSynchronization({
   terminalWorkDetail,
   topologyFactory,
 }: {
-  projectedWorkstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined;
-  replacePresent: (state: { selection: DashboardSelection | null; terminalWorkDetail: TerminalWorkDetail | null }) => void;
+  projectedWorkstationRequestsByDispatchID:
+    | Record<string, DashboardWorkstationRequest>
+    | undefined;
+  replacePresent: (state: {
+    selection: DashboardSelection | null;
+    terminalWorkDetail: TerminalWorkDetail | null;
+  }) => void;
   resetSelectionHistory: () => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot | null | undefined;
@@ -56,7 +65,8 @@ export function useSelectionSynchronization({
         selection,
         snapshot,
         topologyFactory,
-        workstationRequestsByDispatchID: projectedWorkstationRequestsByDispatchID,
+        workstationRequestsByDispatchID:
+          projectedWorkstationRequestsByDispatchID,
       }),
       terminalWorkDetail,
     });
@@ -78,7 +88,11 @@ function useSelectedNode(
   if (!snapshot) {
     return null;
   }
-  if (selection?.kind === "node" || selection?.kind === "workstation-request" || selection?.kind === "work-item") {
+  if (
+    selection?.kind === "node" ||
+    selection?.kind === "workstation-request" ||
+    selection?.kind === "work-item"
+  ) {
     return snapshot.topology.workstation_nodes_by_id[selection.nodeId] ?? null;
   }
   return null;
@@ -89,7 +103,9 @@ function useSelectedStatePlaceData({
   selectedStatePlace,
   snapshot,
 }: {
-  projectedWorkstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined;
+  projectedWorkstationRequestsByDispatchID:
+    | Record<string, DashboardWorkstationRequest>
+    | undefined;
   selectedStatePlace: DashboardPlaceRef | null;
   snapshot: DashboardSnapshot | null | undefined;
 }) {
@@ -121,7 +137,8 @@ function useSelectedStatePlaceData({
   );
   const selectedStateTokenCount =
     selectedStatePlace && snapshot
-      ? snapshot.runtime.place_token_counts?.[selectedStatePlace.place_id] ?? 0
+      ? (snapshot.runtime.place_token_counts?.[selectedStatePlace.place_id] ??
+        0)
       : 0;
 
   return {
@@ -158,7 +175,9 @@ function useSelectedWorkData({
   selection,
   snapshot,
 }: {
-  projectedWorkstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined;
+  projectedWorkstationRequestsByDispatchID:
+    | Record<string, DashboardWorkstationRequest>
+    | undefined;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot | null | undefined;
 }) {
@@ -168,7 +187,9 @@ function useSelectedWorkData({
     }
 
     return selectWorkstationRequestsForWork(
-      projectedWorkstationRequestsByDispatchID as Record<string, WorkstationRequestLike> | undefined,
+      projectedWorkstationRequestsByDispatchID as
+        | Record<string, WorkstationRequestLike>
+        | undefined,
       selection.workItem.work_id,
     );
   }, [projectedWorkstationRequestsByDispatchID, selection]);
@@ -191,7 +212,9 @@ function useSelectedWorkData({
       return filterProviderSessionAttempts(
         snapshot.runtime.session.provider_sessions,
         (attempt) =>
-          attempt.work_items?.some((workItem) => workItem.work_id === selection.workItem.work_id) ?? false,
+          attempt.work_items?.some(
+            (workItem) => workItem.work_id === selection.workItem.work_id,
+          ) ?? false,
       );
     }
 
@@ -205,7 +228,8 @@ function useSelectedWorkData({
       ? buildSelectedWorkDispatchAttempts({
           attempts: snapshot.runtime.session.provider_sessions,
           workID: selection.workItem.work_id,
-          workstationRequestsByDispatchID: projectedWorkstationRequestsByDispatchID,
+          workstationRequestsByDispatchID:
+            projectedWorkstationRequestsByDispatchID,
         })
       : [];
 
@@ -217,13 +241,59 @@ function useSelectedWorkData({
   };
 }
 
+function useSelectedWorkerAndWorkTypeData(
+  selection: DashboardSelection | null,
+  snapshot: DashboardSnapshot | null | undefined,
+) {
+  const selectedWorkerName =
+    selection?.kind === "worker" ? selection.workerName : null;
+  const selectedWorkTypeName =
+    selection?.kind === "work-type" ? selection.workTypeName : null;
+  const selectedWorkType = useMemo(() => {
+    if (!snapshot || !selectedWorkTypeName) {
+      return null;
+    }
+
+    return (
+      findFactoryWorkTypeInSnapshot(snapshot, selectedWorkTypeName) ?? null
+    );
+  }, [selectedWorkTypeName, snapshot]);
+  const selectedWorker = useMemo((): FactoryWorker | null => {
+    if (!snapshot || !selectedWorkerName) {
+      return null;
+    }
+
+    return findFactoryWorkerInSnapshot(snapshot, selectedWorkerName) ?? null;
+  }, [selectedWorkerName, snapshot]);
+  const selectedWorkerWorkstationNames = useMemo(() => {
+    if (!snapshot || !selectedWorkerName) {
+      return [];
+    }
+
+    return workstationNamesReferencingWorkerInSnapshot(
+      snapshot,
+      selectedWorkerName,
+    );
+  }, [selectedWorkerName, snapshot]);
+
+  return {
+    selectedWorker,
+    selectedWorkerName,
+    selectedWorkerWorkstationNames,
+    selectedWorkType,
+    selectedWorkTypeName,
+  };
+}
+
 export function useCurrentSelectionDerivedState({
   projectedWorkstationRequestsByDispatchID,
   selection,
   snapshot,
   terminalWorkDetail,
 }: {
-  projectedWorkstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined;
+  projectedWorkstationRequestsByDispatchID:
+    | Record<string, DashboardWorkstationRequest>
+    | undefined;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot | null | undefined;
   terminalWorkDetail: TerminalWorkDetail | null;
@@ -232,7 +302,9 @@ export function useCurrentSelectionDerivedState({
   const selectedWorkstationRequest =
     selection?.kind === "workstation-request" ? selection.request : null;
   const selectedStatePlace =
-    selection?.kind === "state-node" && snapshot ? findStatePlace(snapshot, selection.placeId) : null;
+    selection?.kind === "state-node" && snapshot
+      ? findStatePlace(snapshot, selection.placeId)
+      : null;
   const {
     selectedStateCurrentWorkItems,
     selectedStateTerminalHistoryWorkItems,
@@ -252,7 +324,8 @@ export function useCurrentSelectionDerivedState({
         )
       : [];
   const selectedNodeActiveExecutions = useMemo(
-    () => activeExecutionsForSelectedWorkstation(snapshot, selection, selectedNode),
+    () =>
+      activeExecutionsForSelectedWorkstation(snapshot, selection, selectedNode),
     [selection, selectedNode, snapshot],
   );
   const selectedNodeWorkstationRequests = useMemo(() => {
@@ -270,31 +343,24 @@ export function useCurrentSelectionDerivedState({
     selection?.kind === "work-item"
       ? selection.workItem.work_id
       : selection?.kind === "workstation-request"
-        ? selection.request.work_items[0]?.work_id ?? null
-        : terminalWorkDetail?.traceWorkID ?? null;
-  const selectedWorkerName = selection?.kind === "worker" ? selection.workerName : null;
+        ? (selection.request.work_items[0]?.work_id ?? null)
+        : (terminalWorkDetail?.traceWorkID ?? null);
   const { selectedResourceName, selectedResourceTokenCount } =
     useSelectedResourceRuntime(selection, snapshot);
-  const selectedWorker = useMemo((): FactoryWorker | null => {
-    if (!snapshot || !selectedWorkerName) {
-      return null;
-    }
-
-    return findFactoryWorkerInSnapshot(snapshot, selectedWorkerName) ?? null;
-  }, [selectedWorkerName, snapshot]);
-  const selectedWorkerWorkstationNames = useMemo(() => {
-    if (!snapshot || !selectedWorkerName) {
-      return [];
-    }
-
-    return workstationNamesReferencingWorkerInSnapshot(snapshot, selectedWorkerName);
-  }, [selectedWorkerName, snapshot]);
+  const {
+    selectedWorker,
+    selectedWorkerName,
+    selectedWorkerWorkstationNames,
+    selectedWorkType,
+    selectedWorkTypeName,
+  } = useSelectedWorkerAndWorkTypeData(selection, snapshot);
   const work = useSelectedWorkData({
     projectedWorkstationRequestsByDispatchID,
     selection,
     snapshot,
   });
-  const completedWorkLabels = snapshot?.runtime.session.completed_work_labels ?? [];
+  const completedWorkLabels =
+    snapshot?.runtime.session.completed_work_labels ?? [];
   const failedWorkLabels = snapshot?.runtime.session.failed_work_labels ?? [];
   const completedWorkItems = useMemo(
     () =>
@@ -340,6 +406,8 @@ export function useCurrentSelectionDerivedState({
     selectedWorker,
     selectedWorkerName,
     selectedWorkerWorkstationNames,
+    selectedWorkType,
+    selectedWorkTypeName,
     selectedWorkstationRequest,
   };
 }
@@ -353,7 +421,10 @@ export function useTerminalWorkDetailCleanup({
 }: {
   completedWorkLabels: string[];
   failedWorkLabels: string[];
-  replacePresent: (state: { selection: DashboardSelection | null; terminalWorkDetail: TerminalWorkDetail | null }) => void;
+  replacePresent: (state: {
+    selection: DashboardSelection | null;
+    terminalWorkDetail: TerminalWorkDetail | null;
+  }) => void;
   selection: DashboardSelection | null;
   terminalWorkDetail: TerminalWorkDetail | null;
 }) {

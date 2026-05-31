@@ -822,7 +822,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -839,10 +839,13 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(screen.getByText("Prompt diagnostics")).toBeTruthy();
     expect(
-      screen.getAllByText(
-        "Resolve the highlighted prompt diagnostics before saving this workstation.",
-      ).length,
-    ).toBeGreaterThan(0);
+      screen.getAllByText("Fix highlighted issues before saving."),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByText(
+        "Save stays disabled until the prompt validates cleanly for this workstation context.",
+      ),
+    ).toBeNull();
     expect(screen.getByText(".Inputs[1]")).toBeTruthy();
     expect(screen.getAllByText("(index .Inputs 1)").length).toBeGreaterThan(0);
   });
@@ -870,7 +873,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(editableConfigurationSection().querySelector("mark")).toBeNull();
   });
 
-  it("labels syntax diagnostics separately from variable-access diagnostics", () => {
+  it("shows line-based syntax diagnostics separately from variable-access diagnostics", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -883,14 +886,14 @@ describe("WorkstationDetailCard editable configuration", () => {
             {
               endOffset: 18,
               kind: "SYNTAX_ERROR",
-              message: "Unexpected EOF in if block.",
+              message: "line 1: unexpected EOF in if block",
               sourceText: "{{ if .WorkID }}",
               startOffset: 5,
             },
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -906,10 +909,13 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText("Template syntax: Unexpected EOF in if block."),
+      screen.getByText("line 1: unexpected EOF in if block"),
     ).toBeTruthy();
     expect(
-      screen.queryByText("Variable access: Unexpected EOF in if block."),
+      screen.queryByText("Template syntax: unexpected EOF in if block"),
+    ).toBeNull();
+    expect(
+      screen.queryByText("Variable access: unexpected EOF in if block"),
     ).toBeNull();
   });
 
@@ -937,7 +943,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             ],
             validationErrors: {
               prompt:
-                "Resolve the highlighted prompt diagnostics before saving this workstation.",
+                "See prompt diagnostics below.",
             },
           })}
           now={DETAIL_CARD_NOW}
@@ -1105,7 +1111,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1129,9 +1135,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
     expect(
       document.getElementById("editable-workstation-prompt-error")?.textContent,
-    ).toBe(
-      "Resolve the highlighted prompt diagnostics before saving this workstation.",
-    );
+    ).toBe("See prompt diagnostics below.");
     expect(
       document.getElementById("editable-workstation-prompt-diagnostics"),
     ).toBeTruthy();
@@ -1166,7 +1170,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1211,7 +1215,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1254,7 +1258,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1301,7 +1305,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1701,7 +1705,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}

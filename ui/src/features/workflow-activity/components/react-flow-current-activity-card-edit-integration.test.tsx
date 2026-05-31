@@ -524,9 +524,14 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
         screen.queryByRole("button", { name: "worker:spare" }),
       ).toBeNull();
     });
-    expect(
-      within(toolbar).getByText("No draft changes", { exact: true }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        within(toolbar).queryByRole("button", { name: "Discard changes" }),
+      ).toBeNull();
+      expect(
+        within(toolbar).queryByRole("button", { name: "Save changes" }),
+      ).toBeNull();
+    });
   });
 
   it("opens save confirmation from the activity card host portaled to document.body", async () => {
@@ -669,6 +674,7 @@ function renderCurrentActivity(snapshot = createSnapshot()) {
       onSelectWorkID={vi.fn()}
       onSelectResource={vi.fn()}
       onSelectWorker={vi.fn()}
+      onSelectWorkType={vi.fn()}
       onSelectWorkstation={vi.fn()}
       selection={null}
       snapshot={snapshot}

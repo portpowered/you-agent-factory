@@ -1,24 +1,16 @@
-import { act, renderHook } from "@testing-library/react";
+import { act } from "@testing-library/react";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
+import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
+import {
+  renderEditableFactoryGraphHook,
+  setupEditableFactoryGraphSaveTestEnvironment,
+} from "../../../testing/editable-factory-graph-hook-test-helpers";
 import {
   baseFactoryDefinition,
   currentFactoryDocument,
 } from "../lib/factory-graph-draft.test-helpers";
-import { useEditableFactoryGraph } from "./use-editable-factory-graph";
-import type { EditableFactoryGraphSaveInput } from "./use-editable-factory-graph-types";
-
-function createSaveFactoryDefinitionMock(
-  baseVersion: CurrentFactoryDocument["version"],
-) {
-  return vi.fn(async (input: EditableFactoryGraphSaveInput) => ({
-    ...input.factoryDefinition,
-    version: {
-      logical: String(Number(baseVersion.logical) + 1),
-      physical: "2026-05-31T12:00:00Z",
-    },
-  }));
-}
+import type { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const logicalMoveFactoryDocument: CurrentFactoryDocument = {
   ...baseFactoryDefinition,
@@ -60,16 +52,17 @@ function anchorIdsForWorkstation(
 }
 
 describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", () => {
+  beforeEach(() => {
+    setupEditableFactoryGraphSaveTestEnvironment();
+  });
+
   it("allows worker-assignment disconnect and reconnect while save stays blocked until reassigned", async () => {
-    const saveFactoryDefinition = createSaveFactoryDefinitionMock(
-      currentFactoryDocument.version,
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
     );
-    const { result } = renderHook(() =>
-      useEditableFactoryGraph({
-        currentFactoryDocument,
-        saveFactoryDefinition,
-      }),
-    );
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument,
+    });
 
     act(() => {
       result.current.actions.addNode({
@@ -140,9 +133,9 @@ describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", (
     });
 
     expect(didSave).toBe(true);
-    expect(saveFactoryDefinition).toHaveBeenCalledWith({
+    expect(saveMutation.saveAsync).toHaveBeenCalledWith({
       baseVersion: currentFactoryDocument.version,
-      factoryDefinition: expect.objectContaining({
+      factory: expect.objectContaining({
         workstations: expect.arrayContaining([
           expect.objectContaining({
             name: "draft",
@@ -155,16 +148,17 @@ describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", (
 });
 
 describe("useEditableFactoryGraph logical-move worker handles", () => {
+  beforeEach(() => {
+    setupEditableFactoryGraphSaveTestEnvironment();
+  });
+
   it("omits worker-assignment handles on LOGICAL_MOVE stations and allows save without a worker", async () => {
-    const saveFactoryDefinition = createSaveFactoryDefinitionMock(
-      logicalMoveFactoryDocument.version,
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
     );
-    const { result } = renderHook(() =>
-      useEditableFactoryGraph({
-        currentFactoryDocument: logicalMoveFactoryDocument,
-        saveFactoryDefinition,
-      }),
-    );
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument: logicalMoveFactoryDocument,
+    });
 
     expect(anchorIdsForWorkstation(result.current.projection, "router")).not.toContain(
       "worker-assignment-target",
@@ -190,9 +184,9 @@ describe("useEditableFactoryGraph logical-move worker handles", () => {
     });
 
     expect(didSave).toBe(true);
-    expect(saveFactoryDefinition).toHaveBeenCalledWith({
+    expect(saveMutation.saveAsync).toHaveBeenCalledWith({
       baseVersion: logicalMoveFactoryDocument.version,
-      factoryDefinition: expect.objectContaining({
+      factory: expect.objectContaining({
         workstations: expect.arrayContaining([
           expect.objectContaining({
             name: "router",

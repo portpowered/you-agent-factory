@@ -268,6 +268,30 @@ describe("useCurrentSelectionActions", () => {
     });
   });
 
+  it("selects work types by authored work type name", () => {
+    const commitSelectionState = vi.fn();
+
+    const actions = useCurrentSelectionActions({
+      commitSelectionState,
+      completedWorkItems: [],
+      failedWorkItems: [],
+      projectedWorkstationRequestsByDispatchID: undefined,
+      selection: null,
+      snapshot: null,
+      terminalWorkDetail: null,
+    });
+
+    actions.selectWorkType("story");
+
+    expect(commitSelectionState).toHaveBeenCalledWith({
+      selection: {
+        kind: "work-type",
+        workTypeName: "story",
+      },
+      terminalWorkDetail: null,
+    });
+  });
+
   it("selects workers by authored worker name", () => {
     const commitSelectionState = vi.fn();
 

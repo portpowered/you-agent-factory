@@ -8,7 +8,7 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
-import type { FactoryWorker } from "../../../api/events/types";
+import type { FactoryWorker, FactoryWorkType } from "../../../api/events/types";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type {
@@ -54,6 +54,8 @@ export interface CurrentSelectionState {
   selectedWorker: FactoryWorker | null;
   selectedWorkerName: string | null;
   selectedWorkerWorkstationNames: string[];
+  selectedWorkType: FactoryWorkType | null;
+  selectedWorkTypeName: string | null;
   selectedWorkstationRequest: DashboardWorkstationRequest | null;
   selection: DashboardSelection | null;
   selectStateNode: (placeId: string) => void;
@@ -72,6 +74,7 @@ export interface CurrentSelectionState {
   clearSelectedFactoryGraphNodeIfMatching: (nodeId: string) => void;
   clearSelectedStateNodeIfMatching: (placeId: string) => void;
   clearSelectedWorkerIfMatching: (workerName: string) => void;
+  selectWorkType: (workTypeName: string) => void;
   terminalWorkDetail: TerminalWorkDetail | null;
   undoSelection: () => void;
 }
@@ -178,6 +181,8 @@ export function useCurrentSelection({
     selectedWorker: derived.selectedWorker,
     selectedWorkerName: derived.selectedWorkerName,
     selectedWorkerWorkstationNames: derived.selectedWorkerWorkstationNames,
+    selectedWorkType: derived.selectedWorkType,
+    selectedWorkTypeName: derived.selectedWorkTypeName,
     selectedWorkstationRequest: derived.selectedWorkstationRequest,
     selection,
     selectStateNode: actions.selectStateNode,
@@ -192,6 +197,7 @@ export function useCurrentSelection({
     clearSelectedWorkerIfMatching: actions.clearSelectedWorkerIfMatching,
     selectResource: actions.selectResource,
     selectWorker: actions.selectWorker,
+    selectWorkType: actions.selectWorkType,
     terminalWorkDetail,
     undoSelection: store.undoSelection,
   };

@@ -14,13 +14,12 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
-import { DisclosureButton } from "../../../../components/ui/disclosure-button";
+import { ExpandablePanelTrigger } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import {
   CURRENT_SELECTION_CODE_SUBTLE_CLASS,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
-  HISTORY_TOGGLE_CLASS,
 } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkstationPromptHelpState,
@@ -165,20 +164,20 @@ function EditableConfigurationReadyPromptHelp({
             promptHelpState.contract.inputCount,
           )}
         </p>
-        <DisclosureButton
+        <ExpandablePanelTrigger
           aria-label={
             expanded
               ? messages.editableConfigurationPromptHelpCollapseActionLabel
               : messages.editableConfigurationPromptHelpExpandActionLabel
           }
-          className={HISTORY_TOGGLE_CLASS}
           controlsID={contentId}
           expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
           type="button"
+          variant="section"
         >
           {expanded ? messages.collapseAction : messages.expandAction}
-        </DisclosureButton>
+        </ExpandablePanelTrigger>
       </div>
       <Collapsible onOpenChange={setExpanded} open={expanded}>
         <CollapsibleContent className="grid gap-2 pt-2" id={contentId}>
@@ -299,9 +298,6 @@ function EditableConfigurationPromptValidationFeedback({
           messages.editableConfigurationPromptDiagnosticsHeading,
         diagnosticsSummary:
           messages.editableConfigurationPromptDiagnosticsSummary,
-        syntaxDiagnosticLabel:
-          messages.editableConfigurationPromptSyntaxDiagnosticLabel,
-        validationDetail: messages.editableConfigurationPromptValidationDetail,
         validationErrorPrefix:
           messages.editableConfigurationPromptValidationErrorPrefix,
         validationLoading:

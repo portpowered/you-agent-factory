@@ -8,11 +8,15 @@ import {
   CurrentSelectionCardStory,
   CurrentSelectionEditableConfigurationStory,
   CurrentSelectionResourceSelectedStory,
+  CurrentSelectionRunHistoryExpandStory,
   CurrentSelectionWorkContentsCardStory,
   editableConfigurationPromptTemplateContract,
   expectBentoHeaderDragSurface,
+  expectCurrentSelectionRunHistoryExpandFlow,
+  expectEditableConfigurationPromptSyntaxSaveStoryFlow,
   expectEditableConfigurationStoryFlow,
   expectResourceSelectedStoryFlow,
+  promptTemplateSyntaxValidationResponse,
   promptTemplateValidationResponse,
   semanticWorkflowDashboardSnapshot,
 } from "./dashboard-bento-story-shared";
@@ -56,6 +60,13 @@ export const CurrentSelectionWorkContents = {
     await expect(
       canvas.getByRole("button", { name: "Move Current selection" }),
     ).toBeVisible();
+  },
+};
+
+export const CurrentSelectionRunHistoryExpand = {
+  render: () => <CurrentSelectionRunHistoryExpandStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectCurrentSelectionRunHistoryExpandFlow(canvasElement);
   },
 };
 
@@ -112,6 +123,35 @@ export const CurrentSelectionResourceSelected = {
   render: () => <CurrentSelectionResourceSelectedStory width={960} />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await expectResourceSelectedStoryFlow(canvasElement);
+  },
+};
+
+export const CurrentSelectionPromptSyntaxSave = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory",
+          response: {
+            body: buildEditableConfigurationDocument(),
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
+            body: promptTemplateSyntaxValidationResponse(init),
+          }),
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => <CurrentSelectionEditableConfigurationStory width={960} />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationPromptSyntaxSaveStoryFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
   },
 };
 

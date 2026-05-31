@@ -123,6 +123,26 @@ describe("editable workstation prompt state helpers", () => {
         "Use {{ .Prompt }}",
         messages,
       ),
+    ).toEqual({
+      diagnostics: [],
+      result: {
+        diagnostics: [],
+        valid: true,
+      },
+      status: "ready",
+    });
+
+    expect(
+      resolvePromptValidationState(
+        {
+          data: undefined,
+          isError: false,
+          isFetching: true,
+          isPending: false,
+        } as never,
+        "Use {{ .Prompt }}",
+        messages,
+      ),
     ).toEqual({ status: "loading" });
 
     expect(

@@ -64,6 +64,53 @@ History: {{ (index .Inputs 0).History }} {{ (index .Inputs 0).History.AttemptNum
 	}
 }
 
+func TestValidatePromptTemplate_NormalizesSyntaxErrorMessages(t *testing.T) {
+	tmpl := `{{ if .Context.Project }}`
+	result := ValidatePromptTemplate(tmpl, 1)
+
+	if result.Valid {
+		t.Fatal("Valid = true, want false")
+	}
+	if len(result.Diagnostics) != 1 {
+		t.Fatalf("diagnostics = %#v, want one syntax error", result.Diagnostics)
+	}
+
+	diagnostic := result.Diagnostics[0]
+	if diagnostic.Kind != PromptTemplateDiagnosticKindSyntaxError {
+		t.Fatalf("diagnostic kind = %q, want %q", diagnostic.Kind, PromptTemplateDiagnosticKindSyntaxError)
+	}
+	if diagnostic.Message != "line 1: unexpected EOF" {
+		t.Fatalf("diagnostic message = %q, want %q", diagnostic.Message, "line 1: unexpected EOF")
+	}
+	if strings.Contains(diagnostic.Message, "template: prompt:") {
+		t.Fatalf("diagnostic message = %q, must not include template parse prefix", diagnostic.Message)
+	}
+	if diagnostic.StartOffset != 1 || diagnostic.EndOffset != len(tmpl) {
+		t.Fatalf(
+			"diagnostic offsets = (%d, %d), want (1, %d)",
+			diagnostic.StartOffset,
+			diagnostic.EndOffset,
+			len(tmpl),
+		)
+	}
+
+	multilineTemplate := "Valid line\n{{ bad"
+	multilineResult := ValidatePromptTemplate(multilineTemplate, 1)
+	if len(multilineResult.Diagnostics) != 1 {
+		t.Fatalf("multiline diagnostics = %#v, want one syntax error", multilineResult.Diagnostics)
+	}
+	multilineDiagnostic := multilineResult.Diagnostics[0]
+	if multilineDiagnostic.Message != `line 2: function "bad" not defined` {
+		t.Fatalf("multiline message = %q, want line 2 function error", multilineDiagnostic.Message)
+	}
+	if multilineDiagnostic.StartOffset != len("Valid line\n")+1 {
+		t.Fatalf("multiline start offset = %d, want %d", multilineDiagnostic.StartOffset, len("Valid line\n")+1)
+	}
+	if multilineDiagnostic.EndOffset != len(multilineTemplate) {
+		t.Fatalf("multiline end offset = %d, want %d", multilineDiagnostic.EndOffset, len(multilineTemplate))
+	}
+}
+
 func TestValidatePromptTemplate_SeparatesSyntaxErrorsFromUnavailableVariables(t *testing.T) {
 	syntaxResult := ValidatePromptTemplate(`{{ if .Context.Project }}`, 1)
 	if syntaxResult.Valid {
@@ -71,6 +118,9 @@ func TestValidatePromptTemplate_SeparatesSyntaxErrorsFromUnavailableVariables(t 
 	}
 	if len(syntaxResult.Diagnostics) != 1 || syntaxResult.Diagnostics[0].Kind != PromptTemplateDiagnosticKindSyntaxError {
 		t.Fatalf("syntax diagnostics = %#v, want one syntax error", syntaxResult.Diagnostics)
+	}
+	if !strings.HasPrefix(syntaxResult.Diagnostics[0].Message, "line 1: ") {
+		t.Fatalf("syntax message = %q, want line-based prefix", syntaxResult.Diagnostics[0].Message)
 	}
 
 	unavailableResult := ValidatePromptTemplate(`{{ (index .Inputs 1).Payload }}`, 1)

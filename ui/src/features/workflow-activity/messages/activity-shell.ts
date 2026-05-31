@@ -10,6 +10,7 @@ export interface WorkflowActivityShellMessages {
   selectStateLabel: (placeLabel: string) => string;
   selectResourceLabel: (resourceName: string) => string;
   selectWorkerLabel: (workerName: string) => string;
+  selectWorkTypeLabel: (workTypeName: string) => string;
   selectWorkstationLabel: (workstationTitle: string) => string;
   title: string;
   viewportLabel: string;
@@ -25,6 +26,7 @@ const workflowActivityShellMessagesByLocale = {
     selectStateLabel: (placeLabel) => `Select ${placeLabel} state`,
     selectResourceLabel: (resourceName) => `Select ${resourceName} resource`,
     selectWorkerLabel: (workerName) => `Select ${workerName} worker`,
+    selectWorkTypeLabel: (workTypeName) => `Select ${workTypeName} work type`,
     selectWorkstationLabel: (workstationTitle) =>
       `Select ${workstationTitle} workstation`,
     title: "Current activity",
@@ -39,6 +41,7 @@ const workflowActivityShellMessagesByLocale = {
     selectStateLabel: (placeLabel) => `选择 ${placeLabel} 状态`,
     selectResourceLabel: (resourceName) => `选择 ${resourceName} 资源`,
     selectWorkerLabel: (workerName) => `选择 ${workerName} 工作者`,
+    selectWorkTypeLabel: (workTypeName) => `选择 ${workTypeName} 工作类型`,
     selectWorkstationLabel: (workstationTitle) =>
       `选择 ${workstationTitle} 工作站`,
     title: "当前活动",

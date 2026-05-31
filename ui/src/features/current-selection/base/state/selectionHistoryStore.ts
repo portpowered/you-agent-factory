@@ -50,6 +50,9 @@ function selectionHistorySelectionKey(selection: DashboardSelection | null): str
     case "resource":
       // hardcoded-ui-copy-exception: non-product-diagnostic
       return `resource:${selection.resourceName}`;
+    case "work-type":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return `work-type:${selection.workTypeName}`;
   }
 }
 

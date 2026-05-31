@@ -6,8 +6,6 @@ const labels = {
   diagnosticsHeading: "Prompt diagnostics",
   diagnosticsSummary:
     "Resolve the highlighted prompt diagnostics before saving this workstation.",
-  syntaxDiagnosticLabel: "Template syntax",
-  validationDetail: "Fix each issue below before saving.",
   validationErrorPrefix: "Prompt validation unavailable.",
   validationLoading: "Validating prompt variables for the current draft.",
   variableDiagnosticLabel: "Variable access",
@@ -48,14 +46,14 @@ describe("PromptEditorDiagnosticsPanel", () => {
     );
   });
 
-  it("renders diagnostic list with syntax vs variable labels and danger panel semantics", () => {
+  it("renders line-based syntax diagnostics without duplicate summary detail", () => {
     render(
       <PromptEditorDiagnosticsPanel
         diagnostics={[
           {
             endOffset: 18,
             kind: "SYNTAX_ERROR",
-            message: "Unexpected EOF in if block.",
+            message: "line 2: unexpected EOF in if block",
             sourceText: "{{ if .WorkID }}",
             startOffset: 5,
           },
@@ -71,10 +69,13 @@ describe("PromptEditorDiagnosticsPanel", () => {
     expect(panel?.getAttribute("role")).toBe("alert");
     expect(screen.getByText("Prompt diagnostics")).toBeTruthy();
     expect(
-      screen.getByText("Template syntax: Unexpected EOF in if block."),
+      screen.getByText("line 2: unexpected EOF in if block"),
     ).toBeTruthy();
     expect(
-      screen.queryByText("Variable access: Unexpected EOF in if block."),
+      screen.queryByText("Template syntax: unexpected EOF in if block"),
+    ).toBeNull();
+    expect(
+      screen.queryByText("Fix each issue below before saving."),
     ).toBeNull();
     expect(screen.getByText("{{ if .WorkID }}")).toBeTruthy();
   });

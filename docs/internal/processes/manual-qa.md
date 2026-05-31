@@ -146,6 +146,14 @@ Date: `2026-05-20`
 - `cd ui && bunx vitest run src/features/current-selection/current-selection-widget.save.test.tsx scripts/verify-import-export-storybook-responsive.schedule.test.mjs scripts/verify-import-export-storybook-responsive.test.mjs scripts/dashboard-shell-storybook-responsive.test.mjs` passed.
 - `cd ui && bun run build-storybook` passed.
 - `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6012 bun run test-storybook` passed, including the new current-selection prompt hinting Storybook interaction and responsive browser verification for prompt help, inline squiggle diagnostics, keyboard interaction, and mobile/tablet/desktop overflow checks.
+Date: `2026-05-31` (UTC)
+
+- `cd ui && bun run build-storybook` passed.
+- `cd ui && bun run tsc` passed.
+- `cd ui && bun x vitest run scripts/verify-current-selection-storybook-responsive.test.mjs scripts/verify-import-export-storybook-responsive.schedule.test.mjs` passed.
+- `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6025 bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/bento/components/dashboard-bento-current-selection-catalog.stories.tsx -t "Current Selection Prompt Syntax Save"` passed in a browser-backed runner, confirming one concise save-blocked summary, `line 1:` diagnostics copy, prompt editor invalid/squiggle feedback, disabled-then-enabled Save, and the overwrite confirmation dialog after correcting `{{ if .WorkID }}` → `{{ if .WorkID }}{{ end }}` on the isolated current-selection bento story.
+- `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6025 bun scripts/run-prompt-syntax-save-browser-check.mjs` passed against built Storybook `iframe.html` story `you-agent-factory-dashboard-bento-cards--current-selection-prompt-syntax-save`, confirming the same typo workflow with Monaco `.squiggly-error` gutter feedback and save confirmation at desktop (`1440x900`) in headless Chromium.
+
 Date: `2026-05-22`
 
 - `cd ui && bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/header/dashboard-session-tabs.stories.tsx` passed in a browser-backed runner, covering the visible session tab strip, the folder-first open-session dialog, the multi-target picker step, and activation of the newly opened session tab.

@@ -6,12 +6,41 @@ export function currentActivityGraphKey(graphLayout: GraphLayout): string {
     return "";
   }
 
-  const nodeIds = graphLayout.nodes.map((node) => node.nodeId).sort().join("|");
-  const edgeIds = graphLayout.edges.map((edge) => edge.edgeId).sort().join("|");
+  const nodeIds = graphLayout.nodes
+    .map((node) => node.nodeId)
+    .sort()
+    .join("|");
+  const edgeIds = graphLayout.edges
+    .map((edge) => edge.edgeId)
+    .sort()
+    .join("|");
   return `${nodeIds}::${edgeIds}`;
 }
 
-export function currentActivityTopologyKey(topology: DashboardTopology): string {
+export function graphKeyAfterAddingNode(
+  graphKey: string,
+  newNodeId: string,
+): string {
+  if (!graphKey) {
+    return newNodeId;
+  }
+
+  const separatorIndex = graphKey.indexOf("::");
+  const nodePart =
+    separatorIndex === -1 ? graphKey : graphKey.slice(0, separatorIndex);
+  const edgePart =
+    separatorIndex === -1 ? "" : graphKey.slice(separatorIndex + 2);
+  const nodeIds = nodePart.split("|").filter((nodeId) => nodeId.length > 0);
+
+  nodeIds.push(newNodeId);
+  nodeIds.sort();
+
+  return `${nodeIds.join("|")}::${edgePart}`;
+}
+
+export function currentActivityTopologyKey(
+  topology: DashboardTopology,
+): string {
   return JSON.stringify({
     edges: [...(topology.edges ?? [])]
       .map((edge) => ({
@@ -23,36 +52,35 @@ export function currentActivityTopologyKey(topology: DashboardTopology): string 
         via_place_id: edge.via_place_id,
         work_type_id: edge.work_type_id ?? "",
       }))
-      .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
-    workstations: [...topology.workstation_node_ids]
-      .sort()
-      .map((nodeId) => {
-        const workstation = topology.workstation_nodes_by_id[nodeId];
-        return {
-          input_places: [...(workstation?.input_places ?? [])]
-            .map((place) => ({
-              kind: place.kind,
-              place_id: place.place_id,
-              state_category: place.state_category ?? "",
-              state_value: place.state_value ?? "",
-              type_id: place.type_id ?? "",
-            }))
-            .sort((left, right) => left.place_id.localeCompare(right.place_id)),
-          node_id: workstation?.node_id ?? nodeId,
-          output_places: [...(workstation?.output_places ?? [])]
-            .map((place) => ({
-              kind: place.kind,
-              place_id: place.place_id,
-              state_category: place.state_category ?? "",
-              state_value: place.state_value ?? "",
-              type_id: place.type_id ?? "",
-            }))
-            .sort((left, right) => left.place_id.localeCompare(right.place_id)),
-          transition_id: workstation?.transition_id ?? "",
-          workstation_kind: workstation?.workstation_kind ?? "",
-          workstation_name: workstation?.workstation_name ?? "",
-        };
-      }),
+      .sort((left, right) =>
+        JSON.stringify(left).localeCompare(JSON.stringify(right)),
+      ),
+    workstations: [...topology.workstation_node_ids].sort().map((nodeId) => {
+      const workstation = topology.workstation_nodes_by_id[nodeId];
+      return {
+        input_places: [...(workstation?.input_places ?? [])]
+          .map((place) => ({
+            kind: place.kind,
+            place_id: place.place_id,
+            state_category: place.state_category ?? "",
+            state_value: place.state_value ?? "",
+            type_id: place.type_id ?? "",
+          }))
+          .sort((left, right) => left.place_id.localeCompare(right.place_id)),
+        node_id: workstation?.node_id ?? nodeId,
+        output_places: [...(workstation?.output_places ?? [])]
+          .map((place) => ({
+            kind: place.kind,
+            place_id: place.place_id,
+            state_category: place.state_category ?? "",
+            state_value: place.state_value ?? "",
+            type_id: place.type_id ?? "",
+          }))
+          .sort((left, right) => left.place_id.localeCompare(right.place_id)),
+        transition_id: workstation?.transition_id ?? "",
+        workstation_kind: workstation?.workstation_kind ?? "",
+        workstation_name: workstation?.workstation_name ?? "",
+      };
+    }),
   });
 }
-

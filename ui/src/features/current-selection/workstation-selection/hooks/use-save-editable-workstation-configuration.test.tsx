@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: save-hook coverage includes invalid-to-valid prompt validation regressions alongside confirmation wiring.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -62,6 +63,70 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         workstations: [],
       },
     });
+  });
+
+  it("does not open save confirmation when canSave is false after prompt validation errors", () => {
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            hasValidationErrors: true,
+            pendingFactoryDefinition: null,
+            promptValidationState: {
+              diagnostics: [
+                {
+                  kind: "SYNTAX_ERROR",
+                  message: "line 1: unexpected EOF",
+                },
+              ],
+              result: {
+                diagnostics: [
+                  {
+                    kind: "SYNTAX_ERROR",
+                    message: "line 1: unexpected EOF",
+                  },
+                ],
+                valid: false,
+              },
+              status: "ready",
+            },
+            validationErrors: {
+              prompt: "See prompt diagnostics below.",
+            },
+          }),
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    expect(result.current.canSave).toBe(false);
+
+    act(() => {
+      result.current.beginSaveConfirmation();
+    });
+
+    expect(result.current.saveState).toEqual({ status: "idle" });
+  });
+
+  it("opens save confirmation after prompt validation recovers for a dirty draft", () => {
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            prompt: "Use {{ .WorkID }}.",
+          }),
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    expect(result.current.canSave).toBe(true);
+
+    act(() => {
+      result.current.beginSaveConfirmation();
+    });
+
+    expect(result.current.saveState).toEqual({ status: "confirming" });
   });
 
   it("allows empty-body pollers to stay saveable", () => {
@@ -324,8 +389,27 @@ function createQueryClientWrapper() {
 
 function buildReadyEditableConfigurationState(overrides?: {
   behavior?: "STANDARD" | "REPEATER" | "POLLER";
+  hasValidationErrors?: boolean;
   markChangesSaved?: () => void;
+  pendingFactoryDefinition?: EditableWorkstationConfigurationState extends {
+    status: "ready";
+  }
+    ? NonNullable<
+        Extract<
+          EditableWorkstationConfigurationState,
+          { status: "ready" }
+        >["pendingFactoryDefinition"]
+      >
+    : never;
   prompt?: string;
+  promptValidationState?: Extract<
+    EditableWorkstationConfigurationState,
+    { status: "ready" }
+  >["promptValidationState"];
+  validationErrors?: Extract<
+    EditableWorkstationConfigurationState,
+    { status: "ready" }
+  >["validationErrors"];
 }): EditableWorkstationConfigurationState {
   return {
     draft: {
@@ -334,7 +418,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       runnerName: null,
       workerName: "reviewer",
     },
-    hasValidationErrors: false,
+    hasValidationErrors: overrides?.hasValidationErrors ?? false,
     initialValues: {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
@@ -371,11 +455,13 @@ function buildReadyEditableConfigurationState(overrides?: {
     onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
     overwriteFieldNames: [],
-    pendingFactoryDefinition: {
-      name: "Current Factory",
-      workers: [],
-      workstations: [],
-    },
+    pendingFactoryDefinition:
+      overrides?.pendingFactoryDefinition ??
+      ({
+        name: "Current Factory",
+        workers: [],
+        workstations: [],
+      } as const),
     promptDiagnostics: [],
     promptHelpState: {
       contract: {
@@ -385,7 +471,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       },
       status: "ready",
     },
-    promptValidationState: {
+    promptValidationState: overrides?.promptValidationState ?? {
       diagnostics: [],
       result: {
         diagnostics: [],
@@ -394,7 +480,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       status: "ready",
     },
     status: "ready",
-    validationErrors: {},
+    validationErrors: overrides?.validationErrors ?? {},
     workerOptionsState: {
       options: ["reviewer"],
       status: "ready",

@@ -29,6 +29,7 @@ interface WorkflowActivityBentoCardProps {
   onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorker: (workerName: string) => void;
+  onSelectWorkType: (workTypeName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   widgetInstanceID?: string;
 }
@@ -46,6 +47,7 @@ export function WorkflowActivityBentoCard({
   onSelectResource,
   onSelectStateNode,
   onSelectWorker,
+  onSelectWorkType,
   onSelectWorkstation,
 }: WorkflowActivityBentoCardProps) {
   const messages = getWorkflowActivityShellMessages(locale);
@@ -88,6 +90,7 @@ export function WorkflowActivityBentoCard({
       chromeDensity="compact"
       headerAction={
         <CurrentActivityGraphHeaderActions
+          key={`graph-editor-header-${editor.editorMode}-${editor.draftState.hasChanges}`}
           compact
           editorMode={editor.editorMode}
           editorUnavailableClassifierWorkstationName={
@@ -119,6 +122,7 @@ export function WorkflowActivityBentoCard({
           onSelectResource={onSelectResource}
           onSelectStateNode={onSelectStateNode}
           onSelectWorker={onSelectWorker}
+          onSelectWorkType={onSelectWorkType}
           onSelectWorkstation={onSelectWorkstation}
         />
       </section>
@@ -133,7 +137,11 @@ function toCurrentActivitySelection(
     return { kind: "node", nodeId: selection.nodeId };
   }
 
-  if (selection?.kind === "worker" || selection?.kind === "resource") {
+  if (
+    selection?.kind === "worker" ||
+    selection?.kind === "resource" ||
+    selection?.kind === "work-type"
+  ) {
     return selection;
   }
 
