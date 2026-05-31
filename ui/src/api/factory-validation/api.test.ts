@@ -1,7 +1,4 @@
-import {
-  FactoryValidationAPIError,
-  validateFactoryDefinition,
-} from "./api";
+import { FactoryValidationAPIError, validateFactoryDefinition } from "./api";
 
 describe("validateFactoryDefinition", () => {
   afterEach(() => {

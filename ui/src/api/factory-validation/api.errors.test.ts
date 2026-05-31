@@ -16,10 +16,12 @@ describe("validateFactoryDefinition error mapping", () => {
   it("throws NETWORK_ERROR when fetch is unavailable in the environment", async () => {
     vi.stubGlobal("fetch", undefined);
 
-    await expect(validateFactoryDefinition(emptyFactory)).rejects.toMatchObject({
-      code: "NETWORK_ERROR",
-      message: factoryValidationAPIErrorMessages.emptyEnvironment,
-    });
+    await expect(validateFactoryDefinition(emptyFactory)).rejects.toMatchObject(
+      {
+        code: "NETWORK_ERROR",
+        message: factoryValidationAPIErrorMessages.emptyEnvironment,
+      },
+    );
   });
 
   it("maps transport failures to NETWORK_ERROR", async () => {
