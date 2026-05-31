@@ -22,6 +22,7 @@ export function WorkItemDetailCard({
   onSelectTraceID,
   onSelectWorkID,
   operationCount,
+  operationHistory,
   relationshipGraph,
   selectedNode,
   selectedProviderSessionKey,
@@ -107,6 +108,7 @@ export function WorkItemDetailCard({
         onSelectProviderSession={onSelectProviderSession}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}
+        operationHistory={operationHistory}
         requests={workstationRequests}
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedWorkID={selection.workItem.work_id}

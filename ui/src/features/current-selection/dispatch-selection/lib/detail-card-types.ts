@@ -4,6 +4,9 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
+import type { SelectedWorkOperationHistoryItem } from "../../hooks/selected-work-operation-history";
+
+export type { SelectedWorkOperationHistoryItem };
 
 export type SelectedWorkRequestHistoryItem =
   | DashboardRuntimeWorkstationRequest
@@ -17,6 +20,7 @@ export interface SelectedWorkDispatchHistorySectionProps {
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
+  operationHistory?: SelectedWorkOperationHistoryItem[];
   requests: SelectedWorkRequestHistoryItem[];
   selectedProviderSessionKey?: string | null;
   selectedWorkID: string;
