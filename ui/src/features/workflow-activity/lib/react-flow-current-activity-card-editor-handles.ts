@@ -391,7 +391,6 @@ function isWorkstationToWorkStateRouteKind(
   value: string | undefined,
 ): value is WorkstationToWorkStateRouteKind {
   return (
-    value === "workstation-input" ||
     value === "workstation-on-continue" ||
     value === "workstation-on-failure" ||
     value === "workstation-on-rejection" ||
@@ -411,8 +410,6 @@ function visibilityBypassSourceHandleId(
       return "workstation-on-rejection-source";
     case "workstation-output":
       return "workstation-output-source";
-    case "workstation-input":
-      return "workstation-input-source";
   }
 }
 
