@@ -247,11 +247,3 @@ test("does not allowlist removed export dialog DIALOG_FILE_INPUT_CLASS", () => {
     ),
   ).toBe(false);
 });
-
-test("does not allowlist removed export dialog DIALOG_FILE_INPUT_CLASS", () => {
-  expect(
-    allowlistedInlineComponentClassUsage.some((entry) =>
-      entry.endsWith("DIALOG_FILE_INPUT_CLASS"),
-    ),
-  ).toBe(false);
-});
