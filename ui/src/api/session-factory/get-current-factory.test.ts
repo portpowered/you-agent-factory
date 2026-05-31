@@ -1,11 +1,11 @@
-import { getCurrentFactory } from "./api";
+import { getCurrentFactory } from "./import-activation";
 
 const defaultSessionFactoryVersion = {
   logical: "9",
   physical: "2026-05-18T14:25:00Z",
 } as const;
 
-describe("named factory export API", () => {
+describe("session factory getCurrentFactory", () => {
   it("reads the current factory as a direct canonical factory payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -35,9 +35,12 @@ describe("named factory export API", () => {
       workers: [],
       workstations: [],
     });
-    expect(fetchMock).toHaveBeenCalledWith("/factory-sessions/~default/factory", {
-      method: "GET",
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/~default/factory",
+      {
+        method: "GET",
+      },
+    );
   });
 
   it("reads the current factory through the session-scoped route for non-default sessions", async () => {
@@ -78,7 +81,7 @@ describe("named factory export API", () => {
     );
   });
 
-  it("rejects retired named-factory wrapper responses from the current factory endpoint", async () => {
+  it("rejects retired wrapper responses from the current factory endpoint", async () => {
     await expect(
       getCurrentFactory({
         fetch: vi.fn().mockResolvedValue(

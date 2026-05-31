@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { App } from "./App";
-import type { FactoryValue } from "./api/named-factory";
+import type { ImportFactoryValue } from "./api/session-factory";
 import {
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
@@ -139,7 +139,7 @@ const promptTemplateContractResponse = {
 
 function buildEditableConfigurationFactoryDefinition(
   overrides: { prompt?: string; workerName?: string } = {},
-): FactoryValue {
+): ImportFactoryValue {
   return {
     name: "Current Factory",
     workers: [
@@ -172,7 +172,7 @@ function buildEditableConfigurationFactoryDefinition(
 }
 
 function buildEditableConfigurationDocument(
-  factoryDefinition: FactoryValue = editableConfigurationFactoryDefinition,
+  factoryDefinition: ImportFactoryValue = editableConfigurationFactoryDefinition,
 ) {
   return {
     ...factoryDefinition,
@@ -198,7 +198,7 @@ function submittedFactoryDefinitionDocument(init?: RequestInit) {
 
   if (typeof factoryDefinition.name === "string") {
     return buildEditableConfigurationDocument(
-      factoryDefinition as FactoryValue,
+      factoryDefinition as ImportFactoryValue,
     );
   }
 
