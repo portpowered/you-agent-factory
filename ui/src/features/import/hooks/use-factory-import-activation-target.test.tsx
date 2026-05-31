@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import {
   discoverSessionNamedFactoryNames,
-  getCurrentFactory,
+  getSessionFactory,
 } from "../../../api/session-factory";
 import { useFactoryImportActivationTarget } from "./use-factory-import-activation-target";
 
@@ -15,7 +15,7 @@ vi.mock("../../../api/session-factory", async () => {
   return {
     ...actual,
     discoverSessionNamedFactoryNames: vi.fn(actual.discoverSessionNamedFactoryNames),
-    getCurrentFactory: vi.fn(actual.getCurrentFactory),
+    getSessionFactory: vi.fn(actual.getSessionFactory),
   };
 });
 
@@ -39,7 +39,7 @@ describe("useFactoryImportActivationTarget", () => {
   });
 
   it("resolves create target names for non-default sessions", async () => {
-    vi.mocked(getCurrentFactory).mockResolvedValue({
+    vi.mocked(getSessionFactory).mockResolvedValue({
       name: "Review Session Import Factory",
       workTypes: [],
       workers: [],
@@ -71,7 +71,7 @@ describe("useFactoryImportActivationTarget", () => {
   });
 
   it("returns null create target names when the preferred name is blank", async () => {
-    vi.mocked(getCurrentFactory).mockResolvedValue({
+    vi.mocked(getSessionFactory).mockResolvedValue({
       name: "alpha",
       workTypes: [],
       workers: [],
@@ -110,7 +110,7 @@ describe("useFactoryImportActivationTarget", () => {
     expect(result.current.isLoading).toBe(false);
     expect(result.current.createTargetFactoryName).toBe("Dropped Factory");
     expect(result.current.currentFactoryName).toBeNull();
-    expect(getCurrentFactory).not.toHaveBeenCalled();
+    expect(getSessionFactory).not.toHaveBeenCalled();
     expect(discoverSessionNamedFactoryNames).not.toHaveBeenCalled();
   });
 });
