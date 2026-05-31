@@ -44,13 +44,11 @@ import type { getWorkerDetailMessages } from "../messages/worker-detail";
 
 export function WorkerEditableConfigurationSection({
   messages,
-  onSaveWorker,
   saveState,
   state,
   workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
-  onSaveWorker?: () => void;
   saveState?: EditableWorkerSaveState;
   state?: WorkerDetailCardProps["editableConfigurationState"];
   workerName: string;
@@ -121,7 +119,6 @@ export function WorkerEditableConfigurationSection({
           {state?.status === "ready" ? (
             <WorkerEditableConfigurationReadyForm
               messages={messages}
-              onSaveWorker={onSaveWorker}
               saveState={saveState}
               state={state}
               workerName={workerName}
@@ -135,13 +132,11 @@ export function WorkerEditableConfigurationSection({
 
 function WorkerEditableConfigurationReadyForm({
   messages,
-  onSaveWorker,
   saveState,
   state,
   workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
-  onSaveWorker?: () => void;
   saveState?: EditableWorkerSaveState;
   state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
   workerName: string;
@@ -159,7 +154,9 @@ function WorkerEditableConfigurationReadyForm({
           errorPrefix: messages.editableConfigurationSaveErrorPrefix,
           staleVersionDetail:
             messages.editableConfigurationSaveStaleVersionDetail,
-          successMessage: messages.editableConfigurationSaveSuccess(workerName),
+          successMessage: messages.editableConfigurationSaveSuccess(
+            state.draft.name.trim() || workerName,
+          ),
         }}
         saveState={saveState}
       />
@@ -183,6 +180,31 @@ function WorkerEditableConfigurationReadyForm({
       <WorkerEditableConfigurationDraftStatus
         messages={messages}
         state={state}
+      />
+      <WorkerEditableConfigurationField
+        errorMessage={validationErrors.name}
+        fieldId="editable-worker-name"
+        input={
+          <input
+            aria-describedby={
+              validationErrors.name ? "editable-worker-name-error" : undefined
+            }
+            aria-invalid={validationErrors.name ? "true" : undefined}
+            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            id="editable-worker-name"
+            onChange={(event) => state.onNameChange(event.target.value)}
+            type="text"
+            value={state.draft.name}
+          />
+        }
+        label={messages.nameFieldLabel}
+        supportingContent={
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="name"
+            messages={messages}
+            state={state}
+          />
+        }
       />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <WorkerEditableConfigurationField
@@ -225,31 +247,19 @@ function WorkerEditableConfigurationReadyForm({
           validationErrors={validationErrors}
         />
       </div>
-      <DashboardActionRow
-        actions={
-          <>
+      {state.isDirty ? (
+        <DashboardActionRow
+          actions={
             <DashboardActionButton
-              aria-busy={isSaving ? "true" : undefined}
-              disabled={!state.canSave || isSaving}
-              onClick={onSaveWorker}
+              disabled={isSaving}
+              onClick={state.onResetToLatest}
               type="button"
             >
-              {isSaving
-                ? messages.editableConfigurationSaveBusyAction
-                : messages.editableConfigurationSaveAction}
+              {messages.discardDraftAction}
             </DashboardActionButton>
-            {state.isDirty ? (
-              <DashboardActionButton
-                disabled={isSaving}
-                onClick={state.onResetToLatest}
-                type="button"
-              >
-                {messages.discardDraftAction}
-              </DashboardActionButton>
-            ) : null}
-          </>
-        }
-      />
+          }
+        />
+      ) : null}
     </form>
   );
 }
@@ -336,7 +346,7 @@ function WorkerEditableConfigurationSharedImpactWarning({
         role="alert"
       >
         {messages.editableConfigurationSharedImpactWarning(
-          workerName,
+          state.draft.name.trim() || workerName,
           formatList(workstationNames),
         )}
       </p>
@@ -477,11 +487,16 @@ function ModelWorkerEditableFields({
         }
         label={messages.modelProviderLabel}
         supportingContent={
-          <WorkerEditableConfigurationServerChangedHint
-            fieldName="modelProvider"
-            messages={messages}
-            state={state}
-          />
+          <>
+            <WorkerEditableConfigurationFieldHelp>
+              {messages.modelProviderFieldHelp}
+            </WorkerEditableConfigurationFieldHelp>
+            <WorkerEditableConfigurationServerChangedHint
+              fieldName="modelProvider"
+              messages={messages}
+              state={state}
+            />
+          </>
         }
       />
       <WorkerEditableConfigurationField
@@ -502,11 +517,16 @@ function ModelWorkerEditableFields({
         }
         label={messages.modelLabel}
         supportingContent={
-          <WorkerEditableConfigurationServerChangedHint
-            fieldName="model"
-            messages={messages}
-            state={state}
-          />
+          <>
+            <WorkerEditableConfigurationFieldHelp>
+              {messages.modelFieldHelp}
+            </WorkerEditableConfigurationFieldHelp>
+            <WorkerEditableConfigurationServerChangedHint
+              fieldName="model"
+              messages={messages}
+              state={state}
+            />
+          </>
         }
       />
       <WorkerEditableConfigurationField
@@ -749,6 +769,23 @@ function WorkerOptionalEnumSelect<T extends string>({
         </option>
       ))}
     </Select>
+  );
+}
+
+function WorkerEditableConfigurationFieldHelp({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <p
+      className={cn(
+        "m-0 text-af-text-subtle",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
+    >
+      {children}
+    </p>
   );
 }
 

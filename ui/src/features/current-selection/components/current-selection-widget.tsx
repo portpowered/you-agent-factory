@@ -4,7 +4,22 @@ import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../../api/dashboard/types";
+import { parseFactoryGraphWorkTypeNodeId } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
+import {
+  CurrentSelectionHeaderActionProvider,
+  CurrentSelectionLocaleProvider,
+} from "../base/public";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { useSelectedProviderSessionState } from "../work-selection/hooks/useSelectedProviderSessionState";
+import type {
+  SelectedWorkItemExecutionDetails,
+  SelectedWorkRelationshipGraph,
+} from "../work-selection/public";
+import { WorkItemDetailCard } from "../work-selection/public";
+import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
+import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
+import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
 import { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
 import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import {
@@ -12,26 +27,12 @@ import {
   EditableWorkstationSaveHeaderAction,
   WorkstationDetailCard,
 } from "../workstation-selection/public";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useSelectedProviderSessionState } from "../work-selection/hooks/useSelectedProviderSessionState";
-import { WorkItemDetailCard } from "../work-selection/public";
-import type {
-  SelectedWorkItemExecutionDetails,
-  SelectedWorkRelationshipGraph,
-} from "../work-selection/public";
-import {
-  CurrentSelectionHeaderActionProvider,
-  CurrentSelectionLocaleProvider,
-} from "../base/public";
-import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
-import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
-import { parseFactoryGraphWorkTypeNodeId } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
   WorkerDetailCard,
-  WorkTypeDetailCard,
   WorkstationRequestDetailCard,
+  WorkTypeDetailCard,
 } from "./current-selection-cards";
 
 export interface CurrentSelectionWidgetProps {
@@ -60,9 +61,9 @@ function renderCurrentSelectionDetailCard({
   headerAction,
   locale,
   now,
-  onSaveWorker,
   onSelectTraceID,
   saveState,
+  workerHeaderAction,
   workerSaveState,
   selectedProviderSessionKey,
   selectedTrace,
@@ -83,8 +84,8 @@ function renderCurrentSelectionDetailCard({
   headerAction: ReactNode;
   locale?: string;
   now: number;
-  onSaveWorker?: () => void;
   onSelectTraceID?: (traceID: string) => void;
+  workerHeaderAction: ReactNode;
   saveState: ReturnType<
     typeof useSaveEditableWorkstationConfiguration
   >["saveState"];
@@ -172,8 +173,8 @@ function renderCurrentSelectionDetailCard({
     return (
       <WorkerDetailCard
         editableConfigurationState={editableWorkerConfigurationState}
+        headerAction={workerHeaderAction}
         locale={locale}
-        onSaveWorker={onSaveWorker}
         saveState={workerSaveState}
         widgetId={widgetId}
         workerName={selectedWorkerName}
@@ -270,6 +271,7 @@ export function CurrentSelectionWidget({
   const workerSave = useSaveEditableWorkerConfiguration({
     editableConfigurationState: editableWorkerConfigurationState,
     locale,
+    onWorkerRenamed: currentSelection.selectWorker,
     scopeKey: workerSaveScopeKey,
   });
   const providerSessionState = useSelectedProviderSessionState({
@@ -292,6 +294,14 @@ export function CurrentSelectionWidget({
       saveState={workstationSave.saveState}
     />
   );
+  const workerHeaderAction = (
+    <EditableWorkerSaveHeaderAction
+      canSave={workerSave.canSave}
+      locale={locale ?? undefined}
+      onClick={() => void workerSave.save()}
+      saveState={workerSave.saveState}
+    />
+  );
   const detailCard = renderCurrentSelectionDetailCard({
     activeTraceID,
     currentSelection,
@@ -301,8 +311,8 @@ export function CurrentSelectionWidget({
     headerAction: workstationHeaderAction,
     locale: locale ?? undefined,
     now,
-    onSaveWorker: () => void workerSave.save(),
     onSelectTraceID,
+    workerHeaderAction,
     saveState: workstationSave.saveState,
     selectedProviderSessionKey,
     workerSaveState: workerSave.saveState,

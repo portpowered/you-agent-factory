@@ -12,6 +12,9 @@ import type {
   FactoryWorkState,
 } from "./factory-graph-draft-types";
 
+type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
+type ModelProvider = NonNullable<CanonicalWorker["modelProvider"]>;
+
 export type FactoryGraphAddEntityKind =
   | "resource"
   | "worker"
@@ -28,6 +31,7 @@ export type FactoryGraphAddEntityDraft =
   | {
       kind: "worker";
       model: string;
+      modelProvider: string;
       name: string;
     }
   | {
@@ -54,6 +58,7 @@ export type FactoryGraphAddEntityFieldErrors = Partial<
     | "capacity"
     | "initialStateName"
     | "model"
+    | "modelProvider"
     | "name"
     | "stateType"
     | "behavior"
@@ -121,6 +126,7 @@ export function createFactoryGraphAddEntityDraft(
     return {
       kind,
       model: "",
+      modelProvider: "",
       name: "",
     };
   }
@@ -178,8 +184,8 @@ export function validateFactoryGraphAddEntityDraft(
     }
   }
 
-  if (draft.kind === "worker" && draft.model.trim().length === 0) {
-    errors.model = "Enter a model identifier for the new worker.";
+  if (draft.kind === "worker" && draft.modelProvider.trim().length === 0) {
+    errors.modelProvider = "Select a model provider for the new worker.";
   }
 
   if (
@@ -242,8 +248,12 @@ export function applyFactoryGraphAddEntityDraft(
   }
 
   if (entityDraft.kind === "worker") {
+    const modelProvider = entityDraft.modelProvider.trim() as ModelProvider;
     nextDraft.additions.workers.push({
-      model: entityDraft.model.trim(),
+      modelProvider,
+      ...(entityDraft.model.trim().length > 0
+        ? { model: entityDraft.model.trim() }
+        : {}),
       name: entityDraft.name.trim(),
       type: "MODEL_WORKER",
     });

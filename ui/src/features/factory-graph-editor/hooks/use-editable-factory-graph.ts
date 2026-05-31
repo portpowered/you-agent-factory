@@ -1,15 +1,15 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: editable graph view-model keeps draft, mutation, and save orchestration on one hook seam.
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: editable graph hook keeps draft, projection, save, and mutation wiring in one view-model seam.
 import { useCallback, useMemo, useState } from "react";
-
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
 } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
+import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
 import type { FactoryGraphNodeFieldUpdate } from "../lib/factory-graph-field-operations";
 import { updateFactoryGraphNodeField } from "../lib/factory-graph-field-operations";
-import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
 import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,
@@ -20,9 +20,8 @@ import {
   projectFactoryGraphToReactFlow,
   removeFactoryGraphNode,
 } from "../lib/factory-graph-operations";
-import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
-import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
+import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 import type {
   EditableFactoryGraphSaveInput,
   EditableFactoryGraphViewModel,
@@ -47,6 +46,7 @@ export function useEditableFactoryGraph(
       draftState.pendingFactoryDefinition ?? draftState.baseDocument ?? null;
 
     return projectFactoryGraphToReactFlow({
+      factoryDefinition,
       locale: options.locale ?? undefined,
       topology: draftState.graph,
       workstationResolver: factoryDefinition

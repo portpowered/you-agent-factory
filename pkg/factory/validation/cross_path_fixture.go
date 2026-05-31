@@ -9,6 +9,11 @@ import (
 // CrossPathInvalidFactoryJSON is the shared invalid factory used to prove canonical
 // validation targets are equivalent across explicit validation, config validation,
 // factory save rejection, and POST /factory-validations.
+//
+// ProfilePrePersist (editable save pre-check) and ProfileTopology (validate-only
+// endpoint) intentionally diverge on this fixture: validate-only includes deferred
+// outcome-route findings; save pre-check rejects with the blocking-load subset only.
+// See validationentry cross_path_profile_gap_test.go.
 const CrossPathInvalidFactoryJSON = `{
 	"name":"alpha",
 	"workTypes":[{"name":"story","states":[
@@ -47,6 +52,15 @@ const CrossPathValidAlphaFactoryJSON = `{
 func DecodeCrossPathInvalidFactory() (factoryapi.Factory, error) {
 	var factory factoryapi.Factory
 	if err := json.Unmarshal([]byte(CrossPathInvalidFactoryJSON), &factory); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return factory, nil
+}
+
+// DecodeCrossPathValidAlphaFactory decodes the shared valid alpha factory fixture.
+func DecodeCrossPathValidAlphaFactory() (factoryapi.Factory, error) {
+	var factory factoryapi.Factory
+	if err := json.Unmarshal([]byte(CrossPathValidAlphaFactoryJSON), &factory); err != nil {
 		return factoryapi.Factory{}, err
 	}
 	return factory, nil

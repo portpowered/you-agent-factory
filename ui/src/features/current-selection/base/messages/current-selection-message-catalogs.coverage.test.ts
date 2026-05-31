@@ -119,6 +119,8 @@ const invokeWorkerDetail = (
   switch (key satisfies keyof WorkerDetailMessages) {
     case "editableConfigurationOverwriteWarning":
       return [formatter("Model provider" as never)];
+    case "editableConfigurationNameDuplicate":
+      return [formatter("duplicate-worker" as never)];
     case "editableConfigurationSaveSuccess":
       return [formatter("reviewer" as never)];
     case "editableConfigurationSharedImpactWarning":

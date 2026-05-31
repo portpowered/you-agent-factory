@@ -56,6 +56,10 @@ const workerDetailMessagesByLocale = {
       "Select a model provider before saving this worker.",
     editableConfigurationModelRequired:
       "Enter a model before saving this worker.",
+    editableConfigurationNameDuplicate: (workerName) =>
+      `A worker named "${workerName}" already exists in the running factory definition.`,
+    editableConfigurationNameRequired:
+      "Enter a worker name before saving this worker.",
     editableConfigurationProviderRequired:
       "Select a hosted provider before saving this worker.",
     editableConfigurationSaveAction: "Save worker",
@@ -79,9 +83,14 @@ const workerDetailMessagesByLocale = {
       "Resolve the highlighted fields before saving this worker.",
     executorProviderLabel: "Executor provider",
     expandAction: "Expand",
+    modelFieldHelp:
+      "Optional. Leave blank to use the provider default model identifier.",
     modelLabel: "Model",
     modelLocalityLabel: "Model locality",
+    modelProviderFieldHelp:
+      "Required for model workers. The provider selects routing and default model behavior.",
     modelProviderLabel: "Model provider",
+    nameFieldLabel: "Worker name",
     notConfiguredOptionLabel: "Not configured",
     notConfiguredValue: "Not configured",
     providerFieldLabel: "Hosted provider",
@@ -135,6 +144,10 @@ const workerDetailMessagesByLocale = {
       "このワーカーを保存する前にモデルプロバイダーを選択してください。",
     editableConfigurationModelRequired:
       "このワーカーを保存する前にモデルを入力してください。",
+    editableConfigurationNameDuplicate: (workerName) =>
+      `実行中のファクトリ定義には "${workerName}" という名前のワーカーがすでに存在します。`,
+    editableConfigurationNameRequired:
+      "このワーカーを保存する前にワーカー名を入力してください。",
     editableConfigurationProviderRequired:
       "このワーカーを保存する前にホスト型プロバイダーを選択してください。",
     editableConfigurationSaveAction: "ワーカーを保存",
@@ -158,9 +171,14 @@ const workerDetailMessagesByLocale = {
       "このワーカーを保存する前にハイライトされた項目を修正してください。",
     executorProviderLabel: "実行プロバイダー",
     expandAction: "展開",
+    modelFieldHelp:
+      "任意です。空のままにするとプロバイダーの既定モデル識別子が使われます。",
     modelLabel: "モデル",
     modelLocalityLabel: "モデルローカリティ",
+    modelProviderFieldHelp:
+      "モデルワーカーでは必須です。プロバイダーがルーティングと既定モデル動作を決定します。",
     modelProviderLabel: "モデルプロバイダー",
+    nameFieldLabel: "ワーカー名",
     notConfiguredOptionLabel: "未設定",
     notConfiguredValue: "未設定",
     providerFieldLabel: "ホスト型プロバイダー",
@@ -214,6 +232,10 @@ const workerDetailMessagesByLocale = {
       "이 워커를 저장하기 전에 모델 제공자를 선택하세요.",
     editableConfigurationModelRequired:
       "이 워커를 저장하기 전에 모델을 입력하세요.",
+    editableConfigurationNameDuplicate: (workerName) =>
+      `실행 중인 팩토리 정의에 "${workerName}"(이)라는 이름의 워커가 이미 있습니다.`,
+    editableConfigurationNameRequired:
+      "이 워커를 저장하기 전에 워커 이름을 입력하세요.",
     editableConfigurationProviderRequired:
       "이 워커를 저장하기 전에 호스티드 제공자를 선택하세요.",
     editableConfigurationSaveAction: "워커 저장",
@@ -237,9 +259,14 @@ const workerDetailMessagesByLocale = {
       "이 워커를 저장하기 전에 강조된 필드를 해결하세요.",
     executorProviderLabel: "실행자 제공자",
     expandAction: "펼치기",
+    modelFieldHelp:
+      "선택 사항입니다. 비워 두면 제공자 기본 모델 식별자가 사용됩니다.",
     modelLabel: "모델",
     modelLocalityLabel: "모델 지역성",
+    modelProviderFieldHelp:
+      "모델 워커에 필수입니다. 제공자가 라우팅과 기본 모델 동작을 선택합니다.",
     modelProviderLabel: "모델 제공자",
+    nameFieldLabel: "워커 이름",
     notConfiguredOptionLabel: "구성되지 않음",
     notConfiguredValue: "구성되지 않음",
     providerFieldLabel: "호스티드 제공자",
@@ -284,6 +311,9 @@ const workerDetailMessagesByLocale = {
     editableConfigurationModelProviderRequired:
       "保存此 worker 前请选择模型 provider。",
     editableConfigurationModelRequired: "保存此 worker 前请输入模型。",
+    editableConfigurationNameDuplicate: (workerName) =>
+      `运行中的工厂定义已存在名为 "${workerName}" 的 worker。`,
+    editableConfigurationNameRequired: "保存此 worker 前请输入 worker 名称。",
     editableConfigurationProviderRequired:
       "保存此 worker 前请选择托管 provider。",
     editableConfigurationSaveAction: "保存 worker",
@@ -305,9 +335,13 @@ const workerDetailMessagesByLocale = {
     editableConfigurationValidationStatus: "保存此 worker 前请修正高亮字段。",
     executorProviderLabel: "执行器 provider",
     expandAction: "展开",
+    modelFieldHelp: "可选。留空将使用 provider 默认模型标识符。",
     modelLabel: "模型",
     modelLocalityLabel: "模型位置",
+    modelProviderFieldHelp:
+      "模型 worker 必填。provider 决定路由和默认模型行为。",
     modelProviderLabel: "模型 provider",
+    nameFieldLabel: "Worker 名称",
     notConfiguredOptionLabel: "未配置",
     notConfiguredValue: "未配置",
     providerFieldLabel: "托管 provider",

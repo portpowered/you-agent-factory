@@ -36,6 +36,7 @@ describe("factory graph operations", () => {
       node: {
         kind: "worker",
         model: "gpt-5-mini",
+        modelProvider: "CURSOR",
         name: "reviewer",
       },
     });
@@ -80,7 +81,9 @@ describe("factory graph operations", () => {
       workers: [
         {
           model: "gpt-5-mini",
+          modelProvider: "CURSOR",
           name: "reviewer",
+          type: "MODEL_WORKER",
         },
       ],
       workStates: [
@@ -114,6 +117,7 @@ describe("factory graph operations", () => {
       node: {
         kind: "worker",
         model: "gpt-5-mini",
+        modelProvider: "CURSOR",
         name: "writer",
       },
     });

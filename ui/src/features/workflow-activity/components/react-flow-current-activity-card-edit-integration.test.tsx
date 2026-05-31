@@ -327,7 +327,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       expectedNodeNames: ["worker:analyst"],
       fields: [
         { label: "Identifier", value: "analyst" },
-        { label: "Model", value: "gpt-5.1" },
+        { label: "Model provider", role: "combobox" as const, value: "CURSOR" },
       ],
       menuAction: "Worker",
     },
@@ -372,7 +372,8 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: menuAction }));
     for (const field of fields) {
-      fireEvent.change(screen.getByRole("textbox", { name: field.label }), {
+      const role = "role" in field && field.role ? field.role : "textbox";
+      fireEvent.change(screen.getByRole(role, { name: field.label }), {
         target: { value: field.value },
       });
     }

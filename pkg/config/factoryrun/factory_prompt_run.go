@@ -32,6 +32,11 @@ func LoadFactoryConfigFromConfigFile(configFilePath string) (*interfaces.Factory
 }
 
 // ValidateFactoryForPromptRun validates a factory config for you run --factory prompt submission.
+//
+// This is an intentional v1 subset: structural validation plus exactly one DEFAULT
+// handling work type. It does not use validationentry.ValidateFactoryAPI (which
+// validates OpenAPI payloads and ProfilePrePersist canonical rules). See the
+// factory validation matrix in docs/reference/config.md.
 func ValidateFactoryForPromptRun(cfg *interfaces.FactoryConfig) error {
 	if cfg == nil {
 		return fmt.Errorf("factory config is required")

@@ -17,6 +17,7 @@ describe("factory graph operations worker assignment", () => {
       node: {
         kind: "worker",
         model: "gpt-5-mini",
+        modelProvider: "CURSOR",
         name: "reviewer",
       },
     });

@@ -1,5 +1,7 @@
 package validation
 
+import factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+
 // Severity classifies how a validation target should be treated by callers.
 type Severity string
 
@@ -57,3 +59,31 @@ type Target struct {
 type Result struct {
 	Targets []Target
 }
+
+// HasTargets reports whether the result contains one or more validation targets.
+func (r Result) HasTargets() bool {
+	return len(r.Targets) > 0
+}
+
+// FactoryValidationResult maps canonical targets onto the validate-only API
+// response shape used by POST /factory-validations.
+func (r Result) FactoryValidationResult() factoryapi.FactoryValidationResult {
+	return factoryapi.FactoryValidationResult{
+		Targets: ToValidationTargets(r.Targets),
+	}
+}
+
+// TopologyValidationErrorInput returns the message and API targets used to build
+// apisurface.TopologyValidationError via apisurface.NewTopologyValidationError.
+// message is used when non-empty; otherwise DefaultTopologyValidationMessage is
+// returned.
+func (r Result) TopologyValidationErrorInput(message string) (string, []factoryapi.FactoryValidationTarget) {
+	if message == "" {
+		message = DefaultTopologyValidationMessage
+	}
+	return message, ToValidationTargets(r.Targets)
+}
+
+// DefaultTopologyValidationMessage is the operator-facing save rejection message
+// when callers do not supply a custom topology validation message.
+const DefaultTopologyValidationMessage = "Factory topology contains invalid graph references."
