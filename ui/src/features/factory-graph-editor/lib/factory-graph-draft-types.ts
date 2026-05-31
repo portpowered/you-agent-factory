@@ -43,6 +43,7 @@ export type FactoryGraphEdgeKind =
   | "workstation-on-rejection"
   | "workstation-output"
   | "workstation-resource"
+  | "work-state-visibility-bypass"
   | "work-type-state";
 
 export interface FactoryGraphNodeReference {
@@ -70,11 +71,19 @@ export interface FactoryGraphNode {
 export interface FactoryGraphEdge {
   id: string;
   kind: FactoryGraphEdgeKind;
+  /** Outcome route label for display-only work-state bypass edges. */
+  outcomeRouteKind?: WorkstationToWorkStateRouteKind;
   source: FactoryGraphNodeKey;
   sourceId: string;
   target: FactoryGraphNodeKey;
   targetId: string;
 }
+
+export type WorkstationToWorkStateRouteKind =
+  | "workstation-on-continue"
+  | "workstation-on-failure"
+  | "workstation-on-rejection"
+  | "workstation-output";
 
 export interface FactoryGraphDraftValidationError {
   code:

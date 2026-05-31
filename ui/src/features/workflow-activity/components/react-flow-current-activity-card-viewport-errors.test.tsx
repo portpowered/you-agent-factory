@@ -280,12 +280,16 @@ function renderViewport({
       handleNodesChange={vi.fn()}
       handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
+      hiddenNodeClasses={new Set()}
+      hideShowMenuOpen={false}
       headingID="test-heading"
       imports={importController}
       initialFitViewKey="full-graph"
       initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
       nodes={nodes}
+      onHideShowMenuOpenChange={vi.fn()}
+      onToggleHiddenNodeClass={vi.fn()}
       onSelectTool={vi.fn()}
       setStoredNodePosition={vi.fn()}
     />,

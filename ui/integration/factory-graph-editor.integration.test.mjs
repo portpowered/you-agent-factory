@@ -908,10 +908,18 @@ describe.sequential("factory graph editor browser integration", () => {
         await browserPage.page
           .getByRole("button", { name: "Enter factory graph editor" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        await toolbar.waitFor({
-          state: "hidden",
-          timeout: uiInteractionTimeoutMs,
-        });
+        await expect
+          .poll(
+            async () =>
+              await toolbar.getByRole("button", { name: "Open add entity menu" }).count(),
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(0);
+        await toolbar
+          .getByRole("button", {
+            name: "Open hide or show node classes menu",
+          })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         expect(saveRequests).toHaveLength(0);
         expectNoBrowserErrors(

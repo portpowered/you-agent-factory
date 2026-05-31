@@ -47,11 +47,15 @@ function CurrentActivityGraphEditorChrome(props: {
   handleDiscardPendingChanges: () => void;
   handleSaveDraft: () => void;
   hasPendingChanges: boolean;
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
+  hideShowMenuOpen: boolean;
   isSavingDraft?: boolean;
   locale?: string;
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
+  onHideShowMenuOpenChange: (open: boolean) => void;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
+  onToggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
   openAddMenu?: boolean;
   saveDisabledReason?: string;
 }) {
@@ -63,13 +67,18 @@ function CurrentActivityGraphEditorChrome(props: {
       canInteract={props.canInteractWithEditor}
       canSave={props.canSaveDraft}
       hasPendingChanges={props.hasPendingChanges}
+      hiddenNodeClasses={props.hiddenNodeClasses}
+      hideShowMenuOpen={props.hideShowMenuOpen}
+      hideShowVisible={true}
       isSaving={props.isSavingDraft}
       locale={props.locale}
       onAddAction={props.onAddAction}
       onAddMenuOpenChange={props.onAddMenuOpenChange}
       onDiscard={props.handleDiscardPendingChanges}
+      onHideShowMenuOpenChange={props.onHideShowMenuOpenChange}
       onSave={props.handleSaveDraft}
       onSelectTool={props.onSelectTool}
+      onToggleHiddenNodeClass={props.onToggleHiddenNodeClass}
       openAddMenu={props.openAddMenu}
       saveDisabledReason={props.saveDisabledReason}
       visible={props.editorMode}
@@ -155,6 +164,8 @@ export function CurrentActivityGraphViewport({
   canSaveDraft,
   handleDiscardPendingChanges,
   handleSaveDraft,
+  hiddenNodeClasses,
+  hideShowMenuOpen,
   editorMode,
   edges,
   graphKey,
@@ -171,6 +182,8 @@ export function CurrentActivityGraphViewport({
   nodes,
   onAddAction,
   onAddMenuOpenChange,
+  onHideShowMenuOpenChange,
+  onToggleHiddenNodeClass,
   onConnect,
   onEditorEdgeClick,
   onEditorNodeClick,
@@ -187,6 +200,8 @@ export function CurrentActivityGraphViewport({
   canSaveDraft: boolean;
   handleDiscardPendingChanges: () => void;
   handleSaveDraft: () => void;
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
+  hideShowMenuOpen: boolean;
   editorMode: boolean;
   edges: Edge[];
   graphKey: string;
@@ -203,6 +218,8 @@ export function CurrentActivityGraphViewport({
   nodes: Node[];
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
+  onHideShowMenuOpenChange: (open: boolean) => void;
+  onToggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
   onConnect?: (connection: Connection) => void;
   onEditorEdgeClick?: (edgeId: string) => void;
   onEditorNodeClick?: (nodeId: string) => void;
@@ -333,11 +350,15 @@ export function CurrentActivityGraphViewport({
           handleDiscardPendingChanges={handleDiscardPendingChanges}
           handleSaveDraft={handleSaveDraft}
           hasPendingChanges={hasPendingChanges}
+          hiddenNodeClasses={hiddenNodeClasses}
+          hideShowMenuOpen={hideShowMenuOpen}
           isSavingDraft={isSavingDraft}
           locale={locale}
           onAddAction={onAddAction}
           onAddMenuOpenChange={onAddMenuOpenChange}
+          onHideShowMenuOpenChange={onHideShowMenuOpenChange}
           onSelectTool={onSelectTool}
+          onToggleHiddenNodeClass={onToggleHiddenNodeClass}
           openAddMenu={openAddMenu}
           saveDisabledReason={saveDisabledReason}
         />

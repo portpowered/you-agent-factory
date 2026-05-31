@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
 import { EMPTY_GRAPH_LAYOUT } from "../lib/react-flow-current-activity-card-graph";
@@ -11,30 +12,41 @@ import {
 
 const GRAPH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<GraphLayout>();
 
-export function useCurrentActivityGraphLayout(snapshot: DashboardSnapshot) {
-  return useCurrentActivityGraphLayoutForFactory(snapshot);
+export function useCurrentActivityGraphLayout(
+  snapshot: DashboardSnapshot,
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind> = new Set(),
+) {
+  return useCurrentActivityGraphLayoutForFactory(
+    snapshot,
+    undefined,
+    hiddenNodeClasses,
+  );
 }
 
 export function useCurrentActivityGraphLayoutForFactory(
   snapshot: DashboardSnapshot,
   /** Omit to use `snapshot.factory`; pass `null` to keep an empty layout while the document GET is pending. */
   factoryOverride?: DashboardSnapshot["factory"] | null,
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind> = new Set(),
 ) {
   const factory =
     factoryOverride === undefined ? snapshot.factory : factoryOverride;
+  const hiddenClassesKey = [...hiddenNodeClasses].sort().join(",");
   const layoutSource = useMemo(
     () =>
       factory
         ? {
             factory,
-            key: currentActivityFactoryKey(factory),
+            hiddenClassesKey,
+            key: `${currentActivityFactoryKey(factory)}|hidden:${hiddenClassesKey}`,
             kind: "factory" as const,
           }
         : {
-            key: "missing-factory",
+            hiddenClassesKey,
+            key: `missing-factory|hidden:${hiddenClassesKey}`,
             kind: "missing-factory" as const,
           },
-    [factory],
+    [factory, hiddenClassesKey],
   );
 
   return useWorkflowTopologyAsyncCache({
@@ -44,7 +56,10 @@ export function useCurrentActivityGraphLayoutForFactory(
     initialValue: EMPTY_GRAPH_LAYOUT,
     loadLayout: () =>
       layoutSource.kind === "factory"
-        ? buildCurrentActivityGraphLayoutFromFactory(layoutSource.factory)
+        ? buildCurrentActivityGraphLayoutFromFactory(
+            layoutSource.factory,
+            hiddenNodeClasses,
+          )
         : Promise.resolve(EMPTY_GRAPH_LAYOUT),
     mapResolvedLayout: identityGraphLayout,
     topologyKey: layoutSource.key,

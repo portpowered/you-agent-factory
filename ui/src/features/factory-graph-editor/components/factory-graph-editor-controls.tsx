@@ -15,12 +15,14 @@ import {
   PopoverTrigger,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
+import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 export { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-work-state-phase-legend";
 export {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
 } from "./factory-graph-editor-mode-controls";
+import { FactoryGraphEditorHideShowMenu } from "./factory-graph-editor-hide-show-menu";
 import {
   FactoryGraphEditorTooltipActionButton,
 } from "./factory-graph-editor-tooltip-button";
@@ -71,12 +73,17 @@ export function FactoryGraphEditorToolbar({
   canSave = false,
   canDiscard = true,
   hasPendingChanges = false,
+  hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
+  hideShowMenuOpen = false,
+  hideShowVisible = true,
   isSaving = false,
   locale,
   onDiscard,
   onAddAction,
   onAddMenuOpenChange,
+  onHideShowMenuOpenChange,
   onSave,
+  onToggleHiddenNodeClass,
   saveDisabledReason,
   visible,
   onSelectTool,
@@ -88,27 +95,46 @@ export function FactoryGraphEditorToolbar({
   canSave?: boolean;
   canDiscard?: boolean;
   hasPendingChanges?: boolean;
+  hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
+  hideShowMenuOpen?: boolean;
+  hideShowVisible?: boolean;
   isSaving?: boolean;
   locale?: string;
   onDiscard?: () => void;
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
+  onHideShowMenuOpenChange?: (open: boolean) => void;
   onSave?: () => void;
+  onToggleHiddenNodeClass?: (kind: FactoryGraphNodeKind) => void;
   saveDisabledReason?: string;
   visible: boolean;
   onSelectTool: (tool: FactoryGraphEditorTool) => void;
   openAddMenu?: boolean;
 }) {
-  if (!visible) {
+  if (!visible && !hideShowVisible) {
     return null;
   }
   const messages = getFactoryGraphEditorMessages(locale);
+  const hideShowActive =
+    hideShowMenuOpen || hiddenNodeClasses.size > 0;
 
   return (
     <section
       aria-label={messages.toolbarAriaLabel}
       className={TOOLBAR_SHELL_CLASS}
     >
+      {hideShowVisible && onToggleHiddenNodeClass ? (
+        <FactoryGraphEditorHideShowMenu
+          hiddenNodeClasses={hiddenNodeClasses}
+          locale={locale}
+          onOpenChange={onHideShowMenuOpenChange}
+          onToggleHiddenNodeClass={onToggleHiddenNodeClass}
+          open={hideShowMenuOpen}
+          pressed={hideShowActive}
+        />
+      ) : null}
+      {visible ? (
+        <>
       <FactoryGraphEditorAddMenu
         actions={addMenuActions}
         canInteract={canInteract}
@@ -168,6 +194,8 @@ export function FactoryGraphEditorToolbar({
           actionsClassName={TOOLBAR_ACTIONS_CLASS}
           className={TOOLBAR_MIXED_ROW_CLASS}
         />
+      ) : null}
+        </>
       ) : null}
     </section>
   );

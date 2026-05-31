@@ -15,6 +15,8 @@ import type {
   FactoryGraphNodeKind,
   FactoryGraphTopology,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/factory-graph-node-class-visibility";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";
 import {
@@ -310,8 +312,16 @@ function stateCategoryForFactoryGraphNode(
 }
 
 function edgeLabelForFactoryGraphEdge(
+  edge: FactoryGraphEdge,
   targetNode: FactoryGraphNode | undefined,
 ) {
+  if (
+    edge.kind === "work-state-visibility-bypass" &&
+    edge.outcomeRouteKind
+  ) {
+    return getFactoryGraphEditorMessages().edgeKindLabel(edge.outcomeRouteKind);
+  }
+
   return targetNode?.kind === "work-state" ? targetNode.label : "";
 }
 
@@ -373,6 +383,7 @@ function edgeOutcomeKind(edge: FactoryGraphEdge): DashboardEdgeOutcomeKind {
     case "workstation-output":
     case "workstation-resource":
     case "work-type-state":
+    case "work-state-visibility-bypass":
       return "accepted";
   }
 }
@@ -427,7 +438,7 @@ function seedEdgeFromFactoryGraphEdge(
     edgeId,
     fromNodeId,
     id: edgeId,
-    label: targetResourceName ? "" : edgeLabelForFactoryGraphEdge(targetNode),
+    label: targetResourceName ? "" : edgeLabelForFactoryGraphEdge(edge, targetNode),
     outcomeKind: edgeOutcomeKind(edge),
     sourcePlaceKind: sourceResourceName
       ? "resource"
@@ -545,6 +556,7 @@ export function findFactoryWorkstationByNodeId(
 
 export async function buildCurrentActivityGraphLayoutFromFactory(
   factory: CanonicalFactoryDefinition,
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind> = new Set(),
 ): Promise<GraphLayout> {
   const nodes = new Map<string, FactoryGraphSeedNode>();
   const edges = new Map<string, FactoryGraphSeedEdge>();
@@ -552,8 +564,11 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
   const categories = stateCategoryByName(normalizedFactory);
   const resourceAvailabilityWorkTypes =
     resourceAvailabilityWorkTypeNames(normalizedFactory);
-  const topology = filterFactoryGraphTopologyForCustomerDisplay(
-    buildFactoryGraphTopologyFromDefinition(normalizedFactory),
+  const topology = projectFactoryGraphByHiddenNodeClasses(
+    filterFactoryGraphTopologyForCustomerDisplay(
+      buildFactoryGraphTopologyFromDefinition(normalizedFactory),
+    ),
+    hiddenNodeClasses,
   );
 
   for (const node of topology.nodes) {

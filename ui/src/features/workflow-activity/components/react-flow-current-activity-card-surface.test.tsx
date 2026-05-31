@@ -117,6 +117,8 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     handleEditorConnect: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),
+    hiddenNodeClasses: new Set(),
+    hideShowMenuOpen: false,
     hasActiveWork: true,
     isStaleDraft: true,
     saveBlockedReason: "Stop active work before saving this draft.",
@@ -126,7 +128,9 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     },
     setActiveTool: vi.fn(),
     setAddMenuOpen: vi.fn(),
+    setHideShowMenuOpen: vi.fn(),
     setIsConfirmingSave: vi.fn(),
+    toggleHiddenNodeClass: vi.fn(),
     ...overrides,
   };
 }

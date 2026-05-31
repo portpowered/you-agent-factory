@@ -267,8 +267,10 @@ export function buildFactoryGraphEdgeChangeFromConnection(
   },
   resolver?: FactoryGraphConnectionResolver,
 ): FactoryGraphDraftEdgeChange | null {
-  const sourceNode = findNode(topology, endpoint.sourceNodeId);
-  const targetNode = findNode(topology, endpoint.targetNodeId);
+  const sourceNode =
+    topology.nodes.find((node) => node.id === endpoint.sourceNodeId) ?? null;
+  const targetNode =
+    topology.nodes.find((node) => node.id === endpoint.targetNodeId) ?? null;
   if (!sourceNode || !targetNode) {
     return null;
   }
@@ -398,7 +400,10 @@ export function applyFactoryGraphEdgeRemoval(
   edge: FactoryGraphEdge,
 ): FactoryGraphDraft {
   const nextDraft = structuredClone(currentDraft);
-  if (edge.kind === "work-type-state") {
+  if (
+    edge.kind === "work-type-state" ||
+    edge.kind === "work-state-visibility-bypass"
+  ) {
     return nextDraft;
   }
   const nextEdgeId = edge.id;
@@ -477,6 +482,3 @@ function appendUniqueEdgeChange(
   return [...edges, edgeChange];
 }
 
-function findNode(topology: FactoryGraphTopology, nodeId: string) {
-  return topology.nodes.find((node) => node.id === nodeId) ?? null;
-}

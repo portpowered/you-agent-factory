@@ -195,6 +195,7 @@ function useEditorCurrentActivityGraphLayout(
   return useCurrentActivityGraphLayoutForFactory(
     snapshot,
     currentActivityCardFactoryDefinition(editor, snapshot),
+    editor.hiddenNodeClasses,
   );
 }
 
