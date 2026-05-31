@@ -9,7 +9,9 @@ import {
   CurrentSelectionWorkContentsCardStory,
   editableConfigurationPromptTemplateContract,
   expectBentoHeaderDragSurface,
+  expectEditableConfigurationPromptSyntaxSaveStoryFlow,
   expectEditableConfigurationStoryFlow,
+  promptTemplateSyntaxValidationResponse,
   promptTemplateValidationResponse,
   semanticWorkflowDashboardSnapshot,
 } from "./dashboard-bento-story-shared";
@@ -88,6 +90,35 @@ export const CurrentSelectionEditableConfigurationDesktop = {
   render: () => <CurrentSelectionEditableConfigurationStory width={960} />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await expectEditableConfigurationStoryFlow(canvasElement);
+  },
+};
+
+export const CurrentSelectionPromptSyntaxSave = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory",
+          response: {
+            body: buildEditableConfigurationDocument(),
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
+            body: promptTemplateSyntaxValidationResponse(init),
+          }),
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => <CurrentSelectionEditableConfigurationStory width={960} />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationPromptSyntaxSaveStoryFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
   },
 };
 

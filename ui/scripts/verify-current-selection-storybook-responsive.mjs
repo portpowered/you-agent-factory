@@ -321,6 +321,83 @@ export async function verifyCurrentSelectionSaveFlow({
   );
 }
 
+export async function verifyCurrentSelectionPromptSyntaxSave({
+  expectNoHorizontalOverflow,
+  expectVisible,
+  page,
+  viewport,
+}) {
+  const currentSelection = page.getByRole("article", {
+    name: "Current selection",
+  });
+  await currentSelection.waitFor({ state: "visible" });
+
+  const expandButton = currentSelection.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+  const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
+  const saveButton = currentSelection.getByRole("button", {
+    name: "Save changes",
+  });
+
+  await expandButton.click();
+  await expectVisible(promptField, "Workstation prompt field");
+
+  await focusPromptEditor(page);
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.insertText("{{ if .WorkID }}");
+
+  await expectVisible(
+    currentSelection.getByText("Fix highlighted issues before saving."),
+    "Prompt validation blocking summary",
+  );
+  const summaryCount = await currentSelection
+    .getByText("Fix highlighted issues before saving.")
+    .count();
+  if (summaryCount !== 1) {
+    throw new Error(
+      `Expected one concise prompt validation summary, received ${summaryCount}.`,
+    );
+  }
+  await expectVisible(
+    currentSelection.getByText(/line 1:/),
+    "Line-based syntax diagnostic",
+  );
+
+  const squiggleCount = await page
+    .locator('[data-monaco-editor="workstation-prompt"] .squiggly-error')
+    .count();
+  if (squiggleCount === 0) {
+    throw new Error("Expected Monaco syntax squiggle feedback for the typo.");
+  }
+
+  const saveButtonDisabled = await saveButton.isDisabled();
+  if (!saveButtonDisabled) {
+    throw new Error(
+      "Save changes should stay disabled while syntax diagnostics remain.",
+    );
+  }
+
+  await focusPromptEditor(page);
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.insertText("{{ if .WorkID }}{{ end }}");
+  await waitForEditableConfigurationReadyToSave(currentSelection, saveButton);
+  await saveButton.click();
+
+  const confirmationDialog = page.getByRole("dialog", {
+    name: "Overwrite the running factory definition?",
+  });
+  await expectVisible(
+    confirmationDialog,
+    "Editable workstation save confirmation dialog",
+  );
+
+  await expectNoHorizontalOverflow(
+    page,
+    `Current selection prompt syntax save at ${viewport.label}`,
+  );
+}
+
 async function waitForEditableConfigurationReadyToSave(
   currentSelection,
   saveButton,

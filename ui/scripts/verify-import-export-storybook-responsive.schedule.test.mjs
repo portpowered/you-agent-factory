@@ -133,6 +133,22 @@ describe("current-selection prompt hint responsive schedule", () => {
   });
 });
 
+describe("current-selection prompt syntax save responsive schedule", () => {
+  test("keeps the prompt syntax save story out of the aggregate responsive schedule", () => {
+    const promptSyntaxSaveStory = storyChecks.find(
+      (storyCheck) =>
+        storyCheck.label === "current selection prompt syntax save",
+    );
+
+    expect(promptSyntaxSaveStory).toBeUndefined();
+    expect(viewportChecks).toEqual([
+      { height: 844, label: "mobile", width: 390 },
+      { height: 1024, label: "tablet", width: 768 },
+      { height: 900, label: "desktop", width: 1440 },
+    ]);
+  });
+});
+
 describe("bento card catalog responsive schedule", () => {
   test("keeps the bento catalog story in the default responsive schedule", () => {
     const bentoCatalogStory = storyChecks.find(
