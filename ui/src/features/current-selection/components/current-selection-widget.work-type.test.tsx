@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
@@ -177,6 +177,46 @@ describe("CurrentSelectionWidget work-type selection", () => {
     expect(within(currentSelection).getByText("queued")).toBeTruthy();
     expect(within(currentSelection).getByText("Initial")).toBeTruthy();
     expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
+  });
+
+  it("forwards work-state row navigation to selectWorkstation with the graph node id", () => {
+    const selectWorkstation = vi.fn();
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          workTypes: [
+            {
+              name: "story",
+              states: [
+                { name: "queued", type: "INITIAL" },
+                { name: "done", type: "TERMINAL" },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedWorkTypeName: "story",
+          selection: { kind: "work-type", workTypeName: "story" },
+          selectWorkstation,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select queued state on factory graph",
+      }),
+    );
+
+    expect(selectWorkstation).toHaveBeenCalledWith("work-state:story:queued");
   });
 });
 

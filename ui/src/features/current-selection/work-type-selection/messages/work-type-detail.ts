@@ -53,6 +53,8 @@ const workTypeDetailMessagesByLocale = {
       "Resolve the highlighted fields before saving this work type.",
     handlingBehaviorDefaultLabel: "Default CLI handling",
     localizeWorkStateType: localizeEnglishWorkStateType,
+    selectWorkStateGraphNodeLabel: (stateName) =>
+      `Select ${stateName} state on factory graph`,
     stateNameColumnLabel: "State",
     statesEmpty: "This work type does not define any states yet.",
     statesHeading: "States",
@@ -106,6 +108,8 @@ const workTypeDetailMessagesByLocale = {
           return "失敗";
       }
     },
+    selectWorkStateGraphNodeLabel: (stateName) =>
+      `ファクトリグラフで ${stateName} 状態を選択`,
     stateNameColumnLabel: "状態",
     statesEmpty: "このワークタイプにはまだ状態が定義されていません。",
     statesHeading: "状態",
@@ -159,6 +163,8 @@ const workTypeDetailMessagesByLocale = {
           return "실패";
       }
     },
+    selectWorkStateGraphNodeLabel: (stateName) =>
+      `팩토리 그래프에서 ${stateName} 상태 선택`,
     stateNameColumnLabel: "상태",
     statesEmpty: "이 작업 유형에는 아직 정의된 상태가 없습니다.",
     statesHeading: "상태",
@@ -205,6 +211,8 @@ const workTypeDetailMessagesByLocale = {
           return "失败";
       }
     },
+    selectWorkStateGraphNodeLabel: (stateName) =>
+      `在工厂 graph 中选择 ${stateName} 状态`,
     stateNameColumnLabel: "状态",
     statesEmpty: "此工作类型尚未定义任何状态。",
     statesHeading: "状态",

@@ -362,6 +362,39 @@ describe("resolveDashboardSelection", () => {
     });
   });
 
+  it("retains factory-graph work-state node selections while the state remains in the factory document", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+
+    const selection = {
+      kind: "node" as const,
+      nodeId: "work-state:story:new",
+    };
+
+    expect(
+      resolveDashboardSelection({
+        selection,
+        snapshot,
+      }),
+    ).toEqual(selection);
+  });
+
+  it("falls back to the default dashboard selection when the selected work-state graph node disappears", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+
+    const resolved = resolveDashboardSelection({
+      selection: {
+        kind: "node",
+        nodeId: "work-state:story:removed",
+      },
+      snapshot,
+    });
+
+    expect(resolved).toEqual({
+      kind: "node",
+      nodeId: "review",
+    });
+  });
+
   it("falls back to the default dashboard selection when the selected work type disappears", () => {
     const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
 

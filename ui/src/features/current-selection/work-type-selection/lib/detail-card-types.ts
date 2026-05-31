@@ -47,6 +47,7 @@ export interface WorkTypeDetailCardProps {
   editableConfigurationState?: EditableWorkTypeConfigurationState;
   headerAction?: ReactNode;
   locale?: string | null;
+  onSelectWorkStateGraphNode?: (graphNodeId: string) => void;
   saveState?: EditableWorkTypeSaveState;
   widgetId?: string;
   workTypeName: string;

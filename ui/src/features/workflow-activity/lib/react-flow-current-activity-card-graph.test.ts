@@ -152,6 +152,59 @@ describe("current activity graph editor handles", () => {
     });
   });
 
+  it("highlights work-state nodes selected by factory-graph node id", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const resolvedSelection = resolveDashboardSelection({
+      selection: { kind: "node", nodeId: "work-state:task:complete" },
+      snapshot,
+    });
+
+    if (
+      !resolvedSelection ||
+      resolvedSelection.kind === "work-item" ||
+      resolvedSelection.kind === "workstation-request"
+    ) {
+      throw new Error(
+        "Expected a graph-compatible current activity selection.",
+      );
+    }
+
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: resolvedSelection,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(resolvedSelection).toEqual({
+      kind: "node",
+      nodeId: "work-state:task:complete",
+    });
+    expect(
+      nodes.find((node) => node.id === "work-state:task:complete")?.data,
+    ).toMatchObject({
+      kind: "work-state",
+      selectedStateNode: true,
+    });
+  });
+
   it("models sample factory resource relationships through the canonical resource node", async () => {
     const factory = loadSampleFactoryDefinition();
     const graphLayout =

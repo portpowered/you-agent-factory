@@ -56,7 +56,13 @@ function buildFactoryDocument(
   };
 }
 
-function WorkTypeDetailCardHarness({ workTypeName }: { workTypeName: string }) {
+function WorkTypeDetailCardHarness({
+  onSelectWorkStateGraphNode,
+  workTypeName,
+}: {
+  onSelectWorkStateGraphNode?: (graphNodeId: string) => void;
+  workTypeName: string;
+}) {
   const editableConfigurationState = useEditableWorkTypeConfigurationState(
     { kind: "work-type", workTypeName },
     workTypeName,
@@ -65,6 +71,7 @@ function WorkTypeDetailCardHarness({ workTypeName }: { workTypeName: string }) {
   return (
     <WorkTypeDetailCard
       editableConfigurationState={editableConfigurationState}
+      onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
       workTypeName={workTypeName}
     />
   );
@@ -158,5 +165,26 @@ describe("WorkTypeDetailCard", () => {
         "Enter a work type name before saving this work type.",
       ),
     ).toBeTruthy();
+  });
+
+  it("navigates to the matching work-state graph node when a state row is clicked", () => {
+    const onSelectWorkStateGraphNode = vi.fn();
+
+    render(
+      <WorkTypeDetailCardHarness
+        onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
+        workTypeName="story"
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select queued state on factory graph",
+      }),
+    );
+
+    expect(onSelectWorkStateGraphNode).toHaveBeenCalledWith(
+      "work-state:story:queued",
+    );
   });
 });

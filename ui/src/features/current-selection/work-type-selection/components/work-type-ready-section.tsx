@@ -22,11 +22,13 @@ import { WorkTypeStatesList } from "./work-type-states-list";
 
 export function WorkTypeReadySection({
   messages,
+  onSelectWorkStateGraphNode,
   saveState,
   state,
   workTypeName,
 }: {
   messages: ReturnType<typeof getWorkTypeDetailMessages>;
+  onSelectWorkStateGraphNode?: (graphNodeId: string) => void;
   saveState?: EditableWorkTypeSaveState;
   state: Extract<EditableWorkTypeConfigurationState, { status: "ready" }>;
   workTypeName: string;
@@ -130,7 +132,9 @@ export function WorkTypeReadySection({
       </div>
       <WorkTypeStatesList
         messages={messages}
+        onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
         states={state.initialValues.states}
+        workTypeName={workTypeName}
       />
     </form>
   );

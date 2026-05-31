@@ -438,8 +438,10 @@ function buildPlaceNodeData(
         input.activeGraphHighlights.hasActiveFlow &&
         !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
       selectedStateNode:
-        input.selection?.kind === "state-node" &&
-        input.selection.placeId === place.place_id,
+        (input.selection?.kind === "state-node" &&
+          input.selection.placeId === place.place_id) ||
+        (input.selection?.kind === "node" &&
+          input.selection.nodeId === factoryGraphNodeId),
       tokenCount:
         input.snapshot.runtime.place_token_counts?.[place.place_id] ?? 0,
       validationError: validationNodeError !== undefined,

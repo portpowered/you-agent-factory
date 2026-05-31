@@ -145,6 +145,7 @@ function renderCurrentSelectionDetailCard({
     selection,
     selectWorkByID,
     selectStateWorkItem,
+    selectWorkstation,
     selectWorkstationRequest,
   } = currentSelection;
 
@@ -220,6 +221,7 @@ function renderCurrentSelectionDetailCard({
         editableConfigurationState={editableWorkTypeConfigurationState}
         headerAction={workTypeHeaderAction}
         locale={locale}
+        onSelectWorkStateGraphNode={selectWorkstation}
         saveState={workTypeSaveState}
         widgetId={widgetId}
         workTypeName={selectedWorkTypeName}
