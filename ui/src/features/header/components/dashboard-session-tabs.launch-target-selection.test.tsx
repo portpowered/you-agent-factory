@@ -3,9 +3,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
+  STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
+} from "../../../components/ui/standard-list-selection";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { getHeaderControlsMessages } from "../messages/header-controls";
+import { DashboardSessionTabs } from "./dashboard-session-tabs";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();
@@ -31,6 +35,82 @@ vi.mock("../../../api/factory-sessions", () => ({
   openFactorySession: (...args: unknown[]) => openFactorySession(...args),
 }));
 
+function mockLaunchTargetSelectionSessionApis() {
+  listFactorySessions
+    .mockResolvedValueOnce([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ])
+    .mockResolvedValueOnce([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/fleet/beta",
+        folderPath: "/workspace/fleet",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+    ]);
+  openFactorySession
+    .mockResolvedValueOnce({
+      targets: [
+        {
+          factoryDir: "/workspace/fleet",
+          folderPath: "/workspace/fleet",
+          label: "default",
+          project: "fleet",
+          ref: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: "/workspace/fleet/beta",
+          folderPath: "/workspace/fleet",
+          label: "beta",
+          project: "beta",
+          ref: {
+            kind: "named",
+            name: "beta",
+          },
+        },
+      ],
+    })
+    .mockResolvedValueOnce({
+      session: {
+        factoryDir: "/workspace/fleet/beta",
+        folderPath: "/workspace/fleet",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+    });
+}
+
 describe("DashboardSessionTabs launch target selection", () => {
   beforeEach(() => {
     listFactorySessions.mockReset();
@@ -42,80 +122,7 @@ describe("DashboardSessionTabs launch target selection", () => {
   });
 
   it("launches the selected named factory instead of falling back to the default target", async () => {
-    listFactorySessions
-      .mockResolvedValueOnce([
-        {
-          factoryDir: "/workspace/root",
-          folderPath: "/workspace/root",
-          id: "~default",
-          isDefault: true,
-          project: "root",
-          target: {
-            kind: "default",
-          },
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          factoryDir: "/workspace/root",
-          folderPath: "/workspace/root",
-          id: "~default",
-          isDefault: true,
-          project: "root",
-          target: {
-            kind: "default",
-          },
-        },
-        {
-          factoryDir: "/workspace/fleet/beta",
-          folderPath: "/workspace/fleet",
-          id: "session-beta",
-          isDefault: false,
-          project: "beta",
-          target: {
-            kind: "named",
-            name: "beta",
-          },
-        },
-      ]);
-    openFactorySession
-      .mockResolvedValueOnce({
-        targets: [
-          {
-            factoryDir: "/workspace/fleet",
-            folderPath: "/workspace/fleet",
-            label: "default",
-            project: "fleet",
-            ref: {
-              kind: "default",
-            },
-          },
-          {
-            factoryDir: "/workspace/fleet/beta",
-            folderPath: "/workspace/fleet",
-            label: "beta",
-            project: "beta",
-            ref: {
-              kind: "named",
-              name: "beta",
-            },
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        session: {
-          factoryDir: "/workspace/fleet/beta",
-          folderPath: "/workspace/fleet",
-          id: "session-beta",
-          isDefault: false,
-          project: "beta",
-          target: {
-            kind: "named",
-            name: "beta",
-          },
-        },
-      });
-
+    mockLaunchTargetSelectionSessionApis();
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
     const messages = getHeaderControlsMessages("en");
 
@@ -149,7 +156,15 @@ describe("DashboardSessionTabs launch target selection", () => {
       });
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /beta/i }));
+    const defaultTargetButton = screen.getByRole("button", {
+      name: /default/i,
+    });
+    const betaTargetButton = screen.getByRole("button", { name: /beta/i });
+
+    expectStandardListTargetRow(defaultTargetButton, { selected: false });
+    expectStandardListTargetRow(betaTargetButton, { selected: false });
+
+    fireEvent.click(betaTargetButton);
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
@@ -160,11 +175,35 @@ describe("DashboardSessionTabs launch target selection", () => {
         },
       });
     });
+
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       "session-beta",
     );
   });
 });
+
+const ACCENT_SELECTED_TOKENS = [
+  "bg-af-accent",
+  "bg-af-accent-surface",
+  "border-af-accent",
+  "shadow-af-accent-selected",
+] as const;
+
+function expectStandardListTargetRow(
+  row: HTMLElement,
+  { selected }: { selected: boolean },
+) {
+  expect(row.getAttribute("aria-pressed")).toBe(selected ? "true" : "false");
+  expect(row.getAttribute("data-selected")).toBe(selected ? "true" : "false");
+  expect(row.className).toContain(
+    selected
+      ? STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS
+      : STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
+  );
+  for (const token of ACCENT_SELECTED_TOKENS) {
+    expect(row.className).not.toContain(token);
+  }
+}
 
 function renderWithQueryClient(view: ReactElement) {
   const queryClient = new QueryClient({

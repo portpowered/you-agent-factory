@@ -1,11 +1,8 @@
-import {
-  type FormEvent,
-  useId,
-} from "react";
+import { type FormEvent, useId } from "react";
 
 import type {
-  FactorySessionTarget,
   FactorySessionsAPIError,
+  FactorySessionTarget,
 } from "../../../api/factory-sessions";
 import {
   Button,
@@ -13,12 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  StandardListSelection,
+  StandardListSelectionItem,
 } from "../../../components/ui";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
 import {
-  factorySessionTargetOptionValue,
   type FolderValidationState,
+  factorySessionTargetOptionValue,
   folderValidationStatusMessage,
   selectedFactorySessionTarget,
 } from "../lib/dashboard-session-tabs-utils";
@@ -32,9 +31,6 @@ const SESSION_DIALOG_STATUS_CLASS =
   "rounded-xl border border-af-accent-border bg-af-accent-surface px-3 py-2 text-sm text-af-text";
 const SESSION_TARGET_PICKER_CLASS =
   "grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4";
-const SESSION_TARGET_BUTTON_CLASS =
-  "flex min-h-16 w-full flex-col items-start justify-center rounded-xl border border-af-accent bg-af-accent px-4 py-3 text-left text-sm text-af-on-accent shadow-sm transition-colors hover:border-af-accent-hover hover:bg-af-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
-const SESSION_TARGET_LIST_CLASS = "grid gap-3";
 
 export function OpenSessionDialog({
   dialogError,
@@ -86,7 +82,10 @@ export function OpenSessionDialog({
       <DialogHeader>
         <DialogTitle>{messages.openSessionDialogTitle}</DialogTitle>
         <p
-          className={cn("text-sm leading-6 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "text-sm leading-6 text-af-text-muted",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           id={dialogDescriptionID}
         >
           {messages.openSessionDialogDescription}
@@ -94,7 +93,10 @@ export function OpenSessionDialog({
       </DialogHeader>
       <form className="grid gap-4" onSubmit={onInspectFolder}>
         <div className="grid gap-2">
-          <label className={SESSION_SECTION_LABEL_CLASS} htmlFor={folderFieldID}>
+          <label
+            className={SESSION_SECTION_LABEL_CLASS}
+            htmlFor={folderFieldID}
+          >
             {messages.sessionFolderFieldLabel}
           </label>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -112,7 +114,10 @@ export function OpenSessionDialog({
             />
           </div>
           <p
-            className={cn("text-sm text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "text-sm text-af-text-muted",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
             id={folderHelperTextID}
           >
             {messages.sessionFolderHelperText}
@@ -183,10 +188,11 @@ function InitNewFactoryConfirmation({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const description = messages.openSessionInitNewFactoryDescriptionTemplate.replace(
-    "{{folderPath}}",
-    folderPath,
-  );
+  const description =
+    messages.openSessionInitNewFactoryDescriptionTemplate.replace(
+      "{{folderPath}}",
+      folderPath,
+    );
 
   return (
     <section
@@ -194,7 +200,10 @@ function InitNewFactoryConfirmation({
       className={SESSION_TARGET_PICKER_CLASS}
     >
       <p
-        className={cn("text-sm leading-6 text-af-text", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "text-sm leading-6 text-af-text",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
         id="init-new-factory-confirmation-title"
       >
         {description}
@@ -242,12 +251,16 @@ function SessionTargetPicker({
   selectedTargetValue: string;
   targets: FactorySessionTarget[];
 }) {
-  const selectedTarget = selectedFactorySessionTarget(targets, selectedTargetValue)
-    ?? (targets.length === 1 ? targets[0] : null);
+  const selectedTarget =
+    selectedFactorySessionTarget(targets, selectedTargetValue) ??
+    (targets.length === 1 ? targets[0] : null);
 
   return (
     <section className={SESSION_TARGET_PICKER_CLASS}>
-      <div className={SESSION_TARGET_LIST_CLASS}>
+      <StandardListSelection
+        disabled={isPending}
+        selectionAnnouncement={selectedTarget?.label}
+      >
         {targets.map((target) => {
           const targetValue = factorySessionTargetOptionValue(target);
           const isSelected =
@@ -255,33 +268,25 @@ function SessionTargetPicker({
             factorySessionTargetOptionValue(selectedTarget) === targetValue;
 
           return (
-            <button
+            <StandardListSelectionItem
               key={`${target.ref.kind}:${target.ref.name ?? ""}:${target.factoryDir}`}
-              className={cn(
-                SESSION_TARGET_BUTTON_CLASS,
-                isSelected
-                  ? "ring-2 ring-af-focus-ring ring-offset-2 ring-offset-af-surface-subtle"
-                  : undefined,
-              )}
-              disabled={isPending}
               onClick={() => {
                 onOpenTarget(targetValue);
               }}
-              type="button"
+              selected={isSelected}
             >
-              <span className="font-semibold text-af-text">{target.label}</span>
-              <span className="truncate text-xs text-af-text-subtle">
-                {target.factoryDir}
+              <span className="flex min-h-16 w-full flex-col items-start justify-center px-1 py-1 text-sm">
+                <span className="font-semibold text-af-text">
+                  {target.label}
+                </span>
+                <span className="truncate text-xs text-af-text-subtle">
+                  {target.factoryDir}
+                </span>
               </span>
-            </button>
+            </StandardListSelectionItem>
           );
         })}
-      </div>
-      {selectedTarget ? (
-        <div className="sr-only" aria-live="polite">
-          {selectedTarget.label}
-        </div>
-      ) : null}
+      </StandardListSelection>
     </section>
   );
 }
