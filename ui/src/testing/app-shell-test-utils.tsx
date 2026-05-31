@@ -40,6 +40,7 @@ import {
   seedTimelineSnapshots,
 } from "./app-shell-timeline-seed-utils";
 import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
+import { sessionFactoryNamedExportDocument } from "./session-factory-mocks";
 
 export {
   renderWithDashboardSessionTest,
@@ -357,6 +358,11 @@ export function registerAppDashboardTestLifecycle(): void {
       selectedSessionID: "~default",
     });
     resetCurrentFactoryDocumentMock();
+    mockCurrentFactoryDocument({
+      data: sessionFactoryNamedExportDocument,
+      error: null,
+      status: "success",
+    } as never);
   });
 
   afterEach(() => {
