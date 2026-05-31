@@ -32,6 +32,7 @@ import {
   baseFactoryDefinition,
   baseFactoryDefinitionDocument,
   buildDivergentPlaneDashboardSnapshot,
+  buildMockGraphSavePayload,
   createMockGraphEditorDraftState,
   divergentDocumentPlaneFactoryDocument,
   wireMockEditableFactoryGraph,
@@ -1692,7 +1693,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
       save: vi.fn(),
       saveAsync,
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    const draftWithReviewer = {
       ...defaultDraftState,
       draft: {
         ...defaultDraftState.draft,
@@ -1708,7 +1709,10 @@ function registerCurrentActivityCardTestLifecycle(): void {
         },
       },
       hasChanges: true,
-    } as never);
+    };
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue(
+      draftWithReviewer as never,
+    );
 
     renderCurrentActivity({
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
@@ -1737,10 +1741,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
 
     await waitFor(() => {
-      expect(saveAsync).toHaveBeenCalledWith({
-        baseVersion: baseFactoryDefinitionDocument.version,
-        factory: baseFactoryDefinition,
-      });
+      expect(saveAsync).toHaveBeenCalledWith(
+        buildMockGraphSavePayload(draftWithReviewer),
+      );
     });
   });
 
@@ -1861,11 +1864,14 @@ function registerCurrentActivityCardTestLifecycle(): void {
       save: vi.fn(),
       saveAsync,
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+    const dirtyDraftState = {
       ...defaultDraftState,
       hasChanges: true,
       replaceDraft,
-    } as never);
+    };
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue(
+      dirtyDraftState as never,
+    );
 
     renderCurrentActivity({
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
@@ -1886,10 +1892,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
 
     await waitFor(() => {
-      expect(saveAsync).toHaveBeenCalledWith({
-        baseVersion: baseFactoryDefinitionDocument.version,
-        factory: baseFactoryDefinition,
-      });
+      expect(saveAsync).toHaveBeenCalledWith(
+        buildMockGraphSavePayload(dirtyDraftState),
+      );
     });
     expect(replaceDraft).toHaveBeenCalledTimes(1);
   });

@@ -8,11 +8,14 @@ import type {
 } from "../api/current-factory-definition";
 import type { DashboardSnapshot } from "../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../components/dashboard/test-fixtures";
+import type { FactoryDocumentSaveState } from "../features/current-selection/base/hooks/factory-document-save-types";
+import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
 import type {
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
 } from "../features/factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { buildFactoryGraphTopologyFromDefinition } from "../features/factory-graph-editor/lib/factory-graph-draft-graph";
+import { applyFactoryGraphPendingEdits } from "../features/factory-graph-editor/lib/factory-graph-operations";
 import {
   createEmptyFactoryGraphDraft,
   type FactoryGraphDraftDerivedState,
@@ -177,6 +180,7 @@ export const workerDenseFactoryDefinitionDocument: CurrentFactoryDocument = {
 };
 
 export type MockGraphEditorDraftState = FactoryGraphDraftDerivedState & {
+  documentSave: FactoryDocumentSaveState;
   replaceDraft: Mock<(draft: FactoryGraphDraftDerivedState["draft"]) => void>;
   resetDraft: Mock<() => void>;
   updateDraft: Mock<
@@ -187,6 +191,50 @@ export type MockGraphEditorDraftState = FactoryGraphDraftDerivedState & {
     ) => void
   >;
 };
+
+const staleDraftDocumentSaveState: FactoryDocumentSaveState = {
+  message:
+    "The factory definition changed while you were editing. Refresh or discard your draft before saving.",
+  status: "warning",
+};
+
+export function buildMockGraphSavePayload(
+  draftState: Pick<MockGraphEditorDraftState, "draft" | "latestDocument">,
+): {
+  baseVersion: CurrentFactoryDocument["version"];
+  factory: CanonicalFactoryDefinition;
+} {
+  const latestDocument =
+    draftState.latestDocument ?? baseFactoryDefinitionDocument;
+  const saveInput = applyFactoryGraphPendingEdits({
+    baseFactoryDefinition: latestDocument,
+    draft: draftState.draft,
+  });
+
+  if (!saveInput.ok) {
+    throw new Error("Expected mock graph draft to produce a save payload.");
+  }
+
+  return {
+    baseVersion: latestDocument.version,
+    factory: saveInput.value,
+  };
+}
+
+function resolveMockGraphDocumentSaveState(
+  draftState: MockGraphEditorDraftState,
+  isStale: boolean,
+): FactoryDocumentSaveState {
+  if (draftState.documentSave.status === "confirming") {
+    return { status: "confirming" };
+  }
+
+  if (isStale) {
+    return staleDraftDocumentSaveState;
+  }
+
+  return draftState.documentSave;
+}
 
 export interface MockEditableFactoryGraphHooks {
   useEditableFactoryGraph: Mock<
@@ -215,6 +263,7 @@ export function createMockGraphEditorDraftState(
     source: "current-factory",
     updateDraft: vi.fn(),
     validationErrors: [],
+    documentSave: overrides.documentSave ?? { status: "idle" },
     ...overrides,
   };
 }
@@ -346,6 +395,20 @@ function createMockEditableFactoryGraphActions(
       ) {
         return false;
       }
+
+      const saveInput = applyFactoryGraphPendingEdits({
+        baseFactoryDefinition: draftState.latestDocument,
+        draft: draftState.draft,
+      });
+      if (!saveInput.ok) {
+        return false;
+      }
+
+      const { saveAsync } = vi.mocked(useFactoryDocumentSave)();
+      await saveAsync({
+        baseVersion: draftState.latestDocument.version,
+        factory: saveInput.value,
+      });
       draftState.replaceDraft(createEmptyFactoryGraphDraft());
       return true;
     },
@@ -392,9 +455,15 @@ export function createMockEditableFactoryGraph(
       nodes: [],
     },
     documentSaveControls: {
-      beginConfirmation: vi.fn(),
-      cancelConfirmation: vi.fn(),
-      clearSaveFeedback: vi.fn(),
+      beginConfirmation: vi.fn(() => {
+        draftState.documentSave = { status: "confirming" };
+      }),
+      cancelConfirmation: vi.fn(() => {
+        draftState.documentSave = { status: "idle" };
+      }),
+      clearSaveFeedback: vi.fn(() => {
+        draftState.documentSave = { status: "idle" };
+      }),
     },
     saveMutation: {
       error: null,
@@ -402,20 +471,19 @@ export function createMockEditableFactoryGraph(
       reset: vi.fn(),
     },
     saveState: {
-      canSave:
-        options.factoryDocumentScopeKey != null &&
-        draftState.hasChanges &&
-        draftState.pendingFactoryDefinition !== null &&
-        draftState.latestDocument !== null &&
-        activeWorkCount === 0 &&
-        !isStale,
-      documentSave: isStale
-        ? {
-            message:
-              "The factory definition changed while you were editing. Refresh or discard your draft before saving.",
-            status: "warning",
-          }
-        : { status: "idle" },
+      get canSave() {
+        return (
+          options.factoryDocumentScopeKey != null &&
+          draftState.hasChanges &&
+          draftState.pendingFactoryDefinition !== null &&
+          draftState.latestDocument !== null &&
+          activeWorkCount === 0 &&
+          !isStale
+        );
+      },
+      get documentSave() {
+        return resolveMockGraphDocumentSaveState(draftState, isStale);
+      },
       isStale,
     },
     validationState: {

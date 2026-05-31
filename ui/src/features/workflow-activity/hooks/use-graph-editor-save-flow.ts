@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
 import { isFactoryDocumentSaveConfirming } from "../../current-selection/base/hooks/factory-document-save-types";
@@ -47,10 +47,18 @@ export function useGraphEditorSaveFlow({
   transientControllerReset: GraphEditorTransientControllerReset;
 }) {
   const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
+  const [pendingSaveConfirmation, setPendingSaveConfirmation] = useState(false);
   const [saveAttemptRevision, setSaveAttemptRevision] = useState(0);
   const hasActiveWork = activeWorkCount > 0;
   const isStaleDraft = editableGraph.saveState.isStale;
-  const isConfirmingSave = isFactoryDocumentSaveConfirming(documentSave);
+  const isConfirmingSave =
+    isFactoryDocumentSaveConfirming(documentSave) || pendingSaveConfirmation;
+
+  useEffect(() => {
+    if (!isFactoryDocumentSaveConfirming(documentSave)) {
+      setPendingSaveConfirmation(false);
+    }
+  }, [documentSave]);
   const canSaveDraft =
     editableGraph.saveState.canSave &&
     editorUnavailableClassifierWorkstationName === undefined &&
@@ -65,6 +73,7 @@ export function useGraphEditorSaveFlow({
 
   const setIsConfirmingSave = useCallback(
     (open: boolean) => {
+      setPendingSaveConfirmation(open);
       if (open) {
         documentSaveControls.beginConfirmation();
         return;
