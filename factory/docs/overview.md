@@ -69,14 +69,47 @@ backends live under `factory/workers/<name>/AGENTS.md`.
 1. Run `you docs agents` for the end-to-end agent playbook.
 2. Open `factory.json` in this directory.
 3. Read this overview and the workstation `AGENTS.md` for the step you will run.
-4. Confirm the target `workTypeName` and inbox path from the tables below — do
-   not infer names from other repositories or examples.
+4. Confirm the target `workTypeName` and inbox path from **Agent submission
+   policy** and the tables below — do not infer names from other repositories or
+   examples.
 5. For batch JSON, follow `you docs batch-inputs` (`you docs batch-work` is a
    byte-identical alias).
 
 Planner workstations enqueue work; executor workstations run inference or
 scripts at bound workers. See `you docs agents` § Planner vs Executor and
 `docs/reference/authoring-agents-md.md` for prompt file shape.
+
+## Agent submission policy
+
+Use this policy when choosing `workTypeName` and ingress. It matches the
+pipeline and work-type tables above; the inbox table below lists paths.
+
+- **Default — `idea`:** Submit new maintainer work as **`idea`**: standalone
+  markdown under `factory/inputs/idea/default/` or
+  `you submit --work-type-name idea` (with `--name` and `--payload` as needed).
+- **`thoughts`:** Only for large, ambiguous customer asks that need **ideafy**
+  breakdown into multiple ideas — not routine features or docs.
+- **`task`:** Only to **unstick** stuck or failed work: failed tokens, review
+  loops that are not progressing, or recovery after **`executor-loop-breaker`**
+  or **`review-loop-breaker`** routes work to `task:failed`. Do **not** use
+  `task` for greenfield features, documentation, or normal pipeline progression.
+- **`plan`:** Rarely submit standalone plans; the pipeline normally spawns
+  **`plan`** work from accepted ideas.
+- **Batch JSON:** Use `factory/inputs/BATCH/default/{requestId}.json` only when
+  the request needs **`DEPENDS_ON`**, **`PARENT_CHILD`**, or multiple work types
+  in one `FACTORY_REQUEST_BATCH` (see `you docs batch-inputs` and
+  `you docs relationships`).
+
+## Submission recipes (this factory)
+
+Pick a row by goal; do not route greenfield features or docs to **`task`**.
+
+| Goal | Work type | Ingress |
+|------|-----------|---------|
+| New feature or documentation | `idea` | `you submit --work-type-name idea` (with `--name` and `--payload` as needed) or markdown under `factory/inputs/idea/default/` |
+| Large, ambiguous multi-area customer ask | `thoughts` | Markdown under `factory/inputs/thoughts/default/` |
+| Unstick failed or looped implementation | `task` | Markdown under `factory/inputs/task/default/` or `you submit --work-type-name task` (with `--name` and `--payload` as needed) |
+| Ordered multi-item or mixed-type request | Batch (`FACTORY_REQUEST_BATCH`) | `factory/inputs/BATCH/default/{requestId}.json` |
 
 ## Input layout
 
@@ -97,10 +130,44 @@ repository-local working state, not generated starter payloads from
 
 Authoring guidance:
 
-- Default to **one standalone markdown idea file** under `factory/inputs/idea/default/`.
+- Default to **one standalone markdown idea file** under
+  `factory/inputs/idea/default/` (see **Agent submission policy** — new work is
+  **`idea`**, not **`task`**).
 - Use `factory/inputs/BATCH/default/` only when the request needs `DEPENDS_ON`,
   `PARENT_CHILD`, or multiple work types in one batch (see `you docs
   relationships`).
+
+## Operator loop (maintainer factory)
+
+Short loop for submitting and verifying maintainer work against a **running**
+factory (see `you docs agents` § Is the factory running?):
+
+1. **`you session list`** — confirm the service is listening and a session is
+   open. Connection refused means start `you run --dir ./factory` (or
+   `you run --continuously`) before submitting.
+2. **Submit an idea** — default path for new work: CLI or inbox markdown under
+   `factory/inputs/idea/default/` (see **Submission recipes** above).
+3. **Verify acceptance** — use one or more of:
+   - **`GET /factory-sessions/{session_id}/status`** — `factoryState` and
+     `runtimeStatus` show whether the runtime accepted work and is processing
+     (session id is often `~default` on single-session hosts).
+   - **Dashboard** — `http://localhost:7437/dashboard/ui` on the same host/port
+     as the API (adjust for `--server` / `--port`).
+   - **`you work list`** — when the listing is populated, locate the submitted
+     item by name or `workId` from the submit response.
+
+Example CLI submit:
+
+```bash
+you submit --name my-idea --work-type-name idea --payload path/to.md
+```
+
+**Post-submit timing:** `you work show <work-id>` may not find the item
+immediately while dispatch is still in flight. An empty `you work list` right
+after submit does **not** by itself mean the submit failed — prefer session
+status and the dashboard until work appears in the list, then use
+`you work show` or `you work list --name <name>` for detail (see `you docs work`
+§ Verify after submit).
 
 ## Maintainer notes
 
@@ -117,6 +184,7 @@ Authoring guidance:
 |------|---------|
 | Agent orientation | `you docs agents` |
 | `factory.json` topology and portability | `you docs config` |
+| Factory sessions and liveness | `you session list` (`you docs sessions` not packaged yet — see **Operator loop** and `you docs agents`) |
 | Submitted work and `POST /work` | `you docs work` |
 | Batch ingress and inboxes | `you docs batch-inputs` |
 | Relations in batch JSON | `you docs relationships` |
