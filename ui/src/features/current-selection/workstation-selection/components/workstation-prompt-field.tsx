@@ -310,14 +310,6 @@ function EditableConfigurationPromptValidationFeedback({
       <p className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}>
         {messages.editableConfigurationPromptDiagnosticsSummary}
       </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationPromptValidationDetail}
-      </p>
       <div className="grid gap-2">
         <h5 className={cn("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
           {messages.editableConfigurationPromptDiagnosticsHeading}

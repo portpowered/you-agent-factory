@@ -37,10 +37,10 @@ export interface WorkstationDetailMessages {
   editableConfigurationPromptValidationFallbackError: string;
   editableConfigurationPromptValidationErrorPrefix: string;
   editableConfigurationPromptDiagnosticsSummary: string;
+  editableConfigurationPromptFieldHint: string;
   editableConfigurationPromptDiagnosticsHeading: string;
   editableConfigurationPromptSyntaxDiagnosticLabel: string;
   editableConfigurationPromptVariableDiagnosticLabel: string;
-  editableConfigurationPromptValidationDetail: string;
   editableConfigurationPromptHelpLoading: string;
   editableConfigurationPromptHelpEmpty: string;
   editableConfigurationPromptHelpFallbackError: string;

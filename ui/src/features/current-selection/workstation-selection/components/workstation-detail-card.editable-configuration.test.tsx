@@ -822,7 +822,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -839,10 +839,13 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(screen.getByText("Prompt diagnostics")).toBeTruthy();
     expect(
-      screen.getAllByText(
-        "Resolve the highlighted prompt diagnostics before saving this workstation.",
-      ).length,
-    ).toBeGreaterThan(0);
+      screen.getAllByText("Fix highlighted issues before saving."),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByText(
+        "Save stays disabled until the prompt validates cleanly for this workstation context.",
+      ),
+    ).toBeNull();
     expect(screen.getByText(".Inputs[1]")).toBeTruthy();
     expect(screen.getAllByText("(index .Inputs 1)").length).toBeGreaterThan(0);
   });
@@ -890,7 +893,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -937,7 +940,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             ],
             validationErrors: {
               prompt:
-                "Resolve the highlighted prompt diagnostics before saving this workstation.",
+                "See prompt diagnostics below.",
             },
           })}
           now={DETAIL_CARD_NOW}
@@ -1028,7 +1031,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1052,9 +1055,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
     expect(
       document.getElementById("editable-workstation-prompt-error")?.textContent,
-    ).toBe(
-      "Resolve the highlighted prompt diagnostics before saving this workstation.",
-    );
+    ).toBe("See prompt diagnostics below.");
     expect(
       document.getElementById("editable-workstation-prompt-diagnostics"),
     ).toBeTruthy();
@@ -1089,7 +1090,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1134,7 +1135,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1177,7 +1178,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1224,7 +1225,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1624,7 +1625,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           ],
           validationErrors: {
             prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+              "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}

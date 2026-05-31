@@ -168,7 +168,7 @@ export function validateEditableWorkstationDraft(
     | "editableConfigurationPromptRequired"
     | "editableConfigurationPromptValidationLoading"
     | "editableConfigurationPromptValidationErrorPrefix"
-    | "editableConfigurationPromptDiagnosticsSummary"
+    | "editableConfigurationPromptFieldHint"
     | "editableConfigurationBehaviorPollerWorkerUnsupported"
     | "editableConfigurationWorkerRequired"
     | "editableConfigurationWorkerUnavailable"
@@ -213,8 +213,7 @@ export function validateEditableWorkstationDraft(
     promptValidationState.status === "ready" &&
     promptValidationState.diagnostics.length > 0
   ) {
-    validationErrors.prompt =
-      messages.editableConfigurationPromptDiagnosticsSummary;
+    validationErrors.prompt = messages.editableConfigurationPromptFieldHint;
   }
 
   return validationErrors;

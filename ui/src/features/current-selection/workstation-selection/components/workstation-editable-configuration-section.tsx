@@ -250,6 +250,22 @@ function EditableConfigurationReadyForm({
 }
 
 
+function hasOnlyPromptBlockingValidationErrors(
+  validationErrors: EditableWorkstationValidationErrors,
+  promptDiagnostics: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >["promptDiagnostics"],
+): boolean {
+  return (
+    promptDiagnostics.length > 0 &&
+    Boolean(validationErrors.prompt) &&
+    !validationErrors.behavior &&
+    !validationErrors.runnerName &&
+    !validationErrors.workerName
+  );
+}
+
 function EditableConfigurationDraftStatus({
   messages,
   state,
@@ -260,17 +276,28 @@ function EditableConfigurationDraftStatus({
     { status: "ready" }
   >;
 }) {
+  const promptOnlyValidationErrors = hasOnlyPromptBlockingValidationErrors(
+    state.validationErrors,
+    state.promptDiagnostics,
+  );
+
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
       <p
         className={cn(
           "m-0",
-          state.hasValidationErrors ? "text-af-danger-text" : "text-af-text-muted",
+          state.hasValidationErrors && !promptOnlyValidationErrors
+            ? "text-af-danger-text"
+            : "text-af-text-muted",
           DASHBOARD_BODY_TEXT_CLASS,
         )}
-        role={state.hasValidationErrors ? "alert" : "status"}
+        role={
+          state.hasValidationErrors && !promptOnlyValidationErrors
+            ? "alert"
+            : "status"
+        }
       >
-        {state.hasValidationErrors
+        {state.hasValidationErrors && !promptOnlyValidationErrors
           ? messages.editableConfigurationValidationStatus
           : state.isDirty
             ? messages.editableConfigurationDirtyStatus
