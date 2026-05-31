@@ -6,6 +6,7 @@ function createVisibleLocator(label, overrides = {}) {
   return {
     click: vi.fn().mockResolvedValue(undefined),
     count: vi.fn().mockResolvedValue(1),
+    evaluate: vi.fn().mockResolvedValue(undefined),
     isDisabled: vi.fn().mockResolvedValue(false),
     isVisible: vi.fn().mockResolvedValue(true),
     selectOption: vi.fn().mockResolvedValue(undefined),
