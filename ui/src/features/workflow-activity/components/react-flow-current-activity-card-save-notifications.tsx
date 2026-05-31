@@ -46,7 +46,6 @@ export function CurrentActivityGraphSaveNotifications({
       duration: GLOBAL_TOAST_DURATION_MS,
     });
   }, [
-    hasDraftChanges,
     messages.noticeSaveFailedTitle,
     messages.noticeSaveSuccessDescription,
     messages.noticeSaveSuccessTitle,
