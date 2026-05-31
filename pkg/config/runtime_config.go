@@ -665,6 +665,16 @@ func PersistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte) (str
 	return result.FactoryDir, nil
 }
 
+// PersistNamedFactoryWithPrepared materializes a named factory directory from a
+// pre-normalized payload shared by validation and split layout writes.
+func PersistNamedFactoryWithPrepared(rootDir, name string, prepared *PreparedFactoryLayoutPayload) (string, error) {
+	result, err := PersistNamedFactoryWithPreparedReport(rootDir, name, prepared)
+	if err != nil {
+		return "", err
+	}
+	return result.FactoryDir, nil
+}
+
 // NamedFactoryPersistResult reports the staged named-factory directory together
 // with any bundled files that were overwritten while restoring inline portable
 // content into the thin persisted layout.
@@ -677,7 +687,13 @@ type NamedFactoryPersistResult struct {
 // payload under a named subdirectory rooted at rootDir and reports any
 // differing portable bundled files that were replaced on disk.
 func PersistNamedFactoryWithReport(rootDir, name string, canonicalFactoryJSON []byte) (*NamedFactoryPersistResult, error) {
-	return persistNamedFactory(rootDir, name, canonicalFactoryJSON, namedFactoryPersistOptions{}, namedFactoryPersistHooks{})
+	return persistNamedFactory(rootDir, name, canonicalFactoryJSON, nil, namedFactoryPersistOptions{}, namedFactoryPersistHooks{})
+}
+
+// PersistNamedFactoryWithPreparedReport is the report variant of
+// PersistNamedFactoryWithPrepared.
+func PersistNamedFactoryWithPreparedReport(rootDir, name string, prepared *PreparedFactoryLayoutPayload) (*NamedFactoryPersistResult, error) {
+	return persistNamedFactory(rootDir, name, nil, prepared, namedFactoryPersistOptions{}, namedFactoryPersistHooks{})
 }
 
 // ReplaceNamedFactory materializes a compact canonical factory payload and
@@ -694,7 +710,7 @@ func ReplaceNamedFactory(rootDir, name string, canonicalFactoryJSON []byte) (str
 // PersistNamedFactoryWithReport. It uses the same staging and validation path
 // as create, then swaps the staged layout into the existing named-factory slot.
 func ReplaceNamedFactoryWithReport(rootDir, name string, canonicalFactoryJSON []byte) (*NamedFactoryPersistResult, error) {
-	return persistNamedFactory(rootDir, name, canonicalFactoryJSON, namedFactoryPersistOptions{replaceExisting: true}, namedFactoryPersistHooks{})
+	return persistNamedFactory(rootDir, name, canonicalFactoryJSON, nil, namedFactoryPersistOptions{replaceExisting: true}, namedFactoryPersistHooks{})
 }
 
 type namedFactoryPersistOptions struct {
@@ -706,7 +722,28 @@ type namedFactoryPersistHooks struct {
 	loadRuntimeConfig func(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error)
 }
 
-func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, options namedFactoryPersistOptions, hooks namedFactoryPersistHooks) (*NamedFactoryPersistResult, error) {
+func resolveNamedFactoryPersistPayload(
+	segment string,
+	canonicalFactoryJSON []byte,
+	prepared *PreparedFactoryLayoutPayload,
+) (*interfaces.FactoryConfig, []byte, error) {
+	switch {
+	case prepared != nil:
+		return prepared.Config, prepared.Canonical, nil
+	case len(canonicalFactoryJSON) > 0:
+		return normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
+	default:
+		return nil, nil, fmt.Errorf("factory layout payload is required")
+	}
+}
+
+func persistNamedFactory(
+	rootDir, name string,
+	canonicalFactoryJSON []byte,
+	prepared *PreparedFactoryLayoutPayload,
+	options namedFactoryPersistOptions,
+	hooks namedFactoryPersistHooks,
+) (*NamedFactoryPersistResult, error) {
 	if strings.TrimSpace(rootDir) == "" {
 		return nil, fmt.Errorf("factory root is required")
 	}
@@ -722,7 +759,7 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, opti
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create factory root %s: %w", rootDir, err)
 	}
-	factoryCfg, canonical, err := normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
+	factoryCfg, canonical, err := resolveNamedFactoryPersistPayload(segment, canonicalFactoryJSON, prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -739,7 +776,10 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, opti
 		}
 	}()
 
-	replacements, err := writeNamedFactoryLayout(stagingDir, factoryCfg, canonical, sourcePath)
+	report, err := writeFactorySplitLayout(stagingDir, factoryCfg, canonical, sourcePath, FactorySplitLayoutWriteOptions{
+		OverwriteExistingSplitFiles: true,
+	})
+	replacements := report.BundledReplacements
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 	}
@@ -924,62 +964,6 @@ func ResolveCurrentFactoryDir(rootDir string) (string, error) {
 	}
 
 	return "", fmt.Errorf("resolve current factory in %s: %w", rootDir, ErrFactoryLayoutNotFound)
-}
-
-func writeNamedFactoryLayout(targetDir string, cfg *interfaces.FactoryConfig, canonical []byte, sourcePath string) ([]PortableBundledFileReplacement, error) {
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create factory directory %s: %w", targetDir, err)
-	}
-
-	formatted, err := formatCanonicalFactoryJSON(canonical, sourcePath)
-	if err != nil {
-		return nil, err
-	}
-	factoryPath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
-	if err := os.WriteFile(factoryPath, formatted, 0o644); err != nil {
-		return nil, fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
-	}
-	persistExpansion := splitRuntimeExpansionOptions{overwriteExisting: true}
-	if _, err := writeExpandedWorkerFiles(targetDir, cfg.Workers, persistExpansion); err != nil {
-		return nil, err
-	}
-	if _, _, err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations, persistExpansion); err != nil {
-		return nil, err
-	}
-	if err := pruneStaleSplitRuntimeDirs(targetDir, cfg); err != nil {
-		return nil, err
-	}
-	replacements, err := materializePortableBundledFiles(targetDir, cfg)
-	if err != nil {
-		return nil, err
-	}
-	inputsDir := filepath.Join(targetDir, interfaces.InputsDir)
-	if err := os.MkdirAll(inputsDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create inputs directory %s: %w", inputsDir, err)
-	}
-	if err := ensureDefaultInputChannelDirectories(targetDir, cfg); err != nil {
-		return nil, err
-	}
-	return replacements, nil
-}
-
-func ensureDefaultInputChannelDirectories(targetDir string, cfg *interfaces.FactoryConfig) error {
-	if cfg == nil {
-		return nil
-	}
-
-	for _, workType := range cfg.WorkTypes {
-		workTypeName := strings.TrimSpace(workType.Name)
-		if workTypeName == "" {
-			continue
-		}
-
-		channelDir := filepath.Join(targetDir, interfaces.InputsDir, workTypeName, interfaces.DefaultChannelName)
-		if err := os.MkdirAll(channelDir, 0o755); err != nil {
-			return fmt.Errorf("create inputs/%s/%s directory: %w", workTypeName, interfaces.DefaultChannelName, err)
-		}
-	}
-	return nil
 }
 
 func requireFactoryConfig(factoryDir string) error {
