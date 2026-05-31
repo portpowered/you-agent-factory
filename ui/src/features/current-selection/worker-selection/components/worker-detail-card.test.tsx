@@ -105,6 +105,7 @@ function buildFactoryDocument(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: WorkerDetailCard coverage keeps loading, ready, and editable state regressions together.
 describe("WorkerDetailCard", () => {
   beforeEach(() => {
     mockFactoryDocumentQuery();
@@ -252,7 +253,10 @@ describe("WorkerDetailCard", () => {
     expect(
       editableConfigurationState.onModelLocalityChange,
     ).toHaveBeenCalledWith("LOCAL");
-    expect(screen.getByLabelText("Worker name")).toHaveProperty("value", "reviewer");
+    expect(screen.getByLabelText("Worker name")).toHaveProperty(
+      "value",
+      "reviewer",
+    );
     expect(screen.queryByLabelText("Command")).toBeNull();
 
     fireEvent.click(
@@ -960,7 +964,9 @@ describe("WorkerDetailCard", () => {
       screen.queryByText("Enter a model before saving this worker."),
     ).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Save worker" }).hasAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "Save worker" })
+        .hasAttribute("disabled"),
     ).toBe(false);
   });
 

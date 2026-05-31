@@ -132,6 +132,7 @@ function FactoryGraphEditorAddEntityFields({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: entity-specific add fields stay colocated in one renderer switch.
 function renderEntitySpecificFields({
   currentFactoryDefinition,
   draft,

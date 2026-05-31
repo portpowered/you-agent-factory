@@ -1,10 +1,10 @@
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import {
   applyFactoryGraphAddEntityDraft,
   createFactoryGraphAddEntityDraft,
   validateFactoryGraphAddEntityDraft,
 } from "./factory-graph-editor-additions";
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 
 const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -37,6 +37,7 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
   ],
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph add validation and apply scenarios share one fixture factory.
 describe("factory graph editor additions", () => {
   it("seeds workstation and work-state drafts from the current pending definition", () => {
     expect(

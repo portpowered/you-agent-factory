@@ -139,6 +139,7 @@ describe("validateEditableWorkerDraft", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: contract validation merge cases stay grouped with decode field mapping.
 describe("mergeEditableWorkerContractValidationErrors", () => {
   it("maps contract decode failures onto worker fields when possible", () => {
     const pendingFactoryDefinition = {

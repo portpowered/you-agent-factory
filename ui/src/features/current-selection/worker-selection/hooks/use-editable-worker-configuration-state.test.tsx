@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: editable worker state regressions share one mocked factory-document seam.
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
@@ -41,7 +42,6 @@ function buildFactoryDocument(
   };
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: editable worker state regressions share one mocked factory-document seam.
 describe("useEditableWorkerConfigurationState", () => {
   const workerSelection: DashboardSelection = {
     kind: "worker",
