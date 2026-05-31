@@ -221,6 +221,7 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
       handleAssignments,
       new Set(),
       visibleGraphEdges,
+      nodes,
     );
 
     expect(edges).toEqual(

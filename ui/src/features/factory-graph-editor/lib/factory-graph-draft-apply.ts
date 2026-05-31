@@ -106,7 +106,7 @@ export function applyWorkstationEdgeChanges(
   const nextWorkstation = structuredClone(workstation);
 
   nextWorkstation.inputs = applyIOEdgeChanges(
-    nextWorkstation.inputs,
+    nextWorkstation.inputs ?? [],
     draft,
     workstationKey,
     "workstation-input",

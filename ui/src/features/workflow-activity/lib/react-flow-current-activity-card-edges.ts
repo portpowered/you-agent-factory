@@ -6,7 +6,12 @@ import type {
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
-import type { ActiveGraphHighlights, HandleAssignments } from "./react-flow-current-activity-card-graph";
+import type { CurrentActivityNode } from "../../flowchart/public";
+import {
+  type ActiveGraphHighlights,
+  type HandleAssignments,
+  filterGraphEdgesForRenderedHandles,
+} from "./react-flow-current-activity-card-graph";
 
 const EDGE_STROKE_MUTED = "var(--color-af-edge-muted)";
 const EDGE_STROKE_SOFT = "var(--color-af-edge-muted-soft)";
@@ -87,8 +92,18 @@ export function buildGraphEdges(
   handleAssignments: HandleAssignments,
   pendingAdditionEdgeIds: ReadonlySet<string>,
   visibleGraphEdges: PositionedEdge[],
+  renderedNodes?: ReadonlyArray<Pick<CurrentActivityNode, "data" | "id">>,
 ): Edge[] {
-  return visibleGraphEdges.map((edge) => {
+  const edgesToRender =
+    renderedNodes === undefined
+      ? visibleGraphEdges
+      : filterGraphEdgesForRenderedHandles(
+          visibleGraphEdges,
+          handleAssignments,
+          renderedNodes,
+        );
+
+  return edgesToRender.map((edge) => {
     const activeFlow = activeGraphHighlights.activeEdgeIds.has(edge.edgeId);
     const pendingAddition = pendingAdditionEdgeIds.has(edge.edgeId);
     const semantic = edgeSemantic(edge);

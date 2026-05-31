@@ -43,6 +43,7 @@ export function useEditableFactoryGraph(
 
     return projectFactoryGraphToReactFlow({
       factoryDefinition,
+      filterEdgesToRenderedHandles: true,
       locale: options.locale ?? undefined,
       topology: draftState.graph,
       workstationResolver: factoryDefinition
