@@ -3,10 +3,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
-import {
-  staleFactoryVersionTarget,
-} from "../../../../testing/factory-validation-target-fixtures";
-import * as currentFactoryFeature from "../../../current-factory-definition/public";
+import { staleFactoryVersionTarget } from "../../../../testing/factory-validation-target-fixtures";
+import * as currentFactoryHooks from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
@@ -21,7 +19,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
 
   it("uses localized fallback copy for unknown save errors", async () => {
     const mutateAsync = vi.fn().mockRejectedValue("network unavailable");
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);
@@ -152,7 +150,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
   it("ignores repeated save confirmations while the current save is still in flight", async () => {
     const deferredSave = createDeferredPromise<unknown>();
     const mutateAsync = vi.fn().mockReturnValue(deferredSave.promise);
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);
@@ -201,13 +199,16 @@ describe("useSaveEditableWorkstationConfiguration", () => {
 
   it("keeps stale-version save failures recoverable as warnings", async () => {
     const mutateAsync = vi.fn().mockRejectedValue(
-      new CurrentFactoryDefinitionError("Current factory definition is stale. Refresh the dashboard before saving or importing again.", {
-        code: "STALE_FACTORY_VERSION",
-        status: 409,
-        targets: [staleFactoryVersionTarget()],
-      }),
+      new CurrentFactoryDefinitionError(
+        "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
+        {
+          code: "STALE_FACTORY_VERSION",
+          status: 409,
+          targets: [staleFactoryVersionTarget()],
+        },
+      ),
     );
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);
@@ -231,7 +232,8 @@ describe("useSaveEditableWorkstationConfiguration", () => {
 
     await waitFor(() => {
       expect(result.current.saveState).toEqual({
-        message: "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
+        message:
+          "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
         status: "warning",
       });
     });
@@ -240,24 +242,27 @@ describe("useSaveEditableWorkstationConfiguration", () => {
 
   it("maps targeted save validation failures onto workstation field errors", async () => {
     const mutateAsync = vi.fn().mockRejectedValue(
-      new CurrentFactoryDefinitionError("Worker selection must reference a configured worker.", {
-        code: "BAD_REQUEST",
-        status: 400,
-        targets: [
-          {
-            code: "factory.worker.danglingReference",
-            message: "Worker selection must reference a configured worker.",
-            severity: "error",
-            subject: {
-              id: "worker",
-              location: "DEFINITION",
-              type: "WORKSTATION",
+      new CurrentFactoryDefinitionError(
+        "Worker selection must reference a configured worker.",
+        {
+          code: "BAD_REQUEST",
+          status: 400,
+          targets: [
+            {
+              code: "factory.worker.danglingReference",
+              message: "Worker selection must reference a configured worker.",
+              severity: "error",
+              subject: {
+                id: "worker",
+                location: "DEFINITION",
+                type: "WORKSTATION",
+              },
             },
-          },
-        ],
-      }),
+          ],
+        },
+      ),
     );
-    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
       isPending: false,
       mutateAsync,
     } as never);

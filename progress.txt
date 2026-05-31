@@ -24,6 +24,7 @@
 - Apply customer-display filtering in `projectFactoryGraphToReactFlow` only; keep `buildFactoryGraphTopologyFromDefinition` and draft-validation topology unfiltered so canonical factory data and editor mutations stay complete.
 - Second-tab PNG import browser proof lives in `ui/integration/factory-import-second-session.integration.test.mjs`: open a non-default session via the Factory Session dialog, export then import on that tab, and track `onSaveCurrentFactory` for the non-default `sessionID` with `mode: "REPLACE_CURRENT"`; use `expect.poll` for PUT completion because submitting-state copy can flash too quickly in Playwright.
 - Legacy `createFactory` and dashboard `POST /factories` were removed from `ui/src/api/named-factory/api.ts`; import activation uses session PUT modes only. Browser/integration harnesses stub `/factory-sessions/{session_id}/factory` GET/PUT via `onSaveCurrentFactory`—do not reintroduce `onActivateFactory` or `/factories` POST handlers.
+- UI Coverage merge lane replays **shard blobs** + isolated React Flow pass only; tests in standalone `*.errors.test.ts` files may not affect merged global thresholds unless they run in a **main shard**—colocate new coverage tests in the primary `api.test.ts` beside the module under test.
 - Session factory operator-facing error copy lives in `ui/src/api/session-factory/operator-errors.ts` (`sessionFactoryOperatorErrorMessages`, `resolveSessionFactoryAPIErrorMessage`); HTTP failures apply it at throw time in `api.ts`. `current-factory-definition` only remaps transport-shell messages (network, rejected request, invalid response) to editor copy; `named-factory` passes through `SessionFactoryAPIError.message`. Import preview `errorByCode` for `STALE_FACTORY_VERSION`, `FACTORY_NOT_IDLE`, `INVALID_FACTORY`, and `INVALID_FACTORY_NAME` should import the same English strings from `sessionFactoryOperatorErrorMessages`.
 - Register new packaged `you docs` topics in the single `topicDocuments` table in `pkg/cli/docs/docs.go` with canonical name, description, `displayOrder`, path, and optional aliases together so `SupportedTopics()`, index output, and unsupported-topic errors stay aligned.
 - Keep `docs/reference/*.md` and `pkg/cli/docs/reference/*.md` synchronized when adding customer-facing packaged topics; embedded markdown is loaded from `pkg/cli/docs/reference/` via `//go:embed`.
@@ -535,4 +536,31 @@
   - Patterns discovered: When `main` deletes `server_session_scoping_test.go` in favor of `server_factory_sessions_test.go`, drop the branch duplicate on merge—session PUT tests already use `saveFactoryForSessionRequestBody` on main.
   - Gotchas encountered: `prd.json`/`progress.txt` conflicts with unrelated Ralph PRDs on `main`—restore branch PRD from pre-merge HEAD, not merge markers.
   - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — BLOCKING merge-conflict feedback on head `6f31eb3f`.
+---
+
+## 2026-05-31T23:25:00Z - mergeability (PR #489 main + coverage)
+- What was implemented: Merged `origin/main` twice after BLOCKING UI Coverage on `bf64f74e`; kept unified import activation + `operator-errors` on session GET/PUT; aligned `getCurrentFactory` via `getCurrentFactoryDocument`; fixed named-factory error tests and `resolveNamedFactoryAPIErrorCode` for `FACTORY_ALREADY_EXISTS`; pushed `214e39a3` + `36ffecc9`.
+- Files changed: merge from main (document-plane export, prompt-template paths), `ui/src/api/session-factory/api.ts`, `ui/src/api/named-factory/api.ts`, `ui/src/api/named-factory/api.additional.test.ts`, `ui/src/api/named-factory/api.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: After `ui-api-module-cleanup` on `main`, keep branch `activateImportedFactoryForSession({ choice, createFactoryName })` — dialog/hooks use `FactoryImportConfirmInput`, not main's split activation functions.
+  - Gotchas encountered: Export PNG tests fail if `getCurrentFactory` returns `version`; session GET mocks need `version` for validation.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — `mergeable: MERGEABLE` on `36ffecc9`; await UI Coverage merge CI.
+---
+
+## 2026-05-31T23:55:00Z - mergeability (PR #489 deadcode + import tests)
+- What was implemented: Fixed CI `make ui-deadcode` by removing stale `workerDenseFactoryDefinitionDocument` from `frontend-deadcode-baseline.json`; updated `react-flow-current-activity-card.test.tsx` import activation cases to use **Confirm import**, `FactoryImportConfirmInput`, and `dashboard-fixture` existing-name set from `semanticWorkflowDashboardSnapshot`.
+- Files changed: `docs/internal/development/frontend-deadcode-baseline.json`, `ui/src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx`
+- **Learnings for future iterations:**
+  - Patterns discovered: `createFactoryImportConfirmInput` defaults assume `alpha` session name — override `existingFactoryNames` when the snapshot factory name is `dashboard-fixture` from `factoryFromDashboardTopology`.
+  - Gotchas encountered: Import confirm action label is **Confirm import**; tests still querying **Activate factory** fail only in full shard/coverage runs.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489#issuecomment-4585193777 — pushed `5e344a6d`; await required CI.
+---
+
+## 2026-05-31T01:20:00Z - mergeability (PR #489 coverage + copy)
+- What was implemented: All PRD stories already `passes: true`; fixed UI Coverage merge failures on `d57592af`—stale import preview copy in `react-flow-current-activity-card.test.tsx` (**before confirming import**), expanded session/named-factory/factory-validation API tests for global threshold; split tests across files for Biome `noExcessiveLinesPerFunction`; pushed through `09d5a817`.
+- Files changed: `ui/src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx`, `ui/src/api/session-factory/*.test.ts`, `ui/src/api/named-factory/api.test.ts`, `ui/src/api/factory-validation/api.errors.test.ts` (new)
+- **Learnings for future iterations:**
+  - Patterns discovered: UI Coverage merge lane fails on stale dialog copy assertions even when per-shard tests pass; global merged threshold (~93.04%) can lag by ~0.03% after API-only tests—`factory-validation/api.ts` error branches move the needle when session-factory tests plateau.
+  - Gotchas encountered: Split new tests into sibling files (`api.errors.test.ts`, `api.get-http-errors.test.ts`) before `describe` blocks exceed 100 lines; `getCurrentFactory` transport errors surface as `NETWORK_ERROR`, not `INTERNAL_ERROR`, when mapping through session-factory.
+  - Useful context: PR https://github.com/portpowered/you-agent-factory/pull/489 — await UI Coverage on `09d5a817` (was 93.01% vs 93.04% on `aa6f039c`).
 ---

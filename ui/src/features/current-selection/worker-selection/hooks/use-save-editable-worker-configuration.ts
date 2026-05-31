@@ -5,7 +5,7 @@ import type {
   CurrentFactoryDefinitionError,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import { useSaveCurrentFactory } from "../../../current-factory-definition/public";
+import { useSaveCurrentFactory } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
