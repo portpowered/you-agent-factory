@@ -55,6 +55,7 @@ describe("useFactoryGraphAddEntityController placement", () => {
       result.current.setAddEntityDraft({
         kind: "worker",
         model: "gpt",
+        modelProvider: "CURSOR",
         name: "reviewer",
       });
     });
@@ -67,6 +68,7 @@ describe("useFactoryGraphAddEntityController placement", () => {
     expect(placeAddedNode).toHaveBeenCalledWith({
       kind: "worker",
       model: "gpt",
+      modelProvider: "CURSOR",
       name: "reviewer",
     });
   });
