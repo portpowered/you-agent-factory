@@ -15,5 +15,6 @@ describe("current-selection base public barrel", () => {
     expect(currentSelectionBasePublic.CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS).toBe(
       "grid grid-cols-1 gap-3",
     );
+    expect(currentSelectionBasePublic.EditableConfigurationSaveRow).toBeTypeOf("function");
   });
 });
