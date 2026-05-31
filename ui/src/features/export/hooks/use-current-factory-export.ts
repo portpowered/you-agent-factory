@@ -4,7 +4,7 @@ import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
-import type { FactoryValue } from "../../../api/named-factory";
+import type { FactoryValue } from "../../../api/session-factory";
 import {
   useCurrentFactoryDocument,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";

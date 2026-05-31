@@ -4,18 +4,18 @@ import type { ReactNode } from "react";
 
 import {
   discoverSessionNamedFactoryNames,
-  getCurrentFactory,
-} from "../../../api/named-factory";
+  getSessionFactory,
+} from "../../../api/session-factory";
 import { useFactoryImportActivationTarget } from "./use-factory-import-activation-target";
 
-vi.mock("../../../api/named-factory", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/named-factory")>(
-    "../../../api/named-factory",
+vi.mock("../../../api/session-factory", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/session-factory")>(
+    "../../../api/session-factory",
   );
   return {
     ...actual,
     discoverSessionNamedFactoryNames: vi.fn(actual.discoverSessionNamedFactoryNames),
-    getCurrentFactory: vi.fn(actual.getCurrentFactory),
+    getSessionFactory: vi.fn(actual.getSessionFactory),
   };
 });
 
@@ -39,11 +39,12 @@ describe("useFactoryImportActivationTarget", () => {
   });
 
   it("resolves create target names for non-default sessions", async () => {
-    vi.mocked(getCurrentFactory).mockResolvedValue({
+    vi.mocked(getSessionFactory).mockResolvedValue({
       name: "Review Session Import Factory",
       workTypes: [],
       workers: [],
       workstations: [],
+      version: { logical: "1", physical: "2026-01-01T00:00:00.000Z" },
     });
     vi.mocked(discoverSessionNamedFactoryNames).mockResolvedValue([
       "Review Session Import Factory",
@@ -71,11 +72,12 @@ describe("useFactoryImportActivationTarget", () => {
   });
 
   it("returns null create target names when the preferred name is blank", async () => {
-    vi.mocked(getCurrentFactory).mockResolvedValue({
+    vi.mocked(getSessionFactory).mockResolvedValue({
       name: "alpha",
       workTypes: [],
       workers: [],
       workstations: [],
+      version: { logical: "1", physical: "2026-01-01T00:00:00.000Z" },
     });
     vi.mocked(discoverSessionNamedFactoryNames).mockResolvedValue(["alpha"]);
 
@@ -110,7 +112,7 @@ describe("useFactoryImportActivationTarget", () => {
     expect(result.current.isLoading).toBe(false);
     expect(result.current.createTargetFactoryName).toBe("Dropped Factory");
     expect(result.current.currentFactoryName).toBeNull();
-    expect(getCurrentFactory).not.toHaveBeenCalled();
+    expect(getSessionFactory).not.toHaveBeenCalled();
     expect(discoverSessionNamedFactoryNames).not.toHaveBeenCalled();
   });
 });

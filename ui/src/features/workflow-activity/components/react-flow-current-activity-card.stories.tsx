@@ -6,7 +6,7 @@ import "../../../styles.css";
 import type {
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
-import type { FactoryValue } from "../../../api/named-factory";
+import type { FactoryValue } from "../../../api/session-factory";
 import {
   resourceOccupancySnapshotForTick,
   semanticWorkflowDashboardSnapshot,

@@ -154,6 +154,35 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
       });
     });
   });
+
+  it("surfaces network failures from the prompt-template contract query", async () => {
+    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockRejectedValue(
+      {
+        code: "NETWORK_ERROR",
+        message:
+          "The dashboard could not reach the current factory prompt-template contract API.",
+        name: "CurrentFactoryPromptTemplateAPIError",
+      },
+    );
+
+    const { result } = renderHook(
+      () => useCurrentWorkstationPromptTemplateContract("Review"),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        data: undefined,
+        error: {
+          code: "NETWORK_ERROR",
+          message:
+            "The dashboard could not reach the current factory prompt-template contract API.",
+        },
+        isPending: false,
+        status: "error",
+      });
+    });
+  });
 });
 
 function createQueryClientWrapper() {

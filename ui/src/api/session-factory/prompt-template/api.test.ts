@@ -163,6 +163,22 @@ describe("session-factory prompt-template API", () => {
     });
   });
 
+  it("surfaces NETWORK_ERROR when prompt-template validation fetch rejects", async () => {
+    await expect(
+      validateCurrentFactoryWorkstationPromptTemplate(
+        "Review",
+        "{{ .Prompt }}",
+        {
+          fetch: vi.fn().mockRejectedValue(new Error("socket closed")),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      message:
+        "The dashboard could not reach the current factory prompt-template validation API.",
+    });
+  });
+
   it("surfaces a network error when no fetch implementation is available", async () => {
     const originalFetch = globalThis.fetch;
     let thrown: unknown;

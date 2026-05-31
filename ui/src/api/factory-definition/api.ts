@@ -974,12 +974,12 @@ function rejectUnknownKeys(
   allowedKeys: Set<string>,
   path: string,
 ): void {
-	for (const key of Object.keys(value)) {
-		if (allowedKeys.has(key)) {
-			continue;
-		}
-		throw new FactoryDefinitionAPIError(
-			`${path}.${key} is not allowed by the generated factory contract.`,
-		);
-	}
+  for (const key of Object.keys(value)) {
+    if (allowedKeys.has(key)) {
+      continue;
+    }
+    throw new FactoryDefinitionAPIError(
+      `${path}.${key} is not allowed by the generated factory contract.`,
+    );
+  }
 }

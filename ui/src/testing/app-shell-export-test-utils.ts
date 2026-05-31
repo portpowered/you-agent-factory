@@ -1,7 +1,7 @@
 import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
 import type { CurrentFactoryDocument } from "../api/current-factory-definition";
-import type { FactoryValue } from "../api/named-factory";
+import type { FactoryValue } from "../api/session-factory";
 import { defaultSessionFactoryVersion } from "./session-factory-mocks";
 
 const onePixelPngBase64 =
