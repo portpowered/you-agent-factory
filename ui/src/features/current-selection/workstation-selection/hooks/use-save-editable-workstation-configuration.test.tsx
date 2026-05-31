@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { staleFactoryVersionTarget } from "../../../../testing/factory-validation-target-fixtures";
-import * as currentFactoryHooks from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
@@ -18,10 +18,13 @@ describe("useSaveEditableWorkstationConfiguration", () => {
   });
 
   it("uses localized fallback copy for unknown save errors", async () => {
-    const mutateAsync = vi.fn().mockRejectedValue("network unavailable");
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
+    const saveAsync = vi.fn().mockRejectedValue("network unavailable");
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
       isPending: false,
-      mutateAsync,
+      saveAsync,
     } as never);
 
     const { result } = renderHook(
@@ -48,12 +51,12 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         status: "error",
       });
     });
-    expect(mutateAsync).toHaveBeenCalledWith({
+    expect(saveAsync).toHaveBeenCalledWith({
       baseVersion: {
         logical: "7",
         physical: "2026-05-23T15:52:00Z",
       },
-      factoryDefinition: {
+      factory: {
         name: "Current Factory",
         workers: [],
         workstations: [],
@@ -149,10 +152,13 @@ describe("useSaveEditableWorkstationConfiguration", () => {
 
   it("ignores repeated save confirmations while the current save is still in flight", async () => {
     const deferredSave = createDeferredPromise<unknown>();
-    const mutateAsync = vi.fn().mockReturnValue(deferredSave.promise);
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
+    const saveAsync = vi.fn().mockReturnValue(deferredSave.promise);
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
       isPending: false,
-      mutateAsync,
+      saveAsync,
     } as never);
 
     const { result } = renderHook(
@@ -175,7 +181,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       await result.current.confirmSave();
     });
 
-    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(saveAsync).toHaveBeenCalledTimes(1);
     expect(result.current.saveState).toEqual({ status: "submitting" });
 
     deferredSave.resolve({
@@ -198,7 +204,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
   });
 
   it("keeps stale-version save failures recoverable as warnings", async () => {
-    const mutateAsync = vi.fn().mockRejectedValue(
+    const saveAsync = vi.fn().mockRejectedValue(
       new CurrentFactoryDefinitionError(
         "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
         {
@@ -208,9 +214,12 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         },
       ),
     );
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
       isPending: false,
-      mutateAsync,
+      saveAsync,
     } as never);
 
     const { result } = renderHook(
@@ -241,7 +250,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
   });
 
   it("maps targeted save validation failures onto workstation field errors", async () => {
-    const mutateAsync = vi.fn().mockRejectedValue(
+    const saveAsync = vi.fn().mockRejectedValue(
       new CurrentFactoryDefinitionError(
         "Worker selection must reference a configured worker.",
         {
@@ -262,9 +271,12 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         },
       ),
     );
-    vi.spyOn(currentFactoryHooks, "useSaveCurrentFactory").mockReturnValue({
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
       isPending: false,
-      mutateAsync,
+      saveAsync,
     } as never);
 
     const { result } = renderHook(

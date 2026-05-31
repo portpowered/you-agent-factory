@@ -46,9 +46,10 @@ const fixtureState = vi.hoisted(() => ({
   },
   saveEditableDefinition: {
     error: null,
-    mutateAsync: vi.fn(async () => undefined),
+    isPending: false,
     reset: vi.fn(),
-    status: "idle" as const,
+    save: vi.fn(),
+    saveAsync: vi.fn(async () => undefined),
   },
 }));
 
@@ -67,7 +68,10 @@ function resetDivergentDocumentFixtureState() {
 
 vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", () => ({
   useCurrentFactoryDocument: () => fixtureState.currentFactoryQuery,
-  useSaveCurrentFactory: () => fixtureState.saveEditableDefinition,
+}));
+
+vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
+  useFactoryDocumentSave: () => fixtureState.saveEditableDefinition,
 }));
 
 vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({

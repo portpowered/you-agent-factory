@@ -110,7 +110,7 @@ export function CurrentActivityGraphSurface({
         imports={imports}
         initialFitViewKey={graph.initialFitViewKey}
         initialFitViewOptions={graph.initialFitViewOptions}
-        isSavingDraft={editor.saveEditableDefinition.status === "pending"}
+        isSavingDraft={editor.saveEditableDefinition.isPending}
         locale={locale}
         nodeTypes={CURRENT_ACTIVITY_NODE_TYPES}
         nodes={graph.nodes}
