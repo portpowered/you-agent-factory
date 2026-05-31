@@ -2267,6 +2267,11 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
 
     const alert = await within(previewDialog).findByRole("alert");
 
+    expect(activateFactory).toHaveBeenCalledWith(
+      createFactoryImportConfirmInput(importValue, {
+        existingFactoryNames: ["dashboard-fixture", "Dropped Factory"],
+      }),
+    );
     expect(alert.textContent).toContain("Activation failed");
     expect(alert.textContent).toContain(
       "A factory with this name already exists.",
@@ -2323,6 +2328,11 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
 
     const alert = await within(previewDialog).findByRole("alert");
 
+    expect(activateFactory).toHaveBeenCalledWith(
+      createFactoryImportConfirmInput(importValue, {
+        existingFactoryNames: ["dashboard-fixture", "Dropped Factory"],
+      }),
+    );
     expect(alert.textContent).toContain("Activation failed");
     expect(alert.textContent).toContain(
       "The current factory runtime is still active.",
