@@ -1,6 +1,8 @@
 import { Toaster } from "sonner";
 
-export const GLOBAL_TOAST_DURATION_MS = 3000;
+import { GLOBAL_TOAST_DURATION_MS } from "../lib/notification-toast-duration";
+
+export { GLOBAL_TOAST_DURATION_MS };
 
 export function AppNotificationToaster() {
   return (
