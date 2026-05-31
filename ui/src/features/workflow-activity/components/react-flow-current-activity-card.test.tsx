@@ -871,9 +871,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
     restoreBrowserTestShims = installDashboardBrowserTestShims();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
+      data: baseFactoryDefinitionDocument,
       error: null,
-      status: "pending",
+      status: "success",
     } as never);
     vi.mocked(useFactoryDocumentSave).mockReturnValue({
       error: null,
@@ -945,6 +945,11 @@ function registerCurrentActivityCardEditorChromeTests(): void {
   });
 
   it("keeps classifier workstations out of the editable graph flow", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+      error: null,
+      status: "pending",
+    } as never);
     const snapshot = dashboardSnapshotWithActiveWorkItemCount(0);
     snapshot.topology.workstation_nodes_by_id.review.workstation_kind =
       "CLASSIFIER_WORKSTATION";
@@ -1270,6 +1275,42 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       expect(document.querySelector('[data-id="worker:stalled"]')).toBeTruthy();
       expect(document.querySelector('[data-id="resource:gpu"]')).toBeTruthy();
     });
+  });
+
+  it("does not render prior-session snapshot workstations in observe mode while the factory document is pending", async () => {
+    const snapshot = buildDivergentPlaneDashboardSnapshot();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+      error: null,
+      status: "pending",
+    } as never);
+    wireMockEditableFactoryGraph(
+      {
+        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
+        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
+      },
+      createMockGraphEditorDraftState({
+        baseDocument: null,
+        latestDocument: null,
+        pendingFactoryDefinition: null,
+      }),
+    );
+
+    renderCurrentActivity({ snapshot });
+
+    expect(
+      await screen.findByRole("region", { name: "Work graph viewport" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: "Select Snapshot Only workstation",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Select Document Only workstation",
+      }),
+    ).toBeNull();
   });
 
   it("renders snapshot-only workstations in observe mode when the document plane diverges", async () => {
@@ -2477,7 +2518,14 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
   registerCurrentActivityCardTestLifecycle();
 
   it("renders active observer graph state from the canonical snapshot factory without topology fallback", async () => {
-    renderCurrentActivity({ snapshot: canonicalObserverSnapshot() });
+    const snapshot = canonicalObserverSnapshot();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: currentFactoryDocumentFromSnapshot(snapshot),
+      error: null,
+      status: "success",
+    } as never);
+
+    renderCurrentActivity({ snapshot });
 
     expect(
       await screen.findByRole("region", { name: "Work graph viewport" }),
