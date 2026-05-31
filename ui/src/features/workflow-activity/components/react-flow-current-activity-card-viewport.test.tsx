@@ -66,6 +66,19 @@ const importController: CurrentActivityImportController = {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: viewport coverage keeps related mocked React Flow click paths together.
 describe("CurrentActivityGraphViewport", () => {
+  it.each([{ editorMode: false }, { editorMode: true }])(
+    "does not render the top-right work-state phase legend when editorMode is $editorMode",
+    ({ editorMode }) => {
+      const { container } = renderViewport({ editorMode });
+
+      expect(
+        container.querySelector(
+          "[data-factory-graph-work-state-phase-legend]",
+        ),
+      ).toBeNull();
+    },
+  );
+
   it.each([
     {
       expectedNodeId: "work-type:story",
