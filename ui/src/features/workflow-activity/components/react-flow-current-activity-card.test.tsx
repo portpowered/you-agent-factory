@@ -38,7 +38,7 @@ import {
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
@@ -71,9 +71,9 @@ import {
   ReactFlowCurrentActivityCard,
 } from "./react-flow-current-activity-card";
 
-vi.mock("../../current-factory-definition/public", async () => {
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
   const actual = await vi.importActual(
-    "../../current-factory-definition/public",
+    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   );
 
   return {
