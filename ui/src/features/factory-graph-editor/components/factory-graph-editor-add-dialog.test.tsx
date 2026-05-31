@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
-import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
+import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
 
 const currentFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -190,7 +190,9 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         name: "review",
         workerName: "",
       },
-      errors: { behavior: "Poller workstations must use a script or hosted worker." },
+      errors: {
+        behavior: "Poller workstations must use a script or hosted worker.",
+      },
       onChange,
       onClose,
     });
@@ -204,7 +206,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         target: { value: "writer" },
       },
     );
-    fireEvent.change(screen.getByRole("textbox", { name: "Prompt body" }), {
+    const promptBodyInput = getAddDialogPromptBodyInput();
+    fireEvent.change(promptBodyInput, {
       target: { value: "Review the draft." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -238,6 +241,18 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+function getAddDialogPromptBodyInput() {
+  const monacoSurface = document.querySelector(
+    '[data-monaco-editor="workstation-prompt"]',
+  );
+  expect(monacoSurface).toBeTruthy();
+  const promptBodyInput = monacoSurface?.querySelector(
+    'textarea[aria-label="Prompt body"]',
+  );
+  expect(promptBodyInput).toBeTruthy();
+  return promptBodyInput as HTMLTextAreaElement;
+}
 
 function renderDialog({
   draft,
