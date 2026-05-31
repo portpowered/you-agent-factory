@@ -54,7 +54,9 @@ describe("factory graph editor additions", () => {
       stateType: "PROCESSING",
       workTypeName: "story",
     });
-    expect(createFactoryGraphAddEntityDraft("worker", baseFactoryDefinition)).toEqual({
+    expect(
+      createFactoryGraphAddEntityDraft("worker", baseFactoryDefinition),
+    ).toEqual({
       argsText: "",
       command: "",
       kind: "worker",
@@ -197,6 +199,29 @@ describe("factory graph editor additions", () => {
     ).toEqual({
       behavior: "Poller workstations must use a script or hosted worker.",
     });
+
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          behavior: "POLLER",
+          body: "",
+          kind: "workstation",
+          name: "linear-poller",
+          workerName: "poller-runner",
+        },
+        {
+          ...baseFactoryDefinition,
+          workers: [
+            ...(baseFactoryDefinition.workers ?? []),
+            {
+              command: "node",
+              name: "poller-runner",
+              type: "SCRIPT_WORKER",
+            },
+          ],
+        },
+      ),
+    ).toEqual({});
 
     expect(
       validateFactoryGraphAddEntityDraft(
