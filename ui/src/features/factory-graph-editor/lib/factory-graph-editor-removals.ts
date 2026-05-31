@@ -379,7 +379,10 @@ function shouldRemoveEdgeForNode(
 function toDraftEdgeRemoval(
   edge: FactoryGraphEdge,
 ): FactoryGraphDraftEdgeChange | null {
-  if (edge.kind === "work-type-state") {
+  if (
+    edge.kind === "work-type-state" ||
+    edge.kind === "work-state-visibility-bypass"
+  ) {
     return null;
   }
 

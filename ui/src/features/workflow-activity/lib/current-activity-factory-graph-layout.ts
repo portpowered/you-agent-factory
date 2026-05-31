@@ -373,6 +373,7 @@ function edgeOutcomeKind(edge: FactoryGraphEdge): DashboardEdgeOutcomeKind {
     case "workstation-output":
     case "workstation-resource":
     case "work-type-state":
+    case "work-state-visibility-bypass":
       return "accepted";
   }
 }

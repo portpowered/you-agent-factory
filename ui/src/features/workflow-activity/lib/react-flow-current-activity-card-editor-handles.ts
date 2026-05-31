@@ -365,7 +365,7 @@ function connectionAnchorId(
   edgeKind: FactoryGraphEdgeKind,
   role: "source" | "target",
 ) {
-  if (edgeKind === "work-type-state") {
+  if (edgeKind === "work-type-state" || edgeKind === "work-state-visibility-bypass") {
     return null;
   }
 

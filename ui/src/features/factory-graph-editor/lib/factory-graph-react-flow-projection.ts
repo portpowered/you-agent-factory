@@ -126,6 +126,7 @@ const EDGE_COLOR_BY_KIND = {
   "workstation-on-rejection": "var(--color-af-warning-text)",
   "workstation-output": "var(--color-af-accent)",
   "workstation-resource": "var(--color-af-success)",
+  "work-state-visibility-bypass": "var(--color-af-accent)",
 } as const;
 const COLUMN_X = 232;
 const ROW_Y = 118;
@@ -301,7 +302,14 @@ function buildFactoryGraphReactFlowEdge(
   const pendingRemoval =
     input.editor?.pendingRemovalEdgeIds.has(edge.id) ?? false;
   const active = input.runtime?.activeEdgeIds?.has(edge.id) ?? false;
-  const edgeLabel = messages.edgeKindLabel(edge.kind);
+  const edgeLabel =
+    edge.kind === "work-state-visibility-bypass" && edge.outcomeRouteKind
+      ? messages.edgeKindLabel(edge.outcomeRouteKind)
+      : messages.edgeKindLabel(
+          edge.kind === "work-state-visibility-bypass"
+            ? "workstation-output"
+            : edge.kind,
+        );
   const handleAssignment = getEdgeHandleAssignment(
     edge,
     input.topology,
@@ -393,6 +401,25 @@ function getEdgeHandleAssignment(
 ): { sourceHandle: string; targetHandle: string } | null {
   const sourceNode = findTopologyNode(topology, edge.sourceId);
   const targetNode = findTopologyNode(topology, edge.targetId);
+  if (edge.kind === "work-state-visibility-bypass" && edge.outcomeRouteKind) {
+    const sourceHandle = getNodeHandleId(
+      sourceNode,
+      edge.outcomeRouteKind,
+      "source",
+      workstationResolver,
+    );
+    const targetHandle = getNodeHandleId(
+      targetNode,
+      "workstation-input",
+      "target",
+      workstationResolver,
+    );
+    if (!sourceHandle || !targetHandle) {
+      return null;
+    }
+    return { sourceHandle, targetHandle };
+  }
+
   const sourceHandle = getNodeHandleId(
     sourceNode,
     edge.kind,
@@ -417,7 +444,7 @@ function getNodeHandleId(
   role: "source" | "target",
   workstationResolver?: FactoryGraphConnectionResolver,
 ) {
-  if (edgeKind === "work-type-state") {
+  if (edgeKind === "work-type-state" || edgeKind === "work-state-visibility-bypass") {
     return null;
   }
 

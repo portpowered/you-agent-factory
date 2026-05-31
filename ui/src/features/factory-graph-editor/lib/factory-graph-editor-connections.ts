@@ -398,7 +398,10 @@ export function applyFactoryGraphEdgeRemoval(
   edge: FactoryGraphEdge,
 ): FactoryGraphDraft {
   const nextDraft = structuredClone(currentDraft);
-  if (edge.kind === "work-type-state") {
+  if (
+    edge.kind === "work-type-state" ||
+    edge.kind === "work-state-visibility-bypass"
+  ) {
     return nextDraft;
   }
   const nextEdgeId = edge.id;

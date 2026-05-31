@@ -3,6 +3,7 @@ import type {
   FactoryGraphNodeKind,
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
+import { synthesizeWorkStateVisibilityBypassEdges } from "./factory-graph-work-state-visibility-bypass";
 
 export const FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS = [
   "work-type",
@@ -55,10 +56,22 @@ export function projectFactoryGraphByHiddenNodeClasses(
     (node) => !hiddenNodeIds.has(node.id),
   );
   const visibleNodeIds = new Set(nodes.map((node) => node.id));
-  const edges = displayTopology.edges.filter(
+  const filteredEdges = displayTopology.edges.filter(
     (edge) =>
       visibleNodeIds.has(edge.sourceId) && visibleNodeIds.has(edge.targetId),
   );
+  const bypassEdges = hiddenNodeClasses.has("work-state")
+    ? synthesizeWorkStateVisibilityBypassEdges(
+        displayTopology,
+        new Set(
+          displayTopology.nodes
+            .filter((node) => node.kind === "work-state")
+            .map((node) => node.id),
+        ),
+        visibleNodeIds,
+      )
+    : [];
+  const edges = [...filteredEdges, ...bypassEdges];
 
   const result: FactoryGraphNodeClassVisibilityResult = { edges, nodes };
 

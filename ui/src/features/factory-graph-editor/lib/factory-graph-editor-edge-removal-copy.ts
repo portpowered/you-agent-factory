@@ -8,6 +8,9 @@ export function buildEdgeRemovalDescription(
   edge: FactoryGraphEdge,
   locale?: string | null,
 ) {
+  if (edge.kind === "work-state-visibility-bypass") {
+    return "";
+  }
   const messages = getFactoryGraphEditorMessages(locale);
   return messages.removalEdgeDescription(
     edge.kind,
@@ -20,6 +23,9 @@ export function describeEdgeLabel(
   edge: FactoryGraphEdge,
   locale?: string | null,
 ) {
+  if (edge.kind === "work-state-visibility-bypass") {
+    return "";
+  }
   const messages = getFactoryGraphEditorMessages(locale);
   return messages.removalEdgeLabel(edge.kind, describeNodeLabel(edge.source));
 }
