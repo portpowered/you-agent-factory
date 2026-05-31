@@ -60,13 +60,6 @@ export function axisAlignedRectFromTopLeft(
   };
 }
 
-export function axisAlignedRectCenter(rect: AxisAlignedRect): FlowPoint {
-  return {
-    x: rect.x + rect.width / 2,
-    y: rect.y + rect.height / 2,
-  };
-}
-
 export function topLeftFromAxisAlignedRectCenter(
   center: FlowPoint,
   size: NodePlacementSize,
