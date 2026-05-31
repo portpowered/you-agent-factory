@@ -11,6 +11,7 @@ import {
   systemTimeGraphNodeId,
 } from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
@@ -826,6 +827,10 @@ describe("current activity graph editor handles", () => {
     );
     expect(handleIds).not.toContain("workstation-on-continue-source");
     expect(handleIds).not.toContain("workstation-on-rejection-source");
+    expect(workstationNode?.data.zAxisIncompleteHints).toEqual({
+      accessibleLabel: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
+      title: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
+    });
   });
 
   it("keeps hidden continue and reject handles for authored edges without stopWords", async () => {
@@ -838,6 +843,13 @@ describe("current activity graph editor handles", () => {
       activeExecutionsByWorkstationNodeID: {},
       activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
       activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
       factoryDefinition: factory,
       graphLayout,
       now: Date.parse("2026-05-24T00:00:00Z"),
@@ -867,6 +879,10 @@ describe("current activity graph editor handles", () => {
         id: "workstation-on-rejection-source",
       }),
     );
+    expect(reviewNode?.data.zAxisIncompleteHints).toEqual({
+      accessibleLabel: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
+      title: getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint,
+    });
   });
 
   it("includes continue and reject editor handles when stopWords are configured", async () => {
@@ -914,6 +930,43 @@ describe("current activity graph editor handles", () => {
 
     expect(handleIds).toContain("workstation-on-continue-source");
     expect(handleIds).toContain("workstation-on-rejection-source");
+    expect(workstationNode?.data.zAxisIncompleteHints).toBeNull();
+  });
+
+  it("omits z-axis incomplete hints outside connect editor mode", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          name: "draft",
+          stopWords: undefined,
+        },
+      ],
+    };
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const workstationNode = nodes.find(
+      (node) => node.id === "workstation:draft",
+    );
+
+    expect(workstationNode?.data.zAxisIncompleteHints).toBeNull();
   });
 
   it("wires shared handle click actions back through the editor anchor callback", () => {

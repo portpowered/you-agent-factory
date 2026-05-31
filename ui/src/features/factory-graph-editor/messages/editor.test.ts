@@ -100,6 +100,18 @@ describe("getFactoryGraphEditorMessages", () => {
     );
   });
 
+  it("resolves z-axis incomplete connection hint copy in English and zh-CN", () => {
+    const english = getFactoryGraphEditorMessages("en");
+    const chinese = getFactoryGraphEditorMessages("zh-CN");
+
+    expect(english.zAxisIncompleteConnectionHint).toMatch(/stop words/i);
+    expect(english.zAxisIncompleteConnectionHint).toMatch(/Continue|Reject/i);
+    expect(english.zAxisIncompleteConnectionHint.length).toBeGreaterThan(0);
+
+    expect(chinese.zAxisIncompleteConnectionHint.length).toBeGreaterThan(0);
+    expect(chinese.zAxisIncompleteConnectionHint).toMatch(/停止词/);
+  });
+
   it("resolves localized function-backed labels", () => {
     const messages = getFactoryGraphEditorMessages("zh-CN");
 
@@ -321,6 +333,8 @@ describe("getFactoryGraphEditorMessages", () => {
       expect(messages.removalWorkerAssignedReason(2, "writer")).toEqual(
         expect.any(String),
       );
+      expect(messages.zAxisIncompleteConnectionHint).toEqual(expect.any(String));
+      expect(messages.zAxisIncompleteConnectionHint.length).toBeGreaterThan(0);
     },
   );
 });

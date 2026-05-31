@@ -109,6 +109,7 @@ function FactoryGraphEditorNodeView({
       )}
       handles={data.connectionAnchors}
       nodeType={data.kind === "workstation" ? "workstation" : "resource"}
+      zAxisIncompleteHints={data.zAxisIncompleteHints}
     >
       <div className="grid h-full min-w-0 content-start gap-2.5">
         <div className="flex items-start justify-between gap-2">

@@ -172,6 +172,7 @@ export interface FactoryGraphEditorMessages {
   workerStatusLabel: (status: FactoryGraphWorkerRuntimeStatus) => string;
   workStatePhaseLegendAriaLabel: string;
   workStatePhaseLegendLabel: (stateType: FactoryWorkState["type"]) => string;
+  zAxisIncompleteConnectionHint: string;
 }
 
 function describeEnglishAddDialog(kind: FactoryGraphAddEntityDraft["kind"]) {
@@ -633,6 +634,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       workerStatusLabel: describeEnglishWorkerStatus,
       workStatePhaseLegendAriaLabel: "Work state lifecycle colors",
       workStatePhaseLegendLabel: describeEnglishWorkStatePhaseLegendLabel,
+      zAxisIncompleteConnectionHint:
+        "Configure stop words on this workstation before connecting Continue or Reject routes.",
     },
     "zh-CN": {
       addDialogAddEntityAction: "添加实体",
@@ -1024,6 +1027,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "失败";
         }
       },
+      zAxisIncompleteConnectionHint:
+        "请在此工作站配置停止词后，再连接“继续”或“拒绝”路由。",
     },
   };
 
