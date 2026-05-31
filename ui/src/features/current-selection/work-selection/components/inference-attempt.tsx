@@ -11,12 +11,12 @@ import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
+import { ExpandablePanelTrigger } from "../../../../components/ui";
 import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   EXECUTION_PILL_CLASS,
   HISTORY_HEADER_CLASS,
-  HISTORY_TOGGLE_CLASS,
   INFERENCE_ATTEMPT_CARD_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
@@ -114,17 +114,17 @@ function AttemptSummaryHeader({
           <p className={REQUEST_SELECTION_STATUS_CLASS}>{timingSummary}</p>
         ) : null}
       </div>
-      <button
-        aria-controls={panelId}
-        aria-expanded={expanded}
-        className={HISTORY_TOGGLE_CLASS}
+      <ExpandablePanelTrigger
+        controlsID={panelId}
+        expanded={expanded}
         onClick={onToggle}
         type="button"
+        variant="section"
       >
         {expanded
           ? detailMessages.collapseAttemptAction(attempt.attempt)
           : detailMessages.expandAttemptAction(attempt.attempt)}
-      </button>
+      </ExpandablePanelTrigger>
     </div>
   );
 }
@@ -182,15 +182,15 @@ function AttemptTextBodyDisclosure({
     <div className="grid gap-1.5">
       <div className={HISTORY_HEADER_CLASS}>
         <strong id={labelId}>{label}</strong>
-        <button
-          aria-controls={panelId}
-          aria-expanded={expanded}
-          className={HISTORY_TOGGLE_CLASS}
+        <ExpandablePanelTrigger
+          controlsID={panelId}
+          expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
           type="button"
+          variant="section"
         >
           {expanded ? collapseAction : expandAction}
-        </button>
+        </ExpandablePanelTrigger>
       </div>
       {expanded ? (
         <div id={panelId}>

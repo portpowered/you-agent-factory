@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DashboardProviderSession } from "../../../../api/dashboard/types";
 
+import { ExpandablePanelTrigger } from "../../../../components/ui";
 import { getProviderSessionLogTarget } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
 import {
@@ -15,7 +16,6 @@ import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   CURRENT_SELECTION_BADGE_CLASS,
   EXECUTION_PILL_CLASS,
-  HISTORY_TOGGLE_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
@@ -109,15 +109,15 @@ export function CollapsibleProviderSessionAttempts({
     <section aria-labelledby={`${historyID}-heading`} className="mt-4 grid gap-2.5">
       <CurrentSelectionSectionHeader
         action={
-          <button
-            aria-controls={historyID}
-            aria-expanded={expanded}
-            className={HISTORY_TOGGLE_CLASS}
+          <ExpandablePanelTrigger
+            controlsID={historyID}
+            expanded={expanded}
             onClick={() => setExpanded((current) => !current)}
             type="button"
+            variant="section"
           >
             {expanded ? resolvedCollapseActionLabel : resolvedExpandActionLabel}
-          </button>
+          </ExpandablePanelTrigger>
         }
         headingId={`${historyID}-heading`}
         supportingText={itemCountLabel}

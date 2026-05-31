@@ -8,6 +8,7 @@ import {
   DashboardActionButton,
   DashboardActionRow,
   DashboardStatusPill,
+  ExpandablePanelTrigger,
 } from "../../../../components/ui";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import {
@@ -21,7 +22,6 @@ import { SelectionDetailLayout } from "../../base/components/current-selection-d
 import {
   CurrentSelectionSectionHeader,
   EXECUTION_PILL_CLASS,
-  HISTORY_TOGGLE_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
 } from "../../base/components/detail-card-shared";
@@ -170,15 +170,15 @@ function CollapsibleWorkstationRequests({
     >
       <CurrentSelectionSectionHeader
         action={
-          <button
-            aria-controls={historyID}
-            aria-expanded={expanded}
-            className={HISTORY_TOGGLE_CLASS}
+          <ExpandablePanelTrigger
+            controlsID={historyID}
+            expanded={expanded}
             onClick={() => setExpanded((current) => !current)}
             type="button"
+            variant="section"
           >
             {expanded ? messages.collapseAction : messages.expandAction}
-          </button>
+          </ExpandablePanelTrigger>
         }
         headingId={`${historyID}-heading`}
         supportingText={itemCountLabel}
