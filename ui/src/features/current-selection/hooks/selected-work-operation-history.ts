@@ -9,11 +9,6 @@ import {
   type WorkstationRequestLike,
 } from "./useCurrentSelection.request-helpers";
 
-export type SelectedWorkOperationKind =
-  | "workstation"
-  | "operator-move"
-  | "logical-move-dispatch";
-
 export type SelectedWorkOperationHistoryItem =
   | {
       kind: "workstation";
