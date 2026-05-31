@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: projection contract scenarios stay together around one adapter.
 import { describe, expect, it, vi } from "vitest";
 import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
@@ -55,6 +56,70 @@ describe("factory graph React Flow projection", () => {
         }),
       ]),
     );
+  });
+
+  it("projects workStateType from factory definition for all lifecycle phases", () => {
+    const lifecycleFactoryDefinition = {
+      ...baseFactoryDefinition,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "review", type: "PROCESSING" },
+            { name: "done", type: "TERMINAL" },
+            { name: "failed", type: "FAILED" },
+          ],
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      lifecycleFactoryDefinition,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition: lifecycleFactoryDefinition,
+      topology,
+    });
+
+    expect(
+      projection.nodes.find((node) => node.id === "work-state:story:queued")
+        ?.data.workStateType,
+    ).toBe("INITIAL");
+    expect(
+      projection.nodes.find((node) => node.id === "work-state:story:review")
+        ?.data.workStateType,
+    ).toBe("PROCESSING");
+    expect(
+      projection.nodes.find((node) => node.id === "work-state:story:done")
+        ?.data.workStateType,
+    ).toBe("TERMINAL");
+    expect(
+      projection.nodes.find((node) => node.id === "work-state:story:failed")
+        ?.data.workStateType,
+    ).toBe("FAILED");
+    expect(
+      projection.nodes.find((node) => node.id === "work-type:story")?.data,
+    ).not.toHaveProperty("workStateType");
+    expect(
+      projection.nodes.find((node) => node.id === "worker:writer")?.data,
+    ).not.toHaveProperty("workStateType");
+  });
+
+  it("omits workStateType when factory definition is not provided", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      topology,
+    });
+
+    for (const node of projection.nodes.filter(
+      (entry) => entry.data.kind === "work-state",
+    )) {
+      expect(node.data.workStateType).toBeUndefined();
+    }
   });
 
   it("applies active runtime overlays without mutating graph topology", () => {

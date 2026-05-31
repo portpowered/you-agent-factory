@@ -33,6 +33,16 @@ describe("useEditableFactoryGraph", () => {
     expect(result.current.projection.nodes.map((node) => node.id)).toContain(
       "workstation:draft",
     );
+    expect(
+      result.current.projection.nodes.find(
+        (node) => node.id === "work-state:story:queued",
+      )?.data.workStateType,
+    ).toBe("INITIAL");
+    expect(
+      result.current.projection.nodes.find(
+        (node) => node.id === "work-state:story:done",
+      )?.data.workStateType,
+    ).toBe("TERMINAL");
     expect(result.current.validationState.isValid).toBe(true);
 
     act(() => {

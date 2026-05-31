@@ -4,12 +4,15 @@ import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
 import { baseFactoryDefinition } from "../lib/factory-graph-draft.test-helpers";
+import { buildFactoryGraphTopologyFromDefinition } from "../lib/factory-graph-draft-graph";
 import type {
+  CanonicalFactoryDefinition,
   FactoryGraphTopology,
   FactoryWorkstation,
 } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphConnectionEndpoint } from "../lib/factory-graph-editor-connections";
 import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-controls";
+import { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-work-state-phase-legend";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
@@ -549,9 +552,88 @@ async function expectProgressOutcomeRouteHandles(
   ).toBeNull();
 }
 
+const lifecycleFactoryDefinition = {
+  ...baseFactoryDefinition,
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        { name: "queued", type: "INITIAL" },
+        { name: "review", type: "PROCESSING" },
+        { name: "done", type: "TERMINAL" },
+        { name: "failed", type: "FAILED" },
+      ],
+    },
+  ],
+} satisfies CanonicalFactoryDefinition;
+
+const LIFECYCLE_PHASE_TOPOLOGY = buildFactoryGraphTopologyFromDefinition(
+  lifecycleFactoryDefinition,
+);
+
+function WorkStateLifecyclePhasesStory() {
+  const flow = buildFactoryGraphEditorFlowModel({
+    canEditConnections: false,
+    factoryDefinition: lifecycleFactoryDefinition,
+    pendingAdditionEdgeIds: new Set<string>(),
+    pendingConnectionSource: null,
+    pendingAdditionNodeIds: new Set<string>(),
+    pendingRemovalEdgeIds: new Set<string>(),
+    pendingRemovalNodeIds: new Set<string>(),
+    topology: LIFECYCLE_PHASE_TOPOLOGY,
+  });
+
+  return (
+    <div className="relative h-[520px] w-full rounded-[1.5rem] border border-af-border bg-af-surface-raised p-4">
+      <FactoryGraphEditorWorkStatePhaseLegend visible={true} />
+      <ReactFlow
+        defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
+        edges={flow.edges}
+        fitView={true}
+        nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
+        nodes={flow.nodes}
+        nodesDraggable={false}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
+  );
+}
+
 export default {
   title: "Agent Factory/Dashboard/Factory Graph Editor Flow",
   tags: ["test"],
+};
+
+export const WorkStateLifecyclePhases = {
+  render: () => <WorkStateLifecyclePhasesStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    const expectPhaseBorder = async (label: string, borderClass: string) => {
+      const node = (await canvas.findByText(label)).closest("article");
+      if (!node) {
+        throw new Error(`Expected work-state node for ${label}`);
+      }
+      await expect(node.className).toContain(borderClass);
+    };
+
+    await expectPhaseBorder("story:queued", "border-af-info-border");
+    await expectPhaseBorder("story:review", "border-af-warning-border");
+    await expectPhaseBorder("story:done", "border-af-success-border");
+    await expectPhaseBorder("story:failed", "border-af-danger-border");
+
+    const legend = canvasElement.querySelector(
+      "[data-factory-graph-work-state-phase-legend]",
+    );
+    if (!legend) {
+      throw new Error("Expected work state phase legend");
+    }
+    await expect(within(legend as HTMLElement).getByText("Initial")).toBeVisible();
+    await expect(within(legend as HTMLElement).getByText("Completed")).toBeVisible();
+  },
 };
 
 export const PendingRemoval = {
