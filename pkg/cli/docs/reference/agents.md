@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-05-30
+last-modified: 2026-05-31
 doc-id: agent-factory/guides/agents
 ---
 
@@ -80,6 +80,9 @@ flow; see [Batch Inputs](batch-inputs.md) for batch shape, inbox placement,
 
 ### Pre-Submit Checklist
 
+- [ ] Confirm a factory service is running — run `you session list` or follow
+  [Is the factory running?](#is-the-factory-running?) before `you submit`, watched
+  `factory/inputs/**`, or `POST /work`.
 - [ ] Read `factory.json` and factory-local `factory/docs/overview.md` or
   `factory/docs/README.md` when present.
 - [ ] Confirm the `workTypeName` exists in `factory.json` ([Config](config.md)).
@@ -90,6 +93,73 @@ flow; see [Batch Inputs](batch-inputs.md) for batch shape, inbox placement,
 - [ ] Add `relations[]` when ordering or parent membership matters
   ([Relationships](relationships.md)).
 
+## Is the factory running?
+
+Before `you submit`, watched `factory/inputs/**`, or `POST /work`, confirm a factory
+service is listening and has an open session. A local `factory.json` on disk does
+not by itself mean a runtime is accepting work.
+
+Use these checks in order:
+
+### 1. `you session list` (primary)
+
+`you session list` calls `GET /factory-sessions` on the running host. It is the
+fastest liveness probe when you only need to know whether any live sessions exist.
+
+- Default target is `http://localhost:7437` (`--port 7437` on session commands).
+- An empty table (`No live factory sessions were found.`) means the service
+  responded but no sessions are open yet.
+- **Connection refused** or **endpoint not reachable** means nothing is listening
+  on that host and port — start the factory with `you`, `you run --continuously`,
+  or `you run --dir <factory>` before submitting.
+- Use `you session list --json` for automation; use global `--server` on other HTTP
+  client commands (`you factory query`, `you submit`, `you work list`) when the API
+  base URI is not the default `http://localhost:7437`.
+
+### 2. `you factory query`
+
+`you factory query` reads the **active factory definition** from a live service
+(`GET /factory-sessions/{session_id}/factory` for the selected session). It confirms
+which factory name and topology the runtime loaded — not merely which
+`factory.json` exists in a checkout.
+
+- Run after `you session list` when you need the active factory name before routing
+  `--session` on submit or work commands.
+- Use `you --json factory query` for the API-shaped current-factory payload.
+
+### 3. `GET /factory-sessions/{session_id}/status`
+
+For deeper runtime health, call `GET /factory-sessions/{session_id}/status` (session
+id is often `~default` on single-session hosts). The response separates:
+
+| Field | Meaning |
+|-------|---------|
+| `factoryState` | Factory lifecycle phase — for example `IDLE`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`. |
+| `runtimeStatus` | Whether the engine is actively processing — `IDLE`, `ACTIVE`, or `FINISHED`. |
+
+`factoryState` can be `RUNNING` while `runtimeStatus` is `IDLE` when the factory is
+up but no work is in flight. Use both fields together when deciding whether to
+submit more work or wait for completion.
+
+### 4. Dashboard
+
+When the service was started via `you` or `you run` without `--quiet`, open the
+dashboard at **`/dashboard/ui`** on the same host and port as the API (default
+`http://localhost:7437/dashboard/ui`). The port follows `--server` / `--port` on
+the process that bound the listener.
+
+### 5. Run modes (keep the service up)
+
+| How you start | Stays running for submissions? |
+|---------------|--------------------------------|
+| `you` (no args) | Yes — continuous mode; watches default inputs and keeps the service up. |
+| `you run --continuously` | Yes — processes work until you stop the process. |
+| `you run` (batch, no `--continuously`) | No — exits when the factory goes idle; not suitable for later `you submit` or watched inbox ingress unless you restart it. |
+
+For steady `you submit`, dashboard submit, or `POST /work` against an already-running
+host, prefer `you` or `you run --continuously`. Use batch `you run` when you want a
+one-shot local run that shuts down on idle.
+
 ## Command Matrix
 
 | Command | Purpose | Factory must already be running? |
@@ -97,8 +167,8 @@ flow; see [Batch Inputs](batch-inputs.md) for batch shape, inbox placement,
 | `you run --dir <factory>` | Start (or attach to) a local factory from a directory | No — command starts runtime |
 | `you run --factory <path> "<prompt>"` | One-shot CLI run with inline factory file and prompt | Depends on flags; see [Config](config.md) |
 | `you run --work <batch.json>` | Submit batch JSON as part of startup | No when combined with `--dir` startup |
-| `you submit` | Submit work through CLI/dashboard flows | Yes |
-| Dashboard / `POST /work` | API submission against running service | Yes |
+| `you submit` | Submit work through CLI/dashboard flows | Yes — see [Is the factory running?](#is-the-factory-running?) |
+| Dashboard / `POST /work` | API submission against running service | Yes — see [Is the factory running?](#is-the-factory-running?) |
 | `you docs <topic>` | Print packaged reference markdown | No |
 
 Use [Mock Workers](mock-workers.md) and [Record and Replay](record-replay.md)
