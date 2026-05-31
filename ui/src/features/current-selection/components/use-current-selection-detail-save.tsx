@@ -6,7 +6,10 @@ import { useSaveEditableResourceConfiguration } from "../resource-selection/hook
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import type { DashboardSelection } from "../base/state/selection-types";
 import type { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
-import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
+import {
+  useSaveEditableWorkstationConfiguration,
+  type UseSaveEditableWorkstationConfigurationResult,
+} from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import {
   EditableWorkstationSaveDialog,
   EditableWorkstationSaveHeaderAction,
@@ -117,7 +120,7 @@ export function CurrentSelectionWorkstationSaveDialog({
     typeof useEditableWorkstationConfigurationState
   >;
   locale?: string | null;
-  workstationSave: ReturnType<typeof useSaveEditableWorkstationConfiguration>;
+  workstationSave: UseSaveEditableWorkstationConfigurationResult;
 }) {
   return (
     <EditableWorkstationSaveDialog

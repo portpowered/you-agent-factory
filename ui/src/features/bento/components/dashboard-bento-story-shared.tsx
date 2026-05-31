@@ -458,6 +458,50 @@ export function buildEditableConfigurationDocument(
   };
 }
 
+export function buildEditableResourceConfigurationDocument() {
+  return {
+    name: "Current Factory",
+    version: {
+      logical: "7",
+      physical: "2026-05-20T10:00:00Z",
+    },
+    resources: [
+      {
+        capacity: 2,
+        name: "agent-slot",
+        type: "INVOCATION_SLOT",
+      },
+      {
+        capacity: 5,
+        model: "gpt-audio",
+        name: "voice-model",
+        type: "MODEL",
+      },
+    ],
+    workers: [
+      {
+        model: "gpt-5.5",
+        name: "reviewer",
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [],
+    workstations: [
+      {
+        body: "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        worker: "reviewer",
+      },
+    ],
+  };
+}
+
 export function promptTemplateValidationResponse(init?: RequestInit) {
   if (typeof init?.body !== "string") {
     return {
@@ -787,6 +831,169 @@ export function CurrentSelectionEditableConfigurationStory({
       />
     </div>
   );
+}
+
+export function CurrentSelectionResourceSelectedStory({
+  width,
+}: {
+  width: number;
+}) {
+  const initializedSelectionRef = useRef(false);
+  const currentSelection = useCurrentSelection({
+    sessionID: DEFAULT_FACTORY_SESSION_ID,
+    snapshot: semanticWorkflowDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      semanticWorkflowDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+  const providerSessionState =
+    useSelectedProviderSessionState(currentSelection);
+  const details = useCurrentSelectionDetails({
+    currentSelection,
+    selectedTrace: storyTrace,
+    snapshot: semanticWorkflowDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      semanticWorkflowDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+
+  useEffect(() => {
+    if (initializedSelectionRef.current) {
+      return;
+    }
+
+    initializedSelectionRef.current = true;
+    currentSelection.selectResource("agent-slot");
+  }, [currentSelection.selectResource]);
+
+  return (
+    <div style={{ maxWidth: `${width}px`, padding: "1rem", width: "100%" }}>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.75rem",
+          marginBottom: "1rem",
+        }}
+      >
+        <button
+          onClick={() => currentSelection.selectResource("agent-slot")}
+          type="button"
+        >
+          Select agent-slot resource
+        </button>
+        <button
+          onClick={() => currentSelection.selectResource("voice-model")}
+          type="button"
+        >
+          Select voice-model resource
+        </button>
+        <button
+          onClick={() => currentSelection.selectWorker("reviewer")}
+          type="button"
+        >
+          Select reviewer worker
+        </button>
+      </div>
+      <AgentBentoLayout
+        cards={[
+          {
+            children: (
+              <CurrentSelectionWidget
+                activeTraceID={storyTrace.trace_id}
+                currentSelection={currentSelection}
+                failedWorkDetailsByWorkID={
+                  semanticWorkflowDashboardSnapshot.runtime.session
+                    .failed_work_details_by_work_id
+                }
+                now={STORY_NOW}
+                onSelectProviderSession={
+                  providerSessionState.setSelectedProviderSession
+                }
+                onSelectTraceID={() => undefined}
+                selectedProviderSessionKey={
+                  providerSessionState.selectedProviderSessionKey
+                }
+                selectedTrace={storyTrace}
+                selectedWorkExecutionDetails={
+                  details.selectedWorkExecutionDetails
+                }
+                selectedWorkRelationshipGraph={
+                  details.selectedWorkRelationshipGraph
+                }
+                widgetId="current-selection-resource-selected::story"
+              />
+            ),
+            id: "current-selection-resource-selected::story",
+            widgetType: DASHBOARD_WIDGET_IDS.currentSelection,
+          },
+        ]}
+        initialWidth={width}
+        layout={[
+          layoutFor(DASHBOARD_WIDGET_IDS.currentSelection, {
+            h: 7,
+            id: "current-selection-resource-selected::story",
+            w: 6,
+          }),
+        ]}
+        responsiveMode="interactive"
+      />
+    </div>
+  );
+}
+
+export async function expectResourceSelectedStoryFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+  const card = await canvas.findByRole("article", {
+    name: "Current selection",
+  });
+
+  await expect(
+    within(card).getByRole("heading", { name: "Resource configuration" }),
+  ).toBeVisible();
+  await expect(within(card).getByDisplayValue("agent-slot")).toBeVisible();
+
+  const capacityField = await within(card).findByLabelText("Capacity");
+  await userEvent.clear(capacityField);
+  await userEvent.type(capacityField, "4");
+
+  await waitFor(() => {
+    expect(
+      within(card).getByRole("button", { name: "Save resource" }),
+    ).toBeEnabled();
+  });
+
+  await userEvent.click(
+    canvas.getByRole("button", { name: "Select voice-model resource" }),
+  );
+
+  await waitFor(() => {
+    expect(within(card).getByDisplayValue("voice-model")).toBeVisible();
+  });
+  await expect(await within(card).findByLabelText("Capacity")).toHaveValue("5");
+  await expect(
+    within(card).getByRole("button", { name: "Save resource" }),
+  ).toBeDisabled();
+
+  await userEvent.click(
+    canvas.getByRole("button", { name: "Select reviewer worker" }),
+  );
+  await waitFor(() => {
+    expect(
+      within(card).getByRole("heading", { name: "Worker configuration" }),
+    ).toBeVisible();
+  });
+  expect(within(card).queryByLabelText("Capacity")).toBeNull();
+
+  await userEvent.click(
+    canvas.getByRole("button", { name: "Select agent-slot resource" }),
+  );
+  await waitFor(() => {
+    expect(within(card).getByDisplayValue("agent-slot")).toBeVisible();
+  });
+  await expect(await within(card).findByLabelText("Capacity")).toHaveValue("2");
 }
 
 export async function expectEditableConfigurationStoryFlow(
@@ -1292,7 +1499,7 @@ function responsiveCatalogSelectionCards({
           importController={importController}
           now={STORY_NOW}
           onSelectResource={currentSelection.selectResource}
-        onSelectStateNode={currentSelection.selectStateNode}
+          onSelectStateNode={currentSelection.selectStateNode}
           onSelectWorkID={currentSelection.selectWorkByID}
           onSelectWorker={currentSelection.selectWorker}
           onSelectWorkstation={currentSelection.selectWorkstation}
