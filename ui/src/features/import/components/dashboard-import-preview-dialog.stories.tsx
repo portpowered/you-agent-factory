@@ -32,26 +32,23 @@ function ImportPreviewStory() {
     useState<DashboardImportPreviewDialogProps["importPreviewState"]>(
       createReadyImportPreviewState(),
     );
-  const [importSaveChoice, setImportSaveChoice] =
-    useState<DashboardImportPreviewDialogProps["importSaveChoice"]>("REPLACE_CURRENT");
 
   return (
     <>
       <DashboardImportPreviewDialog
         activationState={{ status: "idle" }}
-        createTargetFactoryName="Dropped Factory"
-        currentFactoryName="Current Session Factory"
+        currentSessionFactoryName="alpha"
         importPreviewState={importPreviewState}
-        importSaveChoice={importSaveChoice}
         onCancel={() => {
           setActivationStatus("Import preview dismissed.");
           setImportPreviewState({ status: "idle" });
         }}
-        onConfirm={async () => {
-          setActivationStatus("Activated factory: Dropped Factory");
+        onConfirm={async (input) => {
+          setActivationStatus(
+            `Activated factory (${input.choice}): ${input.choice === "create_new_named" ? input.createFactoryName : "alpha"}`,
+          );
           setImportPreviewState({ status: "idle" });
         }}
-        onImportSaveChoiceChange={setImportSaveChoice}
       />
       <p>{activationStatus}</p>
     </>
@@ -62,14 +59,11 @@ function LocalizedImportPreviewStory({ locale }: { locale: string }) {
   return (
     <DashboardImportPreviewDialog
       activationState={{ status: "idle" }}
-      createTargetFactoryName="Dropped Factory"
-      currentFactoryName="Current Session Factory"
+      currentSessionFactoryName="alpha"
       importPreviewState={createReadyImportPreviewState()}
-      importSaveChoice="REPLACE_CURRENT"
       locale={locale}
       onCancel={() => {}}
       onConfirm={async () => {}}
-      onImportSaveChoiceChange={() => {}}
     />
   );
 }
@@ -96,6 +90,9 @@ export const Ready = {
     ).toBeVisible();
     await expect(scope.getByText("factory-import.png")).toBeVisible();
     await expect(scope.getByText(messages.hint)).toBeVisible();
+    await expect(
+      scope.getByRole("radio", { name: new RegExp(messages.replaceCurrentOption) }),
+    ).toBeChecked();
 
     cancelButton.focus();
     await expect(cancelButton).toHaveFocus();

@@ -17,6 +17,7 @@ import {
   type SessionFactoryAPIErrorDetails,
 } from "./errors";
 import { sessionFactoryAPIErrorMessages } from "./messages";
+import { resolveSessionFactoryAPIErrorMessage } from "./operator-errors";
 
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 
@@ -145,13 +146,22 @@ async function requestSessionFactoryDocument({
     const errorBody = extractAPIErrorPayload(responseBody, {
       isTarget: isErrorTarget,
     });
-    throw new SessionFactoryAPIError(errorBody?.message ?? rejectedMessage, {
-      code: normalizeSessionFactoryAPIErrorCode(errorBody?.code),
-      responseBody,
-      status: response.status,
-      statusText: response.statusText,
-      targets: errorBody?.targets,
-    });
+    const code = normalizeSessionFactoryAPIErrorCode(errorBody?.code);
+    throw new SessionFactoryAPIError(
+      resolveSessionFactoryAPIErrorMessage({
+        apiMessage: errorBody?.message,
+        code,
+        rejectedMessage,
+        status: response.status,
+      }),
+      {
+        code,
+        responseBody,
+        status: response.status,
+        statusText: response.statusText,
+        targets: errorBody?.targets,
+      },
+    );
   }
 
   return normalizeSessionFactoryDocument(responseBody, {

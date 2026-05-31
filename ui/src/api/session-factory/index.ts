@@ -9,4 +9,5 @@ export {
   type SessionFactoryAPIErrorCode,
   type SessionFactoryAPIErrorDetails,
 } from "./errors";
+export * from "./operator-errors";
 export * from "./prompt-template";

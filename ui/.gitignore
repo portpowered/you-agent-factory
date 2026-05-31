@@ -2,3 +2,4 @@ node_modules/
 storybook-static/
 *.tsbuildinfo
 *.exe
+.bun-coverage-reports/

@@ -1,7 +1,5 @@
 import type { FactorySessionTarget } from "../factory-sessions";
 
-export type FactoryImportSaveChoice = "REPLACE_CURRENT" | "CREATE_NEW_NAMED";
-
 export function extractNamedFactoryNamesFromSessionTargets(
   targets: FactorySessionTarget[] | undefined,
 ): string[] {

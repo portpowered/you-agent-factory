@@ -249,7 +249,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          "Saving failed. Current factory runtime must be idle before activation.",
+          "Saving failed. The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
         ),
       ).toBeTruthy();
     });
@@ -304,7 +304,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          "Current factory definition is stale. Refresh the graph before saving.",
+          "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
         ),
       ).toBeTruthy();
     });
@@ -942,7 +942,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
     expect(
       screen.queryByText(
-        "Saving failed. Current factory runtime must be idle before activation.",
+        "Saving failed. The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
       ),
     ).toBeNull();
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
@@ -989,7 +989,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          "Saving failed. Current factory runtime must be idle before activation.",
+          "Saving failed. The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
         ),
       ).toBeTruthy();
     });
@@ -1020,7 +1020,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
     expect(
       screen.queryByText(
-        "Saving failed. Current factory runtime must be idle before activation.",
+        "Saving failed. The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
       ),
     ).toBeNull();
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
@@ -1068,7 +1068,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          "Saving failed. Current factory runtime must be idle before activation.",
+          "Saving failed. The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
         ),
       ).toBeTruthy();
     });
@@ -1104,7 +1104,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
     expect(
       screen.queryByText(
-        "Saving failed. Current factory runtime must be idle before activation.",
+        "Saving failed. The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
       ),
     ).toBeNull();
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
