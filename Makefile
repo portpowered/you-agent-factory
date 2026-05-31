@@ -119,6 +119,8 @@ docs-reference-check:
 
 docs-reference-smoke:
 	$(MAKE) docs-reference-check
+	$(GO) test ./pkg/cli/docs/... -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/cli -run TestDocsCommand_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test:
