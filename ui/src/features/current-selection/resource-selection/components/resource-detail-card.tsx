@@ -10,8 +10,10 @@ import { ResourceEditableConfigurationSection } from "./resource-editable-config
 
 export function ResourceDetailCard({
   editableConfigurationState,
+  headerAction,
   locale,
   resourceName,
+  saveState,
   tokenCount = null,
   widgetId = "current-selection",
 }: ResourceDetailCardProps) {
@@ -19,7 +21,7 @@ export function ResourceDetailCard({
   const detailState = useResourceDetailState(resourceName);
 
   return (
-    <SelectionDetailLayout widgetId={widgetId}>
+    <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       {editableConfigurationState?.status !== "ready" ? (
         <p className={WIDGET_SUBTITLE_CLASS}>{resourceName}</p>
       ) : null}
@@ -46,6 +48,7 @@ export function ResourceDetailCard({
           detailState={detailState}
           messages={messages}
           resourceName={resourceName}
+          saveState={saveState}
           state={editableConfigurationState}
           tokenCount={tokenCount}
         />

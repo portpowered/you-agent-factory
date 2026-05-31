@@ -1,7 +1,10 @@
+import type { ReactNode } from "react";
+
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
+import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 import type { FactoryResource } from "../../../../api/events/types";
 import type {
   EditableResourceDraft,
@@ -11,11 +14,26 @@ import type { EditableResourceValidationErrors } from "./resource-editable-valid
 
 export interface ResourceDetailCardProps {
   editableConfigurationState?: EditableResourceConfigurationState;
+  headerAction?: ReactNode;
   locale?: string | null;
   resourceName: string;
+  saveState?: EditableResourceSaveState;
   tokenCount?: number | null;
   widgetId?: string;
 }
+
+export type EditableResourceSaveValidationErrors = {
+  backend?: string;
+  capacity?: string;
+  loadPolicy?: string;
+  model?: string;
+  name?: string;
+  provider?: string;
+  type?: string;
+} & Record<string, string>;
+
+export type EditableResourceSaveState =
+  DetailCardSaveState<EditableResourceSaveValidationErrors>;
 
 export type ResourceDetailState =
   | { status: "loading" }

@@ -45,8 +45,17 @@ const resourceDetailMessagesByLocale = {
       `The running factory changed after you started editing. Saving now will overwrite newer server values for ${fields}.`,
     editableConfigurationOverwriteWarningDetail:
       "Review the latest runtime values before saving, or keep editing if this draft should replace them.",
+    editableConfigurationSaveAction: "Save resource",
+    editableConfigurationSaveBusyAction: "Saving resource...",
     editableConfigurationSaveDisabledValidationDetail:
       "Save stays disabled until the highlighted resource fields are valid.",
+    editableConfigurationSaveErrorPrefix: "Saving failed.",
+    editableConfigurationSaveFallbackError:
+      "The running factory could not be saved.",
+    editableConfigurationSaveStaleVersionDetail:
+      "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
+    editableConfigurationSaveSuccess: (resourceName) =>
+      `Running factory saved. ${resourceName} was updated in the running factory definition.`,
     editableConfigurationServerFieldChangedHint:
       "The running factory changed this field while you were editing. Discard local changes to use the latest server-backed value.",
     editableConfigurationSharedImpactWarning: (
@@ -109,8 +118,17 @@ const resourceDetailMessagesByLocale = {
       `編集開始後に実行中のファクトリが変更されました。保存すると ${fields} の新しいサーバー値が上書きされます。`,
     editableConfigurationOverwriteWarningDetail:
       "保存前に最新のランタイム値を確認するか、この下書きで置き換える場合は編集を続けてください。",
+    editableConfigurationSaveAction: "リソースを保存",
+    editableConfigurationSaveBusyAction: "リソースを保存しています...",
     editableConfigurationSaveDisabledValidationDetail:
       "強調表示されたリソース項目が有効になるまで保存は無効です。",
+    editableConfigurationSaveErrorPrefix: "保存に失敗しました。",
+    editableConfigurationSaveFallbackError:
+      "実行中のファクトリを保存できませんでした。",
+    editableConfigurationSaveStaleVersionDetail:
+      "最新の実行中ファクトリ値を再読み込みするか、エディター更新後にこの下書きで再試行してください。",
+    editableConfigurationSaveSuccess: (resourceName) =>
+      `実行中のファクトリを保存しました。${resourceName} が実行中のファクトリ定義で更新されました。`,
     editableConfigurationServerFieldChangedHint:
       "編集中に実行中のファクトリがこの項目を変更しました。最新のサーバー値を使うにはローカル変更を破棄してください。",
     editableConfigurationSharedImpactWarning: (
@@ -171,8 +189,17 @@ const resourceDetailMessagesByLocale = {
       `편집을 시작한 뒤 실행 중인 팩토리가 변경되었습니다. 저장하면 ${fields}의 최신 서버 값이 덮어씌워집니다.`,
     editableConfigurationOverwriteWarningDetail:
       "저장하기 전에 최신 런타임 값을 검토하거나, 이 초안으로 대체하려면 편집을 계속하세요.",
+    editableConfigurationSaveAction: "리소스 저장",
+    editableConfigurationSaveBusyAction: "리소스 저장 중...",
     editableConfigurationSaveDisabledValidationDetail:
       "강조된 리소스 필드가 유효해질 때까지 저장이 비활성화됩니다.",
+    editableConfigurationSaveErrorPrefix: "저장에 실패했습니다.",
+    editableConfigurationSaveFallbackError:
+      "실행 중인 팩토리를 저장할 수 없습니다.",
+    editableConfigurationSaveStaleVersionDetail:
+      "최신 실행 중 팩토리 값을 다시 불러오거나 편집기가 새로고침된 후 이 초안으로 다시 시도하세요.",
+    editableConfigurationSaveSuccess: (resourceName) =>
+      `실행 중인 팩토리가 저장되었습니다. ${resourceName}이(가) 실행 중인 팩토리 정의에서 업데이트되었습니다.`,
     editableConfigurationServerFieldChangedHint:
       "편집 중 실행 중인 팩토리가 이 필드를 변경했습니다. 최신 서버 값을 사용하려면 로컬 변경을 버리세요.",
     editableConfigurationSharedImpactWarning: (
@@ -227,8 +254,16 @@ const resourceDetailMessagesByLocale = {
       `开始编辑后运行中的工厂已发生变化。现在保存将覆盖 ${fields} 的较新服务器值。`,
     editableConfigurationOverwriteWarningDetail:
       "保存前请查看最新运行时值，或继续编辑以用此草稿替换它们。",
+    editableConfigurationSaveAction: "保存资源",
+    editableConfigurationSaveBusyAction: "正在保存资源...",
     editableConfigurationSaveDisabledValidationDetail:
       "高亮资源字段有效之前，保存保持禁用。",
+    editableConfigurationSaveErrorPrefix: "保存失败。",
+    editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
+    editableConfigurationSaveStaleVersionDetail:
+      "重新加载最新的运行中工厂值，或在编辑器刷新后使用此草稿重试。",
+    editableConfigurationSaveSuccess: (resourceName) =>
+      `运行中的工厂已保存。${resourceName} 已在运行中的工厂定义中更新。`,
     editableConfigurationServerFieldChangedHint:
       "编辑期间运行中的工厂更改了此字段。丢弃本地更改以使用最新服务器值。",
     editableConfigurationSharedImpactWarning: (

@@ -16,6 +16,10 @@ import { formatList } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
 import {
+  DetailCardFactorySaveFeedback,
+  mergeDetailCardSaveFieldErrors,
+} from "../../base/components/detail-card-factory-save-feedback";
+import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   CurrentSelectionSectionHeader,
@@ -25,21 +29,26 @@ import { formatEditableResourceOverwriteFieldLabels } from "../editing/editable-
 import type {
   EditableResourceConfigurationState,
   EditableResourceOverwriteField,
+  EditableResourceSaveState,
+  EditableResourceSaveValidationErrors,
   ResourceDetailCardProps,
   ResourceDetailState,
 } from "../lib/detail-card-types";
+import type { EditableResourceValidationErrors } from "../lib/resource-editable-validation";
 import type { getResourceDetailMessages } from "../messages/resource-detail";
 
 export function ResourceEditableConfigurationSection({
   detailState,
   messages,
   resourceName,
+  saveState,
   state,
   tokenCount,
 }: {
   detailState: Extract<ResourceDetailState, { status: "ready" }>;
   messages: ReturnType<typeof getResourceDetailMessages>;
   resourceName: string;
+  saveState?: EditableResourceSaveState;
   state?: ResourceDetailCardProps["editableConfigurationState"];
   tokenCount?: number | null;
 }) {
@@ -112,6 +121,7 @@ export function ResourceEditableConfigurationSection({
               <ResourceEditableConfigurationReadyForm
                 messages={messages}
                 resourceName={resourceName}
+                saveState={saveState}
                 state={state}
               />
             ) : null}
@@ -132,16 +142,32 @@ export function ResourceEditableConfigurationSection({
 function ResourceEditableConfigurationReadyForm({
   messages,
   resourceName,
+  saveState,
   state,
 }: {
   messages: ReturnType<typeof getResourceDetailMessages>;
   resourceName: string;
+  saveState?: EditableResourceSaveState;
   state: Extract<EditableResourceConfigurationState, { status: "ready" }>;
 }) {
-  const validationErrors = state.validationErrors;
+  const validationErrors = mergeDetailCardSaveFieldErrors<
+    EditableResourceValidationErrors & Record<string, string | undefined>,
+    EditableResourceSaveValidationErrors
+  >(state.validationErrors, saveState);
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
+      <DetailCardFactorySaveFeedback<EditableResourceSaveValidationErrors>
+        messages={{
+          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
+          staleVersionDetail:
+            messages.editableConfigurationSaveStaleVersionDetail,
+          successMessage: messages.editableConfigurationSaveSuccess(
+            state.draft.name.trim() || resourceName,
+          ),
+        }}
+        saveState={saveState}
+      />
       <ResourceEditableConfigurationSharedImpactWarning
         messages={messages}
         resourceName={resourceName}

@@ -19,7 +19,13 @@ export interface ResourceDetailMessages {
   editableConfigurationNameRequired: string;
   editableConfigurationOverwriteWarning: (fields: string) => string;
   editableConfigurationOverwriteWarningDetail: string;
+  editableConfigurationSaveAction: string;
+  editableConfigurationSaveBusyAction: string;
   editableConfigurationSaveDisabledValidationDetail: string;
+  editableConfigurationSaveErrorPrefix: string;
+  editableConfigurationSaveFallbackError: string;
+  editableConfigurationSaveStaleVersionDetail: string;
+  editableConfigurationSaveSuccess: (resourceName: string) => string;
   editableConfigurationServerFieldChangedHint: string;
   editableConfigurationSharedImpactWarning: (
     resourceName: string,
