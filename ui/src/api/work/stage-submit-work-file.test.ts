@@ -1,4 +1,5 @@
 import {
+  isStageSubmitWorkFileAPIError,
   StageSubmitWorkFileAPIError,
   stageSubmitWorkFile,
 } from "./api";
@@ -91,5 +92,16 @@ describe("stageSubmitWorkFile", () => {
         statusText: "Bad Request",
       }),
     );
+  });
+
+  it("identifies staged submit file API errors", () => {
+    const error = new StageSubmitWorkFileAPIError({
+      message: "staging failed",
+      status: 400,
+      statusText: "Bad Request",
+    });
+
+    expect(isStageSubmitWorkFileAPIError(error)).toBe(true);
+    expect(isStageSubmitWorkFileAPIError(new Error("other"))).toBe(false);
   });
 });

@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+description: Operator request to move one work item to another authored marking state.
+required:
+  - stateName
+properties:
+  stateName:
+    type: string
+    description: Authored marking state name to move the work item into.
+  requestId:
+    type: string
+    description: >-
+      Optional client idempotency key. Repeating the same requestId for an
+      already-applied operator move returns 409 Conflict without a second mutation.

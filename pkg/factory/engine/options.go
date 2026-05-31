@@ -119,3 +119,12 @@ func WithWorkstationResponseRecorder(fn func(int, interfaces.WorkResult, interfa
 		e.recordResponse = fn
 	}
 }
+
+// WithAutomaticTicksPaused registers a predicate that suppresses automatic
+// subsystem ticks (dispatch, transition, cascade, scheduling) while returning
+// true. Operator control ingress such as MoveWork is unaffected.
+func WithAutomaticTicksPaused(paused func() bool) Option {
+	return func(e *FactoryEngine) {
+		e.automaticTicksPaused = paused
+	}
+}

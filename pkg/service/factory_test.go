@@ -289,6 +289,9 @@ func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context) (*int
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
 func (f *aggregateSnapshotFactory) Pause(context.Context) error { return f.pauseErr }
+func (f *aggregateSnapshotFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
+	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in aggregateSnapshotFactory")
+}
 func (f *aggregateSnapshotFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	f.engineStateSnapshotCalls++
 	if f.engineStateErr != nil {
@@ -2370,6 +2373,16 @@ func TestFactoryService_SaveFactoryForSession_UpsertCreateAllowsOmittedVersion(t
 		namedFactories: []string{"alpha"},
 	})
 	defer harness.stop(t)
+
+	// CI runners can be slower to reach idle than the default 1s harness wait.
+	waitForSessionRuntimeStatus(
+		t,
+		harness.svc,
+		defaultFactorySessionID,
+		interfaces.RuntimeStatusIdle,
+		5*time.Second,
+		"upsert create readiness",
+	)
 
 	created, err := harness.svc.SaveFactoryForSession(
 		context.Background(),

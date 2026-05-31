@@ -18,10 +18,8 @@ import type { CurrentFactoryDocument } from "../../../api/current-factory-defini
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import {
-  useCurrentFactoryDocument,
-  useFactoryDocumentSave,
-} from "../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
@@ -147,17 +145,20 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 
-vi.mock("../../current-factory-definition/public", async () => {
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
   const actual = await vi.importActual(
-    "../../current-factory-definition/public",
+    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   );
 
   return {
     ...actual,
     useCurrentFactoryDocument: vi.fn(),
-    useFactoryDocumentSave: vi.fn(),
   };
 });
+
+vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
+  useFactoryDocumentSave: vi.fn(),
+}));
 
 const editableFactoryDocument: CurrentFactoryDocument = {
   name: "Current Factory",

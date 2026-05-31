@@ -1,0 +1,39 @@
+type: object
+additionalProperties: false
+description: >-
+  Canonical work marking position change. Operator moves use source api or cli;
+  automatic cascade propagation uses cascading-failure. FactoryEvent.context
+  carries workIds and optional requestId for operator idempotency.
+required:
+  - workId
+  - workTypeName
+  - fromState
+  - toState
+  - fromPlaceId
+  - toPlaceId
+  - source
+properties:
+  workId:
+    type: string
+  workTypeName:
+    type: string
+  fromState:
+    type: string
+    description: Authored state name before the move.
+  toState:
+    type: string
+    description: Authored state name after the move.
+  fromPlaceId:
+    type: string
+    description: Marking place identifier before the move.
+  toPlaceId:
+    type: string
+    description: Marking place identifier after the move.
+  source:
+    $ref: '../WorkStateChangeSource.yaml'
+  triggerWorkId:
+    type: string
+    description: Optional work identifier that triggered a cascade move.
+  reason:
+    type: string
+    description: Optional human-readable reason for the move.

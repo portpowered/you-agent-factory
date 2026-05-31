@@ -1,8 +1,6 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import {
-  useCurrentFactoryDocument,
-  useFactoryDocumentSave,
-} from "../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 
 export function useCurrentActivityEditableGraph({

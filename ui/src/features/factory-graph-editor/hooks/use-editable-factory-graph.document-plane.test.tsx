@@ -139,4 +139,59 @@ describe("useEditableFactoryGraph document plane", () => {
       "workstation:document-only",
     );
   });
+
+  it("clears pending edits after save and resyncs latestDocument when the document cache updates", async () => {
+    const saveFactoryDefinition = vi.fn(async () => undefined);
+
+    const { result, rerender } = renderHook(
+      ({ currentFactoryDocument }: { currentFactoryDocument: CurrentFactoryDocument }) =>
+        useEditableFactoryGraph({
+          currentFactoryDocument,
+          saveFactoryDefinition,
+        }),
+      {
+        initialProps: {
+          currentFactoryDocument: documentFactory,
+        },
+      },
+    );
+
+    act(() => {
+      result.current.actions.addNode({
+        kind: "worker",
+        model: "gpt-5",
+        name: "extra",
+      });
+    });
+
+    expect(result.current.pendingState.hasChanges).toBe(true);
+
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(saveFactoryDefinition).toHaveBeenCalledWith({
+      baseVersion: documentFactory.version,
+      factoryDefinition: expect.objectContaining({
+        workers: expect.arrayContaining([
+          expect.objectContaining({ name: "extra" }),
+        ]),
+      }),
+    });
+    expect(result.current.pendingState.hasChanges).toBe(false);
+
+    const savedDocument: CurrentFactoryDocument = {
+      ...documentFactory,
+      version: {
+        logical: "10",
+        physical: "2026-05-31T02:00:00Z",
+      },
+    };
+
+    rerender({ currentFactoryDocument: savedDocument });
+
+    expect(result.current.draftState.latestDocument).toEqual(savedDocument);
+    expect(result.current.draftState.baseDocument?.version.logical).toBe("10");
+    expect(result.current.pendingState.hasChanges).toBe(false);
+  });
 });

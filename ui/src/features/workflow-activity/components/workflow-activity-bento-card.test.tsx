@@ -6,10 +6,8 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import {
-  useCurrentFactoryDocument,
-  useFactoryDocumentSave,
-} from "../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { DashboardSelection } from "../../current-selection/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
@@ -17,17 +15,20 @@ import type { CurrentActivityImportController } from "../hooks/current-activity-
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 
-vi.mock("../../current-factory-definition/public", async () => {
+vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
   const actual = await vi.importActual(
-    "../../current-factory-definition/public",
+    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   );
 
   return {
     ...actual,
     useCurrentFactoryDocument: vi.fn(),
-    useFactoryDocumentSave: vi.fn(),
   };
 });
+
+vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
+  useFactoryDocumentSave: vi.fn(),
+}));
 
 vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () => {
   const actual = await vi.importActual(

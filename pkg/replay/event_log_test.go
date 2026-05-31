@@ -3,6 +3,7 @@ package replay
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -674,4 +675,124 @@ func replayInferenceResponseEvent(
 		},
 		Payload: union,
 	}
+}
+
+func replayWorkStateChangeEvent(
+	t *testing.T,
+	workID string,
+	fromState string,
+	toState string,
+	fromPlaceID string,
+	toPlaceID string,
+	source factoryapi.WorkStateChangeSource,
+	tick int,
+) factoryapi.FactoryEvent {
+	t.Helper()
+
+	payload := factoryapi.WorkStateChangeEventPayload{
+		WorkId:       workID,
+		WorkTypeName: "task",
+		FromState:    fromState,
+		ToState:      toState,
+		FromPlaceId:  fromPlaceID,
+		ToPlaceId:    toPlaceID,
+		Source:       source,
+	}
+	var union factoryapi.FactoryEvent_Payload
+	if err := union.FromWorkStateChangeEventPayload(payload); err != nil {
+		t.Fatalf("encode work state change payload: %v", err)
+	}
+	return factoryapi.FactoryEvent{
+		Id:            fmt.Sprintf("factory-event/work-state-change/%s/%d", workID, tick),
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          factoryapi.FactoryEventTypeWorkStateChange,
+		Context: factoryapi.FactoryEventContext{
+			EventTime: time.Date(2026, time.April, 10, 12, 0, tick, 0, time.UTC),
+			Tick:      tick,
+			WorkIds:   slicePtr([]string{workID}),
+		},
+		Payload: union,
+	}
+}
+
+func TestReduceReplayEvents_OperatorWorkStateChanges(t *testing.T) {
+	artifact := testReplayArtifact(
+		t,
+		replayWorkStateChangeEvent(t, "work-recover", "failed", "init", "task:failed", "task:init", factoryapi.WorkStateChangeSourceAPI, 4),
+		replayWorkStateChangeEvent(t, "work-cascade", "failed", "init", "task:failed", "task:init", factoryapi.WorkStateChangeSourceCascadingFailure, 5),
+	)
+
+	reduced, err := reduceReplayEvents(artifact)
+	if err != nil {
+		t.Fatalf("reduceReplayEvents: %v", err)
+	}
+	if len(reduced.WorkStateChanges) != 1 {
+		t.Fatalf("work state changes = %d, want 1 operator move", len(reduced.WorkStateChanges))
+	}
+	change := reduced.WorkStateChanges[0]
+	if change.change.WorkID != "work-recover" || change.observedTick != 4 {
+		t.Fatalf("work state change = %#v, want work-recover at tick 4", change)
+	}
+	if change.change.FromPlaceID != "task:failed" || change.change.ToPlaceID != "task:init" {
+		t.Fatalf("places = %q -> %q, want task:failed -> task:init", change.change.FromPlaceID, change.change.ToPlaceID)
+	}
+	if change.change.Source != interfaces.WorkStateChangeSourceAPI {
+		t.Fatalf("source = %q, want api", change.change.Source)
+	}
+}
+
+func TestRecorder_PersistsWorkStateChangeEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "operator-move.replay.json")
+	artifact := testReplayArtifact(t)
+	recorder, err := NewRecorder(path, artifact)
+	if err != nil {
+		t.Fatalf("NewRecorder: %v", err)
+	}
+
+	moveEvent := replayWorkStateChangeEvent(
+		t,
+		"work-recover",
+		"failed",
+		"init",
+		"task:failed",
+		"task:init",
+		factoryapi.WorkStateChangeSourceCLI,
+		3,
+	)
+	recorder.RecordEvent(moveEvent)
+	if err := recorder.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	loaded := loadReplayArtifactForTest(t, path)
+	if replayEventCount(loaded, factoryapi.FactoryEventTypeWorkStateChange) != 1 {
+		t.Fatalf("WORK_STATE_CHANGE events = %d, want 1", replayEventCount(loaded, factoryapi.FactoryEventTypeWorkStateChange))
+	}
+	event := loaded.Events[len(loaded.Events)-1]
+	payload, err := event.Payload.AsWorkStateChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if payload.WorkId != "work-recover" || payload.Source != factoryapi.WorkStateChangeSourceCLI {
+		t.Fatalf("payload = %#v, want work-recover cli source", payload)
+	}
+}
+
+func loadReplayArtifactForTest(t *testing.T, path string) *interfaces.ReplayArtifact {
+	t.Helper()
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	return loaded
+}
+
+func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.FactoryEventType) int {
+	count := 0
+	for _, event := range artifact.Events {
+		if event.Type == eventType {
+			count++
+		}
+	}
+	return count
 }

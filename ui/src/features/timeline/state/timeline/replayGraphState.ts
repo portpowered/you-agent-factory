@@ -172,8 +172,11 @@ export function addToken(
   state.occupancyByID[placeID] = occupancy;
 }
 
-export function removeWorkToken(state: ReplayWorldState, workID: string): void {
-  const placeID = state.workItemsByID[workID]?.place_id;
+export function removeWorkTokenFromPlace(
+  state: ReplayWorldState,
+  workID: string,
+  placeID: string | undefined,
+): void {
   if (!placeID) {
     return;
   }
@@ -186,6 +189,10 @@ export function removeWorkToken(state: ReplayWorldState, workID: string): void {
   if (occupancy.tokenCount === 0) {
     delete state.occupancyByID[placeID];
   }
+}
+
+export function removeWorkToken(state: ReplayWorldState, workID: string): void {
+  removeWorkTokenFromPlace(state, workID, state.workItemsByID[workID]?.place_id);
 }
 
 function removeResourceToken(
