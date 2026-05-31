@@ -372,6 +372,7 @@ interface BuildCurrentActivityNodesInput {
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
   onSelectWorker: (workerName: string) => void;
+  onSelectWorkType: (workTypeName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   editor?: CurrentActivityEditorState;
   selection: CurrentActivitySelection | null;
@@ -437,8 +438,10 @@ function buildPlaceNodeData(
         input.activeGraphHighlights.hasActiveFlow &&
         !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
       selectedStateNode:
-        input.selection?.kind === "state-node" &&
-        input.selection.placeId === place.place_id,
+        (input.selection?.kind === "state-node" &&
+          input.selection.placeId === place.place_id) ||
+        (input.selection?.kind === "node" &&
+          input.selection.nodeId === factoryGraphNodeId),
       tokenCount:
         input.snapshot.runtime.place_token_counts?.[place.place_id] ?? 0,
       validationError: validationNodeError !== undefined,
@@ -505,20 +508,21 @@ function buildPlaceNode(
   }
 
   if (factoryGraphNode?.kind === "work-type") {
+    const workTypeName =
+      place.state_value ?? factoryGraphNodeId.replace(/^work-type:/, "");
     return {
       ...basePlaceNode,
       data: {
         ...basePlaceData,
         kind: "work-type" as const,
-        onSelectGraphNode: input.editor?.editorMode
-          ? input.onSelectWorkstation
+        onSelectWorkType: input.editor?.editorMode
+          ? input.onSelectWorkType
           : undefined,
         place,
-        selectedGraphNode:
+        selectedWorkType:
           input.editor?.editorMode === true &&
-          input.selection?.kind === "node" &&
-          (input.selection.nodeId === factoryGraphNodeId ||
-            input.selection.nodeId === place.state_value),
+          input.selection?.kind === "work-type" &&
+          input.selection.workTypeName === workTypeName,
       },
       selectable: false,
       type: "workType",
@@ -643,6 +647,7 @@ export function buildCurrentActivityNodes({
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
+  onSelectWorkType,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -673,6 +678,7 @@ export function buildCurrentActivityNodes({
     onSelectStateNode,
     onSelectWorkID,
     onSelectWorker,
+    onSelectWorkType,
     onSelectWorkstation,
     selection,
     snapshot,

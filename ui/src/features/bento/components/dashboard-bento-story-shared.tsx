@@ -562,6 +562,7 @@ export function WorkflowGraphCardStory() {
         onSelectStateNode={currentSelection.selectStateNode}
         onSelectWorkID={currentSelection.selectWorkByID}
         onSelectWorker={currentSelection.selectWorker}
+        onSelectWorkType={currentSelection.selectWorkType}
         onSelectWorkstation={currentSelection.selectWorkstation}
         selection={currentSelection.selection}
         snapshot={semanticWorkflowDashboardSnapshot}
@@ -1375,6 +1376,7 @@ function responsiveCatalogSelectionCards({
           onSelectStateNode={currentSelection.selectStateNode}
           onSelectWorkID={currentSelection.selectWorkByID}
           onSelectWorker={currentSelection.selectWorker}
+          onSelectWorkType={currentSelection.selectWorkType}
           onSelectWorkstation={currentSelection.selectWorkstation}
           selection={currentSelection.selection}
           snapshot={semanticWorkflowDashboardSnapshot}

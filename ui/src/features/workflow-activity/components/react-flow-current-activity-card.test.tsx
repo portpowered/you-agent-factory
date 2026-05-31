@@ -379,6 +379,7 @@ function renderCurrentActivity({
     >();
   const onSelectStateNode = vi.fn<(placeId: string) => void>();
   const onSelectWorker = vi.fn<(workerName: string) => void>();
+  const onSelectWorkType = vi.fn<(workTypeName: string) => void>();
   const onSelectWorkstation = vi.fn<(nodeId: string) => void>();
 
   renderWithQueryClient(
@@ -392,6 +393,7 @@ function renderCurrentActivity({
       onSelectWorkID={onSelectWorkID}
       onSelectStateNode={onSelectStateNode}
       onSelectWorker={onSelectWorker}
+      onSelectWorkType={onSelectWorkType}
       onSelectWorkstation={onSelectWorkstation}
       readFactoryImportFile={readFactoryImportFile}
       selection={selection}
@@ -404,6 +406,7 @@ function renderCurrentActivity({
     onSelectStateNode,
     onSelectWorkID,
     onSelectWorker,
+    onSelectWorkType,
     onSelectWorkstation,
   };
 }
@@ -3528,6 +3531,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
         snapshot={dashboardSnapshotWithActiveWorkItemCount(0)}
         onSelectStateNode={vi.fn()}
         onSelectWorker={vi.fn()}
+        onSelectWorkType={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />,
     );
@@ -3554,6 +3558,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
               )}
               onSelectStateNode={vi.fn()}
               onSelectWorker={vi.fn()}
+              onSelectWorkType={vi.fn()}
               onSelectWorkstation={vi.fn()}
             />
           </DashboardSessionTestProvider>
@@ -3590,6 +3595,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
       onSelectWorkID: vi.fn(),
       onSelectStateNode: vi.fn(),
       onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
     };
     const { rerender } = renderWithQueryClient(

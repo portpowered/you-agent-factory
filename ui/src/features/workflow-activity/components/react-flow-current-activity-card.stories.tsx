@@ -398,6 +398,9 @@ function CurrentActivityStory({
         onSelectWorker={(workerName) =>
           setSelection({ kind: "worker", workerName })
         }
+        onSelectWorkType={(workTypeName) =>
+          setSelection({ kind: "work-type", workTypeName })
+        }
         onSelectWorkstation={(nodeId) => setSelection({ kind: "node", nodeId })}
         selection={selection}
         snapshot={snapshot}
@@ -431,6 +434,9 @@ function CurrentActivityImportStory({ snapshot }: CurrentActivityStoryProps) {
           }
           onSelectWorkstation={(nodeId) =>
             setSelection({ kind: "node", nodeId })
+          }
+          onSelectWorkType={(workTypeName) =>
+            setSelection({ kind: "work-type", workTypeName })
           }
           onSelectWorker={(workerName) =>
             setSelection({ kind: "worker", workerName })

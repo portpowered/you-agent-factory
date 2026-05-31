@@ -106,6 +106,13 @@ export function useCurrentSelectionActions({
     });
   };
 
+  const selectWorkType = (workTypeName: string) => {
+    commitSelectionState({
+      selection: { kind: "work-type", workTypeName },
+      terminalWorkDetail: null,
+    });
+  };
+
   const selectWorkItem = (
     dispatchId: string,
     nodeId: string,
@@ -216,6 +223,7 @@ export function useCurrentSelectionActions({
     selectWorkstation,
     selectWorkstationRequest,
     selectWorker,
+    selectWorkType,
   };
 }
 

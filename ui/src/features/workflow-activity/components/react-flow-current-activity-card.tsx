@@ -89,6 +89,7 @@ interface ReactFlowCurrentActivityCardProps {
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
   onSelectWorker: (workerName: string) => void;
+  onSelectWorkType: (workTypeName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
   selection: CurrentActivitySelection | null;

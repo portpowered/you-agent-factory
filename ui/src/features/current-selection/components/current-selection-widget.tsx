@@ -4,7 +4,6 @@ import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../../api/dashboard/types";
-import { parseFactoryGraphWorkTypeNodeId } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 import {
   CurrentSelectionHeaderActionProvider,
@@ -17,6 +16,12 @@ import type {
   SelectedWorkRelationshipGraph,
 } from "../work-selection/public";
 import { WorkItemDetailCard } from "../work-selection/public";
+import { useEditableWorkTypeConfigurationState } from "../work-type-selection/hooks/use-editable-work-type-configuration-state";
+import { useSaveEditableWorkTypeConfiguration } from "../work-type-selection/hooks/use-save-editable-work-type-configuration";
+import {
+  EditableWorkTypeSaveDialog,
+  EditableWorkTypeSaveHeaderAction,
+} from "../work-type-selection/components/work-type-save-controls";
 import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
 import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
@@ -54,13 +59,14 @@ export interface CurrentSelectionWidgetProps {
   widgetId?: string;
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection detail routing keeps one switch over dashboard selection kinds.
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection routing keeps each detail card branch explicit for review.
 function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
   editableConfigurationState,
   editableWorkStateConfigurationState,
   editableWorkerConfigurationState,
+  editableWorkTypeConfigurationState,
   failedWorkDetailsByWorkID,
   headerAction,
   locale,
@@ -70,6 +76,8 @@ function renderCurrentSelectionDetailCard({
   workStateHeaderAction,
   workStateSaveState,
   workerHeaderAction,
+  workTypeHeaderAction,
+  workTypeSaveState,
   workerSaveState,
   selectedProviderSessionKey,
   selectedTrace,
@@ -89,6 +97,9 @@ function renderCurrentSelectionDetailCard({
   editableWorkerConfigurationState: ReturnType<
     typeof useEditableWorkerConfigurationState
   >;
+  editableWorkTypeConfigurationState: ReturnType<
+    typeof useEditableWorkTypeConfigurationState
+  >;
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
   headerAction: ReactNode;
   locale?: string;
@@ -99,8 +110,12 @@ function renderCurrentSelectionDetailCard({
     typeof useSaveEditableWorkStateConfiguration
   >["saveState"];
   workerHeaderAction: ReactNode;
+  workTypeHeaderAction: ReactNode;
   saveState: ReturnType<
     typeof useSaveEditableWorkstationConfiguration
+  >["saveState"];
+  workTypeSaveState: ReturnType<
+    typeof useSaveEditableWorkTypeConfiguration
   >["saveState"];
   workerSaveState: ReturnType<
     typeof useSaveEditableWorkerConfiguration
@@ -125,10 +140,12 @@ function renderCurrentSelectionDetailCard({
     selectedWorkID,
     selectedWorkRequestHistory,
     selectedWorkerName,
+    selectedWorkTypeName,
     selectedWorkstationRequest,
     selection,
     selectWorkByID,
     selectStateWorkItem,
+    selectWorkstation,
     selectWorkstationRequest,
   } = currentSelection;
 
@@ -198,14 +215,14 @@ function renderCurrentSelectionDetailCard({
     );
   }
 
-  const selectedWorkTypeName =
-    selection?.kind === "node"
-      ? parseFactoryGraphWorkTypeNodeId(selection.nodeId)
-      : null;
-  if (selectedWorkTypeName) {
+  if (selection?.kind === "work-type" && selectedWorkTypeName) {
     return (
       <WorkTypeDetailCard
+        editableConfigurationState={editableWorkTypeConfigurationState}
+        headerAction={workTypeHeaderAction}
         locale={locale}
+        onSelectWorkStateGraphNode={selectWorkstation}
+        saveState={workTypeSaveState}
         widgetId={widgetId}
         workTypeName={selectedWorkTypeName}
       />
@@ -238,7 +255,7 @@ function renderCurrentSelectionDetailCard({
   return <NoSelectionDetailCard widgetId={widgetId} />;
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: widget wires editable workstation, worker, and work-state save hooks into one selection detail surface.
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: widget wires editable workstation, worker, work-state, and work-type save hooks into one selection detail surface.
 export function CurrentSelectionWidget({
   activeTraceID,
   currentSelection,
@@ -260,6 +277,7 @@ export function CurrentSelectionWidget({
     selectedWorkDispatchAttempts,
     selectedWorkRequestHistory,
     selectedWorkerName,
+    selectedWorkTypeName,
     selection,
   } = currentSelection;
   const editableConfigurationState = useEditableWorkstationConfigurationState(
@@ -276,6 +294,12 @@ export function CurrentSelectionWidget({
     selectedWorkerName,
     locale,
   );
+  const editableWorkTypeConfigurationState =
+    useEditableWorkTypeConfigurationState(
+      selection,
+      selectedWorkTypeName,
+      locale,
+    );
   const workstationSaveScopeKey =
     selection?.kind === "node" && selectedNode
       ? `${selectedNode.node_id}:${selectedNode.transition_id}:${selectedNode.workstation_name}`
@@ -300,6 +324,16 @@ export function CurrentSelectionWidget({
     locale,
     onWorkerRenamed: currentSelection.selectWorker,
     scopeKey: workerSaveScopeKey,
+  });
+  const workTypeSaveScopeKey =
+    selection?.kind === "work-type" && selectedWorkTypeName
+      ? selectedWorkTypeName
+      : null;
+  const workTypeSave = useSaveEditableWorkTypeConfiguration({
+    editableConfigurationState: editableWorkTypeConfigurationState,
+    locale,
+    onWorkTypeRenamed: currentSelection.selectWorkType,
+    scopeKey: workTypeSaveScopeKey,
   });
   const providerSessionState = useSelectedProviderSessionState({
     selectedNode,
@@ -337,12 +371,21 @@ export function CurrentSelectionWidget({
       saveState={workerSave.saveState}
     />
   );
+  const workTypeHeaderAction = (
+    <EditableWorkTypeSaveHeaderAction
+      canSave={workTypeSave.canSave}
+      locale={locale ?? undefined}
+      onClick={workTypeSave.beginSaveConfirmation}
+      saveState={workTypeSave.saveState}
+    />
+  );
   const detailCard = renderCurrentSelectionDetailCard({
     activeTraceID,
     currentSelection,
     editableConfigurationState,
     editableWorkStateConfigurationState,
     editableWorkerConfigurationState,
+    editableWorkTypeConfigurationState,
     failedWorkDetailsByWorkID,
     headerAction: workstationHeaderAction,
     locale: locale ?? undefined,
@@ -351,8 +394,10 @@ export function CurrentSelectionWidget({
     workStateHeaderAction,
     workStateSaveState: workStateSave.saveState,
     workerHeaderAction,
+    workTypeHeaderAction,
     saveState: workstationSave.saveState,
     selectedProviderSessionKey,
+    workTypeSaveState: workTypeSave.saveState,
     workerSaveState: workerSave.saveState,
     selectedTrace,
     selectedWorkRelationshipGraph,
@@ -376,6 +421,12 @@ export function CurrentSelectionWidget({
             : []
         }
         saveState={workstationSave.saveState}
+      />
+      <EditableWorkTypeSaveDialog
+        locale={locale ?? undefined}
+        onCancel={workTypeSave.cancelSaveConfirmation}
+        onConfirm={() => void workTypeSave.confirmSave()}
+        saveState={workTypeSave.saveState}
       />
     </CurrentSelectionLocaleProvider>
   );

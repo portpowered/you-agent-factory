@@ -206,6 +206,7 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
       onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: {
