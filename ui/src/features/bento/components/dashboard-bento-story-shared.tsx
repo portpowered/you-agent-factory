@@ -717,6 +717,88 @@ export function CurrentSelectionCardStory() {
   });
 }
 
+export function CurrentSelectionRunHistoryExpandStory() {
+  const currentSelection = useCurrentSelection({
+    sessionID: DEFAULT_FACTORY_SESSION_ID,
+    snapshot: semanticWorkflowDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      semanticWorkflowDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+  const providerSessionState =
+    useSelectedProviderSessionState(currentSelection);
+  const details = useCurrentSelectionDetails({
+    currentSelection,
+    selectedTrace: storyTrace,
+    snapshot: semanticWorkflowDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      semanticWorkflowDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+
+  useEffect(() => {
+    currentSelection.selectWorkstation("review");
+  }, [currentSelection.selectWorkstation]);
+
+  return renderCardFrame({
+    children: (
+      <CurrentSelectionWidget
+        activeTraceID={storyTrace.trace_id}
+        currentSelection={currentSelection}
+        failedWorkDetailsByWorkID={
+          semanticWorkflowDashboardSnapshot.runtime.session
+            .failed_work_details_by_work_id
+        }
+        now={STORY_NOW}
+        onSelectProviderSession={
+          providerSessionState.setSelectedProviderSession
+        }
+        onSelectTraceID={() => undefined}
+        selectedProviderSessionKey={
+          providerSessionState.selectedProviderSessionKey
+        }
+        selectedTrace={storyTrace}
+        selectedWorkExecutionDetails={details.selectedWorkExecutionDetails}
+        selectedWorkRelationshipGraph={details.selectedWorkRelationshipGraph}
+        widgetId="current-selection-run-history::story"
+      />
+    ),
+    layout: layoutFor(DASHBOARD_WIDGET_IDS.currentSelection, {
+      h: 6,
+      id: "current-selection-run-history::story",
+      w: 6,
+    }),
+  });
+}
+
+export async function expectCurrentSelectionRunHistoryExpandFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+  const card = await canvas.findByRole("article", {
+    name: "Current selection",
+  });
+  const runHistorySection = (
+    await within(card).findByRole("heading", { name: "Run history" })
+  ).closest("section");
+
+  if (!runHistorySection) {
+    throw new Error("expected run history section");
+  }
+
+  const expandButton = within(runHistorySection).getByRole("button", {
+    name: "Expand",
+  });
+  await expect(expandButton).toHaveAttribute("aria-expanded", "false");
+  await userEvent.click(expandButton);
+  await expect(expandButton).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    within(runHistorySection).getByText("Rejected Story"),
+  ).toBeVisible();
+  await userEvent.click(expandButton);
+  await expect(expandButton).toHaveAttribute("aria-expanded", "false");
+}
+
 export function CurrentSelectionEditableConfigurationStory({
   width,
 }: {

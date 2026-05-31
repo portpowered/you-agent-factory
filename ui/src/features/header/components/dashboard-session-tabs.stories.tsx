@@ -9,9 +9,9 @@ import {
   liveWorkOutcomeSnapshot,
 } from "../../../stories/dashboardStorySupport";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { SESSION_TAB_PATH_MAX_LENGTH } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
+import { DashboardSessionTabs } from "./dashboard-session-tabs";
 
 const defaultSession = {
   factoryDir: "/workspace/root",
@@ -96,11 +96,17 @@ export const OpenFlowVerification = {
     );
 
     await expect(tabsNavigation).toBeVisible();
-    await expect(canvas.getByRole("tab", { name: "root" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    await expect(canvas.getByRole("tab", { name: "beta" })).toBeVisible();
+    const rootTab = canvas.getByRole("tab", { name: "root" });
+    const betaTab = canvas.getByRole("tab", { name: "beta" });
+    await expect(rootTab).toHaveAttribute("aria-selected", "true");
+    await expect(betaTab).toBeVisible();
+    const activeShellClassName = sessionTabShell(rootTab).className;
+    const inactiveShellClassName = sessionTabShell(betaTab).className;
+    expect(activeShellClassName).toContain("border-af-border-strong");
+    expect(activeShellClassName).toContain("bg-af-surface-raised");
+    expect(activeShellClassName).not.toContain("bg-af-accent");
+    expect(activeShellClassName).not.toContain("bg-af-accent-surface");
+    expect(inactiveShellClassName).toContain("text-af-text-muted");
     await expect(
       canvas.getByRole("button", { name: "Close beta session" }),
     ).toBeVisible();
@@ -117,7 +123,9 @@ export const OpenFlowVerification = {
     await userEvent.clear(folderField);
     await userEvent.type(folderField, "/workspace/catalog");
     await userEvent.click(
-      within(dialog).getByRole("button", { name: messages.openSessionSubmitLabel }),
+      within(dialog).getByRole("button", {
+        name: messages.openSessionSubmitLabel,
+      }),
     );
 
     await userEvent.click(
@@ -142,6 +150,14 @@ export const OpenFlowVerification = {
     await expect(canvas.queryByRole("tab", { name: "review" })).toBeNull();
   },
 };
+
+function sessionTabShell(tab: HTMLElement): HTMLElement {
+  const shell = tab.parentElement;
+  if (!shell) {
+    throw new Error("Expected session tab shell wrapper");
+  }
+  return shell;
+}
 
 function SessionTabsStory() {
   useEffect(() => {
@@ -281,7 +297,8 @@ function sessionTabsStoryParameters() {
             return {
               body: {
                 code: "BAD_REQUEST",
-                message: "Unsupported folder for the Storybook session-tabs flow.",
+                message:
+                  "Unsupported folder for the Storybook session-tabs flow.",
               },
               status: 400,
               statusText: "Bad Request",

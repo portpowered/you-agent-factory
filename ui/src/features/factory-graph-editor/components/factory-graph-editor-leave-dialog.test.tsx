@@ -90,4 +90,27 @@ describe("FactoryGraphEditorLeaveDialog", () => {
     expect(onDiscard).not.toHaveBeenCalled();
     expect(onSave).not.toHaveBeenCalled();
   });
+
+  it("disables save when the draft cannot be persisted", () => {
+    render(
+      <FactoryGraphEditorLeaveDialog
+        canSave={false}
+        isOpen={true}
+        isSaving={false}
+        onCancel={() => {}}
+        onDiscard={() => {}}
+        onSave={() => {}}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Leave graph editor with unsaved changes?",
+    });
+
+    expect(
+      within(dialog)
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+  });
 });

@@ -29,6 +29,12 @@ func PersistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte) (str
 	return config.PersistNamedFactory(rootDir, name, canonicalFactoryJSON)
 }
 
+// PersistNamedFactoryWithPrepared materializes a named factory from a
+// pre-normalized payload shared by validation and split layout writes.
+func PersistNamedFactoryWithPrepared(rootDir, name string, prepared *PreparedFactoryLayoutPayload) (string, error) {
+	return config.PersistNamedFactoryWithPrepared(rootDir, name, prepared)
+}
+
 // PersistNamedFactoryWithReport materializes a compact canonical factory payload
 // under a named subdirectory rooted at rootDir and reports portable bundled
 // file replacements.
@@ -46,6 +52,42 @@ func ReplaceNamedFactory(rootDir, name string, canonicalFactoryJSON []byte) (str
 // PersistNamedFactoryWithReport.
 func ReplaceNamedFactoryWithReport(rootDir, name string, canonicalFactoryJSON []byte) (*NamedFactoryPersistResult, error) {
 	return config.ReplaceNamedFactoryWithReport(rootDir, name, canonicalFactoryJSON)
+}
+
+// FactoryLayoutReplaceOptions configures ReplaceFactoryLayoutAtDir.
+type FactoryLayoutReplaceOptions = config.FactoryLayoutReplaceOptions
+
+// DefaultFactoryLayoutReplaceOptions returns persist-from-save layout options.
+func DefaultFactoryLayoutReplaceOptions(targetDir string) FactoryLayoutReplaceOptions {
+	return config.DefaultFactoryLayoutReplaceOptions(targetDir)
+}
+
+// ReplaceFactoryLayoutAtDir atomically replaces targetDir from payload using the
+// shared split-layout persist pipeline.
+func ReplaceFactoryLayoutAtDir(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (restore func(), err error) {
+	return config.ReplaceFactoryLayoutAtDir(targetDir, payload, opts)
+}
+
+// FactorySplitLayoutReplaceResult holds rollback and backup-discard callbacks after
+// a successful split-layout replace commit.
+type FactorySplitLayoutReplaceResult = config.FactorySplitLayoutReplaceResult
+
+// PreparedFactoryLayoutPayload holds normalized factory state for split-layout persist.
+type PreparedFactoryLayoutPayload = config.PreparedFactoryLayoutPayload
+
+// PrepareFactoryLayoutPayload normalizes factory JSON for split-layout persist.
+func PrepareFactoryLayoutPayload(segment string, payload []byte) (*PreparedFactoryLayoutPayload, error) {
+	return config.PrepareFactoryLayoutPayload(segment, payload)
+}
+
+// ReplaceFactoryLayoutAtDirWithPreparedWithResult replaces targetDir using a
+// pre-normalized payload shared by validation and layout writes.
+func ReplaceFactoryLayoutAtDirWithPreparedWithResult(
+	targetDir string,
+	prepared *PreparedFactoryLayoutPayload,
+	opts FactoryLayoutReplaceOptions,
+) (*FactorySplitLayoutReplaceResult, error) {
+	return config.ReplaceFactoryLayoutAtDirWithPreparedWithResult(targetDir, prepared, opts)
 }
 
 // ReplaceFactorySplitLayout atomically replaces an existing factory directory

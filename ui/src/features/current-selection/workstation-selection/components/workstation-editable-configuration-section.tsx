@@ -4,7 +4,7 @@ import { type ReactNode, useId, useState } from "react";
 import {
   DashboardActionButton,
   DashboardActionRow,
-  DisclosureButton,
+  ExpandablePanelTrigger,
   Select,
 } from "../../../../components/ui";
 import {
@@ -22,7 +22,6 @@ import {
   CurrentSelectionSectionHeader,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
-  HISTORY_TOGGLE_CLASS,
   WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "../../base/components/detail-card-shared";
 import type {
@@ -65,20 +64,20 @@ export function EditableConfigurationSection({
     >
       <CurrentSelectionSectionHeader
         action={
-          <DisclosureButton
+          <ExpandablePanelTrigger
             aria-label={
               expanded
                 ? messages.editableConfigurationCollapseActionLabel
                 : messages.editableConfigurationExpandActionLabel
             }
-            className={HISTORY_TOGGLE_CLASS}
             controlsID={contentId}
             expanded={expanded}
             onClick={() => setExpanded((current) => !current)}
             type="button"
+            variant="section"
           >
             {expanded ? messages.collapseAction : messages.expandAction}
-          </DisclosureButton>
+          </ExpandablePanelTrigger>
         }
         headingId={headingId}
         title={messages.editableConfigurationHeading}

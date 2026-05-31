@@ -1,6 +1,9 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
+import { isFactoryDocumentSaveConfirming } from "../../current-selection/base/hooks/factory-document-save-types";
+import type { EditableFactoryGraphDocumentSaveControls } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
@@ -19,6 +22,8 @@ export type GraphEditorTransientControllerReset = {
 export function useGraphEditorSaveFlow({
   activeWorkCount,
   addEntityController,
+  documentSave,
+  documentSaveControls,
   draftState,
   editableGraph,
   editorUnavailableClassifierWorkstationName,
@@ -30,19 +35,30 @@ export function useGraphEditorSaveFlow({
 }: {
   activeWorkCount: number;
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
+  documentSave: FactoryDocumentSaveState;
+  documentSaveControls: EditableFactoryGraphDocumentSaveControls;
   draftState: EditableFactoryGraphViewModel["draftState"];
   editableGraph: EditableFactoryGraphViewModel;
   editorUnavailableClassifierWorkstationName?: string;
   locale?: string | null;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setEditorMode: (mode: boolean) => void;
   transientControllerReset: GraphEditorTransientControllerReset;
 }) {
   const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
-  const [isConfirmingSave, setIsConfirmingSave] = useState(false);
+  const [pendingSaveConfirmation, setPendingSaveConfirmation] = useState(false);
+  const [saveAttemptRevision, setSaveAttemptRevision] = useState(0);
   const hasActiveWork = activeWorkCount > 0;
   const isStaleDraft = editableGraph.saveState.isStale;
+  const isConfirmingSave =
+    isFactoryDocumentSaveConfirming(documentSave) || pendingSaveConfirmation;
+
+  useEffect(() => {
+    if (!isFactoryDocumentSaveConfirming(documentSave)) {
+      setPendingSaveConfirmation(false);
+    }
+  }, [documentSave]);
   const canSaveDraft =
     editableGraph.saveState.canSave &&
     editorUnavailableClassifierWorkstationName === undefined &&
@@ -55,16 +71,29 @@ export function useGraphEditorSaveFlow({
       : undefined;
   const saveSummary = buildFactoryGraphSaveSummary(draftState.draft, locale);
 
+  const setIsConfirmingSave = useCallback(
+    (open: boolean) => {
+      setPendingSaveConfirmation(open);
+      if (open) {
+        documentSaveControls.beginConfirmation();
+        return;
+      }
+      documentSaveControls.cancelConfirmation();
+    },
+    [documentSaveControls],
+  );
+
   const resetTransientEditorState = useCallback(() => {
     addEntityController.reset();
     saveEditableDefinition.reset();
+    documentSaveControls.clearSaveFeedback();
     transientControllerReset.setConnectionNotice(null);
-    setIsConfirmingSave(false);
     setIsConfirmingLeaveEditor(false);
     transientControllerReset.setPendingRemovalEdgeId(null);
     transientControllerReset.setPendingRemovalNodeId(null);
   }, [
     addEntityController,
+    documentSaveControls,
     saveEditableDefinition,
     transientControllerReset,
   ]);
@@ -91,24 +120,30 @@ export function useGraphEditorSaveFlow({
         return false;
       }
 
+      setSaveAttemptRevision((revision) => revision + 1);
+
       try {
         const didSave = await editableGraph.actions.save();
         if (!didSave) {
-          setIsConfirmingSave(false);
+          documentSaveControls.clearSaveFeedback();
           return false;
         }
-        setIsConfirmingSave(false);
         setIsConfirmingLeaveEditor(false);
         if (leaveAfterSave) {
           leaveEditor();
         }
         return true;
       } catch {
-        setIsConfirmingSave(false);
+        documentSaveControls.clearSaveFeedback();
         return false;
       }
     },
-    [canSaveDraft, editableGraph.actions, leaveEditor],
+    [
+      canSaveDraft,
+      documentSaveControls,
+      editableGraph.actions,
+      leaveEditor,
+    ],
   );
 
   const handleSaveDraft = useCallback(
@@ -121,6 +156,8 @@ export function useGraphEditorSaveFlow({
   }, [saveDraft]);
 
   return {
+    beginSaveConfirmation: documentSaveControls.beginConfirmation,
+    cancelSaveConfirmation: documentSaveControls.cancelConfirmation,
     canSaveDraft,
     handleDiscardEditorChanges,
     handleDiscardPendingChanges,
@@ -131,6 +168,7 @@ export function useGraphEditorSaveFlow({
     isConfirmingSave,
     isStaleDraft,
     leaveEditor,
+    saveAttemptRevision,
     saveBlockedReason,
     saveSummary,
     setIsConfirmingLeaveEditor,

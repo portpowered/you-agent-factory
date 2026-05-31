@@ -1,27 +1,25 @@
-import { useMemo, useRef, useState } from "react";
+import { useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
-import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-apply";
-import { useFactoryValidation } from "../../factory-graph-editor/hooks/use-factory-validation";
-import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activity-card-editor-value";
+import { useDraftAppliedFactoryValidation } from "./react-flow-current-activity-card-editor-draft-validation";
 import { useCurrentActivityEditableGraph } from "./react-flow-current-activity-card-editor-editable-graph";
+import { useGraphEditorLeaveEditorBridge } from "./react-flow-current-activity-card-editor-save-flow";
+import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activity-card-editor-value";
 import { useGraphEditorControllers } from "./use-graph-editor-controllers";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 import { useGraphEditorSession } from "./use-graph-editor-session";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph editor hook wires session, controllers, and save flow into one card value model.
 export function useCurrentActivityGraphEditor(
   snapshot: DashboardSnapshot,
   locale?: string | null,
   factoryDocumentScopeKey?: string | null,
+  onNodeRemovedFromDraft?: (nodeId: string) => void,
 ) {
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
-  const leaveEditorRef = useRef<() => void>(() => {});
-  const setIsConfirmingLeaveEditorRef = useRef<(open: boolean) => void>(
-    () => {},
-  );
+  const leaveEditorBridge = useGraphEditorLeaveEditorBridge();
   const { currentFactoryQuery, editableGraph, saveEditableDefinition } =
     useCurrentActivityEditableGraph({
       editorMode,
@@ -40,10 +38,7 @@ export function useCurrentActivityGraphEditor(
     editableDefinitionQuery: currentFactoryQuery,
     editorMode,
     locale,
-    onAttemptLeaveEditor: () => setIsConfirmingLeaveEditorRef.current(true),
-    onLeaveEditor: () => {
-      leaveEditorRef.current();
-    },
+    ...leaveEditorBridge.sessionCallbacks,
     projectedFactory: snapshot.factory,
     saveEditableDefinition,
     setActiveTool,
@@ -56,6 +51,7 @@ export function useCurrentActivityGraphEditor(
     draftState,
     editableGraph,
     locale,
+    onNodeRemovedFromDraft,
     saveEditableDefinition,
     setActiveTool,
   });
@@ -63,6 +59,8 @@ export function useCurrentActivityGraphEditor(
   const saveFlow = useGraphEditorSaveFlow({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     addEntityController,
+    documentSave: editableGraph.saveState.documentSave,
+    documentSaveControls: editableGraph.documentSaveControls,
     draftState,
     editableGraph,
     editorUnavailableClassifierWorkstationName:
@@ -77,8 +75,7 @@ export function useCurrentActivityGraphEditor(
       setPendingRemovalNodeId: controllers.setPendingRemovalNodeId,
     },
   });
-  setIsConfirmingLeaveEditorRef.current = saveFlow.setIsConfirmingLeaveEditor;
-  leaveEditorRef.current = saveFlow.leaveEditor;
+  leaveEditorBridge.bindSaveFlow(saveFlow);
 
   return buildCurrentActivityGraphEditorValue({
     activeTool,
@@ -86,7 +83,9 @@ export function useCurrentActivityGraphEditor(
     addMenuActions: session.addMenuActions,
     blockedRemovalReason: controllers.blockedRemovalReason,
     canInteractWithEditor: session.canInteractWithEditor,
+    cancelSaveConfirmation: saveFlow.cancelSaveConfirmation,
     canSaveDraft: saveFlow.canSaveDraft,
+    documentSave: editableGraph.saveState.documentSave,
     connectionNotice: controllers.connectionNotice,
     currentFactoryDefinition: session.currentFactoryDefinition,
     draftState,
@@ -94,6 +93,7 @@ export function useCurrentActivityGraphEditor(
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,
     editorMode,
+    handleCancelRemoval: controllers.handleCancelRemoval,
     handleDiscardPendingChanges: saveFlow.handleDiscardPendingChanges,
     handleConfirmRemoval: controllers.handleConfirmRemoval,
     handleConnectionAnchorClick: controllers.handleConnectionAnchorClick,
@@ -102,15 +102,16 @@ export function useCurrentActivityGraphEditor(
     handleEditorEdgeDelete: controllers.handleEditorEdgeDelete,
     handleEditorModeToggle: session.handleEditorModeToggle,
     handleEditorNodeDelete: controllers.handleEditorNodeDelete,
+    handleSelectionNodeDelete: controllers.handleSelectionNodeDelete,
     handleSaveDraft: saveFlow.handleSaveDraft,
     handleSaveBeforeLeavingEditor: saveFlow.handleSaveBeforeLeavingEditor,
-    graphDraftSaveSucceeded: editableGraph.saveState.lastSuccess,
     hasActiveWork: saveFlow.hasActiveWork,
     isConfirmingLeaveEditor: saveFlow.isConfirmingLeaveEditor,
     isConfirmingSave: saveFlow.isConfirmingSave,
     isStaleDraft: saveFlow.isStaleDraft,
     pendingConnectionSource: controllers.pendingConnectionSource,
     pendingRemovalIntent: controllers.pendingRemovalIntent,
+    saveAttemptRevision: saveFlow.saveAttemptRevision,
     saveBlockedReason: saveFlow.saveBlockedReason,
     saveEditableDefinition,
     saveSummary: saveFlow.saveSummary,
@@ -123,21 +124,4 @@ export function useCurrentActivityGraphEditor(
     setPendingRemovalNodeId: controllers.setPendingRemovalNodeId,
     structuralValidation,
   });
-}
-
-function useDraftAppliedFactoryValidation(
-  draftState: EditableFactoryGraphViewModel["draftState"],
-  editorMode: boolean,
-) {
-  const draftAppliedFactoryDefinition = useMemo(() => {
-    const baseDocument =
-      draftState.latestDocument ?? draftState.baseDocument ?? null;
-    if (!baseDocument) {
-      return null;
-    }
-
-    return buildDraftAppliedFactoryDefinition(baseDocument, draftState.draft);
-  }, [draftState.baseDocument, draftState.draft, draftState.latestDocument]);
-
-  return useFactoryValidation(draftAppliedFactoryDefinition, editorMode);
 }

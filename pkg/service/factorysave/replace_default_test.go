@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,99 @@ func workerTypeModel() *factoryapi.WorkerType {
 func workstationTypeModel() *factoryapi.WorkstationType {
 	value := factoryapi.WorkstationTypeModelWorkstation
 	return &value
+}
+
+func TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
+	rootDir := t.TempDir()
+	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	initial := []byte(`{"name":"root","id":"root-runtime","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
+	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	host := &splitLayoutDefaultSaveHost{
+		sessionRootDir: rootDir,
+		current: factoryapi.Factory{
+			Name: apisurface.DefaultCurrentFactoryName,
+			Id:   stringPointer("root-runtime"),
+			Version: &factoryapi.HybridLogicalTimestamp{
+				Logical:  1,
+				Physical: time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	svc := New(rootDir, factory.RealClock{}, func() factoryconfig.WorkstationLoader { return nil }, host)
+
+	replacement := factoryapi.Factory{
+		Name: apisurface.DefaultCurrentFactoryName,
+		Id:   stringPointer("root-runtime"),
+		Version: &factoryapi.HybridLogicalTimestamp{
+			Logical:  2,
+			Physical: time.Date(2026, 5, 31, 12, 0, 1, 0, time.UTC),
+		},
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{
+			Name: "planner",
+			Type: workerTypeModel(),
+			Body: stringPointer("You are the planner."),
+		}},
+		Workstations: &[]factoryapi.Workstation{{
+			Name:   "plan-task",
+			Worker: "planner",
+			Type:   workstationTypeModel(),
+			Body:   stringPointer("Plan the story."),
+			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
+			Outputs: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "complete"},
+			},
+			OnFailure: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "failed"},
+			},
+		}},
+	}
+
+	if _, err := svc.Save(context.Background(), factorysessions.DefaultSessionID, factoryapi.FactorySaveModeReplaceCurrent, replacement); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if !host.discardCalled {
+		t.Fatal("expected backup discard after successful activation")
+	}
+
+	factoryJSON, err := os.ReadFile(initialPath)
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	if strings.Contains(string(factoryJSON), "You are the planner.") {
+		t.Fatalf("factory.json should omit inlined planner body after split save, got %s", factoryJSON)
+	}
+	if strings.Contains(string(factoryJSON), "Plan the story.") {
+		t.Fatalf("factory.json should omit inlined workstation body after split save, got %s", factoryJSON)
+	}
+
+	workerAgents := filepath.Join(rootDir, interfaces.WorkersDir, "planner", interfaces.FactoryAgentsFileName)
+	workerBody, err := os.ReadFile(workerAgents)
+	if err != nil {
+		t.Fatalf("ReadFile(planner AGENTS.md): %v", err)
+	}
+	if !strings.Contains(string(workerBody), "You are the planner.") {
+		t.Fatalf("planner AGENTS.md = %q, want planner body", workerBody)
+	}
+
+	workstationAgents := filepath.Join(rootDir, interfaces.WorkstationsDir, "plan-task", interfaces.FactoryAgentsFileName)
+	workstationBody, err := os.ReadFile(workstationAgents)
+	if err != nil {
+		t.Fatalf("ReadFile(plan-task AGENTS.md): %v", err)
+	}
+	if !strings.Contains(string(workstationBody), "Plan the story.") {
+		t.Fatalf("plan-task AGENTS.md = %q, want workstation body", workstationBody)
+	}
 }
 
 func TestSaveDefaultCurrentFactoryForSession_RestoresTreeOnActivationFailure(t *testing.T) {
@@ -149,11 +243,15 @@ func (h *splitLayoutDefaultSaveHost) ActivateSessionEditableFactory(context.Cont
 	return h.activateErr
 }
 
-func (h *splitLayoutDefaultSaveHost) ReplaceFactorySplitLayout(sessionRootDir string, payload []byte) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
-	if sessionRootDir != h.sessionRootDir {
-		return nil, errors.New("unexpected session root")
+func (h *splitLayoutDefaultSaveHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	if targetDir != h.sessionRootDir {
+		return nil, errors.New("unexpected replace target dir")
 	}
-	result, err := factoryconfig.ReplaceFactorySplitLayout(sessionRootDir, payload)
+	result, err := factoryconfig.ReplaceFactoryLayoutAtDirWithPreparedWithResult(
+		targetDir,
+		prepared,
+		factoryconfig.DefaultFactoryLayoutReplaceOptions(targetDir),
+	)
 	if err != nil {
 		return nil, err
 	}

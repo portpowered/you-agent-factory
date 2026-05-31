@@ -5,8 +5,8 @@ import type {
   CurrentFactoryDefinitionError,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
-import type { DetailCardSaveState } from "./detail-card-save-types";
+import { useFactoryDocumentSave } from "../../../current-factory-definition/public";
+import type { FactoryDocumentSaveState } from "./factory-document-save-types";
 
 export interface ScopedFactoryDocumentSaveRequest {
   baseVersion: CurrentFactoryVersion;
@@ -34,10 +34,13 @@ export interface UseScopedFactoryDocumentSaveResult<
 > {
   beginConfirmation: () => void;
   cancelConfirmation: () => void;
+  clearSaveFeedback: () => void;
   confirmSave: (request: ScopedFactoryDocumentSaveRequest) => Promise<void>;
+  error: CurrentFactoryDefinitionError | null;
   isPending: boolean;
+  reset: () => void;
   saveNow: (request: ScopedFactoryDocumentSaveRequest) => Promise<void>;
-  saveState: DetailCardSaveState<TFieldErrors>;
+  saveState: FactoryDocumentSaveState<TFieldErrors>;
 }
 
 interface ScopedFactoryDocumentSaveErrorState<
@@ -67,7 +70,9 @@ export function useScopedFactoryDocumentSave<
     null,
   );
   const saveInFlightRef = useRef(false);
-  const { isPending, saveAsync } = useFactoryDocumentSave();
+  const activeScopeKeyRef = useRef(scopeKey);
+  activeScopeKeyRef.current = scopeKey;
+  const { error, isPending, reset, saveAsync } = useFactoryDocumentSave();
 
   useResetExitedSaveScope({
     scopeKey,
@@ -109,12 +114,12 @@ export function useScopedFactoryDocumentSave<
   const persistSave = useCallback(
     (request: ScopedFactoryDocumentSaveRequest) =>
       executeScopedFactoryDocumentSave({
+        activeScopeKeyRef,
         fallbackErrorMessage,
         mapSaveErrorToFieldErrors,
         request,
         saveAsync,
         saveInFlightRef,
-        scopeKey,
         setIsConfirming,
         setLastFailedScope,
         setLastSuccessfulScopeKey,
@@ -124,7 +129,6 @@ export function useScopedFactoryDocumentSave<
       fallbackErrorMessage,
       mapSaveErrorToFieldErrors,
       saveAsync,
-      scopeKey,
     ],
   );
 
@@ -140,11 +144,20 @@ export function useScopedFactoryDocumentSave<
     }
   }, [isPending]);
 
+  const clearSaveFeedback = useCallback(() => {
+    setIsConfirming(false);
+    setLastFailedScope(null);
+    setLastSuccessfulScopeKey(null);
+  }, []);
+
   return {
     beginConfirmation,
     cancelConfirmation,
+    clearSaveFeedback,
     confirmSave: persistSave,
+    error,
     isPending,
+    reset,
     saveNow: persistSave,
     saveState,
   };
@@ -153,17 +166,18 @@ export function useScopedFactoryDocumentSave<
 async function executeScopedFactoryDocumentSave<
   TFieldErrors extends Record<string, string>,
 >({
+  activeScopeKeyRef,
   fallbackErrorMessage,
   mapSaveErrorToFieldErrors,
   request,
   saveAsync,
   saveInFlightRef,
-  scopeKey,
   setIsConfirming,
   setLastFailedScope,
   setLastSuccessfulScopeKey,
   setSubmittingScopeKey,
 }: {
+  activeScopeKeyRef: { current: string | null };
   fallbackErrorMessage: string;
   mapSaveErrorToFieldErrors?: (
     error: Pick<
@@ -174,7 +188,6 @@ async function executeScopedFactoryDocumentSave<
   request: ScopedFactoryDocumentSaveRequest;
   saveAsync: ReturnType<typeof useFactoryDocumentSave>["saveAsync"];
   saveInFlightRef: { current: boolean };
-  scopeKey: string | null;
   setIsConfirming: (value: boolean) => void;
   setLastFailedScope: (
     value: ScopedFactoryDocumentSaveErrorState<TFieldErrors> | null,
@@ -183,8 +196,8 @@ async function executeScopedFactoryDocumentSave<
   setSubmittingScopeKey: (value: string | null) => void;
 }) {
   if (
-    scopeKey == null ||
-    request.scopeKey !== scopeKey ||
+    activeScopeKeyRef.current == null ||
+    request.scopeKey !== activeScopeKeyRef.current ||
     saveInFlightRef.current
   ) {
     return;
@@ -193,12 +206,15 @@ async function executeScopedFactoryDocumentSave<
   setLastFailedScope(null);
   setLastSuccessfulScopeKey(null);
   saveInFlightRef.current = true;
-  setSubmittingScopeKey(scopeKey);
+  setSubmittingScopeKey(request.scopeKey);
   try {
     await saveAsync({
       baseVersion: request.baseVersion,
       factory: request.factory,
     });
+    if (activeScopeKeyRef.current !== request.scopeKey) {
+      return;
+    }
     request.onSaved?.();
     setIsConfirming(false);
     setSubmittingScopeKey(null);
@@ -208,6 +224,9 @@ async function executeScopedFactoryDocumentSave<
     setIsConfirming(false);
     setSubmittingScopeKey(null);
     setLastSuccessfulScopeKey(null);
+    if (activeScopeKeyRef.current !== request.scopeKey) {
+      return;
+    }
     setLastFailedScope({
       ...normalizeSaveError(error, {
         fallbackMessage: fallbackErrorMessage,
@@ -217,6 +236,9 @@ async function executeScopedFactoryDocumentSave<
     });
   } finally {
     saveInFlightRef.current = false;
+    if (activeScopeKeyRef.current !== request.scopeKey) {
+      setSubmittingScopeKey(null);
+    }
   }
 }
 
@@ -236,7 +258,7 @@ function resolveDetailCardSaveState<
   lastSuccessfulScopeKey: string | null;
   scopeKey: string | null;
   submittingScopeKey: string | null;
-}): DetailCardSaveState<TFieldErrors> {
+}): FactoryDocumentSaveState<TFieldErrors> {
   if (submittingScopeKey !== null && submittingScopeKey === scopeKey) {
     return { status: "submitting" };
   }

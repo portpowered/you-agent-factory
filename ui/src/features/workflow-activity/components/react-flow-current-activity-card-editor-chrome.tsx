@@ -7,8 +7,8 @@ import {
   FactoryGraphEditorStatus,
   type FactoryGraphEditorTool,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   createFactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityDraft,
@@ -16,7 +16,8 @@ import {
   type FactoryGraphAddEntityKind,
   validateFactoryGraphAddEntityDraft,
 } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { useGraphEditorPlaceAddedNode } from "./graph-editor-placement-context";
 
 export function useFactoryGraphAddEntityController({
   currentFactoryDefinition,
@@ -32,6 +33,7 @@ export function useFactoryGraphAddEntityController({
     useState<FactoryGraphAddEntityDraft | null>(null);
   const [addEntityErrors, setAddEntityErrors] =
     useState<FactoryGraphAddEntityFieldErrors>({});
+  const placeAddedNode = useGraphEditorPlaceAddedNode();
 
   const handleAddEntityAction = useCallback(
     (actionID: string) => {
@@ -68,9 +70,15 @@ export function useFactoryGraphAddEntityController({
       return;
     }
 
+    placeAddedNode?.(addEntityDraft);
     setAddEntityDraft(null);
     setAddEntityErrors({});
-  }, [addEntityDraft, currentFactoryDefinition, editableGraph.actions]);
+  }, [
+    addEntityDraft,
+    currentFactoryDefinition,
+    editableGraph.actions,
+    placeAddedNode,
+  ]);
 
   const reset = useCallback(() => {
     setAddMenuOpen(false);
@@ -97,6 +105,7 @@ const FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS = "gap-1.5";
 const STATUS_PILL_COMPACT_CLASS = "px-2.5 py-0.5 text-[0.7rem]";
 const MODE_TOGGLE_COMPACT_CLASS =
   "size-8 rounded-md border-af-border bg-transparent text-af-text-muted hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
+const MODE_TOGGLE_COMPACT_DIRTY_CLASS = "size-8 rounded-md";
 
 export function CurrentActivityGraphHeaderActions({
   compact = false,
@@ -132,9 +141,16 @@ export function CurrentActivityGraphHeaderActions({
       actions={
         <>
           <FactoryGraphEditorModeToggle
-            className={compact ? MODE_TOGGLE_COMPACT_CLASS : undefined}
+            className={
+              compact
+                ? hasChanges
+                  ? MODE_TOGGLE_COMPACT_DIRTY_CLASS
+                  : MODE_TOGGLE_COMPACT_CLASS
+                : undefined
+            }
             disabled={!editorMode && editorUnavailableReason !== undefined}
             editorMode={editorMode}
+            hasChanges={hasChanges}
             locale={locale}
             onClick={onToggle}
             tooltipOverride={editorUnavailableReason}

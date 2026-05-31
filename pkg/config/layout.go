@@ -130,7 +130,11 @@ func ExpandFactoryConfigLayoutWithExpansionReport(path string) (string, LayoutEx
 		return "", LayoutExpansionReport{}, fmt.Errorf("normalize factory config %s: %w", sourcePath, err)
 	}
 
-	report, err := writeExpandedFactoryLayout(filepath.Dir(sourcePath), targetDir, cfgForExpandedFiles, canonical, sourcePath)
+	report, err := writeFactorySplitLayout(targetDir, cfgForExpandedFiles, canonical, sourcePath, FactorySplitLayoutWriteOptions{
+		SourceDir:                   filepath.Dir(sourcePath),
+		CopyReferencedScripts:       true,
+		OverwriteExistingSplitFiles: false,
+	})
 	if err != nil {
 		return "", LayoutExpansionReport{}, err
 	}
@@ -179,220 +183,6 @@ func FactoryConfigWithRuntimeDefinitions(cfg *interfaces.FactoryConfig, runtimeC
 		return nil, err
 	}
 	return inlined, nil
-}
-
-// CloneFactoryConfig deep-copies a factory config through explicit field copies.
-func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfig, error) {
-	if cfg == nil {
-		return nil, nil
-	}
-	cloned := &interfaces.FactoryConfig{
-		Name:             cfg.Name,
-		Project:          cfg.Project,
-		Version:          cloneFactoryVersion(cfg.Version),
-		Guards:           cloneFactoryGuardConfigs(cfg.Guards),
-		InputTypes:       cloneInputTypeConfigs(cfg.InputTypes),
-		WorkTypes:        cloneWorkTypeConfigs(cfg.WorkTypes),
-		Resources:        cloneResourceConfigs(cfg.Resources),
-		ResourceManifest: clonePortableResourceManifestConfig(cfg.ResourceManifest),
-		Workers:          cloneWorkerConfigs(cfg.Workers),
-		Workstations:     cloneWorkstationConfigs(cfg.Workstations),
-	}
-	return cloned, nil
-}
-
-func cloneFactoryVersion(version *interfaces.FactoryVersion) *interfaces.FactoryVersion {
-	if version == nil {
-		return nil
-	}
-	cloned := *version
-	return &cloned
-}
-
-func cloneFactoryGuardConfigs(configs []interfaces.FactoryGuardConfig) []interfaces.FactoryGuardConfig {
-	if len(configs) == 0 {
-		return nil
-	}
-	cloned := make([]interfaces.FactoryGuardConfig, len(configs))
-	copy(cloned, configs)
-	return cloned
-}
-
-// CloneWorkerConfig returns a copy of a worker runtime definition.
-func CloneWorkerConfig(def interfaces.WorkerConfig) interfaces.WorkerConfig {
-	def.Args = append([]string(nil), def.Args...)
-	def.Operations = cloneModelOperations(def.Operations)
-	def.Resources = append([]interfaces.ResourceConfig(nil), def.Resources...)
-	def.Auth = cloneHostedWorkerAuthConfig(def.Auth)
-	def.Linear = cloneHostedLinearWorkerConfig(def.Linear)
-	return def
-}
-
-// CloneWorkstationConfig returns a copy of a workstation runtime definition.
-func CloneWorkstationConfig(def interfaces.FactoryWorkstationConfig) interfaces.FactoryWorkstationConfig {
-	def.Inputs = cloneIOConfigs(def.Inputs)
-	def.Outputs = cloneIOConfigs(def.Outputs)
-	def.OperationBindings = cloneModelOperationBindings(def.OperationBindings)
-	def.Resources = append([]interfaces.ResourceConfig(nil), def.Resources...)
-	def.Guards = cloneGuardConfigs(def.Guards)
-	def.StopWords = append([]string(nil), def.StopWords...)
-	def.RuntimeStopWords = append([]string(nil), def.RuntimeStopWords...)
-	if def.Cron != nil {
-		cron := *def.Cron
-		def.Cron = &cron
-	}
-	def.OnContinue = cloneIOConfigs(def.OnContinue)
-	def.OnRejection = cloneIOConfigs(def.OnRejection)
-	def.OnFailure = cloneIOConfigs(def.OnFailure)
-	if def.Env != nil {
-		env := make(map[string]string, len(def.Env))
-		for key, value := range def.Env {
-			env[key] = value
-		}
-		def.Env = env
-	}
-	return def
-}
-
-func cloneInputTypeConfigs(configs []interfaces.InputTypeConfig) []interfaces.InputTypeConfig {
-	return append([]interfaces.InputTypeConfig(nil), configs...)
-}
-
-func cloneWorkTypeConfigs(configs []interfaces.WorkTypeConfig) []interfaces.WorkTypeConfig {
-	out := append([]interfaces.WorkTypeConfig(nil), configs...)
-	for i := range out {
-		out[i].States = append([]interfaces.StateConfig(nil), configs[i].States...)
-	}
-	return out
-}
-
-func cloneResourceConfigs(configs []interfaces.ResourceConfig) []interfaces.ResourceConfig {
-	return append([]interfaces.ResourceConfig(nil), configs...)
-}
-
-func cloneModelOperations(operations []interfaces.ModelOperation) []interfaces.ModelOperation {
-	if len(operations) == 0 {
-		return nil
-	}
-	cloned := make([]interfaces.ModelOperation, len(operations))
-	for i, operation := range operations {
-		cloned[i] = interfaces.ModelOperation{
-			Name:    operation.Name,
-			Inputs:  cloneModelOperationSlots(operation.Inputs),
-			Outputs: cloneModelOperationSlots(operation.Outputs),
-		}
-	}
-	return cloned
-}
-
-func cloneModelOperationSlots(slots []interfaces.ModelOperationSlot) []interfaces.ModelOperationSlot {
-	if len(slots) == 0 {
-		return nil
-	}
-	cloned := make([]interfaces.ModelOperationSlot, len(slots))
-	for i, slot := range slots {
-		cloned[i] = interfaces.ModelOperationSlot{
-			Name:         slot.Name,
-			ContentTypes: append([]string(nil), slot.ContentTypes...),
-			Required:     slot.Required,
-		}
-	}
-	return cloned
-}
-
-func clonePortableResourceManifestConfig(cfg *interfaces.PortableResourceManifestConfig) *interfaces.PortableResourceManifestConfig {
-	if cfg == nil {
-		return nil
-	}
-
-	cloned := &interfaces.PortableResourceManifestConfig{
-		RequiredTools: make([]interfaces.RequiredToolConfig, len(cfg.RequiredTools)),
-		BundledFiles:  make([]interfaces.BundledFileConfig, len(cfg.BundledFiles)),
-	}
-	for i := range cfg.RequiredTools {
-		cloned.RequiredTools[i] = cfg.RequiredTools[i]
-		cloned.RequiredTools[i].VersionArgs = append([]string(nil), cfg.RequiredTools[i].VersionArgs...)
-	}
-	for i := range cfg.BundledFiles {
-		cloned.BundledFiles[i] = cfg.BundledFiles[i]
-	}
-	return cloned
-}
-
-func cloneWorkerConfigs(configs []interfaces.WorkerConfig) []interfaces.WorkerConfig {
-	out := make([]interfaces.WorkerConfig, len(configs))
-	for i := range configs {
-		out[i] = CloneWorkerConfig(configs[i])
-	}
-	return out
-}
-
-func cloneWorkstationConfigs(configs []interfaces.FactoryWorkstationConfig) []interfaces.FactoryWorkstationConfig {
-	out := make([]interfaces.FactoryWorkstationConfig, len(configs))
-	for i := range configs {
-		out[i] = CloneWorkstationConfig(configs[i])
-	}
-	return out
-}
-
-func cloneIOConfigs(configs []interfaces.IOConfig) []interfaces.IOConfig {
-	out := append([]interfaces.IOConfig(nil), configs...)
-	for i := range out {
-		out[i] = cloneIOConfig(configs[i])
-	}
-	return out
-}
-
-func cloneModelOperationBindings(bindings []interfaces.ModelOperationBinding) []interfaces.ModelOperationBinding {
-	if len(bindings) == 0 {
-		return nil
-	}
-	out := make([]interfaces.ModelOperationBinding, len(bindings))
-	for i := range bindings {
-		out[i] = interfaces.ModelOperationBinding{
-			Slot:           bindings[i].Slot,
-			Config:         interfaces.CloneWorkContentParts(bindings[i].Config),
-			DefaultContent: interfaces.CloneWorkContentParts(bindings[i].DefaultContent),
-		}
-		if bindings[i].Selector != nil {
-			selector := *bindings[i].Selector
-			out[i].Selector = &selector
-		}
-	}
-	return out
-}
-
-func cloneIOConfig(cfg interfaces.IOConfig) interfaces.IOConfig {
-	cloned := cfg
-	cloned.Guard = cloneInputGuardConfigPtr(cfg.Guard)
-	return cloned
-}
-
-func cloneInputGuardConfigPtr(cfg *interfaces.InputGuardConfig) *interfaces.InputGuardConfig {
-	if cfg == nil {
-		return nil
-	}
-	cloned := *cfg
-	return &cloned
-}
-
-func cloneGuardConfigs(configs []interfaces.GuardConfig) []interfaces.GuardConfig {
-	if len(configs) == 0 {
-		return nil
-	}
-	out := append([]interfaces.GuardConfig(nil), configs...)
-	for i := range out {
-		out[i].MatchConfig = cloneGuardMatchConfigPtr(configs[i].MatchConfig)
-	}
-	return out
-}
-
-func cloneGuardMatchConfigPtr(cfg *interfaces.GuardMatchConfig) *interfaces.GuardMatchConfig {
-	if cfg == nil {
-		return nil
-	}
-	cloned := *cfg
-	return &cloned
 }
 
 func applyWorkerRuntimeDefinition(worker *interfaces.WorkerConfig, def *interfaces.WorkerConfig) {
@@ -735,6 +525,42 @@ type factorySplitLayoutReplaceHooks struct {
 	afterStageWrite func(stagingDir string) error
 }
 
+// PreparedFactoryLayoutPayload holds normalized factory state produced once from
+// submitted JSON for split-layout validation and persist.
+type PreparedFactoryLayoutPayload struct {
+	Config    *interfaces.FactoryConfig
+	Canonical []byte
+}
+
+// PrepareFactoryLayoutPayload normalizes factory JSON into expanded config (with
+// inline runtime bodies for split writes) and thin canonical factory.json bytes.
+func PrepareFactoryLayoutPayload(segment string, payload []byte) (*PreparedFactoryLayoutPayload, error) {
+	cfg, canonical, err := normalizeNamedFactoryPayload(segment, payload)
+	if err != nil {
+		return nil, err
+	}
+	return &PreparedFactoryLayoutPayload{
+		Config:    cfg,
+		Canonical: canonical,
+	}, nil
+}
+
+// FactoryLayoutReplaceOptions configures ReplaceFactoryLayoutAtDir.
+type FactoryLayoutReplaceOptions struct {
+	LayoutWrite FactorySplitLayoutWriteOptions
+}
+
+// DefaultFactoryLayoutReplaceOptions returns persist-from-save layout options for
+// an existing factory directory at targetDir.
+func DefaultFactoryLayoutReplaceOptions(targetDir string) FactoryLayoutReplaceOptions {
+	return FactoryLayoutReplaceOptions{
+		LayoutWrite: FactorySplitLayoutWriteOptions{
+			SourceDir:                   strings.TrimSpace(targetDir),
+			OverwriteExistingSplitFiles: true,
+		},
+	}
+}
+
 // FactorySplitLayoutReplaceResult holds rollback and backup-discard callbacks
 // returned by ReplaceFactorySplitLayout after a successful commit.
 type FactorySplitLayoutReplaceResult struct {
@@ -742,12 +568,71 @@ type FactorySplitLayoutReplaceResult struct {
 	DiscardBackup func()
 }
 
+// ReplaceFactoryLayoutAtDir atomically replaces targetDir from payload using
+// normalizeNamedFactoryPayload, staging, writeFactorySplitLayout, LoadRuntimeConfig
+// validation, and an atomic swap. restore reverts to the pre-replace directory
+// tree when downstream activation fails.
+// ReplaceFactoryLayoutAtDirWithResult runs the same pipeline as
+// ReplaceFactoryLayoutAtDir and also returns DiscardBackup for callers that
+// must remove the on-disk backup after successful downstream activation.
+func ReplaceFactoryLayoutAtDirWithResult(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (*FactorySplitLayoutReplaceResult, error) {
+	return replaceFactoryLayoutAtDir(targetDir, payload, nil, opts, factorySplitLayoutReplaceHooks{})
+}
+
+// ReplaceFactoryLayoutAtDirWithPreparedWithResult atomically replaces targetDir
+// using a pre-normalized payload so validation and split layout writes share the
+// same expanded FactoryConfig and canonical factory.json bytes.
+func ReplaceFactoryLayoutAtDirWithPreparedWithResult(
+	targetDir string,
+	prepared *PreparedFactoryLayoutPayload,
+	opts FactoryLayoutReplaceOptions,
+) (*FactorySplitLayoutReplaceResult, error) {
+	if prepared == nil {
+		return nil, fmt.Errorf("prepared factory layout payload is required")
+	}
+	return replaceFactoryLayoutAtDir(targetDir, nil, prepared, opts, factorySplitLayoutReplaceHooks{})
+}
+
+func ReplaceFactoryLayoutAtDir(targetDir string, payload []byte, opts FactoryLayoutReplaceOptions) (restore func(), err error) {
+	result, err := ReplaceFactoryLayoutAtDirWithResult(targetDir, payload, opts)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.Restore == nil {
+		return func() {}, nil
+	}
+	return result.Restore, nil
+}
+
+// ReplaceFactoryLayoutAtDirWithAfterStageHook runs ReplaceFactoryLayoutAtDir and
+// invokes afterStageWrite on the staged directory before validation. It exists for
+// tests that assert validation failures leave the committed target unchanged.
+func ReplaceFactoryLayoutAtDirWithAfterStageHook(
+	targetDir string,
+	payload []byte,
+	opts FactoryLayoutReplaceOptions,
+	afterStageWrite func(stagingDir string) error,
+) (restore func(), err error) {
+	hooks := factorySplitLayoutReplaceHooks{}
+	if afterStageWrite != nil {
+		hooks.afterStageWrite = afterStageWrite
+	}
+	result, err := replaceFactoryLayoutAtDir(targetDir, payload, nil, opts, hooks)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.Restore == nil {
+		return func() {}, nil
+	}
+	return result.Restore, nil
+}
+
 // ReplaceFactorySplitLayout atomically replaces an existing factory directory at
 // targetDir with a split-layout materialization of canonicalFactoryJSON. Call
 // Restore to reinstate the pre-replace tree when downstream steps fail; call
 // DiscardBackup after successful activation to remove the on-disk backup.
 func ReplaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte) (*FactorySplitLayoutReplaceResult, error) {
-	return replaceFactorySplitLayout(targetDir, canonicalFactoryJSON, factorySplitLayoutReplaceHooks{})
+	return ReplaceFactoryLayoutAtDirWithResult(targetDir, canonicalFactoryJSON, DefaultFactoryLayoutReplaceOptions(targetDir))
 }
 
 // ReplaceFactorySplitLayoutWithAfterStageHook runs split-layout replace and invokes
@@ -762,20 +647,26 @@ func ReplaceFactorySplitLayoutWithAfterStageHook(
 	if afterStageWrite != nil {
 		hooks.afterStageWrite = afterStageWrite
 	}
-	return replaceFactorySplitLayout(targetDir, canonicalFactoryJSON, hooks)
+	return replaceFactoryLayoutAtDir(targetDir, canonicalFactoryJSON, nil, DefaultFactoryLayoutReplaceOptions(targetDir), hooks)
 }
 
-func replaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte, hooks factorySplitLayoutReplaceHooks) (*FactorySplitLayoutReplaceResult, error) {
+func replaceFactoryLayoutAtDir(
+	targetDir string,
+	payload []byte,
+	prepared *PreparedFactoryLayoutPayload,
+	opts FactoryLayoutReplaceOptions,
+	hooks factorySplitLayoutReplaceHooks,
+) (*FactorySplitLayoutReplaceResult, error) {
 	if strings.TrimSpace(targetDir) == "" {
 		return nil, fmt.Errorf("factory directory is required")
 	}
 	if err := requireFactoryConfig(targetDir); err != nil {
-		return nil, fmt.Errorf("replace factory split layout: %w", err)
+		return nil, fmt.Errorf("replace factory layout at dir: %w", err)
 	}
 
 	segment := filepath.Base(targetDir)
 	parentDir := filepath.Dir(targetDir)
-	stagingDir, cleanupStaging, err := stageFactorySplitLayoutReplace(targetDir, segment, parentDir, canonicalFactoryJSON, hooks)
+	stagingDir, cleanupStaging, err := stageFactorySplitLayoutReplace(targetDir, segment, parentDir, payload, prepared, opts, hooks)
 	if err != nil {
 		return nil, err
 	}
@@ -798,12 +689,24 @@ func replaceFactorySplitLayout(targetDir string, canonicalFactoryJSON []byte, ho
 
 func stageFactorySplitLayoutReplace(
 	targetDir, segment, parentDir string,
-	canonicalFactoryJSON []byte,
+	payload []byte,
+	prepared *PreparedFactoryLayoutPayload,
+	opts FactoryLayoutReplaceOptions,
 	hooks factorySplitLayoutReplaceHooks,
 ) (stagingDir string, cleanup func(), err error) {
-	factoryCfg, canonical, err := normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
-	if err != nil {
-		return "", func() {}, err
+	var factoryCfg *interfaces.FactoryConfig
+	var canonical []byte
+	switch {
+	case prepared != nil:
+		factoryCfg = prepared.Config
+		canonical = prepared.Canonical
+	case len(payload) > 0:
+		factoryCfg, canonical, err = normalizeNamedFactoryPayload(segment, payload)
+		if err != nil {
+			return "", func() {}, err
+		}
+	default:
+		return "", func() {}, fmt.Errorf("factory layout payload is required")
 	}
 
 	sourcePath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
@@ -815,7 +718,11 @@ func stageFactorySplitLayoutReplace(
 		_ = os.RemoveAll(stagingDir)
 	}
 
-	if _, err := writeNamedFactoryLayout(stagingDir, factoryCfg, canonical, sourcePath); err != nil {
+	layoutWrite := opts.LayoutWrite
+	if strings.TrimSpace(layoutWrite.SourceDir) == "" {
+		layoutWrite.SourceDir = targetDir
+	}
+	if _, err := writeFactorySplitLayout(stagingDir, factoryCfg, canonical, sourcePath, layoutWrite); err != nil {
 		return "", cleanup, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 	}
 	if hooks.afterStageWrite != nil {

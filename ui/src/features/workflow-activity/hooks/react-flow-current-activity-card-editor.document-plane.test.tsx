@@ -80,9 +80,20 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       discard: fixtureState.draftState.resetDraft,
       save: vi.fn(),
     },
+    documentSaveControls: {
+      beginConfirmation: vi.fn(),
+      cancelConfirmation: vi.fn(),
+      clearSaveFeedback: vi.fn(),
+    },
     draftState: fixtureState.draftState,
+    saveMutation: {
+      error: fixtureState.saveEditableDefinition.error,
+      isPending: fixtureState.saveEditableDefinition.isPending,
+      reset: fixtureState.saveEditableDefinition.reset,
+    },
     saveState: {
       canSave: false,
+      documentSave: { status: "idle" },
       isStale: false,
     },
   }),
@@ -125,6 +136,7 @@ vi.mock("./react-flow-current-activity-card-editor-connections", () => ({
 
 vi.mock("./react-flow-current-activity-card-editor-removals", () => ({
   useFactoryGraphRemovalController: () => ({
+    handleCancelRemoval: vi.fn(),
     handleConfirmRemoval: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),

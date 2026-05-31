@@ -4,7 +4,8 @@ import type { FactoryGraphEditorTool } from "../../factory-graph-editor/componen
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
-import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
+import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
@@ -15,8 +16,10 @@ export function buildCurrentActivityGraphEditorValue(args: {
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
   addMenuActions: ReturnType<typeof buildFactoryGraphAddEntityMenuActions>;
   blockedRemovalReason: string | null;
+  cancelSaveConfirmation: () => void;
   canInteractWithEditor: boolean;
   canSaveDraft: boolean;
+  documentSave: FactoryDocumentSaveState;
   connectionNotice: string | null;
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
@@ -25,6 +28,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   >;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
+  handleCancelRemoval: () => void;
   handleDiscardPendingChanges: () => void;
   handleConfirmRemoval: () => void;
   handleConnectionAnchorClick: ReturnType<
@@ -37,9 +41,9 @@ export function buildCurrentActivityGraphEditorValue(args: {
   handleEditorEdgeDelete: (edgeId: string) => void;
   handleEditorModeToggle: () => void;
   handleEditorNodeDelete: (nodeId: string) => void;
+  handleSelectionNodeDelete: (nodeId: string) => void;
   handleSaveDraft: () => Promise<boolean>;
   handleSaveBeforeLeavingEditor: () => Promise<boolean>;
-  graphDraftSaveSucceeded: boolean;
   hasActiveWork: boolean;
   isConfirmingLeaveEditor: boolean;
   isConfirmingSave: boolean;
@@ -50,8 +54,9 @@ export function buildCurrentActivityGraphEditorValue(args: {
   pendingRemovalIntent: ReturnType<
     typeof useFactoryGraphRemovalController
   >["pendingRemovalIntent"];
+  saveAttemptRevision: number;
   saveBlockedReason?: string;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
   saveSummary: ReturnType<typeof buildFactoryGraphSaveSummary>;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setBlockedRemovalReason: (reason: string | null) => void;
@@ -71,8 +76,10 @@ export function buildCurrentActivityGraphEditorValue(args: {
     addMenuActions: args.addMenuActions,
     addMenuOpen: args.addEntityController.addMenuOpen,
     blockedRemovalReason: args.blockedRemovalReason,
+    cancelSaveConfirmation: args.cancelSaveConfirmation,
     canInteractWithEditor: args.canInteractWithEditor,
     canSaveDraft: args.canSaveDraft,
+    documentSave: args.documentSave,
     connectionNotice: args.connectionNotice,
     currentFactoryDefinition: args.currentFactoryDefinition,
     draftState: args.draftState,
@@ -80,6 +87,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     editorUnavailableClassifierWorkstationName:
       args.editorUnavailableClassifierWorkstationName,
     editorMode: args.editorMode,
+    handleCancelRemoval: args.handleCancelRemoval,
     handleDiscardPendingChanges: args.handleDiscardPendingChanges,
     handleAddEntityAction: args.addEntityController.handleAddEntityAction,
     handleAddEntitySubmit: args.addEntityController.handleAddEntitySubmit,
@@ -90,9 +98,9 @@ export function buildCurrentActivityGraphEditorValue(args: {
     handleEditorEdgeDelete: args.handleEditorEdgeDelete,
     handleEditorModeToggle: args.handleEditorModeToggle,
     handleEditorNodeDelete: args.handleEditorNodeDelete,
+    handleSelectionNodeDelete: args.handleSelectionNodeDelete,
     handleSaveDraft: args.handleSaveDraft,
     handleSaveBeforeLeavingEditor: args.handleSaveBeforeLeavingEditor,
-    graphDraftSaveSucceeded: args.graphDraftSaveSucceeded,
     hasActiveWork: args.hasActiveWork,
     isConfirmingLeaveEditor: args.isConfirmingLeaveEditor,
     isConfirmingSave: args.isConfirmingSave,
@@ -100,6 +108,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     leaveDialogOpen: args.isConfirmingLeaveEditor,
     pendingConnectionSource: args.pendingConnectionSource,
     pendingRemovalIntent: args.pendingRemovalIntent,
+    saveAttemptRevision: args.saveAttemptRevision,
     saveBlockedReason: args.saveBlockedReason,
     saveEditableDefinition: args.saveEditableDefinition,
     saveSummary: args.saveSummary,

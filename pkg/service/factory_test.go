@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"go.uber.org/zap"
@@ -511,6 +512,35 @@ func (h *runningSessionService) stop(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for service shutdown")
+	}
+	closeSessionServiceRuntimeLogs(t, h.svc)
+}
+
+func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
+	t.Helper()
+	closed := make(map[*logging.RuntimeLogSink]struct{})
+	closeBundle := func(bundle *factoryRuntimeBundle) {
+		if bundle == nil || bundle.logSink == nil {
+			return
+		}
+		if _, seen := closed[bundle.logSink]; seen {
+			return
+		}
+		closed[bundle.logSink] = struct{}{}
+		if err := bundle.logSink.Close(); err != nil {
+			t.Fatalf("logSink.Close: %v", err)
+		}
+	}
+	closeBundle(svc.startupRuntimeBundle())
+	closeBundle(svc.currentRuntimeBundle())
+	if svc.sessions != nil {
+		for _, sessionID := range svc.sessions.IDs() {
+			session := svc.sessionByID(sessionID)
+			handle := liveSessionHandle(session)
+			if handle != nil {
+				closeBundle(handle.runtime)
+			}
+		}
 	}
 }
 

@@ -18,6 +18,7 @@ const fixtureState = vi.hoisted(() => ({
   },
   removalController: {
     blockedRemovalReason: null as string | null,
+    handleCancelRemoval: vi.fn(),
     handleConfirmRemoval: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),
@@ -77,10 +78,15 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
       resetDraft: vi.fn(),
       validationErrors: [],
     },
+    documentSaveControls: {
+      beginConfirmation: vi.fn(),
+      cancelConfirmation: vi.fn(),
+      clearSaveFeedback: vi.fn(),
+    },
     saveState: {
       canSave: false,
+      documentSave: { status: "idle" },
       isStale: false,
-      lastSuccess: false,
     },
   };
 }

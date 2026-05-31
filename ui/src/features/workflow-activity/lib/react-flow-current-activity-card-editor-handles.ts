@@ -1,10 +1,13 @@
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import type { FactoryValidationTarget } from "../../../api/factory-validation";
+import {
+  workstationHasZAxisIncompleteForConnections,
+  workstationSupportsProgressOutcomeRoutes,
+} from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type {
   FactoryGraphEdgeKind,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import type { FactoryValidationTarget } from "../../../api/factory-validation";
-import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
   type FactoryGraphConnectionAnchorContext,
   type FactoryGraphConnectionEndpoint,
@@ -14,9 +17,13 @@ import {
   mergeAuthoredProgressOutcomeConnectionAnchors,
   PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
-import type { ActivityGraphNodeHandle } from "../../flowchart/components/current-activity-node-shell";
 import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { validationHandleErrorsForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import type {
+  ActivityGraphNodeHandle,
+  ZAxisIncompleteHints,
+} from "../../flowchart/components/current-activity-node-shell";
 import type {
   PositionedEdge,
   PositionedNode,
@@ -121,6 +128,39 @@ export function resolveWorkstationConnectionAnchorContext(
     : undefined;
 }
 
+export function resolveZAxisIncompleteHints(args: {
+  connectionAnchorContext?: FactoryGraphConnectionAnchorContext;
+  editor?: CurrentActivityEditorState;
+  locale?: string | null;
+  nodeKind: FactoryGraphNodeKind;
+}): ZAxisIncompleteHints | null {
+  if (
+    args.nodeKind !== "workstation" ||
+    !args.connectionAnchorContext ||
+    args.editor?.editorMode !== true ||
+    args.editor.activeTool !== "connect" ||
+    !args.editor.canInteractWithEditor
+  ) {
+    return null;
+  }
+
+  if (
+    !workstationHasZAxisIncompleteForConnections(
+      args.connectionAnchorContext.workstation,
+    )
+  ) {
+    return null;
+  }
+
+  const hint = getFactoryGraphEditorMessages(
+    args.locale,
+  ).zAxisIncompleteConnectionHint;
+  return {
+    accessibleLabel: hint,
+    title: hint,
+  };
+}
+
 export function buildSemanticGraphHandles(args: {
   authoredProgressOutcomeSourceHandleIds?: ReadonlySet<string>;
   connectionAnchorContext?: FactoryGraphConnectionAnchorContext;
@@ -184,8 +224,7 @@ export function buildSemanticGraphHandles(args: {
         !visible || isAuthoredOnlyProgressOutcomeHandle || undefined,
       buttonTitle: handleValidation?.message ?? anchor.description,
       connectable: connectable && !isAuthoredOnlyProgressOutcomeHandle,
-      hidden:
-        !visible || isAuthoredOnlyProgressOutcomeHandle || undefined,
+      hidden: !visible || isAuthoredOnlyProgressOutcomeHandle || undefined,
       id: anchor.id,
       label: anchor.label,
       onButtonClick: () =>

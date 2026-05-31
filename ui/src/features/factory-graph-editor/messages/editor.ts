@@ -24,6 +24,8 @@ export interface FactoryGraphEditorMessages {
   addDialogKindLabel: string;
   addDialogModelHelp: string;
   addDialogModelLabel: string;
+  addDialogPromptBodyEditorError: string;
+  addDialogPromptBodyEditorLoading: string;
   addDialogPromptBodyHelp: string;
   addDialogPromptBodyLabel: string;
   addDialogStateTypeLabel: string;
@@ -75,8 +77,6 @@ export interface FactoryGraphEditorMessages {
   modeEnterEditor: string;
   modeLeaveEditor: string;
   modeLoadingDefinition: string;
-  modeNoDraftChanges: string;
-  modePendingChanges: string;
   modeUnavailablePrefix: string;
   modeUnsavedChanges: string;
   modeObserve: string;
@@ -84,6 +84,7 @@ export interface FactoryGraphEditorMessages {
   noticeEmptyMessage: string;
   noticeEmptyTitle: string;
   noticeRemovalBlockedTitle: string;
+  noticeSaveFailedAffectedSummary: (labels: string) => string;
   noticeSaveFailedTitle: string;
   noticeSaveSuccessDescription: string;
   noticeSaveSuccessTitle: string;
@@ -116,8 +117,6 @@ export interface FactoryGraphEditorMessages {
   toolbarDeleteDescription: string;
   toolbarDeleteLabel: string;
   toolbarOpenAddMenuLabel: string;
-  toolbarPendingChanges: string;
-  toolbarNoPendingChanges: string;
   toolbarVisibilityMenuAriaLabel: string;
   toolbarVisibilityMenuDescription: string;
   toolbarVisibilityMenuTitle: string;
@@ -172,6 +171,7 @@ export interface FactoryGraphEditorMessages {
   workerStatusLabel: (status: FactoryGraphWorkerRuntimeStatus) => string;
   workStatePhaseLegendAriaLabel: string;
   workStatePhaseLegendLabel: (stateType: FactoryWorkState["type"]) => string;
+  zAxisIncompleteConnectionHint: string;
 }
 
 function describeEnglishAddDialog(kind: FactoryGraphAddEntityDraft["kind"]) {
@@ -432,6 +432,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelHelp:
         "The model identifier saved on the new `MODEL_WORKER`.",
       addDialogModelLabel: "Model",
+      addDialogPromptBodyEditorError:
+        "The prompt editor could not start. Edit the prompt text below while we recover.",
+      addDialogPromptBodyEditorLoading: "Starting the prompt editor.",
       addDialogPromptBodyHelp:
         "Optional prompt content for the workstation body.",
       addDialogPromptBodyLabel: "Prompt body",
@@ -479,16 +482,15 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       modeEnterEditor: "Enter factory graph editor",
       modeLeaveEditor: "Leave factory graph editor",
       modeLoadingDefinition: "Loading editor definition",
-      modeNoDraftChanges: "No draft changes",
-      modePendingChanges: "Draft changes pending",
       modeUnavailablePrefix: "Editor unavailable",
-      modeUnsavedChanges: "Unsaved graph changes",
+      modeUnsavedChanges: "Unsaved changes",
       modeObserve: "Observe mode",
       noticeConnectionBlockedTitle: "Connection blocked",
       noticeEmptyMessage:
         "The factory has not published any workstation graph yet.",
       noticeEmptyTitle: "No workflow topology loaded",
       noticeRemovalBlockedTitle: "Removal blocked",
+      noticeSaveFailedAffectedSummary: (labels) => `Affected: ${labels}`,
       noticeSaveFailedTitle: "Topology save failed",
       noticeSaveSuccessDescription:
         "The draft has been cleared and the graph is waiting for the latest factory-change event refresh.",
@@ -525,8 +527,6 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarDeleteDescription: "Remove nodes or edges from the draft",
       toolbarDeleteLabel: "Delete",
       toolbarOpenAddMenuLabel: "Open add entity menu",
-      toolbarPendingChanges: "Draft changes pending",
-      toolbarNoPendingChanges: "No draft changes",
       toolbarVisibilityMenuAriaLabel: "Add graph entity menu",
       toolbarVisibilityMenuDescription:
         "Choose a supported entity to add to the current draft.",
@@ -633,6 +633,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       workerStatusLabel: describeEnglishWorkerStatus,
       workStatePhaseLegendAriaLabel: "Work state lifecycle colors",
       workStatePhaseLegendLabel: describeEnglishWorkStatePhaseLegendLabel,
+      zAxisIncompleteConnectionHint:
+        "Configure stop words on this workstation before connecting Continue or Reject routes.",
     },
     "zh-CN": {
       addDialogAddEntityAction: "添加实体",
@@ -659,6 +661,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogKindLabel: "类型",
       addDialogModelHelp: "将保存到新 `MODEL_WORKER` 上的模型标识符。",
       addDialogModelLabel: "模型",
+      addDialogPromptBodyEditorError:
+        "提示词编辑器无法启动。请先在下方编辑提示正文，我们稍后会恢复编辑器。",
+      addDialogPromptBodyEditorLoading: "正在启动提示词编辑器。",
       addDialogPromptBodyHelp: "工作站正文的可选提示内容。",
       addDialogPromptBodyLabel: "提示正文",
       addDialogStateTypeLabel: "状态类型",
@@ -829,15 +834,14 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       modeEnterEditor: "进入工厂图编辑器",
       modeLeaveEditor: "离开工厂图编辑器",
       modeLoadingDefinition: "正在加载编辑器定义",
-      modeNoDraftChanges: "没有草稿更改",
-      modePendingChanges: "草稿更改待处理",
       modeUnavailablePrefix: "编辑器不可用",
-      modeUnsavedChanges: "存在未保存的图更改",
+      modeUnsavedChanges: "未保存的更改",
       modeObserve: "观察模式",
       noticeConnectionBlockedTitle: "连接被阻止",
       noticeEmptyMessage: "该工厂尚未发布任何工作站图。",
       noticeEmptyTitle: "尚未加载工作流拓扑",
       noticeRemovalBlockedTitle: "移除被阻止",
+      noticeSaveFailedAffectedSummary: (labels) => `受影响项：${labels}`,
       noticeSaveFailedTitle: "拓扑保存失败",
       noticeSaveSuccessDescription:
         "草稿已清除，图正在等待最新的 factory-change 事件刷新。",
@@ -900,8 +904,6 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarDeleteDescription: "从草稿中移除节点或边",
       toolbarDeleteLabel: "删除",
       toolbarOpenAddMenuLabel: "打开添加实体菜单",
-      toolbarPendingChanges: "草稿更改待处理",
-      toolbarNoPendingChanges: "没有草稿更改",
       toolbarVisibilityMenuAriaLabel: "添加图实体菜单",
       toolbarVisibilityMenuDescription: "选择要添加到当前草稿的受支持实体。",
       toolbarVisibilityMenuTitle: "添加图实体",
@@ -1024,6 +1026,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "失败";
         }
       },
+      zAxisIncompleteConnectionHint:
+        "请在此工作站配置停止词后，再连接“继续”或“拒绝”路由。",
     },
   };
 

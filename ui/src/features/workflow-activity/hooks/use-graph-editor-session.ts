@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 
 import type { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
@@ -29,7 +29,7 @@ export function useGraphEditorSession({
   onAttemptLeaveEditor: () => void;
   onLeaveEditor: () => void;
   projectedFactory?: CanonicalFactoryDefinition;
-  saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
+  saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setEditorMode: (mode: boolean) => void;
 }) {

@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 
-import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
-import { useScopedFactoryDocumentSave } from "../../base/hooks/useScopedFactoryDocumentSave";
+import { mapWorkerSaveErrorToFieldErrors } from "../lib/worker-save-validation-field-mapping";
+import { useScopedFactoryDocumentSave } from "../../base/public";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
@@ -37,7 +37,7 @@ export function useSaveEditableWorkerConfiguration({
     useScopedFactoryDocumentSave<EditableWorkerSaveValidationErrors>({
       fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
       isDirty,
-      mapSaveErrorToFieldErrors: resolveSaveFieldErrors,
+      mapSaveErrorToFieldErrors: mapWorkerSaveErrorToFieldErrors,
       scopeKey,
     });
 
@@ -83,63 +83,4 @@ export function useSaveEditableWorkerConfiguration({
     }),
     [canSave, save, saveState],
   );
-}
-
-function resolveSaveFieldErrors(
-  error: Pick<CurrentFactoryDefinitionError, "message" | "targets">,
-): EditableWorkerSaveValidationErrors | undefined {
-  const fieldErrors: EditableWorkerSaveValidationErrors = {};
-
-  for (const target of error.targets ?? []) {
-    const fieldName = resolveTargetFieldName(target);
-    if (fieldName === null) {
-      continue;
-    }
-    fieldErrors[fieldName] ??= error.message;
-  }
-
-  return Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined;
-}
-
-function resolveTargetFieldName(
-  target: NonNullable<CurrentFactoryDefinitionError["targets"]>[number],
-): keyof EditableWorkerSaveValidationErrors | null {
-  if (target.subject.type !== "WORKER") {
-    return null;
-  }
-
-  const subjectID = target.subject.id.trim().toLowerCase();
-
-  if (subjectID === "type") {
-    return "type";
-  }
-  if (subjectID === "modelprovider") {
-    return "modelProvider";
-  }
-  if (subjectID === "model") {
-    return "model";
-  }
-  if (subjectID === "modellocality") {
-    return "modelLocality";
-  }
-  if (subjectID === "executorprovider") {
-    return "executorProvider";
-  }
-  if (subjectID === "command") {
-    return "command";
-  }
-  if (subjectID === "args") {
-    return "args";
-  }
-  if (subjectID === "body") {
-    return "body";
-  }
-  if (subjectID === "provider") {
-    return "provider";
-  }
-  if (subjectID === "name") {
-    return "name";
-  }
-
-  return null;
 }

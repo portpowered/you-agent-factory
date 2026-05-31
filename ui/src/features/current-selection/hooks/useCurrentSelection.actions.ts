@@ -10,6 +10,7 @@ import type {
   TerminalWorkStatus,
 } from "../../terminal-work/lib/types";
 import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
+import { selectDefaultSelection } from "../base/state/dashboardSelection";
 import {
   findTerminalWorkItem,
   inferStateWorkTerminalStatus,
@@ -32,6 +33,7 @@ export type WorkSelectionHint = {
   nodeID?: string;
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection actions stay grouped so graph, worker, and work-item clears share one commit seam.
 export function useCurrentSelectionActions({
   commitSelectionState,
   completedWorkItems,
@@ -67,6 +69,39 @@ export function useCurrentSelectionActions({
   const selectWorker = (workerName: string) => {
     commitSelectionState({
       selection: { kind: "worker", workerName },
+      terminalWorkDetail: null,
+    });
+  };
+
+  const clearSelectedWorkerIfMatching = (workerName: string) => {
+    if (selection?.kind !== "worker" || selection.workerName !== workerName) {
+      return;
+    }
+
+    commitSelectionState({
+      selection: snapshot ? selectDefaultSelection(snapshot) : null,
+      terminalWorkDetail: null,
+    });
+  };
+
+  const clearSelectedFactoryGraphNodeIfMatching = (nodeId: string) => {
+    if (selection?.kind !== "node" || selection.nodeId !== nodeId) {
+      return;
+    }
+
+    commitSelectionState({
+      selection: snapshot ? selectDefaultSelection(snapshot) : null,
+      terminalWorkDetail: null,
+    });
+  };
+
+  const clearSelectedStateNodeIfMatching = (placeId: string) => {
+    if (selection?.kind !== "state-node" || selection.placeId !== placeId) {
+      return;
+    }
+
+    commitSelectionState({
+      selection: snapshot ? selectDefaultSelection(snapshot) : null,
       terminalWorkDetail: null,
     });
   };
@@ -170,6 +205,9 @@ export function useCurrentSelectionActions({
   };
 
   return {
+    clearSelectedFactoryGraphNodeIfMatching,
+    clearSelectedStateNodeIfMatching,
+    clearSelectedWorkerIfMatching,
     openTerminalWorkDetail,
     selectStateNode,
     selectStateWorkItem,

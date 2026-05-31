@@ -132,6 +132,7 @@ const hookState = vi.hoisted(() => ({
     validationErrors: [],
   },
   removalController: {
+    handleCancelRemoval: vi.fn(),
     handleConfirmRemoval: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),
@@ -191,11 +192,21 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       discard: hookState.draftState.resetDraft,
       save: vi.fn(async () => false),
     },
+    documentSaveControls: {
+      beginConfirmation: vi.fn(),
+      cancelConfirmation: vi.fn(),
+      clearSaveFeedback: vi.fn(),
+    },
     draftState: hookState.draftState,
+    saveMutation: {
+      error: hookState.saveEditableDefinition.error,
+      isPending: hookState.saveEditableDefinition.isPending,
+      reset: hookState.saveEditableDefinition.reset,
+    },
     saveState: {
       canSave: hookState.draftState.hasChanges,
+      documentSave: { status: "idle" },
       isStale: false,
-      lastSuccess: false,
     },
   }),
 }));

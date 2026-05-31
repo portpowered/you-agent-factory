@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatSyntaxDiagnosticMessage } from "./workstation-prompt-diagnostic-message";
+import { formatSyntaxDiagnosticMessage } from "./prompt-editor-diagnostic-message";
 
 describe("formatSyntaxDiagnosticMessage", () => {
   it("returns API-normalized line-based messages unchanged", () => {

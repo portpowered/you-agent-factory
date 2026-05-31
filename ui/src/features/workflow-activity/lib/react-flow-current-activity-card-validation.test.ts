@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import {
+  mergeFactoryValidationTargets,
+  saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
   validationMessagesForSelectedWorkstation,
 } from "./react-flow-current-activity-card-validation";
@@ -43,6 +46,104 @@ describe("validationMessagesForSelectedWorkstation", () => {
 
     expect(messages).toEqual([
       'Workstation "review" must define a failure route.',
+    ]);
+  });
+
+  it("returns workstation handle validation messages for dangling route targets", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.route.danglingPlaceReference",
+        message:
+          'Workstation "process" references missing place "story:missing-state".',
+        severity: "error",
+        subject: {
+          id: "process",
+          location: "OUTPUTS",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+
+    const messages = validationMessagesForSelectedWorkstation({
+      projection: projectFactoryValidationTargets(targets),
+      selectionNodeId: "workstation:process",
+    });
+
+    expect(messages).toEqual([
+      'Workstation "process" references missing place "story:missing-state".',
+    ]);
+  });
+});
+
+describe("saveErrorNoticeMessages", () => {
+  it("returns server message text and target messages from save rejections", () => {
+    const messages = saveErrorNoticeMessages(
+      new CurrentFactoryDefinitionError(
+        "The factory definition is invalid.",
+        {
+          code: "INVALID_FACTORY_DEFINITION",
+          status: 400,
+          targets: [
+            {
+              code: "factory.route.danglingPlaceReference",
+              message:
+                'Workstation "process" references missing place "story:missing-state".',
+              severity: "error",
+              subject: {
+                id: "process",
+                location: "OUTPUTS",
+                type: "WORKSTATION",
+              },
+            },
+          ],
+        },
+      ),
+    );
+
+    expect(messages).toEqual([
+      "The factory definition is invalid.",
+      'Workstation "process" references missing place "story:missing-state".',
+    ]);
+  });
+});
+
+describe("mergeFactoryValidationTargets", () => {
+  it("projects live validation and save rejection targets together", () => {
+    const projection = mergeFactoryValidationTargets(
+      [
+        {
+          code: "factory.workstation.missingFailureRoute",
+          message: 'Workstation "review" must define a failure route.',
+          severity: "error",
+          subject: {
+            id: "review",
+            location: "ON_FAILURE",
+            type: "WORKSTATION",
+          },
+        },
+      ],
+      [
+        {
+          code: "factory.route.danglingPlaceReference",
+          message:
+            'Workstation "process" references missing place "story:missing-state".',
+          severity: "error",
+          subject: {
+            id: "process",
+            location: "OUTPUTS",
+            type: "WORKSTATION",
+          },
+        },
+      ],
+    );
+
+    expect(
+      validationMessagesForGraphSelection({
+        projection,
+        selectionNodeId: "workstation:process",
+      }),
+    ).toEqual([
+      'Workstation "process" references missing place "story:missing-state".',
     ]);
   });
 });

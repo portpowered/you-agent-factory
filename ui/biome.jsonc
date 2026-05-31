@@ -62,7 +62,8 @@
         "src/features/dashboard/session/dashboard-session-provider.tsx",
         "src/features/header/hooks/use-dashboard-session-tabs-state.ts",
         ".storybook/dashboard-story-runtime.tsx",
-        "src/testing/app-shell-test-utils.tsx"
+        "src/testing/app-shell-test-utils.tsx",
+        "src/testing/scoped-factory-document-save-test-helpers.tsx"
       ],
       "linter": {
         "rules": {
@@ -128,7 +129,7 @@
         "src/features/current-selection/worker-selection/hooks/use-worker-detail-state.test.tsx",
         "src/features/current-selection/workstation-selection/components/workstation-detail-card.editable-configuration.test.tsx",
         "src/features/current-selection/workstation-selection/components/workstation-detail-card.test.tsx",
-        "src/features/current-selection/workstation-selection/components/workstation-prompt-monaco.test.ts",
+        "src/components/prompt-editor/monaco-prompt-setup.test.ts",
         "src/features/current-selection/workstation-selection/editing/editable-workstation-prompt-state.test.ts",
         "src/features/current-selection/workstation-selection/hooks/use-editable-workstation-configuration-state.test.tsx",
         "src/features/current-selection/hooks/useCurrentSelection.actions.test.ts",
@@ -169,7 +170,8 @@
         "integration/browser-test-harness.mjs",
         "integration/event-stream-replay.integration.test.mjs",
         "integration/dashboard-session-tabs.integration.test.mjs",
-        "integration/factory-graph-editor.integration.test.mjs"
+        "integration/factory-graph-editor.integration.test.mjs",
+        "integration/factory-graph-editor-node-placement.integration.test.mjs"
       ],
       "linter": {
         "rules": {

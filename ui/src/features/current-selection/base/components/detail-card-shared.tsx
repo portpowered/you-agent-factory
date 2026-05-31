@@ -50,10 +50,6 @@ export const CURRENT_SELECTION_BADGE_CLASS = cn(
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
-export const HISTORY_TOGGLE_CLASS = cn(
-  "shrink-0 cursor-pointer rounded-lg border border-af-border bg-af-surface-raised px-2.5 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled",
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
 export const WORKSTATION_SUMMARY_ITEM_CLASS =
   "grid min-w-0 gap-1 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2";
 export const INFERENCE_ATTEMPT_CARD_CLASS =

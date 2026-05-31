@@ -32,8 +32,23 @@ export const WorkTotals = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const card = await canvas.findByRole("article", { name: "Work totals" });
+    const cardHeader = card.querySelector("header");
 
     await expect(within(card).getByText("Completed")).toBeVisible();
+    await expect(
+      within(card).getByLabelText("work totals").className,
+    ).toContain("grid-cols-4");
+    expect(cardHeader).not.toBeNull();
+    expect(
+      within(cardHeader as HTMLElement).queryAllByRole("button", {
+        hidden: true,
+      }),
+    ).toHaveLength(0);
+    expect(
+      cardHeader?.querySelector(
+        '[aria-expanded="true"], [aria-expanded="false"]',
+      ),
+    ).toBeNull();
     expectBentoHeaderDragSurface(card, "Work totals");
   },
 };

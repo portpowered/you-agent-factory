@@ -11,7 +11,7 @@ import {
   resetWorkstationPromptMonacoRegistrationForTests,
   WORKSTATION_PROMPT_LANGUAGE_ID,
   WORKSTATION_PROMPT_THEME_ID,
-} from "./workstation-prompt-monaco";
+} from "./monaco-prompt-setup";
 
 describe("registerWorkstationPromptMonaco", () => {
   it("registers the prompt-template language and theme once", () => {

@@ -394,15 +394,16 @@ describe("factory graph React Flow projection", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       factoryWithoutStopWords,
     );
+    const workstationResolver = {
+      resolveWorkstation: (name: string) =>
+        factoryWithoutStopWords.workstations.find(
+          (workstation) => workstation.name === name,
+        ),
+    };
 
     const projection = projectFactoryGraphToReactFlow({
       topology,
-      workstationResolver: {
-        resolveWorkstation: (name) =>
-          factoryWithoutStopWords.workstations.find(
-            (workstation) => workstation.name === name,
-          ),
-      },
+      workstationResolver,
     });
     const anchorIds =
       projection.nodes

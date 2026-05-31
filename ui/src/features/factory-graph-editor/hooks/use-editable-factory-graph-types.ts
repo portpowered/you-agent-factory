@@ -1,3 +1,16 @@
+import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
+import type { useFactoryDocumentSave } from "../../current-factory-definition/public";
+
+export type EditableFactoryGraphSaveMutation = Pick<
+  ReturnType<typeof useFactoryDocumentSave>,
+  "error" | "isPending" | "reset"
+>;
+
+export interface EditableFactoryGraphDocumentSaveControls {
+  beginConfirmation: () => void;
+  cancelConfirmation: () => void;
+  clearSaveFeedback: () => void;
+}
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
@@ -13,20 +26,12 @@ import type {
 } from "../lib/factory-graph-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 
-export interface EditableFactoryGraphSaveInput {
-  baseVersion?: CurrentFactoryDocument["version"];
-  factoryDefinition: CanonicalFactoryDefinition;
-}
-
 export interface UseEditableFactoryGraphOptions {
   activeWorkCount?: number;
   currentFactoryDocument?: CurrentFactoryDocument;
   /** Normalized dashboard session id; graph draft resets when this changes. */
   factoryDocumentScopeKey?: string | null;
   locale?: string | null;
-  saveFactoryDefinition?: (
-    input: EditableFactoryGraphSaveInput,
-  ) => Promise<unknown>;
 }
 
 export interface EditableFactoryGraphViewModel {
@@ -62,11 +67,11 @@ export interface EditableFactoryGraphViewModel {
   projection: FactoryGraphReactFlowProjection;
   saveState: {
     canSave: boolean;
-    isSaving: boolean;
+    documentSave: FactoryDocumentSaveState;
     isStale: boolean;
-    lastError: string | null;
-    lastSuccess: boolean;
   };
+  documentSaveControls: EditableFactoryGraphDocumentSaveControls;
+  saveMutation: EditableFactoryGraphSaveMutation;
   validationState: {
     errors: FactoryGraphDraftValidationError[];
     isValid: boolean;

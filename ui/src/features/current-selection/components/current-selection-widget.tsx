@@ -4,7 +4,22 @@ import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../../api/dashboard/types";
+import { parseFactoryGraphWorkTypeNodeId } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
+import {
+  CurrentSelectionHeaderActionProvider,
+  CurrentSelectionLocaleProvider,
+} from "../base/public";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { useSelectedProviderSessionState } from "../work-selection/hooks/useSelectedProviderSessionState";
+import type {
+  SelectedWorkItemExecutionDetails,
+  SelectedWorkRelationshipGraph,
+} from "../work-selection/public";
+import { WorkItemDetailCard } from "../work-selection/public";
+import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
+import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
+import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
 import { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
 import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import {
@@ -12,25 +27,12 @@ import {
   EditableWorkstationSaveHeaderAction,
   WorkstationDetailCard,
 } from "../workstation-selection/public";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useSelectedProviderSessionState } from "../work-selection/hooks/useSelectedProviderSessionState";
-import { WorkItemDetailCard } from "../work-selection/public";
-import type {
-  SelectedWorkItemExecutionDetails,
-  SelectedWorkRelationshipGraph,
-} from "../work-selection/public";
-import {
-  CurrentSelectionHeaderActionProvider,
-  CurrentSelectionLocaleProvider,
-} from "../base/public";
-import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
-import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
-import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
   WorkerDetailCard,
   WorkstationRequestDetailCard,
+  WorkTypeDetailCard,
 } from "./current-selection-cards";
 
 export interface CurrentSelectionWidgetProps {
@@ -49,6 +51,7 @@ export interface CurrentSelectionWidgetProps {
   widgetId?: string;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection detail routing keeps one switch over dashboard selection kinds.
 function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
@@ -154,6 +157,7 @@ function renderCurrentSelectionDetailCard({
       <StateNodeDetailCard
         currentWorkItems={selectedStateCurrentWorkItems}
         failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
+        locale={locale}
         onSelectWorkItem={(workItem) =>
           selectStateWorkItem(selectedStatePlace, workItem)
         }
@@ -174,6 +178,20 @@ function renderCurrentSelectionDetailCard({
         saveState={workerSaveState}
         widgetId={widgetId}
         workerName={selectedWorkerName}
+      />
+    );
+  }
+
+  const selectedWorkTypeName =
+    selection?.kind === "node"
+      ? parseFactoryGraphWorkTypeNodeId(selection.nodeId)
+      : null;
+  if (selectedWorkTypeName) {
+    return (
+      <WorkTypeDetailCard
+        locale={locale}
+        widgetId={widgetId}
+        workTypeName={selectedWorkTypeName}
       />
     );
   }

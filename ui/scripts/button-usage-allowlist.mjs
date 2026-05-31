@@ -46,32 +46,22 @@ export const approvedButtonUsageAllowlist = [
   },
   {
     rawButtonFingerprints: [
-      'aria-controls={panelId} aria-expanded={expanded}',
-      'className={HISTORY_TOGGLE_CLASS} onClick={() => setExpanded((current) => !current)}',
       'aria-label={workstationMessages.selectProviderSessionLabel(',
     ],
     rawButtonReason:
-      "Inference attempt controls are disclosure toggles and provider-session selection shells inside the current-selection detail surface.",
+      "Inference attempt provider-session rows use selection shells inside the current-selection detail surface.",
     relativeFilePath: "src/features/current-selection/work-selection/components/inference-attempt.tsx",
   },
   {
     rawButtonFingerprints: [
-      'aria-controls={historyID} aria-expanded={expanded}',
       'aria-label={messages.selectProviderSessionLabel(',
       'aria-label={messages.selectWorkItemLabel(',
       'aria-label={messages.selectWorkstationRequestLabel(',
     ],
     rawButtonReason:
-      "Provider-session attempt rows use disclosure and selection semantics rather than ordinary action-button styling.",
+      "Provider-session attempt rows use selection semantics rather than ordinary action-button styling.",
     relativeFilePath:
       "src/features/current-selection/workstation-selection/components/provider-session-attempts.tsx",
-  },
-  {
-    rawButtonFingerprints: ['aria-controls={panelId} aria-expanded={expanded}'],
-    rawButtonReason:
-      "Selected-work dispatch attempt sections are disclosure shells and stay outside the ordinary action-button lane.",
-    relativeFilePath:
-      "src/features/current-selection/dispatch-selection/components/selected-work-dispatch-attempt-sections.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={selectWorkItemAccessibleLabel('],
@@ -101,14 +91,6 @@ export const approvedButtonUsageAllowlist = [
     relativeFilePath: "src/features/current-selection/work-selection/components/work-item-payload-details.tsx",
   },
   {
-    rawButtonFingerprints: [
-      'aria-controls={historyID} aria-expanded={expanded} className={HISTORY_TOGGLE_CLASS}',
-    ],
-    rawButtonReason:
-      "Workstation detail keeps one disclosure-toggle shell inside the current-selection detail surface while ordinary actions stay on shared button primitives.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx",
-  },
-  {
     rawButtonFingerprints: ['aria-controls={panelID} aria-expanded={expanded}'],
     rawButtonReason:
       "Transcript code blocks use a disclosure toggle for expandable inline code content.",
@@ -123,15 +105,5 @@ export const approvedButtonUsageAllowlist = [
     rawButtonReason:
       "The workflow mutation dialog keeps structural overlay-dismiss and close-icon button semantics in its shared shell.",
     relativeFilePath: "src/features/workflow-activity/components/mutation-dialog.tsx",
-  },
-  {
-    rawButtonFingerprints: [
-      'aria-expanded="true"',
-      'aria-expanded="false"',
-    ],
-    rawButtonReason:
-      "The dashboard flow-axis legend uses narrow disclosure-toggle semantics for its collapsible chrome.",
-    relativeFilePath:
-      "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx",
   },
 ];

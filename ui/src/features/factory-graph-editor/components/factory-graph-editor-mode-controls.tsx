@@ -3,6 +3,9 @@ import { cn } from "../../../lib/cn";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
+const MODE_TOGGLE_WARNING_CLASS =
+  "border-af-warning-border bg-af-warning-surface text-af-warning-text hover:border-af-warning-border hover:bg-af-warning-surface hover:text-af-warning-text";
+
 function EditModeIcon() {
   return (
     <svg
@@ -26,6 +29,7 @@ export function FactoryGraphEditorModeToggle({
   className,
   disabled = false,
   editorMode,
+  hasChanges = false,
   locale,
   onClick,
   tooltipOverride,
@@ -33,6 +37,7 @@ export function FactoryGraphEditorModeToggle({
   className?: string;
   disabled?: boolean;
   editorMode: boolean;
+  hasChanges?: boolean;
   locale?: string;
   onClick: () => void;
   tooltipOverride?: string;
@@ -46,7 +51,12 @@ export function FactoryGraphEditorModeToggle({
     <FactoryGraphEditorTooltipActionButton
       aria-label={label}
       aria-pressed={editorMode}
-      className={cn("shrink-0", disabled && "cursor-not-allowed", className)}
+      className={cn(
+        "shrink-0",
+        hasChanges && MODE_TOGGLE_WARNING_CLASS,
+        disabled && "cursor-not-allowed",
+        className,
+      )}
       disabled={disabled}
       iconOnly
       onClick={onClick}

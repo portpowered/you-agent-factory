@@ -150,7 +150,11 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     canSaveDraft: true,
     currentFactoryDefinition: null,
     handleAddEntitySubmit: vi.fn(),
+    handleCancelRemoval: vi.fn(),
+    handleConfirmRemoval: vi.fn(),
     handleDiscardEditorChanges: vi.fn(),
+    cancelSaveConfirmation: vi.fn(),
+    documentSave: { status: "confirming" },
     handleSaveBeforeLeavingEditor: vi.fn(),
     handleSaveDraft: vi.fn(),
     isConfirmingSave: true,
@@ -183,6 +187,7 @@ function createImportsStub(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: dialog wiring cases share one mocked editor surface harness.
 describe("CurrentActivityGraphEditorDialogs", () => {
   it("wires import, save, discard, and add-entity dialog actions on the shared editor surface", () => {
     const editor = createEditorStub();
@@ -237,7 +242,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
         name: /Save factory graph changes\? cancel/i,
       }),
     );
-    expect(editor.setIsConfirmingSave).toHaveBeenCalledWith(false);
+    expect(editor.cancelSaveConfirmation).toHaveBeenCalledTimes(1);
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -259,8 +264,45 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     expect(editor.handleAddEntitySubmit).toHaveBeenCalledTimes(1);
   });
 
+  it("wires removal confirmation actions on the shared editor surface", () => {
+    const editor = createEditorStub({
+      isConfirmingSave: false,
+      leaveDialogOpen: false,
+      pendingRemovalIntent: {
+        confirmDescription: "This will remove 2 graph edges.",
+        confirmLabel: "Delete story work-type",
+        title: "Remove story work-type?",
+      },
+    });
+
+    render(
+      <CurrentActivityGraphEditorDialogs
+        currentSessionFactoryName="alpha"
+        editor={editor as never}
+        imports={createImportsStub() as never}
+        readyImportPreviewState={null}
+        shouldRenderImportPreviewDialog={false}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Remove story work-type\? cancel/i,
+      }),
+    );
+    expect(editor.handleCancelRemoval).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Remove story work-type\? confirm/i,
+      }),
+    );
+    expect(editor.handleConfirmRemoval).toHaveBeenCalledTimes(1);
+  });
+
   it("suppresses save-dismiss callbacks while a save is pending and skips optional import chrome when disabled", () => {
     const editor = createEditorStub({
+      documentSave: { status: "submitting" },
       isConfirmingSave: true,
       pendingRemovalIntent: null,
       saveEditableDefinition: { isPending: true },
@@ -292,6 +334,6 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     );
 
     expect(editor.setIsConfirmingLeaveEditor).not.toHaveBeenCalled();
-    expect(editor.setIsConfirmingSave).not.toHaveBeenCalled();
+    expect(editor.cancelSaveConfirmation).not.toHaveBeenCalled();
   });
 });
