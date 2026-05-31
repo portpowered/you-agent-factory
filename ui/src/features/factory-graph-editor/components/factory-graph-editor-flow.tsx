@@ -11,6 +11,7 @@ import {
   type GraphSemanticIconKind,
 } from "../../flowchart/components/graph-semantic-icon";
 import type {
+  CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
   FactoryGraphTopology,
   FactoryWorkstation,
@@ -41,6 +42,7 @@ export { FACTORY_GRAPH_EDITOR_EDGE_TYPES };
 
 export function buildFactoryGraphEditorFlowModel(input: {
   canEditConnections: boolean;
+  factoryDefinition?: CanonicalFactoryDefinition | null;
   layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
   onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
@@ -57,6 +59,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
   nodes: FactoryGraphEditorNode[];
 } {
   const projection = projectFactoryGraphToReactFlow({
+    factoryDefinition: input.factoryDefinition,
     editor: {
       canEditConnections: input.canEditConnections,
       onConnectionAnchorClick: input.onConnectionAnchorClick,

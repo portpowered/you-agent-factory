@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: editable graph hook keeps draft, projection, save, and mutation wiring in one view-model seam.
 import { useCallback, useMemo, useState } from "react";
 
 import {
@@ -44,6 +45,7 @@ export function useEditableFactoryGraph(
       draftState.pendingFactoryDefinition ?? draftState.baseDocument ?? null;
 
     return projectFactoryGraphToReactFlow({
+      factoryDefinition,
       locale: options.locale ?? undefined,
       topology: draftState.graph,
       workstationResolver: factoryDefinition
