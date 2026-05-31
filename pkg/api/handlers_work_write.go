@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
@@ -799,8 +800,9 @@ func (s *Server) handleMoveWork(
 		s.writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
 		return
 	}
-	workNamesByID := publicWorkNamesByID(snapshot.Marking.Tokens)
-	work := tokenToWork(token, snapshot.Topology)
+	materialized := materialize.CollectPublicWorkTokens(&snapshot.Marking, snapshot.Dispatches)
+	workNamesByID := publicWorkNamesByID(materialized.Tokens)
+	work := tokenToWork(token, snapshot.Topology, false)
 	work.Relations = generatedWorkRelations(token, work.Name, workNamesByID)
 	s.writeJSON(w, http.StatusOK, work)
 }
