@@ -1,16 +1,14 @@
 import {
-  buildSessionFactoryActivationPutBody,
-  defaultSessionFactoryVersion,
-  mockGetSessionFactory,
-  mockPutSessionFactory,
-} from "../../testing/session-factory-mocks";
-import {
-  activateImportedFactoryAsNewNamedForSession,
   activateImportedFactoryForSession,
   discoverSessionNamedFactoryNames,
   getCurrentFactory,
   NamedFactoryAPIError,
 } from "./api";
+
+const defaultSessionFactoryVersion = {
+  logical: "9",
+  physical: "2026-05-18T14:25:00Z",
+} as const;
 
 describe("factory API", () => {
   it("reads the current factory as a direct canonical factory payload", async () => {
@@ -42,12 +40,9 @@ describe("factory API", () => {
       workers: [],
       workstations: [],
     });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/factory-sessions/~default/factory",
-      {
-        method: "GET",
-      },
-    );
+    expect(fetchMock).toHaveBeenCalledWith("/factory-sessions/~default/factory", {
+      method: "GET",
+    });
   });
 
   it("reads the current factory through the session-scoped route for non-default sessions", async () => {
@@ -89,44 +84,54 @@ describe("factory API", () => {
   });
 
   it("activates an imported factory through PUT /factory-sessions/~default/factory with version metadata", async () => {
-    const savedVersion = {
-      logical: "10",
-      physical: "2026-05-18T14:40:00Z",
-    };
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        mockGetSessionFactory({
-          document: {
+        new Response(
+          JSON.stringify({
             name: "Session Current Name",
             workTypes: [],
             workers: [],
             workstations: [],
-            version: defaultSessionFactoryVersion,
+            version: {
+              logical: "9",
+              physical: "2026-05-18T14:25:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
           },
-        }),
+        ),
       )
       .mockResolvedValueOnce(
-        mockPutSessionFactory({
-          responseDocument: {
+        new Response(
+          JSON.stringify({
             name: "Session Current Name",
-            workTypes: [
-              { name: "story", states: [{ name: "new", type: "INITIAL" }] },
-            ],
+            workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
             workers: [],
             workstations: [],
-            version: savedVersion,
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:40:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
           },
-        }),
+        ),
       );
 
     await expect(
       activateImportedFactoryForSession(
         {
           name: "Imported Factory Name",
-          workTypes: [
-            { name: "story", states: [{ name: "new", type: "INITIAL" }] },
-          ],
+          workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
           workers: [],
           workstations: [],
         },
@@ -134,38 +139,32 @@ describe("factory API", () => {
       ),
     ).resolves.toEqual({
       name: "Session Current Name",
-      workTypes: [
-        { name: "story", states: [{ name: "new", type: "INITIAL" }] },
-      ],
+      workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
       workers: [],
       workstations: [],
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "/factory-sessions/~default/factory",
-      {
-        method: "GET",
-      },
-    );
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/factory-sessions/~default/factory", {
+      method: "GET",
+    });
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/factory-sessions/~default/factory",
       expect.objectContaining({
-        body: JSON.stringify(
-          buildSessionFactoryActivationPutBody({
-            sessionName: "Session Current Name",
-            importedFactory: {
-              name: "Imported Factory Name",
-              workTypes: [
-                { name: "story", states: [{ name: "new", type: "INITIAL" }] },
-              ],
-              workers: [],
-              workstations: [],
+        body: JSON.stringify({
+          mode: "REPLACE_CURRENT",
+          factory: {
+            name: "Session Current Name",
+            workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
             },
-          }),
-        ),
+          },
+        }),
         headers: {
           "content-type": "application/json",
         },
@@ -179,47 +178,54 @@ describe("factory API", () => {
   });
 
   it("activates an imported factory through the session-scoped PUT route for non-default sessions", async () => {
-    const scopedVersion = {
-      logical: "3",
-      physical: "2026-05-18T14:24:00Z",
-    };
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        mockGetSessionFactory({
-          document: {
+        new Response(
+          JSON.stringify({
             name: "Scoped Factory",
             workTypes: [],
             workers: [],
             workstations: [],
-            version: scopedVersion,
+            version: {
+              logical: "3",
+              physical: "2026-05-18T14:24:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
           },
-        }),
+        ),
       )
       .mockResolvedValueOnce(
-        mockPutSessionFactory({
-          responseDocument: {
+        new Response(
+          JSON.stringify({
             name: "Scoped Factory",
-            workTypes: [
-              { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
-            ],
+            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
             workers: [],
             workstations: [],
             version: {
               logical: "4",
               physical: "2026-05-18T14:41:00Z",
             },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
           },
-        }),
+        ),
       );
 
     await expect(
       activateImportedFactoryForSession(
         {
           name: "Imported Scoped Name",
-          workTypes: [
-            { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
-          ],
+          workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
           workers: [],
           workstations: [],
         },
@@ -230,26 +236,20 @@ describe("factory API", () => {
       ),
     ).resolves.toEqual({
       name: "Scoped Factory",
-      workTypes: [
-        { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
-      ],
+      workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
       workers: [],
       workstations: [],
     });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "/factory-sessions/session-2/factory",
-      {
-        method: "GET",
-      },
-    );
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/factory-sessions/session-2/factory", {
+      method: "GET",
+    });
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/factory-sessions/session-2/factory",
       expect.objectContaining({
         method: "PUT",
-        body: expect.stringContaining('"name":"Scoped Factory"'),
+        body: expect.stringContaining('"mode":"REPLACE_CURRENT"'),
       }),
     );
   });
@@ -258,18 +258,39 @@ describe("factory API", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        mockGetSessionFactory({
-          document: {
+        new Response(
+          JSON.stringify({
             name: "Current Factory",
             workTypes: [],
             workers: [],
             workstations: [],
-            version: defaultSessionFactoryVersion,
+            version: {
+              logical: "9",
+              physical: "2026-05-18T14:25:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
           },
-        }),
+        ),
       )
       .mockResolvedValueOnce(
-        mockPutSessionFactory({ mode: "factory_not_idle" }),
+        new Response(
+          JSON.stringify({
+            code: "FACTORY_NOT_IDLE",
+            message: "Current factory runtime must be idle before activation.",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 409,
+            statusText: "Conflict",
+          },
+        ),
       );
 
     await expect(
@@ -302,17 +323,40 @@ describe("factory API", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        mockGetSessionFactory({
-          document: {
+        new Response(
+          JSON.stringify({
             name: "Current Factory",
             workTypes: [],
             workers: [],
             workstations: [],
-            version: defaultSessionFactoryVersion,
+            version: {
+              logical: "9",
+              physical: "2026-05-18T14:25:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
           },
-        }),
+        ),
       )
-      .mockResolvedValueOnce(mockPutSessionFactory({ mode: "stale_version" }));
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: "STALE_FACTORY_VERSION",
+            message: "The editable definition is stale.",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 409,
+            statusText: "Conflict",
+          },
+        ),
+      );
 
     await expect(
       activateImportedFactoryForSession(
@@ -340,6 +384,640 @@ describe("factory API", () => {
     );
   });
 
+  it("activates create-new-named imports through UPSERT_NAMED_AND_ACTIVATE without version for new names", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Session Current Name",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "9",
+              physical: "2026-05-18T14:25:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Imported Factory Name-2",
+            workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "1",
+              physical: "2026-05-18T14:41:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      );
+
+    await expect(
+      activateImportedFactoryForSession(
+        {
+          name: "Imported Factory Name",
+          workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+          workers: [],
+          workstations: [],
+        },
+        {
+          choice: "create_new_named",
+          createFactoryName: "Imported Factory Name-2",
+          existingFactoryNames: ["Session Current Name", "Imported Factory Name"],
+          fetch: fetchMock,
+        },
+      ),
+    ).resolves.toEqual({
+      name: "Imported Factory Name-2",
+      workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+      workers: [],
+      workstations: [],
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          mode: "UPSERT_NAMED_AND_ACTIVATE",
+          factory: {
+            name: "Imported Factory Name-2",
+            workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+          },
+        }),
+      }),
+    );
+  });
+
+  it("includes version when create-new-named upserts a name listed in existingFactoryNames", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Session Current Name",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "9",
+              physical: "2026-05-18T14:25:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Known Existing Name",
+            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      );
+
+    await activateImportedFactoryForSession(
+      {
+        name: "Imported Payload",
+        workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+        workers: [],
+        workstations: [],
+      },
+      {
+        choice: "create_new_named",
+        createFactoryName: "Known Existing Name",
+        existingFactoryNames: ["Known Existing Name"],
+        fetch: fetchMock,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mode: "UPSERT_NAMED_AND_ACTIVATE",
+          factory: {
+            name: "Known Existing Name",
+            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it("includes version when create-new-named upserts the current session factory name", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Session Current Name",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "9",
+              physical: "2026-05-18T14:25:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Session Current Name",
+            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      );
+
+    await activateImportedFactoryForSession(
+      {
+        name: "Imported Payload",
+        workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+        workers: [],
+        workstations: [],
+      },
+      {
+        choice: "create_new_named",
+        createFactoryName: "Session Current Name",
+        existingFactoryNames: ["Session Current Name"],
+        fetch: fetchMock,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mode: "UPSERT_NAMED_AND_ACTIVATE",
+          factory: {
+            name: "Session Current Name",
+            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "2026-05-18T14:25:00.001Z",
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it("discovers sorted named factories for the active session folder", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            sessions: [
+              {
+                factoryDir: "/workspace/project/beta",
+                folderPath: "/workspace/project",
+                id: "session-beta",
+                isDefault: false,
+                project: "beta",
+                target: {
+                  kind: "named",
+                  name: "beta",
+                },
+              },
+            ],
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            session: {
+              factoryDir: "/workspace/project/beta",
+              folderPath: "/workspace/project",
+              id: "session-beta",
+              isDefault: false,
+              project: "beta",
+              target: {
+                kind: "named",
+                name: "beta",
+              },
+            },
+            targets: [
+              {
+                factoryDir: "/workspace/project/beta",
+                folderPath: "/workspace/project",
+                label: "Beta",
+                project: "beta",
+                ref: {
+                  kind: "named",
+                  name: "beta",
+                },
+              },
+              {
+                factoryDir: "/workspace/project/alpha",
+                folderPath: "/workspace/project",
+                label: "Alpha",
+                project: "alpha",
+                ref: {
+                  kind: "named",
+                  name: "alpha",
+                },
+              },
+            ],
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      );
+
+    await expect(
+      discoverSessionNamedFactoryNames({
+        fetch: fetchMock,
+        sessionID: "session-beta",
+      }),
+    ).resolves.toEqual(["alpha", "beta"]);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/factory-sessions", {
+      method: "GET",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/factory-sessions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          folderPath: "/workspace/project",
+          validateOnly: true,
+        }),
+      }),
+    );
+  });
+
+  it("returns no discovered names when the session id is unknown", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sessions: [
+            {
+              factoryDir: "/workspace/project/beta",
+              folderPath: "/workspace/project",
+              id: "session-beta",
+              isDefault: false,
+              project: "beta",
+              target: {
+                kind: "named",
+                name: "beta",
+              },
+            },
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+
+    await expect(
+      discoverSessionNamedFactoryNames({
+        fetch: fetchMock,
+        sessionID: "session-missing",
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it("returns no discovered names when the session folder path is missing", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sessions: [
+            {
+              factoryDir: "/workspace/project/beta",
+              id: "session-beta",
+              isDefault: false,
+              project: "beta",
+              target: {
+                kind: "named",
+                name: "beta",
+              },
+            },
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+
+    await expect(
+      discoverSessionNamedFactoryNames({
+        fetch: fetchMock,
+        sessionID: "session-beta",
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it("requires a factory name for create-new-named activation", async () => {
+    await expect(
+      activateImportedFactoryForSession(
+        {
+          name: "Imported Factory",
+          workTypes: [],
+          workers: [],
+          workstations: [],
+        },
+        {
+          choice: "create_new_named",
+          createFactoryName: "   ",
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY_NAME",
+    });
+  });
+
+  it("maps current-factory GET failures during create-new-named activation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "FACTORY_NOT_IDLE",
+          message: "Current factory runtime must be idle before activation.",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 409,
+          statusText: "Conflict",
+        },
+      ),
+    );
+
+    await expect(
+      activateImportedFactoryForSession(
+        {
+          name: "Imported Factory",
+          workTypes: [],
+          workers: [],
+          workstations: [],
+        },
+        {
+          choice: "create_new_named",
+          createFactoryName: "Imported Factory-2",
+          fetch: fetchMock,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "FACTORY_NOT_IDLE",
+    });
+  });
+
+  it("maps session-factory PUT failures during create-new-named activation", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Session Current Name",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "9",
+              physical: "2026-05-18T14:25:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: "INVALID_FACTORY",
+            message: "Factory definition rejected.",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 400,
+            statusText: "Bad Request",
+          },
+        ),
+      );
+
+    await expect(
+      activateImportedFactoryForSession(
+        {
+          name: "Imported Factory",
+          workTypes: [],
+          workers: [],
+          workstations: [],
+        },
+        {
+          choice: "create_new_named",
+          createFactoryName: "Imported Factory-2",
+          fetch: fetchMock,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY",
+    });
+  });
+
+  it("preserves non-timestamp version physical values when upserting the current factory name", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Session Current Name",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "9",
+              physical: "legacy-physical",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Session Current Name",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "legacy-physical",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      );
+
+    await activateImportedFactoryForSession(
+      {
+        name: "Imported Payload",
+        workTypes: [],
+        workers: [],
+        workstations: [],
+      },
+      {
+        choice: "create_new_named",
+        createFactoryName: "Session Current Name",
+        fetch: fetchMock,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mode: "UPSERT_NAMED_AND_ACTIVATE",
+          factory: {
+            name: "Session Current Name",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "10",
+              physical: "legacy-physical",
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it("maps current-factory GET failures during replace activation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "FACTORY_NOT_IDLE",
+          message: "Current factory runtime must be idle before activation.",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 409,
+          statusText: "Conflict",
+        },
+      ),
+    );
+
+    await expect(
+      activateImportedFactoryForSession(
+        {
+          name: "Imported Factory",
+          workTypes: [],
+          workers: [],
+          workstations: [],
+        },
+        { fetch: fetchMock },
+      ),
+    ).rejects.toMatchObject({
+      code: "FACTORY_NOT_IDLE",
+    });
+  });
+
   it("rejects retired named-factory wrapper responses from the current factory endpoint", async () => {
     await expect(
       getCurrentFactory({
@@ -363,177 +1041,66 @@ describe("factory API", () => {
           ),
         ),
       }),
-    ).rejects.toEqual(
-      new NamedFactoryAPIError(
-        "The current factory API returned an invalid response.",
-        {
-          code: "INTERNAL_ERROR",
-          responseBody: {
-            factory: {
-              workTypes: [],
-              workers: [],
-              workstations: [],
-            },
-            name: "Current Factory",
-          },
-          status: 200,
-          statusText: "OK",
-        },
-      ),
-    );
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "The current factory editing API returned an invalid response.",
+    });
   });
 
-  it("activates an imported factory as a new named factory with UPSERT_NAMED_AND_ACTIVATE", async () => {
+  it("maps unknown API error codes from replace import activation to INTERNAL_ERROR", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            sessions: [
-              {
-                factoryDir: "/tmp/factories",
-                folderPath: "/tmp/factories",
-                id: "~default",
-                isDefault: true,
-                project: "default",
-                target: { kind: "default" },
-              },
-            ],
-          }),
-          {
-            headers: { "Content-Type": "application/json" },
-            status: 200,
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            targets: [
-              {
-                factoryDir: "/tmp/factories/Dropped Factory",
-                folderPath: "/tmp/factories",
-                label: "Dropped Factory",
-                project: "Dropped Factory",
-                ref: { kind: "named", name: "Dropped Factory" },
-              },
-            ],
-          }),
-          {
-            headers: { "Content-Type": "application/json" },
-            status: 200,
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: "Dropped Factory-2",
-            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            name: "Session Current Name",
+            workTypes: [],
             workers: [],
             workstations: [],
-            version: {
-              logical: "1",
-              physical: "2026-05-18T14:41:00Z",
-            },
+            version: defaultSessionFactoryVersion,
           }),
           {
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+            },
             status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: "WEIRD_API_CODE",
+            message: "Activation rejected.",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 500,
+            statusText: "Internal Server Error",
           },
         ),
       );
 
     await expect(
-      activateImportedFactoryAsNewNamedForSession(
+      activateImportedFactoryForSession(
         {
-          name: "Dropped Factory",
-          workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+          name: "Imported Factory",
+          workTypes: [],
           workers: [],
           workstations: [],
         },
         { fetch: fetchMock },
       ),
-    ).resolves.toEqual({
-      name: "Dropped Factory-2",
-      workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
-      workers: [],
-      workstations: [],
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      responseBody: {
+        code: "WEIRD_API_CODE",
+        message: "Activation rejected.",
+      },
+      status: 500,
+      statusText: "Internal Server Error",
     });
-
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      "/factory-sessions/~default/factory",
-      expect.objectContaining({
-        method: "PUT",
-        body: JSON.stringify({
-          mode: "UPSERT_NAMED_AND_ACTIVATE",
-          factory: {
-            name: "Dropped Factory-2",
-            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
-            workers: [],
-            workstations: [],
-          },
-        }),
-      }),
-    );
-  });
-
-  it("discovers named factory names from validate-only session targets", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sessions: [
-              {
-                factoryDir: "/tmp/factories",
-                folderPath: "/tmp/factories",
-                id: "session-2",
-                isDefault: false,
-                project: "review",
-                target: { kind: "named", name: "alpha" },
-              },
-            ],
-          }),
-          {
-            headers: { "Content-Type": "application/json" },
-            status: 200,
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            targets: [
-              {
-                factoryDir: "/tmp/factories/alpha",
-                folderPath: "/tmp/factories",
-                label: "Alpha",
-                project: "alpha",
-                ref: { kind: "named", name: "alpha" },
-              },
-              {
-                factoryDir: "/tmp/factories/beta",
-                folderPath: "/tmp/factories",
-                label: "Beta",
-                project: "beta",
-                ref: { kind: "named", name: "beta" },
-              },
-            ],
-          }),
-          {
-            headers: { "Content-Type": "application/json" },
-            status: 200,
-          },
-        ),
-      );
-
-    await expect(
-      discoverSessionNamedFactoryNames({
-        fetch: fetchMock,
-        sessionID: "session-2",
-      }),
-    ).resolves.toEqual(["alpha", "beta"]);
   });
 });

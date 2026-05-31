@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { WorkerDetailState } from "../lib/detail-card-types";
 import {
   findWorkerInFactoryDefinition,

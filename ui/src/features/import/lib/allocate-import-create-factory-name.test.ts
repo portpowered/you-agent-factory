@@ -27,4 +27,8 @@ describe("allocateImportCreateFactoryName", () => {
       allocateImportCreateFactoryName("  Dropped Factory  ", ["  Dropped Factory  "]),
     ).toBe("Dropped Factory-2");
   });
+
+  it("returns an empty embedded name unchanged", () => {
+    expect(allocateImportCreateFactoryName("   ", ["alpha"])).toBe("");
+  });
 });

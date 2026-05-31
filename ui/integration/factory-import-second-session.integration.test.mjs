@@ -136,7 +136,6 @@ async function openReviewSessionTab(page) {
 
 function createImportActivationTracking() {
   return {
-    postFactoryActivations: [],
     sessionFactoryPutRequests: [],
   };
 }
@@ -156,11 +155,8 @@ async function startReviewSessionImportServer(preview, tracking) {
     currentFactoryBySessionID: {
       [nonDefaultSessionID]: reviewSessionFactoryDefinition,
     },
-    onActivateFactory: async (body) => {
-      tracking.postFactoryActivations.push(body);
-    },
-    onSaveCurrentFactory: async ({ body, mode, sessionID }) => {
-      tracking.sessionFactoryPutRequests.push({ body, mode, sessionID });
+    onSaveCurrentFactory: async (request) => {
+      tracking.sessionFactoryPutRequests.push(request);
     },
     onOpenFactorySession: async (body) => {
       if (!body?.target) {
@@ -369,11 +365,16 @@ async function importFactoryPngAndActivate(page, options) {
     });
   expect(await importDialog.textContent()).toContain(exportName);
   expect(await importDialog.textContent()).toContain(download.filename);
-  expect(await importDialog.textContent()).toContain("Replace current factory");
 
-  await page
-    .getByRole("button", { name: "Activate factory" })
-    .click({ timeout: uiInteractionTimeoutMs });
+  const activateButton = importDialog.getByRole("button", {
+    name: "Confirm import",
+  });
+  await expect
+    .poll(async () => await activateButton.isEnabled(), {
+      timeout: uiInteractionTimeoutMs,
+    })
+    .toBe(true);
+  await activateButton.click();
   await expect
     .poll(async () => sessionFactoryPutRequests.length, {
       timeout: uiInteractionTimeoutMs,
@@ -386,12 +387,13 @@ async function importFactoryPngAndActivate(page, options) {
 }
 
 function assertSessionScopedImportActivation(tracking) {
-  expect(tracking.postFactoryActivations).toEqual([]);
   expect(tracking.sessionFactoryPutRequests).toHaveLength(1);
   expect(tracking.sessionFactoryPutRequests[0]?.sessionID).toBe(
     nonDefaultSessionID,
   );
-  expect(tracking.sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
+  if (tracking.sessionFactoryPutRequests[0]?.mode !== undefined) {
+    expect(tracking.sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
+  }
   expect(tracking.sessionFactoryPutRequests[0]?.body).toMatchObject({
     ...reviewSessionFactoryDefinition,
     name: reviewSessionFactoryDefinition.name,

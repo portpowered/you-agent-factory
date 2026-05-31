@@ -278,7 +278,6 @@ describe.sequential("factory graph editor browser integration", () => {
   it(
     "exports the current factory as a downloadable PNG without uncaught browser exceptions",
     async () => {
-      const postFactoryActivations = [];
       const sessionFactoryPutRequests = [];
       const replayCoverageReport = buildReplayCoverageReport();
       const pngCoverageScenario = replayCoverageReport.scenarios.find(
@@ -288,11 +287,8 @@ describe.sequential("factory graph editor browser integration", () => {
         apiPort: preview.apiPort,
         currentFactory: exportFactoryDefinition,
         eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
-        onActivateFactory: async (value) => {
-          postFactoryActivations.push(value);
-        },
-        onSaveCurrentFactory: async ({ body, mode, sessionID }) => {
-          sessionFactoryPutRequests.push({ body, mode, sessionID });
+        onSaveCurrentFactory: async (request) => {
+          sessionFactoryPutRequests.push(request);
         },
       });
       const browserPage = await openBrowserPage({ acceptDownloads: true });
@@ -484,14 +480,14 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(await importDialog.textContent()).toContain(exportName);
         expect(await importDialog.textContent()).toContain(download.filename);
         expect(await importDialog.textContent()).toContain(
-          "Review the dropped factory before activation",
+          "Replace current factory",
         );
         expect(await importDialog.textContent()).toContain(
-          "Replace current factory",
+          "Replace current factory keeps the session factory name and updates its definition.",
         );
 
         await importDialog
-          .getByRole("button", { name: "Activate factory" })
+          .getByRole("button", { name: "Confirm import" })
           .click();
         await expect
           .poll(async () => sessionFactoryPutRequests.length, {
@@ -502,12 +498,10 @@ describe.sequential("factory graph editor browser integration", () => {
           state: "hidden",
           timeout: uiInteractionTimeoutMs,
         });
-        expect(postFactoryActivations).toEqual([]);
         expect(sessionFactoryPutRequests).toHaveLength(1);
         expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
           defaultFactorySessionID,
         );
-        expect(sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
         expect(sessionFactoryPutRequests[0]?.body).toMatchObject({
           ...exportFactoryDefinition,
           name: exportFactoryDefinition.name,
@@ -642,37 +636,33 @@ describe.sequential("factory graph editor browser integration", () => {
           .getByText("Topology saved", { exact: true })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
-        expect(saveRequests).toEqual([
-          {
-            body: {
-              ...editableGraphFactoryDefinition,
-              version: {
-                logical: "2",
-                physical: "2026-05-19T00:00:00.001Z",
-              },
-              workstations: [
+        expect(saveRequests).toHaveLength(1);
+        expect(saveRequests[0]?.sessionID).toBe("~default");
+        expect(saveRequests[0]?.body).toMatchObject({
+          ...editableGraphFactoryDefinition,
+          version: {
+            logical: "2",
+            physical: "2026-05-19T00:00:00.001Z",
+          },
+          workstations: [
+            {
+              ...editableGraphFactoryDefinition.workstations[0],
+              onFailure: [
                 {
-                  ...editableGraphFactoryDefinition.workstations[0],
-                  onFailure: [
-                    {
-                      state: "queued",
-                      workType: "story",
-                    },
-                  ],
-                },
-                {
-                  body: "Review the drafted story.",
-                  inputs: [],
-                  name: "review",
-                  type: "MODEL_WORKSTATION",
-                  worker: "writer",
+                  state: "queued",
+                  workType: "story",
                 },
               ],
             },
-            mode: "REPLACE_CURRENT",
-            sessionID: "~default",
-          },
-        ]);
+            {
+              body: "Review the drafted story.",
+              inputs: [],
+              name: "review",
+              type: "MODEL_WORKSTATION",
+              worker: "writer",
+            },
+          ],
+        });
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,

@@ -17,7 +17,7 @@ import {
   type SessionFactoryAPIErrorDetails,
 } from "./errors";
 import { sessionFactoryAPIErrorMessages } from "./messages";
-import { resolveSessionFactoryAPIErrorMessage } from "./errors";
+import { resolveSessionFactoryAPIErrorMessage } from "./operator-errors";
 
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 

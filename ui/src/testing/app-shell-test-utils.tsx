@@ -19,7 +19,7 @@ import { installDashboardBrowserTestShims } from "../components/dashboard/test-b
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
-import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import {
@@ -56,16 +56,24 @@ vi.mock("../features/flowchart/lib/layout", async () => {
   };
 });
 
-vi.mock("../features/current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../features/current-factory-definition/public",
-  );
+const currentFactoryDocumentMock = vi.hoisted(() => ({
+  actual: null as typeof useCurrentFactoryDocument | null,
+}));
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+vi.mock(
+  "../features/current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import("../features/current-factory-definition/hooks/useCurrentFactoryDefinition")
+    >();
+    currentFactoryDocumentMock.actual = actual.useCurrentFactoryDocument;
+
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(actual.useCurrentFactoryDocument),
+    };
+  },
+);
 
 export {
   fetchRequestPath,
@@ -258,7 +266,7 @@ export async function renderAppWithDashboardShell(
   return result;
 }
 
-function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
+export function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
   return fetchMock.mock.calls.map(([input]) =>
     typeof input === "string"
       ? input
@@ -274,7 +282,8 @@ export function nonPromptTemplateFetchPaths(
   return fetchCallPaths(fetchMock).filter(
     (path) =>
       !path.includes("/prompt-template-contract") &&
-      path !== "/factory-sessions",
+      path !== "/factory-sessions" &&
+      !path.endsWith("/factory"),
   );
 }
 
@@ -328,6 +337,16 @@ export function mockCurrentFactoryDocument(
   vi.mocked(useCurrentFactoryDocument).mockReturnValue(result as never);
 }
 
+export function resetCurrentFactoryDocumentMock(): void {
+  if (currentFactoryDocumentMock.actual == null) {
+    throw new Error("useCurrentFactoryDocument mock was not initialized");
+  }
+
+  vi.mocked(useCurrentFactoryDocument).mockImplementation(
+    currentFactoryDocumentMock.actual,
+  );
+}
+
 export function registerAppDashboardTestLifecycle(): void {
   beforeEach(() => {
     window.localStorage.clear();
@@ -337,30 +356,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
-    mockCurrentFactoryDocument({
-      data: undefined,
-      error: null,
-      failureCount: 0,
-      failureReason: null,
-      fetchStatus: "idle",
-      isError: false,
-      isFetched: false,
-      isFetchedAfterMount: false,
-      isFetching: false,
-      isInitialLoading: false,
-      isLoading: false,
-      isLoadingError: false,
-      isPaused: false,
-      isPending: true,
-      isPlaceholderData: false,
-      isRefetchError: false,
-      isRefetching: false,
-      isStale: true,
-      isSuccess: false,
-      promise: Promise.resolve(undefined),
-      refetch: vi.fn(),
-      status: "pending",
-    } as never);
+    resetCurrentFactoryDocumentMock();
   });
 
   afterEach(() => {

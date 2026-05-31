@@ -19,9 +19,6 @@ vi.mock("../../../api/named-factory", async () => {
   };
 });
 
-const mockedGetCurrentFactory = vi.mocked(getCurrentFactory);
-const mockedDiscoverSessionNamedFactoryNames = vi.mocked(discoverSessionNamedFactoryNames);
-
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -38,67 +35,82 @@ function createWrapper() {
 
 describe("useFactoryImportActivationTarget", () => {
   beforeEach(() => {
-    mockedGetCurrentFactory.mockReset();
-    mockedDiscoverSessionNamedFactoryNames.mockReset();
+    vi.clearAllMocks();
   });
 
-  it("resolves create-target metadata from session queries", async () => {
-    mockedGetCurrentFactory.mockResolvedValue({
-      name: "Session Current",
+  it("resolves create target names for non-default sessions", async () => {
+    vi.mocked(getCurrentFactory).mockResolvedValue({
+      name: "Review Session Import Factory",
       workTypes: [],
       workers: [],
       workstations: [],
     });
-    mockedDiscoverSessionNamedFactoryNames.mockResolvedValue([
-      "Session Current",
-      "Dropped Factory",
+    vi.mocked(discoverSessionNamedFactoryNames).mockResolvedValue([
+      "Review Session Import Factory",
     ]);
 
     const { result } = renderHook(
       () =>
         useFactoryImportActivationTarget({
+          enabled: true,
+          preferredFactoryName: "Review Session Import Factory",
+          sessionID: "session-review",
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.createTargetFactoryName).toBe(
+        "Review Session Import Factory-2",
+      );
+    });
+    expect(result.current.currentFactoryName).toBe("Review Session Import Factory");
+    expect(discoverSessionNamedFactoryNames).toHaveBeenCalledWith({
+      sessionID: "session-review",
+    });
+  });
+
+  it("returns null create target names when the preferred name is blank", async () => {
+    vi.mocked(getCurrentFactory).mockResolvedValue({
+      name: "alpha",
+      workTypes: [],
+      workers: [],
+      workstations: [],
+    });
+    vi.mocked(discoverSessionNamedFactoryNames).mockResolvedValue(["alpha"]);
+
+    const { result } = renderHook(
+      () =>
+        useFactoryImportActivationTarget({
+          enabled: true,
+          preferredFactoryName: "   ",
+          sessionID: "~default",
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+    expect(result.current.createTargetFactoryName).toBeNull();
+    expect(result.current.replacesExistingCreateTarget).toBe(false);
+  });
+
+  it("skips discovery queries when disabled", () => {
+    const { result } = renderHook(
+      () =>
+        useFactoryImportActivationTarget({
+          enabled: false,
           preferredFactoryName: "Dropped Factory",
           sessionID: "session-review",
         }),
       { wrapper: createWrapper() },
     );
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.currentFactoryName).toBe("Session Current");
-    expect(result.current.createTargetFactoryName).toBe("Dropped Factory-2");
-    expect(result.current.replacesExistingCreateTarget).toBe(false);
-    expect(result.current.existingNamedFactoryNames).toEqual([
-      "Session Current",
-      "Dropped Factory",
-    ]);
-  });
-
-  it("omits create-target metadata when the preferred name is blank", async () => {
-    mockedGetCurrentFactory.mockResolvedValue({
-      name: "Session Current",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-    });
-    mockedDiscoverSessionNamedFactoryNames.mockResolvedValue([]);
-
-    const { result } = renderHook(
-      () =>
-        useFactoryImportActivationTarget({
-          preferredFactoryName: "   ",
-          sessionID: "session-review",
-        }),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.createTargetFactoryName).toBeNull();
-    expect(result.current.replacesExistingCreateTarget).toBe(false);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.createTargetFactoryName).toBe("Dropped Factory");
+    expect(result.current.currentFactoryName).toBeNull();
+    expect(getCurrentFactory).not.toHaveBeenCalled();
+    expect(discoverSessionNamedFactoryNames).not.toHaveBeenCalled();
   });
 });

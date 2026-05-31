@@ -2,10 +2,7 @@ import { useState } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 
-import {
-  type FactoryImportSaveChoice,
-  NamedFactoryAPIError,
-} from "../../../api/named-factory";
+import { NamedFactoryAPIError } from "../../../api/named-factory";
 import {
   DashboardImportPreviewDialog,
   FactoryImportPreviewDialog,
@@ -32,38 +29,6 @@ function createReadyImportPreviewState(): DashboardImportPreviewDialogProps["imp
 }
 
 const defaultCurrentSessionFactoryName = "alpha";
-const defaultCreateTargetFactoryName = "Dropped Factory-2";
-
-function ImportPreviewDialogHarness({
-  overrides = {},
-}: {
-  overrides?: Partial<DashboardImportPreviewDialogProps>;
-}) {
-  const [importSaveChoice, setImportSaveChoice] = useState<FactoryImportSaveChoice>(
-    overrides.importSaveChoice ?? "REPLACE_CURRENT",
-  );
-
-  return (
-    <DashboardImportPreviewDialog
-      activationState={overrides.activationState ?? { status: "idle" }}
-      createTargetFactoryName={
-        overrides.createTargetFactoryName ?? defaultCreateTargetFactoryName
-      }
-      currentFactoryName={
-        overrides.currentFactoryName ?? defaultCurrentSessionFactoryName
-      }
-      importPreviewState={
-        overrides.importPreviewState ?? createReadyImportPreviewState()
-      }
-      importSaveChoice={importSaveChoice}
-      locale={overrides.locale}
-      onCancel={overrides.onCancel ?? vi.fn()}
-      onConfirm={overrides.onConfirm ?? vi.fn().mockResolvedValue(undefined)}
-      onImportSaveChoiceChange={setImportSaveChoice}
-      sessionID={overrides.sessionID}
-    />
-  );
-}
 
 function renderDialog(
   overrides: Partial<DashboardImportPreviewDialogProps> = {},
@@ -72,16 +37,17 @@ function renderDialog(
   const onConfirm = vi.fn().mockResolvedValue(undefined);
 
   render(
-    <ImportPreviewDialogHarness
-      overrides={{
-        ...overrides,
-        onCancel: overrides.onCancel ?? onCancel,
-        onConfirm: overrides.onConfirm ?? onConfirm,
-      }}
+    <DashboardImportPreviewDialog
+      activationState={{ status: "idle" }}
+      currentSessionFactoryName={defaultCurrentSessionFactoryName}
+      importPreviewState={createReadyImportPreviewState()}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+      {...overrides}
     />,
   );
 
-  return { onCancel: overrides.onCancel ?? onCancel, onConfirm: overrides.onConfirm ?? onConfirm };
+  return { onCancel, onConfirm };
 }
 
 describe("DashboardImportPreviewDialog", () => {
@@ -93,11 +59,9 @@ describe("DashboardImportPreviewDialog", () => {
     render(
       <FactoryImportPreviewDialog
         activationState={{ status: "idle" }}
-        currentFactoryName={defaultCurrentSessionFactoryName}
-        importSaveChoice="REPLACE_CURRENT"
+        currentSessionFactoryName={defaultCurrentSessionFactoryName}
         onCancel={onCancel}
         onConfirm={onConfirm}
-        onImportSaveChoiceChange={vi.fn()}
         previewState={createReadyImportPreviewState()}
       />,
     );
@@ -139,7 +103,15 @@ describe("DashboardImportPreviewDialog", () => {
   });
 
   it("has no accessibility violations in the ready preview state", async () => {
-    const { baseElement } = render(<ImportPreviewDialogHarness />);
+    const { baseElement } = render(
+      <DashboardImportPreviewDialog
+        activationState={{ status: "idle" }}
+        currentSessionFactoryName={defaultCurrentSessionFactoryName}
+        importPreviewState={createReadyImportPreviewState()}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
     await screen.findByRole("dialog", {
       name: getImportPreviewDialogMessages("en").title,
     });
@@ -151,15 +123,15 @@ describe("DashboardImportPreviewDialog", () => {
 
   it("has no accessibility violations when activation fails", async () => {
     const { baseElement } = render(
-      <ImportPreviewDialogHarness
-        overrides={{
-          activationState: {
-            error: new NamedFactoryAPIError("Network unreachable", {
-              code: "NETWORK_ERROR",
-            }),
-            status: "error",
-          },
+      <DashboardImportPreviewDialog
+        activationState={{
+          error: new NamedFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
+          status: "error",
         }}
+        currentSessionFactoryName={defaultCurrentSessionFactoryName}
+        importPreviewState={createReadyImportPreviewState()}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
       />,
     );
     const messages = getImportPreviewDialogMessages("en");
@@ -215,15 +187,15 @@ describe("DashboardImportPreviewDialog", () => {
         );
 
       return (
-        <ImportPreviewDialogHarness
-          overrides={{
-            activationState,
-            importPreviewState,
-            onCancel: () => {
-              setActivationState({ status: "idle" });
-              setImportPreviewState({ status: "idle" });
-            },
+        <DashboardImportPreviewDialog
+          activationState={activationState}
+          currentSessionFactoryName={defaultCurrentSessionFactoryName}
+          importPreviewState={importPreviewState}
+          onCancel={() => {
+            setActivationState({ status: "idle" });
+            setImportPreviewState({ status: "idle" });
           }}
+          onConfirm={vi.fn()}
         />
       );
     }
@@ -246,71 +218,47 @@ describe("DashboardImportPreviewDialog", () => {
     const messages = getImportPreviewDialogMessages("en");
 
     const previewDialog = await screen.findByRole("dialog", { name: messages.title });
-    const replaceOption = within(previewDialog).getByRole("button", {
-      name: new RegExp(messages.replaceCurrentFactoryLabel),
+    const saveChoiceGroup = within(previewDialog).getByRole("radiogroup", {
+      name: messages.saveChoiceLegend,
     });
-    const createOption = within(previewDialog).getByRole("button", {
-      name: new RegExp(messages.createNewNamedFactoryLabel),
+    const replaceOption = within(saveChoiceGroup).getByRole("radio", {
+      name: new RegExp(messages.replaceCurrentOption),
+    });
+    const createOption = within(saveChoiceGroup).getByRole("radio", {
+      name: new RegExp(messages.createNewNamedOption),
     });
 
-    expect(replaceOption.getAttribute("aria-pressed")).toBe("true");
-    expect(createOption.getAttribute("aria-pressed")).toBe("false");
+    expect((replaceOption as HTMLInputElement).checked).toBe(true);
+    expect((createOption as HTMLInputElement).checked).toBe(false);
 
     fireEvent.click(createOption);
-    expect(createOption.getAttribute("aria-pressed")).toBe("true");
-    expect(replaceOption.getAttribute("aria-pressed")).toBe("false");
-    expect(previewDialog.textContent).toContain(
-      `${messages.createNewNamedFactoryResolvedNameLabel}: Dropped Factory-2`,
-    );
+    expect((createOption as HTMLInputElement).checked).toBe(true);
+    expect((replaceOption as HTMLInputElement).checked).toBe(false);
+    expect(within(saveChoiceGroup).getByText("Dropped Factory-2")).toBeTruthy();
 
     fireEvent.click(replaceOption);
-    expect(replaceOption.getAttribute("aria-pressed")).toBe("true");
-    expect(previewDialog.textContent).toContain(
-      messages.replaceCurrentFactoryDescription(defaultCurrentSessionFactoryName),
-    );
+    expect((replaceOption as HTMLInputElement).checked).toBe(true);
+    expect(within(saveChoiceGroup).getByText(defaultCurrentSessionFactoryName)).toBeTruthy();
   });
 
   it("shows a suffixed create path factory name when the embedded name collides", async () => {
     renderDialog({
-      createTargetFactoryName: "Dropped Factory-2",
-      currentFactoryName: "Dropped Factory",
+      currentSessionFactoryName: "Dropped Factory",
     });
     const messages = getImportPreviewDialogMessages("en");
 
     const previewDialog = await screen.findByRole("dialog", { name: messages.title });
-
-    fireEvent.click(
-      within(previewDialog).getByRole("button", {
-        name: new RegExp(messages.createNewNamedFactoryLabel),
-      }),
-    );
-
-    expect(previewDialog.textContent).toContain(
-      `${messages.createNewNamedFactoryResolvedNameLabel}: Dropped Factory-2`,
-    );
-  });
-
-  it("delegates confirmation with CREATE_NEW_NAMED when that save choice is selected", async () => {
-    const { onConfirm } = renderDialog();
-    const messages = getImportPreviewDialogMessages("en");
-
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
-
-    fireEvent.click(
-      within(previewDialog).getByRole("button", {
-        name: new RegExp(messages.createNewNamedFactoryLabel),
-      }),
-    );
-    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.activateAction }));
-
-    await waitFor(() => {
-      expect(onConfirm).toHaveBeenCalledWith(
-        expect.objectContaining({
-          factory: expect.objectContaining({ name: "Dropped Factory" }),
-        }),
-        "CREATE_NEW_NAMED",
-      );
+    const saveChoiceGroup = within(previewDialog).getByRole("radiogroup", {
+      name: messages.saveChoiceLegend,
     });
+
+    fireEvent.click(
+      within(saveChoiceGroup).getByRole("radio", {
+        name: new RegExp(messages.createNewNamedOption),
+      }),
+    );
+
+    expect(within(saveChoiceGroup).getByText("Dropped Factory-2")).toBeTruthy();
   });
 
   it("shows activation failures and delegates confirmation with the ready preview payload", async () => {
@@ -330,44 +278,63 @@ describe("DashboardImportPreviewDialog", () => {
     fireEvent.click(within(previewDialog).getByRole("button", { name: messages.activateAction }));
 
     await waitFor(() => {
-      expect(onConfirm).toHaveBeenCalledWith(
-        expect.objectContaining({
+      expect(onConfirm).toHaveBeenCalledWith({
+        choice: "replace_current",
+        createFactoryName: "Dropped Factory-2",
+        existingFactoryNames: ["alpha", "Dropped Factory"],
+        value: expect.objectContaining({
           factory: expect.objectContaining({ name: "Dropped Factory" }),
         }),
-        "REPLACE_CURRENT",
-      );
+      });
     });
   });
 
   it.each([
-    ["FACTORY_ALREADY_EXISTS", "Named factory already exists."],
-    ["FACTORY_NOT_IDLE", "Current factory runtime must be idle before activation."],
-    ["INVALID_FACTORY", "Dropped factory payload was rejected."],
-    ["INVALID_FACTORY_NAME", "Embedded factory name is invalid."],
-    ["STALE_FACTORY_VERSION", "The editable definition is stale."],
-    ["INTERNAL_ERROR", "Activation failed in an unexpected way."],
+    [
+      "FACTORY_ALREADY_EXISTS",
+      "Named factory already exists.",
+      "A factory with this name already exists. Rename or remove the existing factory before importing this PNG.",
+    ],
+    [
+      "FACTORY_NOT_IDLE",
+      "Current factory runtime must be idle before activation.",
+      "The current factory runtime is still active. Wait until it becomes idle before saving or switching factories.",
+    ],
+    [
+      "INVALID_FACTORY",
+      "Dropped factory payload was rejected.",
+      "The factory definition was rejected by the session factory API.",
+    ],
+    [
+      "INVALID_FACTORY_NAME",
+      "Embedded factory name is invalid.",
+      "The factory name is not valid for this session.",
+    ],
+    [
+      "STALE_FACTORY_VERSION",
+      "The editable definition is stale.",
+      "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
+    ],
+    [
+      "INTERNAL_ERROR",
+      "Activation failed in an unexpected way.",
+      "Activation failed in an unexpected way.",
+    ],
   ] as const)(
     "renders the mapped activation copy for %s errors",
-    async (code, message) => {
-      const messages = getImportPreviewDialogMessages("en");
-      const expectedCopy =
-        code === "INTERNAL_ERROR" || code === "STALE_FACTORY_VERSION"
-          ? message
-          : messages.errorByCode[code as keyof typeof messages.errorByCode];
-
+    async (code, message, expectedCopy) => {
       renderDialog({
         activationState: {
           error: new NamedFactoryAPIError(message, { code }),
           status: "error",
         },
       });
+      const messages = getImportPreviewDialogMessages("en");
 
       const previewDialog = await screen.findByRole("dialog", { name: messages.title });
       const alert = within(previewDialog).getByRole("alert");
 
-      expect(
-        within(alert).getByRole("heading", { level: 3 }).textContent,
-      ).toContain(messages.activationErrorTitle);
+      expect(alert.textContent).toContain(messages.activationErrorTitle);
       expect(alert.textContent).toContain(expectedCopy);
     },
   );
@@ -382,16 +349,16 @@ describe("DashboardImportPreviewDialog", () => {
         );
 
       return (
-        <ImportPreviewDialogHarness
-          overrides={{
-            importPreviewState,
-            onCancel: () => {
-              setImportPreviewState({ status: "idle" });
-            },
-            onConfirm: async (value, choice) => {
-              await activateImport(value, choice);
-              setImportPreviewState({ status: "idle" });
-            },
+        <DashboardImportPreviewDialog
+          activationState={{ status: "idle" }}
+          currentSessionFactoryName={defaultCurrentSessionFactoryName}
+          importPreviewState={importPreviewState}
+          onCancel={() => {
+            setImportPreviewState({ status: "idle" });
+          }}
+          onConfirm={async (input) => {
+            await activateImport(input);
+            setImportPreviewState({ status: "idle" });
           }}
         />
       );
@@ -406,9 +373,11 @@ describe("DashboardImportPreviewDialog", () => {
     await waitFor(() => {
       expect(activateImport).toHaveBeenCalledWith(
         expect.objectContaining({
-          factory: expect.objectContaining({ name: "Dropped Factory" }),
+          choice: "replace_current",
+          value: expect.objectContaining({
+            factory: expect.objectContaining({ name: "Dropped Factory" }),
+          }),
         }),
-        "REPLACE_CURRENT",
       );
     });
     await waitFor(() => {
@@ -460,12 +429,10 @@ describe("DashboardImportPreviewDialog", () => {
     render(
       <DashboardImportPreviewDialog
         activationState={{ status: "idle" }}
-        currentFactoryName={defaultCurrentSessionFactoryName}
+        currentSessionFactoryName={defaultCurrentSessionFactoryName}
         importPreviewState={{ status: "idle" }}
-        importSaveChoice="REPLACE_CURRENT"
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
-        onImportSaveChoiceChange={vi.fn()}
       />,
     );
     const messages = getImportPreviewDialogMessages("en");
