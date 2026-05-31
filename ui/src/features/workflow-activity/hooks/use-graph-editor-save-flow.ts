@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-
-import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
 import { isFactoryDocumentSaveConfirming } from "../../current-selection/base/hooks/factory-document-save-types";
-import type { EditableFactoryGraphDocumentSaveControls } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type {
+  EditableFactoryGraphDocumentSaveControls,
+  EditableFactoryGraphSaveMutation,
+  EditableFactoryGraphViewModel,
+} from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 
@@ -19,6 +20,7 @@ export type GraphEditorTransientControllerReset = {
   setPendingRemovalNodeId: (nodeId: string | null) => void;
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: save/leave confirmation and scope-reset chrome share one hook boundary.
 export function useGraphEditorSaveFlow({
   activeWorkCount,
   addEntityController,
@@ -104,6 +106,19 @@ export function useGraphEditorSaveFlow({
     resetTransientEditorState();
   }, [resetTransientEditorState, setActiveTool, setEditorMode]);
 
+  const resetEditorChromeForScopeChange = useCallback(() => {
+    setEditorMode(false);
+    setActiveTool(null);
+    setPendingSaveConfirmation(false);
+    documentSaveControls.cancelConfirmation();
+    resetTransientEditorState();
+  }, [
+    documentSaveControls,
+    resetTransientEditorState,
+    setActiveTool,
+    setEditorMode,
+  ]);
+
   const handleDiscardPendingChanges = useCallback(() => {
     editableGraph.actions.discard();
     resetTransientEditorState();
@@ -138,12 +153,7 @@ export function useGraphEditorSaveFlow({
         return false;
       }
     },
-    [
-      canSaveDraft,
-      documentSaveControls,
-      editableGraph.actions,
-      leaveEditor,
-    ],
+    [canSaveDraft, documentSaveControls, editableGraph.actions, leaveEditor],
   );
 
   const handleSaveDraft = useCallback(
@@ -168,6 +178,7 @@ export function useGraphEditorSaveFlow({
     isConfirmingSave,
     isStaleDraft,
     leaveEditor,
+    resetEditorChromeForScopeChange,
     saveAttemptRevision,
     saveBlockedReason,
     saveSummary,

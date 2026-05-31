@@ -4,6 +4,7 @@ import { act, renderHook } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
 import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 
 const fixtureState = vi.hoisted(() => {
@@ -226,6 +227,7 @@ vi.mock("./react-flow-current-activity-card-editor-value", () => ({
 
 describe("useCurrentActivityGraphEditor", () => {
   beforeEach(() => {
+    useFactoryGraphTopologyEditorBridge.setState({ handlers: null });
     hookState.addEntityController.reset.mockReset();
     hookState.connectionController.handleConnectionAnchorClick.mockReset();
     hookState.connectionController.handleEditorConnect.mockReset();
@@ -392,6 +394,55 @@ describe("useCurrentActivityGraphEditor", () => {
     expect(didSave).toBe(false);
     rerender();
     expect(result.current.isConfirmingSave).toBe(false);
+  });
+
+  it("resets editor chrome and topology bridge when factory document scope changes", () => {
+    const { result, rerender } = renderHook(
+      ({ factoryDocumentScopeKey }: { factoryDocumentScopeKey: string }) =>
+        useCurrentActivityGraphEditor(
+          semanticWorkflowDashboardSnapshot,
+          "en",
+          factoryDocumentScopeKey,
+        ),
+      {
+        initialProps: { factoryDocumentScopeKey: "session-alpha" },
+      },
+    );
+
+    act(() => {
+      result.current.handleEditorModeToggle();
+      result.current.setActiveTool("connect");
+      result.current.setIsConfirmingLeaveEditor(true);
+      result.current.setIsConfirmingSave(true);
+    });
+    hookState.draftState.hasChanges = true;
+    useFactoryGraphTopologyEditorBridge.setState({
+      handlers: {
+        blockedRemovalReason: null,
+        canInteractWithEditor: true,
+        editorMode: true,
+        requestNodeRemoval: vi.fn(),
+      },
+    });
+
+    rerender({ factoryDocumentScopeKey: "session-beta" });
+
+    expect(result.current.editorMode).toBe(false);
+    expect(result.current.activeTool).toBeNull();
+    expect(result.current.isConfirmingLeaveEditor).toBe(false);
+    expect(result.current.isConfirmingSave).toBe(false);
+    expect(hookState.addEntityController.reset).toHaveBeenCalled();
+    expect(hookState.saveEditableDefinition.reset).toHaveBeenCalled();
+    expect(
+      hookState.connectionController.setConnectionNotice,
+    ).toHaveBeenCalledWith(null);
+    expect(
+      hookState.removalController.setPendingRemovalEdgeId,
+    ).toHaveBeenCalledWith(null);
+    expect(
+      hookState.removalController.setPendingRemovalNodeId,
+    ).toHaveBeenCalledWith(null);
+    expect(useFactoryGraphTopologyEditorBridge.getState().handlers).toBeNull();
   });
 
   it("saves the draft and leaves editor mode when asked to save before leaving", async () => {

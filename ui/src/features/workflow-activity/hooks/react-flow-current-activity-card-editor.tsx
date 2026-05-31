@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
 import { useDraftAppliedFactoryValidation } from "./react-flow-current-activity-card-editor-draft-validation";
 import { useCurrentActivityEditableGraph } from "./react-flow-current-activity-card-editor-editable-graph";
 import { useGraphEditorLeaveEditorBridge } from "./react-flow-current-activity-card-editor-save-flow";
@@ -76,6 +77,23 @@ export function useCurrentActivityGraphEditor(
     },
   });
   leaveEditorBridge.bindSaveFlow(saveFlow);
+
+  const { resetEditorChromeForScopeChange } = saveFlow;
+  const lastFactoryDocumentScopeKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const normalizedScopeKey = factoryDocumentScopeKey ?? null;
+    const previousScopeKey = lastFactoryDocumentScopeKeyRef.current;
+    const scopeChanged =
+      previousScopeKey !== null && previousScopeKey !== normalizedScopeKey;
+    lastFactoryDocumentScopeKeyRef.current = normalizedScopeKey;
+
+    if (!scopeChanged) {
+      return;
+    }
+
+    resetEditorChromeForScopeChange();
+    useFactoryGraphTopologyEditorBridge.getState().setHandlers(null);
+  }, [factoryDocumentScopeKey, resetEditorChromeForScopeChange]);
 
   return buildCurrentActivityGraphEditorValue({
     activeTool,
