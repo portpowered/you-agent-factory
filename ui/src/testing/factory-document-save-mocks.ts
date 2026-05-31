@@ -1,3 +1,10 @@
+/**
+ * Shared doubles for `useFactoryDocumentSave` in graph-editor and current-selection tests.
+ *
+ * Contract: mock `saveAsync({ baseVersion?, factory, mode?, sessionID? })` and optional
+ * `isPending` / `error` / `reset` / `save` on the hook return value. Prefer
+ * `mockFactoryDocumentSave` or `mockPendingFactoryDocumentSave` over inline mutation stubs.
+ */
 import { type Mock, vi } from "vitest";
 
 import {
@@ -21,9 +28,20 @@ export interface MockFactoryDocumentSaveOptions {
     (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
   >;
   isPending?: boolean;
+  error?: Error | null;
   resolvedDocument?: CurrentFactoryDocument;
   errorMode?: FactoryDocumentSaveErrorMode;
   rejectedError?: unknown;
+}
+
+export interface MockFactoryDocumentSaveReturn {
+  error: Error | null;
+  isPending: boolean;
+  reset: () => void;
+  save: (input: FactoryDocumentSaveInput) => void;
+  saveAsync: Mock<
+    (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
+  >;
 }
 
 export interface MockPendingFactoryDocumentSave {
@@ -31,7 +49,7 @@ export interface MockPendingFactoryDocumentSave {
   saveAsync: Mock<
     (input: FactoryDocumentSaveInput) => Promise<CurrentFactoryDocument>
   >;
-  saveMutation: ReturnType<typeof mockFactoryDocumentSave>;
+  saveMutation: MockFactoryDocumentSaveReturn;
 }
 
 const defaultSavedDocument: CurrentFactoryDocument = {
@@ -77,14 +95,20 @@ export function factoryDocumentSaveError(
 
 export function mockFactoryDocumentSave(
   options: MockFactoryDocumentSaveOptions = {},
-) {
+): MockFactoryDocumentSaveReturn {
   const mode = options.mode ?? "idle";
   const saveAsync =
     options.saveAsync ?? buildFactoryDocumentSaveAsync(options);
   const isPending = options.isPending ?? mode === "pending";
+  const save = vi.fn((input: FactoryDocumentSaveInput) => {
+    void saveAsync(input);
+  });
 
   return {
+    error: options.error ?? null,
     isPending,
+    reset: vi.fn<() => void>(),
+    save,
     saveAsync,
   };
 }

@@ -8,6 +8,17 @@ import {
 } from "./factory-document-save-mocks";
 
 describe("factory-document-save-mocks", () => {
+  it("mockFactoryDocumentSave exposes the useFactoryDocumentSave hook contract", () => {
+    const idle = mockFactoryDocumentSave({ mode: "idle" });
+    expect(idle).toMatchObject({
+      error: null,
+      isPending: false,
+    });
+    expect(idle.saveAsync).toBeTypeOf("function");
+    expect(idle.save).toBeTypeOf("function");
+    expect(idle.reset).toBeTypeOf("function");
+  });
+
   it("mockFactoryDocumentSave exposes idle success and error mutation seams", async () => {
     const success = mockFactoryDocumentSave({ mode: "success" });
     expect(success.isPending).toBe(false);
