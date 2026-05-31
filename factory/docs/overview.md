@@ -171,6 +171,9 @@ status and the dashboard until work appears in the list, then use
 
 ## Maintainer notes
 
+- Packaged CLI reference (`you docs <topic>`): edit `docs/reference/<topic>.md`
+  only, run `make docs-reference-smoke`, then ship. Do not copy topics into
+  `pkg/cli/docs/`; the CLI embeds this directory via `docs/reference/embed.go`.
 - Maintainer control surface: `factory/internal/{asks,view,progress,meta}.md`
   (may be gitignored locally; align all four when updating maintainer state).
 - Process/review semantics: `docs/internal/development/process-review-loop-contract.md`.

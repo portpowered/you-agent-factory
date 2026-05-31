@@ -1,4 +1,11 @@
-# Config Reference
+# Config
+
+`you docs config` is the canonical packaged guide for `factory.json` topology:
+work types, states, workers, workstations, resources, and routing.
+
+`factory.json` declares the workflow topology for a you-agent-factory run. It
+defines the work types, states, workers, workstations, resources, and routing
+behavior that the runtime turns into a Petri-net execution model.
 
 Use this page when you need the canonical factory directory layout, the
 field-by-field `factory.json` topology contract, and where each authored file
@@ -236,13 +243,39 @@ Validation rejects more than one `DEFAULT` work type. Factories used with
 `you run --factory <factory.json> <prompt>` must declare `DEFAULT` on exactly
 one work type.
 
-## Workstation IO And Resources
+## Workstation IO
 
 Workstation inputs, outputs, rejection routes, failure routes, and guarded
-loop-breaker routes use `{ "workType": "<name>", "state": "<name>" }`. Top-level
-`resources` declare bounded concurrency pools that workstations reference through
-`resources` entries. See [Workstations](workstations.md), [Workers](workers.md),
-[Resources](resources.md), and [Guards](guards.md) for field-level contracts.
+loop-breaker routes use `{ "workType": "<name>", "state": "<name>" }`. See
+[Workstations](workstations.md) and [Guards](guards.md) for field-level
+contracts.
+
+## Resources
+
+Resources limit concurrent dispatches across workstations:
+
+```json
+{
+  "resources": [
+    { "name": "agent-slot", "capacity": 2 }
+  ],
+  "workstations": [
+    {
+      "name": "execute",
+      "worker": "executor",
+      "inputs": [{ "workType": "story", "state": "init" }],
+      "outputs": [{ "workType": "story", "state": "complete" }],
+      "onFailure": { "workType": "story", "state": "failed" },
+      "resources": [{ "name": "agent-slot", "capacity": 1 }]
+    }
+  ]
+}
+```
+
+Each declared resource creates `<resource>:available` tokens equal to
+`capacity`. Runtime `resources` entries consume the requested capacity while the
+workstation is in flight. See [Resources](resources.md) for typed model pools
+and [Workers](workers.md) for worker-side requirement metadata.
 
 ## Topology Authoring Checklist
 
@@ -358,16 +391,17 @@ see [Author factories](authoring-factories.md).
 
 ## Related
 
-- [Agents](agents.md)
-- [Guards](guards.md)
-- [Relationships](relationships.md)
-- [Mock workers](mock-workers.md)
-- [Record and replay](record-replay.md)
+- `you docs agents`
+- `you docs work`
+- `you docs mock-workers`
+- `you docs record-replay`
+- `you docs guards`
+- `you docs relationships`
+- `you docs authoring-factories`
+- `you docs workstations`
+- `you docs workers`
+- `you docs resources`
+- `you docs batch-work`
+- `you docs templates`
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Author factories](authoring-factories.md)
-- [Submitted work](work.md)
-- [Workstations](workstations.md)
-- [Workers](workers.md)
-- [Author AGENTS.md](authoring-agents-md.md)
-- [Batch inputs](batch-inputs.md)

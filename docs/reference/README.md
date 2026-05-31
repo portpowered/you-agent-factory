@@ -1,9 +1,19 @@
 # you-agent-factory CLI Reference
 
-This directory is the package-owned reference surface for the customer docs and
-the future `you docs <topic>` command. Use the fixed CLI topic names for quick
-terminal help, then use the canonical concept owners below when you need the
-complete customer-facing contract.
+This directory is the **single source of truth** for packaged CLI reference
+topics. Markdown here is embedded into the `you` binary (`docs/reference/embed.go`
+→ `you docs <topic>`). There is no second tree to edit or copy under
+`pkg/cli/docs/`.
+
+## Maintainer workflow
+
+1. Edit the topic file in this directory (for example `docs/reference/config.md`).
+2. Run `make docs-reference-smoke` from the repository root.
+3. Ship the change. Rebuild or release the CLI when operators need the updated
+   embedded output; do not mirror markdown into another directory.
+
+Use the fixed CLI topic names for quick terminal help, then use the canonical
+concept owners below when you need the complete customer-facing contract.
 
 ## Packaged CLI Topics
 

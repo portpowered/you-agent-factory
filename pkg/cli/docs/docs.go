@@ -3,11 +3,13 @@
 package docs
 
 import (
-	"embed"
 	"fmt"
+	"io/fs"
 	"slices"
 	"sort"
 	"strings"
+
+	refdocs "github.com/portpowered/infinite-you/docs/reference"
 )
 
 // Topic is one stable docs topic name exposed by the CLI.
@@ -37,21 +39,21 @@ const (
 )
 
 const (
-	referenceAgentsPath             = "reference/agents.md"
-	referenceAuthoringFactoriesPath = "reference/authoring-factories.md"
-	referenceConfigPath             = "reference/config.md"
-	referenceMockWorkersPath        = "reference/mock-workers.md"
-	referenceRecordReplayPath       = "reference/record-replay.md"
-	referenceGuardsPath             = "reference/guards.md"
-	referenceRelationshipsPath      = "reference/relationships.md"
-	referenceWorkPath               = "reference/work.md"
-	referenceSessionsPath           = "reference/sessions.md"
-	referenceWorkstationsPath       = "reference/workstations.md"
-	referenceWorkersPath            = "reference/workers.md"
-	referenceResourcesPath          = "reference/resources.md"
-	referenceModelsPath             = "reference/models.md"
-	referenceBatchInputsPath        = "reference/batch-inputs.md"
-	referenceTemplatesPath          = "reference/templates.md"
+	referenceAgentsPath             = "agents.md"
+	referenceAuthoringFactoriesPath = "authoring-factories.md"
+	referenceConfigPath             = "config.md"
+	referenceMockWorkersPath        = "mock-workers.md"
+	referenceRecordReplayPath       = "record-replay.md"
+	referenceGuardsPath             = "guards.md"
+	referenceRelationshipsPath      = "relationships.md"
+	referenceWorkPath               = "work.md"
+	referenceSessionsPath           = "sessions.md"
+	referenceWorkstationsPath       = "workstations.md"
+	referenceWorkersPath            = "workers.md"
+	referenceResourcesPath          = "resources.md"
+	referenceModelsPath             = "models.md"
+	referenceBatchInputsPath        = "batch-inputs.md"
+	referenceTemplatesPath          = "templates.md"
 )
 
 type topicDocument struct {
@@ -81,8 +83,7 @@ var topicDocuments = []topicDocument{
 }
 
 var (
-	//go:embed reference/*.md
-	embeddedReferenceDocs embed.FS
+	packagedReferenceDocs = refdocs.PackagedTopics
 	topicRegistry         = newTopicRegistry(topicDocuments)
 )
 
@@ -159,7 +160,7 @@ func Markdown(topic string) (string, error) {
 		return "", fmt.Errorf("unsupported docs topic %q (supported: %s)", topic, strings.Join(supportedTopics, ", "))
 	}
 
-	content, err := embeddedReferenceDocs.ReadFile(doc.path)
+	content, err := fs.ReadFile(packagedReferenceDocs, doc.path)
 	if err != nil {
 		return "", fmt.Errorf("read embedded docs topic %q: %w", topic, err)
 	}
