@@ -110,4 +110,44 @@ describe("factory timeline store operations", () => {
     expect(after.latestTick).toBe(before.latestTick);
     expect(after.receivedEventIDs).toEqual(before.receivedEventIDs);
   });
+
+  it("preserves selected tick in fixed mode when appending later events", () => {
+    const store = useFactoryTimelineStore.getState();
+    store.appendEvents([initialStructure, workRequest]);
+    store.selectTick(1);
+
+    const workStateChange = timelineEvent(
+      "timeline-ops-move",
+      3,
+      FACTORY_EVENT_TYPES.workStateChange,
+      {
+        from_place_id: "init",
+        from_state: "init",
+        source: "api",
+        to_place_id: "review",
+        to_state: "review",
+        work_id: "work-ops",
+        work_type_name: "task",
+      },
+    );
+    store.appendEvent(workStateChange);
+
+    const state = useFactoryTimelineStore.getState();
+    expect(state.mode).toBe("fixed");
+    expect(state.selectedTick).toBe(1);
+    expect(state.latestTick).toBe(3);
+    expect(state.events).toHaveLength(3);
+  });
+
+  it("setCurrentMode follows the latest tick after scrubbing", () => {
+    const store = useFactoryTimelineStore.getState();
+    store.appendEvents([initialStructure, workRequest]);
+    store.selectTick(1);
+    store.setCurrentMode();
+
+    const state = useFactoryTimelineStore.getState();
+    expect(state.mode).toBe("current");
+    expect(state.selectedTick).toBe(2);
+    expect(state.worldViewCache[2]).toBeDefined();
+  });
 });

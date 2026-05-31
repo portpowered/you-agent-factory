@@ -1,7 +1,9 @@
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
 import {
   compactFactoryEventForTimeline,
+  FACTORY_TIMELINE_DEBUG_GLOBAL,
   FACTORY_TIMELINE_DEBUG_STORAGE_KEY,
+  installFactoryTimelineDebugGlobal,
   persistFactoryTimelineMemorySummary,
   readFactoryTimelineDebugOptions,
   readPersistedFactoryTimelineMemorySummary,
@@ -36,6 +38,45 @@ describe("factoryTimelineDebug", () => {
       maxEventTextChars: 128,
       memoryDebug: true,
     });
+  });
+
+  it("falls back to defaults when debug query params are invalid", () => {
+    expect(
+      readFactoryTimelineDebugOptions({
+        location: {
+          search: "?afCompactEventText=0&afMemoryDebug=no&afMaxEventTextChars=0",
+        },
+      }),
+    ).toEqual({
+      compactEventText: false,
+      maxEventTextChars: 2_048,
+      memoryDebug: false,
+    });
+  });
+
+  it("returns the original event when compaction is disabled", () => {
+    expect(
+      compactFactoryEventForTimeline(BASE_EVENT, {
+        compactEventText: false,
+        maxEventTextChars: 12,
+        memoryDebug: false,
+      }),
+    ).toBe(BASE_EVENT);
+  });
+
+  it("returns non-object payloads unchanged when compaction is enabled", () => {
+    const event = {
+      ...BASE_EVENT,
+      payload: "plain-text",
+    };
+
+    expect(
+      compactFactoryEventForTimeline(event, {
+        compactEventText: true,
+        maxEventTextChars: 12,
+        memoryDebug: false,
+      }),
+    ).toBe(event);
   });
 
   it("compacts heavy event text fields without mutating the original event", () => {
@@ -85,6 +126,46 @@ describe("factoryTimelineDebug", () => {
     persistFactoryTimelineMemorySummary(storage, summary);
 
     expect(readPersistedFactoryTimelineMemorySummary(storage)).toEqual(summary);
+  });
+
+  it("returns null when no persisted summary exists", () => {
+    const storage = {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem: vi.fn(),
+    };
+
+    expect(readPersistedFactoryTimelineMemorySummary(storage)).toBeNull();
+  });
+
+  it("installs window debug globals that summarize current timeline state", () => {
+    const browserWindow = {
+      location: { search: "" },
+      localStorage: {
+        getItem: vi.fn().mockReturnValue(null),
+        setItem: vi.fn(),
+      },
+    } as Window & {
+      location: { search: string };
+      localStorage: Storage;
+    };
+
+    installFactoryTimelineDebugGlobal(
+      browserWindow,
+      () => ({
+        events: [BASE_EVENT],
+        selectedTick: BASE_EVENT.context.tick,
+      }),
+      {
+        compactEventText: false,
+        maxEventTextChars: 2_048,
+        memoryDebug: true,
+      },
+    );
+
+    const debugGlobal = browserWindow[FACTORY_TIMELINE_DEBUG_GLOBAL];
+    expect(debugGlobal?.options.memoryDebug).toBe(true);
+    expect(debugGlobal?.summarize().eventCount).toBe(1);
+    expect(debugGlobal?.readPersistedSummary()).toBeNull();
   });
 });
 
