@@ -281,17 +281,11 @@ describe("current activity graph editor controllers", () => {
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
-  it("surfaces blocked node-removal reasons through the shared removal state", () => {
+  it("surfaces blocked node-removal reasons without mutating the draft", () => {
     const reset = vi.fn();
-    const draftState = createDraftState();
-    const editableGraph = createEditableGraph({
-      removeNode: vi.fn(() => ({
-        message:
-          "This worker is still assigned to 1 workstation. Reassign or remove those workstations before deleting writer.",
-        ok: false,
-        reason: "BLOCKED_REMOVAL",
-      })),
-    });
+    const initialDraft = createEmptyFactoryGraphDraft();
+    const draftState = createDraftState({ draft: initialDraft });
+    const editableGraph = createEditableGraph();
 
     const { result } = renderHook(() =>
       useFactoryGraphRemovalController({
@@ -310,13 +304,49 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
-      "worker:writer",
-    );
+    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(draftState.replaceDraft).not.toHaveBeenCalled();
+    expect(draftState.draft).toBe(initialDraft);
     expect(result.current.blockedRemovalReason).toBe(
       "This worker is still assigned to 1 workstation. Reassign or remove those workstations before deleting writer.",
     );
     expect(result.current.pendingRemovalIntent).toBeNull();
+  });
+
+  it("surfaces blocked node-removal from removeNode without mutating the draft", () => {
+    const reset = vi.fn();
+    const initialDraft = createEmptyFactoryGraphDraft();
+    const draftState = createDraftState({ draft: initialDraft });
+    const editableGraph = createEditableGraph({
+      removeNode: vi.fn(() => ({
+        message: "Removal blocked by graph operation layer.",
+        ok: false,
+        reason: "BLOCKED_REMOVAL",
+      })),
+    });
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete("resource:gpu");
+    });
+
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith("resource:gpu");
+    expect(draftState.replaceDraft).not.toHaveBeenCalled();
+    expect(draftState.draft).toBe(initialDraft);
+    expect(result.current.blockedRemovalReason).toBe(
+      "Removal blocked by graph operation layer.",
+    );
   });
 
   it.each([

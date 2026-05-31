@@ -131,7 +131,6 @@ function useFactoryGraphDeleteTargetHandlers({
         return;
       }
       if (intent.ineligibleReason) {
-        editableGraph.actions.removeNode(nodeId);
         setBlockedRemovalReason(intent.ineligibleReason);
         saveEditableDefinition.reset();
         return;
@@ -181,7 +180,6 @@ function useFactoryGraphDeleteTargetHandlers({
         return;
       }
       if (intent.ineligibleReason) {
-        editableGraph.actions.disconnectEdge(edgeId);
         setBlockedRemovalReason(intent.ineligibleReason);
         saveEditableDefinition.reset();
         return;
