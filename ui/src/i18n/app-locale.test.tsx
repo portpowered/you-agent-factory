@@ -96,6 +96,15 @@ describe("resolveAppLocale", () => {
     ).toBe("en");
   });
 
+  it("skips blank browser language entries when walking the preference list", () => {
+    expect(
+      resolveAppLocale({
+        browserLanguage: "zh-CN",
+        browserLanguages: ["", "   ", "zh-Hans"],
+      }),
+    ).toBe("zh-CN");
+  });
+
   it("walks the ordered browser language list until it finds a supported locale", () => {
     expect(
       resolveAppLocale({

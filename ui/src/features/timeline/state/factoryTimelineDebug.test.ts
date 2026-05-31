@@ -27,6 +27,14 @@ const BASE_EVENT: FactoryEvent = {
 };
 
 describe("factoryTimelineDebug options and compaction", () => {
+  it("uses empty search when browser window is undefined", () => {
+    expect(readFactoryTimelineDebugOptions(undefined)).toEqual({
+      compactEventText: false,
+      maxEventTextChars: 2_048,
+      memoryDebug: false,
+    });
+  });
+
   it("reads debug flags from the browser query string", () => {
     expect(
       readFactoryTimelineDebugOptions({

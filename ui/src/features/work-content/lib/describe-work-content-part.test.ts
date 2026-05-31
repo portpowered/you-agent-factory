@@ -29,6 +29,16 @@ describe("describeWorkContentPart", () => {
     ).toBe("Text: Inline notes");
   });
 
+  it("skips empty labels and uses content type", () => {
+    expect(
+      describeWorkContentPart({
+        type: "json",
+        label: "",
+        contentType: "application/json",
+      }),
+    ).toBe("JSON (application/json)");
+  });
+
   it("uses content type when file and label are absent", () => {
     expect(
       describeWorkContentPart({
