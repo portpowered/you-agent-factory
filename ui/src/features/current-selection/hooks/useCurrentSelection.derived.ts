@@ -12,6 +12,7 @@ import {
   resolveDashboardSelection,
   workstationNamesReferencingWorkerInSnapshot,
 } from "../state/dashboardSelection";
+import { resourceTokenCountFromSnapshot } from "../resource-selection/lib/resource-detail-values";
 import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
 import {
   activeExecutionsForSelectedWorkstation,
@@ -124,6 +125,28 @@ function useSelectedStatePlaceData({
     selectedStateTerminalHistoryWorkItems,
     selectedStateTokenCount,
   };
+}
+
+function useSelectedResourceRuntime(
+  selection: DashboardSelection | null,
+  snapshot: DashboardSnapshot | null | undefined,
+) {
+  const selectedResourceName =
+    selection?.kind === "resource" ? selection.resourceName : null;
+
+  return useMemo(() => {
+    if (!selectedResourceName) {
+      return { selectedResourceName: null, selectedResourceTokenCount: null };
+    }
+
+    return {
+      selectedResourceName,
+      selectedResourceTokenCount: resourceTokenCountFromSnapshot(
+        snapshot,
+        selectedResourceName,
+      ),
+    };
+  }, [selectedResourceName, snapshot]);
 }
 
 function useSelectedWorkData({
@@ -246,7 +269,8 @@ export function useCurrentSelectionDerivedState({
         ? selection.request.work_items[0]?.work_id ?? null
         : terminalWorkDetail?.traceWorkID ?? null;
   const selectedWorkerName = selection?.kind === "worker" ? selection.workerName : null;
-  const selectedResourceName = selection?.kind === "resource" ? selection.resourceName : null;
+  const { selectedResourceName, selectedResourceTokenCount } =
+    useSelectedResourceRuntime(selection, snapshot);
   const selectedWorker = useMemo((): FactoryWorker | null => {
     if (!snapshot || !selectedWorkerName) {
       return null;
@@ -308,6 +332,7 @@ export function useCurrentSelectionDerivedState({
     selectedWorkRequestHistory: work.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: work.selectedWorkWorkstationRequests,
     selectedResourceName,
+    selectedResourceTokenCount,
     selectedWorker,
     selectedWorkerName,
     selectedWorkerWorkstationNames,

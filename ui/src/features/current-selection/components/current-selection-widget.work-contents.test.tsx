@@ -40,6 +40,7 @@ function buildCurrentSelection(
     selectedWorkstationRequest: null,
     selectedNodeWorkstationRequests: [],
     selectedResourceName: null,
+    selectedResourceTokenCount: null,
     selectedWorker: null,
     selectedWorkerName: null,
     selectedWorkerWorkstationNames: [],

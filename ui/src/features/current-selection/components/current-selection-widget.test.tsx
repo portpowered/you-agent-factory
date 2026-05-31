@@ -64,6 +64,7 @@ function buildCurrentSelection(
     selectedWorkstationRequest: null,
     selectedNodeWorkstationRequests: [],
     selectedResourceName: null,
+    selectedResourceTokenCount: null,
     selectedWorker: null,
     selectedWorkerName: null,
     selectedWorkerWorkstationNames: [],
@@ -137,6 +138,7 @@ function buildSelectedWorkItemFixture() {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: widget integration tests cover each selection kind in one suite.
 describe("CurrentSelectionWidget", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
@@ -749,6 +751,63 @@ describe("CurrentSelectionWidget", () => {
     expect(
       screen.queryByRole("heading", { name: "Configuration" }),
     ).toBeNull();
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
+  });
+
+  it("renders the resource detail card for resource selections", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult({
+        ...buildEditableFactoryDefinition(),
+        resources: [
+          {
+            capacity: 2,
+            name: "agent-slot",
+            type: "INVOCATION_SLOT",
+          },
+        ],
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CURSOR",
+            name: "reviewer",
+            resources: [{ capacity: 1, name: "agent-slot" }],
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [
+          {
+            id: "review",
+            name: "Review",
+            resources: [{ capacity: 1, name: "agent-slot" }],
+            worker: "reviewer",
+          },
+        ],
+      }),
+    );
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedResourceName: "agent-slot",
+          selectedResourceTokenCount: 1,
+          selection: { kind: "resource", resourceName: "agent-slot" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(
+      screen.queryByText(
+        "Select a workstation, work item, or state node to inspect live details.",
+      ),
+    ).toBeNull();
+    expect(screen.getByRole("heading", { name: "Summary" })).toBeTruthy();
+    expect(screen.getAllByText("agent-slot").length).toBeGreaterThan(0);
+    expect(screen.getByText("Available tokens")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Referencing workers" }),
+    ).toBeTruthy();
     expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
   });
 

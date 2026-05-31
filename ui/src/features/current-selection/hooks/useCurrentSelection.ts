@@ -49,6 +49,7 @@ export interface CurrentSelectionState {
   selectedWorkRequestHistory: WorkstationRequestLike[];
   selectedWorkWorkstationRequests: DashboardWorkstationRequest[];
   selectedResourceName: string | null;
+  selectedResourceTokenCount: number | null;
   selectedWorker: FactoryWorker | null;
   selectedWorkerName: string | null;
   selectedWorkerWorkstationNames: string[];
@@ -166,6 +167,7 @@ export function useCurrentSelection({
     selectedWorkRequestHistory: derived.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: derived.selectedWorkWorkstationRequests,
     selectedResourceName: derived.selectedResourceName,
+    selectedResourceTokenCount: derived.selectedResourceTokenCount,
     selectedWorker: derived.selectedWorker,
     selectedWorkerName: derived.selectedWorkerName,
     selectedWorkerWorkstationNames: derived.selectedWorkerWorkstationNames,

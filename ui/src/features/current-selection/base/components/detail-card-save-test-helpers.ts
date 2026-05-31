@@ -223,6 +223,7 @@ export function buildDetailCardCurrentSelection(
     selectedWorkstationRequest: null,
     selectedWorker: null,
     selectedResourceName: null,
+    selectedResourceTokenCount: null,
     selectedWorkerName: null,
     selectedWorkerWorkstationNames: [],
     selection: null,

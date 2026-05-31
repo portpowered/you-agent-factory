@@ -1,0 +1,136 @@
+import { renderHook } from "@testing-library/react";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useResourceDetailState } from "./use-resource-detail-state";
+
+vi.mock(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
+
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
+
+function mockFactoryDocumentQuery(
+  overrides: Partial<ReturnType<typeof useCurrentFactoryDocument>> = {},
+) {
+  vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    data: undefined,
+    error: null,
+    failureCount: 0,
+    failureReason: null,
+    fetchStatus: "idle",
+    isError: false,
+    isFetched: false,
+    isFetchedAfterMount: false,
+    isFetching: false,
+    isInitialLoading: false,
+    isLoading: false,
+    isLoadingError: false,
+    isPaused: false,
+    isPending: true,
+    isPlaceholderData: false,
+    isRefetchError: false,
+    isRefetching: false,
+    isStale: true,
+    isSuccess: false,
+    promise: Promise.resolve(undefined),
+    refetch: vi.fn(),
+    status: "pending",
+    ...overrides,
+  } as never);
+}
+
+function buildFactoryDocument(
+  overrides?: Partial<CurrentFactoryDocument>,
+): CurrentFactoryDocument {
+  return {
+    name: "Current Factory",
+    version: {
+      logical: "7",
+      physical: "2026-05-23T16:22:24Z",
+    },
+    resources: [
+      {
+        capacity: 2,
+        name: "agent-slot",
+        type: "INVOCATION_SLOT",
+      },
+    ],
+    workers: [
+      {
+        model: "gpt-5.5",
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        id: "review",
+        name: "Review",
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        worker: "reviewer",
+      },
+    ],
+    workTypes: [],
+    ...overrides,
+  };
+}
+
+describe("useResourceDetailState", () => {
+  beforeEach(() => {
+    mockFactoryDocumentQuery();
+  });
+
+  it("returns loading while the current factory document is pending", () => {
+    const { result } = renderHook(() => useResourceDetailState("agent-slot"));
+
+    expect(result.current).toEqual({ status: "loading" });
+  });
+
+  it("returns error when the current factory document query fails", () => {
+    mockFactoryDocumentQuery({
+      error: { message: "Factory unavailable" },
+      isError: true,
+      isPending: false,
+      status: "error",
+    } as never);
+
+    const { result } = renderHook(() => useResourceDetailState("agent-slot"));
+
+    expect(result.current).toEqual({
+      errorMessage: "Factory unavailable",
+      status: "error",
+    });
+  });
+
+  it("returns ready resource detail when the resource exists in the factory document", () => {
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() => useResourceDetailState("agent-slot"));
+
+    expect(result.current).toEqual({
+      resource: {
+        capacity: 2,
+        name: "agent-slot",
+        type: "INVOCATION_SLOT",
+      },
+      status: "ready",
+      workerNames: ["reviewer"],
+      workstationNames: ["Review"],
+    });
+  });
+});

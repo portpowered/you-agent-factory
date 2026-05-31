@@ -28,6 +28,7 @@ import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/us
 import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
 import {
   NoSelectionDetailCard,
+  ResourceDetailCard,
   StateNodeDetailCard,
   WorkerDetailCard,
   WorkstationRequestDetailCard,
@@ -49,6 +50,7 @@ export interface CurrentSelectionWidgetProps {
   widgetId?: string;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection routing keeps each detail card branch explicit.
 function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
@@ -108,6 +110,8 @@ function renderCurrentSelectionDetailCard({
     selectedWorkDispatchAttempts,
     selectedWorkID,
     selectedWorkRequestHistory,
+    selectedResourceName,
+    selectedResourceTokenCount,
     selectedWorkerName,
     selectedWorkstationRequest,
     selection,
@@ -174,6 +178,17 @@ function renderCurrentSelectionDetailCard({
         saveState={workerSaveState}
         widgetId={widgetId}
         workerName={selectedWorkerName}
+      />
+    );
+  }
+
+  if (selection?.kind === "resource" && selectedResourceName) {
+    return (
+      <ResourceDetailCard
+        locale={locale}
+        resourceName={selectedResourceName}
+        tokenCount={selectedResourceTokenCount}
+        widgetId={widgetId}
       />
     );
   }
