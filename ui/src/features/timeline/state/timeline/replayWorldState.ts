@@ -84,6 +84,7 @@ function emptyWorldState(tick: number): ReplayWorldState {
     tracesByWorkID: {},
     uptime_seconds: 0,
     workItemsByID: {},
+    workStateChangesByWorkID: {},
     workstationRequestsByDispatchID: {},
     workRequestsByID: {},
   };

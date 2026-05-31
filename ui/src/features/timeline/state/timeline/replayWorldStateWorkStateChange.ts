@@ -1,7 +1,44 @@
+import type {
+  DashboardWorkMoveOperation,
+  DashboardWorkMoveOperationSource,
+} from "../../../../api/dashboard";
 import type { FactoryWorkItem } from "../../../../api/events";
 import { addToken, removeWorkToken, removeWorkTokenFromPlace } from "./replayGraphState";
 import type { WorkStateChangeEvent } from "./replayWorldStateTypes";
 import type { ReplayWorldState } from "./types";
+
+function recordWorkStateChange(
+  state: ReplayWorldState,
+  event: WorkStateChangeEvent,
+): void {
+  const payload = event.payload;
+  const workID = payload.workId;
+  if (!workID) {
+    return;
+  }
+
+  const record: DashboardWorkMoveOperation = {
+    work_id: workID,
+    work_type_name: payload.workTypeName,
+    from_state: payload.fromState,
+    to_state: payload.toState,
+    from_place_id: payload.fromPlaceId,
+    to_place_id: payload.toPlaceId,
+    source: payload.source as DashboardWorkMoveOperationSource,
+    request_id: event.context.requestId,
+    tick: event.context.tick,
+    sequence: event.context.sequence,
+    event_time: event.context.eventTime,
+  };
+
+  if (!state.workStateChangesByWorkID) {
+    state.workStateChangesByWorkID = {};
+  }
+  state.workStateChangesByWorkID[workID] = [
+    ...(state.workStateChangesByWorkID[workID] ?? []),
+    record,
+  ];
+}
 
 function placeCategory(
   state: ReplayWorldState,
@@ -19,6 +56,8 @@ export function applyWorkStateChange(
   if (!workID) {
     return;
   }
+
+  recordWorkStateChange(state, event);
 
   const existing = state.workItemsByID[workID];
   let item: FactoryWorkItem = existing ?? {

@@ -9,6 +9,7 @@ import type {
   DashboardTraceToken,
   DashboardWorkDiagnostics,
   DashboardWorkItemRef,
+  DashboardWorkMoveOperation,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
 import type {
@@ -157,6 +158,7 @@ export interface TimelineWorldViewBase {
   terminalWorkByID: Record<string, FactoryTerminalWork>;
   tracesByID: Record<string, DashboardTrace>;
   tracesByWorkID: Record<string, DashboardTrace>;
+  workStateChangesByWorkID?: Record<string, DashboardWorkMoveOperation[]>;
   workItemsByID: Record<string, FactoryWorkItem>;
   workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>;
   workRequestsByID: Record<string, TimelineWorkRequestPayload>;

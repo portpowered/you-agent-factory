@@ -184,12 +184,34 @@ describe("reconstructWorldState WORK_STATE_CHANGE", () => {
     expect(recoveredTick.workItemsByID[workID]?.place_id).toBe("task:review");
     expect(recoveredTick.failedWorkDetailsByWorkID[workID]?.failure_reason).toBeDefined();
 
+    expect(recoveredTick.workStateChangesByWorkID?.[workID]).toEqual([
+      expect.objectContaining({
+        work_id: workID,
+        from_state: "failed",
+        to_state: "review",
+        from_place_id: "task:failed",
+        to_place_id: "task:review",
+        source: "cli",
+        tick: 4,
+        sequence: 4,
+        event_time: eventTime,
+      }),
+    ]);
+
     const runtime = projectRuntime(recoveredTick);
     expect(runtime.current_work_items_by_place_id["task:review"]).toEqual([
       expect.objectContaining({ work_id: workID }),
     ]);
     expect(runtime.place_occupancy_work_items_by_place_id["task:review"]).toEqual([
       expect.objectContaining({ work_id: workID }),
+    ]);
+    expect(runtime.work_move_operations_by_work_id?.[workID]).toEqual([
+      expect.objectContaining({
+        work_id: workID,
+        from_state: "failed",
+        to_state: "review",
+        source: "cli",
+      }),
     ]);
   });
 
@@ -206,9 +228,31 @@ describe("reconstructWorldState WORK_STATE_CHANGE", () => {
     expect(state.occupancyByID["task:review"]?.workItemIDs).toEqual([workID]);
     expect(state.workItemsByID[workID]?.place_id).toBe("task:review");
 
+    expect(state.workStateChangesByWorkID?.[workID]).toEqual([
+      expect.objectContaining({
+        work_id: workID,
+        from_state: "init",
+        to_state: "review",
+        from_place_id: "task:init",
+        to_place_id: "task:review",
+        source: "api",
+        tick: 2,
+        sequence: 2,
+      }),
+    ]);
+    expect(Object.keys(state.workStateChangesByWorkID ?? {})).toEqual([workID]);
+
     const runtime = projectRuntime(state);
     expect(runtime.current_work_items_by_place_id["task:review"]).toEqual([
       expect.objectContaining({ work_id: workID }),
+    ]);
+    expect(runtime.work_move_operations_by_work_id?.[workID]).toEqual([
+      expect.objectContaining({
+        work_id: workID,
+        from_state: "init",
+        to_state: "review",
+        source: "api",
+      }),
     ]);
   });
 });

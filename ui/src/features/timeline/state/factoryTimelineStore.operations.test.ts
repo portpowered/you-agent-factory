@@ -1,6 +1,9 @@
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
-import { useFactoryTimelineStore } from "./factoryTimelineStore";
+import {
+  buildFactoryTimelineSnapshot,
+  useFactoryTimelineStore,
+} from "./factoryTimelineStore";
 
 const eventTime = "2026-05-31T12:00:00.000Z";
 
@@ -137,6 +140,42 @@ describe("factory timeline store operations", () => {
     expect(state.selectedTick).toBe(1);
     expect(state.latestTick).toBe(3);
     expect(state.events).toHaveLength(3);
+  });
+
+  it("projects operator move history at the latest tick without breaking dispatch projection", () => {
+    const store = useFactoryTimelineStore.getState();
+    const workStateChange = timelineEvent(
+      "timeline-ops-move",
+      3,
+      FACTORY_EVENT_TYPES.workStateChange,
+      {
+        fromPlaceId: "task:init",
+        fromState: "init",
+        source: "api",
+        toPlaceId: "task:review",
+        toState: "review",
+        workId: "work-ops",
+        workTypeName: "task",
+      },
+    );
+    store.appendEvents([initialStructure, workRequest, workStateChange]);
+
+    const snapshot = buildFactoryTimelineSnapshot(
+      useFactoryTimelineStore.getState().events,
+      3,
+    );
+
+    expect(snapshot.runtime.work_move_operations_by_work_id?.["work-ops"]).toEqual([
+      expect.objectContaining({
+        work_id: "work-ops",
+        from_state: "init",
+        to_state: "review",
+        source: "api",
+        tick: 3,
+      }),
+    ]);
+    expect(snapshot.runtime.workstation_requests_by_dispatch_id).toBeUndefined();
+    expect(snapshot.runtime.session.has_data).toBe(true);
   });
 
   it("setCurrentMode follows the latest tick after scrubbing", () => {

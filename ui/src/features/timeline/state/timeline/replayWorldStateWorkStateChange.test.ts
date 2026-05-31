@@ -72,6 +72,7 @@ describe("applyWorkStateChange guards", () => {
       workTypeName: "task",
     }));
     expect(state.occupancyByID["task:init"]?.workItemIDs).toEqual(["work-1"]);
+    expect(state.workStateChangesByWorkID).toBeUndefined();
   });
 
   it("skips removeWorkTokenFromPlace when fromPlaceId equals toPlaceId", () => {
@@ -255,5 +256,50 @@ describe("applyWorkStateChange work item metadata", () => {
       workTypeName: "task",
     }));
     expect(state.workItemsByID["work-type-fill"]?.work_type_id).toBe("task");
+  });
+});
+
+describe("applyWorkStateChange move history", () => {
+  it("records operator move metadata from event context", () => {
+    const state = replayStateWithWork("work-move", "task:init", "PROCESSING");
+    state.topology.places = [
+      { category: "PROCESSING", id: "task:init", name: "task:init" },
+      { category: "PROCESSING", id: "task:review", name: "task:review" },
+    ];
+    applyWorkStateChange(state, {
+      context: {
+        eventTime: "2026-05-30T12:00:00.000Z",
+        requestId: "request-move",
+        sequence: 7,
+        tick: 5,
+      },
+      id: "event-move",
+      payload: {
+        fromPlaceId: "task:init",
+        fromState: "init",
+        source: "api",
+        toPlaceId: "task:review",
+        toState: "review",
+        workId: "work-move",
+        workTypeName: "task",
+      },
+      type: "WORK_STATE_CHANGE",
+    });
+
+    expect(state.workStateChangesByWorkID?.["work-move"]).toEqual([
+      {
+        work_id: "work-move",
+        work_type_name: "task",
+        from_state: "init",
+        to_state: "review",
+        from_place_id: "task:init",
+        to_place_id: "task:review",
+        source: "api",
+        request_id: "request-move",
+        tick: 5,
+        sequence: 7,
+        event_time: "2026-05-30T12:00:00.000Z",
+      },
+    ]);
   });
 });

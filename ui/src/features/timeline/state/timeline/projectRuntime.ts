@@ -8,6 +8,7 @@ import {
   cloneProviderSessionAttempts,
   cloneWorkItemRef,
 } from "./cloneTimelineSnapshot";
+import { projectWorkMoveOperationsByWorkID } from "./projectWorkMoveOperations";
 import { projectRuntimeWorkstationRequests } from "./projectWorkstationRequests";
 import { uniqueSorted } from "./shared";
 import { isSystemTimePlace, isSystemTimeWorkItem } from "./systemTime";
@@ -50,6 +51,9 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
       scriptRequestsByDispatchID: state.scriptRequestsByDispatchID,
       scriptResponsesByDispatchID: state.scriptResponsesByDispatchID,
     }),
+    work_move_operations_by_work_id: projectWorkMoveOperationsByWorkID(
+      state.workStateChangesByWorkID,
+    ),
     session: {
       completed_count: customerCompletedDispatches.filter(
         (dispatch) => dispatch.outcome === "ACCEPTED",
