@@ -99,6 +99,17 @@ pipeline and work-type tables above; the inbox table below lists paths.
   in one `FACTORY_REQUEST_BATCH` (see `you docs batch-inputs` and
   `you docs relationships`).
 
+## Submission recipes (this factory)
+
+Pick a row by goal; do not route greenfield features or docs to **`task`**.
+
+| Goal | Work type | Ingress |
+|------|-----------|---------|
+| New feature or documentation | `idea` | `you submit --work-type-name idea` (with `--name` and `--payload` as needed) or markdown under `factory/inputs/idea/default/` |
+| Large, ambiguous multi-area customer ask | `thoughts` | Markdown under `factory/inputs/thoughts/default/` |
+| Unstick failed or looped implementation | `task` | Markdown under `factory/inputs/task/default/` or `you submit --work-type-name task` (with `--name` and `--payload` as needed) |
+| Ordered multi-item or mixed-type request | Batch (`FACTORY_REQUEST_BATCH`) | `factory/inputs/BATCH/default/{requestId}.json` |
+
 ## Input layout
 
 Seed checked-in repository work under:
