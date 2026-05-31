@@ -119,6 +119,18 @@ describe("ExportFactoryDialog", () => {
     expect(imageInput.className).not.toContain("file:text-af-accent");
   });
 
+  it("renders the export cover-image choose-file shell with neutral tokens only", () => {
+    const messages = getExportDialogMessages("en");
+    renderDialog();
+
+    const imageInput = screen.getByLabelText(messages.imageLabel);
+    expect(imageInput.className).toContain("border-dashed");
+    expect(imageInput.className).toContain("border-af-border-strong");
+    expect(imageInput.className).toContain("bg-af-surface-subtle");
+    expect(imageInput.className).not.toContain("bg-af-accent-surface");
+    expect(imageInput.className).not.toContain("border-af-accent-border");
+  });
+
   it("exports the selected image with the trimmed factory name and shows a visible success state", async () => {
     let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null =
       null;
