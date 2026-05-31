@@ -57,7 +57,6 @@ describe("saveSessionFactory version metadata", () => {
       "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
-          mode: "REPLACE_CURRENT",
           factory: {
             name: "Current Factory",
             workers: [],
