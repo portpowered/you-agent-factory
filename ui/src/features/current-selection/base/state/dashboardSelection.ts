@@ -6,7 +6,11 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
-import type { FactoryWorker, FactoryWorkType } from "../../../../api/events/types";
+import type {
+  FactoryResource,
+  FactoryWorker,
+  FactoryWorkType,
+} from "../../../../api/events/types";
 import { hasDashboardStatePlace } from "./dashboardStatePlaces";
 import { resolveFactoryGraphNodeSelection } from "./factoryGraphNodeSelection";
 
@@ -40,6 +44,11 @@ export interface DashboardWorkerSelection {
   workerName: string;
 }
 
+export interface DashboardResourceSelection {
+  kind: "resource";
+  resourceName: string;
+}
+
 export interface DashboardWorkTypeSelection {
   kind: "work-type";
   workTypeName: string;
@@ -51,6 +60,7 @@ export type DashboardSelection =
   | DashboardWorkItemSelection
   | DashboardWorkstationRequestSelection
   | DashboardWorkerSelection
+  | DashboardResourceSelection
   | DashboardWorkTypeSelection;
 
 export function selectDefaultSelection(snapshot: DashboardSnapshot): DashboardSelection | null {
@@ -106,6 +116,12 @@ export function resolveDashboardSelection({
 
   if (selection.kind === "worker") {
     return workerExistsInFactory(factory, selection.workerName)
+      ? selection
+      : selectDefaultSelection(snapshot);
+  }
+
+  if (selection.kind === "resource") {
+    return resourceExistsInSnapshotFactory(snapshot, selection.resourceName)
       ? selection
       : selectDefaultSelection(snapshot);
   }
@@ -466,6 +482,20 @@ function workerExistsInFactory(
   return (
     factory?.workers?.some((worker) => worker.name === workerName) ?? false
   );
+}
+
+function resourceExistsInSnapshotFactory(
+  snapshot: DashboardSnapshot,
+  resourceName: string,
+): boolean {
+  return findFactoryResourceInSnapshot(snapshot, resourceName) !== undefined;
+}
+
+export function findFactoryResourceInSnapshot(
+  snapshot: DashboardSnapshot,
+  resourceName: string,
+): FactoryResource | undefined {
+  return snapshot.factory?.resources?.find((resource) => resource.name === resourceName);
 }
 
 export function findFactoryWorkerInSnapshot(

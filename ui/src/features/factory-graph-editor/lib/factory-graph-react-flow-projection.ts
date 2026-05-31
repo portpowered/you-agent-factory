@@ -98,6 +98,8 @@ export interface FactoryGraphReactFlowEditorOverlay {
 
 export interface ProjectFactoryGraphToReactFlowOptions {
   editor?: FactoryGraphReactFlowEditorOverlay;
+  /** When true, omit edges whose handles are absent from rendered connection anchors. */
+  filterEdgesToRenderedHandles?: boolean;
   factoryDefinition?: CanonicalFactoryDefinition | null;
   layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
@@ -148,81 +150,91 @@ export function projectFactoryGraphToReactFlow(
     topology: displayTopology,
   };
 
-  return {
-    edges: displayTopology.edges.map((edge) =>
-      buildFactoryGraphReactFlowEdge(edge, projectionInput),
-    ),
-    nodes: [...displayTopology.nodes]
-      .sort(sortFactoryGraphNodes)
-      .map((node) => {
-        const column = COLUMN_BY_KIND[node.kind];
-        const row = rowCounts.get(column) ?? 0;
-        rowCounts.set(column, row + 1);
-        const workerStatus =
-          node.kind === "worker"
-            ? (input.runtime?.workerStatusByName?.get(node.label) ?? "idle")
-            : undefined;
-        const canEditConnections = input.editor?.canEditConnections ?? false;
-        const anchorContext = resolveFactoryGraphConnectionAnchorContext(
-          node,
-          input.workstationResolver,
-        );
-        const workStateType =
-          node.kind === "work-state" && node.key.kind === "work-state"
-            ? resolveWorkStateTypeForGraphNode(
-                input.factoryDefinition,
-                node.key,
-              )
-            : undefined;
+  const nodes = [...displayTopology.nodes]
+    .sort(sortFactoryGraphNodes)
+    .map((node) => {
+      const column = COLUMN_BY_KIND[node.kind];
+      const row = rowCounts.get(column) ?? 0;
+      rowCounts.set(column, row + 1);
+      const workerStatus =
+        node.kind === "worker"
+          ? (input.runtime?.workerStatusByName?.get(node.label) ?? "idle")
+          : undefined;
+      const canEditConnections = input.editor?.canEditConnections ?? false;
+      const anchorContext = resolveFactoryGraphConnectionAnchorContext(
+        node,
+        input.workstationResolver,
+      );
+      const workStateType =
+        node.kind === "work-state" && node.key.kind === "work-state"
+          ? resolveWorkStateTypeForGraphNode(input.factoryDefinition, node.key)
+          : undefined;
 
-        return {
-          className: nodeClassName(node.id, input),
-          data: {
-            active: input.runtime?.activeNodeIds?.has(node.id) ?? false,
-            activeFlow: input.runtime?.activeNodeIds?.has(node.id) ?? false,
-            activeTool: input.editor?.activeTool ?? null,
+      return {
+        className: nodeClassName(node.id, input),
+        data: {
+          active: input.runtime?.activeNodeIds?.has(node.id) ?? false,
+          activeFlow: input.runtime?.activeNodeIds?.has(node.id) ?? false,
+          activeTool: input.editor?.activeTool ?? null,
+          canEditConnections,
+          connectionAnchors: buildNodeHandles({
+            editor: input.editor,
+            locale: input.locale,
+            node,
+            topology: displayTopology,
+            workstationResolver: input.workstationResolver,
+          }),
+          connectionHint: messages.flowConnectionHint,
+          draftStatus: draftStatusForNode(node.id, input.editor),
+          focused: input.runtime?.focusedNodeIds?.has(node.id) ?? false,
+          kind: node.kind,
+          kindLabel: messages.kindLabel(node.kind),
+          label: node.label,
+          muted: input.runtime?.mutedNodeIds?.has(node.id) ?? false,
+          pendingLabel: messages.flowPendingLabel,
+          removingLabel: messages.flowRemovingLabel,
+          selectedWorkId: input.runtime?.selectedWorkId ?? null,
+          tokenCount:
+            input.runtime?.placeTokenCountsByNodeId?.get(node.id) ?? null,
+          validationMessage: validationMessages.get(node.id) ?? null,
+          ...(node.kind === "work-state" ? { workStateType } : {}),
+          workerStatus,
+          workerStatusLabel: workerStatus
+            ? messages.workerStatusLabel(workerStatus)
+            : undefined,
+          zAxisIncompleteHints: resolveFactoryGraphZAxisIncompleteHints({
+            anchorContext,
             canEditConnections,
-            connectionAnchors: buildNodeHandles({
-              editor: input.editor,
-              locale: input.locale,
-              node,
-              topology: displayTopology,
-              workstationResolver: input.workstationResolver,
-            }),
-            connectionHint: messages.flowConnectionHint,
-            draftStatus: draftStatusForNode(node.id, input.editor),
-            focused: input.runtime?.focusedNodeIds?.has(node.id) ?? false,
-            kind: node.kind,
-            kindLabel: messages.kindLabel(node.kind),
-            label: node.label,
-            muted: input.runtime?.mutedNodeIds?.has(node.id) ?? false,
-            pendingLabel: messages.flowPendingLabel,
-            removingLabel: messages.flowRemovingLabel,
-            selectedWorkId: input.runtime?.selectedWorkId ?? null,
-            tokenCount:
-              input.runtime?.placeTokenCountsByNodeId?.get(node.id) ?? null,
-            validationMessage: validationMessages.get(node.id) ?? null,
-            ...(node.kind === "work-state" ? { workStateType } : {}),
-            workerStatus,
-            workerStatusLabel: workerStatus
-              ? messages.workerStatusLabel(workerStatus)
-              : undefined,
-            zAxisIncompleteHints: resolveFactoryGraphZAxisIncompleteHints({
-              anchorContext,
-              canEditConnections,
-              locale: input.locale,
-              nodeKind: node.kind,
-            }),
-          },
-          draggable: true,
-          id: node.id,
-          position: input.layoutPositionsByNodeId?.get(node.id) ?? {
-            x: column * COLUMN_X,
-            y: row * ROW_Y,
-          },
-          type: "factoryEntity",
-        } satisfies FactoryGraphReactFlowNode;
-      }),
+            locale: input.locale,
+            nodeKind: node.kind,
+          }),
+        },
+        draggable: true,
+        id: node.id,
+        position: input.layoutPositionsByNodeId?.get(node.id) ?? {
+          x: column * COLUMN_X,
+          y: row * ROW_Y,
+        },
+        type: "factoryEntity",
+      } satisfies FactoryGraphReactFlowNode;
+    });
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+
+  const projectedEdges = displayTopology.edges.map((topologyEdge) =>
+    buildFactoryGraphReactFlowEdge(topologyEdge, projectionInput),
+  );
+
+  return {
+    edges: input.filterEdgesToRenderedHandles
+      ? projectedEdges.filter((edge) =>
+          shouldIncludeFactoryGraphReactFlowEdge(
+            edge,
+            edge.data?.kind,
+            nodesById,
+          ),
+        )
+      : projectedEdges,
+    nodes,
   };
 }
 
@@ -248,6 +260,34 @@ function sortFactoryGraphNodes(
     return leftColumn - rightColumn;
   }
   return left.label.localeCompare(right.label);
+}
+
+function shouldIncludeFactoryGraphReactFlowEdge(
+  edge: FactoryGraphReactFlowEdge,
+  edgeKind: FactoryGraphEdge["kind"] | undefined,
+  nodesById: ReadonlyMap<string, FactoryGraphReactFlowNode>,
+): boolean {
+  if (edgeKind === "work-type-state") {
+    return true;
+  }
+
+  const sourceNode = nodesById.get(edge.source);
+  const targetNode = nodesById.get(edge.target);
+  if (!sourceNode || !targetNode || !edge.sourceHandle || !edge.targetHandle) {
+    return false;
+  }
+
+  const sourceAnchorIds = new Set(
+    sourceNode.data.connectionAnchors.map((anchor) => anchor.id),
+  );
+  const targetAnchorIds = new Set(
+    targetNode.data.connectionAnchors.map((anchor) => anchor.id),
+  );
+
+  return (
+    sourceAnchorIds.has(edge.sourceHandle) &&
+    targetAnchorIds.has(edge.targetHandle)
+  );
 }
 
 function buildFactoryGraphReactFlowEdge(
@@ -405,7 +445,9 @@ export function resolveFactoryGraphZAxisIncompleteHints(input: {
     input.nodeKind !== "workstation" ||
     !input.canEditConnections ||
     !input.anchorContext?.workstation ||
-    !workstationHasZAxisIncompleteForConnections(input.anchorContext.workstation)
+    !workstationHasZAxisIncompleteForConnections(
+      input.anchorContext.workstation,
+    )
   ) {
     return null;
   }

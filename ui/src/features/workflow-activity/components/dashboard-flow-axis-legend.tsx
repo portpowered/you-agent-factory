@@ -3,6 +3,12 @@ import { DisclosureButton } from "../../../components/ui/disclosure-button";
 import { ExpandablePanelIcon } from "../../../components/ui/expandable-panel-icon";
 import { cn } from "../../../lib/cn";
 import {
+  WORK_STATE_PHASE_LEGEND_ORDER,
+  workStatePhaseSwatchClassName,
+} from "../../factory-graph-editor/lib/factory-graph-work-state-phase-styling";
+import type { FactoryGraphWorkStateType } from "../../factory-graph-editor/lib/factory-graph-work-state-type";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart/lib/workstation-icon-metadata";
@@ -22,12 +28,19 @@ export interface DashboardFlowAxisLegendIconItem {
   label: string;
 }
 
+export interface DashboardFlowAxisLegendPhaseItem {
+  id: FactoryGraphWorkStateType;
+  label: string;
+  swatchClassName: string;
+}
+
 export interface DashboardFlowAxisLegendProps {
   ariaLabel?: string;
   className?: string;
   defaultExpanded?: boolean;
   edgeItems: readonly DashboardFlowAxisLegendEdgeItem[];
   iconItems: readonly DashboardFlowAxisLegendIconItem[];
+  phaseItems: readonly DashboardFlowAxisLegendPhaseItem[];
   locale?: string;
 }
 
@@ -109,6 +122,18 @@ export function getDefaultDashboardFlowAxisLegendIconItems(
   ];
 }
 
+export function getDefaultDashboardFlowAxisLegendPhaseItems(
+  locale?: string,
+): readonly DashboardFlowAxisLegendPhaseItem[] {
+  const messages = getFactoryGraphEditorMessages(locale);
+
+  return WORK_STATE_PHASE_LEGEND_ORDER.map((phase) => ({
+    id: phase,
+    label: messages.workStatePhaseLegendLabel(phase),
+    swatchClassName: workStatePhaseSwatchClassName(phase),
+  }));
+}
+
 const DEFAULT_CONTAINER_CLASS =
   "pointer-events-none z-10 flex flex-col items-stretch gap-2 md:items-start";
 const TOGGLE_BUTTON_CLASS =
@@ -121,6 +146,7 @@ const COLLAPSE_BUTTON_CLASS =
   "dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-border bg-af-surface-subtle px-3 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const ITEMS_LIST_CLASS =
   "m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2";
+const PHASE_SWATCH_CLASS = "h-3 w-3 shrink-0 rounded-sm border";
 
 function normalizeLabelForAction(ariaLabel: string): string {
   return ariaLabel.charAt(0).toLowerCase() + ariaLabel.slice(1);
@@ -162,46 +188,80 @@ function DashboardFlowAxisLegendItems({
   edgeItems,
   iconItems,
   locale,
-}: Pick<DashboardFlowAxisLegendProps, "edgeItems" | "iconItems" | "locale">) {
+  phaseItems,
+}: Pick<
+  DashboardFlowAxisLegendProps,
+  "edgeItems" | "iconItems" | "locale" | "phaseItems"
+>) {
   const messages = getDashboardFlowAxisLegendMessages(locale);
+  const editorMessages = getFactoryGraphEditorMessages(locale);
 
   return (
-    <ul className={ITEMS_LIST_CLASS}>
-      {edgeItems.map((item) => (
-        <li
-          className="flex items-center gap-2"
-          data-legend-edge={item.id}
-          key={item.id}
-        >
-          <span
-            className={cn(
-              "h-1 w-7 rounded-full",
-              edgeSwatchClassName(item.tone),
-            )}
-            data-legend-flow={item.tone === "active" ? "" : undefined}
-          />
-          <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
-            {item.label}
-          </span>
-        </li>
-      ))}
-      {iconItems.map((item) => (
-        <li
-          className="flex min-w-0 items-center gap-2"
-          data-legend-icon={item.kind}
-          key={item.kind}
-        >
-          <GraphSemanticIcon
-            className={cn("h-4 w-4", item.iconClassName)}
-            kind={item.kind}
-            label={messages.iconLabel(item.label)}
-          />
-          <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
-            {item.label}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-3">
+      {edgeItems.length > 0 ? (
+        <ul className={ITEMS_LIST_CLASS}>
+          {edgeItems.map((item) => (
+            <li
+              className="flex items-center gap-2"
+              data-legend-edge={item.id}
+              key={item.id}
+            >
+              <span
+                className={cn(
+                  "h-1 w-7 rounded-full",
+                  edgeSwatchClassName(item.tone),
+                )}
+                data-legend-flow={item.tone === "active" ? "" : undefined}
+              />
+              <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
+                {item.label}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {phaseItems.length > 0 ? (
+        <section aria-label={editorMessages.workStatePhaseLegendAriaLabel}>
+          <ul className={ITEMS_LIST_CLASS}>
+            {phaseItems.map((item) => (
+              <li
+                className="flex items-center gap-2"
+                data-legend-phase={item.id}
+                key={item.id}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(PHASE_SWATCH_CLASS, item.swatchClassName)}
+                />
+                <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
+                  {item.label}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {iconItems.length > 0 ? (
+        <ul className={ITEMS_LIST_CLASS}>
+          {iconItems.map((item) => (
+            <li
+              className="flex min-w-0 items-center gap-2"
+              data-legend-icon={item.kind}
+              key={item.kind}
+            >
+              <GraphSemanticIcon
+                className={cn("h-4 w-4", item.iconClassName)}
+                kind={item.kind}
+                label={messages.iconLabel(item.label)}
+              />
+              <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
+                {item.label}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -211,6 +271,7 @@ export function DashboardFlowAxisLegend({
   defaultExpanded = false,
   edgeItems,
   iconItems,
+  phaseItems,
   locale,
 }: DashboardFlowAxisLegendProps) {
   const messages = getDashboardFlowAxisLegendMessages(locale);
@@ -254,6 +315,7 @@ export function DashboardFlowAxisLegend({
             edgeItems={edgeItems}
             iconItems={iconItems}
             locale={locale}
+            phaseItems={phaseItems}
           />
         </aside>
       ) : (

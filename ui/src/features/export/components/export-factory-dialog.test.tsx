@@ -111,12 +111,24 @@ describe("ExportFactoryDialog", () => {
 
     expect(screen.getByText(messages.hint)).toBeTruthy();
     expect(screen.getByText(messages.nameDescription)).toBeTruthy();
-    expect(screen.getByLabelText(messages.imageLabel).className).toContain(
-      "border-af-border-strong",
-    );
-    expect(screen.getByLabelText(messages.imageLabel).className).toContain(
-      "bg-af-surface-subtle",
-    );
+    const imageInput = screen.getByLabelText(messages.imageLabel);
+    expect(imageInput.className).toContain("border-af-border-strong");
+    expect(imageInput.className).toContain("bg-af-surface-subtle");
+    expect(imageInput.className).toContain("file:bg-af-surface-raised");
+    expect(imageInput.className).not.toContain("file:bg-af-accent-surface");
+    expect(imageInput.className).not.toContain("file:text-af-accent");
+  });
+
+  it("renders the export cover-image choose-file shell with neutral tokens only", () => {
+    const messages = getExportDialogMessages("en");
+    renderDialog();
+
+    const imageInput = screen.getByLabelText(messages.imageLabel);
+    expect(imageInput.className).toContain("border-dashed");
+    expect(imageInput.className).toContain("border-af-border-strong");
+    expect(imageInput.className).toContain("bg-af-surface-subtle");
+    expect(imageInput.className).not.toContain("bg-af-accent-surface");
+    expect(imageInput.className).not.toContain("border-af-accent-border");
   });
 
   it("exports the selected image with the trimmed factory name and shows a visible success state", async () => {

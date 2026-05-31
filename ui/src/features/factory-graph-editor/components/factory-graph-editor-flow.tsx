@@ -66,6 +66,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
 } {
   const projection = projectFactoryGraphToReactFlow({
     factoryDefinition: input.factoryDefinition,
+    filterEdgesToRenderedHandles: true,
     editor: {
       canEditConnections: input.canEditConnections,
       onConnectionAnchorClick: input.onConnectionAnchorClick,

@@ -32,6 +32,22 @@ export function workerFieldValidationTarget(
   };
 }
 
+export function resourceFieldValidationTarget(
+  fieldName: string,
+  message = `Invalid ${fieldName}.`,
+): FactoryValidationTarget {
+  return {
+    code: `factory.resource.${fieldName}`,
+    message,
+    severity: "error",
+    subject: {
+      id: fieldName,
+      location: "DEFINITION",
+      type: "RESOURCE",
+    },
+  };
+}
+
 export function staleFactoryVersionTarget(
   message = "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
 ): FactoryValidationTarget {

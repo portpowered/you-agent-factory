@@ -126,6 +126,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -420,6 +421,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -520,6 +522,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -562,6 +565,8 @@ describe("current activity graph editor handles", () => {
         expect.objectContaining({ id: "workstation-resource-source" }),
       ]),
       kind: "resource",
+      onSelectResource: expect.any(Function),
+      selectedResource: false,
     });
     expect(
       nodes.find((node) => node.id === "worker:writer")?.data,
@@ -577,6 +582,42 @@ describe("current activity graph editor handles", () => {
       kind: "worker",
       onSelectWorker: expect.any(Function),
       selectedWorker: false,
+    });
+  });
+
+  it("marks the selected resource node while resource selection is active", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      resources: [{ capacity: 1, name: "gpu" }],
+    };
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "resource", resourceName: "gpu" },
+      snapshot: {
+        factory,
+        runtime: { place_token_counts: {} },
+        topology: { workstation_nodes_by_id: {} },
+      } as never,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(
+      nodes.find((node) => node.id === "resource:gpu")?.data,
+    ).toMatchObject({
+      kind: "resource",
+      selectedResource: true,
     });
   });
 
@@ -602,6 +643,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -670,6 +712,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -709,6 +752,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -799,6 +843,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -1078,6 +1123,206 @@ describe("current activity graph editor handles", () => {
     expect(workstationNode?.data.zAxisIncompleteHints).toBeNull();
   });
 
+  it("omits progress-outcome edges when rendered workstation nodes omit those handles", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "rejected", type: "FAILED" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          behavior: "STANDARD",
+          onContinue: [{ state: "queued", workType: "story" }],
+          onFailure: [{ state: "rejected", workType: "story" }],
+          onRejection: [{ state: "rejected", workType: "story" }],
+          stopWords: undefined,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const handleAssignments = buildHandleAssignments(
+      visibleGraphEdges,
+      graphLayout.nodes,
+    );
+    const observerNodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const editorNodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    expect(
+      visibleGraphEdges.some((edge) => edge.outcomeKind === "rejected"),
+    ).toBe(true);
+    expect(
+      visibleGraphEdges.some((edge) => edge.outcomeKind === "continue"),
+    ).toBe(true);
+
+    const observerEdges = buildGraphEdges(
+      buildActiveGraphHighlights([], visibleGraphEdges),
+      handleAssignments,
+      new Set(),
+      visibleGraphEdges,
+      observerNodes,
+    );
+    const editorEdges = buildGraphEdges(
+      buildActiveGraphHighlights([], visibleGraphEdges),
+      handleAssignments,
+      new Set(),
+      visibleGraphEdges,
+      editorNodes,
+    );
+
+    expect(
+      observerEdges.some(
+        (edge) => edge.sourceHandle === "workstation-on-rejection-source",
+      ),
+    ).toBe(false);
+    expect(
+      observerEdges.some(
+        (edge) => edge.sourceHandle === "workstation-on-continue-source",
+      ),
+    ).toBe(false);
+    expect(
+      editorEdges.some(
+        (edge) => edge.sourceHandle === "workstation-on-rejection-source",
+      ),
+    ).toBe(false);
+    expect(
+      editorEdges.some(
+        (edge) => edge.sourceHandle === "workstation-on-continue-source",
+      ),
+    ).toBe(false);
+    expect(
+      observerEdges.some(
+        (edge) => edge.sourceHandle === "workstation-on-failure-source",
+      ),
+    ).toBe(true);
+    expect(
+      observerEdges.some(
+        (edge) => edge.sourceHandle === "workstation-output-source",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps progress-outcome edges when stopWords render continue and reject handles", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "rejected", type: "FAILED" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          behavior: "STANDARD",
+          onContinue: [{ state: "queued", workType: "story" }],
+          onFailure: [{ state: "rejected", workType: "story" }],
+          onRejection: [{ state: "rejected", workType: "story" }],
+          stopWords: ["DONE"],
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const handleAssignments = buildHandleAssignments(
+      visibleGraphEdges,
+      graphLayout.nodes,
+    );
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: false,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const edges = buildGraphEdges(
+      buildActiveGraphHighlights([], visibleGraphEdges),
+      handleAssignments,
+      new Set(),
+      visibleGraphEdges,
+      nodes,
+    );
+
+    expect(
+      edges.some(
+        (edge) => edge.sourceHandle === "workstation-on-rejection-source",
+      ),
+    ).toBe(true);
+    expect(
+      edges.some(
+        (edge) => edge.sourceHandle === "workstation-on-continue-source",
+      ),
+    ).toBe(true);
+  });
+
   it("wires shared handle click actions back through the editor anchor callback", () => {
     const onConnectionAnchorClick = vi.fn();
 
@@ -1183,6 +1428,7 @@ describe("current activity graph active item labels", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -1242,6 +1488,7 @@ describe("current activity graph active item labels", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -1319,6 +1566,7 @@ describe("current activity graph active item labels", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),

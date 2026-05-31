@@ -1943,7 +1943,7 @@ describe("App current selection", () => {
       within(dashboardGrid)
         .getByRole("button", { name: "Done Story" })
         .getAttribute("data-selected"),
-    ).toBeNull();
+    ).toBe("false");
     expect(
       within(dashboardGrid)
         .getByRole("button", { name: "Failed Story" })

@@ -1,5 +1,4 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   act,
   fireEvent,
@@ -9,11 +8,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-
 import {
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
 } from "../../../components/dashboard/test-fixtures";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
@@ -194,6 +193,7 @@ vi.mock("./dashboard-flow-axis-legend", () => ({
   ),
   getDefaultDashboardFlowAxisLegendEdgeItems: () => [],
   getDefaultDashboardFlowAxisLegendIconItems: () => [],
+  getDefaultDashboardFlowAxisLegendPhaseItems: () => [],
 }));
 
 vi.mock("./react-flow-current-activity-card-import", () => ({
@@ -202,31 +202,40 @@ vi.mock("./react-flow-current-activity-card-import", () => ({
   graphDropStateAttribute: () => "idle",
 }));
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
-  useFactoryDocumentSave: vi.fn(),
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: vi.fn(),
+  }),
+);
 
-vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () => {
-  const actual = await vi.importActual(
-    "../../factory-graph-editor/hooks/factory-graph-draft-hook",
-  );
+vi.mock(
+  "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+  async () => {
+    const actual = await vi.importActual(
+      "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+    );
 
-  return {
-    ...actual,
-    useFactoryGraphDraftState: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useFactoryGraphDraftState: vi.fn(),
+    };
+  },
+);
 
 vi.mock("../../factory-graph-editor/hooks/use-factory-validation", () => ({
   useFactoryValidation: () => ({
@@ -297,6 +306,7 @@ const defaultDraftState = {
 
 interface ReactFlowCurrentActivityCardProps {
   now: number;
+  onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (workID: string) => void;
   onSelectWorker: (workerName: string) => void;
@@ -313,6 +323,7 @@ function createProps(
     now: Date.parse("2026-04-08T12:00:00Z"),
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
+    onSelectResource: vi.fn(),
     onSelectWorker: vi.fn(),
     onSelectWorkType: vi.fn(),
     onSelectWorkstation: vi.fn(),

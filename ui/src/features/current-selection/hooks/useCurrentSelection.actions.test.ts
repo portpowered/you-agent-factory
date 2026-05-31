@@ -315,4 +315,28 @@ describe("useCurrentSelectionActions", () => {
       terminalWorkDetail: null,
     });
   });
+
+  it("selects resources by authored resource name", () => {
+    const commitSelectionState = vi.fn();
+
+    const actions = useCurrentSelectionActions({
+      commitSelectionState,
+      completedWorkItems: [],
+      failedWorkItems: [],
+      projectedWorkstationRequestsByDispatchID: undefined,
+      selection: null,
+      snapshot: null,
+      terminalWorkDetail: null,
+    });
+
+    actions.selectResource("gpu");
+
+    expect(commitSelectionState).toHaveBeenCalledWith({
+      selection: {
+        kind: "resource",
+        resourceName: "gpu",
+      },
+      terminalWorkDetail: null,
+    });
+  });
 });

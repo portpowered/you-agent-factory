@@ -42,6 +42,7 @@ export type CurrentActivityGraphViewModelInput = {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectResource: (resourceName: string) => void;
   onSelectWorker: (workerName: string) => void;
   onSelectWorkType: (workTypeName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
@@ -58,6 +59,7 @@ function useCurrentActivityBaseNodes({
   graphLayout,
   locale,
   now,
+  onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
@@ -69,6 +71,7 @@ function useCurrentActivityBaseNodes({
 }: Pick<
   CurrentActivityGraphViewModelInput,
   | "now"
+  | "onSelectResource"
   | "onSelectStateNode"
   | "onSelectWorkID"
   | "onSelectWorker"
@@ -107,6 +110,7 @@ function useCurrentActivityBaseNodes({
         graphLayout,
         locale,
         now,
+        onSelectResource,
         onSelectStateNode,
         onSelectWorkID,
         onSelectWorker,
@@ -125,6 +129,7 @@ function useCurrentActivityBaseNodes({
       graphLayout,
       locale,
       now,
+      onSelectResource,
       onSelectStateNode,
       onSelectWorkID,
       onSelectWorker,
@@ -198,6 +203,7 @@ export function useCurrentActivityGraphViewModel({
   editor,
   locale,
   now,
+  onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
   onSelectWorker,
@@ -253,6 +259,7 @@ export function useCurrentActivityGraphViewModel({
     graphLayout,
     locale,
     now,
+    onSelectResource,
     onSelectStateNode,
     onSelectWorkID,
     onSelectWorker,
@@ -282,6 +289,16 @@ export function useCurrentActivityGraphViewModel({
         applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
     );
   }, []);
+  const displayNodes = useMemo(() => {
+    const positionOverrides = new Map(
+      nodes.map((node) => [node.id, node.position] as const),
+    );
+
+    return baseNodes.map((node) => ({
+      ...node,
+      position: positionOverrides.get(node.id) ?? node.position,
+    }));
+  }, [baseNodes, nodes]);
   const edges = useMemo(
     () =>
       buildGraphEdges(
@@ -289,9 +306,11 @@ export function useCurrentActivityGraphViewModel({
         handleAssignments,
         pendingAdditionEdgeIds,
         visibleGraphEdges,
+        displayNodes,
       ),
     [
       activeGraphHighlights,
+      displayNodes,
       handleAssignments,
       pendingAdditionEdgeIds,
       visibleGraphEdges,
@@ -315,7 +334,7 @@ export function useCurrentActivityGraphViewModel({
       initialFitViewOptions.nodes?.map((node) => node.id).join(":") ||
       "full-graph",
     initialFitViewOptions,
-    nodes,
+    nodes: displayNodes,
     setStoredNodePosition,
   };
 }

@@ -205,6 +205,7 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
       now: Date.parse("2026-05-28T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -221,6 +222,7 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
       handleAssignments,
       new Set(),
       visibleGraphEdges,
+      nodes,
     );
 
     expect(edges).toEqual(

@@ -372,6 +372,12 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     if (!(dropzone instanceof HTMLLabelElement)) {
       throw new Error("expected image upload dropzone label");
     }
+    expect(dropzone.className).toContain("border-dashed");
+    expect(dropzone.className).toContain("border-af-border-strong");
+    expect(dropzone.className).toContain("bg-af-surface-subtle");
+    expect(dropzone.className).not.toContain("bg-af-accent-surface");
+    expect(dropzone.className).not.toContain("border-af-accent-border");
+
     fireEvent.dragOver(dropzone, {
       dataTransfer: {
         dropEffect: "copy",
@@ -380,6 +386,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       },
     });
     expect(screen.getByText("Drop the image file to stage it.")).toBeTruthy();
+    expect(dropzone.className).toContain("bg-af-overlay");
+    expect(dropzone.className).not.toContain("bg-af-accent-surface");
+    expect(dropzone.className).not.toContain("border-af-accent-border");
 
     view.unmount();
     render(

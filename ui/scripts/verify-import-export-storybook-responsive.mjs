@@ -31,6 +31,7 @@ import {
   verifyProgressOutcomeRoutesWithoutStopWords as verifyProgressOutcomeRoutesWithoutStopWordsImpl,
   verifyProgressOutcomeRoutesWithStopWords as verifyProgressOutcomeRoutesWithStopWordsImpl,
 } from "./verify-progress-outcome-route-handles-storybook-responsive.mjs";
+import { assertChooseFileShellNeutral } from "./choose-file-shell-assertions.mjs";
 import { verifyProviderSessionDetailSuccess as verifyProviderSessionDetailSuccessImpl } from "./verify-provider-session-storybook-responsive.mjs";
 
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
@@ -190,7 +191,15 @@ export async function verifyExportDialog(page, dialog, viewport) {
     dialog.getByRole("textbox", { name: "Factory name" }),
     "Factory name input",
   );
-  await expectVisible(dialog.getByLabel("Cover image"), "Cover image input");
+  const coverImageInput = dialog.getByLabel("Cover image");
+  await expectVisible(coverImageInput, "Cover image input");
+  const coverImageClassName = await coverImageInput.evaluate(
+    (element) => element.className,
+  );
+  assertChooseFileShellNeutral(
+    coverImageClassName,
+    "export cover-image input",
+  );
   await expectVisible(
     dialog.getByRole("button", { name: "Cancel" }),
     "Export cancel button",

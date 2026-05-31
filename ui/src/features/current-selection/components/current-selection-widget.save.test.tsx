@@ -9,6 +9,10 @@ import { staleFactoryVersionTarget } from "../../../testing/factory-validation-t
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import {
+  buildDetailCardMultiResourceFactoryDocument,
+  expandDetailCardResourceConfiguration,
+} from "../base/components/detail-card-save-test-helpers";
+import {
   buildDetailCardCurrentSelection,
   buildDetailCardEditableFactoryDocument,
   buildDetailCardFactoryDocumentQueryResult,
@@ -1210,6 +1214,228 @@ describe("CurrentSelectionWidget workstation save flow", () => {
         .getByRole("button", { name: "Save changes" })
         .getAttribute("disabled"),
     ).not.toBeNull();
+  });
+});
+
+describe("CurrentSelectionWidget resource save flow", () => {
+  beforeEach(() => {
+    resetSelectionHistoryStore();
+    saveCurrentFactoryMutation.mockReset();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildDetailCardFactoryDocumentQueryResult(
+        buildDetailCardMultiResourceFactoryDocument(),
+      ),
+    );
+    vi.mocked(useFactoryDocumentSave).mockReturnValue(
+      buildDetailCardFactoryDocumentSaveHookReturn(
+        saveCurrentFactoryMutation,
+      ) as never,
+    );
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+      data: {
+        diagnostics: [],
+        valid: true,
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+  });
+
+  afterEach(() => {
+    resetSelectionHistoryStore();
+  });
+
+  it("keeps save feedback scoped to the resource that started the save after switching selections", async () => {
+    const deferredSave =
+      createDetailCardDeferredFactoryDocumentSave<CurrentFactoryDocument>();
+    const queryClient = createCurrentSelectionWidgetQueryClient();
+    saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
+
+    const { rerender } = renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildDetailCardCurrentSelection({
+          selectedResourceName: "agent-slot",
+          selection: { kind: "resource", resourceName: "agent-slot" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expandDetailCardResourceConfiguration();
+    fireEvent.change(screen.getByLabelText("Capacity"), {
+      target: { value: "4" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save resource" }));
+
+    await waitFor(() => {
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
+    });
+    expect(
+      screen.getAllByRole("button", { name: "Saving resource..." })[0],
+    ).toBeTruthy();
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildDetailCardCurrentSelection({
+          selectedResourceName: "voice-model",
+          selection: { kind: "resource", resourceName: "voice-model" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expandDetailCardResourceConfiguration();
+
+    expect(screen.getByDisplayValue("5")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Running factory saved. agent-slot was updated in the running factory definition.",
+      ),
+    ).toBeNull();
+    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Save resource" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+
+    deferredSave.resolve({
+      ...buildDetailCardMultiResourceFactoryDocument(),
+      resources: [
+        {
+          capacity: 4,
+          name: "agent-slot",
+          type: "INVOCATION_SLOT",
+        },
+        {
+          capacity: 5,
+          model: "gpt-audio",
+          name: "voice-model",
+          type: "MODEL",
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(
+          "Running factory saved. agent-slot was updated in the running factory definition.",
+        ),
+      ).toBeNull();
+    });
+    expect((screen.getByLabelText("Capacity") as HTMLInputElement).value).toBe(
+      "5",
+    );
+  });
+
+  it("does not leak a failed resource save message into a different resource after switching selections", async () => {
+    const deferredSave =
+      createDetailCardDeferredFactoryDocumentSave<CurrentFactoryDocument>();
+    const queryClient = createCurrentSelectionWidgetQueryClient();
+    saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
+
+    const { rerender } = renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildDetailCardCurrentSelection({
+          selectedResourceName: "agent-slot",
+          selection: { kind: "resource", resourceName: "agent-slot" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expandDetailCardResourceConfiguration();
+    fireEvent.change(screen.getByLabelText("Capacity"), {
+      target: { value: "9" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save resource" }));
+
+    await waitFor(() => {
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildDetailCardCurrentSelection({
+          selectedResourceName: "voice-model",
+          selection: { kind: "resource", resourceName: "voice-model" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expandDetailCardResourceConfiguration();
+
+    deferredSave.reject(
+      new CurrentFactoryDefinitionError(
+        "Current factory runtime must be idle before activation.",
+        {
+          code: "FACTORY_NOT_IDLE",
+        },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    });
+    expect(
+      screen.queryByText(
+        "Saving failed. Current factory runtime must be idle before activation.",
+      ),
+    ).toBeNull();
+    expect((screen.getByLabelText("Capacity") as HTMLInputElement).value).toBe(
+      "5",
+    );
+  });
+
+  it("resets editable resource fields when switching from resource to worker selection", () => {
+    const queryClient = createCurrentSelectionWidgetQueryClient();
+
+    const { rerender } = renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildDetailCardCurrentSelection({
+          selectedResourceName: "agent-slot",
+          selection: { kind: "resource", resourceName: "agent-slot" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expandDetailCardResourceConfiguration();
+    fireEvent.change(screen.getByLabelText("Capacity"), {
+      target: { value: "9" },
+    });
+    expect((screen.getByLabelText("Capacity") as HTMLInputElement).value).toBe(
+      "9",
+    );
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildDetailCardCurrentSelection({
+          selectedWorkerName: "reviewer",
+          selection: { kind: "worker", workerName: "reviewer" },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Capacity")).toBeNull();
+    expect(screen.getByLabelText("Model")).toBeTruthy();
+    expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(
+      "gpt-5.5",
+    );
   });
 });
 

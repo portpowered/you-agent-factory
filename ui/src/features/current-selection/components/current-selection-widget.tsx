@@ -10,6 +10,7 @@ import {
   CurrentSelectionLocaleProvider,
 } from "../base/public";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
 import { useSelectedProviderSessionState } from "../work-selection/hooks/useSelectedProviderSessionState";
 import type {
   SelectedWorkItemExecutionDetails,
@@ -23,20 +24,18 @@ import {
   EditableWorkTypeSaveHeaderAction,
 } from "../work-type-selection/components/work-type-save-controls";
 import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
-import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
-import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
 import { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
-import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
-import {
-  EditableWorkstationSaveDialog,
-  EditableWorkstationSaveHeaderAction,
-  WorkstationDetailCard,
-} from "../workstation-selection/public";
+import { WorkstationDetailCard } from "../workstation-selection/public";
 import { useEditableWorkStateConfigurationState } from "../work-state-selection/hooks/use-editable-work-state-configuration-state";
 import { useSaveEditableWorkStateConfiguration } from "../work-state-selection/hooks/use-save-editable-work-state-configuration";
 import { EditableWorkStateSaveHeaderAction } from "../work-state-selection/public";
 import {
+  CurrentSelectionWorkstationSaveDialog,
+  useCurrentSelectionDetailSave,
+} from "./use-current-selection-detail-save";
+import {
   NoSelectionDetailCard,
+  ResourceDetailCard,
   StateNodeDetailCard,
   WorkerDetailCard,
   WorkstationRequestDetailCard,
@@ -64,6 +63,7 @@ function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
   editableConfigurationState,
+  editableResourceConfigurationState,
   editableWorkStateConfigurationState,
   editableWorkerConfigurationState,
   editableWorkTypeConfigurationState,
@@ -72,6 +72,8 @@ function renderCurrentSelectionDetailCard({
   locale,
   now,
   onSelectTraceID,
+  resourceHeaderAction,
+  resourceSaveState,
   saveState,
   workStateHeaderAction,
   workStateSaveState,
@@ -91,6 +93,9 @@ function renderCurrentSelectionDetailCard({
   editableConfigurationState: ReturnType<
     typeof useEditableWorkstationConfigurationState
   >;
+  editableResourceConfigurationState: ReturnType<
+    typeof useEditableResourceConfigurationState
+  >;
   editableWorkStateConfigurationState: ReturnType<
     typeof useEditableWorkStateConfigurationState
   >;
@@ -105,21 +110,25 @@ function renderCurrentSelectionDetailCard({
   locale?: string;
   now: number;
   onSelectTraceID?: (traceID: string) => void;
+  resourceHeaderAction: ReactNode;
+  resourceSaveState: ReturnType<
+    typeof useCurrentSelectionDetailSave
+  >["resourceSaveState"];
+  saveState: ReturnType<
+    typeof useCurrentSelectionDetailSave
+  >["workstationSaveState"];
   workStateHeaderAction: ReactNode;
   workStateSaveState: ReturnType<
     typeof useSaveEditableWorkStateConfiguration
   >["saveState"];
   workerHeaderAction: ReactNode;
   workTypeHeaderAction: ReactNode;
-  saveState: ReturnType<
-    typeof useSaveEditableWorkstationConfiguration
-  >["saveState"];
   workTypeSaveState: ReturnType<
     typeof useSaveEditableWorkTypeConfiguration
   >["saveState"];
   workerSaveState: ReturnType<
-    typeof useSaveEditableWorkerConfiguration
-  >["saveState"];
+    typeof useCurrentSelectionDetailSave
+  >["workerSaveState"];
   selectedProviderSessionKey: string | null;
   selectedTrace?: DashboardTrace;
   selectedWorkRelationshipGraph?: SelectedWorkRelationshipGraph;
@@ -139,6 +148,8 @@ function renderCurrentSelectionDetailCard({
     selectedWorkDispatchAttempts,
     selectedWorkID,
     selectedWorkRequestHistory,
+    selectedResourceName,
+    selectedResourceTokenCount,
     selectedWorkerName,
     selectedWorkTypeName,
     selectedWorkstationRequest,
@@ -215,6 +226,20 @@ function renderCurrentSelectionDetailCard({
     );
   }
 
+  if (selection?.kind === "resource" && selectedResourceName) {
+    return (
+      <ResourceDetailCard
+        editableConfigurationState={editableResourceConfigurationState}
+        headerAction={resourceHeaderAction}
+        locale={locale}
+        resourceName={selectedResourceName}
+        saveState={resourceSaveState}
+        tokenCount={selectedResourceTokenCount}
+        widgetId={widgetId}
+      />
+    );
+  }
+
   if (selection?.kind === "work-type" && selectedWorkTypeName) {
     return (
       <WorkTypeDetailCard
@@ -255,7 +280,7 @@ function renderCurrentSelectionDetailCard({
   return <NoSelectionDetailCard widgetId={widgetId} />;
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: widget wires editable workstation, worker, work-state, and work-type save hooks into one selection detail surface.
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: widget wires editable workstation, worker, resource, work-state, and work-type save hooks into one selection detail surface.
 export function CurrentSelectionWidget({
   activeTraceID,
   currentSelection,
@@ -276,6 +301,7 @@ export function CurrentSelectionWidget({
     selectedNodeProviderSessions,
     selectedWorkDispatchAttempts,
     selectedWorkRequestHistory,
+    selectedResourceName,
     selectedWorkerName,
     selectedWorkTypeName,
     selection,
@@ -294,36 +320,41 @@ export function CurrentSelectionWidget({
     selectedWorkerName,
     locale,
   );
+  const editableResourceConfigurationState = useEditableResourceConfigurationState(
+    selection,
+    selectedResourceName,
+    locale,
+  );
   const editableWorkTypeConfigurationState =
     useEditableWorkTypeConfigurationState(
       selection,
       selectedWorkTypeName,
       locale,
     );
-  const workstationSaveScopeKey =
-    selection?.kind === "node" && selectedNode
-      ? `${selectedNode.node_id}:${selectedNode.transition_id}:${selectedNode.workstation_name}`
-      : null;
-  const workstationSave = useSaveEditableWorkstationConfiguration({
+  const {
+    resourceHeaderAction,
+    resourceSaveState,
+    workstationHeaderAction,
+    workstationSave,
+    workstationSaveState,
+    workerHeaderAction,
+    workerSaveState,
+  } = useCurrentSelectionDetailSave({
+    currentSelection,
     editableConfigurationState,
+    editableResourceConfigurationState,
+    editableWorkerConfigurationState,
     locale,
-    scopeKey: workstationSaveScopeKey,
+    selectedNode,
+    selectedResourceName,
+    selectedWorkerName,
+    selection,
   });
-  const workerSaveScopeKey =
-    selection?.kind === "worker" && selectedWorkerName
-      ? selectedWorkerName
-      : null;
   const workStateSave = useSaveEditableWorkStateConfiguration({
     editableConfigurationState: editableWorkStateConfigurationState,
     locale,
     onWorkStateRenamed: currentSelection.selectStateNode,
     scopeKey: workStatePlaceId,
-  });
-  const workerSave = useSaveEditableWorkerConfiguration({
-    editableConfigurationState: editableWorkerConfigurationState,
-    locale,
-    onWorkerRenamed: currentSelection.selectWorker,
-    scopeKey: workerSaveScopeKey,
   });
   const workTypeSaveScopeKey =
     selection?.kind === "work-type" && selectedWorkTypeName
@@ -347,28 +378,12 @@ export function CurrentSelectionWidget({
     providerSessionState.selectedProviderSessionKey;
   const handleSelectProviderSession =
     onSelectProviderSession ?? providerSessionState.setSelectedProviderSession;
-  const workstationHeaderAction = (
-    <EditableWorkstationSaveHeaderAction
-      canSave={workstationSave.canSave}
-      locale={locale ?? undefined}
-      onClick={workstationSave.beginSaveConfirmation}
-      saveState={workstationSave.saveState}
-    />
-  );
   const workStateHeaderAction = (
     <EditableWorkStateSaveHeaderAction
       canSave={workStateSave.canSave}
       locale={locale ?? undefined}
       onClick={() => void workStateSave.save()}
       saveState={workStateSave.saveState}
-    />
-  );
-  const workerHeaderAction = (
-    <EditableWorkerSaveHeaderAction
-      canSave={workerSave.canSave}
-      locale={locale ?? undefined}
-      onClick={() => void workerSave.save()}
-      saveState={workerSave.saveState}
     />
   );
   const workTypeHeaderAction = (
@@ -383,6 +398,7 @@ export function CurrentSelectionWidget({
     activeTraceID,
     currentSelection,
     editableConfigurationState,
+    editableResourceConfigurationState,
     editableWorkStateConfigurationState,
     editableWorkerConfigurationState,
     editableWorkTypeConfigurationState,
@@ -391,14 +407,16 @@ export function CurrentSelectionWidget({
     locale: locale ?? undefined,
     now,
     onSelectTraceID,
+    resourceHeaderAction,
+    resourceSaveState,
     workStateHeaderAction,
     workStateSaveState: workStateSave.saveState,
     workerHeaderAction,
     workTypeHeaderAction,
-    saveState: workstationSave.saveState,
+    saveState: workstationSaveState,
     selectedProviderSessionKey,
     workTypeSaveState: workTypeSave.saveState,
-    workerSaveState: workerSave.saveState,
+    workerSaveState,
     selectedTrace,
     selectedWorkRelationshipGraph,
     selectedWorkExecutionDetails,
@@ -411,16 +429,10 @@ export function CurrentSelectionWidget({
       <CurrentSelectionHeaderActionProvider headerAction={headerAction ?? null}>
         {detailCard}
       </CurrentSelectionHeaderActionProvider>
-      <EditableWorkstationSaveDialog
-        locale={locale ?? undefined}
-        onCancel={workstationSave.cancelSaveConfirmation}
-        onConfirm={() => void workstationSave.confirmSave()}
-        overwriteFieldNames={
-          editableConfigurationState?.status === "ready"
-            ? editableConfigurationState.overwriteFieldNames
-            : []
-        }
-        saveState={workstationSave.saveState}
+      <CurrentSelectionWorkstationSaveDialog
+        editableConfigurationState={editableConfigurationState}
+        locale={locale}
+        workstationSave={workstationSave}
       />
       <EditableWorkTypeSaveDialog
         locale={locale ?? undefined}

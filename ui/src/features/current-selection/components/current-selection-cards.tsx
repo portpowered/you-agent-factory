@@ -4,6 +4,7 @@ export {
   TerminalWorkSummaryCard,
   WorkItemDetailCard,
 } from "../work-selection/public";
+export { ResourceDetailCard } from "../resource-selection/public";
 export { StateNodeDetailCard } from "../work-state-selection/public";
 export { WorkTypeDetailCard } from "../work-type-selection/public";
 export { WorkerDetailCard } from "../worker-selection/public";

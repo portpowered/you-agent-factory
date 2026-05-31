@@ -26,6 +26,7 @@ interface WorkflowActivityBentoCardProps {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorker: (workerName: string) => void;
   onSelectWorkType: (workTypeName: string) => void;
@@ -43,6 +44,7 @@ export function WorkflowActivityBentoCard({
   snapshot,
   widgetInstanceID,
   onSelectWorkID,
+  onSelectResource,
   onSelectStateNode,
   onSelectWorker,
   onSelectWorkType,
@@ -117,6 +119,7 @@ export function WorkflowActivityBentoCard({
           snapshot={snapshot}
           widgetInstanceID={widgetInstanceID}
           onSelectWorkID={onSelectWorkID}
+          onSelectResource={onSelectResource}
           onSelectStateNode={onSelectStateNode}
           onSelectWorker={onSelectWorker}
           onSelectWorkType={onSelectWorkType}
@@ -134,7 +137,11 @@ function toCurrentActivitySelection(
     return { kind: "node", nodeId: selection.nodeId };
   }
 
-  if (selection?.kind === "worker" || selection?.kind === "work-type") {
+  if (
+    selection?.kind === "worker" ||
+    selection?.kind === "resource" ||
+    selection?.kind === "work-type"
+  ) {
     return selection;
   }
 

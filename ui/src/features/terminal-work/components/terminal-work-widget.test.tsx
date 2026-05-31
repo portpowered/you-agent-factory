@@ -16,7 +16,9 @@ describe("TerminalWorkWidget", () => {
 
     render(
       <TerminalWorkWidget
-        completedItems={[{ label: "Done Story", traceWorkID: "work-done-story" }]}
+        completedItems={[
+          { label: "Done Story", traceWorkID: "work-done-story" },
+        ]}
         failedItems={[]}
         onSelectItem={vi.fn()}
         selectedItem={null}
@@ -35,7 +37,9 @@ describe("TerminalWorkWidget", () => {
 
     render(
       <TerminalWorkWidget
-        completedItems={[{ label: "Done Story", traceWorkID: "work-done-story" }]}
+        completedItems={[
+          { label: "Done Story", traceWorkID: "work-done-story" },
+        ]}
         failedItems={[]}
         locale="zh-CN"
         onSelectItem={vi.fn()}
@@ -55,8 +59,12 @@ describe("TerminalWorkWidget", () => {
 
     render(
       <TerminalWorkWidget
-        completedItems={[{ label: "Done Story", traceWorkID: "work-done-story" }]}
-        failedItems={[{ label: "Failed Story", traceWorkID: "work-failed-story" }]}
+        completedItems={[
+          { label: "Done Story", traceWorkID: "work-done-story" },
+        ]}
+        failedItems={[
+          { label: "Failed Story", traceWorkID: "work-failed-story" },
+        ]}
         onSelectItem={onSelectItem}
         selectedItem={{ label: "Done Story", status: "completed" }}
       />,
@@ -71,7 +79,7 @@ describe("TerminalWorkWidget", () => {
       screen
         .getByRole("button", { name: /Failed Story/ })
         .getAttribute("data-selected"),
-    ).toBeNull();
+    ).toBe("false");
 
     fireEvent.click(screen.getByRole("button", { name: /Failed Story/ }));
 

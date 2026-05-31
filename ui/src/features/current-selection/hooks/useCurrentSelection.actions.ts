@@ -73,6 +73,13 @@ export function useCurrentSelectionActions({
     });
   };
 
+  const selectResource = (resourceName: string) => {
+    commitSelectionState({
+      selection: { kind: "resource", resourceName },
+      terminalWorkDetail: null,
+    });
+  };
+
   const clearSelectedWorkerIfMatching = (workerName: string) => {
     if (selection?.kind !== "worker" || selection.workerName !== workerName) {
       return;
@@ -222,6 +229,7 @@ export function useCurrentSelectionActions({
     selectWorkItem,
     selectWorkstation,
     selectWorkstationRequest,
+    selectResource,
     selectWorker,
     selectWorkType,
   };
