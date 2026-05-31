@@ -1,11 +1,7 @@
 import type { ReactNode } from "react";
 
 import { useState } from "react";
-import {
-  DASHBOARD_WIDGET_CLASS,
-  DETAIL_CARD_CLASS,
-  DETAIL_COPY_CLASS,
-} from "../../../components/ui/widget-frame";
+import { ExpandablePanelTrigger } from "../../../components/ui";
 import {
   Collapsible,
   CollapsibleContent,
@@ -15,8 +11,12 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { DisclosureButton } from "../../../components/ui/disclosure-button";
 import { SelectableCardButton } from "../../../components/ui/selectable-card-button";
+import {
+  DASHBOARD_WIDGET_CLASS,
+  DETAIL_CARD_CLASS,
+  DETAIL_COPY_CLASS,
+} from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
 import { AgentBentoCard } from "../../bento/public";
 import type { GraphSemanticIconKind } from "../../flowchart/public";
@@ -66,8 +66,6 @@ const TERMINAL_ROW_HEADER_CLASS =
 const TERMINAL_ROW_TITLE_CLASS = "flex min-w-0 flex-1 items-center gap-2";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_LIST_CLASS = "grid gap-2";
-const TERMINAL_TOGGLE_CLASS =
-  "min-h-9 shrink-0 border-af-border bg-af-surface-raised px-2.5 py-1.5 text-xs text-af-text-muted hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
 const TERMINAL_BUTTON_CLASS = cn(
   "grid h-auto min-h-0 w-full justify-start gap-1 border-af-info-border bg-af-info-surface px-2.5 py-2 text-left text-af-on-info [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
@@ -212,16 +210,14 @@ function TerminalWorkRow({
             </div>
             <p className={DASHBOARD_SUPPORTING_TEXT_CLASS}>{itemCountLabel}</p>
           </div>
-          <DisclosureButton
+          <ExpandablePanelTrigger
             controlsID={rowId}
             expanded={expanded}
-            className={TERMINAL_TOGGLE_CLASS}
             onClick={() => onExpandedChange(!expanded)}
-            size="sm"
-            tone="secondary"
+            variant="compact"
           >
             {toggleLabel}
-          </DisclosureButton>
+          </ExpandablePanelTrigger>
         </div>
 
         <CollapsibleContent className={TERMINAL_LIST_CLASS} id={rowId}>
