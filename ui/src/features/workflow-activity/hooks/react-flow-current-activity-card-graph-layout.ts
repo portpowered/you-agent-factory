@@ -17,9 +17,11 @@ export function useCurrentActivityGraphLayout(snapshot: DashboardSnapshot) {
 
 export function useCurrentActivityGraphLayoutForFactory(
   snapshot: DashboardSnapshot,
-  factoryOverride?: DashboardSnapshot["factory"],
+  /** Omit to use `snapshot.factory`; pass `null` to keep an empty layout while the document GET is pending. */
+  factoryOverride?: DashboardSnapshot["factory"] | null,
 ) {
-  const factory = factoryOverride ?? snapshot.factory;
+  const factory =
+    factoryOverride === undefined ? snapshot.factory : factoryOverride;
   const layoutSource = useMemo(
     () =>
       factory

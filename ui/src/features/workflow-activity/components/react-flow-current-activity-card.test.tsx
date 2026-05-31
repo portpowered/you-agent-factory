@@ -1322,6 +1322,48 @@ function registerCurrentActivityCardTestLifecycle(): void {
     ).toBeNull();
   });
 
+  it("does not render snapshot-only workstations in editor mode while the factory document is loading", async () => {
+    const snapshot = buildDivergentPlaneDashboardSnapshot();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+      error: null,
+      status: "pending",
+    } as never);
+    wireMockEditableFactoryGraph(
+      {
+        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
+        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
+      },
+      createMockGraphEditorDraftState({
+        baseDocument: null,
+        latestDocument: null,
+        pendingFactoryDefinition: null,
+      }),
+    );
+
+    renderCurrentActivity({ snapshot });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("region", { name: "Factory graph editor tools" }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.queryByRole("button", {
+        name: "Select Snapshot Only workstation",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Select Document Only workstation",
+      }),
+    ).toBeNull();
+  });
+
   it("does not render the editor-only visibility preset controls in embedded editor mode", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,

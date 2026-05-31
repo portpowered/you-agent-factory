@@ -195,6 +195,49 @@ describe("useCurrentActivityGraphLayout", () => {
       "workstation:Snapshot Only",
     );
   });
+
+  it("keeps an empty layout when factory override is null even if the snapshot factory is present", async () => {
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        name: "snapshot-factory",
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            id: "snapshot-only",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Snapshot Only",
+            outputs: [{ state: "done", workType: "story" }],
+            type: "MODEL_WORKSTATION",
+            worker: "",
+          },
+        ],
+      },
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphLayoutForFactory(snapshot, null),
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes).toHaveLength(0);
+      expect(result.current.edges).toHaveLength(0);
+    });
+    expect(mockBuildGraphLayout).not.toHaveBeenCalled();
+  });
 });
 
 describe("useCurrentActivityGraphLayout legacy routes", () => {
