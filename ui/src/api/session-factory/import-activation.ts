@@ -1,4 +1,3 @@
-import type { components } from "../generated/openapi";
 import {
   CurrentFactoryDefinitionError,
   getCurrentFactoryDocument,
@@ -19,8 +18,9 @@ import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
 import {
   extractNamedFactoryNamesFromSessionTargets,
 } from "./import-save-mode";
+import type { FactoryValue } from "./types";
 
-export type FactoryValue = components["schemas"]["Factory"];
+export type { FactoryValue } from "./types";
 
 export type FactoryImportSaveChoice = "replace_current" | "create_new_named";
 

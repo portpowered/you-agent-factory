@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { FactoryValue } from "../../../api/named-factory";
+import type { FactoryValue } from "../../../api/session-factory";
 import {
   Button,
   Dialog,

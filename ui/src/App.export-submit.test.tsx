@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import { readFactoryImportPng } from "./features/import/lib/factory-png-import";
-import type { FactoryValue } from "./api/named-factory";
+import type { FactoryValue } from "./api/session-factory";
 import {
   baselineSnapshot,
   jsonResponse,
