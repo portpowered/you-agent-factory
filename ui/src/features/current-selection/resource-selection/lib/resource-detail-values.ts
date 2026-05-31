@@ -59,28 +59,6 @@ export function workstationNamesReferencingResourceInFactoryDefinition(
     .filter((name) => name.length > 0);
 }
 
-export function workerNamesReferencingResourceInSnapshot(
-  snapshot: DashboardSnapshot,
-  resourceName: string,
-): string[] {
-  return (snapshot.factory?.workers ?? [])
-    .filter((worker) => referencesResourceName(worker.resources, resourceName))
-    .map((worker) => worker.name)
-    .filter((name) => name.length > 0);
-}
-
-export function workstationNamesReferencingResourceInSnapshot(
-  snapshot: DashboardSnapshot,
-  resourceName: string,
-): string[] {
-  return (snapshot.factory?.workstations ?? [])
-    .filter((workstation) =>
-      referencesResourceName(workstation.resources, resourceName),
-    )
-    .map((workstation) => workstation.name)
-    .filter((name) => name.length > 0);
-}
-
 export function resourceShowsModelFields(resource: FactoryResource): boolean {
   return resource.type === "MODEL";
 }

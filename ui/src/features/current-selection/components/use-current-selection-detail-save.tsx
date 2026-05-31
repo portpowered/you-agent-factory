@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import { EditableResourceSaveHeaderAction } from "../resource-selection/components/resource-save-controls";
 import type { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
 import { useSaveEditableResourceConfiguration } from "../resource-selection/hooks/use-save-editable-resource-configuration";
@@ -136,9 +134,3 @@ export function CurrentSelectionWorkstationSaveDialog({
     />
   );
 }
-
-export type CurrentSelectionDetailSaveHeaderActions = {
-  resourceHeaderAction: ReactNode;
-  workstationHeaderAction: ReactNode;
-  workerHeaderAction: ReactNode;
-};
