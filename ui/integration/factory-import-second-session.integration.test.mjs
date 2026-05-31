@@ -136,7 +136,6 @@ async function openReviewSessionTab(page) {
 
 function createImportActivationTracking() {
   return {
-    postFactoryActivations: [],
     sessionFactoryPutRequests: [],
   };
 }
@@ -156,11 +155,8 @@ async function startReviewSessionImportServer(preview, tracking) {
     currentFactoryBySessionID: {
       [nonDefaultSessionID]: reviewSessionFactoryDefinition,
     },
-    onActivateFactory: async (body) => {
-      tracking.postFactoryActivations.push(body);
-    },
-    onSaveCurrentFactory: async ({ body, sessionID }) => {
-      tracking.sessionFactoryPutRequests.push({ body, sessionID });
+    onSaveCurrentFactory: async (request) => {
+      tracking.sessionFactoryPutRequests.push(request);
     },
     onOpenFactorySession: async (body) => {
       if (!body?.target) {
@@ -371,7 +367,7 @@ async function importFactoryPngAndActivate(page, options) {
   expect(await importDialog.textContent()).toContain(download.filename);
 
   const activateButton = importDialog.getByRole("button", {
-    name: "Activate factory",
+    name: "Confirm import",
   });
   await expect
     .poll(async () => await activateButton.isEnabled(), {
@@ -391,11 +387,13 @@ async function importFactoryPngAndActivate(page, options) {
 }
 
 function assertSessionScopedImportActivation(tracking) {
-  expect(tracking.postFactoryActivations).toEqual([]);
   expect(tracking.sessionFactoryPutRequests).toHaveLength(1);
   expect(tracking.sessionFactoryPutRequests[0]?.sessionID).toBe(
     nonDefaultSessionID,
   );
+  if (tracking.sessionFactoryPutRequests[0]?.mode !== undefined) {
+    expect(tracking.sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
+  }
   expect(tracking.sessionFactoryPutRequests[0]?.body).toMatchObject({
     ...reviewSessionFactoryDefinition,
     name: reviewSessionFactoryDefinition.name,

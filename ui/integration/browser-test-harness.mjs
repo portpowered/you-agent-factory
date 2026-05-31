@@ -470,13 +470,11 @@ export function expectNoBrowserErrors(pageErrors, consoleErrors, expect) {
 }
 
 export async function startFactoryApiServer({
-  activationResponseFactory = null,
   apiPort,
   currentFactory = null,
   currentFactoryBySessionID = {},
   eventLines = [],
   eventLinesBySessionID = {},
-  onActivateFactory = null,
   onOpenFactorySession = null,
   onSaveCurrentFactory = null,
   pauseBeforeTick = null,
@@ -541,25 +539,6 @@ export async function startFactoryApiServer({
       logical: sessionState.version.logical + 1,
       physical: new Date().toISOString(),
     };
-  }
-
-  function parseSaveFactoryForSessionBody(body) {
-    if (!body || typeof body !== "object") {
-      return null;
-    }
-    if (body.factory && typeof body.factory === "object") {
-      return {
-        factory: body.factory,
-        mode: body.mode ?? "REPLACE_CURRENT",
-      };
-    }
-    if (body.name != null) {
-      return {
-        factory: body,
-        mode: "REPLACE_CURRENT",
-      };
-    }
-    return null;
   }
 
   const server = http.createServer((request, response) => {
@@ -680,10 +659,15 @@ export async function startFactoryApiServer({
         requestBody += chunk;
       });
       request.on("end", async () => {
-        const parsedBody =
-          requestBody.length === 0 ? null : JSON.parse(requestBody);
-        const saveRequest = parseSaveFactoryForSessionBody(parsedBody);
-        if (!saveRequest?.factory?.name) {
+        const parsedBody = requestBody.length === 0 ? null : JSON.parse(requestBody);
+        const factory =
+          parsedBody &&
+          typeof parsedBody === "object" &&
+          parsedBody.factory &&
+          typeof parsedBody.factory === "object"
+            ? parsedBody.factory
+            : parsedBody;
+        if (!factory || typeof factory !== "object" || factory.name == null) {
           response.writeHead(400, {
             "Access-Control-Allow-Origin": "*",
             "Content-Type": "application/json",
@@ -699,12 +683,18 @@ export async function startFactoryApiServer({
 
         if (onSaveCurrentFactory) {
           await onSaveCurrentFactory({
-            body: saveRequest.factory,
-            mode: saveRequest.mode,
+            body: factory,
+            mode:
+              parsedBody &&
+              typeof parsedBody === "object" &&
+              typeof parsedBody.mode === "string"
+                ? parsedBody.mode
+                : undefined,
+            requestBody: parsedBody,
             sessionID,
           });
         }
-        sessionState.currentFactory = saveRequest.factory;
+        sessionState.currentFactory = factory;
         bumpEditableFactoryDefinitionVersion(sessionID);
         response.writeHead(200, {
           "Access-Control-Allow-Origin": "*",
@@ -745,31 +735,6 @@ export async function startFactoryApiServer({
         "Content-Type": "application/json",
       });
       response.end(JSON.stringify({ targets: [] }));
-      return;
-    }
-
-    if (request.url === "/factories" && request.method === "POST") {
-      let requestBody = "";
-      request.setEncoding("utf8");
-      request.on("data", (chunk) => {
-        requestBody += chunk;
-      });
-      request.on("end", async () => {
-        const body = requestBody.length === 0 ? null : JSON.parse(requestBody);
-        if (onActivateFactory) {
-          await onActivateFactory(body);
-        }
-
-        const defaultSession =
-          sessionRegistry.state.get(defaultFactorySessionID);
-        defaultSession.currentFactory = activationResponseFactory ?? body;
-        bumpEditableFactoryDefinitionVersion(defaultFactorySessionID);
-        response.writeHead(200, {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        });
-        response.end(JSON.stringify(defaultSession.currentFactory));
-      });
       return;
     }
 

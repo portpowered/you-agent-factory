@@ -5,6 +5,7 @@ import * as factoryPngExportModule from "./features/export/lib/factory-png-expor
 import type { FactoryValue } from "./api/named-factory";
 import {
   baselineSnapshot,
+  fetchCallPaths,
   jsonResponse,
   nonPromptTemplateFetchPaths,
   registerAppDashboardTestLifecycle,
@@ -72,9 +73,10 @@ describe("App shell export dialog flows", () => {
           screen.queryByRole("dialog", { name: "Export factory" }),
         ).toBeNull();
       });
-      expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
-        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`,
-      ]);
+      expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
+      expect(
+        fetchCallPaths(fetchMock).filter((path) => path.endsWith("/factory")),
+      ).toContain(`/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`);
       expect(exportProbe.getDownloadedBlob()).toBeNull();
       expect(exportProbe.getDownloadedFilename()).toBe("");
     } finally {

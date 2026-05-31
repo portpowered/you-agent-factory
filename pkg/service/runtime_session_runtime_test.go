@@ -102,7 +102,6 @@ func TestFactoryService_OpenFactorySession_IsolatesSessionLogsAndReplayArtifacts
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",
 		namedFactories: []string{"alpha", "beta"},
-		runtimeLogDir:  t.TempDir(),
 		recordPath:     recordPath,
 	})
 

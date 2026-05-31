@@ -1,5 +1,6 @@
 import { getSessionFactory, saveSessionFactory } from "./api";
 import { SessionFactoryAPIError } from "./errors";
+import { sessionFactoryAPIErrorMessages } from "./messages";
 
 describe("getSessionFactory routing", () => {
   it("issues GET to the default session factory route", async () => {

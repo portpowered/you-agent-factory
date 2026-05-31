@@ -1,19 +1,22 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
 
-vi.mock("../../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../../../current-factory-definition/public",
-  );
+vi.mock(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
 function mockFactoryDocumentQuery(
   overrides: Partial<ReturnType<typeof useCurrentFactoryDocument>> = {},
@@ -218,9 +221,9 @@ describe("WorkerDetailCard", () => {
     });
 
     expect(onModelProviderChange).toHaveBeenCalledWith("CODEX");
-    expect(editableConfigurationState.onModelLocalityChange).toHaveBeenCalledWith(
-      "LOCAL",
-    );
+    expect(
+      editableConfigurationState.onModelLocalityChange,
+    ).toHaveBeenCalledWith("LOCAL");
     expect(screen.queryByLabelText("Command")).toBeNull();
 
     fireEvent.click(
@@ -442,9 +445,7 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(
-      screen.getByText(/overwrite newer server values for/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/overwrite newer server values for/i)).toBeTruthy();
     expect(
       screen.getByText(
         /The running factory changed this field while you were editing/i,
@@ -702,7 +703,7 @@ describe("WorkerDetailCard", () => {
         }}
         saveState={{
           message:
-            "Current factory definition is stale. Refresh the graph before saving.",
+            "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
           status: "warning",
         }}
         workerName="reviewer"

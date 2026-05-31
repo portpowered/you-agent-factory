@@ -4,6 +4,7 @@ import {
 } from "../../testing/factory-validation-target-fixtures";
 import { getSessionFactory, saveSessionFactory } from "./api";
 import { SessionFactoryAPIError } from "./errors";
+import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
 
 const baseSaveParams = {
   sessionID: "~default",
@@ -69,6 +70,7 @@ describe("saveSessionFactory stale and idle errors", () => {
       }),
     ).rejects.toMatchObject({
       code: "STALE_FACTORY_VERSION",
+      message: sessionFactoryOperatorErrorMessages.STALE_FACTORY_VERSION,
       name: "SessionFactoryAPIError",
     });
   });
@@ -99,6 +101,7 @@ describe("saveSessionFactory stale and idle errors", () => {
       }),
     ).rejects.toMatchObject({
       code: "FACTORY_NOT_IDLE",
+      message: sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE,
       name: "SessionFactoryAPIError",
     });
   });
@@ -126,6 +129,7 @@ describe("saveSessionFactory validation errors", () => {
       }),
     ).rejects.toMatchObject({
       code: "INVALID_FACTORY",
+      message: sessionFactoryOperatorErrorMessages.INVALID_FACTORY,
       name: "SessionFactoryAPIError",
     });
   });
@@ -151,6 +155,7 @@ describe("saveSessionFactory validation errors", () => {
       }),
     ).rejects.toMatchObject({
       code: "INVALID_FACTORY_NAME",
+      message: sessionFactoryOperatorErrorMessages.INVALID_FACTORY_NAME,
       name: "SessionFactoryAPIError",
     });
   });

@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { activateImportedFactoryForSession } from "../../../api/named-factory";
+import { createFactoryImportConfirmInput } from "../../import/lib/factory-import-confirm-input.test-helpers";
 import { PORT_OS_FACTORY_PNG_SCHEMA_VERSION } from "../../import/lib/factory-png-import";
 import { useCurrentActivityImportController } from "./current-activity-import-controller";
 
@@ -38,19 +39,24 @@ describe("useCurrentActivityImportController", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
+    const importInput = createFactoryImportConfirmInput({
+      factory: canonicalFactory,
+      previewImageSrc: "blob:preview",
+      revokePreviewImageSrc: vi.fn(),
+      schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+    });
+
     await act(async () => {
-      await result.current.activateImport({
-        factory: canonicalFactory,
-        previewImageSrc: "blob:preview",
-        revokePreviewImageSrc: vi.fn(),
-        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
-      });
+      await result.current.activateImport(importInput);
     });
 
     await waitFor(() => {
       expect(mockedActivateImportedFactoryForSession).toHaveBeenCalledWith(
         canonicalFactory,
-        { sessionID: "session-2" },
+        expect.objectContaining({
+          choice: "replace_current",
+          sessionID: "session-2",
+        }),
       );
     });
   });

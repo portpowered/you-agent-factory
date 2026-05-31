@@ -5,13 +5,11 @@ import type {
   CurrentFactoryDefinitionError,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import {
-  useSaveCurrentFactory,
-} from "../../../current-factory-definition/public";
+import { useSaveCurrentFactory } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type {
   EditableWorkstationConfigurationState,
-  EditableWorkstationSaveValidationErrors,
   EditableWorkstationSaveState,
+  EditableWorkstationSaveValidationErrors,
 } from "../lib/detail-card-types";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
@@ -152,8 +150,7 @@ export function useSaveEditableWorkstationConfiguration({
         setLastSuccessfulScopeKey(null);
         setLastFailedScope({
           ...normalizeSaveError(error, {
-            fallbackMessage:
-              messages.editableConfigurationSaveFallbackError,
+            fallbackMessage: messages.editableConfigurationSaveFallbackError,
           }),
           scopeKey: request.scopeKey,
         });
