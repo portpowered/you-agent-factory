@@ -21,6 +21,31 @@ const openedFactoryDefinition = {
   name: "Opened Review Factory",
 };
 
+const betaSessionID = "session-beta";
+
+const defaultSession = {
+  factoryDir: "/workspace/root",
+  folderPath: "/workspace/root",
+  id: "~default",
+  isDefault: true,
+  project: "root",
+  target: {
+    kind: "default",
+  },
+};
+
+const betaSession = {
+  factoryDir: "/workspace/root/beta",
+  folderPath: "/workspace/root",
+  id: betaSessionID,
+  isDefault: false,
+  project: "beta",
+  target: {
+    kind: "named",
+    name: "beta",
+  },
+};
+
 function renameReplayWorkstation(lines, workstationName) {
   return lines.map((line) => {
     const event = JSON.parse(line);
@@ -185,4 +210,103 @@ describe.sequential("dashboard session tabs browser integration", () => {
     },
     browserScenarioTimeoutMs,
   );
+
+  it(
+    "shows outline active session tab styling and moves selection across preloaded tabs",
+    async () => {
+      const replayLines = await loadReplayLines("graph-state-smoke-replay.jsonl");
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: defaultFactoryDefinition,
+        eventLines: replayLines,
+        eventLinesBySessionID: {
+          [betaSessionID]: replayLines,
+        },
+        currentFactoryBySessionID: {
+          [betaSessionID]: defaultFactoryDefinition,
+        },
+        sessions: [defaultSession, betaSession],
+      });
+      const browserPage = await openBrowserPage();
+
+      try {
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+
+        const rootTab = browserPage.page.getByRole("tab", { name: "root" });
+        const betaTab = browserPage.page.getByRole("tab", { name: "beta" });
+        await rootTab.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await betaTab.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await expect
+          .poll(async () => rootTab.getAttribute("aria-selected"), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("true");
+
+        expectOutlineActiveSessionTabShell(
+          await readSessionTabShellClassName(rootTab),
+        );
+        expectMutedInactiveSessionTabShell(
+          await readSessionTabShellClassName(betaTab),
+        );
+
+        await betaTab.click();
+        await expect
+          .poll(async () => betaTab.getAttribute("aria-selected"), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("true");
+        await expect
+          .poll(async () => rootTab.getAttribute("aria-selected"), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("false");
+
+        expectOutlineActiveSessionTabShell(
+          await readSessionTabShellClassName(betaTab),
+        );
+        expectMutedInactiveSessionTabShell(
+          await readSessionTabShellClassName(rootTab),
+        );
+
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
 });
+
+async function readSessionTabShellClassName(tabLocator) {
+  return tabLocator.evaluate((tab) => {
+    const shell = tab.parentElement;
+    if (!shell) {
+      throw new Error("Expected session tab shell wrapper");
+    }
+    return shell.className;
+  });
+}
+
+function expectOutlineActiveSessionTabShell(className) {
+  expect(className).toContain("border-af-border-strong");
+  expect(className).toContain("bg-af-surface-raised");
+  expect(className).not.toContain("bg-af-accent");
+  expect(className).not.toContain("bg-af-accent-surface");
+}
+
+function expectMutedInactiveSessionTabShell(className) {
+  expect(className).toContain("text-af-text-muted");
+}
