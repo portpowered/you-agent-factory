@@ -111,6 +111,7 @@ export function useCurrentActivityGraphEditor(
     isStaleDraft: saveFlow.isStaleDraft,
     pendingConnectionSource: controllers.pendingConnectionSource,
     pendingRemovalIntent: controllers.pendingRemovalIntent,
+    saveAttemptRevision: saveFlow.saveAttemptRevision,
     saveBlockedReason: saveFlow.saveBlockedReason,
     saveEditableDefinition,
     saveSummary: saveFlow.saveSummary,

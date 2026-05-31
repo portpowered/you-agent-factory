@@ -207,6 +207,50 @@ describe("useGraphEditorSaveFlow", () => {
     expect(result.current.isConfirmingSave).toBe(false);
   });
 
+  it("starts saveAttemptRevision at zero", () => {
+    const { result } = renderSaveFlow(0);
+
+    expect(result.current.saveAttemptRevision).toBe(0);
+  });
+
+  it("increments saveAttemptRevision when each save starts", async () => {
+    fixtureState.draftState.hasChanges = true;
+    const { result } = renderSaveFlow(0);
+
+    await act(async () => {
+      await result.current.handleSaveDraft();
+    });
+    expect(result.current.saveAttemptRevision).toBe(1);
+
+    fixtureState.draftState.hasChanges = true;
+    await act(async () => {
+      await result.current.handleSaveBeforeLeavingEditor();
+    });
+    expect(result.current.saveAttemptRevision).toBe(2);
+  });
+
+  it("does not increment saveAttemptRevision on rerender alone", () => {
+    fixtureState.draftState.hasChanges = true;
+    const { result, rerender } = renderSaveFlow(0);
+
+    expect(result.current.saveAttemptRevision).toBe(0);
+
+    rerender();
+
+    expect(result.current.saveAttemptRevision).toBe(0);
+  });
+
+  it("does not increment saveAttemptRevision when save is blocked", async () => {
+    fixtureState.draftState.hasChanges = true;
+    const { result } = renderSaveFlow(2);
+
+    await act(async () => {
+      await result.current.handleSaveDraft();
+    });
+
+    expect(result.current.saveAttemptRevision).toBe(0);
+  });
+
   it("saves and leaves editor mode when asked to save before leaving", async () => {
     fixtureState.draftState.hasChanges = true;
     const { result, setActiveTool, setEditorMode } = renderSaveFlow(0);

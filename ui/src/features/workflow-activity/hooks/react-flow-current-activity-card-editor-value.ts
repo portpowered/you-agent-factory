@@ -50,6 +50,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   pendingRemovalIntent: ReturnType<
     typeof useFactoryGraphRemovalController
   >["pendingRemovalIntent"];
+  saveAttemptRevision: number;
   saveBlockedReason?: string;
   saveEditableDefinition: ReturnType<typeof useFactoryDocumentSave>;
   saveSummary: ReturnType<typeof buildFactoryGraphSaveSummary>;
@@ -100,6 +101,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     leaveDialogOpen: args.isConfirmingLeaveEditor,
     pendingConnectionSource: args.pendingConnectionSource,
     pendingRemovalIntent: args.pendingRemovalIntent,
+    saveAttemptRevision: args.saveAttemptRevision,
     saveBlockedReason: args.saveBlockedReason,
     saveEditableDefinition: args.saveEditableDefinition,
     saveSummary: args.saveSummary,
