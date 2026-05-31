@@ -110,6 +110,58 @@ describe("DashboardSessionTabs", () => {
     expect(screen.getByRole("tabpanel")).toBeTruthy();
   });
 
+  it("uses outline-aligned styling on the active session tab shell without accent fill", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("navigation", { name: messages.sessionTabsLabel }),
+      ).toBeTruthy();
+    });
+
+    const rootTab = screen.getByRole("tab", { name: "root" });
+    const betaTab = screen.getByRole("tab", { name: "beta" });
+    const activeShell = sessionTabShell(rootTab);
+    const inactiveShell = sessionTabShell(betaTab);
+
+    expectOutlineActiveSessionTabShell(activeShell);
+    expectMutedInactiveSessionTabShell(inactiveShell);
+
+    fireEvent.click(betaTab);
+
+    await waitFor(() => {
+      expect(betaTab.getAttribute("aria-selected")).toBe("true");
+    });
+
+    expectOutlineActiveSessionTabShell(sessionTabShell(betaTab));
+    expectMutedInactiveSessionTabShell(sessionTabShell(rootTab));
+  });
+
   it("supports keyboard navigation across session tabs with roving tab focus", async () => {
     listFactorySessions.mockResolvedValue([
       {
@@ -1252,6 +1304,29 @@ describe("DashboardSessionTabs", () => {
     );
   });
 });
+
+function sessionTabShell(tab: HTMLElement): HTMLElement {
+  const shell = tab.parentElement;
+  if (!shell) {
+    throw new Error("Expected session tab shell wrapper");
+  }
+  return shell;
+}
+
+function expectOutlineActiveSessionTabShell(shell: HTMLElement) {
+  expect(shell.className).toContain("border-af-border-strong");
+  expect(shell.className).toContain("bg-af-surface-raised");
+  expect(shell.className).toContain("text-af-text");
+  expect(shell.className.includes("bg-af-accent")).toBe(false);
+  expect(shell.className.includes("bg-af-accent-surface")).toBe(false);
+}
+
+function expectMutedInactiveSessionTabShell(shell: HTMLElement) {
+  expect(shell.className).toContain("text-af-text-muted");
+  expect(shell.className.includes("bg-af-surface-raised")).toBe(false);
+  expect(shell.className.includes("bg-af-accent")).toBe(false);
+  expect(shell.className.includes("bg-af-accent-surface")).toBe(false);
+}
 
 function renderWithQueryClient(view: React.ReactElement) {
   const queryClient = new QueryClient({
