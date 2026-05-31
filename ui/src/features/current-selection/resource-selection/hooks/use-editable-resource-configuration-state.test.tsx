@@ -165,4 +165,117 @@ describe("useEditableResourceConfigurationState", () => {
     }
     expect(result.current.validationErrors.capacity).toBeTruthy();
   });
+
+  it("flags overwrite fields when the server-backed factory document changes during editing", async () => {
+    const { rerender, result } = renderHook(() =>
+      useEditableResourceConfigurationState(resourceSelection, "agent-slot"),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable resource state");
+      }
+      result.current.onCapacityChange("9");
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        resources: [
+          {
+            capacity: 4,
+            name: "agent-slot",
+            type: "INVOCATION_SLOT",
+          },
+          {
+            capacity: 1,
+            name: "voice-model",
+            type: "MODEL",
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        draft: {
+          capacityText: "9",
+          name: "agent-slot",
+        },
+        isDirty: true,
+        overwriteFieldNames: ["capacity"],
+        status: "ready",
+      });
+    });
+  });
+
+  it("resets dirty resource drafts to the latest server-backed values", async () => {
+    const { rerender, result } = renderHook(() =>
+      useEditableResourceConfigurationState(resourceSelection, "agent-slot"),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable resource state");
+      }
+      result.current.onCapacityChange("9");
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        resources: [
+          {
+            capacity: 4,
+            name: "agent-slot",
+            type: "INVOCATION_SLOT",
+          },
+          {
+            capacity: 1,
+            name: "voice-model",
+            type: "MODEL",
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable resource state");
+      }
+      result.current.onResetToLatest();
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        capacityText: "4",
+        name: "agent-slot",
+      },
+      isDirty: false,
+      overwriteFieldNames: [],
+      status: "ready",
+    });
+  });
 });

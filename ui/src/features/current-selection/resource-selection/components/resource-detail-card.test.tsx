@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { DashboardSelection } from "../../base/state/selection-types";
@@ -124,6 +124,18 @@ function renderResourceDetailCard(
   return render(<Harness />);
 }
 
+function renderReadOnlyResourceDetailCard(
+  resourceName: string,
+  options?: { tokenCount?: number | null },
+) {
+  return render(
+    <ResourceDetailCard
+      resourceName={resourceName}
+      tokenCount={options?.tokenCount}
+    />,
+  );
+}
+
 describe("ResourceDetailCard", () => {
   beforeEach(() => {
     mockFactoryDocumentQuery();
@@ -220,5 +232,84 @@ describe("ResourceDetailCard", () => {
       "ON_DEMAND",
     );
     expect(screen.queryByText("anthropic")).toBeNull();
+  });
+
+  it("renders read-only context with empty referencing lists when nothing references the resource", () => {
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument({
+        resources: [
+          {
+            capacity: 1,
+            name: "orphan-slot",
+            type: "INVOCATION_SLOT",
+          },
+        ],
+        workers: [],
+        workstations: [],
+      }),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    renderReadOnlyResourceDetailCard("orphan-slot");
+
+    expect(
+      screen.getByText(
+        "No workers in the running factory definition require this resource.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No workstations in the running factory definition consume this resource.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("renders provider quota fields in read-only context", () => {
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument({
+        resources: [
+          {
+            capacity: 10,
+            name: "anthropic-quota",
+            provider: "anthropic",
+            type: "PROVIDER_QUOTA",
+          },
+        ],
+      }),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    renderReadOnlyResourceDetailCard("anthropic-quota");
+
+    expect(screen.getByText("Provider quota")).toBeTruthy();
+    expect(screen.getByText("anthropic")).toBeTruthy();
+  });
+
+  it("collapses and expands editable resource configuration", async () => {
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    renderResourceDetailCard("agent-slot");
+
+    const collapseButton = screen.getByRole("button", {
+      name: "Collapse resource configuration editor",
+    });
+    fireEvent.click(collapseButton);
+
+    expect(screen.queryByLabelText("Name")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand resource configuration editor" }),
+    );
+
+    expect(screen.getByLabelText("Name")).toBeTruthy();
   });
 });
