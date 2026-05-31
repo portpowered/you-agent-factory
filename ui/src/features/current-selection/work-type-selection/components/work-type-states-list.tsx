@@ -1,3 +1,4 @@
+import { Button } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -82,22 +83,30 @@ export function WorkTypeStatesList({
             return (
               <li key={`${state.name}:${state.type}`}>
                 {onSelectWorkStateGraphNode ? (
-                  <button
+                  <Button
                     aria-label={messages.selectWorkStateGraphNodeLabel(
                       state.name,
                     )}
                     className={cn(
                       WORKSTATION_SUMMARY_ITEM_CLASS,
-                      "w-full cursor-pointer text-left transition hover:border-af-border-strong hover:bg-af-surface",
+                      "h-auto min-h-0 w-full justify-start rounded-lg px-3 py-2 font-normal shadow-none",
+                      "border-af-border bg-af-surface-subtle text-left hover:border-af-border-strong hover:bg-af-surface",
                     )}
                     onClick={() => onSelectWorkStateGraphNode(graphNodeId)}
+                    tone="outline"
                     type="button"
                   >
-                    <WorkTypeStateRowContent messages={messages} state={state} />
-                  </button>
+                    <WorkTypeStateRowContent
+                      messages={messages}
+                      state={state}
+                    />
+                  </Button>
                 ) : (
                   <div className={WORKSTATION_SUMMARY_ITEM_CLASS}>
-                    <WorkTypeStateRowContent messages={messages} state={state} />
+                    <WorkTypeStateRowContent
+                      messages={messages}
+                      state={state}
+                    />
                   </div>
                 )}
               </li>
