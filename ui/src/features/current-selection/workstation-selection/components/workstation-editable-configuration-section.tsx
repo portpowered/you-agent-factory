@@ -3,7 +3,6 @@ import { type ReactNode, useId, useState } from "react";
 
 import {
   DashboardActionButton,
-  DashboardActionRow,
   ExpandablePanelTrigger,
   Select,
 } from "../../../../components/ui";
@@ -21,9 +20,11 @@ import {
 import {
   CurrentSelectionSectionHeader,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "../../base/components/detail-card-shared";
+import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
@@ -45,10 +46,12 @@ import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({
   messages,
+  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
+  onSaveConfiguration?: () => void;
   saveState?: EditableWorkstationSaveState;
   state?: WorkstationDetailCardProps["editableConfigurationState"];
 }) {
@@ -105,6 +108,7 @@ export function EditableConfigurationSection({
           {state?.status === "ready" ? (
             <EditableConfigurationReadyForm
               messages={messages}
+              onSaveConfiguration={onSaveConfiguration}
               saveState={saveState}
               state={state}
             />
@@ -115,12 +119,15 @@ export function EditableConfigurationSection({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: workstation ready form keeps save feedback, overwrite hints, and vertical field wiring colocated.
 function EditableConfigurationReadyForm({
   messages,
+  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
+  onSaveConfiguration?: () => void;
   saveState?: EditableWorkstationSaveState;
   state: Extract<
     NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
@@ -131,6 +138,12 @@ function EditableConfigurationReadyForm({
     EditableWorkstationValidationErrors & Record<string, string | undefined>,
     EditableWorkstationSaveValidationErrors
   >(state.validationErrors, saveState);
+  const isSaving = saveState?.status === "submitting";
+  const canSave =
+    state.isDirty &&
+    !state.hasValidationErrors &&
+    state.pendingFactoryDefinition != null &&
+    !isSaving;
   const renderState = {
     ...state,
     validationErrors,
@@ -151,7 +164,7 @@ function EditableConfigurationReadyForm({
         overwriteFieldNames={state.overwriteFieldNames ?? []}
       />
       <EditableConfigurationDraftStatus messages={messages} state={state} />
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
         <EditableConfigurationField
           fieldId="editable-workstation-worker"
           errorMessage={validationErrors.workerName}
@@ -212,36 +225,43 @@ function EditableConfigurationReadyForm({
             />
           }
         />
-      </div>
-      <EditableConfigurationField
-        errorMessage={validationErrors.prompt}
-        fieldId="editable-workstation-prompt"
-        input={
-          <EditableConfigurationPromptInput
-            messages={messages}
-            state={renderState}
-          />
-        }
-        label={messages.promptFieldLabel}
-        supportingContent={
-          <EditableConfigurationServerChangedHint
-            fieldName="prompt"
-            messages={messages}
-            state={state}
-          />
-        }
-      />
-      {state.isDirty ? (
-        <DashboardActionRow
-          actions={
-            <DashboardActionButton
-              disabled={saveState?.status === "submitting"}
-              onClick={state.onResetToLatest}
-              type="button"
-            >
-              {messages.editableConfigurationResetAction}
-            </DashboardActionButton>
+        <EditableConfigurationField
+          errorMessage={validationErrors.prompt}
+          fieldId="editable-workstation-prompt"
+          input={
+            <EditableConfigurationPromptInput
+              messages={messages}
+              state={renderState}
+            />
           }
+          label={messages.promptFieldLabel}
+          supportingContent={
+            <EditableConfigurationServerChangedHint
+              fieldName="prompt"
+              messages={messages}
+              state={state}
+            />
+          }
+        />
+      </div>
+      {onSaveConfiguration ? (
+        <EditableConfigurationSaveRow
+          busyLabel={messages.editableConfigurationSaveBusyAction}
+          canSave={canSave}
+          isSaving={isSaving}
+          onSave={onSaveConfiguration}
+          resetSlot={
+            state.isDirty ? (
+              <DashboardActionButton
+                disabled={isSaving}
+                onClick={state.onResetToLatest}
+                type="button"
+              >
+                {messages.editableConfigurationResetAction}
+              </DashboardActionButton>
+            ) : undefined
+          }
+          saveLabel={messages.editableConfigurationSaveAction}
         />
       ) : null}
     </form>

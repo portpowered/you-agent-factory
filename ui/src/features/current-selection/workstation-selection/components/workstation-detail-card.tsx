@@ -41,6 +41,7 @@ export function WorkstationDetailCard({
   headerAction,
   locale,
   now,
+  onSaveConfiguration,
   onSelectProviderSession,
   onSelectWorkID,
   onSelectWorkstationRequest,
@@ -81,6 +82,7 @@ export function WorkstationDetailCard({
       <EditableConfigurationSection
         key={`editable-configuration:${selectedNode.node_id}`}
         messages={messages}
+        onSaveConfiguration={onSaveConfiguration}
         saveState={saveState}
         state={editableConfigurationState}
       />

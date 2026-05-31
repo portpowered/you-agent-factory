@@ -2,11 +2,35 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
-import type { EditableWorkstationOverwriteField } from "../lib/detail-card-types";
+import { buildDetailCardEditableFactoryDocument } from "../../base/components/detail-card-test-helpers";
+import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
+import type {
+  EditableWorkstationOverwriteField,
+  EditableWorkstationSaveState,
+} from "../lib/detail-card-types";
 import { WorkstationDetailCard } from "./workstation-detail-card";
+import { EditableWorkstationSaveHeaderAction } from "./workstation-save-controls";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 const editableConfigurationCoverageTimeoutMs = 240_000;
+
+function buildWorkstationHeaderSaveAction({
+  canSave,
+  onClick = vi.fn(),
+  saveState = { status: "idle" },
+}: {
+  canSave: boolean;
+  onClick?: () => void;
+  saveState?: EditableWorkstationSaveState;
+}) {
+  return (
+    <EditableWorkstationSaveHeaderAction
+      canSave={canSave}
+      onClick={onClick}
+      saveState={saveState}
+    />
+  );
+}
 
 function expandEditableConfiguration() {
   fireEvent.click(
@@ -303,6 +327,51 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     ).toBeTruthy();
     expect(screen.queryByLabelText("Worker")).toBeNull();
+  });
+
+  it("stacks configuration fields vertically and renders a labeled footer Save", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const onSaveConfiguration = vi.fn();
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...buildReadyEditableConfigurationState(),
+          isDirty: true,
+          pendingFactoryDefinition: buildDetailCardEditableFactoryDocument(),
+        }}
+        headerAction={buildWorkstationHeaderSaveAction({ canSave: true })}
+        now={DETAIL_CARD_NOW}
+        onSaveConfiguration={onSaveConfiguration}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const fieldGroup = editableConfigurationSection().querySelector(
+      `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+    );
+    expect(fieldGroup).not.toBeNull();
+    expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);
+    expect(fieldGroup?.className).not.toMatch(/xl:grid-cols-\d/);
+
+    const saveButtons = screen.getAllByRole("button", { name: "Save changes" });
+    expect(saveButtons).toHaveLength(2);
+
+    fireEvent.click(saveButtons[1] ?? saveButtons[0]);
+    expect(onSaveConfiguration).toHaveBeenCalledTimes(1);
+
+    expect(
+      screen.getByRole("button", { name: "Reset to latest" }),
+    ).toBeTruthy();
   });
 
   it("starts collapsed and expands with accessible disclosure behavior", () => {

@@ -24,6 +24,7 @@ export interface WorkstationDetailCardProps {
   activeExecutions: DashboardActiveExecution[];
   editableConfigurationState?: EditableWorkstationConfigurationState;
   headerAction?: ReactNode;
+  onSaveConfiguration?: () => void;
   locale?: string;
   now: number;
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;

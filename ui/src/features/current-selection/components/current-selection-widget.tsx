@@ -76,6 +76,7 @@ function renderCurrentSelectionDetailCard({
   workStateHeaderAction,
   workStateSaveState,
   onSaveWorkerConfiguration,
+  onSaveWorkstationConfiguration,
   workerHeaderAction,
   workTypeHeaderAction,
   workTypeSaveState,
@@ -111,6 +112,7 @@ function renderCurrentSelectionDetailCard({
     typeof useSaveEditableWorkStateConfiguration
   >["saveState"];
   onSaveWorkerConfiguration: () => void;
+  onSaveWorkstationConfiguration: () => void;
   workerHeaderAction: ReactNode;
   workTypeHeaderAction: ReactNode;
   saveState: ReturnType<
@@ -240,6 +242,7 @@ function renderCurrentSelectionDetailCard({
         headerAction={headerAction}
         locale={locale}
         now={now}
+        onSaveConfiguration={onSaveWorkstationConfiguration}
         onSelectProviderSession={setSelectedProviderSession}
         onSelectWorkID={selectWorkByID}
         onSelectWorkstationRequest={selectWorkstationRequest}
@@ -397,6 +400,7 @@ export function CurrentSelectionWidget({
     workStateHeaderAction,
     workStateSaveState: workStateSave.saveState,
     onSaveWorkerConfiguration: () => void workerSave.save(),
+    onSaveWorkstationConfiguration: workstationSave.beginSaveConfirmation,
     workerHeaderAction,
     workTypeHeaderAction,
     saveState: workstationSave.saveState,

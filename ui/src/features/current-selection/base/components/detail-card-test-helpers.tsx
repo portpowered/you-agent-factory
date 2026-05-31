@@ -84,7 +84,9 @@ export {
   buildDetailCardSharedWorkerFactoryDocument,
   buildDetailCardWorkStateFactoryDocument,
   buildDetailCardWorkstationNodeSelection,
+  clickWorkstationSave,
   createDetailCardDeferredFactoryDocumentSave,
   DETAIL_CARD_SAVE_FACTORY_VERSION,
   expandDetailCardWorkstationConfiguration,
+  workstationFooterSaveButton,
 } from "./detail-card-save-test-helpers";
