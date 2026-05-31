@@ -29,11 +29,13 @@ const promptTemplateValidationResult: PromptTemplateValidationResult = {
   valid: true,
 };
 
-describe("useCurrentWorkstationPromptTemplateValidation", () => {
-  beforeEach(() => {
-    useDashboardSessionStore.setState({ selectedSessionID: "~default" });
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockReset();
-  });
+function resetValidationHookTestState(): void {
+  useDashboardSessionStore.setState({ selectedSessionID: "~default" });
+  vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockReset();
+}
+
+describe("useCurrentWorkstationPromptTemplateValidation query key", () => {
+  beforeEach(resetValidationHookTestState);
 
   it("builds a stable query key for one prompt draft", () => {
     expect(
@@ -49,6 +51,10 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       "Use {{ .Prompt }}",
     ]);
   });
+});
+
+describe("useCurrentWorkstationPromptTemplateValidation fetch gating", () => {
+  beforeEach(resetValidationHookTestState);
 
   it("does not fetch validation while the draft is blank", () => {
     const { result } = renderHook(
@@ -65,6 +71,10 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       status: "pending",
     });
   });
+});
+
+describe("useCurrentWorkstationPromptTemplateValidation refetch guards", () => {
+  beforeEach(resetValidationHookTestState);
 
   it("rejects manual refetches without a selected workstation or prompt", async () => {
     const { result: missingWorkstation } = renderHook(
@@ -85,6 +95,10 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       status: "error",
     });
   });
+});
+
+describe("useCurrentWorkstationPromptTemplateValidation success", () => {
+  beforeEach(resetValidationHookTestState);
 
   it("loads authoritative prompt validation for the active draft", async () => {
     vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockResolvedValue(
@@ -141,6 +155,10 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       { sessionID: "session-beta" },
     );
   });
+});
+
+describe("useCurrentWorkstationPromptTemplateValidation API failures", () => {
+  beforeEach(resetValidationHookTestState);
 
   it("surfaces typed validation API failures for the active draft", async () => {
     vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockRejectedValue(
