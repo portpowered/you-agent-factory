@@ -76,6 +76,7 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 			PlaceOccupancyByID:            make(map[string]interfaces.FactoryPlaceOccupancy),
 			ActiveDispatches:              make(map[string]interfaces.FactoryWorldDispatch),
 			TracesByID:                    make(map[string]interfaces.FactoryWorldTrace),
+			WorkStateChangesByWorkID:      make(map[string][]interfaces.FactoryWorldWorkStateChangeRecord),
 		},
 		placeTokens:  make(map[string]map[string]struct{}),
 		tokenPlaces:  make(map[string]string),
@@ -124,6 +125,7 @@ func (r *factoryWorldReducer) applyWorkStateChangeEvent(event factoryapi.Factory
 	if err != nil {
 		return err
 	}
+	r.recordWorkStateChange(event, payload)
 	r.applyWorkStateChange(payload)
 	return nil
 }

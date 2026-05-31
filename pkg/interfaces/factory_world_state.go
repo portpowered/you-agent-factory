@@ -30,6 +30,7 @@ type FactoryWorldState struct {
 	ScriptResponsesByDispatchID   map[string]map[string]FactoryWorldScriptResponse   `json:"script_responses_by_dispatch_id,omitempty"`
 	TracesByID                    map[string]FactoryWorldTrace                       `json:"traces_by_id,omitempty"`
 	ProviderSessions              []FactoryWorldProviderSessionRecord                `json:"provider_sessions,omitempty"`
+	WorkStateChangesByWorkID      map[string][]FactoryWorldWorkStateChangeRecord     `json:"work_state_changes_by_work_id,omitempty"`
 	FactoryState                  string                                             `json:"factory_state,omitempty"`
 	FactoryStateReason            string                                             `json:"factory_state_reason,omitempty"`
 	FactoryStatePrevious          string                                             `json:"factory_state_previous,omitempty"`
@@ -97,6 +98,22 @@ type FactoryWorldTrace struct {
 	DispatchIDs   []string `json:"dispatch_ids,omitempty"`
 	TerminalWork  []string `json:"terminal_work,omitempty"`
 	FailedWorkIDs []string `json:"failed_work_ids,omitempty"`
+}
+
+// FactoryWorldWorkStateChangeRecord records one canonical WORK_STATE_CHANGE
+// affecting a work item at the selected projection tick.
+type FactoryWorldWorkStateChangeRecord struct {
+	WorkID       string                `json:"work_id"`
+	WorkTypeName string                `json:"work_type_name,omitempty"`
+	FromState    string                `json:"from_state"`
+	ToState      string                `json:"to_state"`
+	FromPlaceID  string                `json:"from_place_id"`
+	ToPlaceID    string                `json:"to_place_id"`
+	Source       WorkStateChangeSource `json:"source"`
+	RequestID    string                `json:"request_id,omitempty"`
+	Tick         int                   `json:"tick"`
+	Sequence     int                   `json:"sequence"`
+	EventTime    time.Time             `json:"event_time,omitempty"`
 }
 
 // FactoryWorldProviderSessionRecord records one provider session attached to a

@@ -829,3 +829,28 @@ func int64PtrForProjectionTest(value int64) *int64 {
 func intPtrForProjectionTest(value int) *int {
 	return &value
 }
+
+func assertWorkStateChangeRecord(
+	t *testing.T,
+	records []interfaces.FactoryWorldWorkStateChangeRecord,
+	want interfaces.FactoryWorldWorkStateChangeRecord,
+) {
+	t.Helper()
+	if len(records) != 1 {
+		t.Fatalf("work state change records = %#v, want one record", records)
+	}
+	got := records[0]
+	if got.WorkID != want.WorkID ||
+		got.WorkTypeName != want.WorkTypeName ||
+		got.FromState != want.FromState ||
+		got.ToState != want.ToState ||
+		got.FromPlaceID != want.FromPlaceID ||
+		got.ToPlaceID != want.ToPlaceID ||
+		got.Source != want.Source ||
+		got.Tick != want.Tick {
+		t.Fatalf("work state change record = %#v, want %#v", got, want)
+	}
+	if got.EventTime.IsZero() {
+		t.Fatalf("work state change record event time = zero, want populated from event context")
+	}
+}

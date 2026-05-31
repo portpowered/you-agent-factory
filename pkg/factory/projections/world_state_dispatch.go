@@ -481,6 +481,30 @@ func latestInferenceDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt
 	return interfaces.CloneSafeWorkDiagnostics(attempt.Diagnostics)
 }
 
+func (r *factoryWorldReducer) recordWorkStateChange(event factoryapi.FactoryEvent, payload factoryapi.WorkStateChangeEventPayload) {
+	workID := payload.WorkId
+	if workID == "" {
+		return
+	}
+	record := interfaces.FactoryWorldWorkStateChangeRecord{
+		WorkID:       workID,
+		WorkTypeName: payload.WorkTypeName,
+		FromState:    payload.FromState,
+		ToState:      payload.ToState,
+		FromPlaceID:  payload.FromPlaceId,
+		ToPlaceID:    payload.ToPlaceId,
+		Source:       interfaces.WorkStateChangeSource(payload.Source),
+		RequestID:    stringValue(event.Context.RequestId),
+		Tick:         event.Context.Tick,
+		Sequence:     event.Context.Sequence,
+		EventTime:    event.Context.EventTime,
+	}
+	r.stateValue.WorkStateChangesByWorkID[workID] = append(
+		r.stateValue.WorkStateChangesByWorkID[workID],
+		record,
+	)
+}
+
 func (r *factoryWorldReducer) applyWorkStateChange(payload factoryapi.WorkStateChangeEventPayload) {
 	workID := payload.WorkId
 	if workID == "" {
