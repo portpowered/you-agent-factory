@@ -1,18 +1,21 @@
 import { renderHook } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useWorkerDetailState } from "./use-worker-detail-state";
 
-vi.mock("../../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual(
-    "../../../current-factory-definition/public",
-  );
+vi.mock(
+  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
 function mockFactoryDocumentQuery(
   overrides: Partial<ReturnType<typeof useCurrentFactoryDocument>> = {},

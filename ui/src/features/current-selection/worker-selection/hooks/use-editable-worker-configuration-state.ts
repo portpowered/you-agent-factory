@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   applyEditableWorkerDraft,
   type EditableWorkerDraft,
   editableWorkerDraftFromValues,
   resolveEditableWorkerValues,
 } from "../../../current-factory-definition/lib/worker-editable-values";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/public";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import { resolveEditableWorkerOverwriteFields } from "../editing/editable-worker-overwrite-fields";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
