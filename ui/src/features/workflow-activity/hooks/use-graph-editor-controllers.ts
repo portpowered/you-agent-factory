@@ -13,6 +13,7 @@ export function useGraphEditorControllers({
   draftState,
   editableGraph,
   locale,
+  onNodeRemovedFromDraft,
   saveEditableDefinition,
   setActiveTool,
 }: {
@@ -22,6 +23,7 @@ export function useGraphEditorControllers({
   draftState: EditableFactoryGraphViewModel["draftState"];
   editableGraph: EditableFactoryGraphViewModel;
   locale?: string | null;
+  onNodeRemovedFromDraft?: (nodeId: string) => void;
   saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
 }) {
@@ -43,6 +45,7 @@ export function useGraphEditorControllers({
     draftState,
     editableGraph,
     locale,
+    onNodeRemovedFromDraft,
     saveEditableDefinition,
   });
 

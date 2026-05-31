@@ -153,6 +153,7 @@ export interface FactoryGraphDraftDerivedState {
   hasChanges: boolean;
   latestDocument: CurrentFactoryDocument | null;
   pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+  adoptSavedFactoryDocument: (document: CurrentFactoryDocument) => void;
   replaceDraft: (draft: FactoryGraphDraft) => void;
   resetDraft: () => void;
   source: "current-factory" | "projection";

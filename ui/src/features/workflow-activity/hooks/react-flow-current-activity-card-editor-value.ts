@@ -28,6 +28,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   >;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
+  handleCancelRemoval: () => void;
   handleDiscardPendingChanges: () => void;
   handleConfirmRemoval: () => void;
   handleConnectionAnchorClick: ReturnType<
@@ -40,6 +41,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   handleEditorEdgeDelete: (edgeId: string) => void;
   handleEditorModeToggle: () => void;
   handleEditorNodeDelete: (nodeId: string) => void;
+  handleSelectionNodeDelete: (nodeId: string) => void;
   handleSaveDraft: () => Promise<boolean>;
   handleSaveBeforeLeavingEditor: () => Promise<boolean>;
   hasActiveWork: boolean;
@@ -85,6 +87,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     editorUnavailableClassifierWorkstationName:
       args.editorUnavailableClassifierWorkstationName,
     editorMode: args.editorMode,
+    handleCancelRemoval: args.handleCancelRemoval,
     handleDiscardPendingChanges: args.handleDiscardPendingChanges,
     handleAddEntityAction: args.addEntityController.handleAddEntityAction,
     handleAddEntitySubmit: args.addEntityController.handleAddEntitySubmit,
@@ -95,6 +98,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     handleEditorEdgeDelete: args.handleEditorEdgeDelete,
     handleEditorModeToggle: args.handleEditorModeToggle,
     handleEditorNodeDelete: args.handleEditorNodeDelete,
+    handleSelectionNodeDelete: args.handleSelectionNodeDelete,
     handleSaveDraft: args.handleSaveDraft,
     handleSaveBeforeLeavingEditor: args.handleSaveBeforeLeavingEditor,
     hasActiveWork: args.hasActiveWork,

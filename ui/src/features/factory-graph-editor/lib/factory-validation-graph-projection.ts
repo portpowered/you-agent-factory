@@ -36,6 +36,11 @@ export interface FactoryValidationGraphProjection {
 const WORKSTATION_GRAPH_NODE_PREFIX = "workstation:";
 const WORK_TYPE_GRAPH_NODE_PREFIX = "work-type:";
 const WORK_STATE_GRAPH_NODE_PREFIX = "work-state:";
+const WORKER_GRAPH_NODE_PREFIX = "worker:";
+
+export function factoryGraphNodeIdForWorker(workerName: string): string {
+  return `${WORKER_GRAPH_NODE_PREFIX}${workerName}`;
+}
 
 export function factoryGraphNodeIdForWorkstation(subjectId: string): string {
   return `${WORKSTATION_GRAPH_NODE_PREFIX}${subjectId}`;
@@ -43,6 +48,33 @@ export function factoryGraphNodeIdForWorkstation(subjectId: string): string {
 
 export function factoryGraphNodeIdForWorkType(subjectId: string): string {
   return `${WORK_TYPE_GRAPH_NODE_PREFIX}${subjectId}`;
+}
+
+export function parseFactoryGraphWorkTypeNodeId(
+  nodeId: string,
+): string | null {
+  if (!nodeId.startsWith(WORK_TYPE_GRAPH_NODE_PREFIX)) {
+    return null;
+  }
+
+  const workTypeName = nodeId.slice(WORK_TYPE_GRAPH_NODE_PREFIX.length);
+  return workTypeName.length > 0 ? workTypeName : null;
+}
+
+export function parseFactoryGraphWorkStateNodeId(
+  nodeId: string,
+): string | null {
+  if (!nodeId.startsWith(WORK_STATE_GRAPH_NODE_PREFIX)) {
+    return null;
+  }
+
+  const placeId = nodeId.slice(WORK_STATE_GRAPH_NODE_PREFIX.length);
+  const separatorIndex = placeId.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex >= placeId.length - 1) {
+    return null;
+  }
+
+  return placeId;
 }
 
 export function factoryGraphNodeIdForWorkState(subjectId: string): string {

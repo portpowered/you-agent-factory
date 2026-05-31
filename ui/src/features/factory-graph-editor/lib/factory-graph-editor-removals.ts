@@ -27,6 +27,7 @@ export interface FactoryGraphRemovalIntent {
   confirmLabel: string;
   ineligibleReason?: string;
   key: FactoryGraphNodeKey;
+  requiresConfirmation: boolean;
   title: string;
 }
 
@@ -35,6 +36,7 @@ export interface FactoryGraphEdgeRemovalIntent {
   confirmLabel: string;
   edge: FactoryGraphEdge;
   ineligibleReason?: string;
+  requiresConfirmation: boolean;
   title: string;
 }
 
@@ -89,9 +91,13 @@ export function buildFactoryGraphRemovalIntent(options: {
         node.label,
       ),
       key: node.key,
+      requiresConfirmation: false,
       title: "",
     };
   }
+
+  const requiresConfirmation =
+    connectedEdges.length > 0 || impactedStateCount > 0;
 
   return {
     confirmDescription: buildRemovalDescription(
@@ -103,6 +109,7 @@ export function buildFactoryGraphRemovalIntent(options: {
     ),
     confirmLabel: messages.removalEntityConfirmLabel(node.label, node.kind),
     key: node.key,
+    requiresConfirmation,
     title: messages.removalEntityTitle(node.label, node.kind),
   };
 }
@@ -153,6 +160,7 @@ export function buildFactoryGraphEdgeRemovalIntent(options: {
       confirmLabel: "",
       edge,
       ineligibleReason: messages.removalEdgeIneligibleWorkTypeState,
+      requiresConfirmation: false,
       title: "",
     };
   }
@@ -162,6 +170,7 @@ export function buildFactoryGraphEdgeRemovalIntent(options: {
     confirmDescription: buildEdgeRemovalDescription(edge, options.locale),
     confirmLabel: messages.removalEdgeConfirmLabel(edgeLabel),
     edge,
+    requiresConfirmation: true,
     title: messages.removalEdgeTitle(edgeLabel),
   };
 }
@@ -365,13 +374,6 @@ function shouldRemoveEdgeForNode(
         edge.target.workTypeName === key.name &&
         edge.kind !== "work-type-state"))
   );
-}
-
-function matchesExplicitEdgeRemoval(
-  edge: FactoryGraphEdge,
-  removals: FactoryGraphDraftEdgeChange[],
-) {
-  return removals.some((removal) => edgeChangeId(removal) === edge.id);
 }
 
 function toDraftEdgeRemoval(

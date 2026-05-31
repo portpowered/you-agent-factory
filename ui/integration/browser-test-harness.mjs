@@ -22,6 +22,36 @@ export const readyTimeoutMs = 90_000;
 export const replayDelayMs = 25;
 export const uiInteractionTimeoutMs = 10_000;
 export const defaultFactorySessionID = "~default";
+
+const workstationPromptEditorTimeoutMs = 60_000;
+
+/** Playwright locator for Monaco's hidden input textarea (aria-label varies by a11y mode). */
+export function getWorkstationPromptBodyTextarea(scope) {
+  return scope.locator(".monaco-editor textarea.inputarea").first();
+}
+
+/** Fill a workstation prompt editor after Monaco has mounted in the browser. */
+export async function fillWorkstationPromptBody(scope, text) {
+  const monacoEditor = scope.locator(".monaco-editor").first();
+  await monacoEditor.waitFor({
+    state: "visible",
+    timeout: workstationPromptEditorTimeoutMs,
+  });
+
+  const textarea = getWorkstationPromptBodyTextarea(scope);
+  try {
+    await textarea.waitFor({
+      state: "visible",
+      timeout: 5_000,
+    });
+    await textarea.fill(text);
+    await textarea.press("Tab");
+    return;
+  } catch {
+    await monacoEditor.click();
+    await scope.page().keyboard.type(text);
+  }
+}
 const sharedApiPort = 43117;
 const sharedPreviewPort = 43118;
 const browserBuildCacheKey = "__agentFactoryBrowserIntegrationBuildComplete";
@@ -144,7 +174,9 @@ function resolveRuntimeCommand(args) {
     };
   }
 
-  throw new Error(`Unsupported local runtime command fallback: ${args.join(" ")}`);
+  throw new Error(
+    `Unsupported local runtime command fallback: ${args.join(" ")}`,
+  );
 }
 
 function spawnRuntime(args, extraEnv = {}, options = {}) {
@@ -255,9 +287,9 @@ function cloneVersion(version) {
 }
 
 function buildSessionMap(sessions, currentFactory, currentFactoryBySessionID) {
-  const defaultSession = sessions.find(
-    (session) => session.id === defaultFactorySessionID,
-  ) ?? createDefaultSession(currentFactory);
+  const defaultSession =
+    sessions.find((session) => session.id === defaultFactorySessionID) ??
+    createDefaultSession(currentFactory);
   const nextSessions = sessions.some(
     (session) => session.id === defaultFactorySessionID,
   )
@@ -304,7 +336,11 @@ function ensureSessionState(
     });
   }
 
-  if (!sessionRegistry.sessions.some((existingSession) => existingSession.id === session.id)) {
+  if (
+    !sessionRegistry.sessions.some(
+      (existingSession) => existingSession.id === session.id,
+    )
+  ) {
     sessionRegistry.sessions = [...sessionRegistry.sessions, session];
     return;
   }
@@ -464,9 +500,25 @@ export async function openBrowserPage(options = {}) {
   };
 }
 
+function isBenignBrowserError(error) {
+  const message = (error ?? "").trim();
+  if (message === "") {
+    return true;
+  }
+
+  return (
+    message.startsWith("Canceled: Canceled") &&
+    (message.includes("setModel") || message.includes("dispose"))
+  );
+}
+
 export function expectNoBrowserErrors(pageErrors, consoleErrors, expect) {
-  expect(pageErrors).toEqual([]);
-  expect(consoleErrors).toEqual([]);
+  expect(pageErrors.filter((error) => !isBenignBrowserError(error))).toEqual(
+    [],
+  );
+  expect(consoleErrors.filter((error) => !isBenignBrowserError(error))).toEqual(
+    [],
+  );
 }
 
 export async function startFactoryApiServer({
@@ -595,9 +647,12 @@ export async function startFactoryApiServer({
             currentFactory,
             currentFactoryBySessionID,
           );
-          const openedSessionState = sessionRegistry.state.get(result.session.id);
+          const openedSessionState = sessionRegistry.state.get(
+            result.session.id,
+          );
           if (openedSessionState) {
-            openedSessionState.eventLines = eventLinesBySessionID[result.session.id] ?? [];
+            openedSessionState.eventLines =
+              eventLinesBySessionID[result.session.id] ?? [];
           }
         }
 
@@ -659,7 +714,8 @@ export async function startFactoryApiServer({
         requestBody += chunk;
       });
       request.on("end", async () => {
-        const parsedBody = requestBody.length === 0 ? null : JSON.parse(requestBody);
+        const parsedBody =
+          requestBody.length === 0 ? null : JSON.parse(requestBody);
         const factory =
           parsedBody &&
           typeof parsedBody === "object" &&

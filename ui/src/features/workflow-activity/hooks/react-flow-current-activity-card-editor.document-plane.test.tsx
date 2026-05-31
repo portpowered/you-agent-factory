@@ -136,6 +136,7 @@ vi.mock("./react-flow-current-activity-card-editor-connections", () => ({
 
 vi.mock("./react-flow-current-activity-card-editor-removals", () => ({
   useFactoryGraphRemovalController: () => ({
+    handleCancelRemoval: vi.fn(),
     handleConfirmRemoval: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),

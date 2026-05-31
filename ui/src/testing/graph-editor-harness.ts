@@ -258,6 +258,7 @@ export function createMockGraphEditorDraftState(
     hasChanges: false,
     latestDocument: baseFactoryDefinitionDocument,
     pendingFactoryDefinition: baseFactoryDefinition,
+    adoptSavedFactoryDocument: vi.fn(),
     replaceDraft: vi.fn(),
     resetDraft: vi.fn(),
     source: "current-factory",

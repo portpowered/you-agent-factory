@@ -3,15 +3,15 @@ import type {
   languages as MonacoLanguagesAPI,
 } from "monaco-editor";
 
-import type { PromptTemplateContract } from "../../../../api/current-factory-prompt-template";
-import type {
-  EditableWorkstationPromptDiagnostic,
-  EditableWorkstationPromptHelpState,
-} from "../lib/detail-card-types";
+import type { PromptTemplateContract } from "../../api/current-factory-prompt-template";
 import {
   WORKSTATION_PROMPT_MONARCH_LANGUAGE,
   WORKSTATION_PROMPT_THEME,
-} from "./workstation-prompt-monaco-language";
+} from "./monaco-prompt-language";
+import type {
+  PromptEditorAutocompleteState,
+  PromptEditorDiagnostic,
+} from "./prompt-editor-types";
 
 type MonacoModule = typeof import("monaco-editor");
 type CompletionInsertMode =
@@ -48,7 +48,7 @@ export function resetWorkstationPromptMonacoRegistrationForTests() {
 
 export function registerWorkstationPromptCompletionProvider(
   monaco: MonacoModule,
-  getPromptHelpState: () => EditableWorkstationPromptHelpState,
+  getPromptHelpState: () => PromptEditorAutocompleteState,
 ) {
   return monaco.languages.registerCompletionItemProvider(
     WORKSTATION_PROMPT_LANGUAGE_ID,
@@ -314,7 +314,7 @@ function resolveCompletionRange(
 
 export function buildWorkstationPromptMarkers(
   prompt: string,
-  diagnostics: EditableWorkstationPromptDiagnostic[],
+  diagnostics: PromptEditorDiagnostic[],
 ): MonacoEditorAPI.IMarkerData[] {
   const markers: MonacoEditorAPI.IMarkerData[] = [];
 
@@ -361,8 +361,8 @@ function fallbackWorkstationPromptDiagnosticRange(prompt: string) {
 
 function resolveWorkstationPromptDiagnosticRange(
   prompt: string,
-  diagnostics: EditableWorkstationPromptDiagnostic[],
-  diagnostic: EditableWorkstationPromptDiagnostic,
+  diagnostics: PromptEditorDiagnostic[],
+  diagnostic: PromptEditorDiagnostic,
   diagnosticIndex: number,
 ) {
   if (
