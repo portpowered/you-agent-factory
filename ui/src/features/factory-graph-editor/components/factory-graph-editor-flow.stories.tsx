@@ -10,6 +10,7 @@ import type {
 } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphConnectionEndpoint } from "../lib/factory-graph-editor-connections";
 import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-controls";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
@@ -549,6 +550,36 @@ async function expectProgressOutcomeRouteHandles(
   ).toBeNull();
 }
 
+async function expectZAxisIncompleteHints(
+  canvasElement: HTMLElement,
+  input: { expectHints: boolean },
+) {
+  const hints = canvasElement.querySelectorAll("[data-z-axis-incomplete-hint]");
+
+  if (!input.expectHints) {
+    await expect(hints).toHaveLength(0);
+    return;
+  }
+
+  await expect(hints).toHaveLength(2);
+  const hintMessage =
+    getFactoryGraphEditorMessages().zAxisIncompleteConnectionHint;
+  for (const hint of hints) {
+    await expect(hint.getAttribute("aria-label")).toBe(hintMessage);
+    await expect(hint.getAttribute("title")).toBe(hintMessage);
+  }
+  await expect(
+    canvasElement.querySelector(
+      '[data-z-axis-incomplete-hint="workstation-on-continue-source"]',
+    ),
+  ).not.toBeNull();
+  await expect(
+    canvasElement.querySelector(
+      '[data-z-axis-incomplete-hint="workstation-on-rejection-source"]',
+    ),
+  ).not.toBeNull();
+}
+
 export default {
   title: "Agent Factory/Dashboard/Factory Graph Editor Flow",
   tags: ["test"],
@@ -647,6 +678,7 @@ export const ProgressOutcomeRoutesWithoutStopWords = {
     await expectProgressOutcomeRouteHandles(canvas, {
       includeContinueAndReject: false,
     });
+    await expectZAxisIncompleteHints(canvasElement, { expectHints: true });
   },
 };
 
@@ -663,6 +695,7 @@ export const ProgressOutcomeRoutesWithStopWords = {
     await expectProgressOutcomeRouteHandles(canvas, {
       includeContinueAndReject: true,
     });
+    await expectZAxisIncompleteHints(canvasElement, { expectHints: false });
   },
 };
 
