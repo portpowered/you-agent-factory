@@ -4,9 +4,11 @@ import {
   type MutableRefObject,
   useCallback,
   useContext,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 
 import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
@@ -16,6 +18,7 @@ import {
   resolveInitialPlacementTopLeft,
   viewportCenterInFlowCoordinates,
 } from "../lib/graph-editor-add-node-placement";
+import { graphKeyAfterAddingNode } from "../lib/react-flow-current-activity-card-keys";
 import type { GraphNodePositions } from "../state/currentActivityGraphStore";
 
 export interface GraphEditorPlacementApi {
@@ -73,6 +76,8 @@ export function GraphEditorPlacementRegistrar({
   storedNodePositions: GraphNodePositions;
 }) {
   const apiRef = useContext(GraphEditorPlacementContext);
+  const [pendingDraft, setPendingDraft] =
+    useState<FactoryGraphAddEntityDraft | null>(null);
   const placementInput = useMemo(
     () => ({
       graphKey,
@@ -90,37 +95,44 @@ export function GraphEditorPlacementRegistrar({
 
     apiRef.current = {
       placeAddedNode: (draft) => {
-        if (!placementInput.graphKey) {
-          return;
-        }
-
-        const flowInstance = flowInstanceRef.current;
-        const flowContainer = flowContainerRef.current;
-        if (!flowInstance || !flowContainer) {
-          return;
-        }
-
-        const topLeft = resolveInitialPlacementTopLeft({
-          draft,
-          nodes: placementInput.nodes,
-          storedPositions: placementInput.storedNodePositions,
-          viewportCenter: viewportCenterInFlowCoordinates(
-            flowInstance,
-            flowContainer,
-          ),
-        });
-        if (!topLeft) {
-          return;
-        }
-
-        placementInput.setStoredNodePosition(
-          placementInput.graphKey,
-          factoryGraphNodeIdForAddEntityDraft(draft),
-          topLeft,
-        );
+        setPendingDraft(draft);
       },
     };
-  }, [apiRef, flowContainerRef, flowInstanceRef, placementInput]);
+  }, [apiRef]);
+
+  useEffect(() => {
+    if (!pendingDraft || !placementInput.graphKey) {
+      return;
+    }
+
+    const flowInstance = flowInstanceRef.current;
+    const flowContainer = flowContainerRef.current;
+    if (!flowInstance || !flowContainer) {
+      return;
+    }
+
+    const topLeft = resolveInitialPlacementTopLeft({
+      draft: pendingDraft,
+      nodes: placementInput.nodes,
+      storedPositions: placementInput.storedNodePositions,
+      viewportCenter: viewportCenterInFlowCoordinates(
+        flowInstance,
+        flowContainer,
+      ),
+    });
+    if (!topLeft) {
+      setPendingDraft(null);
+      return;
+    }
+
+    const nodeId = factoryGraphNodeIdForAddEntityDraft(pendingDraft);
+    placementInput.setStoredNodePosition(
+      graphKeyAfterAddingNode(placementInput.graphKey, nodeId),
+      nodeId,
+      topLeft,
+    );
+    setPendingDraft(null);
+  }, [flowContainerRef, flowInstanceRef, pendingDraft, placementInput]);
 
   return null;
 }
