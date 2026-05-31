@@ -1,0 +1,87 @@
+{
+  "project": "infinite-you",
+  "branchName": "ralph/issues2-factory-worker-add-script-toggle",
+  "description": "Extend the factory graph editor Add worker flow with a model-vs-script worker toggle so operators can create SCRIPT_WORKER entries with command and args or MODEL_WORKER entries with model provider and model, and persist the chosen type through graph save into factory.json.",
+  "context": {
+    "customerAsk": "Add-worker flow toggles between model worker and script worker; script worker captures command and args; model worker captures model provider and model; persisted factory.json reflects chosen worker type.",
+    "problem": "The graph editor Add worker dialog and additions layer only support MODEL_WORKER with modelProvider/model fields. Script workers are supported elsewhere in the product but cannot be created from the add-worker flow, forcing manual factory.json edits.",
+    "solution": "Extend the worker add draft, validation, and apply logic for both worker types; conditionally render fields in the add dialog; reuse worker-detail messages and parseWorkerArgsText conventions; prove save-round-trip with focused unit and integration tests."
+  },
+  "acceptanceCriteria": [
+    "Add worker dialog includes a model vs script worker type control (default model)",
+    "Model path requires model provider and optional model; applied addition has type MODEL_WORKER with captured fields",
+    "Script path requires command and optional newline-separated args; applied addition has type SCRIPT_WORKER with command and args array when provided",
+    "Switching type in the dialog hides and clears the other type's fields so additions do not mix model and script data",
+    "Graph save persists the new worker into factory.json with the selected type and type-specific fields",
+    "Automated tests cover additions validate/apply, add-dialog interaction, and save-input projection for script workers",
+    "UI typecheck, lint, and affected tests pass"
+  ],
+  "userStories": [
+    {
+      "id": "issues2-factory-worker-add-script-toggle-001",
+      "title": "Worker add draft supports model and script types",
+      "description": "As a maintainer, I need the graph editor worker-add draft and apply logic to understand both model and script workers so additions persist the correct canonical worker shape.",
+      "acceptanceCriteria": [
+        "FactoryGraphAddEntityDraft for kind worker includes workerType MODEL_WORKER or SCRIPT_WORKER (default MODEL_WORKER) plus command and argsText for script workers",
+        "createFactoryGraphAddEntityDraft seeds workerType MODEL_WORKER with empty script fields",
+        "validateFactoryGraphAddEntityDraft requires modelProvider only for MODEL_WORKER and non-empty command for SCRIPT_WORKER; rejects argsText containing null bytes",
+        "applyFactoryGraphAddEntityDraft appends MODEL_WORKER with modelProvider and optional model, or SCRIPT_WORKER with command and optional args parsed via parseWorkerArgsText",
+        "factory-graph-editor-additions.test.ts covers model-only, model with model id, script command-only, and script command plus args apply results",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "issues2-factory-worker-add-script-toggle-002",
+      "title": "Add-worker dialog toggles fields by worker type",
+      "description": "As a factory author, I want to pick model vs script worker when adding a worker so I only see fields that apply to my choice.",
+      "acceptanceCriteria": [
+        "Add worker dialog shows Worker type control with Model worker and Script worker options (hosted worker not offered in add flow)",
+        "Model worker selected shows model provider select and model field; command and args fields are hidden",
+        "Script worker selected shows command and args fields; model provider and model fields are hidden",
+        "Changing worker type clears validation errors and values for the deselected type",
+        "Field labels and help reuse getWorkerDetailMessages for provider, model, command, and args",
+        "factory-graph-editor-add-dialog.test.tsx covers toggling visibility and onChange payloads for both types",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: graph editor Add Worker toggles show only relevant fields per type"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "issues2-factory-worker-add-script-toggle-003",
+      "title": "Save path persists script workers into factory.json",
+      "description": "As a factory author, I want a script worker I add from the graph editor to appear in the saved factory document with SCRIPT_WORKER, command, and args so runtime and other editors see the same definition.",
+      "acceptanceCriteria": [
+        "Adding a script worker and saving produces an applied factory definition workers entry with type SCRIPT_WORKER, trimmed command, and args array when args lines were provided",
+        "Focused test in factory-graph-save-input.test.ts or equivalent asserts save payload includes a newly added script worker",
+        "Script worker added via this flow can be assigned when adding a poller workstation without the existing script-or-hosted validation error",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "issues2-factory-worker-add-script-toggle-004",
+      "title": "Copy and menu text reflect both worker kinds",
+      "description": "As a factory author reading the add menu, I want descriptions to mention both model and script workers so the capability is discoverable.",
+      "acceptanceCriteria": [
+        "Factory graph editor add-menu Worker description mentions model or script workers in localized editor message catalogs",
+        "Add dialog worker kind description matches dual-type behavior",
+        "editor.test.ts or message catalog coverage updated for changed strings",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

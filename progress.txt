@@ -1,0 +1,16 @@
+## Codebase Patterns
+- Graph editor worker add drafts live in `factory-graph-editor-additions.ts`; reuse `parseWorkerArgsText` from `worker-editable-values.ts` for script args parsing.
+- `FactoryGraphAddEntityDraft` worker branch uses `workerType` (`MODEL_WORKER` | `SCRIPT_WORKER`) with separate model vs script fields; validation is type-specific in `validateFactoryGraphAddEntityDraft`.
+- `addNode` and add-dialog tests must include full worker draft fields (`workerType`, `command`, `argsText`) when constructing worker adds.
+
+## 2026-05-31T00:02:00Z - issues2-factory-worker-add-script-toggle-001
+- Extended `FactoryGraphAddEntityDraft` worker branch with `workerType`, `command`, and `argsText`; default seed is `MODEL_WORKER` with empty script fields.
+- Updated `validateFactoryGraphAddEntityDraft` for model-provider (model only), command (script only), and null-byte args rejection.
+- Updated `applyFactoryGraphAddEntityDraft` to append `SCRIPT_WORKER` with trimmed command and optional parsed args, or `MODEL_WORKER` as before.
+- Added unit tests for script validation/apply and updated dependent graph-editor tests for the new draft shape.
+- Files changed: `ui/src/features/factory-graph-editor/lib/factory-graph-editor-additions.ts`, `factory-graph-editor-additions.test.ts`, `factory-graph-operations.test.ts`, `factory-graph-operations.worker-assignment.test.ts`, `factory-graph-editor-add-dialog.test.tsx`, `use-editable-factory-graph*.test.tsx`
+- **Learnings for future iterations:**
+  - Reuse `parseWorkerArgsText` rather than reimplementing newline arg parsing in graph-editor additions.
+  - Story 002 should gate add-dialog fields on `draft.workerType` and clear deselected-type values on toggle.
+  - Any test calling `addNode` with `kind: "worker"` must pass the full worker draft object after story 001.
+---
