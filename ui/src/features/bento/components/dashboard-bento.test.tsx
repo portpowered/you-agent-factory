@@ -248,17 +248,6 @@ vi.mock(
   }),
 );
 
-vi.mock("../hooks/use-dashboard-bento-import", () => ({
-  useDashboardBentoImport: () => ({
-    importActivationTarget: {
-      createTargetFactoryName: null,
-      currentFactoryName: "alpha",
-    },
-    importSaveChoice: "REPLACE_CURRENT",
-    setImportSaveChoice: vi.fn(),
-  }),
-}));
-
 vi.mock("../state/dashboardBentoStore", () => ({
   useDashboardBentoStore: (
     selector: (state: {

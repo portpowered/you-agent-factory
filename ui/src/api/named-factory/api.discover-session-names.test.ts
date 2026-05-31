@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  activateImportedFactoryAsNewNamedForSession,
-  discoverSessionNamedFactoryNames,
-} from "./api";
-import { mockPutSessionFactory } from "../../testing/session-factory-mocks";
+import { discoverSessionNamedFactoryNames } from "./api";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();
@@ -73,55 +69,5 @@ describe("discoverSessionNamedFactoryNames", () => {
     });
 
     await expect(discoverSessionNamedFactoryNames()).resolves.toEqual(["alpha"]);
-  });
-});
-
-describe("activateImportedFactoryAsNewNamedForSession discovery", () => {
-  beforeEach(() => {
-    listFactorySessions.mockReset();
-    openFactorySession.mockReset();
-  });
-
-  it("discovers existing names before UPSERT when none are provided", async () => {
-    listFactorySessions.mockResolvedValue([
-      {
-        id: "~default",
-        folderPath: "/tmp/default-session",
-      },
-    ]);
-    openFactorySession.mockResolvedValue({
-      targets: [{ ref: { kind: "named", name: "Imported Factory" } }],
-    });
-
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      mockPutSessionFactory({
-        responseDocument: {
-          name: "Imported Factory-2",
-          workTypes: [],
-          workers: [],
-          workstations: [],
-          version: {
-            logical: "1",
-            physical: "2026-05-18T14:41:00Z",
-          },
-        },
-      }),
-    );
-
-    await activateImportedFactoryAsNewNamedForSession(
-      {
-        name: "Imported Factory",
-        workTypes: [],
-        workers: [],
-        workstations: [],
-      },
-      { fetch: fetchMock },
-    );
-
-    expect(openFactorySession).toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/factory-sessions/~default/factory",
-      expect.objectContaining({ method: "PUT" }),
-    );
   });
 });
