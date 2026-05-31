@@ -1,8 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
+import type {
+  EditableWorkerConfigurationState,
+  EditableWorkerSaveState,
+} from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
+import { EditableWorkerSaveHeaderAction } from "./worker-save-controls";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -48,6 +52,24 @@ function mockFactoryDocumentQuery(
   } as never);
 }
 
+function buildWorkerHeaderSaveAction({
+  canSave,
+  onClick = vi.fn(),
+  saveState = { status: "idle" },
+}: {
+  canSave: boolean;
+  onClick?: () => void;
+  saveState?: EditableWorkerSaveState;
+}) {
+  return (
+    <EditableWorkerSaveHeaderAction
+      canSave={canSave}
+      onClick={onClick}
+      saveState={saveState}
+    />
+  );
+}
+
 function buildFactoryDocument(
   overrides?: Partial<CurrentFactoryDocument>,
 ): CurrentFactoryDocument {
@@ -83,6 +105,7 @@ function buildFactoryDocument(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: WorkerDetailCard coverage keeps loading, ready, and editable state regressions together.
 describe("WorkerDetailCard", () => {
   beforeEach(() => {
     mockFactoryDocumentQuery();
@@ -133,7 +156,7 @@ describe("WorkerDetailCard", () => {
     ).toBeTruthy();
   });
 
-  it("renders worker summary and referencing workstations from the factory document", () => {
+  it("omits summary and referencing-workstations sections from the worker detail panel", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument(),
       isPending: false,
@@ -144,12 +167,15 @@ describe("WorkerDetailCard", () => {
     render(<WorkerDetailCard workerName="reviewer" />);
 
     expect(screen.getByText("reviewer")).toBeTruthy();
-    expect(screen.getByText("Model worker")).toBeTruthy();
-    expect(screen.getByText("Cursor")).toBeTruthy();
-    expect(screen.getByText("gpt-5.5")).toBeTruthy();
-    expect(screen.getByText("Script wrap")).toBeTruthy();
-    expect(screen.getByText("Review")).toBeTruthy();
-    expect(screen.getByText("Plan")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Worker configuration" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Summary" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Referencing workstations" }),
+    ).toBeNull();
+    expect(screen.queryByText("Review")).toBeNull();
+    expect(screen.queryByText("Plan")).toBeNull();
   });
 
   it("renders editable worker fields for model workers", () => {
@@ -164,6 +190,7 @@ describe("WorkerDetailCard", () => {
         model: "gpt-5.5",
         modelLocality: null,
         modelProvider: "CURSOR",
+        name: "reviewer",
         provider: null,
         type: "MODEL_WORKER",
       },
@@ -176,6 +203,7 @@ describe("WorkerDetailCard", () => {
         model: "gpt-5.5",
         modelLocality: null,
         modelProvider: "CURSOR",
+        name: "reviewer",
         provider: null,
         type: "MODEL_WORKER",
         workerName: "reviewer",
@@ -189,6 +217,7 @@ describe("WorkerDetailCard", () => {
       onModelChange: vi.fn(),
       onModelLocalityChange: vi.fn(),
       onModelProviderChange,
+      onNameChange: vi.fn(),
       onProviderChange: vi.fn(),
       markChangesSaved: vi.fn(),
       onResetToLatest: vi.fn(),
@@ -224,6 +253,10 @@ describe("WorkerDetailCard", () => {
     expect(
       editableConfigurationState.onModelLocalityChange,
     ).toHaveBeenCalledWith("LOCAL");
+    expect(screen.getByLabelText("Worker name")).toHaveProperty(
+      "value",
+      "reviewer",
+    );
     expect(screen.queryByLabelText("Command")).toBeNull();
 
     fireEvent.click(
@@ -234,7 +267,7 @@ describe("WorkerDetailCard", () => {
     expect(screen.queryByLabelText("Model provider")).toBeNull();
   });
 
-  it("omits optional model fields when they are absent on the worker", () => {
+  it("does not list referencing workstations outside the editable configuration section", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument({
         workers: [{ name: "script-runner", type: "SCRIPT_WORKER" }],
@@ -247,10 +280,10 @@ describe("WorkerDetailCard", () => {
 
     render(<WorkerDetailCard workerName="script-runner" />);
 
-    expect(screen.getByText("Script worker")).toBeTruthy();
-    expect(screen.queryByText("Model provider")).toBeNull();
-    expect(screen.queryByText("Model")).toBeNull();
-    expect(screen.queryByText("Executor provider")).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Referencing workstations" }),
+    ).toBeNull();
+    expect(screen.queryByText("Run")).toBeNull();
   });
 
   it("warns when saving would affect multiple referencing workstations", () => {
@@ -264,6 +297,7 @@ describe("WorkerDetailCard", () => {
         model: "gpt-5.5",
         modelLocality: null,
         modelProvider: "CURSOR",
+        name: "reviewer",
         provider: null,
         type: "MODEL_WORKER",
       },
@@ -276,6 +310,7 @@ describe("WorkerDetailCard", () => {
         model: "gpt-5.5",
         modelLocality: null,
         modelProvider: "CURSOR",
+        name: "reviewer",
         provider: null,
         type: "MODEL_WORKER",
         workerName: "reviewer",
@@ -289,6 +324,7 @@ describe("WorkerDetailCard", () => {
       onModelChange: vi.fn(),
       onModelLocalityChange: vi.fn(),
       onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
       onProviderChange: vi.fn(),
       markChangesSaved: vi.fn(),
       onResetToLatest: vi.fn(),
@@ -309,6 +345,7 @@ describe("WorkerDetailCard", () => {
     render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
         workerName="reviewer"
       />,
     );
@@ -317,6 +354,81 @@ describe("WorkerDetailCard", () => {
       "Saving reviewer updates every workstation",
     );
     expect(screen.getByRole("button", { name: "Save worker" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    ).toBeTruthy();
+  });
+
+  it("renders header save and omits a footer Save button", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: true,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: true,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: "Save worker" })).toHaveLength(
+      1,
+    );
+    expect(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    ).toBeTruthy();
   });
 
   it("shows scoped save success feedback for the selected worker", () => {
@@ -339,6 +451,7 @@ describe("WorkerDetailCard", () => {
             model: "gpt-5.5",
             modelLocality: null,
             modelProvider: "CURSOR",
+            name: "reviewer",
             provider: null,
             type: "MODEL_WORKER",
           },
@@ -365,6 +478,7 @@ describe("WorkerDetailCard", () => {
           onModelChange: vi.fn(),
           onModelLocalityChange: vi.fn(),
           onModelProviderChange: vi.fn(),
+          onNameChange: vi.fn(),
           onProviderChange: vi.fn(),
           onResetToLatest: vi.fn(),
           onTypeChange: vi.fn(),
@@ -396,6 +510,7 @@ describe("WorkerDetailCard", () => {
         model: "gpt-5.5",
         modelLocality: null,
         modelProvider: "CODEX",
+        name: "reviewer",
         provider: null,
         type: "MODEL_WORKER",
       },
@@ -408,6 +523,7 @@ describe("WorkerDetailCard", () => {
         model: "gpt-5.5",
         modelLocality: null,
         modelProvider: "CURSOR",
+        name: "reviewer",
         provider: null,
         type: "MODEL_WORKER",
         workerName: "reviewer",
@@ -421,6 +537,7 @@ describe("WorkerDetailCard", () => {
       onModelChange: vi.fn(),
       onModelLocalityChange: vi.fn(),
       onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
       onProviderChange: vi.fn(),
       markChangesSaved: vi.fn(),
       onResetToLatest: vi.fn(),
@@ -464,6 +581,7 @@ describe("WorkerDetailCard", () => {
         model: "",
         modelLocality: null,
         modelProvider: null,
+        name: "linear-bot",
         provider: "LINEAR",
         type: "HOSTED_WORKER",
       },
@@ -489,6 +607,7 @@ describe("WorkerDetailCard", () => {
       onModelChange: vi.fn(),
       onModelLocalityChange: vi.fn(),
       onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
       onProviderChange: vi.fn(),
       markChangesSaved: vi.fn(),
       onResetToLatest: vi.fn(),
@@ -536,6 +655,7 @@ describe("WorkerDetailCard", () => {
         model: "",
         modelLocality: null,
         modelProvider: null,
+        name: "script-runner",
         provider: null,
         type: "SCRIPT_WORKER",
       },
@@ -561,6 +681,7 @@ describe("WorkerDetailCard", () => {
       onModelChange: vi.fn(),
       onModelLocalityChange: vi.fn(),
       onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
       onProviderChange: vi.fn(),
       markChangesSaved: vi.fn(),
       onResetToLatest: vi.fn(),
@@ -620,33 +741,6 @@ describe("WorkerDetailCard", () => {
     );
   });
 
-  it("shows empty referencing workstations copy when none reference the worker", () => {
-    mockFactoryDocumentQuery({
-      data: buildFactoryDocument({
-        workers: [
-          {
-            model: "gpt-5.5",
-            modelProvider: "CURSOR",
-            name: "orphan",
-            type: "MODEL_WORKER",
-          },
-        ],
-        workstations: [],
-      }),
-      isPending: false,
-      isSuccess: true,
-      status: "success",
-    } as never);
-
-    render(<WorkerDetailCard workerName="orphan" />);
-
-    expect(
-      screen.getByText(
-        "No workstations reference this worker in the running factory definition.",
-      ),
-    ).toBeTruthy();
-  });
-
   it("shows stale-version save warning without discarding the worker draft", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument(),
@@ -667,6 +761,7 @@ describe("WorkerDetailCard", () => {
             model: "gpt-5.5",
             modelLocality: null,
             modelProvider: "CURSOR",
+            name: "reviewer",
             provider: null,
             type: "MODEL_WORKER",
           },
@@ -693,6 +788,7 @@ describe("WorkerDetailCard", () => {
           onModelChange: vi.fn(),
           onModelLocalityChange: vi.fn(),
           onModelProviderChange: vi.fn(),
+          onNameChange: vi.fn(),
           onProviderChange: vi.fn(),
           onResetToLatest: vi.fn(),
           onTypeChange: vi.fn(),
@@ -740,6 +836,7 @@ describe("WorkerDetailCard", () => {
             model: "gpt-5.5",
             modelLocality: null,
             modelProvider: "CURSOR",
+            name: "reviewer",
             provider: null,
             type: "MODEL_WORKER",
           },
@@ -766,6 +863,7 @@ describe("WorkerDetailCard", () => {
           onModelChange: vi.fn(),
           onModelLocalityChange: vi.fn(),
           onModelProviderChange: vi.fn(),
+          onNameChange: vi.fn(),
           onProviderChange: vi.fn(),
           onResetToLatest: vi.fn(),
           onTypeChange: vi.fn(),
@@ -788,9 +886,9 @@ describe("WorkerDetailCard", () => {
     );
   });
 
-  it("disables save and shows field errors while validation is unresolved", () => {
+  it("shows model worker field help and allows save with provider only", () => {
     const editableConfigurationState: EditableWorkerConfigurationState = {
-      canSave: false,
+      canSave: true,
       draft: {
         argsText: "",
         body: "",
@@ -798,11 +896,12 @@ describe("WorkerDetailCard", () => {
         executorProvider: null,
         model: "",
         modelLocality: null,
-        modelProvider: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
         provider: null,
         type: "MODEL_WORKER",
       },
-      hasValidationErrors: true,
+      hasValidationErrors: false,
       initialValues: {
         args: [],
         body: null,
@@ -811,6 +910,7 @@ describe("WorkerDetailCard", () => {
         model: "gpt-5.5",
         modelLocality: null,
         modelProvider: "CURSOR",
+        name: "reviewer",
         provider: null,
         type: "MODEL_WORKER",
         workerName: "reviewer",
@@ -824,6 +924,91 @@ describe("WorkerDetailCard", () => {
       onModelChange: vi.fn(),
       onModelLocalityChange: vi.fn(),
       onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Required for model workers. The provider selects routing and default model behavior.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Optional. Leave blank to use the provider default model identifier.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Enter a model before saving this worker."),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Save worker" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("disables save and shows field errors while validation is unresolved", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: false,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "",
+        modelLocality: null,
+        modelProvider: null,
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: true,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: true,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
       onProviderChange: vi.fn(),
       markChangesSaved: vi.fn(),
       onResetToLatest: vi.fn(),
@@ -832,7 +1017,6 @@ describe("WorkerDetailCard", () => {
       pendingFactoryDefinition: buildFactoryDocument(),
       status: "ready",
       validationErrors: {
-        model: "Enter a model before saving this worker.",
         modelProvider: "Select a model provider before saving this worker.",
       },
     };
@@ -847,6 +1031,7 @@ describe("WorkerDetailCard", () => {
     render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkerHeaderSaveAction({ canSave: false })}
         workerName="reviewer"
       />,
     );
@@ -857,8 +1042,11 @@ describe("WorkerDetailCard", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText("Enter a model before saving this worker."),
+      screen.getByText("Select a model provider before saving this worker."),
     ).toBeTruthy();
+    expect(
+      screen.queryByText("Enter a model before saving this worker."),
+    ).toBeNull();
     expect(
       screen
         .getByRole("button", { name: "Save worker" })

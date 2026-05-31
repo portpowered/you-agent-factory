@@ -1,10 +1,10 @@
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import {
   applyFactoryGraphAddEntityDraft,
   createFactoryGraphAddEntityDraft,
   validateFactoryGraphAddEntityDraft,
 } from "./factory-graph-editor-additions";
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 
 const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -37,6 +37,7 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
   ],
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph add validation and apply scenarios share one fixture factory.
 describe("factory graph editor additions", () => {
   it("seeds workstation and work-state drafts from the current pending definition", () => {
     expect(
@@ -55,18 +56,46 @@ describe("factory graph editor additions", () => {
     });
   });
 
+  it("allows provider-only worker adds and rejects missing model provider", () => {
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          kind: "worker",
+          model: "",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toEqual({});
+
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          kind: "worker",
+          model: "",
+          modelProvider: "",
+          name: "reviewer",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toEqual({
+      modelProvider: "Select a model provider for the new worker.",
+    });
+  });
+
   it("rejects duplicate identifiers and structurally invalid add forms", () => {
     expect(
       validateFactoryGraphAddEntityDraft(
         {
           kind: "worker",
           model: "",
+          modelProvider: "CURSOR",
           name: "writer",
         },
         baseFactoryDefinition,
       ),
     ).toEqual({
-      model: "Enter a model identifier for the new worker.",
       name: 'A worker named "writer" already exists in the draft.',
     });
 
@@ -120,6 +149,43 @@ describe("factory graph editor additions", () => {
         outputs: [],
         type: "MODEL_WORKSTATION",
         worker: "writer",
+      },
+    ]);
+  });
+
+  it("persists modelProvider on new workers and model only when non-empty", () => {
+    const providerOnlyDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        kind: "worker",
+        model: "",
+        modelProvider: "CURSOR",
+        name: "reviewer",
+      },
+    );
+    expect(providerOnlyDraft.additions.workers).toEqual([
+      {
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ]);
+
+    const withModelDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        kind: "worker",
+        model: "gpt-5",
+        modelProvider: "CODEX",
+        name: "writer",
+      },
+    );
+    expect(withModelDraft.additions.workers).toEqual([
+      {
+        model: "gpt-5",
+        modelProvider: "CODEX",
+        name: "writer",
+        type: "MODEL_WORKER",
       },
     ]);
   });

@@ -19,23 +19,68 @@ function buildDraft(
     model: "gpt-5.5",
     modelLocality: null,
     modelProvider: "CURSOR",
+    name: "reviewer",
     provider: null,
     type: "MODEL_WORKER",
     ...overrides,
   };
 }
 
+const validationContext = {
+  originalWorkerName: "reviewer",
+  workerNames: ["reviewer", "writer"],
+};
+
 describe("validateEditableWorkerDraft", () => {
-  it("requires model provider and model for model workers", () => {
+  it("allows model workers with provider set and empty model", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({ model: "", modelProvider: "CURSOR" }),
+        messages,
+      ),
+    ).toEqual({});
+  });
+
+  it("requires model provider for model workers", () => {
     expect(
       validateEditableWorkerDraft(
         buildDraft({ model: "", modelProvider: null }),
         messages,
+        validationContext,
       ),
     ).toEqual({
-      model: messages.editableConfigurationModelRequired,
       modelProvider: messages.editableConfigurationModelProviderRequired,
     });
+  });
+
+  it("requires a non-empty worker name", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({ name: "   " }),
+        messages,
+        validationContext,
+      ),
+    ).toEqual({
+      name: messages.editableConfigurationNameRequired,
+    });
+  });
+
+  it("rejects duplicate worker names", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({ name: "writer" }),
+        messages,
+        validationContext,
+      ),
+    ).toEqual({
+      name: messages.editableConfigurationNameDuplicate("writer"),
+    });
+  });
+
+  it("allows keeping the current worker name", () => {
+    expect(
+      validateEditableWorkerDraft(buildDraft(), messages, validationContext),
+    ).toEqual({});
   });
 
   it("requires command or body for script workers", () => {
@@ -67,6 +112,7 @@ describe("validateEditableWorkerDraft", () => {
           model: "",
           modelLocality: null,
           modelProvider: null,
+          name: "runner",
           provider: null,
           type: "SCRIPT_WORKER",
         },
@@ -93,6 +139,7 @@ describe("validateEditableWorkerDraft", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: contract validation merge cases stay grouped with decode field mapping.
 describe("mergeEditableWorkerContractValidationErrors", () => {
   it("maps contract decode failures onto worker fields when possible", () => {
     const pendingFactoryDefinition = {
@@ -113,10 +160,35 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
         pendingFactoryDefinition,
         "reviewer",
         messages,
+        0,
       ),
     ).toEqual({
       modelProvider: `${messages.editableConfigurationContractInvalidPrefix} factory.workers[0].modelProvider must be one of CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE.`,
     });
+  });
+
+  it("resolves renamed workers by index for contract validation", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          modelProvider: "Claude",
+          name: "senior-reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "reviewer",
+        messages,
+        0,
+      ).modelProvider,
+    ).toContain(messages.editableConfigurationContractInvalidPrefix);
   });
 
   it("falls back to a scoped contract banner when the error is not field-specific", () => {

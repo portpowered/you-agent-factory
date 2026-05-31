@@ -16,6 +16,7 @@ function buildDraft(
     model: "gpt-5.5",
     modelLocality: "CLOUD",
     modelProvider: "CURSOR",
+    name: "reviewer",
     provider: "LINEAR",
     type: "MODEL_WORKER",
     ...overrides,

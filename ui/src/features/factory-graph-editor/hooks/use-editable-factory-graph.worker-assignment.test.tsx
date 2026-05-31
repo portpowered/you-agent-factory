@@ -60,6 +60,7 @@ describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", (
       result.current.actions.addNode({
         kind: "worker",
         model: "gpt-5-mini",
+        modelProvider: "CURSOR",
         name: "reviewer",
       });
     });
