@@ -63,6 +63,9 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       onSubmit,
     });
 
+    const dialog = screen.getByRole("dialog", { name: "Add resource" });
+    expect(document.body.contains(dialog)).toBe(true);
+
     fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
       target: { value: "cpu" },
     });
