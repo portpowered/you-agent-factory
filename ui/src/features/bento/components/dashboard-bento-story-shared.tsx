@@ -492,6 +492,38 @@ export function promptTemplateValidationResponse(init?: RequestInit) {
   };
 }
 
+export function promptTemplateSyntaxValidationResponse(init?: RequestInit) {
+  if (typeof init?.body !== "string") {
+    return {
+      diagnostics: [],
+      valid: true,
+    };
+  }
+
+  const requestBody = JSON.parse(init.body) as { prompt?: unknown };
+  const prompt =
+    typeof requestBody.prompt === "string" ? requestBody.prompt : "";
+
+  if (
+    prompt.includes("{{ if .WorkID }}") &&
+    !prompt.includes("{{ end }}")
+  ) {
+    return {
+      diagnostics: [
+        {
+          endOffset: Math.max(0, prompt.length - 1),
+          kind: "SYNTAX_ERROR",
+          message: "line 1: unexpected EOF",
+          startOffset: 0,
+        },
+      ],
+      valid: false,
+    };
+  }
+
+  return promptTemplateValidationResponse(init);
+}
+
 export function layoutFor(
   widgetType: string,
   overrides: Partial<AgentBentoLayoutItem> = {},
@@ -938,6 +970,82 @@ export async function expectEditableConfigurationStoryFlow(
   await expect(
     await within(card).findByRole("textbox", { name: "Prompt" }),
   ).toHaveValue("Review the latest story changes before approval.");
+}
+
+async function expectWorkstationPromptSyntaxEditorFeedback(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  await waitFor(
+    () => {
+      const editor = canvasElement.querySelector(
+        '[data-monaco-editor="workstation-prompt"]',
+      );
+      const squiggles = canvasElement.querySelectorAll(
+        '[data-monaco-editor="workstation-prompt"] .squiggly-error',
+      );
+      const hasSquiggles = squiggles.length > 0;
+      const hasInvalidState = editor?.getAttribute("aria-invalid") === "true";
+
+      expect(hasSquiggles || hasInvalidState).toBe(true);
+    },
+    { timeout: 15_000 },
+  );
+}
+
+export async function expectEditableConfigurationPromptSyntaxSaveStoryFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+  const card = await canvas.findByRole("article", {
+    name: "Current selection",
+  });
+  const cardScope = within(card);
+  const saveButton = cardScope.getByRole("button", { name: "Save changes" });
+
+  await userEvent.click(
+    cardScope.getByRole("button", { name: "Expand editable configuration" }),
+  );
+
+  const promptField = await cardScope.findByRole("textbox", { name: "Prompt" });
+
+  await userEvent.click(promptField, { pointerEventsCheck: 0 });
+  await userEvent.keyboard("{Control>}{KeyA}{/Control}");
+  await userEvent.paste("{{ if .WorkID }}");
+
+  await waitFor(() => {
+    expect(
+      cardScope.getAllByText("Fix highlighted issues before saving."),
+    ).toHaveLength(1);
+    expect(cardScope.getByText(/line 1:/)).toBeVisible();
+    expect(saveButton).toBeDisabled();
+    expect(
+      cardScope.queryByText(
+        "Resolve the highlighted prompt diagnostics before saving this workstation.",
+      ),
+    ).toBeNull();
+  });
+  await expectWorkstationPromptSyntaxEditorFeedback(canvasElement);
+
+  await userEvent.click(promptField, { pointerEventsCheck: 0 });
+  await userEvent.keyboard("{Control>}{KeyA}{/Control}");
+  await userEvent.paste("{{ if .WorkID }}{{ end }}");
+
+  await waitFor(() => {
+    expect(
+      cardScope.queryByText(
+        "Validating prompt variables for the current draft.",
+      ),
+    ).toBeNull();
+    expect(saveButton).toBeEnabled();
+  });
+
+  await userEvent.click(saveButton);
+
+  await expect(
+    canvas.getByRole("heading", {
+      name: "Overwrite the running factory definition?",
+    }),
+  ).toBeVisible();
 }
 
 export function InlineAddWidgetCardStory() {

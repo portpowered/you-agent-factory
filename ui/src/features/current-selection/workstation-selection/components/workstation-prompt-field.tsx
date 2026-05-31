@@ -298,9 +298,6 @@ function EditableConfigurationPromptValidationFeedback({
           messages.editableConfigurationPromptDiagnosticsHeading,
         diagnosticsSummary:
           messages.editableConfigurationPromptDiagnosticsSummary,
-        syntaxDiagnosticLabel:
-          messages.editableConfigurationPromptSyntaxDiagnosticLabel,
-        validationDetail: messages.editableConfigurationPromptValidationDetail,
         validationErrorPrefix:
           messages.editableConfigurationPromptValidationErrorPrefix,
         validationLoading:

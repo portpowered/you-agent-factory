@@ -53,6 +53,14 @@ export function useSaveEditableWorkstationConfiguration({
     editableConfigurationState.pendingFactoryDefinition != null &&
     !isPending;
 
+  const beginSaveConfirmation = useCallback(() => {
+    if (!canSave) {
+      return;
+    }
+
+    beginConfirmation();
+  }, [beginConfirmation, canSave]);
+
   const confirmSave = useCallback(async () => {
     if (
       editableConfigurationState?.status !== "ready" ||
@@ -72,14 +80,14 @@ export function useSaveEditableWorkstationConfiguration({
 
   return useMemo(
     () => ({
-      beginSaveConfirmation: beginConfirmation,
+      beginSaveConfirmation,
       canSave,
       cancelSaveConfirmation: cancelConfirmation,
       confirmSave,
       saveState,
     }),
     [
-      beginConfirmation,
+      beginSaveConfirmation,
       canSave,
       cancelConfirmation,
       confirmSave,

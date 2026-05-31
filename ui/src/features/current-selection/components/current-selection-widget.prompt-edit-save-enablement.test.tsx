@@ -92,11 +92,27 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
     ).mockImplementation(async () => promptTemplateContract);
     vi.mocked(
       validateCurrentFactoryWorkstationPromptTemplate,
-    ).mockImplementation(async (_workstationName, prompt) => ({
-      ...validPromptValidation,
-      diagnostics: [],
-      valid: prompt.trim().length > 0,
-    }));
+    ).mockImplementation(async (_workstationName, prompt) => {
+      if (prompt.includes("{{ if .WorkID }}") && !prompt.includes("{{ end }}")) {
+        return {
+          diagnostics: [
+            {
+              endOffset: prompt.length,
+              kind: "SYNTAX_ERROR",
+              message: "line 1: unexpected EOF",
+              startOffset: 0,
+            },
+          ],
+          valid: false,
+        };
+      }
+
+      return {
+        ...validPromptValidation,
+        diagnostics: [],
+        valid: prompt.trim().length > 0,
+      };
+    });
   });
 
   afterEach(() => {
@@ -135,6 +151,45 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
     expect(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Overwrite factory",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("re-enables save after correcting a template syntax typo", async () => {
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildDetailCardWorkstationNodeSelection()}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expandDetailCardWorkstationConfiguration();
+
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "{{ if .WorkID }}" },
+    });
+
+    await waitFor(() => {
+      expect(saveButton.getAttribute("disabled")).not.toBeNull();
+      expect(screen.getByText(/line 1: unexpected EOF/)).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "{{ if .WorkID }}{{ end }}" },
+    });
+
+    await waitFor(() => {
+      expect(saveButton.getAttribute("disabled")).toBeNull();
+    });
+
+    fireEvent.click(saveButton);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Overwrite the running factory definition?",
       }),
     ).toBeTruthy();
   });

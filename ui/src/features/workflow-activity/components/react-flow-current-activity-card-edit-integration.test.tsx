@@ -524,12 +524,14 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
         screen.queryByRole("button", { name: "worker:spare" }),
       ).toBeNull();
     });
-    expect(
-      within(toolbar).queryByRole("button", { name: "Save changes" }),
-    ).toBeNull();
-    expect(
-      within(toolbar).queryByRole("button", { name: "Discard changes" }),
-    ).toBeNull();
+    await waitFor(() => {
+      expect(
+        within(toolbar).queryByRole("button", { name: "Discard changes" }),
+      ).toBeNull();
+      expect(
+        within(toolbar).queryByRole("button", { name: "Save changes" }),
+      ).toBeNull();
+    });
   });
 
   it("opens save confirmation from the activity card host portaled to document.body", async () => {

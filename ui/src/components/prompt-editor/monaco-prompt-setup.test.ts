@@ -464,7 +464,7 @@ describe("registerWorkstationPromptMonaco", () => {
         },
         {
           kind: "SYNTAX_ERROR",
-          message: "Second template is invalid.",
+          message: "line 2: Second template is invalid.",
           sourceText: "{{ .Other }}",
         },
       ]),
@@ -479,9 +479,41 @@ describe("registerWorkstationPromptMonaco", () => {
       expect.objectContaining({
         endColumn: 20,
         endLineNumber: 2,
-        message: "Second template is invalid.",
+        message: "line 2: Second template is invalid.",
         startColumn: 8,
         startLineNumber: 2,
+      }),
+    ]);
+  });
+
+  it("formats syntax marker messages as line-based copy", () => {
+    expect(
+      buildWorkstationPromptMarkers("{{ if .WorkID }}", [
+        {
+          endOffset: 18,
+          kind: "SYNTAX_ERROR",
+          message: "line 1: unexpected EOF",
+          startOffset: 1,
+        },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        message: "line 1: unexpected EOF",
+      }),
+    ]);
+  });
+
+  it("normalizes legacy syntax marker messages for Monaco hover text", () => {
+    expect(
+      buildWorkstationPromptMarkers("{{ bad", [
+        {
+          kind: "SYNTAX_ERROR",
+          message: 'template: prompt:1: function "bad" not defined',
+        },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        message: 'line 1: function "bad" not defined',
       }),
     ]);
   });

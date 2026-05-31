@@ -314,7 +314,7 @@ describe("verifyCurrentSelectionPromptHint", () => {
     ]);
     expect(calls).toContainEqual([
       "text",
-      "Save stays disabled until the prompt validates cleanly for this workstation context.",
+      "Fix highlighted issues before saving.",
     ]);
     expect(calls).toContainEqual([
       "role",
