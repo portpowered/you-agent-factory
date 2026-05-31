@@ -77,7 +77,11 @@ func TestBuildSimpleDashboardProjection_TracksActiveDispatchState(t *testing.T) 
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
 
-	projection := BuildSimpleDashboardProjection(state)
+	assertTracksActiveDispatchProjection(t, BuildSimpleDashboardProjection(state))
+}
+
+func assertTracksActiveDispatchProjection(t *testing.T, projection SimpleDashboardProjection) {
+	t.Helper()
 
 	if projection.Runtime.InFlightDispatchCount != 1 {
 		t.Fatalf("InFlightDispatchCount = %d, want 1", projection.Runtime.InFlightDispatchCount)

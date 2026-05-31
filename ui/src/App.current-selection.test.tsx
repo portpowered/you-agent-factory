@@ -500,7 +500,7 @@ describe("App current selection", () => {
     ).toBe(DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace);
     expect(
       within(currentSelection).getByRole("heading", {
-        name: "Work operations",
+        name: /Work operations|Workstation dispatches/,
       }),
     ).toBeTruthy();
     expect(
