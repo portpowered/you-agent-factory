@@ -10,4 +10,7 @@ export interface WorkStateDetailMessages {
   editableConfigurationErrorPrefix: string;
   editableConfigurationNameDuplicate: (stateName: string) => string;
   editableConfigurationNameRequired: string;
+  editableConfigurationSaveAction: string;
+  editableConfigurationSaveBusyAction: string;
+  editableConfigurationSaveFallbackError: string;
 }

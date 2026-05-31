@@ -9,7 +9,16 @@ import type {
 } from "../../../current-factory-definition/lib/work-state-editable-values";
 import type { CurrentSelectionDetailMessages } from "../../base/messages/current-selection-detail";
 import type { StatePositionWorkItem } from "../../base/state/selection-types";
+import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 import type { EditableWorkStateValidationErrors } from "./work-state-editable-validation";
+
+export type EditableWorkStateSaveValidationErrors = {
+  contract?: string;
+  name?: string;
+} & Record<string, string>;
+
+export type EditableWorkStateSaveState =
+  DetailCardSaveState<EditableWorkStateSaveValidationErrors>;
 
 export type EditableWorkStateConfigurationState =
   | { status: "loading" }

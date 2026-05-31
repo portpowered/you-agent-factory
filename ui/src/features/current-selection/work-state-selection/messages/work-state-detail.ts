@@ -24,6 +24,10 @@ const workStateDetailMessagesByLocale = {
       `A work state named "${stateName}" already exists for this work type.`,
     editableConfigurationNameRequired:
       "Enter a work state name before saving this work state.",
+    editableConfigurationSaveAction: "Save work state",
+    editableConfigurationSaveBusyAction: "Saving work state...",
+    editableConfigurationSaveFallbackError:
+      "The running factory could not be saved.",
   },
   ja: {
     topologyDeleteAction: (workTypeName, stateName) =>
@@ -44,6 +48,10 @@ const workStateDetailMessagesByLocale = {
       `このワークタイプには、すでに「${stateName}」というワーク状態があります。`,
     editableConfigurationNameRequired:
       "保存する前にワーク状態名を入力してください。",
+    editableConfigurationSaveAction: "ワーク状態を保存",
+    editableConfigurationSaveBusyAction: "ワーク状態を保存しています...",
+    editableConfigurationSaveFallbackError:
+      "実行中のファクトリーを保存できませんでした。",
   },
   ko: {
     topologyDeleteAction: (workTypeName, stateName) =>
@@ -64,6 +72,10 @@ const workStateDetailMessagesByLocale = {
       `이 작업 유형에 이미 "${stateName}" 작업 상태가 있습니다.`,
     editableConfigurationNameRequired:
       "이 작업 상태를 저장하기 전에 작업 상태 이름을 입력하세요.",
+    editableConfigurationSaveAction: "작업 상태 저장",
+    editableConfigurationSaveBusyAction: "작업 상태 저장 중...",
+    editableConfigurationSaveFallbackError:
+      "실행 중인 팩토리를 저장할 수 없습니다.",
   },
   "zh-CN": {
     topologyDeleteAction: (workTypeName, stateName) =>
@@ -80,6 +92,9 @@ const workStateDetailMessagesByLocale = {
     editableConfigurationNameDuplicate: (stateName) =>
       `此工作类型已存在名为“${stateName}”的工作状态。`,
     editableConfigurationNameRequired: "保存此工作状态前请输入工作状态名称。",
+    editableConfigurationSaveAction: "保存工作状态",
+    editableConfigurationSaveBusyAction: "正在保存工作状态...",
+    editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
   },
 } satisfies LocalizedMessages<WorkStateDetailMessages>;
 
