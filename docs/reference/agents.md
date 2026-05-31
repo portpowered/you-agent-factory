@@ -94,12 +94,6 @@ and a **stable, non-empty `requestId`**. The CLI validates locally, then issues
 `PUT` to `/factory-sessions/{session}/work-requests/{requestId}` (same upsert
 semantics as operator HTTP batch ingress in [Batch Inputs](batch-inputs.md)).
 
-**Idempotency:** Re-submitting the **same** batch JSON with the **same**
-`requestId` is an idempotent batch upsert—the factory updates that work-request
-instead of creating a parallel batch. Changing `requestId` (or issuing a new unary
-`you submit` call) creates a **new** submission. Keep `requestId` stable across
-retries when you intend to replace or refresh the same batch, not fork duplicate work.
-
 For `DEPENDS_ON`, `PARENT_CHILD`, relation field names, and full batch shape, read
 [Batch Inputs](batch-inputs.md) (`you docs batch-inputs`)—do not duplicate that
 contract here.
@@ -142,6 +136,25 @@ Use `you submit batch --dry-run <path>` to validate without contacting the serve
 Run `you submit batch --help` for `--file`, explicit stdin (`you submit batch -`),
 `--server`, `--session`, and `--json` flags.
 
+### Idempotency and duplicate work
+
+The factory does **not** automatically merge or deduplicate work across arbitrary
+retries. Treat every ingress path by its own rules:
+
+| Path | Dedupes when you retry? |
+|------|-------------------------|
+| `you submit batch` with the same `requestId` and batch body | Yes — idempotent batch upsert on that work-request |
+| `you submit batch` with a **new** `requestId` | No — creates a new batch submission |
+| `you submit` (unary), repeated with the same flags and payload | No — each successful call enqueues **new** work |
+| New inbox file under `factory/inputs/**` | No — a new file is a new submission, not a CLI batch retry |
+| `POST /work` or dashboard submit with a new body | No — new HTTP or UI submissions are new work |
+
+**Autonomous agents:** Reuse the same stable `requestId` on `you submit batch` when
+you mean to refresh or replace one batch. Change `requestId` (or call unary
+`you submit` again) only when you intentionally want additional work. Do not drop
+files into `factory/inputs` or call `POST /work` expecting the factory to treat
+those retries like `you submit batch` idempotency.
+
 ### Pre-Submit Checklist
 
 - [ ] Confirm a factory service is running — run `you session list` or follow
@@ -151,8 +164,12 @@ Run `you submit batch --help` for `--file`, explicit stdin (`you submit batch -`
   `factory/docs/README.md` when present.
 - [ ] Confirm the `workTypeName` exists in `factory.json` ([Config](config.md)).
 - [ ] For multi-item work, prepare `FACTORY_REQUEST_BATCH` JSON and submit with
-  `you submit batch` ([Batch Inputs](batch-inputs.md)).
-- [ ] Set `requestId`, `name`, and relation fields with OpenAPI camelCase names
+  `you submit batch`—not by placing files under `factory/inputs` inbox paths
+  ([Batch Inputs](batch-inputs.md) for operator inbox layout only).
+- [ ] Choose a stable, non-empty `requestId` before the first batch submit; reuse
+  it on retries so the factory upserts the same work-request instead of forking
+  duplicate batches ([Idempotency and duplicate work](#idempotency-and-duplicate-work)).
+- [ ] Set `name` and relation fields with OpenAPI camelCase names
   (`requestId`, `workTypeName`, `sourceWorkName`, `targetWorkName`).
 - [ ] Add `relations[]` when ordering or parent membership matters
   ([Relationships](relationships.md)).
