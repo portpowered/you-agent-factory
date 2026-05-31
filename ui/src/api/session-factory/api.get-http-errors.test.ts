@@ -13,6 +13,70 @@ const sessionFactoryFixture = {
   },
 };
 
+describe("getSessionFactory version normalization", () => {
+  it("normalizes numeric logical version values from GET responses", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Numeric Version Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: 12,
+            physical: "2026-05-18T14:25:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await expect(getSessionFactory("~default", { fetch })).resolves.toMatchObject({
+      name: "Numeric Version Factory",
+      version: {
+        logical: "12",
+        physical: "2026-05-18T14:25:00Z",
+      },
+    });
+  });
+
+  it("rejects GET responses with invalid version metadata", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              name: "Broken Version Factory",
+              workers: [],
+              workstations: [],
+              workTypes: [],
+              version: {
+                logical: "9",
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY",
+      name: "SessionFactoryAPIError",
+    });
+  });
+});
+
 describe("getSessionFactory HTTP error mapping", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
