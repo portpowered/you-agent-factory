@@ -36,74 +36,104 @@ func writeFactorySplitLayout(
 	sourcePath string,
 	opts FactorySplitLayoutWriteOptions,
 ) (LayoutExpansionReport, error) {
-	sourceDir := strings.TrimSpace(opts.SourceDir)
-	if sourceDir != "" {
-		if _, err := preparePortableBundledFileWrites(targetDir, cfg); err != nil {
-			return LayoutExpansionReport{}, err
-		}
+	if err := prepareFactorySplitLayoutWrite(targetDir, cfg, canonical, sourcePath, opts); err != nil {
+		return LayoutExpansionReport{}, err
 	}
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return LayoutExpansionReport{}, fmt.Errorf("create factory directory %s: %w", targetDir, err)
-	}
-
-	formatted, err := formatCanonicalFactoryJSON(canonical, sourcePath)
+	report, err := writeFactorySplitLayoutRuntimeFiles(targetDir, cfg, opts)
 	if err != nil {
 		return LayoutExpansionReport{}, err
 	}
+	if err := finalizeFactorySplitLayoutWrite(targetDir, cfg, opts, &report); err != nil {
+		return LayoutExpansionReport{}, err
+	}
+	return report, nil
+}
+
+func prepareFactorySplitLayoutWrite(
+	targetDir string,
+	cfg *interfaces.FactoryConfig,
+	canonical []byte,
+	sourcePath string,
+	opts FactorySplitLayoutWriteOptions,
+) error {
+	sourceDir := strings.TrimSpace(opts.SourceDir)
+	if sourceDir != "" {
+		if _, err := preparePortableBundledFileWrites(targetDir, cfg); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return fmt.Errorf("create factory directory %s: %w", targetDir, err)
+	}
+	formatted, err := formatCanonicalFactoryJSON(canonical, sourcePath)
+	if err != nil {
+		return err
+	}
 	factoryPath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
 	if err := os.WriteFile(factoryPath, formatted, 0o644); err != nil {
-		return LayoutExpansionReport{}, fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
+		return fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
 	}
-	report := LayoutExpansionReport{FactoryConfigPaths: 1}
+	return nil
+}
 
+func writeFactorySplitLayoutRuntimeFiles(
+	targetDir string,
+	cfg *interfaces.FactoryConfig,
+	opts FactorySplitLayoutWriteOptions,
+) (LayoutExpansionReport, error) {
 	expansionOpts := splitRuntimeExpansionOptions{overwriteExisting: opts.OverwriteExistingSplitFiles}
 	workerAgentPaths, err := writeExpandedWorkerFiles(targetDir, cfg.Workers, expansionOpts)
 	if err != nil {
 		return LayoutExpansionReport{}, err
 	}
-	report.WorkerAgentPaths = workerAgentPaths
-
 	workstationAgentPaths, promptPaths, err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations, expansionOpts)
 	if err != nil {
 		return LayoutExpansionReport{}, err
 	}
-	report.WorkstationAgentPaths = workstationAgentPaths
-	report.PromptPaths = promptPaths
-
 	if opts.OverwriteExistingSplitFiles {
 		if err := pruneStaleSplitRuntimeDirs(targetDir, cfg); err != nil {
 			return LayoutExpansionReport{}, err
 		}
 	}
+	return LayoutExpansionReport{
+		FactoryConfigPaths:    1,
+		WorkerAgentPaths:      workerAgentPaths,
+		WorkstationAgentPaths: workstationAgentPaths,
+		PromptPaths:           promptPaths,
+	}, nil
+}
 
+func finalizeFactorySplitLayoutWrite(
+	targetDir string,
+	cfg *interfaces.FactoryConfig,
+	opts FactorySplitLayoutWriteOptions,
+	report *LayoutExpansionReport,
+) error {
 	replacements, err := materializePortableBundledFiles(targetDir, cfg)
 	if err != nil {
-		return LayoutExpansionReport{}, err
+		return err
 	}
 	report.BundledReplacements = replacements
 
+	sourceDir := strings.TrimSpace(opts.SourceDir)
 	if sourceDir != "" {
 		if err := copySupportedPortableBundledFilesFromSource(sourceDir, targetDir, cfg); err != nil {
-			return LayoutExpansionReport{}, err
+			return err
 		}
 	}
 	if opts.CopyReferencedScripts && sourceDir != "" {
 		if err := writeExpandedReferencedScripts(sourceDir, targetDir, cfg); err != nil {
-			return LayoutExpansionReport{}, err
+			return err
 		}
 	}
-
-	if opts.OverwriteExistingSplitFiles {
-		inputsDir := filepath.Join(targetDir, interfaces.InputsDir)
-		if err := os.MkdirAll(inputsDir, 0o755); err != nil {
-			return LayoutExpansionReport{}, fmt.Errorf("create inputs directory %s: %w", inputsDir, err)
-		}
-		if err := ensureDefaultInputChannelDirectories(targetDir, cfg); err != nil {
-			return LayoutExpansionReport{}, err
-		}
+	if !opts.OverwriteExistingSplitFiles {
+		return nil
 	}
-
-	return report, nil
+	inputsDir := filepath.Join(targetDir, interfaces.InputsDir)
+	if err := os.MkdirAll(inputsDir, 0o755); err != nil {
+		return fmt.Errorf("create inputs directory %s: %w", inputsDir, err)
+	}
+	return ensureDefaultInputChannelDirectories(targetDir, cfg)
 }
 
 func copySupportedPortableBundledFilesFromSource(sourceDir, targetDir string, cfg *interfaces.FactoryConfig) error {

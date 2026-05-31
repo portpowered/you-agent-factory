@@ -722,6 +722,21 @@ type namedFactoryPersistHooks struct {
 	loadRuntimeConfig func(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error)
 }
 
+func resolveNamedFactoryPersistPayload(
+	segment string,
+	canonicalFactoryJSON []byte,
+	prepared *PreparedFactoryLayoutPayload,
+) (*interfaces.FactoryConfig, []byte, error) {
+	switch {
+	case prepared != nil:
+		return prepared.Config, prepared.Canonical, nil
+	case len(canonicalFactoryJSON) > 0:
+		return normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
+	default:
+		return nil, nil, fmt.Errorf("factory layout payload is required")
+	}
+}
+
 func persistNamedFactory(
 	rootDir, name string,
 	canonicalFactoryJSON []byte,
@@ -744,19 +759,9 @@ func persistNamedFactory(
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create factory root %s: %w", rootDir, err)
 	}
-	var factoryCfg *interfaces.FactoryConfig
-	var canonical []byte
-	switch {
-	case prepared != nil:
-		factoryCfg = prepared.Config
-		canonical = prepared.Canonical
-	case len(canonicalFactoryJSON) > 0:
-		factoryCfg, canonical, err = normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("factory layout payload is required")
+	factoryCfg, canonical, err := resolveNamedFactoryPersistPayload(segment, canonicalFactoryJSON, prepared)
+	if err != nil {
+		return nil, err
 	}
 
 	sourcePath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
