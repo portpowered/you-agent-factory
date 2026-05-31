@@ -80,6 +80,9 @@ flow; see [Batch Inputs](batch-inputs.md) for batch shape, inbox placement,
 
 ### Pre-Submit Checklist
 
+- [ ] Confirm a factory service is running — run `you session list` or follow
+  [Is the factory running?](#is-the-factory-running?) before `you submit`, watched
+  `factory/inputs/**`, or `POST /work`.
 - [ ] Read `factory.json` and factory-local `factory/docs/overview.md` or
   `factory/docs/README.md` when present.
 - [ ] Confirm the `workTypeName` exists in `factory.json` ([Config](config.md)).
@@ -164,8 +167,8 @@ one-shot local run that shuts down on idle.
 | `you run --dir <factory>` | Start (or attach to) a local factory from a directory | No — command starts runtime |
 | `you run --factory <path> "<prompt>"` | One-shot CLI run with inline factory file and prompt | Depends on flags; see [Config](config.md) |
 | `you run --work <batch.json>` | Submit batch JSON as part of startup | No when combined with `--dir` startup |
-| `you submit` | Submit work through CLI/dashboard flows | Yes |
-| Dashboard / `POST /work` | API submission against running service | Yes |
+| `you submit` | Submit work through CLI/dashboard flows | Yes — see [Is the factory running?](#is-the-factory-running?) |
+| Dashboard / `POST /work` | API submission against running service | Yes — see [Is the factory running?](#is-the-factory-running?) |
 | `you docs <topic>` | Print packaged reference markdown | No |
 
 Use [Mock Workers](mock-workers.md) and [Record and Replay](record-replay.md)
