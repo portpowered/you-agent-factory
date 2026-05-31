@@ -2356,7 +2356,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         "No script response yet for this dispatch.",
       ),
     ).toBeNull();
-    expect(within(dispatchCard).getByText("Workstation")).toBeTruthy();
+    expect(
+      within(dispatchCard).getByText("Workstation", { selector: "dt" }),
+    ).toBeTruthy();
     expect(
       within(fallbackRequestDetails).queryByText("Resolved args"),
     ).toBeNull();
@@ -2664,7 +2666,9 @@ describe("WorkItemDetailCard localized dispatch diagnostics", () => {
         "このディスパッチにはまだスクリプト応答がありません。",
       ),
     ).toBeNull();
-    expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
+    expect(
+      within(dispatchCard).getByText("ワークステーション", { selector: "dt" }),
+    ).toBeTruthy();
     expectDispatchCardToHideTransitionId(
       dispatchCard,
       "遷移 ID",

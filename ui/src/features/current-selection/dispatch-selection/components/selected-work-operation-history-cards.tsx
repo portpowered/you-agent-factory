@@ -21,23 +21,29 @@ import {
 } from "../dispatch-history/selected-work-dispatch-history-helpers";
 import type { SelectedWorkRequestHistoryItem } from "../lib/detail-card-types";
 
-const MOVE_OPERATION_KIND_BADGE_CLASS = cn(
-  CURRENT_SELECTION_BADGE_CLASS,
-  "border-af-info-border bg-af-info-surface text-af-info",
-);
-
-const WORKSTATION_OPERATION_KIND_BADGE_CLASS = cn(
-  CURRENT_SELECTION_BADGE_CLASS,
-  "border-af-border bg-af-surface-raised text-af-text-muted",
-);
-
 function OperationKindBadge({ label }: { label: string }) {
-  return <span className={MOVE_OPERATION_KIND_BADGE_CLASS}>{label}</span>;
+  return (
+    <span
+      className={cn(
+        CURRENT_SELECTION_BADGE_CLASS,
+        "border-af-info-border bg-af-info-surface text-af-info",
+      )}
+    >
+      {label}
+    </span>
+  );
 }
 
 export function WorkstationOperationKindBadge({ label }: { label: string }) {
   return (
-    <span className={WORKSTATION_OPERATION_KIND_BADGE_CLASS}>{label}</span>
+    <span
+      className={cn(
+        CURRENT_SELECTION_BADGE_CLASS,
+        "border-af-border bg-af-surface-raised text-af-text-muted",
+      )}
+    >
+      {label}
+    </span>
   );
 }
 
