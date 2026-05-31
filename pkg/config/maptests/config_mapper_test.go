@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
@@ -141,9 +142,11 @@ func TestConfigMapping_RejectionLoopWithGuardedLoopBreaker(t *testing.T) {
 	if len(outputNet.Transitions) != 2 {
 		t.Fatalf("expected only authored reviewer transitions, got %d", len(outputNet.Transitions))
 	}
-	assertNoTransitionExhaustion(t, outputNet.Transitions)
+	testutil.AssertNoTransitionExhaustion(t, outputNet.Transitions, testutil.PetriTransitionAssertOptions{
+		ExhaustionContext: "customer-authored mapping",
+	})
 	assertReviewerRejectionTransition(t, outputNet.Transitions["reviewer"])
-	assertGuardedLoopBreakerTransition(t, outputNet.Transitions["reviewer-loop-breaker"], "task:init", "task:failed", "reviewer", 3)
+	testutil.AssertGuardedLoopBreakerTransition(t, outputNet.Transitions["reviewer-loop-breaker"], "task:init", "task:failed", "reviewer", 3)
 }
 
 func rejectionLoopWithGuardedLoopBreakerFactoryConfig() *interfaces.FactoryConfig {
@@ -372,7 +375,9 @@ func TestConfigMapping_GuardedLogicalMoveLoopBreakerRemainsNormalTransition(t *t
 	if len(outputNet.Transitions) != 2 {
 		t.Fatalf("expected only authored process transitions, got %d", len(outputNet.Transitions))
 	}
-	assertNoTransitionExhaustion(t, outputNet.Transitions)
+	testutil.AssertNoTransitionExhaustion(t, outputNet.Transitions, testutil.PetriTransitionAssertOptions{
+		ExhaustionContext: "customer-authored mapping",
+	})
 
 	loopBreaker := outputNet.Transitions["process-loop-breaker"]
 	if loopBreaker == nil {
@@ -381,7 +386,7 @@ func TestConfigMapping_GuardedLogicalMoveLoopBreakerRemainsNormalTransition(t *t
 	if loopBreaker.WorkerType != "" {
 		t.Fatalf("guarded logical move worker type = %q, want empty", loopBreaker.WorkerType)
 	}
-	assertGuardedLoopBreakerTransition(t, loopBreaker, "task:init", "task:failed", "process", 3)
+	testutil.AssertGuardedLoopBreakerTransition(t, loopBreaker, "task:init", "task:failed", "process", 3)
 }
 
 func TestConfigMapping_ValidationRejectsWorkstationLevelChildFanInGuards(t *testing.T) {
