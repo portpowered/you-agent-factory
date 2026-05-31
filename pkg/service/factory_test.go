@@ -503,6 +503,7 @@ func (h *runningSessionService) stop(t *testing.T) {
 			}
 		}
 	}
+	closeSessionServiceRuntimeLogs(t, h.svc)
 
 	h.cancelRun()
 	select {

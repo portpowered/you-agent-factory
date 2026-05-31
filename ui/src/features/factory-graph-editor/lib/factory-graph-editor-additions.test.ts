@@ -54,16 +54,30 @@ describe("factory graph editor additions", () => {
       stateType: "PROCESSING",
       workTypeName: "story",
     });
+    expect(
+      createFactoryGraphAddEntityDraft("worker", baseFactoryDefinition),
+    ).toEqual({
+      argsText: "",
+      command: "",
+      kind: "worker",
+      model: "",
+      modelProvider: "",
+      name: "",
+      workerType: "MODEL_WORKER",
+    });
   });
 
   it("allows provider-only worker adds and rejects missing model provider", () => {
     expect(
       validateFactoryGraphAddEntityDraft(
         {
+          argsText: "",
+          command: "",
           kind: "worker",
           model: "",
           modelProvider: "CURSOR",
           name: "reviewer",
+          workerType: "MODEL_WORKER",
         },
         baseFactoryDefinition,
       ),
@@ -72,10 +86,13 @@ describe("factory graph editor additions", () => {
     expect(
       validateFactoryGraphAddEntityDraft(
         {
+          argsText: "",
+          command: "",
           kind: "worker",
           model: "",
           modelProvider: "",
           name: "reviewer",
+          workerType: "MODEL_WORKER",
         },
         baseFactoryDefinition,
       ),
@@ -84,14 +101,83 @@ describe("factory graph editor additions", () => {
     });
   });
 
+  it("requires script worker command and rejects null bytes in args text", () => {
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          argsText: "",
+          command: "node",
+          kind: "worker",
+          model: "",
+          modelProvider: "",
+          name: "runner",
+          workerType: "SCRIPT_WORKER",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toEqual({});
+
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          argsText: "",
+          command: "",
+          kind: "worker",
+          model: "",
+          modelProvider: "",
+          name: "runner",
+          workerType: "SCRIPT_WORKER",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toEqual({
+      command: "Enter a command for the new script worker.",
+    });
+
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          argsText: "check\0lint",
+          command: "node",
+          kind: "worker",
+          model: "",
+          modelProvider: "",
+          name: "runner",
+          workerType: "SCRIPT_WORKER",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toEqual({
+      args: "Each script argument must be a single non-empty line.",
+    });
+
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          argsText: "",
+          command: "node",
+          kind: "worker",
+          model: "",
+          modelProvider: "CURSOR",
+          name: "runner",
+          workerType: "SCRIPT_WORKER",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toEqual({});
+  });
+
   it("rejects duplicate identifiers and structurally invalid add forms", () => {
     expect(
       validateFactoryGraphAddEntityDraft(
         {
+          argsText: "",
+          command: "",
           kind: "worker",
           model: "",
           modelProvider: "CURSOR",
           name: "writer",
+          workerType: "MODEL_WORKER",
         },
         baseFactoryDefinition,
       ),
@@ -113,6 +199,29 @@ describe("factory graph editor additions", () => {
     ).toEqual({
       behavior: "Poller workstations must use a script or hosted worker.",
     });
+
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          behavior: "POLLER",
+          body: "",
+          kind: "workstation",
+          name: "linear-poller",
+          workerName: "poller-runner",
+        },
+        {
+          ...baseFactoryDefinition,
+          workers: [
+            ...(baseFactoryDefinition.workers ?? []),
+            {
+              command: "node",
+              name: "poller-runner",
+              type: "SCRIPT_WORKER",
+            },
+          ],
+        },
+      ),
+    ).toEqual({});
 
     expect(
       validateFactoryGraphAddEntityDraft(
@@ -157,10 +266,13 @@ describe("factory graph editor additions", () => {
     const providerOnlyDraft = applyFactoryGraphAddEntityDraft(
       createEmptyFactoryGraphDraft(),
       {
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "",
         modelProvider: "CURSOR",
         name: "reviewer",
+        workerType: "MODEL_WORKER",
       },
     );
     expect(providerOnlyDraft.additions.workers).toEqual([
@@ -174,10 +286,13 @@ describe("factory graph editor additions", () => {
     const withModelDraft = applyFactoryGraphAddEntityDraft(
       createEmptyFactoryGraphDraft(),
       {
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5",
         modelProvider: "CODEX",
         name: "writer",
+        workerType: "MODEL_WORKER",
       },
     );
     expect(withModelDraft.additions.workers).toEqual([
@@ -186,6 +301,49 @@ describe("factory graph editor additions", () => {
         modelProvider: "CODEX",
         name: "writer",
         type: "MODEL_WORKER",
+      },
+    ]);
+  });
+
+  it("persists script workers with command and parsed args", () => {
+    const commandOnlyDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        argsText: "",
+        command: "node",
+        kind: "worker",
+        model: "",
+        modelProvider: "",
+        name: "runner",
+        workerType: "SCRIPT_WORKER",
+      },
+    );
+    expect(commandOnlyDraft.additions.workers).toEqual([
+      {
+        command: "node",
+        name: "runner",
+        type: "SCRIPT_WORKER",
+      },
+    ]);
+
+    const withArgsDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        argsText: " --verbose \n\n--dry-run\n",
+        command: "npm",
+        kind: "worker",
+        model: "",
+        modelProvider: "",
+        name: "packager",
+        workerType: "SCRIPT_WORKER",
+      },
+    );
+    expect(withArgsDraft.additions.workers).toEqual([
+      {
+        args: ["--verbose", "--dry-run"],
+        command: "npm",
+        name: "packager",
+        type: "SCRIPT_WORKER",
       },
     ]);
   });

@@ -12,6 +12,7 @@ import {
   DialogTitle,
   Input,
   Select,
+  Textarea,
 } from "../../../components/ui";
 import { EDITABLE_MODEL_PROVIDERS } from "../../current-factory-definition/lib/worker-editable-values";
 import { getWorkerDetailMessages } from "../../current-selection/worker-selection/messages/worker-detail";
@@ -19,6 +20,7 @@ import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-type
 import type {
   FactoryGraphAddEntityDraft,
   FactoryGraphAddEntityFieldErrors,
+  FactoryGraphAddWorkerType,
 } from "../lib/factory-graph-editor-additions";
 import { editableWorkstationBehaviorOptions } from "../lib/factory-graph-editor-additions";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
@@ -167,38 +169,101 @@ function renderEntitySpecificFields({
 
   if (draft.kind === "worker") {
     const workerMessages = getWorkerDetailMessages(locale);
+    const isModelWorker = draft.workerType === "MODEL_WORKER";
+    const isScriptWorker = draft.workerType === "SCRIPT_WORKER";
+
     return (
       <>
         <FactoryGraphEditorSelectField
-          error={errors.modelProvider}
-          helpText={workerMessages.modelProviderFieldHelp}
-          inputId="factory-graph-add-model-provider"
-          label={workerMessages.modelProviderLabel}
+          inputId="factory-graph-add-worker-type"
+          label={workerMessages.typeFieldLabel}
           onChange={(value) => {
-            onChange({ ...draft, modelProvider: value });
+            const workerType = value as FactoryGraphAddWorkerType;
+            if (workerType === draft.workerType) {
+              return;
+            }
+
+            if (workerType === "MODEL_WORKER") {
+              onChange({
+                ...draft,
+                argsText: "",
+                command: "",
+                workerType,
+              });
+              return;
+            }
+
+            onChange({
+              ...draft,
+              model: "",
+              modelProvider: "",
+              workerType,
+            });
           }}
-          options={[
-            {
-              label: workerMessages.notConfiguredOptionLabel,
-              value: "",
-            },
-            ...EDITABLE_MODEL_PROVIDERS.map((provider) => ({
-              label: workerMessages.localizeModelProvider(provider),
-              value: provider,
-            })),
-          ]}
-          value={draft.modelProvider}
+          options={(
+            ["MODEL_WORKER", "SCRIPT_WORKER"] as const satisfies FactoryGraphAddWorkerType[]
+          ).map((workerType) => ({
+            label: workerMessages.localizeWorkerType(workerType),
+            value: workerType,
+          }))}
+          value={draft.workerType}
         />
-        <FactoryGraphEditorTextField
-          error={errors.model}
-          helpText={workerMessages.modelFieldHelp}
-          inputId="factory-graph-add-model"
-          label={workerMessages.modelLabel}
-          onChange={(value) => {
-            onChange({ ...draft, model: value });
-          }}
-          value={draft.model}
-        />
+        {isModelWorker ? (
+          <>
+            <FactoryGraphEditorSelectField
+              error={errors.modelProvider}
+              helpText={workerMessages.modelProviderFieldHelp}
+              inputId="factory-graph-add-model-provider"
+              label={workerMessages.modelProviderLabel}
+              onChange={(value) => {
+                onChange({ ...draft, modelProvider: value });
+              }}
+              options={[
+                {
+                  label: workerMessages.notConfiguredOptionLabel,
+                  value: "",
+                },
+                ...EDITABLE_MODEL_PROVIDERS.map((provider) => ({
+                  label: workerMessages.localizeModelProvider(provider),
+                  value: provider,
+                })),
+              ]}
+              value={draft.modelProvider}
+            />
+            <FactoryGraphEditorTextField
+              error={errors.model}
+              helpText={workerMessages.modelFieldHelp}
+              inputId="factory-graph-add-model"
+              label={workerMessages.modelLabel}
+              onChange={(value) => {
+                onChange({ ...draft, model: value });
+              }}
+              value={draft.model}
+            />
+          </>
+        ) : null}
+        {isScriptWorker ? (
+          <>
+            <FactoryGraphEditorTextField
+              error={errors.command}
+              inputId="factory-graph-add-command"
+              label={workerMessages.commandFieldLabel}
+              onChange={(value) => {
+                onChange({ ...draft, command: value });
+              }}
+              value={draft.command}
+            />
+            <FactoryGraphEditorTextareaField
+              error={errors.args}
+              inputId="factory-graph-add-args"
+              label={workerMessages.argsFieldLabel}
+              onChange={(value) => {
+                onChange({ ...draft, argsText: value });
+              }}
+              value={draft.argsText}
+            />
+          </>
+        ) : null}
       </>
     );
   }
@@ -306,6 +371,38 @@ function renderEntitySpecificFields({
         value={draft.body}
       />
     </>
+  );
+}
+
+function FactoryGraphEditorTextareaField({
+  error,
+  inputId,
+  label,
+  onChange,
+  value,
+}: {
+  error?: string;
+  inputId: string;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <div className={FIELD_GROUP_CLASS}>
+      <label className={FIELD_LABEL_CLASS} htmlFor={inputId}>
+        {label}
+      </label>
+      <Textarea
+        aria-label={label}
+        className={INPUT_CLASS}
+        id={inputId}
+        onChange={(event) => {
+          onChange(event.currentTarget.value);
+        }}
+        value={value}
+      />
+      {error ? <p className={FIELD_ERROR_CLASS}>{error}</p> : null}
+    </div>
   );
 }
 

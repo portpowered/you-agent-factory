@@ -184,6 +184,9 @@ function describeEnglishAddDialog(kind: FactoryGraphAddEntityDraft["kind"]) {
   if (kind === "work-state") {
     return "Append a new ordered state to an existing work type.";
   }
+  if (kind === "worker") {
+    return "Create a pending model or script worker in the current graph draft.";
+  }
   return `Create a pending ${kind} in the current graph draft.`;
 }
 
@@ -301,7 +304,8 @@ function describeEnglishAddMenuAction(
       };
     case "worker":
       return {
-        description: "Add a model worker that can be assigned to workstations.",
+        description:
+          "Add a model or script worker that can be assigned to workstations.",
         label: "Worker",
       };
     case "work-type":
@@ -652,6 +656,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         if (kind === "work-state") {
           return "向现有工作类型追加一个新的有序状态。";
         }
+        if (kind === "worker") {
+          return "在当前图草稿中创建一个待处理的模型或脚本工作者。";
+        }
         return `在当前图草稿中创建一个待处理的${kind}。`;
       },
       addDialogFirstStateHelp: "新的工作类型必须从一个有序状态开始。",
@@ -687,7 +694,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             };
           case "worker":
             return {
-              description: "添加可分配给工作站的模型工作者。",
+              description: "添加可分配给工作站的模型或脚本工作者。",
               label: "工作者",
             };
           case "work-type":

@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
-
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
-import {
-  applyFactoryGraphPendingEdits,
-  connectFactoryGraphNodes,
-  disconnectFactoryGraphEdge,
-} from "./factory-graph-operations";
+import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
 } from "./factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import {
+  addFactoryGraphNode,
+  applyFactoryGraphPendingEdits,
+  connectFactoryGraphNodes,
+  disconnectFactoryGraphEdge,
+} from "./factory-graph-operations";
 
 const richFactoryDefinition: CanonicalFactoryDefinition = {
   guards: [
@@ -161,6 +162,7 @@ const richFactoryDefinition: CanonicalFactoryDefinition = {
   ],
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: save-input scenarios share one rich factory fixture.
 describe("factory graph save input", () => {
   it("preserves unrelated canonical factory fields while mapping graph edges into save fields", () => {
     const draft = connect(
@@ -248,6 +250,116 @@ describe("factory graph save input", () => {
     expect(saveInput.value.workstations?.[0]?.onContinue).toBeUndefined();
     expect(saveInput.value.workstations?.[0]?.onRejection).toBeUndefined();
     expect(saveInput.value.workstations?.[0]?.onFailure).toBeUndefined();
+  });
+
+  it("persists a newly added script worker into the save payload", () => {
+    const withScriptWorker = addFactoryGraphNode({
+      baseFactoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      node: {
+        argsText: " --watch \n--verbose\n",
+        command: "  node  ",
+        kind: "worker",
+        model: "",
+        modelProvider: "",
+        name: "poller-runner",
+        workerType: "SCRIPT_WORKER",
+      },
+    });
+    expect(withScriptWorker.ok).toBe(true);
+    if (!withScriptWorker.ok) {
+      return;
+    }
+
+    const saveInput = applyFactoryGraphPendingEdits({
+      baseFactoryDefinition,
+      draft: withScriptWorker.value,
+    });
+
+    expect(saveInput.ok).toBe(true);
+    if (!saveInput.ok) {
+      return;
+    }
+
+    expect(saveInput.value.workers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "writer",
+          type: "MODEL_WORKER",
+        }),
+        {
+          args: ["--watch", "--verbose"],
+          command: "node",
+          name: "poller-runner",
+          type: "SCRIPT_WORKER",
+        },
+      ]),
+    );
+  });
+
+  it("adds a script worker and poller workstation that save together", () => {
+    const withScriptWorker = addFactoryGraphNode({
+      baseFactoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      node: {
+        argsText: "",
+        command: "node",
+        kind: "worker",
+        model: "",
+        modelProvider: "",
+        name: "poller-runner",
+        workerType: "SCRIPT_WORKER",
+      },
+    });
+    expect(withScriptWorker.ok).toBe(true);
+    if (!withScriptWorker.ok) {
+      return;
+    }
+
+    const withPollerWorkstation = addFactoryGraphNode({
+      baseFactoryDefinition,
+      draft: withScriptWorker.value,
+      node: {
+        behavior: "POLLER",
+        body: "",
+        kind: "workstation",
+        name: "linear-poller",
+        workerName: "poller-runner",
+      },
+    });
+    expect(withPollerWorkstation.ok).toBe(true);
+    if (!withPollerWorkstation.ok) {
+      return;
+    }
+
+    const saveInput = applyFactoryGraphPendingEdits({
+      baseFactoryDefinition,
+      draft: withPollerWorkstation.value,
+    });
+
+    expect(saveInput.ok).toBe(true);
+    if (!saveInput.ok) {
+      return;
+    }
+
+    expect(saveInput.value.workers).toEqual(
+      expect.arrayContaining([
+        {
+          command: "node",
+          name: "poller-runner",
+          type: "SCRIPT_WORKER",
+        },
+      ]),
+    );
+    expect(saveInput.value.workstations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          behavior: "POLLER",
+          name: "linear-poller",
+          worker: "poller-runner",
+        }),
+      ]),
+    );
   });
 
   it("rejects invalid save input without mutating the base factory definition", () => {

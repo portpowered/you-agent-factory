@@ -15,10 +15,13 @@ describe("factory graph operations worker assignment", () => {
       baseFactoryDefinition,
       draft: createEmptyFactoryGraphDraft(),
       node: {
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "reviewer",
+        workerType: "MODEL_WORKER",
       },
     });
     expect(withReviewer.ok).toBe(true);
