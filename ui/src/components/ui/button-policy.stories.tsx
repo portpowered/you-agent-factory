@@ -41,7 +41,7 @@ const semanticExceptions = [
   {
     category: "Disclosure triggers",
     guidance:
-      "Keep wrapper ownership such as DisclosureButton where the trigger controls expanded content and needs disclosure-specific semantics.",
+      "Use ExpandablePanelTrigger for dashboard inline panel expand/collapse (aria-expanded, aria-controls, shared chevron). Reserve DisclosureButton for non-dashboard or custom shells; use Dialog for immersive full-screen expand, not the panel trigger.",
   },
   {
     category: "Selectable rows and cards",
