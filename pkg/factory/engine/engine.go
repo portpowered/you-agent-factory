@@ -39,12 +39,13 @@ type FactoryEngine struct {
 	recordDispatch    func(interfaces.FactoryDispatchRecord)
 	recordCompletion  func(interfaces.FactoryCompletionRecord)
 	recordResponse    func(int, interfaces.WorkResult, interfaces.CompletedDispatch)
-	dispatchHandler   func(interfaces.WorkDispatch)
-	dispatchHook      factory.DispatchResultHook
-	resultHandler     func() // called when a result event is processed (e.g. decrement in-flight counter)
-	mu                sync.Mutex
-	transformer       *token_transformer.Transformer
-	acceptingSubmits  bool
+	dispatchHandler        func(interfaces.WorkDispatch)
+	dispatchHook           factory.DispatchResultHook
+	resultHandler          func() // called when a result event is processed (e.g. decrement in-flight counter)
+	automaticTicksPaused   func() bool
+	mu                     sync.Mutex
+	transformer            *token_transformer.Transformer
+	acceptingSubmits       bool
 }
 
 // NewFactoryEngine creates a new engine for the given net and marking.
@@ -190,6 +191,13 @@ func workResultForCompletedDispatch(result interfaces.WorkResult, completed inte
 func (e *FactoryEngine) NotifyResult() {
 	select {
 	case e.resultCh <- struct{}{}:
+	default:
+	}
+}
+
+func (e *FactoryEngine) wakeForOperatorControl() {
+	select {
+	case e.submitSignal <- struct{}{}:
 	default:
 	}
 }
@@ -467,6 +475,11 @@ func (e *FactoryEngine) RunningDispatches() map[string][]interfaces.MarkingMutat
 // mutated is true if any mutations were applied (another tick may be needed).
 // shouldTerminate is true if the TerminationCheck subsystem signaled completion.
 func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
+	if e.automaticTicksPaused != nil && e.automaticTicksPaused() {
+		e.logger.Debug("engine: skipping automatic tick while factory is paused")
+		return false, false, nil
+	}
+
 	rtSnapshot, mutated, keepAlive, err := e.beginTick(ctx)
 	if err != nil {
 		return false, false, err
@@ -697,8 +710,31 @@ func (e *FactoryEngine) invokeSubmissionHooks(ctx context.Context) (int, bool, e
 			totalSubmissions += count
 			snapshot = e.runtimeState.Snapshot()
 		}
+		if len(result.MarkingMutations) > 0 {
+			if err := e.applyHookMarkingMutations(result.MarkingMutations); err != nil {
+				return 0, false, fmt.Errorf("submission hook %q marking mutations: %w", hookName, err)
+			}
+			snapshot = e.runtimeState.Snapshot()
+		}
 	}
 	return totalSubmissions, keepAlive, nil
+}
+
+func (e *FactoryEngine) applyHookMarkingMutations(mutations []interfaces.MarkingMutation) error {
+	for _, mutation := range mutations {
+		if mutation.Type != interfaces.MutationMove {
+			continue
+		}
+		token, ok := e.runtimeState.Marking.Tokens[mutation.TokenID]
+		if !ok || token == nil {
+			continue
+		}
+		fromState := stateValueForPlace(e.state, mutation.FromPlace)
+		if leavingFailedPlace(e.state, token.Color.WorkTypeID, fromState) {
+			interfaces.ClearGuardBlockingFields(&token.History)
+		}
+	}
+	return applyMutations(e.runtimeState.Marking, e.state.Places, mutations)
 }
 
 func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []interfaces.GeneratedSubmissionBatch, defaultSource string) (int, error) {

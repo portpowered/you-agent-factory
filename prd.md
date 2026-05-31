@@ -1,237 +1,324 @@
-# PRD: UI Session Factory Client
+# PRD: Manual Work Recovery (`you work move`)
 
 ---
 author: Codex
 last modified: 2026-05-30
 status: draft
+work-item: batch-request-fcb63742c470157a3fdbacb4d83d6dd6-prd-work-manual-recovery
 ---
-
-## Introduction
-
-Dashboard factory editing, saving, and PNG import today use overlapping API surfaces: `current-factory-definition` (session GET/PUT without save modes), `named-factory` (`createFactory` → `POST /factories`), and `factory-definition` (normalization only). Session-scoped import already PUTs to `/factory-sessions/{session_id}/factory` for replace-in-place, but create/activate semantics still depend on the legacy POST path in some flows.
-
-Backend [session factory save modes](../prd-session-factory-save-modes.md) (S1) unifies submission behind one session PUT with `{ mode, factory }` and removes `POST /factories`. This PRD delivers the **UI transport and operator flows** that match that contract: one GET/PUT client, editor saves that only replace the current factory, and an import confirm dialog that chooses replace-current vs create-new-named.
-
-**Intent:** Operators and maintainers get predictable, session-scoped factory I/O with no duplicate HTTP paths; implementers get one module to own transport, error mapping, and save-mode selection.
 
 ## Context
 
 ### Customer ask
 
-One GET/PUT session factory client with `mode` + `factory`; import confirm dialog; remove `POST /factories` from dashboard paths. Complete backend S1 (`prd-session-factory-save-modes`) before UI implementation.
+Operators need a **session-scoped control plane** to relocate an existing work item to
+another authored marking state after failures, provider errors, or cascading dependency
+failure — without deleting tokens. Deliver `you work move <work-id> <state-name>`,
+matching HTTP API, canonical `WORK_STATE_CHANGE` events, engine marking updates, CLI,
+dashboard replay projection, and record/replay persistence.
 
 ### Problem
 
-- Factory definition writes are split across modules with different body shapes and error types.
-- Import cannot offer “create new named factory” without `POST /factories`.
-- Save-mode semantics (`REPLACE_CURRENT` vs `UPSERT_NAMED_AND_ACTIVATE`) are not represented in the UI client, so the dashboard cannot align with the unified backend contract.
-- Tests and Storybook mocks may still assert `POST /factories`, hiding regressions.
+Work items can land in bad marking positions (`FAILED`, blocked dependents) when
+`CascadingFailureSubsystem` or dispatch outcomes move tokens on marking only. Today
+work advances only through submit → dispatch → transition paths. Dependents cascaded
+into `FAILED` cannot progress until upstream work is corrected, but there is no
+operator ingress to move an existing item to another authored state. Marking can show
+the truth while `/events`, replay artifacts, and the dashboard stay stale.
 
 ### Solution
 
-Introduce a dedicated session factory API client, migrate existing get/save call sites through thin adapters, wire import confirm UX to the two save modes, delete `createFactory`, and centralize error mapping—while keeping canonical shape normalization in `factory-definition`.
+Add **manual work migration**: validate target state name, reject in-flight dispatches,
+apply `MutationMove` on live marking, emit `WORK_STATE_CHANGE` with `source: api` |
+`cli`, fan out on SSE, update backend and UI projections, and persist in replay.
+Operator moves are **allowed while the factory is paused**; automatic subsystem ticks
+must not advance marking while paused. Leaving `FAILED` **retains** failure history and
+**clears** guard-blocking fields via a shared helper (also used by
+[`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md)).
+
+| Topic | Decision |
+| --- | --- |
+| Event type | `WORK_STATE_CHANGE` (shared with cascade PRD; distinguish `source`) |
+| Idempotent replay | HTTP **409 Conflict** when same `requestId` repeats |
+| Target | Specific **state name** (e.g. `in-progress`), not state type alone |
+| Delete | **No** — move only |
+| In-flight dispatch | **Reject** move when work is in `ActiveDispatches` |
+| Dependents | **Manual** — operator moves each item; no auto-unfail |
+| Scope | Full vertical slice (contracts, engine, events, API, CLI, UI, replay, tests) |
+| Allowed targets | Any authored state for the work item's work type |
+| Session | Session-aware routes and `--session` on CLI |
+| Paused factory | Operator move **allowed**; automatic ticks **must not** mutate marking |
+
+## Introduction
+
+This PRD implements operator-driven work recovery end-to-end. Automatic cascade moves
+remain in [`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md)
+(same event type, `source: cascading-failure`). Coordinate **contract US-001** once
+across both PRDs.
+
+Maintainer checklist (update after implementation):
+[`docs/internal/development/work-session-runtime-feature-guide.md`](../../docs/internal/development/work-session-runtime-feature-guide.md).
 
 ## Project-level acceptance criteria
 
-- [ ] All dashboard factory definition writes use `GET` / `PUT` on `/factory-sessions/{session_id}/factory` only (no `POST /factories`).
-- [ ] PUT bodies use `{ mode?: "REPLACE_CURRENT" | "UPSERT_NAMED_AND_ACTIVATE", factory: Factory }` with `version` inside `factory` when required by mode.
-- [ ] Factory editor Save replaces the current factory in the active tab (`REPLACE_CURRENT` or omitted mode); no editor path uses `UPSERT_NAMED_AND_ACTIVATE`.
-- [ ] Import confirm dialog on every session tab offers **Replace current factory** (default) and **Create new named factory**, with correct mode, name, and version rules per choice.
-- [ ] `selectedSessionID` from the dashboard session store reaches save, import, and export-equivalent factory I/O for the active tab.
-- [ ] Canonical factory normalization remains in `factory-definition`; session transport does not reshape topology.
-- [ ] Quality gate: UI typecheck, lint, and affected unit/integration tests pass.
+- [ ] **PA-1:** `POST /work/{id}/move` and `POST /factory-sessions/{session_id}/work/{id}/move` accept `stateName` and move work to that authored state; response reflects the new position (same work shape as `GET /work/{id}`).
+- [ ] **PA-2:** `you work move <work-id> <state-name>` performs the same operation with `--session`, `--json`, and human summary output (work id, previous state, new state, session).
+- [ ] **PA-3:** Move is rejected with a stable client-visible error when the work item is consumed by an entry in `ActiveDispatches`.
+- [ ] **PA-4:** Each successful operator move appends exactly one `WORK_STATE_CHANGE` (`source: api` | `cli`) to the session event stream before SSE fanout and replay recording.
+- [ ] **PA-5:** Repeating the same operator `requestId` returns **409 Conflict** without a second marking mutation.
+- [ ] **PA-6:** Operator move succeeds while factory lifecycle is `PAUSED`; with factory paused, no automatic cascade or new dispatch advances marking until resumed.
+- [ ] **PA-7:** Dashboard/timeline replay at a tick after a manual move shows the work token in the target place (matches `you work show` / API marking).
+- [ ] **PA-8 (quality gate):** Typecheck, lint, and `make verify-pr` pass for the changed surfaces.
 
 ## Goals
 
-- Single client for session factory GET and PUT with explicit save `mode` and `factory` payload.
-- Editor save uses `REPLACE_CURRENT` only (or omitted default mode).
-- Import confirm dialog: replace current vs create new named; suffixed name (`name-2`, `name-3`, …) on conflict for create path.
-- Remove `createFactory` and all dashboard `POST /factories` usage.
-- Keep `factory-definition` as pure normalization; map API errors in one place for save and import.
-
-## User Stories
-
-### ui-session-factory-client-001: Session factory transport client
-
-**Description:** As a frontend maintainer, I want one module that performs session factory GET/PUT against the regenerated OpenAPI contract so all features share one HTTP shape.
-
-**Acceptance Criteria:**
-
-- [ ] After S1 lands, regenerate `ui/src/api/generated/openapi.ts` so PUT accepts `mode` and `factory` per backend contract.
-- [ ] New module under `ui/src/api/session-factory/` exports `getSessionFactory(sessionID)` and `saveSessionFactory({ sessionID, mode?, factory })`.
-- [ ] PUT request body is `{ mode?: "REPLACE_CURRENT" | "UPSERT_NAMED_AND_ACTIVATE", factory: Factory }`; `factory.version` is set on the wire when callers supply it.
-- [ ] GET and PUT target `currentFactorySessionPath(sessionID)` from `session-routing.ts` and use shared `transport.ts` helpers.
-- [ ] Unit tests assert HTTP method, path, and JSON body for default (`~default`) and a non-default session ID for GET and for PUT with each save mode.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-### ui-session-factory-client-002: Current factory document delegates to session client
-
-**Description:** As a feature developer, I want existing `getCurrentFactoryDocument` / `saveCurrentFactoryDocument` to call the session factory client so hooks do not duplicate fetch logic.
-
-**Acceptance Criteria:**
-
-- [ ] `getCurrentFactoryDocument` and `saveCurrentFactoryDocument` delegate to `getSessionFactory` / `saveSessionFactory` (or remain thin wrappers with identical observable behavior).
-- [ ] `SaveCurrentFactoryInput.baseVersion` continues to map to `factory.version` on the PUT body only; callers do not pass a parallel top-level version field.
-- [ ] React Query keys and hook signatures in `useCurrentFactoryDefinition` / `useSaveCurrentFactory` are unchanged unless a breaking change is documented in the PR.
-- [ ] Existing unit tests for current-factory-definition still pass or are updated to mock the session client without changing operator-visible behavior.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-### ui-session-factory-client-003: Editor save always replaces current factory
-
-**Description:** As a factory editor, I want Save to update the factory I am editing in the active session without switching named factories or save modes.
-
-**Acceptance Criteria:**
-
-- [ ] `useSaveCurrentFactory` (and any direct `saveCurrentFactoryDocument` call from editor paths) sends `mode: "REPLACE_CURRENT"` or omits `mode`.
-- [ ] No graph editor, activity card, worker, or workstation save path sends `UPSERT_NAMED_AND_ACTIVATE`.
-- [ ] Stale version (`STALE_FACTORY_VERSION`) and not-idle (`FACTORY_NOT_IDLE`) errors still surface in the same UI states as before migration.
-- [ ] Save on a non-default session tab PUTs to that session’s factory endpoint when `selectedSessionID` is set.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-- [ ] Verify in browser using dev-browser skill: edit and save on default and second session tabs; confirm network PUT uses session path and replace mode only.
-
-### ui-session-factory-client-004: Import confirm dialog with replace vs create choice
-
-**Description:** As a dashboard operator, I want to choose on import confirm whether to replace the current factory or create a new named factory, with accessible defaults and loading/error states.
-
-**Acceptance Criteria:**
-
-- [ ] Import preview confirm dialog appears on all session tabs and defaults to **Replace current factory**.
-- [ ] Operator can select **Create new named factory** before confirming; choice is keyboard-accessible and announced to assistive tech (radio group or equivalent).
-- [ ] Dialog shows the resolved factory name for the create path once derived (including numeric suffix when applicable).
-- [ ] Confirm button shows submitting state during activation; errors render in the existing error panel pattern.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-- [ ] Verify in browser using dev-browser skill: open import preview, switch choices, confirm disabled/submitting behavior matches selection.
-
-### ui-session-factory-client-005: Import activation uses session PUT save modes
-
-**Description:** As a dashboard operator, I want import confirm to persist via the correct save mode so replace keeps my current name and create adds or upserts a new named factory in this session.
-
-**Acceptance Criteria:**
-
-- [ ] **Replace current:** GET current factory for `sessionID` → set imported payload `factory.name` to current session name (ignore PNG embedded name) → PUT `REPLACE_CURRENT` with `factory.version` from GET.
-- [ ] **Create new named:** derive writable `factory.name` from PNG metadata → if name exists under session, allocate first free suffixed name (`base`, `base-2`, `base-3`, …) using client-side factory name list when available, otherwise documented probe strategy → PUT `UPSERT_NAMED_AND_ACTIVATE`; omit `factory.version` when creating a new name, include version when upserting an existing name the client pre-read.
-- [ ] `useFactoryImportActivation` uses session factory client only; no `POST /factories`.
-- [ ] `App.import.test.tsx` and `factory-import-second-session.integration.test.mjs` assert correct PUT mode and body per dialog choice and session.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-- [ ] Verify in browser using dev-browser skill: replace on default tab; create-new-named on second tab; no `POST /factories` in network log.
-
-### ui-session-factory-client-006: Remove legacy named-factory create path
-
-**Description:** As a maintainer, I want dead `POST /factories` client surface removed so the dashboard cannot regress to global create.
-
-**Acceptance Criteria:**
-
-- [ ] `createFactory` is removed from `ui/src/api/named-factory/api.ts` (or deleted module after call-site migration).
-- [ ] No remaining dashboard import or save code references `POST /factories`.
-- [ ] `openapi.named-factory.test.ts` (or successor contract tests) expect session PUT only for former create flows.
-- [ ] Storybook `fetchMocks` for current-factory and import stories use session factory paths and modes.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-### ui-session-factory-client-007: Unified session factory error mapping
-
-**Description:** As a dashboard operator, I want consistent, actionable error messages in save and import dialogs when the session factory API rejects a request.
-
-**Acceptance Criteria:**
-
-- [ ] Session factory client maps API codes (`STALE_FACTORY_VERSION`, `FACTORY_NOT_IDLE`, `INVALID_FACTORY`, `INVALID_FACTORY_NAME`, etc.) to a single error type consumed by save and import features (e.g. `SessionFactoryAPIError`), or thin adapters preserve existing `CurrentFactoryDefinitionError` / `NamedFactoryAPIError` shapes without duplicate switch logic in hooks.
-- [ ] Import preview shows stale-version guidance when the API returns `STALE_FACTORY_VERSION` on replace or upsert paths.
-- [ ] Network and 5xx failures show the same recoverable copy patterns as today.
-- [ ] Unit tests cover at least stale, not-idle, and invalid-factory mappings from mocked HTTP responses.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-## Functional Requirements
-
-- FR-1: All dashboard factory definition writes use `PUT /factory-sessions/{session_id}/factory` only.
-- FR-2: Request body includes optional `mode` (default `REPLACE_CURRENT`) and `factory` conforming to OpenAPI `Factory`.
-- FR-3: `selectedSessionID` from `dashboardSessionStore` must reach save and import activation (same threading as export).
-- FR-4: Editor saves use `REPLACE_CURRENT` only; `factory.name` must match session current name from last GET.
-- FR-5: Import replace path preserves session current name and requires version from GET.
-- FR-6: Import create path uses `UPSERT_NAMED_AND_ACTIVATE` with PNG-derived name and client-side suffix allocation on conflict.
-- FR-7: Normalization of canonical factory shape stays in `factory-definition/api.ts`.
-- FR-8: Generated OpenAPI types are regenerated when S1 changes the save request schema.
-
-## Non-Goals
-
-- PNG parsing, thumbnail preview, or import drag-drop UX redesign (only confirm-dialog actions and activation).
-- CLI or backend handler changes (covered by S1).
-- New HTTP endpoints beyond S1.
-- Renaming all hooks under `features/current-factory-definition` (optional follow-up in U3/U7 PRDs).
-- `SessionScope` context extraction (separate `prd-ui-session-scope-context`).
+- Operators can move one work item to any valid authored state name for its work type.
+- Move is rejected with a clear error when the work item is in an active dispatch.
+- Move emits `WORK_STATE_CHANGE`, updates marking, streams on `/events`, and is recorded in replay artifacts.
+- Dashboard/timeline projections show the work item at the new place after the event.
+- CLI follows existing `you work` / `you submit` patterns (`--session`, `--json`, diagnostics).
+- Operator move succeeds while factory is **paused**; automatic engine work remains frozen per pause policy.
 
 ## High-level technical design
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  Features: editor save, import, selection saves             │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-         ┌──────────────────┼──────────────────┐
-         ▼                  ▼                  ▼
-  useSaveCurrentFactory   import activation   (future U3 hook)
-         │                  │
-         ▼                  ▼
-  current-factory-definition (thin adapters, stable hook API)
-         │
-         ▼
-  session-factory/client  ──GET/PUT──►  /factory-sessions/{id}/factory
-         │                                    { mode, factory }
-         ▼
-  factory-definition (normalizeFactoryDefinition only)
+```mermaid
+flowchart LR
+  subgraph ingress [Operator ingress]
+    CLI["you work move"]
+    API["POST .../work/{id}/move"]
+  end
+  subgraph control [Control plane]
+    FS[FactoryService]
+    MV[MoveWork validation + apply]
+  end
+  subgraph engine [Engine marking]
+    MUT[MutationMove]
+  end
+  subgraph observe [Observation]
+    HIST[RecordWorkStateChange]
+    SSE["/events SSE"]
+    REC[Replay recorder]
+    GOPROJ[world_state.go]
+    UIPROJ[replayWorldState.ts]
+  end
+
+  CLI --> API --> FS --> MV --> MUT
+  MV --> HIST --> SSE
+  HIST --> REC
+  HIST --> GOPROJ
+  HIST --> UIPROJ
 ```
 
-**Layers:**
+**Control-plane placement:** Operator move is a synchronous control ingress (dedicated
+hook or subsystem entry), not ad hoc mutation from handler goroutines and not inside
+`TransitionerSubsystem`. **No fake** `DISPATCH_REQUEST` / `DISPATCH_RESPONSE` for moves.
 
-| Layer | Responsibility |
-|-------|----------------|
-| `session-factory` | HTTP transport, save mode on PUT, response parse, error code mapping |
-| `current-factory-definition` | `CurrentFactoryDocument` type, `baseVersion` adapter, React Query hooks |
-| `factory-definition` | Canonical topology normalization (no I/O) |
-| Import feature | Dialog UX + mode/name/version orchestration before calling save |
+**Failure exit policy:** When leaving a `FAILED` place, retain `FailureRecords` and
+customer-visible failure history; clear guard-blocking fields via shared helper consumed
+by cascade PRD when moving out of failed.
 
-**Prerequisite:** Do not merge UI transport typed against production until S1 is merged and `api/openapi.yaml` + `ui` generated client include save `mode`. Development may use a short-lived branch that tracks S1 OpenAPI.
+| Seam | Owner |
+| --- | --- |
+| OpenAPI / contracts | `api/components/schemas/events/`, `make verify-build-contracts` |
+| Engine apply | `pkg/factory/engine/`, control hook |
+| Events | `pkg/factory/events/event_history.go` |
+| API | `pkg/api/handlers.go`, `pkg/service/` |
+| CLI | `pkg/cli/work/` |
+| Backend projection | `pkg/factory/projections/world_state.go` |
+| UI projection | `ui/src/features/timeline/state/timeline/replayWorldState.ts` |
+| Pause policy | `pkg/factory/runtime/factory.go`, engine tick loop |
 
-**Suffix allocation:** Prefer listing named factories under the session when an HTTP list exists; otherwise iterate suffixed names with PUT validation or documented client-side name set from session metadata—document chosen approach in story 005 implementation notes.
+## User Stories
+
+### US-001: OpenAPI `WORK_STATE_CHANGE` and move routes
+
+**Description:** As a maintainer, I need a canonical event type and move API contract so operator and cascade paths share one vocabulary.
+
+**Acceptance Criteria:**
+
+- [ ] Add `WORK_STATE_CHANGE` to `FactoryEventType` with payload: `workId`, `workTypeName`, `fromState`, `toState`, `fromPlaceId`, `toPlaceId`, `source` (`api` | `cli` | `cascading-failure`), optional `triggerWorkId`, optional `reason`.
+- [ ] Add request/response schemas for `POST /work/{id}/move` and `POST /factory-sessions/{session_id}/work/{id}/move` (`stateName` required, optional `requestId`).
+- [ ] `FactoryEvent.context` carries `workIds`, `requestId` (idempotency for operator moves), tick/sequence as today.
+- [ ] Contract tests in `pkg/api/contracttests/` cover enum, payload refs, and a sample operator event with `source: cli`.
+- [ ] `make verify-build-contracts` passes.
+- [ ] Coordinate enum/payload merge with [`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md) US-001 so only one contract lands.
+
+### US-002: Engine control path and marking migration
+
+**Description:** As the runtime, I must apply a validated place change on live marking when an operator requests a move.
+
+**Acceptance Criteria:**
+
+- [ ] Control ingress validates: work exists, target state exists for work type, target place resolves via topology, work is **not** in `ActiveDispatches`.
+- [ ] Successful move applies `MutationMove`; leaving `FAILED` retains `FailureRecords` and clears guard-blocking fields via shared helper.
+- [ ] Move does **not** emit fake dispatch events.
+- [ ] Rejected moves return stable errors: not found, invalid state, in-flight dispatch, engine terminated.
+- [ ] Operator move **allowed** when factory lifecycle is `PAUSED`.
+- [ ] Unit tests prove accept/reject paths and paused-factory accept for operator move.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-003: Event history and live fanout
+
+**Description:** As a dashboard consumer, I need move operations recorded like other canonical runtime changes.
+
+**Acceptance Criteria:**
+
+- [ ] `RecordWorkStateChange` in `pkg/factory/events/event_history.go` invoked on successful operator move (`source: api` | `cli`).
+- [ ] `FactoryEventHistory` subscribers receive the event in order on `/events` and session-scoped SSE.
+- [ ] Tests assert event shape and UTC `eventTime` consistent with `RecordWorkRequest`.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-004: HTTP API handlers
+
+**Description:** As an integrator, I can move work via the public API on the default or selected session.
+
+**Acceptance Criteria:**
+
+- [ ] Handlers implement both move routes; route through `FactoryService` / runtime factory interface.
+- [ ] `404` when work or session missing; `400` for invalid state or in-flight dispatch; **`409 Conflict`** when the same `requestId` was already applied.
+- [ ] Response returns updated `Work` (aligned with `GET /work/{id}`).
+- [ ] Handler tests cover default session, named session, **409** idempotency, and move **while paused**.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-005: CLI `you work move`
+
+**Description:** As an operator, I can move work from the CLI without using the dashboard.
+
+**Acceptance Criteria:**
+
+- [ ] `you work move <work-id> <state-name>` with `--session`, global `--json`, `clidiag`, `clihttp`, `sessionpath`.
+- [ ] Human output includes work id, previous state, new state, session id.
+- [ ] CLI tests: help, session path, httptest success, in-flight error, **409** on duplicate client request id when exposed.
+- [ ] Functional smoke: `tests/functional/smoke/cli_work_move_smoke_test.go` passes.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-006: Backend world projection
+
+**Description:** As a service consumer, factory world state must reflect manual moves from events.
+
+**Acceptance Criteria:**
+
+- [ ] `pkg/factory/projections/world_state.go` handles `WORK_STATE_CHANGE`: place occupancy, `WorkItemsByID`, failed/terminal maps.
+- [ ] Leaving FAILED updates occupancy maps without dropping retained failure history from stored work facts.
+- [ ] Projection tests: FAILED → in-progress and INITIAL → arbitrary authored state reconstruct expected occupancy.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-007: UI event replay projection
+
+**Description:** As a dashboard user, I see work at the new place after an operator move when scrubbing the timeline.
+
+**Acceptance Criteria:**
+
+- [ ] `replayWorldState.ts` `applyWorkStateChange`: `removeWorkToken`, `addToken`, update `workItemsByID`; adjust `failedWorkItemsByID` when leaving/entering FAILED without erasing historical failure details shown elsewhere.
+- [ ] `FACTORY_EVENT_TYPES` updated after codegen.
+- [ ] Timeline/dashboard tests prove work position at a later tick after a manual move event.
+- [ ] Verify in browser using dev-browser skill: failed work moved to in-progress appears in the target place on the graph/timeline.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-008: Record and replay
+
+**Description:** As a maintainer, recorded runs preserve manual recovery for postmortems.
+
+**Acceptance Criteria:**
+
+- [ ] `replay.Recorder` persists `WORK_STATE_CHANGE` events for operator moves.
+- [ ] Replay reconstructs marking positions including manual moves (same places as live session after move).
+- [ ] Replay test in `pkg/service/replaytests/` or `pkg/factory/runtime/` proves artifact round-trip.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-009: Pause / tick audit (fix if needed)
+
+**Description:** As an operator, pausing the factory freezes automatic subsystem ticks while manual move still works.
+
+**Acceptance Criteria:**
+
+- [ ] Document which subsystems run while `PAUSED` in the work-session guide (dispatcher, cascade, cron, etc.).
+- [ ] Engine tick loop / subsystems do **not** apply marking mutations or scheduling while `PAUSED` (fix if currently violated).
+- [ ] `POST …/move` while paused succeeds without requiring a scheduling tick.
+- [ ] Test: paused factory → no new cascade/dispatch marking changes; operator move still updates marking and emits `WORK_STATE_CHANGE`.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-010: Recovery scenario functional test
+
+**Description:** As CI, we prove failure → cascade (sibling PRD) → manual move → progress.
+
+**Acceptance Criteria:**
+
+- [ ] Fixture: parent fails, child cascaded to FAILED; operator moves parent then child via API; child can progress when factory runs after recovery moves.
+- [ ] In-flight rejection covered in unit/API tests (not duplicated only in this story).
+- [ ] `make verify-pr` green for the recovery lane.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### US-011: Maintainer guide and AGENTS.md (after implementation)
+
+**Description:** As a future contributor, docs reflect shipped manual recovery behavior.
+
+**Acceptance Criteria:**
+
+- [ ] Update [`work-session-runtime-feature-guide.md`](../../docs/internal/development/work-session-runtime-feature-guide.md) for `WORK_STATE_CHANGE`, pause policy, failure history vs guards.
+- [ ] Cross-link [`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md).
+- [ ] Add standards bullet in root [`AGENTS.md`](../../AGENTS.md) linking the guide **only after US-001–US-010 are complete**.
+- [ ] Typecheck passes
+
+## Functional Requirements
+
+- FR-1: Move targets an authored **state name**; server resolves place ID from topology.
+- FR-2: Session-scoped and default `POST …/work/{id}/move` routes.
+- FR-3: CLI `you work move <work-id> <state-name>` mirrors HTTP.
+- FR-4: Reject move when work is in an active dispatch.
+- FR-5: Each successful operator move appends one `WORK_STATE_CHANGE` (`source: api` | `cli`) before SSE and replay.
+- FR-6: Duplicate `requestId` returns **409 Conflict** without a second mutation.
+- FR-7: Operator move **allowed** while factory is **PAUSED**.
+- FR-8: Automatic subsystem ticks (dispatch, cascade, transition) **must not** advance marking while **PAUSED** — fix if violated (US-009).
+- FR-9: Leaving FAILED: **keep** failure history; **clear** guard-blocking fields (shared helper with cascade PRD).
+- FR-10: Dependents are not auto-moved when parent recovers.
+- FR-11: No delete API/CLI.
+- FR-12: UI and backend projections both consume `WORK_STATE_CHANGE`; no marking-only operator moves.
+
+## Non-Goals
+
+- `you work delete` or token removal.
+- Move by state **type** only when ambiguous.
+- `--force` through in-flight dispatches.
+- Auto-unfail dependents.
+- Batch move.
+- Dashboard move button (follow-up).
+- Cascade event emission (see cascade PRD).
+- Authorization beyond local-trust model.
 
 ## Supporting technical and UX considerations
 
-- **Loading / empty / error / success:** Import dialog must show submitting on confirm, preserve preview while idle, and surface API errors without dismissing preview until operator cancels.
-- **Accessibility:** Replace vs create controls use a single selectable group; confirm/cancel remain in dialog footer with focus trap.
-- **Responsive:** Dialog layout unchanged from current import preview; new controls fit existing two-column preview grid.
-- **Session isolation:** Non-default tab flows must be covered by integration test already in repo; extend for create-new-named mode.
-- **Coordination:** [`prd-ui-api-module-cleanup.md`](../prd-ui-api-module-cleanup.md) may delete `named-factory` after this client lands; [`prd-ui-factory-document-save-hook.md`](../prd-ui-factory-document-save-hook.md) consumes the same transport later.
+- **Idempotency:** Clients may supply `requestId`; server stores applied operator move ids per session and returns 409 on replay.
+- **CLI errors:** Map HTTP status to exit codes; surface in-flight and invalid-state messages on stderr per CLI standards.
+- **UI:** No new move button in this PRD; timeline/graph must reflect events from API/CLI moves only.
+- **Codegen:** Run `make verify-build-contracts` and commit `pkg/api/generated/` and `ui/src/api/generated/` when contracts change.
+
+## Success Metrics
+
+- Operator recovers cascaded-failed work via one CLI command; dashboard matches `you work show` at the selected tick.
+- Duplicate `requestId` returns 409 without double move.
+- Paused factory: no automatic cascade/dispatch marking changes; manual move still works.
 
 ## Dependencies
 
-| Upstream | Relationship |
-|----------|----------------|
-| `prd-session-factory-save-modes` (S1) | **Hard block:** OpenAPI `mode` + `factory` body and removal of `POST /factories` |
+| Upstream | Notes |
+| --- | --- |
+| [`prd-cascading-failure-events.md`](../prd-cascading-failure-events.md) | Shares `WORK_STATE_CHANGE`; coordinate US-001 |
+| [`prd-cli-work-inspection.md`](../prd-cli-work-inspection.md) | Verify loop after move |
+| [`work-session-runtime-feature-guide.md`](../../docs/internal/development/work-session-runtime-feature-guide.md) | Implementer checklist |
 
-| Downstream | Relationship |
-|------------|----------------|
-| `prd-ui-factory-document-save-hook` | Consumes session client via current-factory adapters |
-| `prd-ui-api-module-cleanup` | Removes `named-factory` after migration |
+## Related Documents
 
-## Success metrics
-
-- Zero `POST /factories` requests in UI test network assertions for save and import flows.
-- One session-factory module imported by both save and import activation paths.
-- Import on non-default session tab integration test green for both replace and create modes.
-- Operators can complete replace import in one confirm with default selection unchanged from today’s mental model.
-
-## Open Questions
-
-None blocking—suffix allocation fallback is an implementation detail documented in story 005 if no list endpoint exists at S1 merge time.
-
-## Related documents
-
-- [`dependence-graph-for-ui-prds.md`](../dependence-graph-for-ui-prds.md)
-- [`prd-session-factory-save-modes.md`](../prd-session-factory-save-modes.md)
-- [`prd-ui-api-module-cleanup.md`](../prd-ui-api-module-cleanup.md)
-- [`prd-ui-factory-document-save-hook.md`](../prd-ui-factory-document-save-hook.md)
+- [`tasks/prd-cascading-failure-events.md`](../prd-cascading-failure-events.md)
+- [`docs/internal/development/work-session-runtime-feature-guide.md`](../../docs/internal/development/work-session-runtime-feature-guide.md)
+- [`docs/internal/development/record-replay.md`](../../docs/internal/development/record-replay.md)
+- [`tasks/prd-cli-work-inspection.md`](../prd-cli-work-inspection.md)

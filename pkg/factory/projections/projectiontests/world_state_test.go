@@ -660,3 +660,104 @@ func TestReconstructFactoryWorldState_FailedTerminalWorkRetainsFailureDetails(t 
 		t.Fatalf("completion result = %#v, want failure reason retained", failedState.CompletedDispatches[0].Result)
 	}
 }
+
+func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress(t *testing.T) {
+	t0 := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+			ID:          "work-recover",
+			WorkTypeID:  "task",
+			DisplayName: "Recover me",
+			TraceID:     "trace-recover",
+			PlaceID:     "task:init",
+		}),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-failed",
+			TransitionID: "t-review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "work-recover",
+				PlaceID:  "task:init",
+				WorkItem: &interfaces.FactoryWorkItem{ID: "work-recover", WorkTypeID: "task", TraceID: "trace-recover", PlaceID: "task:init"},
+			}},
+		}),
+		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
+			DispatchID:   "dispatch-failed",
+			TransitionID: "t-review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Result:       interfaces.WorkstationResult{Outcome: "FAILED", Error: "boom", FailureReason: "worker_error", FailureMessage: "boom"},
+			Outputs: []interfaces.WorkstationOutput{{
+				Type:     string(interfaces.MutationMove),
+				TokenID:  "work-recover",
+				ToPlace:  "task:failed",
+				WorkItem: &interfaces.FactoryWorkItem{ID: "work-recover", WorkTypeID: "task", TraceID: "trace-recover", PlaceID: "task:failed", State: "failed"},
+			}},
+			TraceData: &interfaces.FactoryTraceData{TraceID: "trace-recover", WorkIDs: []string{"work-recover"}},
+		}),
+		workStateChangeEvent(4, t0.Add(4*time.Second), "work-recover", "failed", "review", "task:failed", "task:review", factoryapi.WorkStateChangeSourceCLI),
+	}
+
+	failedState, err := ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState failed tick: %v", err)
+	}
+	if _, ok := failedState.FailedWorkItemsByID["work-recover"]; !ok {
+		t.Fatalf("work-recover should be failed before operator move")
+	}
+
+	recoveredState, err := ReconstructFactoryWorldState(events, 4)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState recovered tick: %v", err)
+	}
+	if _, ok := recoveredState.FailedWorkItemsByID["work-recover"]; ok {
+		t.Fatalf("work-recover should leave failed index after operator move")
+	}
+	if _, ok := recoveredState.ActiveWorkItemsByID["work-recover"]; !ok {
+		t.Fatalf("work-recover should be active after move to review")
+	}
+	if got := recoveredState.PlaceOccupancyByID["task:review"].WorkItemIDs; len(got) != 1 || got[0] != "work-recover" {
+		t.Fatalf("task:review occupancy = %#v, want work-recover", got)
+	}
+	if got := recoveredState.PlaceOccupancyByID["task:failed"].WorkItemIDs; len(got) != 0 {
+		t.Fatalf("task:failed occupancy = %#v, want empty after move", got)
+	}
+	if detail, ok := recoveredState.FailureDetailsByWorkID["work-recover"]; !ok || detail.FailureReason != "worker_error" {
+		t.Fatalf("failure details = %#v, want retained history after leaving FAILED", recoveredState.FailureDetailsByWorkID["work-recover"])
+	}
+	item := recoveredState.WorkItemsByID["work-recover"]
+	if item.PlaceID != "task:review" || item.State != "review" {
+		t.Fatalf("work item = %#v, want place task:review and state review", item)
+	}
+}
+
+func TestReconstructFactoryWorldState_WorkStateChangeMovesFromInitialToArbitraryState(t *testing.T) {
+	t0 := time.Date(2026, 5, 30, 13, 0, 0, 0, time.UTC)
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+			ID:          "work-bootstrap",
+			WorkTypeID:  "task",
+			DisplayName: "Bootstrap",
+			TraceID:     "trace-bootstrap",
+			PlaceID:     "task:init",
+			State:       "init",
+		}),
+		workStateChangeEvent(2, t0.Add(2*time.Second), "work-bootstrap", "init", "review", "task:init", "task:review", factoryapi.WorkStateChangeSourceAPI),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if got := state.PlaceOccupancyByID["task:review"].WorkItemIDs; len(got) != 1 || got[0] != "work-bootstrap" {
+		t.Fatalf("task:review occupancy = %#v, want work-bootstrap", got)
+	}
+	if got := state.PlaceOccupancyByID["task:init"].WorkItemIDs; len(got) != 0 {
+		t.Fatalf("task:init occupancy = %#v, want empty after move", got)
+	}
+	item := state.WorkItemsByID["work-bootstrap"]
+	if item.PlaceID != "task:review" || item.State != "review" {
+		t.Fatalf("work item = %#v, want place task:review and state review", item)
+	}
+}

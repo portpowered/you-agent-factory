@@ -39,9 +39,10 @@ type SessionAPI interface {
 	CloseFactorySession(ctx context.Context, sessionID string) error
 }
 
-// WorkAPI is the session-scoped work submission and runtime observability seam.
+// WorkAPI is the session-scoped work submission, operator move, and runtime observability seam.
 type WorkAPI interface {
 	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
+	MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error)
 	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 }

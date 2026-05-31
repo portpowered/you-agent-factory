@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,8 +55,14 @@ type factoryImpl struct {
 	mu           sync.RWMutex
 	// completeCh is closed when Run() returns (either by termination or error).
 	// WaitToComplete() returns this channel.
-	completeCh chan struct{}
-	usePool    bool
+	completeCh           chan struct{}
+	usePool              bool
+	operatorMoveRequests map[string]appliedOperatorMove
+}
+
+type appliedOperatorMove struct {
+	workID string
+	result interfaces.OperatorMoveResult
 }
 
 // Compile-time checks.
@@ -87,8 +94,10 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 	engineOpts := buildRuntimeEngineOptions(cfg, logger, sharedTransformer, resultBuffer, eventHistory)
 	usePool := !cfg.IsInlineDispatch()
 	pool, dispatchHook, engineOpts := configureRuntimeDispatch(cfg, logger, resultBuffer, usePool, engineOpts)
-	eng := engine.NewFactoryEngine(cfg.GetNet(), marking, subs, engineOpts...)
-	return newFactoryImpl(cfg, eng, pool, logger, resultBuffer, dispatchHook, eventHistory, usePool), nil
+	impl := newFactoryImpl(cfg, nil, pool, logger, resultBuffer, dispatchHook, eventHistory, usePool)
+	engineOpts = append(engineOpts, engine.WithAutomaticTicksPaused(impl.automaticTicksPaused))
+	impl.engine = engine.NewFactoryEngine(cfg.GetNet(), marking, subs, engineOpts...)
+	return impl, nil
 }
 
 func buildRuntimeScheduler(cfg *factory.FactoryConfig) scheduler.Scheduler {
@@ -223,18 +232,19 @@ func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.Typ
 
 func newFactoryImpl(cfg *factory.FactoryConfig, eng *engine.FactoryEngine, pool *workers.WorkerPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory *factoryevents.FactoryEventHistory, usePool bool) *factoryImpl {
 	return &factoryImpl{
-		engine:       eng,
-		pool:         pool,
-		cfg:          cfg,
-		topology:     cfg.GetNet(),
-		logger:       logger,
-		resultBuffer: resultBuffer,
-		dispatchHook: dispatchHook,
-		eventHistory: eventHistory,
-		state:        interfaces.FactoryStateIdle,
-		clock:        cfg.Clock,
-		completeCh:   make(chan struct{}),
-		usePool:      usePool,
+		engine:               eng,
+		pool:                 pool,
+		cfg:                  cfg,
+		topology:             cfg.GetNet(),
+		logger:               logger,
+		resultBuffer:         resultBuffer,
+		dispatchHook:         dispatchHook,
+		eventHistory:         eventHistory,
+		state:                interfaces.FactoryStateIdle,
+		clock:                cfg.Clock,
+		completeCh:           make(chan struct{}),
+		usePool:              usePool,
+		operatorMoveRequests: make(map[string]appliedOperatorMove),
 	}
 }
 
@@ -299,6 +309,67 @@ func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request interfaces.
 	return f.engine.SubmitWorkRequest(ctx, request)
 }
 
+// MoveWork validates and applies a synchronous operator relocation for one work item.
+func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID != "" {
+		f.mu.RLock()
+		if existing, ok := f.operatorMoveRequests[requestID]; ok {
+			f.mu.RUnlock()
+			if existing.workID != workID {
+				return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+			}
+			return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+		}
+		f.mu.RUnlock()
+	}
+
+	result, err := f.engine.MoveWork(ctx, workID, stateName)
+	if err != nil {
+		return result, err
+	}
+
+	if requestID != "" {
+		f.mu.Lock()
+		if f.operatorMoveRequests == nil {
+			f.operatorMoveRequests = make(map[string]appliedOperatorMove)
+		}
+		f.operatorMoveRequests[requestID] = appliedOperatorMove{
+			workID: workID,
+			result: result,
+		}
+		f.mu.Unlock()
+	}
+
+	if source != "" {
+		f.recordOperatorWorkStateChange(result, source, requestID, "", "")
+	}
+	return result, nil
+}
+
+func (f *factoryImpl) recordOperatorWorkStateChange(result interfaces.OperatorMoveResult, source interfaces.WorkStateChangeSource, requestID, triggerWorkID, reason string) {
+	workTypeName := result.WorkTypeID
+	if workType, ok := f.topology.WorkTypes[result.WorkTypeID]; ok && workType != nil {
+		if name := strings.TrimSpace(workType.Name); name != "" {
+			workTypeName = name
+		}
+	}
+	tick := f.engine.GetRuntimeStateSnapshot().TickCount
+	f.eventHistory.RecordWorkStateChange(tick, interfaces.WorkStateChangeRecord{
+		WorkID:        result.WorkID,
+		WorkTypeID:    result.WorkTypeID,
+		WorkTypeName:  workTypeName,
+		FromState:     result.FromState,
+		ToState:       result.ToState,
+		FromPlaceID:   result.FromPlaceID,
+		ToPlaceID:     result.ToPlaceID,
+		Source:        source,
+		RequestID:     requestID,
+		TriggerWorkID: triggerWorkID,
+		Reason:        reason,
+	}, f.clock.Now())
+}
+
 // SubscribeFactoryEvents returns canonical history followed by live events.
 func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context) (*interfaces.FactoryEventStream, error) {
 	stream := f.eventHistory.Subscribe(ctx)
@@ -313,6 +384,12 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 	f.mu.Unlock()
 	f.recordStateChange(previousState, interfaces.FactoryStatePaused, "pause requested")
 	return nil
+}
+
+func (f *factoryImpl) automaticTicksPaused() bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.state == interfaces.FactoryStatePaused
 }
 
 // GetEngineStateSnapshot returns the aggregate observability snapshot for

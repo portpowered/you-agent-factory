@@ -152,6 +152,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/work/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move work to another state
+         * @description Moves an existing work item to a named authored marking state in the default factory session. Rejects moves while the work item is consumed by an active dispatch.
+         */
+        post: operations["moveWork"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factory-sessions/{session_id}/work/{id}": {
         parameters: {
             query?: never;
@@ -166,6 +186,26 @@ export interface paths {
         get: operations["getWorkBySessionId"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/factory-sessions/{session_id}/work/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move work to another state for one session
+         * @description Moves an existing work item to a named authored marking state in the selected live factory session. Rejects moves while the work item is consumed by an active dispatch.
+         */
+        post: operations["moveWorkBySessionId"];
         delete?: never;
         options?: never;
         head?: never;
@@ -598,6 +638,13 @@ export interface components {
             traceId: string;
             works: components["schemas"]["UpsertWorkRequestSubmittedWork"][];
         };
+        /** @description Operator request to move one work item to another authored marking state. */
+        MoveWorkRequest: {
+            /** @description Authored marking state name to move the work item into. */
+            stateName: string;
+            /** @description Optional client idempotency key. Repeating the same requestId for an already-applied operator move returns 409 Conflict without a second mutation. */
+            requestId?: string;
+        };
         ListWorkResponse: {
             results: components["schemas"]["Work"][];
             paginationContext?: components["schemas"]["PaginationContext"];
@@ -804,7 +851,7 @@ export interface components {
              * @description Stable machine-readable error code.
              * @enum {string}
              */
-            code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "STALE_FACTORY_VERSION" | "NOT_FOUND" | "INTERNAL_ERROR";
+            code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "STALE_FACTORY_VERSION" | "MOVE_WORK_REQUEST_ALREADY_APPLIED" | "NOT_FOUND" | "INTERNAL_ERROR";
             /** @description Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields. */
             targets?: components["schemas"]["FactoryValidationTarget"][];
         };
@@ -1197,13 +1244,13 @@ export interface components {
             id: string;
             type: components["schemas"]["FactoryEventType"];
             context: components["schemas"]["FactoryEventContext"];
-            payload: components["schemas"]["RunRequestEventPayload"] | components["schemas"]["InitialStructureRequestEventPayload"] | components["schemas"]["FactoryChangeEventPayload"] | components["schemas"]["WorkRequestEventPayload"] | components["schemas"]["RelationshipChangeRequestEventPayload"] | components["schemas"]["DispatchRequestEventPayload"] | components["schemas"]["ModelRequestEventPayload"] | components["schemas"]["ModelResponseEventPayload"] | components["schemas"]["InferenceRequestEventPayload"] | components["schemas"]["InferenceResponseEventPayload"] | components["schemas"]["ScriptRequestEventPayload"] | components["schemas"]["ScriptResponseEventPayload"] | components["schemas"]["DispatchResponseEventPayload"] | components["schemas"]["FactoryStateResponseEventPayload"] | components["schemas"]["RunResponseEventPayload"];
+            payload: components["schemas"]["RunRequestEventPayload"] | components["schemas"]["InitialStructureRequestEventPayload"] | components["schemas"]["FactoryChangeEventPayload"] | components["schemas"]["WorkRequestEventPayload"] | components["schemas"]["RelationshipChangeRequestEventPayload"] | components["schemas"]["DispatchRequestEventPayload"] | components["schemas"]["ModelRequestEventPayload"] | components["schemas"]["ModelResponseEventPayload"] | components["schemas"]["InferenceRequestEventPayload"] | components["schemas"]["InferenceResponseEventPayload"] | components["schemas"]["ScriptRequestEventPayload"] | components["schemas"]["ScriptResponseEventPayload"] | components["schemas"]["DispatchResponseEventPayload"] | components["schemas"]["WorkStateChangeEventPayload"] | components["schemas"]["FactoryStateResponseEventPayload"] | components["schemas"]["RunResponseEventPayload"];
         };
         /**
          * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
          * @enum {string}
          */
-        FactoryEventType: "RUN_REQUEST" | "INITIAL_STRUCTURE_REQUEST" | "FACTORY_CHANGE" | "WORK_REQUEST" | "RELATIONSHIP_CHANGE_REQUEST" | "DISPATCH_REQUEST" | "MODEL_REQUEST" | "MODEL_RESPONSE" | "INFERENCE_REQUEST" | "INFERENCE_RESPONSE" | "SCRIPT_REQUEST" | "SCRIPT_RESPONSE" | "DISPATCH_RESPONSE" | "FACTORY_STATE_RESPONSE" | "RUN_RESPONSE";
+        FactoryEventType: "RUN_REQUEST" | "INITIAL_STRUCTURE_REQUEST" | "FACTORY_CHANGE" | "WORK_REQUEST" | "RELATIONSHIP_CHANGE_REQUEST" | "DISPATCH_REQUEST" | "MODEL_REQUEST" | "MODEL_RESPONSE" | "INFERENCE_REQUEST" | "INFERENCE_RESPONSE" | "SCRIPT_REQUEST" | "SCRIPT_RESPONSE" | "DISPATCH_RESPONSE" | "WORK_STATE_CHANGE" | "FACTORY_STATE_RESPONSE" | "RUN_RESPONSE";
         FactoryEventContext: {
             /** @description Append-only event-log sequence number. */
             sequence: number;
@@ -1229,6 +1276,11 @@ export interface components {
             /** @description Human-readable source such as api, filewatcher, replay, cron, or worker. */
             source?: string;
         };
+        /**
+         * @description Origin of a WORK_STATE_CHANGE event.
+         * @enum {string}
+         */
+        WorkStateChangeSource: "api" | "cli" | "cascading-failure";
         /** @description Ordered reference to one consumed work item on a dispatch boundary. Dispatch-request payloads keep only the consumed work identity here; work type, trace, display, and other work facts must be derived from prior WORK_REQUEST events plus FactoryEvent.context. */
         DispatchConsumedWorkRef: {
             /** @description Canonical work identity for one consumed dispatch input. */
@@ -1455,6 +1507,24 @@ export interface components {
             outputWork?: components["schemas"]["Work"][];
             outputResources?: components["schemas"]["Resource"][];
             metadata?: components["schemas"]["StringMap"];
+        };
+        /** @description Canonical work marking position change. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
+        WorkStateChangeEventPayload: {
+            workId: string;
+            workTypeName: string;
+            /** @description Authored state name before the move. */
+            fromState: string;
+            /** @description Authored state name after the move. */
+            toState: string;
+            /** @description Marking place identifier before the move. */
+            fromPlaceId: string;
+            /** @description Marking place identifier after the move. */
+            toPlaceId: string;
+            source: components["schemas"]["WorkStateChangeSource"];
+            /** @description Optional work identifier that triggered a cascade move. */
+            triggerWorkId?: string;
+            /** @description Optional human-readable reason for the move. */
+            reason?: string;
         };
         FactoryStateResponseEventPayload: {
             previousState?: components["schemas"]["FactoryState"];
@@ -2521,6 +2591,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Operator move request was already applied for the supplied requestId. */
+        MoveWorkConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Server failed while reading or building runtime state. */
         InternalError: {
             headers: {
@@ -2837,6 +2916,37 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    moveWork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Work or token identifier, depending on route. */
+                id: components["parameters"]["WorkOrTokenID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveWorkRequest"];
+            };
+        };
+        responses: {
+            /** @description Work item at the new marking position. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Work"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["MoveWorkConflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     getWorkBySessionId: {
         parameters: {
             query?: never;
@@ -2861,6 +2971,39 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    moveWorkBySessionId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+                session_id: components["parameters"]["SessionID"];
+                /** @description Work or token identifier, depending on route. */
+                id: components["parameters"]["WorkOrTokenID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveWorkRequest"];
+            };
+        };
+        responses: {
+            /** @description Work item at the new marking position for the targeted session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Work"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["MoveWorkConflict"];
             500: components["responses"]["InternalError"];
         };
     };

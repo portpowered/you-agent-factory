@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,6 +47,9 @@ func (m *mockFactory) SubscribeFactoryEvents(_ context.Context) (*interfaces.Fac
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
 func (m *mockFactory) Pause(_ context.Context) error { return nil }
+func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ interfaces.WorkStateChangeSource, _ string) (interfaces.OperatorMoveResult, error) {
+	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
+}
 
 func (m *mockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}, nil
