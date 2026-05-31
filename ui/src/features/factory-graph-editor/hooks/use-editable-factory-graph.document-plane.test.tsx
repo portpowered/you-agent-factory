@@ -1,12 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
-import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import {
   createEditableFactoryGraphHookWrapper,
   renderEditableFactoryGraphHook,
   setupEditableFactoryGraphSaveTestEnvironment,
 } from "../../../testing/editable-factory-graph-hook-test-helpers";
+import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const sharedWorkType = {
@@ -75,9 +75,9 @@ describe("useEditableFactoryGraph document plane projection", () => {
     expect(result.current.projection.nodes.map((node) => node.id)).toContain(
       "workstation:document-only",
     );
-    expect(result.current.projection.nodes.map((node) => node.id)).not.toContain(
-      "workstation:snapshot-only",
-    );
+    expect(
+      result.current.projection.nodes.map((node) => node.id),
+    ).not.toContain("workstation:snapshot-only");
   });
 
   it("exposes an empty projection while the factory document is still unavailable", () => {
@@ -94,9 +94,82 @@ describe("useEditableFactoryGraph document plane projection", () => {
   });
 });
 
-describe("useEditableFactoryGraph document plane scope and persist", () => {
+describe("useEditableFactoryGraph document plane scope isolation", () => {
   beforeEach(() => {
     setupEditableFactoryGraphSaveTestEnvironment();
+  });
+
+  it("does not rehydrate from a stale document while the new scope document is pending", () => {
+    const betaFactory: CurrentFactoryDocument = {
+      ...documentFactory,
+      name: "Beta Factory Pending",
+      workstations: [
+        {
+          ...documentFactory.workstations[0],
+          name: "beta-pending-only",
+        },
+      ],
+    };
+    const { result, rerender } = renderHook(
+      ({
+        currentFactoryDocument,
+        factoryDocumentScopeKey,
+      }: {
+        currentFactoryDocument: CurrentFactoryDocument | undefined;
+        factoryDocumentScopeKey: string;
+      }) =>
+        useEditableFactoryGraph({
+          currentFactoryDocument,
+          factoryDocumentScopeKey,
+        }),
+      {
+        initialProps: {
+          currentFactoryDocument: documentFactory,
+          factoryDocumentScopeKey: "session-alpha",
+        },
+        wrapper:
+          createEditableFactoryGraphHookWrapper()
+            .EditableFactoryGraphHookWrapper,
+      },
+    );
+
+    act(() => {
+      result.current.actions.addNode({
+        kind: "worker",
+        model: "gpt-5",
+        modelProvider: "CURSOR",
+        name: "extra",
+      });
+    });
+
+    rerender({
+      currentFactoryDocument: documentFactory,
+      factoryDocumentScopeKey: "session-beta",
+    });
+
+    expect(result.current.pendingState.hasChanges).toBe(false);
+    expect(result.current.draftState.source).toBe("projection");
+    expect(result.current.draftState.latestDocument).toBeNull();
+    expect(result.current.projection).toEqual({
+      edges: [],
+      nodes: [],
+    });
+
+    rerender({
+      currentFactoryDocument: betaFactory,
+      factoryDocumentScopeKey: "session-beta",
+    });
+
+    expect(result.current.pendingState.hasChanges).toBe(false);
+    expect(result.current.draftState.latestDocument?.name).toBe(
+      "Beta Factory Pending",
+    );
+    expect(result.current.projection.nodes.map((node) => node.id)).toContain(
+      "workstation:beta-pending-only",
+    );
+    expect(
+      result.current.projection.nodes.map((node) => node.id),
+    ).not.toContain("workstation:document-only");
   });
 
   it("drops a dirty draft when the factory document scope key changes", () => {
@@ -117,8 +190,9 @@ describe("useEditableFactoryGraph document plane scope and persist", () => {
           currentFactoryDocument: documentFactory,
           factoryDocumentScopeKey: "session-alpha",
         },
-        wrapper: createEditableFactoryGraphHookWrapper()
-          .EditableFactoryGraphHookWrapper,
+        wrapper:
+          createEditableFactoryGraphHookWrapper()
+            .EditableFactoryGraphHookWrapper,
       },
     );
 
@@ -152,9 +226,15 @@ describe("useEditableFactoryGraph document plane scope and persist", () => {
     expect(result.current.projection.nodes.map((node) => node.id)).toContain(
       "workstation:beta-only",
     );
-    expect(result.current.projection.nodes.map((node) => node.id)).not.toContain(
-      "workstation:document-only",
-    );
+    expect(
+      result.current.projection.nodes.map((node) => node.id),
+    ).not.toContain("workstation:document-only");
+  });
+});
+
+describe("useEditableFactoryGraph document plane persist", () => {
+  beforeEach(() => {
+    setupEditableFactoryGraphSaveTestEnvironment();
   });
 
   it("clears pending edits after save and resyncs latestDocument when the document cache updates", async () => {
@@ -163,7 +243,11 @@ describe("useEditableFactoryGraph document plane scope and persist", () => {
     );
 
     const { result, rerender } = renderHook(
-      ({ currentFactoryDocument }: { currentFactoryDocument: CurrentFactoryDocument }) =>
+      ({
+        currentFactoryDocument,
+      }: {
+        currentFactoryDocument: CurrentFactoryDocument;
+      }) =>
         useEditableFactoryGraph({
           currentFactoryDocument,
           factoryDocumentScopeKey: "session-alpha",
@@ -172,8 +256,9 @@ describe("useEditableFactoryGraph document plane scope and persist", () => {
         initialProps: {
           currentFactoryDocument: documentFactory,
         },
-        wrapper: createEditableFactoryGraphHookWrapper()
-          .EditableFactoryGraphHookWrapper,
+        wrapper:
+          createEditableFactoryGraphHookWrapper()
+            .EditableFactoryGraphHookWrapper,
       },
     );
 
