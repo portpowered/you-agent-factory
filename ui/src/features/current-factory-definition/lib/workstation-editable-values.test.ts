@@ -382,7 +382,9 @@ describe("resolveEditableWorkstationValues", () => {
       workTypes: [],
     };
 
-    expect(resolveEditableWorkstationValues(factory, selectedNode)).toMatchObject({
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode),
+    ).toMatchObject({
       effectiveRunnerName: "codex",
       resolvedRunnerSelection: {
         runnerId: "codex",
@@ -563,6 +565,57 @@ describe("resolveEditableWorkstationValues", () => {
     ).toBeNull();
   });
 
+  it("preserves legacy worker and ignores draft worker, prompt, and runner for LOGICAL_MOVE", () => {
+    const logicalMoveNode: DashboardWorkstationNode = {
+      model: "",
+      node_id: "move",
+      transition_id: "move",
+      workstation_kind: "LOGICAL_MOVE",
+      workstation_name: "Move",
+    };
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [],
+      workstations: [
+        {
+          body: "Legacy prompt that must not be overwritten.",
+          id: "move",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Move",
+          outputs: [{ state: "moved", workType: "story" }],
+          runner: "gemini",
+          type: "LOGICAL_MOVE",
+          worker: "removed-worker",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      logicalMoveNode,
+      {
+        behavior: "POLLER",
+        prompt: "Draft prompt must not apply.",
+        runnerName: "codex",
+        workerName: "missing-worker",
+      },
+    );
+
+    expect(updatedFactory).toMatchObject({
+      workstations: [
+        {
+          body: "Legacy prompt that must not be overwritten.",
+          name: "Move",
+          runner: "gemini",
+          type: "LOGICAL_MOVE",
+          worker: "removed-worker",
+        },
+      ],
+    });
+    expect(updatedFactory?.workstations?.[0]).toBe(factory.workstations?.[0]);
+  });
+
   it("keeps cron behavior selectable for existing cron workstations", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
@@ -586,7 +639,9 @@ describe("resolveEditableWorkstationValues", () => {
       workTypes: [],
     };
 
-    expect(resolveEditableWorkstationValues(factory, selectedNode)).toMatchObject({
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode),
+    ).toMatchObject({
       behavior: "CRON",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER", "CRON"],
     });
