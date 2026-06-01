@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { DashboardActionButton } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -16,7 +15,6 @@ import {
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
   CurrentSelectionSectionHeader,
 } from "../../base/components/detail-card-shared";
-import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
 import type {
   EditableWorkStateConfigurationState,
   EditableWorkStateSaveState,
@@ -27,12 +25,10 @@ import type { getWorkStateDetailMessages } from "../messages/work-state-detail";
 
 export function WorkStateEditableConfigurationSection({
   messages,
-  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkStateDetailMessages>;
-  onSaveConfiguration?: () => void;
   saveState?: EditableWorkStateSaveState;
   state?: EditableWorkStateConfigurationState;
 }) {
@@ -66,7 +62,6 @@ export function WorkStateEditableConfigurationSection({
         {state?.status === "ready" ? (
           <WorkStateEditableConfigurationReadyForm
             messages={messages}
-            onSaveConfiguration={onSaveConfiguration}
             saveState={saveState}
             state={state}
           />
@@ -78,12 +73,10 @@ export function WorkStateEditableConfigurationSection({
 
 function WorkStateEditableConfigurationReadyForm({
   messages,
-  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkStateDetailMessages>;
-  onSaveConfiguration?: () => void;
   saveState?: EditableWorkStateSaveState;
   state: Extract<EditableWorkStateConfigurationState, { status: "ready" }>;
 }) {
@@ -91,7 +84,6 @@ function WorkStateEditableConfigurationReadyForm({
     EditableWorkStateValidationErrors & Record<string, string | undefined>,
     EditableWorkStateSaveValidationErrors
   >(state.validationErrors, saveState);
-  const isSaving = saveState?.status === "submitting";
   const displayStateName = state.draft.name.trim() || state.originalStateName;
 
   return (
@@ -145,26 +137,6 @@ function WorkStateEditableConfigurationReadyForm({
           label={messages.typeFieldLabel}
         />
       </div>
-      {onSaveConfiguration ? (
-        <EditableConfigurationSaveRow
-          busyLabel={messages.editableConfigurationSaveBusyAction}
-          canSave={state.canSave}
-          isSaving={isSaving}
-          onSave={onSaveConfiguration}
-          resetSlot={
-            state.isDirty ? (
-              <DashboardActionButton
-                disabled={isSaving}
-                onClick={state.onResetToLatest}
-                type="button"
-              >
-                {messages.discardDraftAction}
-              </DashboardActionButton>
-            ) : undefined
-          }
-          saveLabel={messages.editableConfigurationSaveAction}
-        />
-      ) : null}
     </form>
   );
 }

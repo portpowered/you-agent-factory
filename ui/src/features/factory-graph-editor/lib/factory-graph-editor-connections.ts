@@ -2,17 +2,15 @@ import type { WorkstationProgressOutcomeRouteContext } from "../../current-facto
 import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-import type {
-  FactoryGraphDraft,
-  FactoryGraphDraftEdgeChange,
-  FactoryGraphEdge,
-  FactoryGraphNode,
-  FactoryGraphNodeKind,
-  FactoryGraphTopology,
-  FactoryWorkstation,
-} from "./factory-graph-draft-types";
 import {
-  appendUniqueFactoryGraphEdgeChange,
+  type FactoryGraphDraft,
+  type FactoryGraphDraftEdgeChange,
+  type FactoryGraphEdge,
+  type FactoryGraphNode,
+  type FactoryGraphNodeKind,
+  type FactoryGraphTopology,
+  type FactoryWorkstation,
+  appendUniqueEdgeChange,
   edgeChangeId,
 } from "./factory-graph-draft-types";
 import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "./factory-graph-progress-outcome-connection-anchors";
@@ -395,7 +393,7 @@ export function applyFactoryGraphEdgeAddition(
     );
   }
 
-  nextDraft.edgeChanges.additions = appendUniqueFactoryGraphEdgeChange(
+  nextDraft.edgeChanges.additions = appendUniqueEdgeChange(
     nextDraft.edgeChanges.additions,
     edgeChange,
   );
@@ -429,7 +427,7 @@ export function applyFactoryGraphEdgeRemoval(
     return nextDraft;
   }
 
-  nextDraft.edgeChanges.removals = appendUniqueFactoryGraphEdgeChange(
+  nextDraft.edgeChanges.removals = appendUniqueEdgeChange(
     nextDraft.edgeChanges.removals,
     {
       kind: edge.kind,

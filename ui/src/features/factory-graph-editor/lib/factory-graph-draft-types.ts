@@ -251,7 +251,7 @@ export function edgeChangeId(
   return `${edgeChange.kind}:${nodeKeyId(edgeChange.source)}->${nodeKeyId(edgeChange.target)}`;
 }
 
-export function appendUniqueFactoryGraphEdgeChange(
+export function appendUniqueEdgeChange(
   edges: FactoryGraphDraftEdgeChange[],
   edgeChange: FactoryGraphDraftEdgeChange,
 ) {

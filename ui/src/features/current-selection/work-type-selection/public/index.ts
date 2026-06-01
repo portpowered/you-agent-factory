@@ -1,5 +1,6 @@
 export { WorkTypeDetailCard } from "../components/work-type-detail-card";
 export {
+  EditableWorkTypeConfigurationHeaderActions,
   EditableWorkTypeSaveDialog,
   EditableWorkTypeSaveHeaderAction,
 } from "../components/work-type-save-controls";
