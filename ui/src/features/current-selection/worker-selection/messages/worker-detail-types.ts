@@ -53,9 +53,6 @@ export interface WorkerDetailMessages {
   referencingWorkstationsEmpty: string;
   referencingWorkstationsHeading: string;
   summaryHeading: string;
-  topologyDeleteAction: (workerName: string) => string;
-  topologyDeleteBlockedPrefix: string;
-  topologyDeleteHeading: string;
   typeFieldLabel: string;
   typeLabel: string;
   unknownTypeValue: string;

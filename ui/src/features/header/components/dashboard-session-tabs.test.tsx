@@ -110,7 +110,7 @@ describe("DashboardSessionTabs", () => {
     expect(screen.getByRole("tabpanel")).toBeTruthy();
   });
 
-  it("uses outline-aligned styling on the active session tab shell without accent fill", async () => {
+  it("uses subtle active styling on the session tab shell without accent fill", async () => {
     listFactorySessions.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
@@ -149,7 +149,7 @@ describe("DashboardSessionTabs", () => {
     const activeShell = sessionTabShell(rootTab);
     const inactiveShell = sessionTabShell(betaTab);
 
-    expectOutlineActiveSessionTabShell(activeShell);
+    expectSubtleActiveSessionTabShell(activeShell);
     expectMutedInactiveSessionTabShell(inactiveShell);
 
     fireEvent.click(betaTab);
@@ -158,7 +158,7 @@ describe("DashboardSessionTabs", () => {
       expect(betaTab.getAttribute("aria-selected")).toBe("true");
     });
 
-    expectOutlineActiveSessionTabShell(sessionTabShell(betaTab));
+    expectSubtleActiveSessionTabShell(sessionTabShell(betaTab));
     expectMutedInactiveSessionTabShell(sessionTabShell(rootTab));
   });
 
@@ -1313,19 +1313,22 @@ function sessionTabShell(tab: HTMLElement): HTMLElement {
   return shell;
 }
 
-function expectOutlineActiveSessionTabShell(shell: HTMLElement) {
-  expect(shell.className).toContain("border-af-border-strong");
-  expect(shell.className).toContain("bg-af-surface-raised");
+function expectSubtleActiveSessionTabShell(shell: HTMLElement) {
+  expect(shell.className).toContain("bg-af-surface-subtle");
   expect(shell.className).toContain("text-af-text");
+  expect(shell.className.includes("border-af-border-strong")).toBe(false);
+  expect(shell.className.includes("bg-af-surface-raised")).toBe(false);
   expect(shell.className.includes("bg-af-accent")).toBe(false);
   expect(shell.className.includes("bg-af-accent-surface")).toBe(false);
 }
 
 function expectMutedInactiveSessionTabShell(shell: HTMLElement) {
   expect(shell.className).toContain("text-af-text-muted");
+  expect(shell.className.includes("bg-af-surface-subtle")).toBe(false);
   expect(shell.className.includes("bg-af-surface-raised")).toBe(false);
   expect(shell.className.includes("bg-af-accent")).toBe(false);
   expect(shell.className.includes("bg-af-accent-surface")).toBe(false);
+  expect(shell.className.includes("hover:border-af-border")).toBe(false);
 }
 
 function renderWithQueryClient(view: React.ReactElement) {

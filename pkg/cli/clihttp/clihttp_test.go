@@ -320,6 +320,132 @@ func TestPostJSONCreated_LogsStatusDiagnosticForNonCreated(t *testing.T) {
 	}
 }
 
+func TestPutJSONCreated_DecodesSuccessResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Fatalf("method = %s, want PUT", r.Method)
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Fatalf("content-type = %q, want application/json", r.Header.Get("Content-Type"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(map[string]string{"batchId": "batch-1"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var result map[string]string
+	resp, err := PutJSONCreated(
+		context.Background(),
+		srv.Client(),
+		srv.URL+"/work/batch",
+		strings.NewReader(`{"items":[]}`),
+		&result,
+		RequestOptions{EndpointPath: "/work/batch", LogLabel: "submit batch"},
+	)
+	if err != nil {
+		t.Fatalf("PutJSONCreated: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	if result["batchId"] != "batch-1" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestPutJSONCreated_ReturnsResponseForNonCreatedStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Message: "invalid batch",
+			Code:    factoryapi.ErrorResponseCode("INVALID_REQUEST"),
+			Family:  factoryapi.ErrorFamilyBadRequest,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var result map[string]string
+	resp, err := PutJSONCreated(
+		context.Background(),
+		srv.Client(),
+		srv.URL,
+		strings.NewReader(`{"items":[]}`),
+		&result,
+		RequestOptions{EndpointPath: "/work/batch", LogLabel: "submit batch"},
+	)
+	if err != nil {
+		t.Fatalf("PutJSONCreated: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestPutJSONCreated_PropagatesTransportFailure(t *testing.T) {
+	client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return nil, io.ErrUnexpectedEOF
+	})}
+
+	var diagnostics bytes.Buffer
+	_, err := PutJSONCreated(
+		context.Background(),
+		client,
+		"http://127.0.0.1:1/work/batch",
+		strings.NewReader(`{"items":[]}`),
+		nil,
+		RequestOptions{
+			Diagnostics:  &diagnostics,
+			Verbose:      true,
+			EndpointPath: "/work/batch",
+			LogLabel:     "submit batch",
+		},
+	)
+	if err == nil {
+		t.Fatal("PutJSONCreated: want transport error")
+	}
+	if !strings.Contains(diagnostics.String(), "submit batch response endpointPath=/work/batch error=unreachable") {
+		t.Fatalf("diagnostics = %q", diagnostics.String())
+	}
+}
+
+func TestPutJSONCreated_LogsStatusDiagnosticForNonCreated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	var diagnostics bytes.Buffer
+	resp, err := PutJSONCreated(
+		context.Background(),
+		srv.Client(),
+		srv.URL,
+		strings.NewReader(`{"items":[]}`),
+		nil,
+		RequestOptions{
+			Diagnostics:  &diagnostics,
+			Verbose:      true,
+			EndpointPath: "/work/batch",
+			LogLabel:     "submit batch",
+		},
+	)
+	if err != nil {
+		t.Fatalf("PutJSONCreated: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if !strings.Contains(diagnostics.String(), "submit batch response endpointPath=/work/batch status=500") {
+		t.Fatalf("diagnostics = %q", diagnostics.String())
+	}
+}
+
 func TestPutJSON_SendsJSONBodyAndDecodesResponse(t *testing.T) {
 	var gotMethod string
 	var gotContentType string

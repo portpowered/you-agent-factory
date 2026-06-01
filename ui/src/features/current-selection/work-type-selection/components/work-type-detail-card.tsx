@@ -5,7 +5,6 @@ import { SelectionDetailLayout } from "../../base/components/current-selection-d
 import type { WorkTypeDetailCardProps } from "../lib/detail-card-types";
 import { getWorkTypeDetailMessages } from "../messages/work-type-detail";
 import { WorkTypeReadySection } from "./work-type-ready-section";
-import { WorkTypeTopologyDeleteSection } from "./work-type-topology-delete-section";
 
 export function WorkTypeDetailCard({
   editableConfigurationState,
@@ -51,14 +50,6 @@ export function WorkTypeDetailCard({
           workTypeName={workTypeName}
         />
       ) : null}
-      <WorkTypeTopologyDeleteSection
-        messages={messages}
-        workTypeName={
-          editableConfigurationState?.status === "ready"
-            ? editableConfigurationState.draft.name
-            : workTypeName
-        }
-      />
     </SelectionDetailLayout>
   );
 }

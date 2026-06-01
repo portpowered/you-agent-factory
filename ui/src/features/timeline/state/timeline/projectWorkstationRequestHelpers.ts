@@ -4,7 +4,6 @@ import type {
   DashboardRuntimeWorkstationRequest,
   DashboardScriptRequest,
   DashboardScriptResponse,
-  DashboardTraceToken,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
@@ -16,7 +15,10 @@ import type {
   WorldScriptRequest,
   WorldScriptResponse,
 } from "./types";
-import { workRef } from "./workItemRef";
+import type { FactoryWorkItem } from "../../../../api/events";
+import type { WorkPayloadLineageProjection } from "./workPayloadLineage";
+import { workItemRefWithOutputPayload } from "./workItemRef";
+import { isSystemTimeWorkItem } from "./systemTime";
 
 const DASHBOARD_TIME_WORK_TYPE_ID = "time";
 
@@ -99,76 +101,45 @@ export function scriptResponseErrored(response: WorldScriptResponse): boolean {
   );
 }
 
-export function workItemsFromTokens(
-  tokens: DashboardTraceToken[],
-  fallback: DashboardWorkItemRef[],
-): DashboardWorkItemRef[] {
-  const fallbackByID = new Map(fallback.map((item) => [item.work_id, item] as const));
-  const workItems = Object.values(
-    Object.fromEntries(
-      tokens
-        .filter(
-          (token) => token.work_id && token.work_type_id !== DASHBOARD_TIME_WORK_TYPE_ID,
-        )
-        .map((token) => [
-          token.work_id,
-          {
-            ...(fallbackByID.get(token.work_id)?.current_chaining_trace_id
-              ? {
-                  current_chaining_trace_id:
-                    fallbackByID.get(token.work_id)?.current_chaining_trace_id,
-                }
-              : {}),
-            display_name: token.name,
-            ...(fallbackByID.get(token.work_id)?.previous_chaining_trace_ids
-              ? {
-                  previous_chaining_trace_ids:
-                    fallbackByID.get(token.work_id)?.previous_chaining_trace_ids,
-                }
-              : {}),
-            trace_id: token.trace_id,
-            work_id: token.work_id,
-            work_type_id: token.work_type_id,
-          } satisfies DashboardWorkItemRef,
-        ]),
-    ),
-  );
-  return workItems.length > 0
-    ? workItems.sort((left, right) => left.work_id.localeCompare(right.work_id))
-    : [...fallback].sort((left, right) => left.work_id.localeCompare(right.work_id));
-}
-
 export function outputWorkItemsFromCompletion(
+  lineage: WorkPayloadLineageProjection,
   completion: WorldCompletion,
+  workItemsByID: Record<string, FactoryWorkItem>,
 ): DashboardWorkItemRef[] | undefined {
-  const workItems: Record<string, DashboardWorkItemRef> = Object.fromEntries(
-    completion.outputItems
-      .filter((item) => item.work_type_id !== DASHBOARD_TIME_WORK_TYPE_ID)
-      .map((item) => [item.work_id, item] as const),
-  );
-  for (const mutation of completion.outputMutations) {
-    const token = mutation.resulting_token;
-    if (!token?.work_id || token.work_type_id === DASHBOARD_TIME_WORK_TYPE_ID) {
-      continue;
+  const seen = new Set<string>();
+  const refs: DashboardWorkItemRef[] = [];
+  const appendOutput = (workID: string | undefined) => {
+    if (!workID || seen.has(workID)) {
+      return;
     }
-    workItems[token.work_id] = {
-      display_name: token.name,
-      trace_id: token.trace_id,
-      work_id: token.work_id,
-      work_type_id: token.work_type_id,
-    };
+    const item = workItemsByID[workID];
+    if (!item || isSystemTimeWorkItem(item)) {
+      return;
+    }
+    seen.add(workID);
+    refs.push(
+      workItemRefWithOutputPayload(lineage, completion.dispatchID, item),
+    );
+  };
+
+  for (const item of completion.outputItems) {
+    appendOutput(item.work_id);
   }
-  if (
-    completion.terminalWork?.work_item &&
-    completion.terminalWork.work_item.work_type_id !== DASHBOARD_TIME_WORK_TYPE_ID
-  ) {
-    const item = completion.terminalWork.work_item;
-    workItems[item.id] = workRef(item);
+  for (const mutation of completion.outputMutations) {
+    appendOutput(mutation.resulting_token?.work_id);
   }
-  const values = Object.values(workItems).sort((left, right) =>
-    left.work_id.localeCompare(right.work_id),
+  appendOutput(completion.terminalWork?.work_item.id);
+
+  if (refs.length > 0) {
+    return refs.sort((left, right) => left.work_id.localeCompare(right.work_id));
+  }
+
+  const fallbackItems = completion.outputItems.filter(
+    (item) => item.work_type_id !== DASHBOARD_TIME_WORK_TYPE_ID,
   );
-  return values.length > 0 ? values : undefined;
+  return fallbackItems.length > 0
+    ? [...fallbackItems].sort((left, right) => left.work_id.localeCompare(right.work_id))
+    : undefined;
 }
 
 export function sortInferenceAttempts(

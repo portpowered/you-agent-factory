@@ -45,7 +45,7 @@ export function createLocalizedImportDialogVerifier({
       "Localized import cancel button",
     );
     await expectVisible(
-      dialog.getByRole("button", { name: "启用工厂" }),
+      dialog.getByRole("button", { name: "确认导入" }),
       "Localized import activate button",
     );
     await expectVisible(

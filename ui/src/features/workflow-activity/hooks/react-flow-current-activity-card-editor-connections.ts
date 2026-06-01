@@ -127,9 +127,13 @@ export function useFactoryGraphConnectionController({
       createFactoryGraphWorkstationResolver(
         draftState.pendingFactoryDefinition?.workstations ??
           draftState.baseDocument?.workstations,
+        draftState.pendingFactoryDefinition?.workers ??
+          draftState.baseDocument?.workers,
       ),
     [
+      draftState.baseDocument?.workers,
       draftState.baseDocument?.workstations,
+      draftState.pendingFactoryDefinition?.workers,
       draftState.pendingFactoryDefinition?.workstations,
     ],
   );

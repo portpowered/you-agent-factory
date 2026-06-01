@@ -72,19 +72,24 @@ export type WorkRequestPayload = FactorySchemas["WorkRequestEventPayload"];
 export type RelationshipChangeRequestPayload =
   FactorySchemas["RelationshipChangeRequestEventPayload"];
 
-export type DispatchRequestPayload = FactorySchemas["DispatchRequestEventPayload"];
+export type DispatchRequestPayload =
+  FactorySchemas["DispatchRequestEventPayload"];
 
-export type InferenceRequestPayload = FactorySchemas["InferenceRequestEventPayload"];
+export type InferenceRequestPayload =
+  FactorySchemas["InferenceRequestEventPayload"];
 
-export type InferenceResponsePayload = FactorySchemas["InferenceResponseEventPayload"];
+export type InferenceResponsePayload =
+  FactorySchemas["InferenceResponseEventPayload"];
 
 export type InferenceOutcome = FactorySchemas["InferenceOutcome"];
 
 export type ScriptRequestPayload = FactorySchemas["ScriptRequestEventPayload"];
 
-export type ScriptResponsePayload = FactorySchemas["ScriptResponseEventPayload"];
+export type ScriptResponsePayload =
+  FactorySchemas["ScriptResponseEventPayload"];
 
-export type DispatchResponsePayload = FactorySchemas["DispatchResponseEventPayload"];
+export type DispatchResponsePayload =
+  FactorySchemas["DispatchResponseEventPayload"];
 
 export type WorkStateChangeEventPayload =
   FactorySchemas["WorkStateChangeEventPayload"];
@@ -112,12 +117,15 @@ export type WorkstationIO = FactorySchemas["WorkstationIO"];
 export type FactoryWork = FactorySchemas["Work"];
 
 export interface FactoryWorkItem {
+  chaining_trace_depth?: number;
+  content?: FactorySchemas["Work"]["content"];
   current_chaining_trace_id?: string;
   display_name?: string;
   id: string;
   parent_id?: string;
   place_id?: string;
   previous_chaining_trace_ids?: string[];
+  state?: string;
   tags?: Record<string, string>;
   trace_id?: string;
   work_type_id: string;

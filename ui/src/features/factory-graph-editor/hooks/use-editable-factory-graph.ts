@@ -47,7 +47,10 @@ export function useEditableFactoryGraph(
       locale: options.locale ?? undefined,
       topology: draftState.graph,
       workstationResolver: factoryDefinition
-        ? createFactoryGraphWorkstationResolver(factoryDefinition.workstations)
+        ? createFactoryGraphWorkstationResolver(
+            factoryDefinition.workstations,
+            factoryDefinition.workers,
+          )
         : undefined,
     });
   }, [

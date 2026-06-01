@@ -42,7 +42,7 @@ const DASHBOARD_SECONDARY_ROW_CLASS = "flex min-w-0";
 const DASHBOARD_BRAND_SLOT_CLASS = "min-w-0 self-end pb-2";
 const DASHBOARD_TIMELINE_CLUSTER_CLASS = "flex min-w-0 w-full flex-1";
 const DASHBOARD_SESSION_STRIP_CLASS =
-  "flex min-w-0 h-full w-full items-stretch px-2 pt-1";
+  "flex min-w-0 h-full w-full items-stretch overflow-x-auto px-4 pt-1";
 const DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS =
   "relative flex min-w-0 w-full rounded-sm items-center gap-1.5 rounded-t-2xl bg-af-surface-subtle pb-2 px-2 pt-1";
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);

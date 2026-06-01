@@ -53,6 +53,7 @@ describe("App follow-up flows", () => {
   it("keeps the export toolbar action available alongside the submit-work card", async () => {
     renderApp({
       snapshot: terminalSnapshot,
+      seedCurrentFactoryDocument: false,
       fetchOverride: async (path, method) => {
         if (method === "GET" && isSessionFactoryRequest(path, method)) {
           return jsonResponse(

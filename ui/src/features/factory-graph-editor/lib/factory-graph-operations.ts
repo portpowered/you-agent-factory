@@ -201,6 +201,7 @@ export function connectFactoryGraphNodes(options: {
   const graph = buildEditingFactoryGraphTopology(options);
   const workstationResolver = createFactoryGraphWorkstationResolver(
     editingFactoryDefinition.workstations,
+    editingFactoryDefinition.workers,
   );
   const edgeChange = buildFactoryGraphEdgeChangeFromConnection(
     graph,

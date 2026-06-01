@@ -4,6 +4,7 @@ import type { FactoryWorkItem } from "../../../../api/events";
 import { applyWorkStateChange } from "./replayWorldStateWorkStateChange";
 import type { WorkStateChangeEvent } from "./replayWorldStateTypes";
 import { emptyWorldRuntime, type ReplayWorldState } from "./types";
+import { emptyWorkPayloadLineageProjection } from "./workPayloadLineage";
 
 function workStateChangeEvent(
   payload: WorkStateChangeEvent["payload"],
@@ -40,6 +41,7 @@ function replayStateWithWork(
     occupancyByID: {
       [placeID]: { placeID, resourceTokenIDs: [], workItemIDs: [workID] },
     },
+    payloadLineage: emptyWorkPayloadLineageProjection(),
     providerSessions: [],
     relationsByWorkID: {},
     runtime: emptyWorldRuntime(),
