@@ -24,6 +24,14 @@ type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
 type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
+type CanonicalWorkstationGuard = NonNullable<CanonicalWorkstation["guards"]>[number];
+type CanonicalWorkstationInput = NonNullable<CanonicalWorkstation["inputs"]>[number];
+
+export interface EditableWorkstationInputDraft {
+  guards: CanonicalWorkstationGuard[];
+  state: string;
+  workType: string;
+}
 
 export interface EditableWorkstationValues {
   behavior: EditableWorkstationBehavior;
@@ -41,12 +49,16 @@ export interface EditableWorkstationValues {
   workerName: string;
   workerOptions: string[];
   workerModelProvider: string | null;
+  guards: CanonicalWorkstationGuard[];
+  inputs: EditableWorkstationInputDraft[];
   workstationName: string;
   workstationType: EditableWorkstationType;
 }
 
 export interface EditableWorkstationDraft {
   behavior: EditableWorkstationBehavior;
+  guards: CanonicalWorkstationGuard[];
+  inputs: EditableWorkstationInputDraft[];
   prompt: string;
   runnerName: RunnerID | null;
   workerName: string;
@@ -95,6 +107,8 @@ export function resolveEditableWorkstationValues(
     workerModelProvider,
     workerName: workstation.worker,
     workerOptions: resolveWorkerOptions(factory),
+    guards: resolveEditableWorkstationGuards(workstation),
+    inputs: resolveEditableWorkstationInputs(workstation),
     workstationName: workstation.name,
     workstationType: resolveEditableWorkstationType(workstation),
   };
@@ -105,6 +119,12 @@ export function editableWorkstationDraftFromValues(
 ): EditableWorkstationDraft {
   return {
     behavior: values.behavior,
+    guards: values.guards,
+    inputs: values.inputs.map((input) => ({
+      guards: [...input.guards],
+      state: input.state,
+      workType: input.workType,
+    })),
     prompt: values.prompt ?? "",
     runnerName: values.runnerName,
     workerName: values.workerName,
@@ -127,14 +147,17 @@ export function applyEditableWorkstationDraft(
 
   const {
     behavior: existingBehavior,
+    guards: _existingGuards,
+    inputs: _existingInputs,
     runner: _existingRunner,
     ...workstationWithoutRunner
-  } =
-    workstationResolution.workstation;
+  } = workstationResolution.workstation;
   const nextWorkstation = {
     ...workstationWithoutRunner,
     body: draft.prompt,
+    inputs: applyEditableWorkstationInputs(draft.inputs),
     worker: draft.workerName,
+    ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
     ...(draft.runnerName ? { runner: draft.runnerName } : {}),
     ...(draft.behavior === DEFAULT_WORKSTATION_BEHAVIOR &&
     existingBehavior === undefined
@@ -246,4 +269,30 @@ function resolveWorkerTypeByName(factory: CanonicalFactoryDefinition) {
   return Object.fromEntries(
     (factory.workers ?? []).map((worker) => [worker.name, worker.type]),
   ) as Record<string, CanonicalWorker["type"] | undefined>;
+}
+
+function resolveEditableWorkstationGuards(
+  workstation: CanonicalWorkstation,
+): CanonicalWorkstationGuard[] {
+  return [...(workstation.guards ?? [])];
+}
+
+function resolveEditableWorkstationInputs(
+  workstation: CanonicalWorkstation,
+): EditableWorkstationInputDraft[] {
+  return (workstation.inputs ?? []).map((input) => ({
+    guards: [...(input.guards ?? [])],
+    state: input.state,
+    workType: input.workType,
+  }));
+}
+
+function applyEditableWorkstationInputs(
+  inputs: EditableWorkstationInputDraft[],
+): CanonicalWorkstationInput[] {
+  return inputs.map((input) => ({
+    state: input.state,
+    workType: input.workType,
+    ...(input.guards.length > 0 ? { guards: input.guards } : {}),
+  }));
 }

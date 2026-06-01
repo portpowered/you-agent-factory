@@ -630,12 +630,16 @@ describe("useEditableWorkstationConfigurationState", () => {
         reviewer: "MODEL_WORKER",
       },
       workstationName: "Review",
+      guards: [],
+      inputs: [],
     };
 
     expect(
       validateEditableWorkstationDraft(
         {
           behavior: "STANDARD",
+          guards: [],
+          inputs: [],
           prompt: "Review the story.",
           runnerName: null,
           workerName: "reviewer",
@@ -651,6 +655,8 @@ describe("useEditableWorkstationConfigurationState", () => {
       validateEditableWorkstationDraft(
         {
           behavior: "STANDARD",
+          guards: [],
+          inputs: [],
           prompt: "Review the story.",
           runnerName: null,
           workerName: "reviewer",
