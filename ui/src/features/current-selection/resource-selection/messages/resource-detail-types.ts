@@ -8,8 +8,6 @@ export interface ResourceDetailMessages {
   editableConfigurationCapacityInvalid: string;
   editableConfigurationCollapseActionLabel: string;
   editableConfigurationContractInvalidPrefix: string;
-  editableConfigurationDirtyStatus: string;
-  editableConfigurationDraftNote: string;
   editableConfigurationEmpty: string;
   editableConfigurationErrorPrefix: string;
   editableConfigurationExpandActionLabel: string;

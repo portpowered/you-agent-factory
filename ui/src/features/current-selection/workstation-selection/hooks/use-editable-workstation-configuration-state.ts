@@ -4,43 +4,35 @@ import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
-  applyEditableWorkstationDraft,
-  areEditableWorkstationDraftsEqual,
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
+import { editableWorkstationDraftsEqual } from "../../../current-factory-definition/lib/workstation-guards";
+import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import type { DashboardSelection } from "../../base/state/selection-types";
-import {
-  buildEditableWorkstationConfigurationMutators,
-  type EditableWorkstationSessionDraftState,
-} from "../editing/editable-workstation-configuration-mutators";
-import {
-  hasEditableWorkstationValidationErrors,
-  validateEditableWorkstationDraft,
-} from "../editing/editable-workstation-draft-validation";
-import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import {
   resolvePromptHelpState,
   resolvePromptValidationState,
 } from "../editing/editable-workstation-prompt-state";
-import type {
-  EditableWorkstationConfigurationState,
-  EditableWorkstationPromptHelpState,
-  EditableWorkstationPromptValidationState,
-  EditableWorkstationValidationErrors,
-  EditableWorkstationWorkerOptionsState,
-} from "../lib/detail-card-types";
-import {
-  getWorkstationDetailMessages,
-  type WorkstationDetailMessages,
-} from "../messages/workstation-detail";
+import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
+import { validateEditableWorkstationDraft } from "../lib/editable-workstation-configuration-validation";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { buildReadyEditableWorkstationConfigurationState } from "./editable-workstation-ready-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
-type EditableWorkstationSessionState = EditableWorkstationSessionDraftState & {
+export {
+  hasEditableWorkstationValidationErrors,
+  validateEditableWorkstationDraft,
+} from "../lib/editable-workstation-configuration-validation";
+
+interface EditableWorkstationSessionState {
+  draft: EditableWorkstationDraft;
+  latestDefinitionDraft: EditableWorkstationDraft;
   selectionKey: string;
-};
+  sessionStartDraft: EditableWorkstationDraft;
+}
 
 export function useEditableWorkstationConfigurationState(
   selection: DashboardSelection | null,
@@ -63,6 +55,10 @@ export function useEditableWorkstationConfigurationState(
   const shouldValidatePrompt =
     isNodeSelection &&
     sessionState != null &&
+    selectedEditableValues != null &&
+    workstationRequiresWorkerAssignment({
+      type: selectedEditableValues.workstationType,
+    }) &&
     workstationBehaviorRequiresPrompt(sessionState.draft.behavior);
   const promptValidation = useCurrentWorkstationPromptTemplateValidation(
     selectedEditableValues?.workstationName,
@@ -158,125 +154,6 @@ function useEditableWorkstationSession(
   };
 }
 
-export {
-  hasEditableWorkstationValidationErrors,
-  validateEditableWorkstationDraft,
-} from "../editing/editable-workstation-draft-validation";
-
-function resolveWorkerOptionsState(
-  draft: EditableWorkstationDraft,
-  selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
-  messages: Pick<
-    WorkstationDetailMessages,
-    | "editableConfigurationEmpty"
-    | "editableConfigurationWorkerMissing"
-    | "editableConfigurationWorkerOptionsEmpty"
-  >,
-): EditableWorkstationWorkerOptionsState {
-  if (!selectedEditableValues) {
-    return {
-      message: messages.editableConfigurationEmpty,
-      status: "error",
-    };
-  }
-
-  if (selectedEditableValues.workerOptions.length === 0) {
-    return {
-      message: messages.editableConfigurationWorkerOptionsEmpty,
-      status: "empty",
-    };
-  }
-
-  if (!selectedEditableValues.workerOptions.includes(draft.workerName)) {
-    return {
-      message: messages.editableConfigurationWorkerMissing,
-      status: "error",
-    };
-  }
-
-  return {
-    options: selectedEditableValues.workerOptions,
-    status: "ready",
-  };
-}
-
-function buildReadyEditableWorkstationConfigurationState({
-  editableDefinition,
-  messages,
-  promptHelpState,
-  promptValidationState,
-  resolvedValidationErrors,
-  selectedEditableValues,
-  selectedNode,
-  sessionState,
-  setSessionState,
-}: {
-  editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentFactoryDocument>["data"]
-  >;
-  messages: WorkstationDetailMessages;
-  promptHelpState: EditableWorkstationPromptHelpState;
-  promptValidationState: EditableWorkstationPromptValidationState;
-  resolvedValidationErrors: EditableWorkstationValidationErrors;
-  selectedEditableValues: NonNullable<
-    ReturnType<typeof resolveEditableWorkstationValues>
-  >;
-  selectedNode: DashboardWorkstationNode;
-  sessionState: EditableWorkstationSessionState;
-  setSessionState: (
-    updater: (
-      currentState: EditableWorkstationSessionState | null,
-    ) => EditableWorkstationSessionState | null,
-  ) => void;
-}) {
-  const pendingFactoryDefinition = hasEditableWorkstationValidationErrors(
-    resolvedValidationErrors,
-  )
-    ? null
-    : applyEditableWorkstationDraft(
-        editableDefinition,
-        selectedNode,
-        sessionState.draft,
-      );
-  const mutators = buildEditableWorkstationConfigurationMutators({
-    selectedEditableValues,
-    setSessionState,
-  });
-
-  return {
-    baseVersion: editableDefinition.version,
-    draft: sessionState.draft,
-    hasValidationErrors: hasEditableWorkstationValidationErrors(
-      resolvedValidationErrors,
-    ),
-    initialValues: selectedEditableValues,
-    isDirty: !areEditableWorkstationDraftsEqual(
-      sessionState.draft,
-      sessionState.sessionStartDraft,
-    ),
-    ...mutators,
-    overwriteFieldNames: resolveEditableWorkstationOverwriteFields(
-      sessionState.sessionStartDraft,
-      sessionState.draft,
-      sessionState.latestDefinitionDraft,
-    ),
-    pendingFactoryDefinition,
-    promptDiagnostics:
-      promptValidationState.status === "ready"
-        ? promptValidationState.diagnostics
-        : [],
-    promptHelpState,
-    promptValidationState,
-    status: "ready" as const,
-    validationErrors: resolvedValidationErrors,
-    workerOptionsState: resolveWorkerOptionsState(
-      sessionState.draft,
-      selectedEditableValues,
-      messages,
-    ),
-  };
-}
-
 function syncEditableWorkstationSession(
   currentState: EditableWorkstationSessionState | null,
   selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
@@ -299,7 +176,7 @@ function syncEditableWorkstationSession(
   }
 
   if (
-    areEditableWorkstationDraftsEqual(
+    editableWorkstationDraftsEqual(
       currentState.draft,
       currentState.sessionStartDraft,
     )
@@ -312,7 +189,7 @@ function syncEditableWorkstationSession(
     };
   }
 
-  return areEditableWorkstationDraftsEqual(
+  return editableWorkstationDraftsEqual(
     currentState.latestDefinitionDraft,
     initialDraft,
   )

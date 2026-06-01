@@ -2,6 +2,7 @@ import type { CanonicalFactoryDefinition } from "../../../api/current-factory-de
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import {
   workstationHasZAxisIncompleteForConnections,
+  workstationSupportsProgressOutcomeFailureRoute,
   workstationSupportsProgressOutcomeRoutes,
 } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type {
@@ -17,9 +18,11 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   mergeAuthoredProgressOutcomeConnectionAnchors,
   PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
+} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import {
   workstationRendersProgressOutcomeHandleValidation,
   workstationRendersProgressOutcomeZAxisHintAnchors,
-} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+} from "../../factory-graph-editor/lib/factory-graph-progress-outcome-handle-visibility";
 import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { validationHandleErrorsForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
@@ -39,6 +42,13 @@ export interface CurrentActivityEditorState {
   onConnectionAnchorClick: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
   validationTargets?: readonly FactoryValidationTarget[];
+}
+
+/** Graph node header selection competes with delete-tool onNodeClick when wired. */
+export function shouldWireGraphNodeSelectionHandlers(
+  editor?: CurrentActivityEditorState,
+): boolean {
+  return !(editor?.editorMode === true && editor.activeTool === "delete");
 }
 
 type CurrentActivityEndpointKind = Extract<
@@ -197,12 +207,15 @@ export function buildSemanticGraphHandles(args: {
     args.editor.canInteractWithEditor &&
     args.editor.activeTool === "connect";
 
+  const workstation = args.connectionAnchorContext?.workstation;
   const supportsProgressOutcomeRoutes =
     args.nodeKind !== "workstation" ||
-    !args.connectionAnchorContext ||
-    workstationSupportsProgressOutcomeRoutes(
-      args.connectionAnchorContext.workstation,
-    );
+    !workstation ||
+    workstationSupportsProgressOutcomeRoutes(workstation);
+  const supportsProgressOutcomeFailureRoute =
+    args.nodeKind !== "workstation" ||
+    !workstation ||
+    workstationSupportsProgressOutcomeFailureRoute(workstation);
 
   let anchors = getLocalizedFactoryGraphConnectionAnchors(
     args.nodeKind,
@@ -219,8 +232,10 @@ export function buildSemanticGraphHandles(args: {
   const handles: ActivityGraphNodeHandle[] = anchors.map((anchor) => {
     const isAuthoredOnlyProgressOutcomeHandle =
       args.nodeKind === "workstation" &&
-      !supportsProgressOutcomeRoutes &&
-      PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id);
+      ((!supportsProgressOutcomeRoutes &&
+        PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id)) ||
+        (!supportsProgressOutcomeFailureRoute &&
+          anchor.id === "workstation-on-failure-source"));
     const handleValidation = validationHandleErrors?.get(anchor.id);
     const rendersHandleValidation =
       args.nodeKind !== "workstation" ||
@@ -436,7 +451,10 @@ function connectionAnchorId(
   edgeKind: FactoryGraphEdgeKind,
   role: "source" | "target",
 ) {
-  if (edgeKind === "work-type-state" || edgeKind === "work-state-visibility-bypass") {
+  if (
+    edgeKind === "work-type-state" ||
+    edgeKind === "work-state-visibility-bypass"
+  ) {
     return null;
   }
 

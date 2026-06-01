@@ -4,11 +4,11 @@ import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import { resolveEditableWorkstationOverwriteFields } from "../../current-selection/workstation-selection/editing/editable-workstation-overwrite-fields";
 import {
   applyEditableWorkstationDraft,
-  areEditableWorkstationDraftsEqual,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationCron,
   resolveEditableWorkstationValues,
 } from "./workstation-editable-values";
+import { editableWorkstationDraftsEqual } from "./workstation-guards";
 
 const selectedNode: DashboardWorkstationNode = {
   model: "gpt-5.4",
@@ -65,7 +65,10 @@ describe("resolveEditableWorkstationValues", () => {
       workerTypeByName: {
         reviewer: "MODEL_WORKER",
       },
+      guards: [],
+      inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
+      workstationOptions: ["Review"],
       workstationType: "MODEL_WORKSTATION",
     });
   });
@@ -191,7 +194,10 @@ describe("resolveEditableWorkstationValues", () => {
       workerName: "missing-worker",
       workerOptions: [],
       workerTypeByName: {},
+      guards: [],
+      inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
+      workstationOptions: ["Review"],
       workstationType: "MODEL_WORKSTATION",
     });
   });
@@ -247,7 +253,8 @@ describe("resolveEditableWorkstationValues", () => {
       selectedNode,
       {
         behavior: "POLLER",
-        cron: null,
+        guards: [{ maxVisits: 1, type: "VISIT_COUNT" }],
+        inputs: [{ guards: [], state: "queued", workType: "story" }],
         prompt: "Review the updated prompt before approval.",
         runnerName: null,
         workerName: "reviewer",
@@ -361,7 +368,10 @@ describe("resolveEditableWorkstationValues", () => {
       workerTypeByName: {
         processor: "MODEL_WORKER",
       },
+      guards: [],
+      inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
+      workstationOptions: ["Review", "Plan", "Code"],
       workstationType: "MODEL_WORKSTATION",
     });
   });
@@ -450,7 +460,8 @@ describe("resolveEditableWorkstationValues", () => {
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
         behavior: "STANDARD",
-        cron: null,
+        guards: [],
+        inputs: [{ guards: [], state: "queued", workType: "story" }],
         prompt: "Updated review work",
         runnerName: "gemini",
         workerName: "reviewer",
@@ -509,7 +520,8 @@ describe("resolveEditableWorkstationValues", () => {
       selectedNode,
       {
         behavior: "REPEATER",
-        cron: null,
+        guards: [],
+        inputs: [{ guards: [], state: "queued", workType: "story" }],
         prompt: "Updated review prompt only.",
         runnerName: null,
         workerName: "processor",
@@ -568,10 +580,572 @@ describe("resolveEditableWorkstationValues", () => {
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
         behavior: "STANDARD",
-        cron: null,
+        guards: [],
+        inputs: [{ guards: [], state: "queued", workType: "story" }],
         prompt: "Updated review work",
         runnerName: null,
         workerName: "missing-worker",
+      }),
+    ).toBeNull();
+  });
+
+  it("preserves legacy worker and ignores draft worker, prompt, and runner for LOGICAL_MOVE", () => {
+    const logicalMoveNode: DashboardWorkstationNode = {
+      model: "",
+      node_id: "move",
+      transition_id: "move",
+      workstation_kind: "LOGICAL_MOVE",
+      workstation_name: "Move",
+    };
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [],
+      workstations: [
+        {
+          body: "Legacy prompt that must not be overwritten.",
+          id: "move",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Move",
+          outputs: [{ state: "moved", workType: "story" }],
+          runner: "gemini",
+          type: "LOGICAL_MOVE",
+          worker: "removed-worker",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      logicalMoveNode,
+      {
+        behavior: "POLLER",
+        prompt: "Draft prompt must not apply.",
+        runnerName: "codex",
+        workerName: "missing-worker",
+      },
+    );
+
+    expect(updatedFactory).toMatchObject({
+      workstations: [
+        {
+          body: "Legacy prompt that must not be overwritten.",
+          name: "Move",
+          runner: "gemini",
+          type: "LOGICAL_MOVE",
+          worker: "removed-worker",
+        },
+      ],
+    });
+    expect(updatedFactory?.workstations?.[0]).toBe(factory.workstations?.[0]);
+  });
+
+  it("keeps cron behavior selectable for existing cron workstations", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          command: "./cron.sh",
+          name: "cron-runner",
+          type: "SCRIPT_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          behavior: "CRON",
+          cron: { schedule: "0 * * * *" },
+          inputs: [],
+          name: "Review",
+          outputs: [],
+          worker: "cron-runner",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode),
+    ).toMatchObject({
+      behavior: "CRON",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER", "CRON"],
+      guards: [],
+      inputs: [],
+    });
+  });
+
+  it("reads workstation-level and per-input guards into editable values", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review work",
+          guards: [
+            {
+              matchConfig: { inputKey: ".Name" },
+              type: "MATCHES_FIELDS",
+            },
+            {
+              maxVisits: 2,
+              type: "VISIT_COUNT",
+              workstation: "Plan",
+            },
+          ],
+          id: "review",
+          inputs: [
+            {
+              guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode),
+    ).toMatchObject({
+      guards: [
+        {
+          matchConfig: { inputKey: ".Name" },
+          type: "MATCHES_FIELDS",
+        },
+        {
+          maxVisits: 2,
+          type: "VISIT_COUNT",
+          workstation: "Plan",
+        },
+      ],
+      inputs: [
+        {
+          guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+          state: "queued",
+          workType: "story",
+        },
+      ],
+    });
+  });
+
+  it("writes draft guards onto the selected workstation", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
+    expect(editableValues).not.toBeNull();
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
+        guards: [{ maxVisits: 3, type: "VISIT_COUNT", workstation: "Review" }],
+        inputs: [
+          {
+            guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]).toMatchObject({
+      body: "Review work",
+      guards: [{ maxVisits: 3, type: "VISIT_COUNT", workstation: "Review" }],
+      inputs: [
+        {
+          guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+          state: "queued",
+          workType: "story",
+        },
+      ],
+    });
+  });
+
+  it("normalizes multiple input guards to one when reading editable values", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          id: "review",
+          inputs: [
+            {
+              guards: [
+                { matchInput: "planItem", type: "SAME_NAME" },
+                { parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" },
+              ],
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "Review",
+          outputs: [],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode)?.inputs,
+    ).toEqual([
+      {
+        guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+        state: "queued",
+        workType: "story",
+      },
+    ]);
+  });
+
+  it("applies SAME_NAME and ALL_CHILDREN_COMPLETE input guards onto the selected workstation", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [
+            { state: "queued", workType: "planItem" },
+            { state: "queued", workType: "story" },
+          ],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
+    expect(editableValues).not.toBeNull();
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
+        inputs: [
+          {
+            guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+            state: "queued",
+            workType: "planItem",
+          },
+          {
+            guards: [
+              { parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" },
+            ],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]?.inputs).toEqual([
+      {
+        guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+        state: "queued",
+        workType: "planItem",
+      },
+      {
+        guards: [{ parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" }],
+        state: "queued",
+        workType: "story",
+      },
+    ]);
+  });
+
+  it("clears an input guard without removing the input slot", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          id: "review",
+          inputs: [
+            {
+              guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "Review",
+          outputs: [],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
+    expect(editableValues).not.toBeNull();
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
+        inputs: [{ guards: [], state: "queued", workType: "story" }],
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]?.inputs).toEqual([
+      { state: "queued", workType: "story" },
+    ]);
+  });
+
+  it("preserves outputs, special IO, workstation guards, and other workstations when only input guards change", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Plan work",
+          id: "plan",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Plan",
+          outputs: [],
+          worker: "reviewer",
+        },
+        {
+          body: "Review work",
+          guards: [{ maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" }],
+          id: "review",
+          inputs: [
+            {
+              guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "Review",
+          onRejection: [{ state: "rejected", workType: "story" }],
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
+    expect(editableValues).not.toBeNull();
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
+        inputs: [
+          {
+            guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]).toMatchObject({
+      body: "Plan work",
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Plan",
+    });
+    expect(updatedFactory?.workstations?.[1]).toMatchObject({
+      body: "Review work",
+      guards: [{ maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" }],
+      inputs: [
+        {
+          guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+          state: "queued",
+          workType: "story",
+        },
+      ],
+      onRejection: [{ state: "rejected", workType: "story" }],
+      outputs: [{ state: "approved", workType: "story" }],
+    });
+  });
+
+  it("preserves workstation and input guards when only non-guard draft fields change", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review work",
+          guards: [{ maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" }],
+          id: "review",
+          inputs: [
+            {
+              guards: [
+                { parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" },
+              ],
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
+    expect(editableValues).not.toBeNull();
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
+        prompt: "Updated review prompt only.",
+        runnerName: "gemini",
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]).toMatchObject({
+      body: "Updated review prompt only.",
+      guards: [{ maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" }],
+      inputs: [
+        {
+          guards: [{ parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" }],
+          state: "queued",
+          workType: "story",
+        },
+      ],
+      runner: "gemini",
+    });
+  });
+});
+
+describe("applyEditableWorkstationDraft failures", () => {
+  it("returns null when the selected workstation cannot be resolved", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [{ model: "gpt-5.5", name: "reviewer", type: "MODEL_WORKER" }],
+      workstations: [],
+      workTypes: [],
+    };
+
+    expect(
+      applyEditableWorkstationDraft(factory, selectedNode, {
+        behavior: "STANDARD",
+        guards: [],
+        inputs: [],
+        prompt: "Updated prompt",
+        runnerName: "gemini",
+        workerName: "reviewer",
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when workers are missing for a model workstation draft", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      applyEditableWorkstationDraft(factory, selectedNode, {
+        behavior: "STANDARD",
+        guards: [],
+        inputs: [],
+        prompt: "Updated prompt",
+        runnerName: "gemini",
+        workerName: "reviewer",
       }),
     ).toBeNull();
   });
@@ -687,7 +1261,7 @@ describe("editable workstation cron draft", () => {
       triggerAtStart: false,
     };
     expect(
-      areEditableWorkstationDraftsEqual(draft, {
+      editableWorkstationDraftsEqual(draft, {
         ...draft,
         cron: {
           ...draftCron,
@@ -709,6 +1283,8 @@ describe("editable workstation cron draft", () => {
           jitter: "1s",
           expiryWindow: "10m",
         },
+        guards: [],
+        inputs: [],
         prompt: "",
         runnerName: null,
         workerName: "cron-runner",
@@ -750,6 +1326,8 @@ describe("editable workstation cron draft", () => {
           jitter: "1s",
           expiryWindow: "10m",
         },
+        guards: [],
+        inputs: [],
         prompt: "Run on demand.",
         runnerName: null,
         workerName: "cron-runner",
@@ -788,7 +1366,10 @@ describe("editable workstation cron draft", () => {
       workerName: "cron-runner",
       workerOptions: ["cron-runner"],
       workerTypeByName: { "cron-runner": "SCRIPT_WORKER" },
+      guards: [],
+      inputs: [],
       workstationName: "Cron Tick",
+      workstationOptions: ["Cron Tick"],
       workstationType: "MODEL_WORKSTATION",
     });
     const sessionCron = sessionStartDraft.cron ?? {

@@ -740,6 +740,66 @@ describe("StateNodeDetailCard editable work state configuration", () => {
     ).toBeNull();
   });
 
+  it("omits global unsaved helper paragraphs for dirty ready-state work state drafts", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+      (place) => place.place_id === "story:implemented",
+    );
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+
+    render(
+      <StateNodeDetailCard
+        currentWorkItems={[]}
+        editableConfigurationState={{
+          baseVersion: buildFactoryDocument().version,
+          canSave: true,
+          draft: {
+            name: "implemented",
+            type: "PROCESSING",
+          },
+          hasValidationErrors: false,
+          initialValues: {
+            stateName: "implemented",
+            stateNamesInWorkType: ["implemented", "complete"],
+            stateType: "PROCESSING",
+            workTypeName: "story",
+          },
+          isDirty: true,
+          markChangesSaved: vi.fn(),
+          onNameChange: vi.fn(),
+          onResetToLatest: vi.fn(),
+          originalStateName: "implemented",
+          pendingFactoryDefinition: buildFactoryDocument(),
+          status: "ready",
+          validationErrors: {},
+          workTypeName: "story",
+        }}
+        headerAction={buildWorkStateHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
+        place={resolvedSelectedState}
+        tokenCount={0}
+      />,
+    );
+
+    expect(
+      screen.queryByText("You have unsaved changes for this work state."),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "Changes stay local to this edit session until you save the running factory.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: messages.editableConfigurationSaveAction })
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: messages.discardDraftAction }),
+    ).toBeTruthy();
+  });
+
   it("keeps runtime work list content when editable configuration is ready", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedState =

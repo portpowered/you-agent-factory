@@ -24,75 +24,69 @@ run `you docs <topic>` for packaged topics such as `agents`,
 
 These are the fixed topic names accepted by `you docs <topic>`.
 
-- `agents` is the packaged agent orientation guide. Use
-  [Agents](reference/agents.md) for read order, work submission, the command
-  matrix, planner vs executor, and factory-local docs discovery.
-- `authoring-factories` is the packaged practical factory authoring guide. Use
-  [Author factories](reference/authoring-factories.md) for workflow sequencing,
-  runnable examples, mock-worker checks, and replay recording.
-- `config` is the packaged `factory.json` topology reference. Use
-  [Config](reference/config.md) for work types, states, workers, workstations,
-  resources, portability, and top-level layout fields.
-- `mock-workers` is the packaged mock-worker reference. Use
-  [Mock workers](reference/mock-workers.md) for `--with-mock-workers` and the
-  `mockWorkers` JSON contract.
-- `record-replay` is the packaged record and replay reference. Use
-  [Record and replay](reference/record-replay.md) for default recording,
-  `--record`, `--replay`, and incompatible flag combinations.
-- `guards` is the packaged guards reference. Use [Guards](reference/guards.md)
-  for workstation, input, and factory guards plus guarded loop breakers.
-- `relationships` is the packaged batch and lineage relations reference. Use
-  [Relationships](reference/relationships.md) for `DEPENDS_ON`, `PARENT_CHILD`,
-  and runtime `SPAWNED_BY` semantics.
-- `work` is the packaged submitted-work reference. Use
-  [Submitted work](reference/work.md) for `POST /work`, tags, batch cross-links,
-  and submission-oriented runtime flow.
+- `agents` is the packaged agent orientation guide. Run `you docs agents` for
+  read order, work submission, the command matrix, planner vs executor, and
+  factory-local docs discovery.
+- `authoring-factories` is the packaged practical factory authoring guide. Run
+  `you docs authoring-factories` for workflow sequencing, runnable examples,
+  mock-worker checks, and replay recording.
+- `config` is the packaged `factory.json` topology reference. Run `you docs
+  config` for work types, states, workers, workstations, resources,
+  portability, and top-level layout fields.
+- `mock-workers` is the packaged mock-worker reference. Run `you docs
+  mock-workers` for `--with-mock-workers` and the `mockWorkers` JSON contract.
+- `record-replay` is the packaged record and replay reference. Run `you docs
+  record-replay` for default recording, `--record`, `--replay`, and incompatible
+  flag combinations.
+- `guards` is the packaged guards reference. Run `you docs guards` for
+  workstation, input, and factory guards plus guarded loop breakers.
+- `relationships` is the packaged batch and lineage relations reference. Run
+  `you docs relationships` for `DEPENDS_ON`, `PARENT_CHILD`, and runtime
+  `SPAWNED_BY` semantics.
+- `work` is the packaged submitted-work reference. Run `you docs work` for
+  `POST /work`, tags, batch cross-links, and submission-oriented runtime flow.
 - `workstations` is the packaged workstation reference. `workstation` remains
-  accepted as a compatibility alias for the same raw markdown. Use
-  [Workstations](reference/workstations.md) for the canonical workstation
-  guide.
-- `workers` is the packaged worker quick reference. Use
-  [Workers](reference/workers.md) for the canonical worker guide.
-- `resources` is the packaged bounded-concurrency reference. Use
-  [Resources](reference/resources.md) for the resource slice and
-  [Config](reference/config.md) for top-level topology fields.
-- `models` is the packaged model operations quick reference. Use
-  [Models and model operations](reference/models.md) for model discovery,
-  invocation, and local or hosted model setup.
-- `batch-inputs` is the packaged batch-request reference. Use
-  [Batch inputs](reference/batch-inputs.md) for submitted payload fields and
-  watched-file placement. `batch-work` remains accepted as a compatibility
-  alias for the same raw markdown.
-- `templates` is the packaged template syntax reference. Use
-  [Templates](reference/templates.md) for template surfaces, the complete
-  variable inventory, and JSON-versus-Markdown quoting rules.
+  accepted as a compatibility alias for the same raw markdown. Run `you docs
+  workstations` for the canonical workstation guide.
+- `workers` is the packaged worker quick reference. Run `you docs workers` for
+  the canonical worker guide.
+- `resources` is the packaged bounded-concurrency reference. Run `you docs
+  resources` for the resource slice and `you docs config` for top-level topology
+  fields.
+- `models` is the packaged model operations quick reference. Run `you docs
+  models` for model discovery, invocation, and local or hosted model setup.
+- `batch-inputs` is the packaged batch-request reference. Run `you docs
+  batch-inputs` for submitted payload fields and watched-file placement.
+  `batch-work` remains accepted as a compatibility alias for the same raw
+  markdown.
+- `templates` is the packaged template syntax reference. Run `you docs
+  templates` for template surfaces, the complete variable inventory, and
+  JSON-versus-Markdown quoting rules.
 
 ## Customer Guides
 
 - [CLI reference](reference/README.md) is the package-owned topic index for the stable packaged reference pages.
 - Canonical concept guides:
-  - [Config](reference/config.md) owns work types, work states, top-level
-    `factory.json`, routing behavior, runtime resources, and portability fields.
-  - [Submitted work](reference/work.md) owns `POST /work`, submitted-work tags,
-    and batch cross-links.
-  - [Workstations reference](reference/workstations.md) owns workstation kinds,
-    route fields, runtime step behavior, and workstation-scoped execution
-    settings.
-  - [Workers reference](reference/workers.md) owns worker types, worker-scoped
-    runtime fields, and split `workers/<name>/AGENTS.md` placement.
-  - [Batch inputs](reference/batch-inputs.md) owns `FACTORY_REQUEST_BATCH`
-    ingress, watched-file placement, and authored relation types (`batch-work`
-    remains a CLI alias for the same guide).
-- [Config reference](reference/config.md) explains the canonical split layout,
-  `factory.json`, and where worker, workstation, and input files live.
-- [Resources reference](reference/resources.md) explains top-level resource pools
-  and workstation or worker resource requirements.
-- [Templates reference](reference/templates.md) explains supported Go-template
-  surfaces, the complete variable inventory, and the JSON-versus-Markdown quoting
-  rule.
-- [Author factories](reference/authoring-factories.md) explains how to configure
-  and run factories end to end, including mock-worker checks, replay recording,
-  and reusable inputs under [docs/examples](examples/README.md).
+  - `you docs config` owns work types, work states, top-level `factory.json`,
+    routing behavior, runtime resources, and portability fields.
+  - `you docs work` owns `POST /work`, submitted-work tags, and batch
+    cross-links.
+  - `you docs workstations` owns workstation kinds, route fields, runtime step
+    behavior, and workstation-scoped execution settings.
+  - `you docs workers` owns worker types, worker-scoped runtime fields, and split
+    `workers/<name>/AGENTS.md` placement.
+  - `you docs batch-inputs` owns `FACTORY_REQUEST_BATCH` ingress, watched-file
+    placement, and authored relation types (`batch-work` remains a CLI alias for
+    the same guide).
+- Run `you docs config` for the canonical split layout, `factory.json`, and where
+  worker, workstation, and input files live.
+- Run `you docs resources` for top-level resource pools and workstation or
+  worker resource requirements.
+- Run `you docs templates` for supported Go-template surfaces, the complete
+  variable inventory, and the JSON-versus-Markdown quoting rule.
+- Run `you docs authoring-factories` to configure and run factories end to end,
+  including mock-worker checks, replay recording, and reusable inputs under
+  [docs/examples](examples/README.md).
 - [Author AGENTS.md](reference/authoring-agents-md.md) explains split
   `AGENTS.md` file shape, prompt placement, and authoring patterns.
 - [The Zen of flow](reference/the-zen-of-flow.md) explains the project’s workflow

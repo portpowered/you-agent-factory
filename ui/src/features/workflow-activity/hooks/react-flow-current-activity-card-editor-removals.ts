@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
@@ -38,6 +38,22 @@ export function useFactoryGraphRemovalController({
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
   } = usePendingRemovalIntentState(draftState, locale);
+
+  useEffect(() => {
+    if (activeTool === "delete") {
+      return;
+    }
+
+    setBlockedRemovalReason(null);
+    setPendingRemovalEdgeId(null);
+    setPendingRemovalNodeId(null);
+  }, [
+    activeTool,
+    setBlockedRemovalReason,
+    setPendingRemovalEdgeId,
+    setPendingRemovalNodeId,
+  ]);
+
   const notifyNodeRemovedFromDraft = useCallback(
     (nodeId: string) => {
       onNodeRemovedFromDraft?.(nodeId);

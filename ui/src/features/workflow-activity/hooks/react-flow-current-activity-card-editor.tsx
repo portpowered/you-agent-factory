@@ -79,6 +79,7 @@ export function useCurrentActivityGraphEditor(
     setActiveTool,
     setEditorMode,
     transientControllerReset: {
+      setBlockedRemovalReason: controllers.setBlockedRemovalReason,
       setConnectionNotice: controllers.setConnectionNotice,
       setPendingRemovalEdgeId: controllers.setPendingRemovalEdgeId,
       setPendingRemovalNodeId: controllers.setPendingRemovalNodeId,

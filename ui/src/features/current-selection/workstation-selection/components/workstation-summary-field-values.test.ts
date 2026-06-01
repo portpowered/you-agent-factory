@@ -4,6 +4,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashbo
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import {
   resolveWorkstationSummaryKindValue,
+  resolveWorkstationSummaryRequiresWorkerAssignment,
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
 } from "./workstation-summary-field-values";
@@ -11,6 +12,8 @@ import {
 const readyEditableConfigurationState = {
   draft: {
     behavior: "STANDARD" as const,
+    guards: [],
+    inputs: [],
     prompt: "Review",
     runnerName: null,
     workerName: "reviewer",
@@ -36,7 +39,10 @@ const readyEditableConfigurationState = {
     workerOptions: ["reviewer"],
     workerTypeByName: {},
     workstationName: "Review",
+    workstationOptions: ["Review"],
     workstationType: "MODEL_WORKSTATION" as const,
+    guards: [],
+    inputs: [],
   },
   isDirty: false,
   markChangesSaved: () => {},
@@ -44,8 +50,14 @@ const readyEditableConfigurationState = {
   onBehaviorChange: () => {},
   onPromptChange: () => {},
   onResetToLatest: () => {},
+  onGuardsChange: () => {},
+  onInputsChange: () => {},
   onRunnerChange: () => {},
   onWorkerChange: () => {},
+  workstationOptionsState: {
+    options: ["Review"],
+    status: "ready",
+  },
   overwriteFieldNames: [],
   pendingFactoryDefinition: null,
   promptDiagnostics: [],
@@ -55,6 +67,51 @@ const readyEditableConfigurationState = {
   validationErrors: {},
   workerOptionsState: { options: ["reviewer"], status: "ready" as const },
 };
+
+const modelWorkstationNode =
+  semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
+
+const logicalMoveWorkstationNode = {
+  ...modelWorkstationNode,
+  workstation_kind: "LOGICAL_MOVE",
+};
+
+const logicalMoveEditableConfigurationState = {
+  ...readyEditableConfigurationState,
+  initialValues: {
+    ...readyEditableConfigurationState.initialValues,
+    workstationType: "LOGICAL_MOVE" as const,
+  },
+};
+
+describe("resolveWorkstationSummaryRequiresWorkerAssignment", () => {
+  it("returns false for ready LOGICAL_MOVE editable configuration", () => {
+    expect(
+      resolveWorkstationSummaryRequiresWorkerAssignment(
+        logicalMoveEditableConfigurationState,
+        logicalMoveWorkstationNode,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true for ready model workstation editable configuration", () => {
+    expect(
+      resolveWorkstationSummaryRequiresWorkerAssignment(
+        readyEditableConfigurationState,
+        modelWorkstationNode,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false when topology kind is LOGICAL_MOVE before editable configuration is ready", () => {
+    expect(
+      resolveWorkstationSummaryRequiresWorkerAssignment(
+        { status: "loading" },
+        logicalMoveWorkstationNode,
+      ),
+    ).toBe(false);
+  });
+});
 
 describe("resolveWorkstationSummaryTypeValue", () => {
   const messages = getWorkstationDetailMessages("en");
@@ -78,6 +135,15 @@ describe("resolveWorkstationSummaryTypeValue", () => {
     expect(resolveWorkstationSummaryTypeValue(undefined, messages)).toBe(
       "Loading workstation type...",
     );
+  });
+
+  it("localizes LOGICAL_MOVE workstation type when editable configuration is ready", () => {
+    expect(
+      resolveWorkstationSummaryTypeValue(
+        logicalMoveEditableConfigurationState,
+        messages,
+      ),
+    ).toBe("Logical move");
   });
 });
 
@@ -170,9 +236,29 @@ describe("resolveWorkstationSummaryKindValue", () => {
       ),
     ).toBe("未知种类：FUTURE-KIND");
   });
+
+  it("returns null for LOGICAL_MOVE workstations", () => {
+    expect(
+      resolveWorkstationSummaryKindValue(
+        logicalMoveEditableConfigurationState,
+        logicalMoveWorkstationNode,
+        getWorkstationDetailMessages("en"),
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("resolveWorkstationSummaryRunnerValue", () => {
+  it("returns null for LOGICAL_MOVE workstations", () => {
+    expect(
+      resolveWorkstationSummaryRunnerValue(
+        logicalMoveEditableConfigurationState,
+        getWorkstationDetailMessages("en"),
+        logicalMoveWorkstationNode,
+      ),
+    ).toBeNull();
+  });
+
   it("shows localized runner display metadata with RunnerSelectionSource labels", () => {
     expect(
       resolveWorkstationSummaryRunnerValue(
@@ -196,6 +282,7 @@ describe("resolveWorkstationSummaryRunnerValue", () => {
           status: "ready",
         } as never,
         getWorkstationDetailMessages("en"),
+        modelWorkstationNode,
       ),
     ).toBe("Gemini (Workstation)");
   });
@@ -224,6 +311,7 @@ describe("resolveWorkstationSummaryRunnerValue", () => {
           status: "ready",
         } as never,
         getWorkstationDetailMessages("en"),
+        modelWorkstationNode,
       ),
     ).toBe("Codex (Legacy provider)");
   });
@@ -244,6 +332,7 @@ describe("resolveWorkstationSummaryRunnerValue", () => {
           status: "ready",
         } as never,
         messages,
+        modelWorkstationNode,
       ),
     ).toBe(messages.unavailableRunnerValue);
   });

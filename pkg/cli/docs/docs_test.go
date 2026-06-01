@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -147,6 +148,26 @@ func TestTopicSummaries_ReturnsTopicDescriptionsInSupportedOrder(t *testing.T) {
 	}
 }
 
+func TestQuickStartMarkdown_AtMostSixLines(t *testing.T) {
+	t.Parallel()
+
+	got := QuickStartMarkdown("you")
+	lines := strings.Split(strings.TrimSpace(got), "\n")
+	if len(lines) > 6 {
+		t.Fatalf("QuickStartMarkdown() has %d lines, want <= 6:\n%s", len(lines), got)
+	}
+	for _, want := range []string{
+		"`you docs agents`",
+		"`you submit batch`",
+		"`you session list`",
+		"`--verbose` or `--debug`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("QuickStartMarkdown() missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 	t.Parallel()
 
@@ -226,9 +247,10 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 
 	for _, want := range []string{
 		"# Agents",
+		"## Read order",
+		"## CLI-only ingress",
 		"Autonomous agents must submit work only through the CLI",
-		"## Submitting Work",
-		"### Batch submit for agents",
+		"## Batch submit for agents",
 		"### Idempotency and duplicate work",
 		"you submit batch",
 		"requestId",
@@ -237,20 +259,17 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"## Is the factory running?",
 		"you session list",
 		"you factory query",
-		"GET /factory-sessions/{session_id}/status",
-		"factoryState",
-		"runtimeStatus",
-		"categories",
-		"http://localhost:7437/dashboard/ui",
-		"you run --continuously",
+		"you docs sessions",
 		"## Operator loop",
+		"you work list --name",
 		"you submit",
 		"--name driver-incident-review",
 		"--work-type-name task",
 		"--payload request.md",
-		"## Command Matrix",
+		"## Command matrix",
 		"Operator-only",
-		"you docs sessions",
+		"## Topic router",
+		"`you docs config`",
 		"[Is the factory running?](#is-the-factory-running?)",
 	} {
 		if !strings.Contains(got, want) {
@@ -260,9 +279,50 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 	for _, wrapper := range []string{
 		"# Docs",
 		"Run `you docs agents`.",
+		"## Start Here",
+		"## Read Order (Any Factory)",
 	} {
 		if strings.Contains(got, wrapper) {
 			t.Fatalf("Markdown(agents) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+	lineCount := strings.Count(got, "\n") + 1
+	if lineCount > 220 {
+		t.Fatalf("Markdown(agents) line count = %d, want at most 220", lineCount)
+	}
+	topicRouter := got[strings.Index(got, "## Topic router"):]
+	if strings.Contains(topicRouter, ".md)") {
+		t.Fatalf("Markdown(agents) topic router must not use packaged-topic .md links:\n%s", topicRouter)
+	}
+}
+
+func TestMarkdown_AgentsDocumentsMinimalOperatorSpotCheckFlow(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("agents")
+	if err != nil {
+		t.Fatalf("Markdown(agents) error = %v", err)
+	}
+
+	for _, cmd := range []string{
+		"you session list",
+		"you submit batch",
+		"you work list --name",
+	} {
+		if !strings.Contains(got, cmd) {
+			t.Fatalf("Markdown(agents) missing operator spot-check command %q", cmd)
+		}
+	}
+	if !strings.Contains(got, "you submit batch ./") {
+		t.Fatalf("Markdown(agents) missing file-path batch example (you submit batch ./…)")
+	}
+	operatorLoop := got[strings.Index(got, "## Operator loop"):]
+	if operatorLoop == got {
+		t.Fatal("Markdown(agents) missing ## Operator loop section")
+	}
+	for _, step := range []string{"Check running", "Submit", "Verify"} {
+		if !strings.Contains(operatorLoop, step) {
+			t.Fatalf("Markdown(agents) operator loop missing step %q", step)
 		}
 	}
 }
@@ -335,8 +395,8 @@ func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 		"stderr",
 		"## Tags And Prompt Templates",
 		"Token.Tags",
-		"[Config](config.md)",
-		"[Batch Inputs](batch-inputs.md)",
+		"`you docs config`",
+		"`you docs batch-inputs`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(work) missing %q:\n%s", want, got)
@@ -511,8 +571,8 @@ func TestMarkdown_GuardsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"matchInput",
 		"limits.maxExecutionTime",
 		"limits.maxRetries",
-		"[Workstations](workstations.md)",
-		"[Relationships](relationships.md)",
+		"`you docs workstations`",
+		"`you docs relationships`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(guards) missing %q:\n%s", want, got)
@@ -551,8 +611,8 @@ func TestMarkdown_RelationshipsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"Whole-Batch Validation",
 		"Parent-Aware Guard Linkage",
 		"ALL_CHILDREN_COMPLETE",
-		"[Guards](guards.md)",
-		"[Batch Inputs](batch-inputs.md)",
+		"`you docs guards`",
+		"`you docs batch-inputs`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(relationships) missing %q:\n%s", want, got)
@@ -638,9 +698,9 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"## `--server` and `--session` routing",
 		"you submit --session session-beta",
 		"you run --continuously",
-		"[Agents](agents.md)",
-		"[Work](work.md)",
-		"[Config](config.md)",
+		"`you docs agents`",
+		"`you docs work`",
+		"`you docs config`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(sessions) missing %q:\n%s", want, got)
@@ -652,6 +712,44 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 	} {
 		if strings.Contains(got, wrapper) {
 			t.Fatalf("Markdown(sessions) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
+func TestMarkdown_PackagedReferenceTopicsHaveNoPackagedTopicMarkdownLinks(t *testing.T) {
+	t.Parallel()
+
+	packagedTopicMD := regexp.MustCompile(`\[[^\]]+\]\((?:\./|\.\./reference/)?([a-z0-9-]+)\.md(?:#[^)]*)?\)`)
+	exempt := map[string]bool{"README": true}
+
+	repoRoot := testutil.MustRepoRoot(t)
+	referenceDir := filepath.Join(repoRoot, "docs", "reference")
+	entries, err := os.ReadDir(referenceDir)
+	if err != nil {
+		t.Fatalf("ReadDir(docs/reference) error = %v", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		if entry.Name() == "README.md" {
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(referenceDir, entry.Name()))
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", entry.Name(), err)
+		}
+		doc := string(content)
+		for _, match := range packagedTopicMD.FindAllString(doc, -1) {
+			stem := packagedTopicMD.FindStringSubmatch(match)[1]
+			if exempt[stem] {
+				continue
+			}
+			t.Fatalf("%s contains packaged-topic markdown link %q; use `you docs %s` instead", entry.Name(), match, stem)
+		}
+		if strings.Contains(doc, "you docs authoring-agents-md") {
+			t.Fatalf("%s references authoring-agents-md as a docs topic; use docs/reference/authoring-agents-md.md path instead", entry.Name())
 		}
 	}
 }

@@ -1,9 +1,7 @@
-import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
-import {
-  factoryGraphConnectionAnchorContext,
-  workstationRendersProgressOutcomeHandleValidation,
-} from "./factory-graph-editor-connections";
+import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import { factoryGraphConnectionAnchorContext } from "./factory-graph-editor-connections";
+import { workstationRendersProgressOutcomeHandleValidation } from "./factory-graph-progress-outcome-handle-visibility";
 
 export type FactoryValidationSubjectLocation =
   FactoryValidationTarget["subject"]["location"];
@@ -55,9 +53,7 @@ export function factoryGraphNodeIdForWorkType(subjectId: string): string {
   return `${WORK_TYPE_GRAPH_NODE_PREFIX}${subjectId}`;
 }
 
-export function parseFactoryGraphWorkTypeNodeId(
-  nodeId: string,
-): string | null {
+export function parseFactoryGraphWorkTypeNodeId(nodeId: string): string | null {
   if (!nodeId.startsWith(WORK_TYPE_GRAPH_NODE_PREFIX)) {
     return null;
   }

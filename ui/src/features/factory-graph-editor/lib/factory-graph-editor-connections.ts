@@ -1,8 +1,13 @@
-import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
-import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import {
+  type WorkstationProgressOutcomeRouteContext,
+  workstationSupportsProgressOutcomeFailureRoute,
+  workstationSupportsProgressOutcomeRoutes,
+} from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import {
+  appendUniqueEdgeChange,
+  edgeChangeId,
   type FactoryGraphDraft,
   type FactoryGraphDraftEdgeChange,
   type FactoryGraphEdge,
@@ -10,8 +15,6 @@ import {
   type FactoryGraphNodeKind,
   type FactoryGraphTopology,
   type FactoryWorkstation,
-  appendUniqueEdgeChange,
-  edgeChangeId,
 } from "./factory-graph-draft-types";
 import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "./factory-graph-progress-outcome-connection-anchors";
 
@@ -196,15 +199,22 @@ function filterWorkstationConnectionAnchors(
     context && !workstationRequiresWorkerAssignment(context.workstation)
       ? anchors.filter((anchor) => anchor.id !== "worker-assignment-target")
       : anchors;
-  if (
-    !context ||
-    workstationSupportsProgressOutcomeRoutes(context.workstation)
-  ) {
+  if (!context) {
     return filtered;
   }
-  return filtered.filter(
-    (anchor) => !PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id),
-  );
+
+  let result = filtered;
+  if (!workstationSupportsProgressOutcomeRoutes(context.workstation)) {
+    result = result.filter(
+      (anchor) => !PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id),
+    );
+  }
+  if (!workstationSupportsProgressOutcomeFailureRoute(context.workstation)) {
+    result = result.filter(
+      (anchor) => anchor.id !== "workstation-on-failure-source",
+    );
+  }
+  return result;
 }
 
 export function getFactoryGraphConnectionAnchors(
@@ -218,8 +228,6 @@ export function getFactoryGraphConnectionAnchors(
 
   return filterWorkstationConnectionAnchors(anchors, context);
 }
-
-export { workstationRendersProgressOutcomeHandleValidation, workstationRendersProgressOutcomeZAxisHintAnchors } from "./factory-graph-progress-outcome-handle-visibility";
 
 export function getLocalizedFactoryGraphConnectionAnchors(
   kind: FactoryGraphNodeKind,
@@ -473,4 +481,3 @@ export function buildFactoryGraphConnectionNotice(options: {
     options.targetNode.label,
   );
 }
-

@@ -1,74 +1,41 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-05-31
+last-modified: 2026-06-01
 doc-id: agent-factory/guides/agents
 ---
 
 # Agents
 
-Use this guide when you are an autonomous agent or operator learning how to
-orient inside any you-agent-factory deployment: which docs to read first, how
-work enters the factory, and which `you docs` topic answers the next question.
-
-Run `you docs agents` whenever you need the end-to-end agent playbook. Run
+Orient inside any you-agent-factory deployment: what to read first, how work
+enters the factory, and which `you docs` topic answers the next question. Run
 `you docs` with no topic to print the packaged topic index.
 
-## Start Here
+## Read order
 
-1. Run `you docs agents` (this guide).
-2. Run `you docs` to list every packaged topic.
-3. Open the target factory's `factory.json`.
-4. When the factory ships companion docs, read them before submitting work:
-   - prefer `factory/docs/overview.md`
-   - otherwise `factory/docs/README.md`
-5. Open the workstation and worker `AGENTS.md` files for the step you will run.
-6. Open the task-specific `you docs` topic from the [Topic router](#topic-router)
-   table when you need normative contracts.
-
-Do not guess `workTypeName`, inbox paths, or pipeline stages from repository
-layout alone. Instance-specific names belong in factory-local docs, not in this
-packaged guide.
-
-## Read Order (Any Factory)
-
-Use this order before changing files or submitting work:
+Before changing files or submitting work:
 
 | Step | Read |
 |------|------|
 | 1 | `factory.json` in the factory directory |
-| 2 | [Config](config.md) (`you docs config`) for topology, work types, states, workers, workstations, resources, and portability |
+| 2 | `you docs config` for topology, work types, states, workers, workstations, resources, and portability |
 | 3 | Factory-local `factory/docs/overview.md` or `factory/docs/README.md` when present |
 | 4 | `factory/workstations/<name>/AGENTS.md` for the step you execute |
 | 5 | `factory/workers/<name>/AGENTS.md` for the bound worker backend and system prompt |
-| 6 | The task topic from the [Topic router](#topic-router) (for example [Work](work.md), [Batch Inputs](batch-inputs.md), or [Relationships](relationships.md)) |
+| 6 | The task topic from [Topic router](#topic-router) (for example `you docs work`, `you docs batch-inputs`, or `you docs relationships`) |
 
-[Authoring Factories](authoring-factories.md) walks through a full greenfield
-setup when you are creating or restructuring a factory.
+Then open the task-specific `you docs` topic from the router when you need normative
+contracts. Do not guess `workTypeName`, inbox paths, or pipeline stages from repository
+layout alone—instance-specific names belong in factory-local docs. For greenfield factory
+setup, run `you docs authoring-factories`.
 
-## Authoring Factories
+## CLI-only ingress
 
-When you are building or extending a factory rather than only submitting work:
-
-| Need | Topic or file |
-|------|----------------|
-| End-to-end factory walkthrough with runnable commands | [Authoring Factories](authoring-factories.md) |
-| `factory.json` topology and portability | [Config](config.md) |
-| Workstation routing, guards, and runtime kinds | [Workstations](workstations.md) |
-| Worker providers, models, and script workers | [Workers](workers.md) |
-| Split `AGENTS.md` file shape and prompt composition | [Author AGENTS.md](authoring-agents-md.md) (repository doc; not a packaged CLI topic) |
-
-Keep topology changes in `factory.json` and [Config](config.md). Keep prompt
-bodies in worker and workstation `AGENTS.md` files per
-[Author AGENTS.md](authoring-agents-md.md).
-
-## Submitting Work
-
-**Autonomous agents must submit work only through the CLI.** Use `you submit` for
-a single work item, `you submit batch` for a `FACTORY_REQUEST_BATCH` against a
-running factory, and `you run --work <path>` **only** when you are starting a
-local factory run with batch JSON (for example `you run --dir <factory> --work
-batch.json`). Do not treat watched inbox files, dashboard submit, `POST /work`,
-or `PUT /work-requests/{id}` as parallel agent control paths.
+**Autonomous agents must submit work only through the CLI.** Use `you submit` for one
+work item, `you submit batch` for a `FACTORY_REQUEST_BATCH` against a running factory,
+and `you run --work <path>` **only** when starting a local factory run with batch JSON
+(for example `you run --dir <factory> --work batch.json`). Do not treat watched inbox
+files, dashboard submit, `POST /work`, or `PUT /work-requests/{id}` as parallel agent
+control paths.
 
 | Command | When autonomous agents use it |
 |---------|-------------------------------|
@@ -76,29 +43,27 @@ or `PUT /work-requests/{id}` as parallel agent control paths.
 | `you submit batch` | Upsert batch JSON to a **running** factory session |
 | `you run --work <path>` | Submit batch JSON as part of **local startup** only—not steady-state ingress while a factory is already running |
 
-Operators who use watched `factory/inputs/**` folders, dashboard HTTP submit,
-`POST /work`, or `PUT /work-requests/{id}` should read [Batch Inputs](batch-inputs.md)
-(`you docs batch-inputs`) and [Work](work.md) (`you docs work`) for inbox layout,
-HTTP contracts, and operator workflows. Agents still use the CLI commands above.
+Operators who use watched `factory/inputs/**`, dashboard HTTP submit, `POST /work`, or
+`PUT /work-requests/{id}` should read `you docs batch-inputs` and `you docs work` for inbox
+layout, HTTP contracts, and operator workflows.
 
-Batch submissions use `FACTORY_REQUEST_BATCH` with explicit `requestId`, `name`,
-and `workTypeName` fields. See [Batch Inputs](batch-inputs.md) for batch shape,
-`DEPENDS_ON`, and `PARENT_CHILD`; see [Work](work.md) for submitted-work tags and
-verification after CLI submit.
+## Pre-submit checklist
 
-### Batch submit for agents
+- [ ] Confirm a factory service is running — `you session list` or [Is the factory running?](#is-the-factory-running?)
+- [ ] Read `factory.json` and factory-local `factory/docs/overview.md` or `factory/docs/README.md` when present
+- [ ] Confirm the `workTypeName` exists in `factory.json` (`you docs config`)
+- [ ] For multi-item work, prepare `FACTORY_REQUEST_BATCH` JSON and submit with `you submit batch`—not inbox files (`you docs batch-inputs` for operator layout only)
+- [ ] Choose a stable, non-empty `requestId` before the first batch submit; reuse it on retries ([Idempotency and duplicate work](#idempotency-and-duplicate-work))
+- [ ] Set `name` and relation fields with OpenAPI camelCase (`requestId`, `workTypeName`, `sourceWorkName`, `targetWorkName`)
+- [ ] Add `relations[]` when ordering or parent membership matters (`you docs relationships`)
 
-When a factory is already running, upsert multi-item work with `you submit batch`
-against the live session. The JSON body must set `"type": "FACTORY_REQUEST_BATCH"`
-and a **stable, non-empty `requestId`**. The CLI validates locally, then issues
-`PUT` to `/factory-sessions/{session}/work-requests/{requestId}` (same upsert
-semantics as operator HTTP batch ingress in [Batch Inputs](batch-inputs.md)).
+## Batch submit for agents
 
-For `DEPENDS_ON`, `PARENT_CHILD`, relation field names, and full batch shape, read
-[Batch Inputs](batch-inputs.md) (`you docs batch-inputs`)—do not duplicate that
-contract here.
-
-Minimal batch (save to a file or pipe inline):
+When a factory is already running, upsert multi-item work with `you submit batch`. The
+JSON body must set `"type": "FACTORY_REQUEST_BATCH"` and a **stable, non-empty `requestId`**.
+The CLI validates locally, then issues `PUT` to
+`/factory-sessions/{session}/work-requests/{requestId}`. For `DEPENDS_ON`, `PARENT_CHILD`,
+relation field names, and full batch shape, read `you docs batch-inputs`.
 
 ```json
 {
@@ -114,156 +79,51 @@ Minimal batch (save to a file or pipe inline):
 }
 ```
 
-File path (primary form):
-
 ```bash
 you submit batch ./batches/release-story-set.json
-```
-
-Pipe or stdin without a temp file:
-
-```bash
 cat batch.json | you submit batch
+you submit batch --dry-run <path>
 ```
 
-Inline JSON positional (small batches; mind shell length limits):
-
-```bash
-you submit batch '{"requestId":"release-story-set","type":"FACTORY_REQUEST_BATCH","works":[{"name":"story-auth","workTypeName":"story","payload":{"title":"Harden auth session handling"}}]}'
-```
-
-Use `you submit batch --dry-run <path>` to validate without contacting the server.
-Run `you submit batch --help` for `--file`, explicit stdin (`you submit batch -`),
-`--server`, `--session`, and `--json` flags.
+Run `you submit batch --help` for `--file`, stdin (`you submit batch -`), `--server`,
+`--session`, and `--json`.
 
 ### Idempotency and duplicate work
 
-The factory does **not** automatically merge or deduplicate work across arbitrary
-retries. Treat every ingress path by its own rules:
+The factory does **not** automatically deduplicate arbitrary retries:
 
 | Path | Dedupes when you retry? |
 |------|-------------------------|
-| `you submit batch` with the same `requestId` and batch body | Yes — idempotent batch upsert on that work-request |
-| `you submit batch` with a **new** `requestId` | No — creates a new batch submission |
-| `you submit` (unary), repeated with the same flags and payload | No — each successful call enqueues **new** work |
-| New inbox file under `factory/inputs/**` | No — a new file is a new submission, not a CLI batch retry |
-| `POST /work` or dashboard submit with a new body | No — new HTTP or UI submissions are new work |
+| `you submit batch` with the same `requestId` and batch body | Yes — idempotent batch upsert |
+| `you submit batch` with a **new** `requestId` | No — new batch submission |
+| `you submit` (unary), repeated with the same flags and payload | No — each call enqueues **new** work |
+| New inbox file under `factory/inputs/**` | No — new file, not CLI batch retry |
+| `POST /work` or dashboard submit | No — new work |
 
-**Autonomous agents:** Reuse the same stable `requestId` on `you submit batch` when
-you mean to refresh or replace one batch. Change `requestId` (or call unary
-`you submit` again) only when you intentionally want additional work. Do not drop
-files into `factory/inputs` or call `POST /work` expecting the factory to treat
-those retries like `you submit batch` idempotency.
-
-### Pre-Submit Checklist
-
-- [ ] Confirm a factory service is running — run `you session list` or follow
-  [Is the factory running?](#is-the-factory-running?) before `you submit` or
-  `you submit batch` (or before `you run --work` when starting a local run).
-- [ ] Read `factory.json` and factory-local `factory/docs/overview.md` or
-  `factory/docs/README.md` when present.
-- [ ] Confirm the `workTypeName` exists in `factory.json` ([Config](config.md)).
-- [ ] For multi-item work, prepare `FACTORY_REQUEST_BATCH` JSON and submit with
-  `you submit batch`—not by placing files under `factory/inputs` inbox paths
-  ([Batch Inputs](batch-inputs.md) for operator inbox layout only).
-- [ ] Choose a stable, non-empty `requestId` before the first batch submit; reuse
-  it on retries so the factory upserts the same work-request instead of forking
-  duplicate batches ([Idempotency and duplicate work](#idempotency-and-duplicate-work)).
-- [ ] Set `name` and relation fields with OpenAPI camelCase names
-  (`requestId`, `workTypeName`, `sourceWorkName`, `targetWorkName`).
-- [ ] Add `relations[]` when ordering or parent membership matters
-  ([Relationships](relationships.md)).
+**Autonomous agents:** Reuse the same stable `requestId` on `you submit batch` when you mean
+to refresh one batch without creating duplicate batches. Change `requestId` or call unary
+`you submit` only when you want additional work. Do not use inbox or `POST /work` expecting
+`you submit batch` idempotency.
 
 ## Is the factory running?
 
-Before `you submit` or `you submit batch`, confirm a factory service is listening
-and has an open session. A local `factory.json` on disk does not by itself mean a
-runtime is accepting work.
+Before `you submit` or `you submit batch`, confirm a factory service is listening. A local
+`factory.json` on disk does not mean a runtime is accepting work.
 
-Operators who submit via watched `factory/inputs/**`, dashboard, or `POST /work`
-should still follow the checks below; see [Work](work.md) (`you docs work`) for
-HTTP and dashboard submit contracts.
-
-Use these checks in order:
-
-### 1. `you session list` (primary)
-
-`you session list` calls `GET /factory-sessions` on the running host. It is the
-fastest liveness probe when you only need to know whether any live sessions exist.
-
-- Default target is `http://localhost:7437` (`--port 7437` on session commands).
-- An empty table (`No live factory sessions were found.`) means the service
-  responded but no sessions are open yet.
-- **Connection refused** or **endpoint not reachable** means nothing is listening
-  on that host and port — start the factory with `you`, `you run --continuously`,
-  or `you run --dir <factory>` before submitting.
-- Use `you session list --json` for automation; use global `--server` on other HTTP
-  client commands (`you factory query`, `you submit`, `you work list`) when the API
-  base URI is not the default `http://localhost:7437`.
-
-### 2. `you factory query`
-
-`you factory query` reads the **active factory definition** from a live service
-(`GET /factory-sessions/{session_id}/factory` for the selected session). It confirms
-which factory name and topology the runtime loaded — not merely which
-`factory.json` exists in a checkout.
-
-- Run after `you session list` when you need the active factory name before routing
-  `--session` on submit or work commands.
-- Use `you --json factory query` for the API-shaped current-factory payload.
-
-### 3. `GET /factory-sessions/{session_id}/status`
-
-For deeper runtime health, call `GET /factory-sessions/{session_id}/status` (session
-id is often `~default` on single-session hosts). The response separates:
-
-| Field | Meaning |
-|-------|---------|
-| `factoryState` | Factory lifecycle phase — for example `IDLE`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`. |
-| `runtimeStatus` | Whether the engine is actively processing — `IDLE`, `ACTIVE`, or `FINISHED`. |
-| `categories` | Token counts by lifecycle bucket — `initial`, `processing`, `terminal`, and `failed`. |
-
-`factoryState` can be `RUNNING` while `runtimeStatus` is `IDLE` when the factory is
-up but no work is in flight. Use `factoryState`, `runtimeStatus`, and `categories`
-together when deciding whether to submit more work or wait for completion.
-
-### 4. Dashboard
-
-When the service was started via `you` or `you run` without `--quiet`, open the
-dashboard at **`/dashboard/ui`** on the same host and port as the API (default
-`http://localhost:7437/dashboard/ui`). The port follows `--server` / `--port` on
-the process that bound the listener.
-
-### 5. Run modes (keep the service up)
-
-| How you start | Stays running for submissions? |
-|---------------|--------------------------------|
-| `you` (no args) | Yes — continuous mode; watches default inputs and keeps the service up. |
-| `you run --continuously` | Yes — processes work until you stop the process. |
-| `you run` (batch, no `--continuously`) | No — exits when the factory goes idle; not suitable for later `you submit` or watched inbox ingress unless you restart it. |
-
-For steady `you submit` or `you submit batch` against an already-running host,
-prefer `you` or `you run --continuously`. Operators using dashboard submit or
-`POST /work` need the same continuous run mode. Use batch `you run` when you want a
-one-shot local run that shuts down on idle.
+1. **`you session list`** (primary) — calls `GET /factory-sessions` on the running host
+   (default `http://localhost:7437`). Empty table means no open sessions; connection refused
+   means start the factory with `you`, `you run --continuously`, or `you run --dir <factory>`.
+2. **`you factory query`** — active factory definition for the selected session when you need
+   the loaded factory name before `--session` on submit or work commands.
+3. **Deeper checks** — status API fields, dashboard URL, and continuous run modes: `you docs sessions`.
 
 ## Operator loop
 
-Use this loop when driving a factory from the CLI or an autonomous agent:
+1. **Check running** — [Is the factory running?](#is-the-factory-running?)
+2. **Submit** — `you submit` or `you submit batch` (stable `requestId` for batches)
+3. **Verify** — `you work show <work-id>` or `you work list --name <name>` (`you docs work`)
 
-1. **Check running** — follow [Is the factory running?](#is-the-factory-running?)
-   (`you session list`, then `you factory query` or status when you need depth).
-2. **Submit** — enqueue work with `you submit` or `you submit batch` (see
-   [Batch submit for agents](#batch-submit-for-agents) for batch JSON and stable
-   `requestId`).
-3. **Verify** — confirm acceptance on stdout, then inspect work with
-   `you work show <work-id>` or `you work list --name <name>` (see [Work](work.md)).
-
-For session-scoped hosts, pass the same `--server` and `--session` on submit and
-verify commands. See [Sessions](sessions.md) (`you docs sessions`) for session list,
-factory query, status API fields, and run-mode detail.
-
-### Copy-paste `you submit` example
+Pass the same `--server` and `--session` on submit and verify commands.
 
 ```bash
 you submit \
@@ -272,53 +132,36 @@ you submit \
   --payload request.md
 ```
 
-Replace `task` with a `workTypeName` from your `factory.json` and `request.md`
-with the payload file your factory expects.
+Replace `task` with a `workTypeName` from your `factory.json` and `request.md` with the
+payload file your factory expects.
 
-### Copy-paste `you submit batch` example
-
-```bash
-you submit batch ./batches/release-story-set.json
-```
-
-Use the same `FACTORY_REQUEST_BATCH` shape and stable `requestId` as in
-[Batch submit for agents](#batch-submit-for-agents). Reuse the same `requestId`
-on retries so the factory upserts instead of creating duplicate batches.
-
-## Command Matrix
+## Command matrix
 
 | Command | Purpose | Factory must already be running? |
 |---------|---------|----------------------------------|
 | `you run --dir <factory>` | Start (or attach to) a local factory from a directory | No — command starts runtime |
-| `you run --factory <path> "<prompt>"` | One-shot CLI run with inline factory file and prompt | Depends on flags; see [Config](config.md) |
-| `you run --work <batch.json>` | Submit batch JSON as part of **local startup** (agent path when not already running) | No when combined with `--dir` startup |
-| `you submit` | Submit one work item (autonomous agent path) | Yes — see [Is the factory running?](#is-the-factory-running?) |
-| `you submit batch` | Upsert batch JSON to a running session (autonomous agent path) | Yes — see [Is the factory running?](#is-the-factory-running?) |
-| Dashboard / `POST /work` | **Operator-only** API or UI submission | Yes — see [Work](work.md) (`you docs work`) |
+| `you run --work <batch.json>` | Submit batch JSON as part of **local startup** | No when combined with `--dir` startup |
+| `you submit` | Submit one work item (autonomous agent path) | Yes |
+| `you submit batch` | Upsert batch JSON to a running session (autonomous agent path) | Yes |
+| Dashboard / `POST /work` | **Operator-only** API or UI submission | Yes (`you docs work`) |
 | `you docs <topic>` | Print packaged reference markdown | No |
 
-Use [Mock Workers](mock-workers.md) and [Record and Replay](record-replay.md)
-when you need deterministic runs without live provider calls.
+Use `you docs mock-workers` and `you docs record-replay` for deterministic runs without live
+provider calls.
 
-## Planner vs Executor
-
-Autonomous agent workflows usually split into two cooperating roles:
+## Planner vs executor
 
 | Role | Responsibility | Typical artifacts |
 |------|----------------|-------------------|
-| **Planner / scheduler** | Reads topology, chooses the next work item, prepares batch or single-work JSON, and enqueues work via `you submit` or `you submit batch` without executing workstation prompts | CLI batch JSON files, planning prompts, unary `you submit` flags and payloads |
-| **Executor** | Runs when a token reaches a workstation input place; loads worker + workstation `AGENTS.md`, calls the configured worker backend, and returns accept, continue, reject, or failure outcomes | Workstation and worker `AGENTS.md`, rendered templates ([Templates](templates.md)) |
+| **Planner / scheduler** | Chooses the next work item, prepares batch or single-work JSON, enqueues via `you submit` or `you submit batch` without executing workstation prompts | Batch JSON files, unary `you submit` flags and payloads |
+| **Executor** | Runs when a token reaches a workstation input place; loads worker + workstation `AGENTS.md`, calls the configured worker backend, returns accept, continue, reject, or failure | Workstation and worker `AGENTS.md`, rendered templates (`you docs templates`) |
 
-Planners should prefer factory-local overview docs and [Config](config.md) before
-submitting. Executors should read the workstation and worker `AGENTS.md` for the
-active step before changing repository files or responding to review loops.
+Planners should read factory-local overview docs and `you docs config` before submitting.
+Executors should read the workstation and worker `AGENTS.md` for the active step before
+changing repository files. Prompt composition rules live in `docs/reference/authoring-agents-md.md`
+(repository doc; not a packaged CLI topic).
 
-[Author AGENTS.md](authoring-agents-md.md) documents how worker and workstation
-`AGENTS.md` files compose into system and user prompts. It does **not** define
-planner versus executor scheduling policy—that operational split lives here and
-in your factory's `factory/docs/overview.md`.
-
-## Topic Router
+## Topic router
 
 | Intent | Command |
 |--------|---------|
@@ -338,26 +181,15 @@ in your factory's `factory/docs/overview.md`.
 | Batch ingress and inbox layout | `you docs batch-inputs` (alias: `you docs batch-work`) |
 | Prompt template variables | `you docs templates` |
 
-## Factory-Local Docs Discovery
-
-Every factory may ship companion documentation beside `factory.json`:
+## Factory-local docs discovery
 
 | Path | Use |
 |------|-----|
-| `factory/docs/overview.md` | Preferred portable overview: pipeline, work types, inboxes, maintainer notes |
+| `factory/docs/overview.md` | Preferred portable overview: pipeline, work types, inboxes |
 | `factory/docs/README.md` | Fallback overview when `overview.md` is absent |
 | `factory/workstations/*/AGENTS.md` | Step prompts and routing-owned fields |
 | `factory/workers/*/AGENTS.md` | Worker backends and system prompts |
 
-Read `factory.json` plus `factory/docs/overview.md` or `factory/docs/README.md`
-before choosing a `workTypeName` or inbox path. When those files disagree with
-this packaged guide, the factory-local file wins for instance-specific names.
-
-## Related Topics
-
-- [Config](config.md) — `factory.json` topology
-- [Work](work.md) — submitted-work contracts
-- [Sessions](sessions.md) — session list, factory query, status API, dashboard
-- [Batch Inputs](batch-inputs.md) — batch ingress (alias: `batch-work`)
-- [Authoring Factories](authoring-factories.md) — greenfield factory setup
-- [Relationships](relationships.md) — batch and runtime relation semantics
+Read `factory.json` plus factory-local overview before choosing a `workTypeName` or inbox path.
+When factory-local files disagree with this packaged guide, the factory-local file wins for
+instance-specific names.

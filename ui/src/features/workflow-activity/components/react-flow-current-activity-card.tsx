@@ -4,10 +4,10 @@ import { useId } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
-import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
@@ -19,24 +19,17 @@ import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activ
 import { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
+import { GraphEditorPlacementProvider } from "./graph-editor-placement-context";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
-import { GraphEditorPlacementProvider } from "./graph-editor-placement-context";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
+export { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
 export {
   currentActivityGraphKey,
   currentActivityTopologyKey,
 } from "../lib/react-flow-current-activity-card-keys";
-
-export { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
-
-const CURRENT_ACTIVITY_CARD_CLASS = cn(
-  DASHBOARD_PANEL_SHELL_CLASS,
-  "relative flex h-full min-h-0 min-w-0 flex-col",
-);
-const CURRENT_ACTIVITY_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 export type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 
@@ -61,7 +54,7 @@ function CurrentActivityCardHeading({
 
   return (
     <div>
-      <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id={headingID}>
+      <h2 className={cn("m-0", DASHBOARD_SECTION_HEADING_CLASS)} id={headingID}>
         {messages.title}
       </h2>
     </div>
@@ -77,7 +70,9 @@ function useCurrentActivityAccessibilityIDs(widgetInstanceID?: string) {
 }
 
 interface ReactFlowCurrentActivityCardProps {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>;
+  activateFactory?: (
+    input: FactoryImportConfirmInput,
+  ) => Promise<ImportFactoryValue>;
   importController?: CurrentActivityImportController;
   locale?: string;
   now: number;
@@ -143,61 +138,64 @@ export function ReactFlowCurrentActivityCardView(
 
   return (
     <GraphEditorPlacementProvider>
-    <section
-      aria-labelledby={headingID}
-      className={CURRENT_ACTIVITY_CARD_CLASS}
-    >
-      {showHeaderActions ? (
-        <div className="mb-4">
-          <CurrentActivityGraphHeaderActions
-            editorMode={editor.editorMode}
-            editorUnavailableClassifierWorkstationName={
-              editor.editorUnavailableClassifierWorkstationName
-            }
-            hasChanges={editor.draftState.hasChanges}
-            isDefinitionLoading={
-              editor.editableDefinitionQuery.status === "pending"
-            }
-            loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+      <section
+        aria-labelledby={headingID}
+        className={cn(
+          DASHBOARD_PANEL_SHELL_CLASS,
+          "relative flex h-full min-h-0 min-w-0 flex-col",
+        )}
+      >
+        {showHeaderActions ? (
+          <div className="mb-4">
+            <CurrentActivityGraphHeaderActions
+              editorMode={editor.editorMode}
+              editorUnavailableClassifierWorkstationName={
+                editor.editorUnavailableClassifierWorkstationName
+              }
+              hasChanges={editor.draftState.hasChanges}
+              isDefinitionLoading={
+                editor.editableDefinitionQuery.status === "pending"
+              }
+              loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+              locale={props.locale}
+              onToggle={editor.handleEditorModeToggle}
+            />
+          </div>
+        ) : null}
+        {showHeaderActions ? (
+          <CurrentActivityCardHeading
+            headingID={headingID}
             locale={props.locale}
-            onToggle={editor.handleEditorModeToggle}
           />
-        </div>
-      ) : null}
-      {showHeaderActions ? (
-        <CurrentActivityCardHeading
+        ) : (
+          <CurrentActivityCardHeading
+            headingID={headingID}
+            hidden
+            locale={props.locale}
+          />
+        )}
+        <CurrentActivityGraphSurface
+          editor={editor}
+          graph={graph}
           headingID={headingID}
+          imports={imports}
+          locale={props.locale}
+          selection={props.selection}
+          snapshot={props.snapshot}
+        />
+        <CurrentActivityGraphSaveNotifications
+          editor={editor}
           locale={props.locale}
         />
-      ) : (
-        <CurrentActivityCardHeading
-          headingID={headingID}
-          hidden
+        <CurrentActivityGraphEditorDialogs
+          currentSessionFactoryName={props.snapshot.factory?.name ?? "factory"}
+          editor={editor}
+          imports={imports}
           locale={props.locale}
+          readyImportPreviewState={readyImportPreviewState}
+          shouldRenderImportPreviewDialog={shouldRenderImportPreviewDialog}
         />
-      )}
-      <CurrentActivityGraphSurface
-        editor={editor}
-        graph={graph}
-        headingID={headingID}
-        imports={imports}
-        locale={props.locale}
-        selection={props.selection}
-        snapshot={props.snapshot}
-      />
-      <CurrentActivityGraphSaveNotifications
-        editor={editor}
-        locale={props.locale}
-      />
-      <CurrentActivityGraphEditorDialogs
-        currentSessionFactoryName={props.snapshot.factory?.name ?? "factory"}
-        editor={editor}
-        imports={imports}
-        locale={props.locale}
-        readyImportPreviewState={readyImportPreviewState}
-        shouldRenderImportPreviewDialog={shouldRenderImportPreviewDialog}
-      />
-    </section>
+      </section>
     </GraphEditorPlacementProvider>
   );
 }

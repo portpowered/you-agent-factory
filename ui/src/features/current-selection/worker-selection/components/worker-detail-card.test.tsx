@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkerConfigurationState,
@@ -301,6 +302,84 @@ describe("WorkerDetailCard", () => {
     expect(screen.queryByLabelText("Model provider")).toBeNull();
   });
 
+  it("renders model worker configuration without a runner capability matrix", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: false,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: false,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        workerName="reviewer"
+      />,
+    );
+
+    const configurationHeading = screen.getByRole("heading", {
+      name: "Worker configuration",
+    });
+    const configurationSection = configurationHeading.closest("section");
+    expect(configurationSection).toBeTruthy();
+
+    const configuration = within(configurationSection as HTMLElement);
+    expect(configuration.getByLabelText("Model provider")).toBeTruthy();
+    expect(configuration.getByLabelText("Model")).toBeTruthy();
+    expect(configuration.getByLabelText("Executor provider")).toBeTruthy();
+    expect(configuration.queryByText("Runner capability support")).toBeNull();
+    expect(configuration.queryByText("Supported")).toBeNull();
+    expect(configuration.queryByText("Unsupported")).toBeNull();
+  });
+
   it("does not list referencing workstations outside the editable configuration section", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument({
@@ -519,7 +598,7 @@ describe("WorkerDetailCard", () => {
     ).toBeNull();
   });
 
-  it("shows scoped save success feedback for the selected worker", () => {
+  it("does not render inline save success feedback for the selected worker", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument(),
       isPending: false,
@@ -580,11 +659,10 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(
-      screen.getByText(
-        /reviewer was updated in the running factory definition/,
-      ),
-    ).toBeTruthy();
+    expectNoInlineSaveOutcomesIn(
+      screen.getByRole("heading", { name: "Worker configuration" }).closest("section") ??
+        document.body,
+    );
   });
 
   it("shows overwrite warning and server-changed hints for dirty worker drafts", () => {
@@ -655,6 +733,89 @@ describe("WorkerDetailCard", () => {
       screen.getByText(
         /The running factory changed this field while you were editing/i,
       ),
+    ).toBeTruthy();
+  });
+
+  it("omits global unsaved helper paragraphs for dirty ready-state worker drafts", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: true,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: true,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkerHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.queryByText("You have unsaved changes for this worker."),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "Changes stay local to this edit session until you save the running factory.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Save worker" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Discard local changes" }),
     ).toBeTruthy();
   });
 
@@ -894,17 +1055,15 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "Current factory definition is stale",
-    );
+    expect(screen.queryByText(/Current factory definition is stale/)).toBeNull();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
-  it("shows scoped save error feedback when persistence fails", () => {
+  it("does not render inline save error feedback when persistence fails", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument(),
       isPending: false,
@@ -968,9 +1127,9 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(screen.getByRole("alert").textContent).toContain("Saving failed.");
-    expect(screen.getByRole("alert").textContent).toContain(
-      "The running factory could not be saved.",
+    expectNoInlineSaveOutcomesIn(
+      screen.getByRole("heading", { name: "Worker configuration" }).closest("section") ??
+        document.body,
     );
   });
 

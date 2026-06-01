@@ -6,7 +6,7 @@ import type { DashboardSelection } from "../../base/state/selection-types";
 import {
   hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
-} from "../editing/editable-workstation-draft-validation";
+} from "../lib/editable-workstation-configuration-validation";
 import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
@@ -630,6 +630,8 @@ describe("useEditableWorkstationConfigurationState", () => {
         reviewer: "MODEL_WORKER",
       },
       workstationName: "Review",
+      guards: [],
+      inputs: [],
     };
 
     expect(
@@ -637,6 +639,8 @@ describe("useEditableWorkstationConfigurationState", () => {
         {
           behavior: "STANDARD",
           cron: null,
+          guards: [],
+          inputs: [],
           prompt: "Review the story.",
           runnerName: null,
           workerName: "reviewer",
@@ -653,6 +657,8 @@ describe("useEditableWorkstationConfigurationState", () => {
         {
           behavior: "STANDARD",
           cron: null,
+          guards: [],
+          inputs: [],
           prompt: "Review the story.",
           runnerName: null,
           workerName: "reviewer",
@@ -694,6 +700,217 @@ describe("useEditableWorkstationConfigurationState", () => {
       validationErrors: {
         behavior:
           "Poller workstations must use a script or hosted worker before saving this workstation.",
+      },
+    });
+  });
+
+  it("marks the draft dirty when workstation guards change", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current?.status === "ready" ? result.current.isDirty : true).toBe(
+      false,
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onGuardsChange([
+        {
+          maxVisits: 2,
+          type: "VISIT_COUNT",
+          workstation: "Review",
+        },
+      ]);
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        guards: [
+          {
+            maxVisits: 2,
+            type: "VISIT_COUNT",
+            workstation: "Review",
+          },
+        ],
+      },
+      isDirty: true,
+      status: "ready",
+    });
+  });
+
+  it("blocks save when guard validation errors exist", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onGuardsChange([
+        {
+          maxVisits: 0,
+          type: "VISIT_COUNT",
+          workstation: "",
+        },
+      ]);
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: true,
+      status: "ready",
+      validationErrors: {
+        "guards[0].maxVisits": "Max visits must be a positive whole number.",
+        "guards[0].workstation":
+          "Select the workstation whose visits are counted.",
+      },
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toBeNull();
+  });
+
+  it("marks the draft dirty when per-input guards change", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onInputsChange([
+        {
+          guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+          state: "queued",
+          workType: "story",
+        },
+      ]);
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        inputs: [
+          {
+            guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+      },
+      isDirty: true,
+      status: "ready",
+    });
+  });
+
+  it("skips worker and prompt validation for LOGICAL_MOVE drafts", () => {
+    const logicalMoveValues = {
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      cron: null,
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
+      prompt: null,
+      resolvedRunnerSelection: {
+        runnerId: "codex",
+        source: "default",
+      },
+      runnerName: null,
+      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      runnerSelectionSource: "default",
+      sharedWorkerWorkstationNamesByWorkerName: {},
+      sharedWorkerWorkstationNames: [],
+      workerModelProvider: null,
+      workerName: "legacy-missing-worker",
+      workerOptions: ["reviewer"],
+      workerTypeByName: {
+        reviewer: "MODEL_WORKER",
+      },
+      workstationName: "Route",
+      workstationOptions: ["Route"],
+      workstationType: "LOGICAL_MOVE" as const,
+      guards: [],
+      inputs: [],
+    };
+
+    expect(
+      validateEditableWorkstationDraft(
+        {
+          behavior: "STANDARD",
+          cron: null,
+          guards: [],
+          inputs: [],
+          prompt: "",
+          runnerName: null,
+          workerName: "",
+        },
+        logicalMoveValues,
+        { status: "loading" },
+      ),
+    ).toEqual({});
+    expect(
+      validateEditableWorkstationDraft(
+        {
+          behavior: "POLLER",
+          cron: null,
+          guards: [],
+          inputs: [],
+          prompt: "",
+          runnerName: null,
+          workerName: "legacy-missing-worker",
+        },
+        logicalMoveValues,
+        {
+          errorMessage: "Prompt validation API unavailable.",
+          status: "error",
+        },
+      ),
+    ).toEqual({});
+  });
+
+  it("does not surface worker option errors for LOGICAL_MOVE with a legacy missing worker", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          workerName: "legacy-missing-worker",
+          workerOptions: [{ name: "reviewer", type: "MODEL_WORKER" }],
+          workstationType: "LOGICAL_MOVE",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: false,
+      status: "ready",
+      validationErrors: {},
+      workerOptionsState: {
+        options: ["reviewer"],
+        status: "ready",
       },
     });
   });
@@ -752,6 +969,8 @@ describe("useEditableWorkstationConfigurationState", () => {
         jitter: "-1s",
         expiryWindow: "0s",
       },
+      guards: [],
+      inputs: [],
       prompt: "",
       runnerName: null,
       workerName: "reviewer",
@@ -768,6 +987,8 @@ describe("useEditableWorkstationConfigurationState", () => {
     const standardErrors = validateEditableWorkstationDraft({
       behavior: "STANDARD",
       cron: null,
+      guards: [],
+      inputs: [],
       prompt: "Review the story.",
       runnerName: null,
       workerName: "reviewer",
@@ -998,6 +1219,7 @@ function buildEditableFactoryDefinition(overrides?: {
     name: string;
     type: "HOSTED_WORKER" | "MODEL_WORKER" | "SCRIPT_WORKER";
   }>;
+  workstationType?: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
 }): CurrentFactoryDocument {
   return {
     name: "Current Factory",
@@ -1038,6 +1260,7 @@ function buildEditableFactoryDefinition(overrides?: {
         outputs: [{ state: "approved", workType: "story" }],
         promptFile: "prompts/review.md",
         runner: overrides?.runnerName ?? "gemini",
+        type: overrides?.workstationType,
         worker: overrides?.workerName ?? "reviewer",
       },
     ],

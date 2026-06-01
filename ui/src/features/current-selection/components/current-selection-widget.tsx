@@ -30,6 +30,7 @@ import {
   WorkstationRequestDetailCard,
   WorkTypeDetailCard,
 } from "./current-selection-cards";
+import { CurrentSelectionWidgetSaveNotifications } from "./current-selection-widget-save-notifications";
 import {
   CurrentSelectionWorkstationSaveDialog,
   CurrentSelectionWorkTypeSaveDialog,
@@ -343,6 +344,7 @@ export function CurrentSelectionWidget({
     );
   const {
     resourceHeaderAction,
+    resourceSave,
     resourceSaveState,
     saveWorkerConfiguration,
     saveWorkStateConfiguration,
@@ -350,8 +352,10 @@ export function CurrentSelectionWidget({
     workstationSave,
     workstationSaveState,
     workerHeaderAction,
+    workerSave,
     workerSaveState,
     workStateHeaderAction,
+    workStateSave,
     workStateSaveState,
     workTypeHeaderAction,
     workTypeSave,
@@ -416,11 +420,37 @@ export function CurrentSelectionWidget({
     widgetId,
   });
 
+  const resolvedLocale = locale ?? undefined;
+
   return (
-    <CurrentSelectionLocaleProvider locale={locale ?? undefined}>
+    <CurrentSelectionLocaleProvider locale={resolvedLocale}>
       <CurrentSelectionHeaderActionProvider headerAction={headerAction ?? null}>
         {detailCard}
       </CurrentSelectionHeaderActionProvider>
+      <CurrentSelectionWidgetSaveNotifications
+        editableConfigurationState={editableConfigurationState}
+        editableResourceConfigurationState={editableResourceConfigurationState}
+        editableWorkStateConfigurationState={
+          editableWorkStateConfigurationState
+        }
+        editableWorkerConfigurationState={editableWorkerConfigurationState}
+        editableWorkTypeConfigurationState={editableWorkTypeConfigurationState}
+        locale={resolvedLocale}
+        resourceSave={resourceSave}
+        resourceSaveState={resourceSaveState}
+        selectedNode={selectedNode}
+        selectedResourceName={selectedResourceName}
+        selectedWorkerName={selectedWorkerName}
+        selectedWorkTypeName={selectedWorkTypeName}
+        selection={selection}
+        workStatePlaceId={workStatePlaceId}
+        workStateSave={workStateSave}
+        workerSave={workerSave}
+        workerSaveState={workerSaveState}
+        workstationSave={workstationSave}
+        workstationSaveState={workstationSaveState}
+        workTypeSave={workTypeSave}
+      />
       <CurrentSelectionWorkstationSaveDialog
         editableConfigurationState={editableConfigurationState}
         locale={locale}

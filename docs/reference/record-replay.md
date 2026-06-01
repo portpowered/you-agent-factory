@@ -5,7 +5,7 @@ replay-compatible artifact, locate the saved file after shutdown, or re-run
 from a saved history without dispatching live workers again.
 
 `you docs record-replay` is the canonical guide for `--record`, `--replay`, and
-`--no-record`. See [Authoring Factories](authoring-factories.md) for the full
+`--no-record`. See `you docs authoring-factories` for the full
 factory setup workflow.
 
 ## Default Recording On Live Runs
@@ -111,11 +111,11 @@ in your own home directory or CI workspace. Do not commit generated replay
 artifacts from real customer runs.
 
 Maintainers who need the internal event-log and fixture workflow can use
-[`docs/internal/development/record-replay.md`](../internal/development/record-replay.md);
+`you docs record-replay`;
 customer runs only need the CLI flags above.
 
 ## Related
 
-- [Config](config.md) — brief run-flag summary with pointers to this topic
-- [Authoring Factories](authoring-factories.md) — full factory authoring workflow
-- [Mock Workers](mock-workers.md) — deterministic runs without live provider calls
+- `you docs config` — brief run-flag summary with pointers to this topic
+- `you docs authoring-factories` — full factory authoring workflow
+- `you docs mock-workers` — deterministic runs without live provider calls

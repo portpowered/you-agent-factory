@@ -225,6 +225,63 @@ describe("factory graph editor mode toggle controls", () => {
     expect(tooltip.className).toContain("bg-af-surface-raised");
     expect(tooltip.className).toContain("text-af-text");
   });
+
+  it("keeps the mode-toggle tooltip below the trigger button", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FactoryGraphEditorModeToggle editorMode={false} onClick={() => {}} />,
+    );
+
+    await user.hover(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    const tooltip = await screen.findByRole("tooltip", {
+      name: "Enter factory graph editor",
+    });
+    expect(tooltip.className).toContain("top-full");
+    expect(tooltip.className).toContain("mt-2");
+    expect(tooltip.className).not.toContain("bottom-full");
+  });
+});
+
+describe("factory graph editor toolbar tooltip placement", () => {
+  it("renders toolbar tooltips above the trigger buttons", async () => {
+    const user = userEvent.setup();
+
+    renderToolbar();
+
+    const toolbarTooltips = [
+      {
+        buttonName: "Delete",
+        tooltipName: "Remove nodes or edges from the draft",
+      },
+      {
+        buttonName: "Connect",
+        tooltipName: "Create compatible graph connections",
+      },
+      {
+        buttonName: "Open hide or show node classes menu",
+        tooltipName: "Show or hide node classes on the graph",
+      },
+      {
+        buttonName: "Save changes",
+        tooltipName: "Save changes",
+      },
+    ] as const;
+
+    for (const { buttonName, tooltipName } of toolbarTooltips) {
+      await user.hover(screen.getByRole("button", { name: buttonName }));
+
+      const tooltip = await screen.findByRole("tooltip", { name: tooltipName });
+      expect(tooltip.className).toContain("bottom-full");
+      expect(tooltip.className).toContain("mb-2");
+      expect(tooltip.className).not.toContain("top-full");
+
+      await user.unhover(screen.getByRole("button", { name: buttonName }));
+      expect(screen.queryByRole("tooltip")).toBeNull();
+    }
+  });
 });
 
 describe("factory graph editor toolbar action-row composition", () => {

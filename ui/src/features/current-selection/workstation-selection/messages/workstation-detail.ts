@@ -3,14 +3,16 @@ import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../../i18n";
-import type { WorkstationDetailMessages } from "./workstation-detail-types";
 import { getWorkstationDetailEnumMessages } from "./workstation-detail-enums";
+import type { WorkstationDetailMessages } from "./workstation-detail-types";
 
 type WorkstationDetailCatalogMessages = Omit<
   WorkstationDetailMessages,
   | "localizeProviderSessionKind"
   | "localizeRunnerSelectionSource"
   | "localizeWorkstationBehavior"
+  | "localizeWorkstationGuardType"
+  | "localizeInputGuardType"
   | "localizeWorkstationKind"
   | "localizeWorkstationType"
 >;
@@ -30,10 +32,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel: "Collapse editable configuration",
     editableConfigurationExpandActionLabel: "Expand editable configuration",
     editableConfigurationHeading: "Configuration",
-    editableConfigurationDirtyStatus:
-      "You have unsaved changes for this workstation.",
-    editableConfigurationDraftNote:
-      "Changes stay local to this edit session until you save the running factory.",
     editableConfigurationModelSharedWorkerHint:
       "Model edits are disabled here because this workstation shares its worker with other workstations.",
     editableConfigurationResetAction: "Reset to latest",
@@ -90,7 +88,10 @@ const workstationDetailMessagesByLocale = {
       "Prompt variable help could not be loaded.",
     editableConfigurationPromptHelpErrorPrefix:
       "Prompt variable help unavailable.",
-    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+    editableConfigurationPromptAutocompleteSummary: (
+      variableCount,
+      inputCount,
+    ) =>
       `Autocomplete is ready with ${singularPlural(variableCount, "variable", "variables")} for ${singularPlural(inputCount, "authored input", "authored inputs")}.`,
     editableConfigurationPromptAutocompleteDetail:
       "Suggestions appear only while typing inside {{ ... }}.",
@@ -98,10 +99,8 @@ const workstationDetailMessagesByLocale = {
       "Open prompt variable help",
     editableConfigurationPromptHelpCollapseActionLabel:
       "Close prompt variable help",
-    editableConfigurationPromptAvailableVariablesHeading:
-      "Available variables",
-    editableConfigurationPromptUnavailableAccessHeading:
-      "Unavailable access",
+    editableConfigurationPromptAvailableVariablesHeading: "Available variables",
+    editableConfigurationPromptUnavailableAccessHeading: "Unavailable access",
     editableConfigurationPromptResizeHandleLabel: "Resize prompt editor width",
     editableConfigurationSaveFallbackError:
       "The running factory could not be saved.",
@@ -120,11 +119,57 @@ const workstationDetailMessagesByLocale = {
       "The selected worker is no longer available. Choose another worker before saving this workstation.",
     editableConfigurationWorkerUnavailablePrefix:
       "Worker selection unavailable.",
+    editableConfigurationWorkstationOptionsEmpty:
+      "No workstations are available in the current factory definition.",
+    editableConfigurationWorkstationUnavailablePrefix:
+      "Workstation selection unavailable.",
+    editableConfigurationVisitCountMaxVisitsInvalid:
+      "Max visits must be a positive whole number.",
+    editableConfigurationVisitCountWorkstationInvalid: (workstation) =>
+      `Counted workstation ${workstation} is not available in this factory.`,
+    editableConfigurationVisitCountWorkstationRequired:
+      "Select the workstation whose visits are counted.",
+    editableConfigurationMatchesFieldsInputKeyRequired:
+      "Enter a field selector for this guard.",
+    editableConfigurationInputGuardMultipleGuards:
+      "Each input slot can have at most one guard.",
+    editableConfigurationInputGuardMatchInputRequired:
+      "Select a peer input for this guard.",
+    editableConfigurationInputGuardMatchInputInvalid: (workType) =>
+      `Peer input ${workType} is not available on this workstation.`,
+    editableConfigurationInputGuardMatchInputSelfReference:
+      "Peer input cannot reference the same input slot.",
+    editableConfigurationInputGuardParentInputRequired:
+      "Select a parent input for this guard.",
+    editableConfigurationInputGuardParentInputInvalid: (workType) =>
+      `Parent input ${workType} is not available on this workstation.`,
+    editableConfigurationInputGuardParentInputSelfReference:
+      "Parent input cannot reference the same input slot.",
+    editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
+      `Spawned-by workstation ${workstation} is not available in this factory.`,
+    matchesFieldsGuardInputKeyFieldLabel: "Field selector",
     modelFieldLabel: "Model",
     notConfiguredValue: "Not configured",
     promptFieldLabel: "Prompt",
     templateFieldLabel: "Template",
     workerFieldLabel: "Worker",
+    workstationGuardsHeading: "Workstation guards",
+    workstationGuardsEmpty: "No workstation guards are configured.",
+    workstationGuardsAddLabel: "Add guard",
+    workstationGuardsAddPlaceholder: "Choose a guard type",
+    workstationGuardsRemoveAction: "Remove guard",
+    visitCountGuardWorkstationFieldLabel: "Counted workstation",
+    visitCountGuardMaxVisitsFieldLabel: "Max visits",
+    inputGuardMatchInputFieldLabel: "Peer input",
+    inputGuardParentInputFieldLabel: "Parent input",
+    inputGuardSpawnedByFieldLabel: "Spawned by (optional)",
+    workstationInputGuardsHeading: "Input guards",
+    workstationInputGuardsEmpty: "This workstation has no authored inputs.",
+    workstationInputGuardTypeFieldLabel: "Input guard",
+    workstationInputGuardNoneOption: "None",
+    workstationInputGuardPeersEmpty:
+      "Add another input on this workstation to configure peer-based guards.",
+    workstationInputSlotHeading: (workType, state) => `${workType} · ${state}`,
     currentDispatchLabel: "Current dispatch",
     dispatchLabel: "Dispatch",
     elapsedLabel: "Elapsed",
@@ -155,14 +200,6 @@ const workstationDetailMessagesByLocale = {
     requestHistoryHeading: "Request history",
     requestSelectedAction: "Request selected",
     requestStatusStartedAgo: (elapsed) => `Started ${elapsed}`,
-    runnerCapabilityImageInputLabel: "Image input",
-    runnerCapabilitySessionResumeLabel: "Session resume",
-    runnerCapabilityStructuredOutputLabel: "Structured output",
-    runnerCapabilitySupportHeading: "Runner capability support",
-    runnerCapabilitySupportedLabel: "Supported",
-    runnerCapabilityUnsupportedLabel: "Unsupported",
-    runnerCapabilityWorkingDirectoryLabel: "Working directory",
-    runnerCapabilityWorktreeLabel: "Worktree selection",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `Effective runner: ${runnerName} (${sourceLabel}).`,
     editableConfigurationCronExpiryWindowInvalid: (value) =>
@@ -235,10 +272,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel: "編集可能な構成を折りたたむ",
     editableConfigurationExpandActionLabel: "編集可能な構成を展開",
     editableConfigurationHeading: "構成",
-    editableConfigurationDirtyStatus:
-      "このワークステーションには未保存の変更があります。",
-    editableConfigurationDraftNote:
-      "変更は、実行中ファクトリーを保存するまでこの編集セッション内だけに保持されます。",
     editableConfigurationModelSharedWorkerHint:
       "このワークステーションは他のワークステーションと同じワーカーを共有しているため、ここではモデルを編集できません。",
     editableConfigurationResetAction: "最新へ戻す",
@@ -296,7 +329,10 @@ const workstationDetailMessagesByLocale = {
       "プロンプト変数ヘルプを読み込めませんでした。",
     editableConfigurationPromptHelpErrorPrefix:
       "プロンプト変数ヘルプは利用できません。",
-    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+    editableConfigurationPromptAutocompleteSummary: (
+      variableCount,
+      inputCount,
+    ) =>
       `${inputCount} 件の入力コンテキストで ${variableCount} 件の補完候補を利用できます。`,
     editableConfigurationPromptAutocompleteDetail:
       "候補は {{ ... }} の中で入力しているときだけ表示されます。",
@@ -325,11 +361,58 @@ const workstationDetailMessagesByLocale = {
       "選択したワーカーは利用できなくなりました。保存前に別のワーカーを選択してください。",
     editableConfigurationWorkerUnavailablePrefix:
       "ワーカー選択は利用できません。",
+    editableConfigurationWorkstationOptionsEmpty:
+      "現在のファクトリー定義に利用可能なワークステーションがありません。",
+    editableConfigurationWorkstationUnavailablePrefix:
+      "ワークステーション選択は利用できません。",
+    editableConfigurationVisitCountMaxVisitsInvalid:
+      "最大訪問回数は正の整数である必要があります。",
+    editableConfigurationVisitCountWorkstationInvalid: (workstation) =>
+      `カウント対象ワークステーション ${workstation} はこのファクトリーで利用できません。`,
+    editableConfigurationVisitCountWorkstationRequired:
+      "訪問回数をカウントするワークステーションを選択してください。",
+    editableConfigurationMatchesFieldsInputKeyRequired:
+      "このガードのフィールドセレクターを入力してください。",
+    editableConfigurationInputGuardMultipleGuards:
+      "各入力スロットには最大 1 つのガードしか設定できません。",
+    editableConfigurationInputGuardMatchInputRequired:
+      "このガードのピア入力を選択してください。",
+    editableConfigurationInputGuardMatchInputInvalid: (workType) =>
+      `ピア入力 ${workType} はこのワークステーションで利用できません。`,
+    editableConfigurationInputGuardMatchInputSelfReference:
+      "ピア入力は同じ入力スロットを参照できません。",
+    editableConfigurationInputGuardParentInputRequired:
+      "このガードの親入力を選択してください。",
+    editableConfigurationInputGuardParentInputInvalid: (workType) =>
+      `親入力 ${workType} はこのワークステーションで利用できません。`,
+    editableConfigurationInputGuardParentInputSelfReference:
+      "親入力は同じ入力スロットを参照できません。",
+    editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
+      `spawned-by ワークステーション ${workstation} はこのファクトリーで利用できません。`,
+    matchesFieldsGuardInputKeyFieldLabel: "フィールドセレクター",
     modelFieldLabel: "モデル",
     notConfiguredValue: "未設定",
     promptFieldLabel: "プロンプト",
     templateFieldLabel: "テンプレート",
     workerFieldLabel: "ワーカー",
+    workstationGuardsHeading: "ワークステーションガード",
+    workstationGuardsEmpty: "ワークステーションガードは設定されていません。",
+    workstationGuardsAddLabel: "ガードを追加",
+    workstationGuardsAddPlaceholder: "ガード種別を選択",
+    workstationGuardsRemoveAction: "ガードを削除",
+    visitCountGuardWorkstationFieldLabel: "カウント対象ワークステーション",
+    visitCountGuardMaxVisitsFieldLabel: "最大訪問回数",
+    inputGuardMatchInputFieldLabel: "ピア入力",
+    inputGuardParentInputFieldLabel: "親入力",
+    inputGuardSpawnedByFieldLabel: "生成元（任意）",
+    workstationInputGuardsHeading: "入力ガード",
+    workstationInputGuardsEmpty:
+      "このワークステーションには作成済み入力がありません。",
+    workstationInputGuardTypeFieldLabel: "入力ガード",
+    workstationInputGuardNoneOption: "なし",
+    workstationInputGuardPeersEmpty:
+      "ピアベースのガードを設定するには、同じワークステーションに別の入力を追加してください。",
+    workstationInputSlotHeading: (workType, state) => `${workType} · ${state}`,
     currentDispatchLabel: "現在のディスパッチ",
     dispatchLabel: "ディスパッチ",
     elapsedLabel: "経過時間",
@@ -360,14 +443,6 @@ const workstationDetailMessagesByLocale = {
     requestHistoryHeading: "リクエスト履歴",
     requestSelectedAction: "リクエストを選択済み",
     requestStatusStartedAgo: (elapsed) => `${elapsed} に開始`,
-    runnerCapabilityImageInputLabel: "画像入力",
-    runnerCapabilitySessionResumeLabel: "セッション再開",
-    runnerCapabilityStructuredOutputLabel: "構造化出力",
-    runnerCapabilitySupportHeading: "Runner の機能サポート",
-    runnerCapabilitySupportedLabel: "対応",
-    runnerCapabilityUnsupportedLabel: "未対応",
-    runnerCapabilityWorkingDirectoryLabel: "作業ディレクトリ",
-    runnerCapabilityWorktreeLabel: "worktree 選択",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `有効な runner: ${runnerName}（${sourceLabel}）。`,
     editableConfigurationCronExpiryWindowInvalid: (value) =>
@@ -439,10 +514,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel: "편집 가능한 구성 접기",
     editableConfigurationExpandActionLabel: "편집 가능한 구성 펼치기",
     editableConfigurationHeading: "구성",
-    editableConfigurationDirtyStatus:
-      "이 워크스테이션에 저장되지 않은 변경 사항이 있습니다.",
-    editableConfigurationDraftNote:
-      "변경 사항은 실행 중인 팩토리를 저장할 때까지 이 편집 세션에만 로컬로 유지됩니다.",
     editableConfigurationModelSharedWorkerHint:
       "이 워크스테이션은 다른 워크스테이션과 같은 워커를 공유하므로 여기서는 모델을 편집할 수 없습니다.",
     editableConfigurationResetAction: "최신값으로 재설정",
@@ -499,7 +570,10 @@ const workstationDetailMessagesByLocale = {
       "프롬프트 변수 도움말을 불러올 수 없습니다.",
     editableConfigurationPromptHelpErrorPrefix:
       "프롬프트 변수 도움말을 사용할 수 없습니다.",
-    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+    editableConfigurationPromptAutocompleteSummary: (
+      variableCount,
+      inputCount,
+    ) =>
       `${inputCount}개의 입력 컨텍스트에서 ${variableCount}개의 자동완성 변수를 사용할 수 있습니다.`,
     editableConfigurationPromptAutocompleteDetail:
       "추천은 {{ ... }} 안에서 입력할 때만 표시됩니다.",
@@ -527,11 +601,57 @@ const workstationDetailMessagesByLocale = {
       "선택한 워커를 더 이상 사용할 수 없습니다. 저장하기 전에 다른 워커를 선택하세요.",
     editableConfigurationWorkerUnavailablePrefix:
       "워커 선택을 사용할 수 없습니다.",
+    editableConfigurationWorkstationOptionsEmpty:
+      "현재 팩토리 정의에 사용 가능한 워크스테이션이 없습니다.",
+    editableConfigurationWorkstationUnavailablePrefix:
+      "워크스테이션 선택을 사용할 수 없습니다.",
+    editableConfigurationVisitCountMaxVisitsInvalid:
+      "최대 방문 횟수는 양의 정수여야 합니다.",
+    editableConfigurationVisitCountWorkstationInvalid: (workstation) =>
+      `카운트 대상 워크스테이션 ${workstation} 은(는) 이 팩토리에서 사용할 수 없습니다.`,
+    editableConfigurationVisitCountWorkstationRequired:
+      "방문 횟수를 셀 워크스테이션을 선택하세요.",
+    editableConfigurationMatchesFieldsInputKeyRequired:
+      "이 가드의 필드 선택자를 입력하세요.",
+    editableConfigurationInputGuardMultipleGuards:
+      "각 입력 슬롯에는 가드를 하나만 설정할 수 있습니다.",
+    editableConfigurationInputGuardMatchInputRequired:
+      "이 가드의 피어 입력을 선택하세요.",
+    editableConfigurationInputGuardMatchInputInvalid: (workType) =>
+      `피어 입력 ${workType} 은(는) 이 워크스테이션에서 사용할 수 없습니다.`,
+    editableConfigurationInputGuardMatchInputSelfReference:
+      "피어 입력은 같은 입력 슬롯을 참조할 수 없습니다.",
+    editableConfigurationInputGuardParentInputRequired:
+      "이 가드의 부모 입력을 선택하세요.",
+    editableConfigurationInputGuardParentInputInvalid: (workType) =>
+      `부모 입력 ${workType} 은(는) 이 워크스테이션에서 사용할 수 없습니다.`,
+    editableConfigurationInputGuardParentInputSelfReference:
+      "부모 입력은 같은 입력 슬롯을 참조할 수 없습니다.",
+    editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
+      `spawned-by 워크스테이션 ${workstation} 은(는) 이 팩토리에서 사용할 수 없습니다.`,
+    matchesFieldsGuardInputKeyFieldLabel: "필드 선택자",
     modelFieldLabel: "모델",
     notConfiguredValue: "구성되지 않음",
     promptFieldLabel: "프롬프트",
     templateFieldLabel: "템플릿",
     workerFieldLabel: "워커",
+    workstationGuardsHeading: "워크스테이션 가드",
+    workstationGuardsEmpty: "구성된 워크스테이션 가드가 없습니다.",
+    workstationGuardsAddLabel: "가드 추가",
+    workstationGuardsAddPlaceholder: "가드 유형 선택",
+    workstationGuardsRemoveAction: "가드 제거",
+    visitCountGuardWorkstationFieldLabel: "카운트 대상 워크스테이션",
+    visitCountGuardMaxVisitsFieldLabel: "최대 방문 횟수",
+    inputGuardMatchInputFieldLabel: "피어 입력",
+    inputGuardParentInputFieldLabel: "부모 입력",
+    inputGuardSpawnedByFieldLabel: "생성 주체(선택)",
+    workstationInputGuardsHeading: "입력 가드",
+    workstationInputGuardsEmpty: "이 워크스테이션에 작성된 입력이 없습니다.",
+    workstationInputGuardTypeFieldLabel: "입력 가드",
+    workstationInputGuardNoneOption: "없음",
+    workstationInputGuardPeersEmpty:
+      "피어 기반 가드를 구성하려면 이 워크스테이션에 다른 입력을 추가하세요.",
+    workstationInputSlotHeading: (workType, state) => `${workType} · ${state}`,
     currentDispatchLabel: "현재 디스패치",
     dispatchLabel: "디스패치",
     elapsedLabel: "경과 시간",
@@ -561,14 +681,6 @@ const workstationDetailMessagesByLocale = {
     requestHistoryHeading: "요청 기록",
     requestSelectedAction: "요청 선택됨",
     requestStatusStartedAgo: (elapsed) => `${elapsed} 시작`,
-    runnerCapabilityImageInputLabel: "이미지 입력",
-    runnerCapabilitySessionResumeLabel: "세션 재개",
-    runnerCapabilityStructuredOutputLabel: "구조화된 출력",
-    runnerCapabilitySupportHeading: "Runner 기능 지원",
-    runnerCapabilitySupportedLabel: "지원",
-    runnerCapabilityUnsupportedLabel: "미지원",
-    runnerCapabilityWorkingDirectoryLabel: "작업 디렉터리",
-    runnerCapabilityWorktreeLabel: "worktree 선택",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `유효 runner: ${runnerName} (${sourceLabel}).`,
     editableConfigurationCronExpiryWindowInvalid: (value) =>
@@ -639,9 +751,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel: "收起可编辑配置",
     editableConfigurationExpandActionLabel: "展开可编辑配置",
     editableConfigurationHeading: "配置",
-    editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
-    editableConfigurationDraftNote:
-      "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
     editableConfigurationModelSharedWorkerHint:
       "此工作站与其他工作站共享同一个 worker，因此这里不能编辑模型。",
     editableConfigurationResetAction: "重置为最新值",
@@ -670,10 +779,12 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationBehaviorPollerWorkerUnsupported:
       "保存此工作站前，请先为轮询器工作站选择脚本或 hosted worker。",
     editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",
-    editableConfigurationPromptEditorLoading: "正在启动此工作站的提示词编辑器。",
+    editableConfigurationPromptEditorLoading:
+      "正在启动此工作站的提示词编辑器。",
     editableConfigurationPromptEditorError:
       "无法启动提示词编辑器。请重新加载此工作站后重试。",
-    editableConfigurationPromptValidationLoading: "正在校验当前草稿中的提示词变量。",
+    editableConfigurationPromptValidationLoading:
+      "正在校验当前草稿中的提示词变量。",
     editableConfigurationPromptValidationFallbackError: "无法完成提示词校验。",
     editableConfigurationPromptValidationErrorPrefix: "提示词校验不可用。",
     editableConfigurationPromptDiagnosticsSummary:
@@ -689,7 +800,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptHelpFallbackError:
       "无法加载提示词变量帮助信息。",
     editableConfigurationPromptHelpErrorPrefix: "提示词变量帮助信息不可用。",
-    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+    editableConfigurationPromptAutocompleteSummary: (
+      variableCount,
+      inputCount,
+    ) =>
       `自动补全已就绪，可为 ${inputCount} 个已编写输入上下文提供 ${variableCount} 个变量候选。`,
     editableConfigurationPromptAutocompleteDetail:
       "仅在 {{ ... }} 内输入时显示建议。",
@@ -712,11 +826,56 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationWorkerUnavailable:
       "所选工作器已不可用。保存前请选择其他工作器。",
     editableConfigurationWorkerUnavailablePrefix: "工作器选择不可用。",
+    editableConfigurationWorkstationOptionsEmpty:
+      "当前工厂定义中没有可用的工作站。",
+    editableConfigurationWorkstationUnavailablePrefix: "工作站选择不可用。",
+    editableConfigurationVisitCountMaxVisitsInvalid:
+      "最大访问次数必须是正整数。",
+    editableConfigurationVisitCountWorkstationInvalid: (workstation) =>
+      `计数工作站 ${workstation} 在当前工厂中不可用。`,
+    editableConfigurationVisitCountWorkstationRequired:
+      "请选择要计数访问次数的工作站。",
+    editableConfigurationMatchesFieldsInputKeyRequired:
+      "请输入此守卫的字段选择器。",
+    editableConfigurationInputGuardMultipleGuards:
+      "每个输入槽最多只能配置一个守卫。",
+    editableConfigurationInputGuardMatchInputRequired:
+      "请为此守卫选择对等输入。",
+    editableConfigurationInputGuardMatchInputInvalid: (workType) =>
+      `对等输入 ${workType} 在此工作站上不可用。`,
+    editableConfigurationInputGuardMatchInputSelfReference:
+      "对等输入不能引用同一个输入槽。",
+    editableConfigurationInputGuardParentInputRequired:
+      "请为此守卫选择父输入。",
+    editableConfigurationInputGuardParentInputInvalid: (workType) =>
+      `父输入 ${workType} 在此工作站上不可用。`,
+    editableConfigurationInputGuardParentInputSelfReference:
+      "父输入不能引用同一个输入槽。",
+    editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
+      `spawned-by 工作站 ${workstation} 在当前工厂中不可用。`,
+    matchesFieldsGuardInputKeyFieldLabel: "字段选择器",
     modelFieldLabel: "模型",
     notConfiguredValue: "未配置",
     promptFieldLabel: "提示词",
     templateFieldLabel: "模板",
     workerFieldLabel: "工作器",
+    workstationGuardsHeading: "工作站守卫",
+    workstationGuardsEmpty: "未配置工作站守卫。",
+    workstationGuardsAddLabel: "添加守卫",
+    workstationGuardsAddPlaceholder: "选择守卫类型",
+    workstationGuardsRemoveAction: "移除守卫",
+    visitCountGuardWorkstationFieldLabel: "计数工作站",
+    visitCountGuardMaxVisitsFieldLabel: "最大访问次数",
+    inputGuardMatchInputFieldLabel: "对等输入",
+    inputGuardParentInputFieldLabel: "父输入",
+    inputGuardSpawnedByFieldLabel: "生成方（可选）",
+    workstationInputGuardsHeading: "输入守卫",
+    workstationInputGuardsEmpty: "此工作站没有已编写的输入。",
+    workstationInputGuardTypeFieldLabel: "输入守卫",
+    workstationInputGuardNoneOption: "无",
+    workstationInputGuardPeersEmpty:
+      "请在此工作站添加另一个输入，以配置基于对等的守卫。",
+    workstationInputSlotHeading: (workType, state) => `${workType} · ${state}`,
     currentDispatchLabel: "当前分派",
     dispatchLabel: "分派",
     elapsedLabel: "已用时间",
@@ -744,14 +903,6 @@ const workstationDetailMessagesByLocale = {
     requestHistoryHeading: "请求历史",
     requestSelectedAction: "请求已选中",
     requestStatusStartedAgo: (elapsed) => `开始于 ${elapsed}`,
-    runnerCapabilityImageInputLabel: "图片输入",
-    runnerCapabilitySessionResumeLabel: "会话恢复",
-    runnerCapabilityStructuredOutputLabel: "结构化输出",
-    runnerCapabilitySupportHeading: "Runner 能力支持",
-    runnerCapabilitySupportedLabel: "支持",
-    runnerCapabilityUnsupportedLabel: "不支持",
-    runnerCapabilityWorkingDirectoryLabel: "工作目录",
-    runnerCapabilityWorktreeLabel: "worktree 选择",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `当前生效的 runner：${runnerName}（${sourceLabel}）。`,
     editableConfigurationCronExpiryWindowInvalid: (value) =>
@@ -827,6 +978,8 @@ export function getWorkstationDetailMessages(
     localizeProviderSessionKind: enumMessages.localizeProviderSessionKind,
     localizeRunnerSelectionSource: enumMessages.localizeRunnerSelectionSource,
     localizeWorkstationBehavior: enumMessages.localizeWorkstationBehavior,
+    localizeWorkstationGuardType: enumMessages.localizeWorkstationGuardType,
+    localizeInputGuardType: enumMessages.localizeInputGuardType,
     localizeWorkstationKind: enumMessages.localizeWorkstationKind,
     localizeWorkstationType: enumMessages.localizeWorkstationType,
   };

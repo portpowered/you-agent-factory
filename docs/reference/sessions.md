@@ -11,9 +11,9 @@ service is listening, inspect the active factory on a running host, read session
 status from the API, or route submit and work commands to a non-default session.
 
 For the end-to-end agent playbook (read order, submission ingress, operator
-loop), see [Agents](agents.md) (`you docs agents`). For submitted-work contracts
-after the factory is running, see [Work](work.md). For `factory.json` topology,
-see [Config](config.md).
+loop), see `you docs agents`. For submitted-work contracts
+after the factory is running, see `you docs work`. For `factory.json` topology,
+see `you docs config`.
 
 ## When To Use This Guide
 
@@ -188,7 +188,7 @@ you submit --session session-beta \
 you work show <work-id> --session session-beta
 ```
 
-See [Work](work.md) for submit success output and verification with
+See `you docs work` for submit success output and verification with
 `you work show` / `you work list`.
 
 ## Run modes
@@ -203,12 +203,12 @@ still-running service:
 | `you run` (batch, no `--continuously`) | No — exits when the factory goes idle; restart before later CLI or API submissions. |
 
 For steady operator loops (check running → submit → verify), prefer `you` or
-`you run --continuously`. See [Agents](agents.md) for the full operator loop and
+`you run --continuously`. See `you docs agents` for the full operator loop and
 pre-submit checklist.
 
 ## Related Topics
 
-- [Agents](agents.md) — agent orientation, operator loop, and topic router
-- [Work](work.md) — `you submit`, `POST /work`, and verification commands
-- [Config](config.md) — `factory.json` topology and portability
-- [Batch Inputs](batch-inputs.md) — batch ingress when the factory is already running
+- `you docs agents` — agent orientation, operator loop, and topic router
+- `you docs work` — `you submit`, `POST /work`, and verification commands
+- `you docs config` — `factory.json` topology and portability
+- `you docs batch-inputs` — batch ingress when the factory is already running

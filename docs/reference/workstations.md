@@ -6,8 +6,8 @@ topology fields, scheduling kinds, runtime `type`, and outcome routing.
 This is the canonical customer-facing guide for workstations. Keep workstation
 kinds, route fields, runtime step behavior, prompt/runtime fields, and
 workstation-scoped execution settings here. Keep worker backend fields in
-[Workers](workers.md) and top-level `factory.json` work type and routing
-context in [Config](config.md).
+`you docs workers` and top-level `factory.json` work type and routing
+context in `you docs config`.
 
 ## Split Layout And Ownership
 
@@ -415,7 +415,7 @@ and worker binding without restating each detailed field contract:
 
 With a split layout, `workers/executor/AGENTS.md` owns the executor backend
 and system prompt, while `workstations/execute-story/AGENTS.md` owns the
-step-specific prompt and execution settings. Use [Workers](workers.md) for the
+step-specific prompt and execution settings. Use `you docs workers` for the
 worker contract and this page for the workstation contract.
 
 ## Cron Kind
@@ -517,7 +517,7 @@ Review the implementation against the story acceptance criteria.
 
 List available agent names with `opencode agent list`. See the
 [OpenCode CLI reference](https://opencode.ai/docs/cli/) and
-[Workers](workers.md) for worker defaults, validation, and dispatch behavior.
+`you docs workers` for worker defaults, validation, and dispatch behavior.
 
 ## Workstation AGENTS.md
 
@@ -626,7 +626,7 @@ With this authored shape, `config flatten` succeeds without a split workstation
 ## Template Fields
 
 Workstation prompts, `workingDirectory`, `worktree`, and `env` values can use
-Go template syntax. Use [Templates](templates.md) for the shared template
+Go template syntax. Use `you docs templates` for the shared template
 surface, complete variable inventory, and JSON-versus-Markdown quoting rules.
 
 ## Guards And Fan-In
@@ -641,17 +641,17 @@ same-name joins on `workstations[].inputs[].guards[]` with
 `type: "SAME_NAME"` and `matchInput`; keep parent fan-in on per-input guards
 such as `ALL_CHILDREN_COMPLETE` or `ANY_CHILD_FAILED`.
 
-See [Guards](guards.md) for guard types, attachment levels, and guarded
-`LOGICAL_MOVE` loop breakers, and [Relationships](relationships.md) for
+See `you docs guards` for guard types, attachment levels, and guarded
+`LOGICAL_MOVE` loop breakers, and `you docs relationships` for
 `PARENT_CHILD` batch relations that enable parent-aware input guards.
 
 ## Related
 
-- [CLI reference landing page](README.md)
-- [Package docs index](../README.md)
-- [Workers reference](workers.md)
-- [Config](config.md)
-- [Submitted work](work.md)
-- [Templates](templates.md)
-- [Guards](guards.md)
-- [Relationships](relationships.md)
+- `docs/reference/README.md`
+- `docs/README.md`
+- `you docs workers`
+- `you docs config`
+- `you docs work`
+- `you docs templates`
+- `you docs guards`
+- `you docs relationships`

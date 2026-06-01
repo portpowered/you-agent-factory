@@ -101,8 +101,8 @@ fields:
 | `.TargetWorkID` | WorkID of the related work item |
 | `.RequiredState` | State the target must be in (for example `"complete"`) |
 
-See [Relationships](relationships.md) for batch relation authoring and
-[Guards](guards.md) for parent-aware guard fields on consumed inputs.
+See `you docs relationships` for batch relation authoring and
+`you docs guards` for parent-aware guard fields on consumed inputs.
 
 ## Tags and Project Resolution
 
@@ -247,10 +247,10 @@ Input {{ $i }}: {{ $input.WorkID }} - {{ $input.Payload }}
 
 ## Related
 
-- [Guards](guards.md)
-- [Relationships](relationships.md)
-- [CLI reference landing page](README.md)
-- [Package docs index](../README.md)
-- [Workstations](workstations.md)
-- [Author AGENTS.md](authoring-agents-md.md)
-- [Authoring factories](authoring-factories.md)
+- `you docs guards`
+- `you docs relationships`
+- `docs/reference/README.md`
+- `docs/README.md`
+- `you docs workstations`
+- `docs/reference/authoring-agents-md.md`
+- `you docs authoring-factories`

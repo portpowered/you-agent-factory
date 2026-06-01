@@ -17,9 +17,14 @@ import {
   resolveEditableWorkstationBehaviorOptions,
 } from "./workstation-behavior";
 import {
+  normalizeEditableInputGuards,
+  resolveFactoryWorkstationNameOptions,
+} from "./workstation-guards";
+import {
   type EditableWorkstationType,
   resolveEditableWorkstationType,
 } from "./workstation-type";
+import { workstationRequiresWorkerAssignment } from "./workstation-worker-assignment";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
@@ -28,6 +33,12 @@ type CanonicalWorker = NonNullable<
   CanonicalFactoryDefinition["workers"]
 >[number];
 type CanonicalWorkstationCron = NonNullable<CanonicalWorkstation["cron"]>;
+type CanonicalWorkstationGuard = NonNullable<
+  CanonicalWorkstation["guards"]
+>[number];
+type CanonicalWorkstationInput = NonNullable<
+  CanonicalWorkstation["inputs"]
+>[number];
 
 export type EditableWorkstationCronDraft = Pick<
   components["schemas"]["WorkstationCron"],
@@ -39,9 +50,16 @@ export type EditableWorkstationCronDraft = Pick<
   jitter: string;
 };
 
+export interface EditableWorkstationInputDraft {
+  guards: CanonicalWorkstationGuard[];
+  state: string;
+  workType: string;
+}
+
 export interface EditableWorkstationValues {
   behavior: EditableWorkstationBehavior;
   behaviorOptions: EditableWorkstationBehavior[];
+  cron: EditableWorkstationCronDraft | null;
   effectiveRunnerName: RunnerID;
   factoryRunnerName: RunnerID | null;
   prompt: string | null;
@@ -55,14 +73,18 @@ export interface EditableWorkstationValues {
   workerName: string;
   workerOptions: string[];
   workerModelProvider: string | null;
+  guards: CanonicalWorkstationGuard[];
+  inputs: EditableWorkstationInputDraft[];
   workstationName: string;
+  workstationOptions: string[];
   workstationType: EditableWorkstationType;
-  cron: EditableWorkstationCronDraft | null;
 }
 
 export interface EditableWorkstationDraft {
   behavior: EditableWorkstationBehavior;
   cron: EditableWorkstationCronDraft | null;
+  guards: CanonicalWorkstationGuard[];
+  inputs: EditableWorkstationInputDraft[];
   prompt: string;
   runnerName: RunnerID | null;
   workerName: string;
@@ -115,7 +137,10 @@ export function resolveEditableWorkstationValues(
     workerModelProvider,
     workerName: workstation.worker,
     workerOptions: resolveWorkerOptions(factory),
+    guards: resolveEditableWorkstationGuards(workstation),
+    inputs: resolveEditableWorkstationInputs(workstation),
     workstationName: workstation.name,
+    workstationOptions: resolveFactoryWorkstationNameOptions(factory),
     workstationType: resolveEditableWorkstationType(workstation),
   };
 }
@@ -126,6 +151,12 @@ export function editableWorkstationDraftFromValues(
   return {
     behavior: values.behavior,
     cron: values.cron ? { ...values.cron } : null,
+    guards: values.guards,
+    inputs: values.inputs.map((input) => ({
+      guards: normalizeEditableInputGuards([...input.guards]),
+      state: input.state,
+      workType: input.workType,
+    })),
     prompt: values.prompt ?? "",
     runnerName: values.runnerName,
     workerName: values.workerName,
@@ -144,19 +175,6 @@ export function areEditableWorkstationCronDraftsEqual(
   );
 }
 
-export function areEditableWorkstationDraftsEqual(
-  left: EditableWorkstationDraft,
-  right: EditableWorkstationDraft,
-): boolean {
-  return (
-    left.behavior === right.behavior &&
-    left.prompt === right.prompt &&
-    left.runnerName === right.runnerName &&
-    left.workerName === right.workerName &&
-    areEditableWorkstationCronDraftsEqualOrNull(left.cron, right.cron)
-  );
-}
-
 export function applyEditableWorkstationDraft(
   factory: CanonicalFactoryDefinition,
   selectedNode: DashboardWorkstationNode,
@@ -166,7 +184,23 @@ export function applyEditableWorkstationDraft(
     factory,
     selectedNode,
   );
-  if (!workstationResolution || !factory.workers || !factory.workstations) {
+  if (!workstationResolution || !factory.workstations) {
+    return null;
+  }
+
+  const { workstation, workstationIndex } = workstationResolution;
+
+  if (!workstationRequiresWorkerAssignment(workstation)) {
+    return {
+      ...factory,
+      workers: factory.workers,
+      workstations: factory.workstations.map((entry, index) =>
+        index === workstationIndex ? workstation : entry,
+      ),
+    };
+  }
+
+  if (!factory.workers) {
     return null;
   }
 
@@ -177,13 +211,17 @@ export function applyEditableWorkstationDraft(
   const {
     behavior: existingBehavior,
     cron: _existingCron,
+    guards: _existingGuards,
+    inputs: _existingInputs,
     runner: _existingRunner,
     ...workstationWithoutCronRunner
-  } = workstationResolution.workstation;
+  } = workstation;
   const nextWorkstation = {
     ...workstationWithoutCronRunner,
     body: draft.prompt,
+    inputs: applyEditableWorkstationInputs(draft.inputs),
     worker: draft.workerName,
+    ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
     ...(draft.runnerName ? { runner: draft.runnerName } : {}),
     ...(draft.behavior === DEFAULT_WORKSTATION_BEHAVIOR &&
     existingBehavior === undefined
@@ -197,10 +235,8 @@ export function applyEditableWorkstationDraft(
   return {
     ...factory,
     workers: factory.workers,
-    workstations: factory.workstations.map((workstation, index) =>
-      index === workstationResolution.workstationIndex
-        ? nextWorkstation
-        : workstation,
+    workstations: factory.workstations.map((entry, index) =>
+      index === workstationIndex ? nextWorkstation : entry,
     ),
   };
 }
@@ -242,19 +278,6 @@ function buildCanonicalWorkstationCron(
     cron.expiryWindow = expiryWindow;
   }
   return cron;
-}
-
-function areEditableWorkstationCronDraftsEqualOrNull(
-  left: EditableWorkstationCronDraft | null,
-  right: EditableWorkstationCronDraft | null,
-): boolean {
-  if (left === null && right === null) {
-    return true;
-  }
-  if (left === null || right === null) {
-    return false;
-  }
-  return areEditableWorkstationCronDraftsEqual(left, right);
 }
 
 function resolveCanonicalWorkstation(
@@ -357,4 +380,33 @@ function resolveWorkerTypeByName(factory: CanonicalFactoryDefinition) {
   return Object.fromEntries(
     (factory.workers ?? []).map((worker) => [worker.name, worker.type]),
   ) as Record<string, CanonicalWorker["type"] | undefined>;
+}
+
+function resolveEditableWorkstationGuards(
+  workstation: CanonicalWorkstation,
+): CanonicalWorkstationGuard[] {
+  return [...(workstation.guards ?? [])];
+}
+
+function resolveEditableWorkstationInputs(
+  workstation: CanonicalWorkstation,
+): EditableWorkstationInputDraft[] {
+  return (workstation.inputs ?? []).map((input) => ({
+    guards: normalizeEditableInputGuards([...(input.guards ?? [])]),
+    state: input.state,
+    workType: input.workType,
+  }));
+}
+
+function applyEditableWorkstationInputs(
+  inputs: EditableWorkstationInputDraft[],
+): CanonicalWorkstationInput[] {
+  return inputs.map((input) => {
+    const guards = normalizeEditableInputGuards(input.guards);
+    return {
+      state: input.state,
+      workType: input.workType,
+      ...(guards.length > 0 ? { guards } : {}),
+    };
+  });
 }

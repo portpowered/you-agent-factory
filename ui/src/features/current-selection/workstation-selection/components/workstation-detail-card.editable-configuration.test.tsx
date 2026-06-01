@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import { buildDetailCardEditableFactoryDocument } from "../../base/components/detail-card-test-helpers";
 import type {
@@ -13,6 +14,14 @@ import { EditableWorkstationConfigurationHeaderActions } from "./workstation-sav
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 const editableConfigurationCoverageTimeoutMs = 240_000;
+
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value == null) {
+    throw new Error(message);
+  }
+
+  return value;
+}
 
 function currentSelectionHeaderActionSection() {
   const card = screen.getByRole("article", { name: "Current selection" });
@@ -88,11 +97,11 @@ function editableConfigurationSection() {
 function buildReadyEditableConfigurationState(overrides?: {
   behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
   cron?: {
-    expiryWindow?: string;
-    jitter?: string;
+    expiryWindow: string;
+    jitter: string;
     schedule: string;
-    triggerAtStart?: boolean;
-  } | null;
+    triggerAtStart: boolean;
+  };
   promptDiagnostics?: Array<{
     endOffset?: number;
     kind: string;
@@ -157,6 +166,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     cronExpiryWindow?: string;
     cronJitter?: string;
     cronSchedule?: string;
+    cronTriggerAtStart?: string;
     prompt?: string;
     workerName?: string;
   };
@@ -164,6 +174,7 @@ function buildReadyEditableConfigurationState(overrides?: {
   workerOptionsState?:
     | { status: "ready"; options: string[] }
     | { message: string; status: "empty" | "error" };
+  workstationType?: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
 }) {
   const behavior = overrides?.behavior ?? "STANDARD";
   const cron =
@@ -180,6 +191,8 @@ function buildReadyEditableConfigurationState(overrides?: {
     draft: {
       behavior,
       cron,
+      guards: [],
+      inputs: [],
       prompt:
         overrides?.prompt ?? "Review the latest story changes before approval.",
       runnerName: "gemini",
@@ -190,7 +203,8 @@ function buildReadyEditableConfigurationState(overrides?: {
         overrides?.validationErrors?.workerName ||
         overrides?.validationErrors?.cronSchedule ||
         overrides?.validationErrors?.cronJitter ||
-        overrides?.validationErrors?.cronExpiryWindow,
+        overrides?.validationErrors?.cronExpiryWindow ||
+        overrides?.validationErrors?.cronTriggerAtStart,
     ),
     initialValues: {
       behavior,
@@ -223,7 +237,10 @@ function buildReadyEditableConfigurationState(overrides?: {
         reviewer: "MODEL_WORKER",
       },
       workstationName: overrides?.initialValuesWorkstationName ?? "Review",
-      workstationType: "MODEL_WORKSTATION",
+      workstationOptions: ["Plan", "Review"],
+      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
+      guards: [],
+      inputs: [],
     },
     isDirty: Boolean(
       overrides?.behavior ||
@@ -234,6 +251,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         overrides?.validationErrors?.cronSchedule ||
         overrides?.validationErrors?.cronJitter ||
         overrides?.validationErrors?.cronExpiryWindow ||
+        overrides?.validationErrors?.cronTriggerAtStart ||
         overrides?.prompt,
     ),
     markChangesSaved: vi.fn(),
@@ -248,8 +266,14 @@ function buildReadyEditableConfigurationState(overrides?: {
     onCronTriggerAtStartChange: vi.fn(),
     onPromptChange: vi.fn(),
     onResetToLatest: vi.fn(),
+    onGuardsChange: vi.fn(),
+    onInputsChange: vi.fn(),
     onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
+    workstationOptionsState: {
+      options: ["Plan", "Review"],
+      status: "ready" as const,
+    },
     overwriteFieldNames: overrides?.overwriteFieldNames ?? [],
     pendingFactoryDefinition: null,
     promptDiagnostics: overrides?.promptDiagnostics ?? [],
@@ -546,6 +570,68 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeTruthy();
     expect(
       within(editableConfigurationSection()).queryByLabelText("Worker"),
+    ).toBeNull();
+  });
+
+  it("renders runner selection and effective-runner help without a capability matrix", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const onRunnerChange = vi.fn();
+    const readyState = buildReadyEditableConfigurationState();
+
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...readyState,
+          onRunnerChange,
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    const configuration = editableConfigurationSection();
+    const runnerSelect = screen.getByLabelText("Runner") as HTMLSelectElement;
+
+    expect(runnerSelect).toBeTruthy();
+    expect(
+      within(configuration).getByText("Effective runner: Gemini (Workstation)."),
+    ).toBeTruthy();
+    expect(
+      within(configuration).queryByText("Runner capability support"),
+    ).toBeNull();
+    expect(within(configuration).queryByText("Supported")).toBeNull();
+    expect(within(configuration).queryByText("Unsupported")).toBeNull();
+
+    fireEvent.change(runnerSelect, { target: { value: "codex" } });
+    expect(onRunnerChange).toHaveBeenCalledWith("codex");
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...readyState,
+          draft: {
+            ...readyState.draft,
+            runnerName: "codex",
+          },
+          onRunnerChange,
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(
+      within(configuration).getByText("Effective runner: Codex (Workstation)."),
+    ).toBeTruthy();
+    expect(
+      within(configuration).queryByText("Runner capability support"),
     ).toBeNull();
   });
 
@@ -2001,7 +2087,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toContain("text-af-text-muted");
   });
 
-  it("keeps save feedback inside the configuration section after the reorder", () => {
+  it("does not render inline save outcome copy in the configuration section", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const { rerender } = render(
@@ -2021,20 +2107,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    let configuration = editableConfigurationSection();
-    expect(
-      within(configuration).getByText(
-        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-      ),
-    ).toBeTruthy();
-    expect(
-      within(configuration)
-        .getAllByRole("status")
-        .map((element) => element.textContent)
-        .join(" "),
-    ).toContain(
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-    );
+    expectNoInlineSaveOutcomesIn(editableConfigurationSection());
 
     rerender(
       <WorkstationDetailCard
@@ -2050,12 +2123,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    configuration = editableConfigurationSection();
-    expect(
-      within(configuration).getByText(
-        "Saving failed. The current factory rejected the workstation update.",
-      ),
-    ).toBeTruthy();
+    expectNoInlineSaveOutcomesIn(editableConfigurationSection());
   });
 
   it("uses semantic panels for autocomplete and diagnostics feedback", () => {
@@ -2107,5 +2175,220 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.getByText(".Inputs[1]").className).toContain(
       "text-af-text-muted",
     );
+  });
+
+  it("hides worker, runner, prompt, and kind fields for LOGICAL_MOVE configuration", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      workstation_kind: "LOGICAL_MOVE",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "removed-worker",
+          workstationType: "LOGICAL_MOVE",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const configuration = editableConfigurationSection();
+    expect(within(configuration).queryByLabelText("Worker")).toBeNull();
+    expect(within(configuration).queryByLabelText("Kind")).toBeNull();
+    expect(within(configuration).queryByLabelText("Runner")).toBeNull();
+    expect(within(configuration).queryByLabelText("Prompt")).toBeNull();
+    expect(
+      within(configuration).queryByText("Worker selection unavailable."),
+    ).toBeNull();
+    expect(
+      configuration.querySelector(
+        `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+      ),
+    ).toBeNull();
+  });
+
+  it("does not surface worker-unavailable copy for LOGICAL_MOVE with a legacy missing worker", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      workstation_kind: "LOGICAL_MOVE",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "missing-worker",
+          workerOptionsState: {
+            message:
+              "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
+            status: "error",
+          },
+          workstationType: "LOGICAL_MOVE",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(screen.queryByText(/Worker selection unavailable/i)).toBeNull();
+    expect(
+      screen.queryByText(/no longer available in the current factory definition/i),
+    ).toBeNull();
+  });
+
+  it("hides worker, runner, and kind summary tiles for LOGICAL_MOVE while keeping workstation type", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      worker_type: "MODEL_WORKER",
+      workstation_kind: "LOGICAL_MOVE",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "removed-worker",
+          workstationType: "LOGICAL_MOVE",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const summarySection = screen
+      .getByRole("heading", { name: "Workstation summary" })
+      .closest("section");
+    const resolvedSummarySection = requireValue(
+      summarySection,
+      "expected workstation summary section",
+    );
+
+    expect(within(resolvedSummarySection).getByText("Logical move")).toBeTruthy();
+    expect(within(resolvedSummarySection).queryByText("Worker type")).toBeNull();
+    expect(
+      within(resolvedSummarySection).queryByText("Selected runner"),
+    ).toBeNull();
+    expect(within(resolvedSummarySection).queryByText("Kind")).toBeNull();
+    expect(within(resolvedSummarySection).queryByText("MODEL_WORKER")).toBeNull();
+  });
+
+  it("still renders worker-backed summary tiles for model workstations", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const summarySection = screen
+      .getByRole("heading", { name: "Workstation summary" })
+      .closest("section");
+    const resolvedSummarySection = requireValue(
+      summarySection,
+      "expected workstation summary section",
+    );
+
+    expect(within(resolvedSummarySection).getByText("Worker type")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Selected runner")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Kind")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Model workstation")).toBeTruthy();
+  });
+
+  it("still renders worker-backed configuration fields for model workstations", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workstationType: "MODEL_WORKSTATION",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const configuration = editableConfigurationSection();
+    expect(within(configuration).getByLabelText("Worker")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Kind")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Runner")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Prompt")).toBeTruthy();
+  });
+
+  it("omits global unsaved helper paragraphs for dirty ready-state workstation drafts", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...buildReadyEditableConfigurationState({
+            prompt: "Updated prompt for review.",
+          }),
+          isDirty: true,
+          pendingFactoryDefinition: buildDetailCardEditableFactoryDocument(),
+        }}
+        headerAction={buildWorkstationHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    expect(
+      screen.queryByText("You have unsaved changes for this workstation."),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "Changes stay local to this edit session until you save the running factory.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Save changes" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    ).toBeTruthy();
   });
 });
