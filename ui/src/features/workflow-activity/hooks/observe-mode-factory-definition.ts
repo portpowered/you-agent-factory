@@ -1,7 +1,7 @@
-import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
-import type { FactoryTimelineMode } from "../../timeline/state/factoryTimelineStore";
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../factory-graph-editor/lib/factory-graph-topology-impact";
+import type { FactoryTimelineMode } from "../../timeline/state/factoryTimelineStore";
 
 type FactoryDefinitionLike = NonNullable<DashboardSnapshot["factory"]>;
 
