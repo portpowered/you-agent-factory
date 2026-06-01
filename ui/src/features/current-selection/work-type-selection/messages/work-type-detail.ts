@@ -28,8 +28,6 @@ const workTypeDetailMessagesByLocale = {
       "Loading the current factory definition for this work type.",
     editableConfigurationContractInvalidPrefix:
       "Work type configuration is invalid.",
-    editableConfigurationDirtyStatus:
-      "You have unsaved changes for this work type.",
     editableConfigurationNameDuplicate: (workTypeName: string) =>
       `A work type named "${workTypeName}" already exists in the running factory definition.`,
     editableConfigurationNameRequired:
@@ -71,8 +69,6 @@ const workTypeDetailMessagesByLocale = {
     configurationLoading:
       "このワークタイプの現在のファクトリ定義を読み込んでいます。",
     editableConfigurationContractInvalidPrefix: "ワークタイプ設定が無効です。",
-    editableConfigurationDirtyStatus:
-      "このワークタイプに未保存の変更があります。",
     editableConfigurationNameDuplicate: (workTypeName: string) =>
       `実行中のファクトリ定義には、すでに「${workTypeName}」というワークタイプが存在します。`,
     editableConfigurationNameRequired:
@@ -127,8 +123,6 @@ const workTypeDetailMessagesByLocale = {
       "이 작업 유형의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationContractInvalidPrefix:
       "작업 유형 구성이 유효하지 않습니다.",
-    editableConfigurationDirtyStatus:
-      "이 작업 유형에 저장되지 않은 변경 사항이 있습니다.",
     editableConfigurationNameDuplicate: (workTypeName: string) =>
       `실행 중인 팩토리 정의에 "${workTypeName}" 작업 유형이 이미 있습니다.`,
     editableConfigurationNameRequired:
@@ -179,7 +173,6 @@ const workTypeDetailMessagesByLocale = {
     configurationErrorPrefix: "工作类型定义不可用。",
     configurationLoading: "正在加载此工作类型的当前工厂定义。",
     editableConfigurationContractInvalidPrefix: "工作类型配置无效。",
-    editableConfigurationDirtyStatus: "此工作类型有未保存的更改。",
     editableConfigurationNameDuplicate: (workTypeName: string) =>
       `运行中的工厂定义中已存在名为“${workTypeName}”的工作类型。`,
     editableConfigurationNameRequired: "保存此工作类型前请输入工作类型名称。",

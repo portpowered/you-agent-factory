@@ -9,8 +9,9 @@ import type {
 import type { FactoryEvent } from "../src/api/events";
 import { resetSelectionHistoryStore } from "../src/features/current-selection/base/public";
 import { resetDashboardSessionStore } from "../src/features/dashboard/state/dashboardSessionStore";
-import { useFactoryTimelineStore } from "../src/features/timeline/state/factoryTimelineStore";
+import { AppNotificationToaster } from "../src/features/notifications/public";
 import type { WorldState } from "../src/features/timeline/state/factoryTimelineStore";
+import { useFactoryTimelineStore } from "../src/features/timeline/state/factoryTimelineStore";
 import { DashboardSessionTestProvider } from "../src/testing/dashboard-session-test-provider";
 
 const DASHBOARD_STORYBOOK_BASE_PATH = "/dashboard/ui/";
@@ -340,6 +341,7 @@ function StorybookDashboardRuntime({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={createQueryClient()}>
       {children}
+      <AppNotificationToaster />
     </QueryClientProvider>
   );
 }

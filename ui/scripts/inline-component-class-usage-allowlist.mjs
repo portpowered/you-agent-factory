@@ -74,6 +74,4 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/work-outcome/components/trend-cards.tsx#TREND_CAUSE_LABEL_CLASS",
   "src/features/work-outcome/components/trend-cards.tsx#TIMING_RANGE_SUMMARY_CLASS",
   "src/features/work-outcome/components/work-chart.tsx#WORK_CHART_TOOLBAR_CLASS",
-  "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_CARD_CLASS",
-  "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_TITLE_CLASS",
 ];

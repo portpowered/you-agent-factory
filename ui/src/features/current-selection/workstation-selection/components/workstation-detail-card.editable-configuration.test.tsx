@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import { buildDetailCardEditableFactoryDocument } from "../../base/components/detail-card-test-helpers";
 import type {
@@ -1821,7 +1822,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toContain("text-af-text-muted");
   });
 
-  it("keeps save feedback inside the configuration section after the reorder", () => {
+  it("does not render inline save outcome copy in the configuration section", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const { rerender } = render(
@@ -1841,20 +1842,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    let configuration = editableConfigurationSection();
-    expect(
-      within(configuration).getByText(
-        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-      ),
-    ).toBeTruthy();
-    expect(
-      within(configuration)
-        .getAllByRole("status")
-        .map((element) => element.textContent)
-        .join(" "),
-    ).toContain(
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-    );
+    expectNoInlineSaveOutcomesIn(editableConfigurationSection());
 
     rerender(
       <WorkstationDetailCard
@@ -1870,12 +1858,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    configuration = editableConfigurationSection();
-    expect(
-      within(configuration).getByText(
-        "Saving failed. The current factory rejected the workstation update.",
-      ),
-    ).toBeTruthy();
+    expectNoInlineSaveOutcomesIn(editableConfigurationSection());
   });
 
   it("uses semantic panels for autocomplete and diagnostics feedback", () => {
@@ -2100,5 +2083,47 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(within(configuration).getByLabelText("Kind")).toBeTruthy();
     expect(within(configuration).getByLabelText("Runner")).toBeTruthy();
     expect(within(configuration).getByLabelText("Prompt")).toBeTruthy();
+  });
+
+  it("omits global unsaved helper paragraphs for dirty ready-state workstation drafts", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...buildReadyEditableConfigurationState({
+            prompt: "Updated prompt for review.",
+          }),
+          isDirty: true,
+          pendingFactoryDefinition: buildDetailCardEditableFactoryDocument(),
+        }}
+        headerAction={buildWorkstationHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    expect(
+      screen.queryByText("You have unsaved changes for this workstation."),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "Changes stay local to this edit session until you save the running factory.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Save changes" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    ).toBeTruthy();
   });
 });

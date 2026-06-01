@@ -19,6 +19,157 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("useScopedFactoryDocumentSave saveAttemptRevision", () => {
+  it("starts at zero", () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "idle" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const { result } = renderHook(
+      () =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createScopedFactoryDocumentSaveQueryClientWrapper() },
+    );
+
+    expect(result.current.saveAttemptRevision).toBe(0);
+  });
+
+  it("increments on each saveNow or confirmSave invocation that starts a save", async () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "success" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const { result } = renderHook(
+      () =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createScopedFactoryDocumentSaveQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.saveNow(defaultScopedFactoryDocumentSaveRequest);
+    });
+    expect(result.current.saveAttemptRevision).toBe(1);
+
+    await act(async () => {
+      await result.current.saveNow(defaultScopedFactoryDocumentSaveRequest);
+    });
+    expect(result.current.saveAttemptRevision).toBe(2);
+
+    act(() => {
+      result.current.beginConfirmation();
+    });
+
+    await act(async () => {
+      await result.current.confirmSave(defaultScopedFactoryDocumentSaveRequest);
+    });
+    expect(result.current.saveAttemptRevision).toBe(3);
+  });
+
+  it("does not increment on confirmation-only state transitions", () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "idle" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const { result } = renderHook(
+      () =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createScopedFactoryDocumentSaveQueryClientWrapper() },
+    );
+
+    act(() => {
+      result.current.beginConfirmation();
+    });
+    expect(result.current.saveAttemptRevision).toBe(0);
+
+    act(() => {
+      result.current.cancelConfirmation();
+    });
+    expect(result.current.saveAttemptRevision).toBe(0);
+  });
+
+  it("does not increment when duplicate save calls are deduplicated while in flight", async () => {
+    const pendingSave = mockPendingFactoryDocumentSave();
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(pendingSave.saveMutation as never);
+
+    const { result } = renderHook(
+      () =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createScopedFactoryDocumentSaveQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      void result.current.saveNow(defaultScopedFactoryDocumentSaveRequest);
+      await Promise.resolve();
+      await result.current.saveNow(defaultScopedFactoryDocumentSaveRequest);
+    });
+
+    expect(result.current.saveAttemptRevision).toBe(1);
+
+    pendingSave.deferred.resolve({
+      name: "Current Factory",
+      version: {
+        logical: "8",
+        physical: "2026-05-23T15:52:00.001Z",
+      },
+      workers: [],
+      workstations: [],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+  });
+
+  it("resets when scopeKey changes", async () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "success" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const { rerender, result } = renderHook(
+      ({ scopeKey }) =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey,
+        }),
+      {
+        initialProps: { scopeKey: "review:transition:Review" },
+        wrapper: createScopedFactoryDocumentSaveQueryClientWrapper(),
+      },
+    );
+
+    await act(async () => {
+      await result.current.saveNow(defaultScopedFactoryDocumentSaveRequest);
+    });
+    expect(result.current.saveAttemptRevision).toBe(1);
+
+    rerender({ scopeKey: "worker:reviewer" });
+    expect(result.current.saveAttemptRevision).toBe(0);
+  });
+});
+
 describe("useScopedFactoryDocumentSave in-flight deduplication", () => {
   it("ignores repeated confirm and immediate save calls while a save is in flight", async () => {
     const pendingSave = mockPendingFactoryDocumentSave();

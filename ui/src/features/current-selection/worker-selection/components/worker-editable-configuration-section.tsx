@@ -16,10 +16,7 @@ import {
   EDITABLE_MODEL_PROVIDERS,
   EDITABLE_WORKER_TYPES,
 } from "../../../current-factory-definition/lib/worker-editable-values";
-import {
-  DetailCardFactorySaveFeedback,
-  mergeDetailCardSaveFieldErrors,
-} from "../../base/components/detail-card-factory-save-feedback";
+import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
@@ -143,17 +140,6 @@ function WorkerEditableConfigurationReadyForm({
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
-      <DetailCardFactorySaveFeedback<EditableWorkerSaveValidationErrors>
-        messages={{
-          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
-          staleVersionDetail:
-            messages.editableConfigurationSaveStaleVersionDetail,
-          successMessage: messages.editableConfigurationSaveSuccess(
-            state.draft.name.trim() || workerName,
-          ),
-        }}
-        saveState={saveState}
-      />
       <WorkerEditableConfigurationSharedImpactWarning
         messages={messages}
         state={state}
@@ -350,43 +336,26 @@ function WorkerEditableConfigurationDraftStatus({
   messages: ReturnType<typeof getWorkerDetailMessages>;
   state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
 }) {
+  if (!state.hasValidationErrors) {
+    return null;
+  }
+
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
       <p
-        className={cn(
-          "m-0",
-          state.hasValidationErrors
-            ? "text-af-danger-text"
-            : "text-af-text-muted",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-        role={state.hasValidationErrors ? "alert" : "status"}
+        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+        role="alert"
       >
-        {state.hasValidationErrors
-          ? messages.editableConfigurationValidationStatus
-          : state.isDirty
-            ? messages.editableConfigurationDirtyStatus
-            : messages.editableConfigurationDraftNote}
+        {messages.editableConfigurationValidationStatus}
       </p>
-      {state.hasValidationErrors ? (
-        <p
-          className={cn(
-            "m-0 text-af-text-subtle",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
-          {messages.editableConfigurationSaveDisabledValidationDetail}
-        </p>
-      ) : (
-        <p
-          className={cn(
-            "m-0 text-af-text-subtle",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
-          {messages.editableConfigurationDraftNote}
-        </p>
-      )}
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
+        {messages.editableConfigurationSaveDisabledValidationDetail}
+      </p>
     </div>
   );
 }
