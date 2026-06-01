@@ -6,7 +6,7 @@ repository file is `docs/reference/resources.md`.
 Use this page when you need the current you-agent-factory resource contract for
 bounded concurrency across workstations.
 
-Use [Config](config.md) for the overall
+Use `you docs config` for the overall
 `factory.json` topology and field ownership. This page owns the bounded
 concurrency behavior of `resources` pools and resource requirements.
 
@@ -124,12 +124,12 @@ should be throttled.
 
 ## Related
 
-- [CLI reference landing page](README.md)
-- [Package docs index](../README.md)
-- [Config](config.md)
-- [Submitted work](work.md)
-- [Models and model operations](models.md)
-- [Author AGENTS.md](authoring-agents-md.md)
-- [Workstations](workstations.md)
-- [Workers](workers.md)
-- [Guards](guards.md)
+- `docs/reference/README.md`
+- `docs/README.md`
+- `you docs config`
+- `you docs work`
+- `you docs models`
+- `docs/reference/authoring-agents-md.md`
+- `you docs workstations`
+- `you docs workers`
+- `you docs guards`

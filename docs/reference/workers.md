@@ -10,9 +10,9 @@ workstation-owned runtime fields.
 This is the canonical customer-facing guide for workers. Keep worker types,
 worker-scoped runtime fields, model/script backend fields, and
 `workers/<name>/AGENTS.md` placement here. Keep workstation routing and
-prompt/runtime fields in [Workstations](workstations.md), and keep top-level
+prompt/runtime fields in `you docs workstations`, and keep top-level
 `factory.json` work type and routing context in
-[Config](config.md).
+`you docs config`.
 
 ## Canonical Placement
 
@@ -44,7 +44,7 @@ between the two concepts explicit:
   instructions for every workstation that references it.
 
 Use this page when you need the backend-facing worker contract. Use
-[Workstations](workstations.md) when you need to understand when a step runs,
+`you docs workstations` when you need to understand when a step runs,
 what it renders, and where it routes results.
 
 ## Current Contract
@@ -275,15 +275,15 @@ opencode agent list
 See the [OpenCode CLI reference](https://opencode.ai/docs/cli/) for agent
 create/list commands and profile management.
 
-Workstations can override the worker default. See [Workstations](workstations.md)
+Workstations can override the worker default. See `you docs workstations`
 for precedence and workstation-level examples.
 
 ## Related
 
-- [CLI reference landing page](README.md)
-- [Package docs index](../README.md)
-- [Models and model operations](models.md)
-- [Workstations reference](workstations.md)
-- [Config](config.md)
-- [Submitted work](work.md)
-- [Author AGENTS.md](authoring-agents-md.md)
+- `docs/reference/README.md`
+- `docs/README.md`
+- `you docs models`
+- `you docs workstations`
+- `you docs config`
+- `you docs work`
+- `docs/reference/authoring-agents-md.md`

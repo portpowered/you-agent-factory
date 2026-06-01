@@ -12,10 +12,10 @@ instructions in `workers/<name>/AGENTS.md`, and workstation prompts in
 `workstations/<name>/AGENTS.md`.
 
 Use this guide for workflow sequencing, runnable examples, and command order.
-Use [Config](config.md) for the field-by-field
-`factory.json` reference, [Workstations](workstations.md) for workstation
-runtime fields, [Workers](workers.md) for worker backend fields, and
-[Batch Inputs](batch-inputs.md) for the watched-file and API request shape.
+Use `you docs config` for the field-by-field
+`factory.json` reference, `you docs workstations` for workstation
+runtime fields, `you docs workers` for worker backend fields, and
+`you docs batch-inputs` for the watched-file and API request shape.
 
 ## Recommended Layout
 
@@ -75,7 +75,7 @@ At runtime:
 3. Accepted work routes to `task:complete`.
 4. Failed or timed-out work routes to `task:failed`.
 
-Use [Config](config.md#how-the-pieces-fit) for the
+Use `you docs config` for the
 canonical routing contract, including continue and rejection routes.
 
 ## Build Your First Workflow
@@ -145,7 +145,7 @@ guarded loop breaker so a rejected story cannot cycle forever.
 Add `supportingFiles` only when the workflow also needs declarative host-tool
 checks or bundled helper files that should travel with the factory contract.
 Use
-[Config](config.md#portability-resource-manifest)
+`you docs config`
 for the manifest fields and validation rules.
 
 ### 2. Create the split runtime definitions
@@ -223,7 +223,7 @@ Return REJECTED with concrete feedback when another pass is needed.
 
 For a portable `factory.json` and a single customer prompt, mark one work type
 with `handlingBehavior: ["DEFAULT"]` in `factory.json` (see
-[Work types](config.md#default-handling-for-one-shot-cli-runs)) and run:
+`you docs config`) and run:
 
 ```bash
 you run --factory ./factory.json "Fix the lint issues"
@@ -491,22 +491,22 @@ installed, and optionally set `INFINITE_YOU_OMNIVOICE_COMMAND` or
 
 ## Related Contract Detail
 
-- [Config](config.md) owns work types, states,
+- `you docs config` owns work types, states,
   routing, resources, and portability fields.
-- [Workstations](workstations.md) owns workstation kinds, runtime fields,
+- `you docs workstations` owns workstation kinds, runtime fields,
   route fields, and guards.
-- [Workers](workers.md) owns worker types, backend fields, and worker
+- `you docs workers` owns worker types, backend fields, and worker
   `AGENTS.md` placement.
-- [Author AGENTS.md](authoring-agents-md.md) owns split file shape, prompt
+- `docs/reference/authoring-agents-md.md` owns split file shape, prompt
   placement, and authoring patterns.
 
 ## Failure Routing And Provider Behavior
 
 For workflow design, add explicit failure, continue, and rejection destinations
 to the topology so every outcome lands somewhere intentional. Use
-[Config](config.md#how-the-pieces-fit) for the
-canonical routing contract, [Workstations](workstations.md) for route fields
-and execution limits, and [Workers](workers.md) for worker backend behavior.
+`you docs config` for the
+canonical routing contract, `you docs workstations` for route fields
+and execution limits, and `you docs workers` for worker backend behavior.
 
 ## When To Use Pollers
 
@@ -533,10 +533,10 @@ Choose the poller worker type this way:
 
 Keep the exact contracts on the canonical owner pages:
 
-- [Workstations](workstations.md) owns `behavior: "POLLER"` and lifecycle
+- `you docs workstations` owns `behavior: "POLLER"` and lifecycle
   behavior.
-- [Workers](workers.md) owns hosted `LINEAR` worker fields and `auth.secretRef`.
-- [Batch Inputs](batch-inputs.md#poller-stdout-contract) owns the script
+- `you docs workers` owns hosted `LINEAR` worker fields and `auth.secretRef`.
+- `you docs batch-inputs` owns the script
   poller stdout submission contract.
 
 ### Script Poller Example
@@ -664,23 +664,23 @@ review-loop workflow.
 - Keep prompt-heavy worker and workstation runtime fields in split `AGENTS.md`
   files unless you intentionally need a single-file config.
 - Add a guarded `LOGICAL_MOVE` workstation for repeater or review loops.
-- Use [Batch Inputs](batch-inputs.md) for `FACTORY_REQUEST_BATCH`
+- Use `you docs batch-inputs` for `FACTORY_REQUEST_BATCH`
   request files.
-- Use [Workstations](workstations.md) for cron, prompt templates, timeouts, and
+- Use `you docs workstations` for cron, prompt templates, timeouts, and
   workstation runtime field details.
-- Use [Workers](workers.md) for worker backend field details.
+- Use `you docs workers` for worker backend field details.
 
 ## Related
 
-- [Agents](agents.md)
-- [Mock workers](mock-workers.md)
-- [Record and replay](record-replay.md)
-- [Config](config.md)
-- [Submitted work](work.md)
-- [Workstations](workstations.md)
-- [Workers](workers.md)
-- [Batch Inputs](batch-inputs.md)
+- `you docs agents`
+- `you docs mock-workers`
+- `you docs record-replay`
+- `you docs config`
+- `you docs work`
+- `you docs workstations`
+- `you docs workers`
+- `you docs batch-inputs`
 - [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
 - [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
-- [Templates](templates.md)
-- [README](../README.md)
+- `you docs templates`
+- `docs/reference/README.md`
