@@ -199,6 +199,42 @@ function useEditorCurrentActivityGraphLayout(
   );
 }
 
+function useSyncedDisplayNodes(baseNodes: CurrentActivityNode[]) {
+  const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
+
+  useEffect(() => {
+    setNodes((currentNodes) => {
+      const currentPositions = new Map(
+        currentNodes.map((node) => [node.id, node.position]),
+      );
+      return baseNodes.map((node) => ({
+        ...node,
+        position: currentPositions.get(node.id) ?? node.position,
+      }));
+    });
+  }, [baseNodes]);
+
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes(
+      (currentNodes) =>
+        applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
+    );
+  }, []);
+
+  const displayNodes = useMemo(() => {
+    const positionOverrides = new Map(
+      nodes.map((node) => [node.id, node.position] as const),
+    );
+
+    return baseNodes.map((node) => ({
+      ...node,
+      position: positionOverrides.get(node.id) ?? node.position,
+    }));
+  }, [baseNodes, nodes]);
+
+  return { displayNodes, handleNodesChange };
+}
+
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,
@@ -269,36 +305,7 @@ export function useCurrentActivityGraphViewModel({
     snapshot,
     storedNodePositions,
   });
-  const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
-
-  useEffect(() => {
-    setNodes((currentNodes) => {
-      const currentPositions = new Map(
-        currentNodes.map((node) => [node.id, node.position]),
-      );
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
-    });
-  }, [baseNodes]);
-
-  const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes(
-      (currentNodes) =>
-        applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
-    );
-  }, []);
-  const displayNodes = useMemo(() => {
-    const positionOverrides = new Map(
-      nodes.map((node) => [node.id, node.position] as const),
-    );
-
-    return baseNodes.map((node) => ({
-      ...node,
-      position: positionOverrides.get(node.id) ?? node.position,
-    }));
-  }, [baseNodes, nodes]);
+  const { displayNodes, handleNodesChange } = useSyncedDisplayNodes(baseNodes);
   const edges = useMemo(
     () =>
       buildGraphEdges(
