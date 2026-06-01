@@ -4,7 +4,6 @@ import type {
   DashboardRuntimeWorkstationRequest,
   DashboardScriptRequest,
   DashboardScriptResponse,
-  DashboardTraceToken,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
@@ -100,45 +99,6 @@ export function scriptResponseErrored(response: WorldScriptResponse): boolean {
     response.outcome === "PROCESS_ERROR" ||
     response.outcome === "TIMED_OUT"
   );
-}
-
-export function workItemsFromTokens(
-  tokens: DashboardTraceToken[],
-  fallback: DashboardWorkItemRef[],
-): DashboardWorkItemRef[] {
-  const fallbackByID = new Map(fallback.map((item) => [item.work_id, item] as const));
-  const workItems = Object.values(
-    Object.fromEntries(
-      tokens
-        .filter(
-          (token) => token.work_id && token.work_type_id !== DASHBOARD_TIME_WORK_TYPE_ID,
-        )
-        .map((token) => [
-          token.work_id,
-          {
-            ...(fallbackByID.get(token.work_id)?.current_chaining_trace_id
-              ? {
-                  current_chaining_trace_id:
-                    fallbackByID.get(token.work_id)?.current_chaining_trace_id,
-                }
-              : {}),
-            display_name: token.name,
-            ...(fallbackByID.get(token.work_id)?.previous_chaining_trace_ids
-              ? {
-                  previous_chaining_trace_ids:
-                    fallbackByID.get(token.work_id)?.previous_chaining_trace_ids,
-                }
-              : {}),
-            trace_id: token.trace_id,
-            work_id: token.work_id,
-            work_type_id: token.work_type_id,
-          } satisfies DashboardWorkItemRef,
-        ]),
-    ),
-  );
-  return workItems.length > 0
-    ? workItems.sort((left, right) => left.work_id.localeCompare(right.work_id))
-    : [...fallback].sort((left, right) => left.work_id.localeCompare(right.work_id));
 }
 
 export function outputWorkItemsFromCompletion(
