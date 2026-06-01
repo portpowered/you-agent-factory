@@ -20,6 +20,17 @@ function workTypeStateMap(
   return statesByWorkType;
 }
 
+function isSavedDocumentMinimalReplayStub(
+  document: CurrentFactoryDocument,
+): boolean {
+  return (
+    (document.workTypes?.length ?? 0) === 0 &&
+    (document.workstations?.length ?? 0) === 0 &&
+    (document.workers?.length ?? 0) === 0 &&
+    (document.resources?.length ?? 0) === 0
+  );
+}
+
 function isDocumentWorkTypeStructureAheadOfSnapshot(
   document: CurrentFactoryDocument,
   snapshotFactory: FactoryDefinitionLike,
@@ -27,21 +38,37 @@ function isDocumentWorkTypeStructureAheadOfSnapshot(
   const documentWorkTypes = workTypeStateMap(document);
   const snapshotWorkTypes = workTypeStateMap(snapshotFactory);
 
+  if (snapshotWorkTypes.size === 0) {
+    return documentWorkTypes.size > 0;
+  }
+
+  for (const [workTypeName, snapshotStates] of snapshotWorkTypes) {
+    const documentStates = documentWorkTypes.get(workTypeName);
+    if (!documentStates) {
+      return false;
+    }
+
+    for (const stateName of snapshotStates) {
+      if (!documentStates.has(stateName)) {
+        return false;
+      }
+    }
+  }
+
+  if (documentWorkTypes.size > snapshotWorkTypes.size) {
+    return true;
+  }
+
   for (const [workTypeName, documentStates] of documentWorkTypes) {
     const snapshotStates = snapshotWorkTypes.get(workTypeName);
     if (!snapshotStates) {
-      return true;
+      continue;
     }
 
-    const includesAllSnapshotStates = [...snapshotStates].every((stateName) =>
-      documentStates.has(stateName),
-    );
-    const addsStates = [...documentStates].some(
-      (stateName) => !snapshotStates.has(stateName),
-    );
-
-    if (includesAllSnapshotStates && addsStates) {
-      return true;
+    for (const stateName of documentStates) {
+      if (!snapshotStates.has(stateName)) {
+        return true;
+      }
     }
   }
 
@@ -114,6 +141,10 @@ export function resolveObserveModeFactoryDefinition({
   }
 
   if (timelineMode === "fixed") {
+    return snapshotFactory;
+  }
+
+  if (isSavedDocumentMinimalReplayStub(document)) {
     return snapshotFactory;
   }
 

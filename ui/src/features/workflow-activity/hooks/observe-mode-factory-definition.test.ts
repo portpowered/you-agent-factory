@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { buildDashboardSnapshotFixture } from "../../../components/dashboard/fixtures";
 import { mediumBranchingDashboardTopology } from "../../../components/dashboard/fixtures/topologies";
 import {
-  baseFactoryDefinitionDocument,
   buildDivergentSnapshotPlaneFactory,
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
@@ -26,16 +25,14 @@ describe("resolveObserveModeFactoryDefinition", () => {
 
   it("prefers the saved document when it adds work type states ahead of the snapshot", () => {
     const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
-    const savedDocument = {
-      ...baseFactoryDefinitionDocument,
-      workTypes: [
-        ...(baseFactoryDefinitionDocument.workTypes ?? []),
-        {
-          name: "task",
-          states: [{ name: "open", type: "INITIAL" as const }],
-        },
-      ],
-    };
+    const savedDocument = sessionFactoryDocumentFromSnapshot(snapshot);
+    savedDocument.workTypes = [
+      ...(savedDocument.workTypes ?? []),
+      {
+        name: "task",
+        states: [{ name: "open", type: "INITIAL" as const }],
+      },
+    ];
 
     expect(
       resolveObserveModeFactoryDefinition({
@@ -111,5 +108,67 @@ describe("resolveObserveModeFactoryDefinition", () => {
         timelineMode: "current",
       }),
     ).toEqual(snapshot.factory);
+  });
+
+  it("prefers the timeline snapshot factory when the saved document defines unrelated work types", () => {
+    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const replayFactory = {
+      ...snapshot.factory,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" as const },
+            { name: "done", type: "TERMINAL" as const },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Session Review",
+          outputs: [{ state: "done", workType: "story" }],
+          type: "MODEL_WORKSTATION" as const,
+          worker: "writer",
+        },
+      ],
+    };
+    snapshot.factory = replayFactory;
+
+    const importedSessionDocument = {
+      name: "Review Session Import Factory",
+      workTypes: [
+        {
+          name: "request",
+          states: [
+            { name: "queued", type: "INITIAL" as const },
+            { name: "done", type: "TERMINAL" as const },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          inputs: [{ state: "queued", workType: "request" }],
+          name: "Review import workstation",
+          outputs: [{ state: "done", workType: "request" }],
+          type: "MODEL_WORKSTATION" as const,
+          worker: "review-import-worker",
+        },
+      ],
+      workers: [
+        {
+          name: "review-import-worker",
+          type: "MODEL_WORKER" as const,
+        },
+      ],
+    };
+
+    expect(
+      resolveObserveModeFactoryDefinition({
+        document: importedSessionDocument,
+        snapshotFactory: replayFactory,
+        timelineMode: "current",
+      }),
+    ).toEqual(replayFactory);
   });
 });
