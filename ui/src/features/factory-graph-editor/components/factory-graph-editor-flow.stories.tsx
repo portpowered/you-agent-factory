@@ -492,7 +492,46 @@ const standardProcessorWithStopWords: FactoryWorkstation = {
   stopWords: ["DONE"],
 };
 
+const logicalMoveWorkstation: FactoryWorkstation = {
+  body: "Move work downstream.",
+  inputs: [
+    {
+      state: "queued",
+      workType: "story",
+    },
+  ],
+  name: "router",
+  outputs: [
+    {
+      state: "done",
+      workType: "story",
+    },
+  ],
+  resources: [
+    {
+      capacity: 2,
+      name: "gpu",
+    },
+  ],
+  type: "LOGICAL_MOVE",
+  worker: "",
+};
+
+const logicalMoveComparisonTopology: FactoryGraphTopology = {
+  ...PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+  nodes: [
+    ...PROGRESS_OUTCOME_ROUTE_TOPOLOGY.nodes,
+    {
+      id: "workstation:router",
+      key: { kind: "workstation", name: "router" },
+      kind: "workstation",
+      label: "router",
+    },
+  ],
+};
+
 function ProgressOutcomeRoutesStory(input: {
+  topology?: FactoryGraphTopology;
   workstations: readonly FactoryWorkstation[];
 }) {
   const flow = buildFactoryGraphEditorFlowModel({
@@ -502,7 +541,7 @@ function ProgressOutcomeRoutesStory(input: {
     pendingAdditionNodeIds: new Set<string>(),
     pendingRemovalEdgeIds: new Set<string>(),
     pendingRemovalNodeIds: new Set<string>(),
-    topology: PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+    topology: input.topology ?? PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
     workstations: input.workstations,
   });
 
@@ -522,6 +561,27 @@ function ProgressOutcomeRoutesStory(input: {
       </ReactFlow>
     </div>
   );
+}
+
+async function expectLogicalMoveConnectHandles(canvas: ReturnType<typeof within>) {
+  await expect(
+    canvas.getByRole("button", { name: "Connect: router Success" }),
+  ).toBeVisible();
+  await expect(
+    canvas.getByRole("button", { name: "Connect: router Input" }),
+  ).toBeVisible();
+  await expect(
+    canvas.getByRole("button", { name: "Connect: router Resource" }),
+  ).toBeVisible();
+  await expect(
+    canvas.queryByRole("button", { name: "Connect: router Failure" }),
+  ).toBeNull();
+  await expect(
+    canvas.queryByRole("button", { name: "Connect: router Continue" }),
+  ).toBeNull();
+  await expect(
+    canvas.queryByRole("button", { name: "Connect: router Reject" }),
+  ).toBeNull();
 }
 
 async function expectProgressOutcomeRouteHandles(
@@ -777,6 +837,42 @@ export const ProgressOutcomeRoutesWithStopWords = {
     await expectProgressOutcomeRouteHandles(canvas, {
       includeContinueAndReject: true,
     });
+    await expectZAxisIncompleteHints(canvasElement, { expectHints: false });
+  },
+};
+
+export const LogicalMoveProgressOutcomeHandles = {
+  render: () => (
+    <ProgressOutcomeRoutesStory
+      topology={logicalMoveComparisonTopology}
+      workstations={[logicalMoveWorkstation]}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByText("router")).toBeVisible();
+    await expectLogicalMoveConnectHandles(canvas);
+    await expectZAxisIncompleteHints(canvasElement, { expectHints: false });
+  },
+};
+
+export const LogicalMoveComparedToStandardProcessor = {
+  render: () => (
+    <ProgressOutcomeRoutesStory
+      topology={logicalMoveComparisonTopology}
+      workstations={[standardProcessorWithoutStopWords, logicalMoveWorkstation]}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByText("draft")).toBeVisible();
+    await expect(canvas.getByText("router")).toBeVisible();
+    await expectProgressOutcomeRouteHandles(canvas, {
+      includeContinueAndReject: false,
+    });
+    await expectLogicalMoveConnectHandles(canvas);
     await expectZAxisIncompleteHints(canvasElement, { expectHints: false });
   },
 };

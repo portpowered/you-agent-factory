@@ -1,5 +1,6 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
@@ -24,6 +25,17 @@ const logicalMoveContext = factoryGraphConnectionAnchorContext({
 const modelWorkstationContext = factoryGraphConnectionAnchorContext({
   type: "MODEL_WORKSTATION",
   behavior: "STANDARD",
+});
+
+const standardProcessorWithoutStopWords = factoryGraphConnectionAnchorContext({
+  type: "MODEL_WORKSTATION",
+  behavior: "STANDARD",
+});
+
+const standardProcessorWithStopWords = factoryGraphConnectionAnchorContext({
+  type: "MODEL_WORKSTATION",
+  behavior: "STANDARD",
+  stopWords: ["DONE"],
 });
 
 const factoryWithLogicalMove = {
@@ -54,6 +66,125 @@ const factoryWithLogicalMove = {
 function handleIds(handles: { id: string }[]) {
   return handles.map((handle) => handle.id);
 }
+
+it("omits continue, failure, and reject handles on LOGICAL_MOVE workstations in connect mode", () => {
+  const ids = handleIds(
+    buildEditorHandles({
+      connectionAnchorContext: logicalMoveContext,
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: () => {},
+        pendingConnectionSource: null,
+      },
+      nodeId: "workstation:router",
+      nodeKind: "workstation",
+    }),
+  );
+
+  expect(ids).not.toContain("workstation-on-continue-source");
+  expect(ids).not.toContain("workstation-on-failure-source");
+  expect(ids).not.toContain("workstation-on-rejection-source");
+});
+
+it("keeps failure and omits continue and reject for a standard processor without stopWords", () => {
+  const ids = handleIds(
+    buildEditorHandles({
+      connectionAnchorContext: standardProcessorWithoutStopWords,
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: () => {},
+        pendingConnectionSource: null,
+      },
+      nodeId: "workstation:draft",
+      nodeKind: "workstation",
+    }),
+  );
+
+  expect(ids).toContain("workstation-on-failure-source");
+  expect(ids).not.toContain("workstation-on-continue-source");
+  expect(ids).not.toContain("workstation-on-rejection-source");
+});
+
+it("renders all progress-outcome handles when stopWords are configured", () => {
+  const ids = handleIds(
+    buildEditorHandles({
+      connectionAnchorContext: standardProcessorWithStopWords,
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: () => {},
+        pendingConnectionSource: null,
+      },
+      nodeId: "workstation:draft",
+      nodeKind: "workstation",
+    }),
+  );
+
+  expect(ids).toEqual(
+    expect.arrayContaining([
+      "workstation-on-continue-source",
+      "workstation-on-failure-source",
+      "workstation-on-rejection-source",
+    ]),
+  );
+});
+
+it("does not attach progress-outcome validation to hidden logical-move anchors", () => {
+  const validationProjection = projectFactoryValidationTargets([
+    {
+      code: "factory.workstation.missingFailureRoute",
+      message: "Workstation router must define a failure route.",
+      severity: "error",
+      subject: {
+        id: "router",
+        location: "ON_FAILURE",
+        type: "WORKSTATION",
+      },
+    },
+    {
+      code: "factory.workstation.missingRejectionRoute",
+      message: "Workstation router must define a reject route.",
+      severity: "error",
+      subject: {
+        id: "router",
+        location: "ON_REJECTION",
+        type: "WORKSTATION",
+      },
+    },
+    {
+      code: "factory.workstation.missingContinueRoute",
+      message: "Workstation router must define a continue route.",
+      severity: "error",
+      subject: {
+        id: "router",
+        location: "ON_CONTINUE",
+        type: "WORKSTATION",
+      },
+    },
+  ]);
+  const handles = buildEditorHandles({
+    connectionAnchorContext: logicalMoveContext,
+    editor: {
+      activeTool: "connect",
+      canInteractWithEditor: true,
+      editorMode: true,
+      onConnectionAnchorClick: () => {},
+      pendingConnectionSource: null,
+    },
+    nodeId: "workstation:router",
+    nodeKind: "workstation",
+    validationProjection,
+  });
+
+  expect(handles.find((handle) => handle.id === "workstation-on-failure-source")).toBeUndefined();
+  expect(handles.find((handle) => handle.id === "workstation-on-rejection-source")).toBeUndefined();
+  expect(handles.find((handle) => handle.id === "workstation-on-continue-source")).toBeUndefined();
+});
 
 it("omits worker-assignment-target on LOGICAL_MOVE workstations", () => {
   const ids = handleIds(
@@ -170,5 +301,8 @@ it("builds current-activity workstation nodes without worker-assignment handles 
   );
 
   expect(logicalMoveHandles).not.toContain("worker-assignment-target");
+  expect(logicalMoveHandles).not.toContain("workstation-on-continue-source");
+  expect(logicalMoveHandles).not.toContain("workstation-on-failure-source");
+  expect(logicalMoveHandles).not.toContain("workstation-on-rejection-source");
   expect(modelWorkstationHandles).toContain("worker-assignment-target");
 });

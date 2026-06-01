@@ -4,6 +4,7 @@ import {
   createFactoryGraphWorkstationResolver,
   factoryGraphConnectionAnchorContext,
   getLocalizedFactoryGraphConnectionAnchors,
+  isValidFactoryGraphConnection,
 } from "./factory-graph-editor-connections";
 
 const logicalMoveContext = factoryGraphConnectionAnchorContext({
@@ -23,6 +24,16 @@ const workerAssignmentTopology: FactoryGraphTopology = {
       key: { kind: "worker", name: "writer" },
       kind: "worker",
       label: "writer",
+    },
+    {
+      id: "work-state:story:queued",
+      key: {
+        kind: "work-state",
+        stateName: "queued",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:queued",
     },
     {
       id: "workstation:router",
@@ -54,6 +65,60 @@ it("omits worker-assignment-target for LOGICAL_MOVE workstations", () => {
       "workstation-output-source",
     ]),
   );
+});
+
+it("omits continue, failure, and reject anchors for LOGICAL_MOVE workstations", () => {
+  const anchorIds = getLocalizedFactoryGraphConnectionAnchors(
+    "workstation",
+    "en",
+    logicalMoveContext,
+  ).map((anchor) => anchor.id);
+
+  expect(anchorIds).not.toContain("workstation-on-continue-source");
+  expect(anchorIds).not.toContain("workstation-on-failure-source");
+  expect(anchorIds).not.toContain("workstation-on-rejection-source");
+});
+
+it("rejects new progress-outcome connections from hidden logical-move anchors", () => {
+  const logicalMoveWorkstation = logicalMoveContext.workstation;
+
+  for (const sourceAnchorId of [
+    "workstation-on-continue-source",
+    "workstation-on-failure-source",
+    "workstation-on-rejection-source",
+  ] as const) {
+    expect(
+      isValidFactoryGraphConnection({
+        sourceAnchorId,
+        sourceNodeKind: "workstation",
+        targetAnchorId: "work-state-input-target",
+        targetNodeKind: "work-state",
+        sourceWorkstation: logicalMoveWorkstation,
+      }),
+    ).toBe(false);
+  }
+
+  expect(
+    buildFactoryGraphEdgeChangeFromConnection(
+      workerAssignmentTopology,
+      {
+        sourceAnchorId: "workstation-on-failure-source",
+        sourceNodeId: "workstation:router",
+        targetAnchorId: "work-state-input-target",
+        targetNodeId: "work-state:story:queued",
+      },
+      createFactoryGraphWorkstationResolver([
+        {
+          body: "Route work downstream.",
+          inputs: [],
+          name: "router",
+          outputs: [],
+          type: "LOGICAL_MOVE",
+          worker: "",
+        },
+      ]),
+    ),
+  ).toBeNull();
 });
 
 it("exposes worker-assignment-target for worker-backed workstations", () => {
