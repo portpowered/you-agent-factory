@@ -308,35 +308,17 @@ function EditableConfigurationDraftStatus({
     state.promptDiagnostics,
   );
 
+  if (!state.hasValidationErrors || promptOnlyValidationErrors) {
+    return null;
+  }
+
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
       <p
-        className={cn(
-          "m-0",
-          state.hasValidationErrors && !promptOnlyValidationErrors
-            ? "text-af-danger-text"
-            : "text-af-text-muted",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-        role={
-          state.hasValidationErrors && !promptOnlyValidationErrors
-            ? "alert"
-            : "status"
-        }
+        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+        role="alert"
       >
-        {state.hasValidationErrors && !promptOnlyValidationErrors
-          ? messages.editableConfigurationValidationStatus
-          : state.isDirty
-            ? messages.editableConfigurationDirtyStatus
-            : messages.editableConfigurationDraftNote}
-      </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationDraftNote}
+        {messages.editableConfigurationValidationStatus}
       </p>
     </div>
   );

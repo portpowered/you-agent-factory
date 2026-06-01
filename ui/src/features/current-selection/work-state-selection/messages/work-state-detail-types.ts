@@ -9,8 +9,6 @@ export interface WorkStateDetailMessages {
   configurationLoading: string;
   discardDraftAction: string;
   editableConfigurationContractInvalidPrefix: string;
-  editableConfigurationDirtyStatus: string;
-  editableConfigurationDraftNote: string;
   editableConfigurationEmpty: string;
   editableConfigurationErrorPrefix: string;
   editableConfigurationHeading: string;

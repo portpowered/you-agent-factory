@@ -2084,4 +2084,46 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(within(configuration).getByLabelText("Runner")).toBeTruthy();
     expect(within(configuration).getByLabelText("Prompt")).toBeTruthy();
   });
+
+  it("omits global unsaved helper paragraphs for dirty ready-state workstation drafts", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...buildReadyEditableConfigurationState({
+            prompt: "Updated prompt for review.",
+          }),
+          isDirty: true,
+          pendingFactoryDefinition: buildDetailCardEditableFactoryDocument(),
+        }}
+        headerAction={buildWorkstationHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    expect(
+      screen.queryByText("You have unsaved changes for this workstation."),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "Changes stay local to this edit session until you save the running factory.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Save changes" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    ).toBeTruthy();
+  });
 });
