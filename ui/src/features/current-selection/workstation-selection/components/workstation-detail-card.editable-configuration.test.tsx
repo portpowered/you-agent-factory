@@ -522,6 +522,68 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeNull();
   });
 
+  it("renders runner selection and effective-runner help without a capability matrix", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const onRunnerChange = vi.fn();
+    const readyState = buildReadyEditableConfigurationState();
+
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...readyState,
+          onRunnerChange,
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    const configuration = editableConfigurationSection();
+    const runnerSelect = screen.getByLabelText("Runner") as HTMLSelectElement;
+
+    expect(runnerSelect).toBeTruthy();
+    expect(
+      within(configuration).getByText("Effective runner: Gemini (Workstation)."),
+    ).toBeTruthy();
+    expect(
+      within(configuration).queryByText("Runner capability support"),
+    ).toBeNull();
+    expect(within(configuration).queryByText("Supported")).toBeNull();
+    expect(within(configuration).queryByText("Unsupported")).toBeNull();
+
+    fireEvent.change(runnerSelect, { target: { value: "codex" } });
+    expect(onRunnerChange).toHaveBeenCalledWith("codex");
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...readyState,
+          draft: {
+            ...readyState.draft,
+            runnerName: "codex",
+          },
+          onRunnerChange,
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(
+      within(configuration).getByText("Effective runner: Codex (Workstation)."),
+    ).toBeTruthy();
+    expect(
+      within(configuration).queryByText("Runner capability support"),
+    ).toBeNull();
+  });
+
   it("renders behavior, worker, and prompt controls in the editable form", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;

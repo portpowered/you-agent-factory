@@ -301,6 +301,84 @@ describe("WorkerDetailCard", () => {
     expect(screen.queryByLabelText("Model provider")).toBeNull();
   });
 
+  it("renders model worker configuration without a runner capability matrix", () => {
+    const editableConfigurationState: EditableWorkerConfigurationState = {
+      canSave: false,
+      draft: {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        args: [],
+        body: null,
+        command: null,
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        type: "MODEL_WORKER",
+        workerName: "reviewer",
+        workstationNames: ["Review"],
+      },
+      isDirty: false,
+      onArgsTextChange: vi.fn(),
+      onBodyChange: vi.fn(),
+      onCommandChange: vi.fn(),
+      onExecutorProviderChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onModelLocalityChange: vi.fn(),
+      onModelProviderChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      markChangesSaved: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={editableConfigurationState}
+        workerName="reviewer"
+      />,
+    );
+
+    const configurationHeading = screen.getByRole("heading", {
+      name: "Worker configuration",
+    });
+    const configurationSection = configurationHeading.closest("section");
+    expect(configurationSection).toBeTruthy();
+
+    const configuration = within(configurationSection as HTMLElement);
+    expect(configuration.getByLabelText("Model provider")).toBeTruthy();
+    expect(configuration.getByLabelText("Model")).toBeTruthy();
+    expect(configuration.getByLabelText("Executor provider")).toBeTruthy();
+    expect(configuration.queryByText("Runner capability support")).toBeNull();
+    expect(configuration.queryByText("Supported")).toBeNull();
+    expect(configuration.queryByText("Unsupported")).toBeNull();
+  });
+
   it("does not list referencing workstations outside the editable configuration section", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument({

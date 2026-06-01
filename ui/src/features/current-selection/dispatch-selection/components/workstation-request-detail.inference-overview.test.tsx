@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
+import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "../../base/components/detail-card-shared";
 import {
   inferenceAttempt,
   workstationRequest,
 } from "../../base/components/detail-card-test-helpers";
-import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "../../base/components/detail-card-shared";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 function renderReadyInferenceRequestDetailCard() {
@@ -131,11 +131,9 @@ it("keeps inference-backed request and response detail inside inference attempts
   expect(currentSelection.getByText("Runner")).toBeTruthy();
   expect(currentSelection.getByText("Gemini")).toBeTruthy();
   expect(currentSelection.getByText("factory")).toBeTruthy();
-  expect(currentSelection.getByText("Runner capability support")).toBeTruthy();
-  expect(currentSelection.getByText("Structured output")).toBeTruthy();
-  expect(currentSelection.getAllByText("Unsupported").length).toBeGreaterThan(
-    0,
-  );
+  expect(currentSelection.queryByText("Runner capability support")).toBeNull();
+  expect(currentSelection.queryByText("Structured output")).toBeNull();
+  expect(currentSelection.queryByText("Unsupported")).toBeNull();
   expect(
     currentSelection.queryByRole("heading", {
       name: "Request counts",
@@ -155,9 +153,7 @@ it("keeps inference-backed request and response detail inside inference attempts
   expect(
     responseDetails.queryByText(/Inference attempts when available/),
   ).toBeNull();
-  expect(
-    screen.queryByRole("region", { name: "Request metadata" }),
-  ).toBeNull();
+  expect(screen.queryByRole("region", { name: "Request metadata" })).toBeNull();
   expect(
     screen.queryByRole("region", { name: "Response metadata" }),
   ).toBeNull();

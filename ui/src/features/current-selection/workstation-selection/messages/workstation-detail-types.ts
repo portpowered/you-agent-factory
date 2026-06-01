@@ -95,14 +95,6 @@ export interface WorkstationDetailMessages {
   requestHistoryHeading: string;
   requestSelectedAction: string;
   requestStatusStartedAgo: (elapsed: string) => string;
-  runnerCapabilityImageInputLabel: string;
-  runnerCapabilitySessionResumeLabel: string;
-  runnerCapabilityStructuredOutputLabel: string;
-  runnerCapabilityWorktreeLabel: string;
-  runnerCapabilityWorkingDirectoryLabel: string;
-  runnerCapabilitySupportHeading: string;
-  runnerCapabilitySupportedLabel: string;
-  runnerCapabilityUnsupportedLabel: string;
   runnerFieldHelp: (runnerName: string, sourceLabel: string) => string;
   runnerFieldLabel: string;
   runnerInheritanceFactoryLabel: (runnerName: string) => string;
