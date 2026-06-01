@@ -1,0 +1,45 @@
+## Codebase Patterns
+- Shared editable-configuration header actions live under `ui/src/features/current-selection/base/components/` and export through `base/public/index.ts`.
+- Reuse `getEditableConfigurationControlsMessages(locale)` for shared discard aria-label copy (`Discard local changes` and localized variants).
+- Pair header save controls with `EditableConfigurationDiscardHeaderAction`; disable discard when `!canDiscard || isSaving`.
+- Colocated Vitest files import `@testing-library/jest-dom/vitest` when using `toBeEnabled` / `toBeDisabled`.
+- Per-kind save header actions use `DashboardActionButton` with `iconOnly`, lucide icons (`Save`), and warning surface classes when save is available.
+- Pair workstation header save/discard via `EditableWorkstationConfigurationHeaderActions` in `workstation-save-controls.tsx`; scope header-only assertions with `currentSelectionHeaderActionSection()` (`[data-dashboard-action-row-section='actions']` inside the Current selection article).
+- Pair worker header save/discard via `EditableWorkerConfigurationHeaderActions` in `worker-save-controls.tsx`; worker editable configuration heading is `Worker configuration` (not `Configuration`) when scoping body assertions.
+- Pair resource header save/discard via `EditableResourceConfigurationHeaderActions` in `resource-save-controls.tsx`; resource editable configuration heading is `Resource configuration` when scoping body assertions.
+
+## [2026-06-01T12:18:00Z] - issues3-header-save-discard-icons-001
+- What was implemented: Added `EditableConfigurationDiscardHeaderAction` with localized default aria-label, `RotateCcw` icon, disabled rules (`!canDiscard || isSaving`), shared message catalog, barrel exports, and unit tests.
+- Files changed: `editable-configuration-discard-header-action.tsx`, `editable-configuration-discard-header-action.test.tsx`, `editable-configuration-controls.ts`, `editable-configuration-controls.test.ts`, `base/public/index.ts`, `base/public/index.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Mirror `EditableWorkerSaveHeaderAction` structure for header actions; keep discard copy in `base/messages/editable-configuration-controls.ts` so selection kinds can share one control.
+  - Gotchas encountered: Vitest needs explicit `@testing-library/jest-dom/vitest` import for enabled/disabled matchers used elsewhere in `editable-configuration-save-row.test.tsx`.
+  - Useful context: Header undo/redo already uses custom SVG icons in `current-selection-header-actions.tsx`; discard uses `RotateCcw` to avoid confusion with undo.
+---
+
+## [2026-06-01T12:22:00Z] - issues3-header-save-discard-icons-002
+- What was implemented: Workstation configuration now exposes paired header save/discard via `EditableWorkstationConfigurationHeaderActions`, wired through `useCurrentSelectionDetailSave` to `onResetToLatest` when dirty; removed `EditableConfigurationSaveRow` and body reset from the configuration form; updated editable-configuration and save-controls tests to assert single header controls.
+- Files changed: `workstation-save-controls.tsx`, `workstation-save-controls.test.tsx`, `workstation-editable-configuration-section.tsx`, `workstation-detail-card.tsx`, `workstation-detail-card.editable-configuration.test.tsx`, `use-current-selection-detail-save.tsx`, `workstation-selection/public/index.ts`, `workstation-selection/public/index.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Compose per-kind header actions in the kind's `*-save-controls.tsx` module and return them from `useCurrentSelectionDetailSave`; discard precedes save in the header action row to match undo/redo → detail actions ordering.
+  - Gotchas encountered: `WorkstationDetailCard` still accepts `onSaveConfiguration` for widget callers, but the form no longer consumes it—save is header-only.
+  - Useful context: Server-changed field hints still reference "Reset to latest" copy even though discard aria-label is "Discard local changes".
+---
+
+## [2026-06-01T12:32:00Z] - issues3-header-save-discard-icons-003
+- What was implemented: Worker configuration now exposes paired header save/discard via `EditableWorkerConfigurationHeaderActions`, wired through `useCurrentSelectionDetailSave` to `onResetToLatest` when dirty; removed `EditableConfigurationSaveRow` and body discard from the configuration form; updated worker detail and save-controls tests to assert single header controls.
+- Files changed: `worker-save-controls.tsx`, `worker-save-controls.test.tsx`, `worker-editable-configuration-section.tsx`, `worker-detail-card.tsx`, `worker-detail-card.test.tsx`, `use-current-selection-detail-save.tsx`, `worker-selection/public/index.ts`, `worker-selection/public/index.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Mirror workstation `EditableWorkstationConfigurationHeaderActions` in the kind's `worker-save-controls.tsx`; worker form section heading is `Worker configuration`.
+  - Gotchas encountered: `WorkerDetailCard` tests must query `Worker configuration` heading, not `Configuration`, when scoping the editable section.
+  - Useful context: `current-selection-widget.tsx` still passes `onSaveConfiguration` to `WorkerDetailCard` for now; the prop is unused after header-only save (same dead prop pattern as workstation until a later cleanup story).
+---
+
+## [2026-06-01T12:36:00Z] - issues3-header-save-discard-icons-004
+- What was implemented: Resource configuration now exposes paired header save/discard via `EditableResourceConfigurationHeaderActions`, wired through `useCurrentSelectionDetailSave` to `onResetToLatest` when dirty; removed body `DashboardActionRow` discard from the configuration form; updated resource detail, save-controls, and public barrel tests.
+- Files changed: `resource-save-controls.tsx`, `resource-save-controls.test.tsx`, `resource-editable-configuration-section.tsx`, `resource-detail-card.test.tsx`, `use-current-selection-detail-save.tsx`, `resource-selection/public/index.ts`, `resource-selection/public/index.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Mirror worker `EditableWorkerConfigurationHeaderActions` in `resource-save-controls.tsx`; scope header-only assertions with `resourceDetailHeaderActionSection()` and body checks under `Resource configuration` heading.
+  - Gotchas encountered: `resource-detail-card.test.tsx` exceeds the 450-line nursery limit after adding header tests—add `noExcessiveLinesPerFile` to the existing biome-ignore-all comment at file top.
+  - Useful context: `resetToLatestAction` message key remains in resource-detail messages for server-changed hints even though the form no longer renders a body discard button.
+---

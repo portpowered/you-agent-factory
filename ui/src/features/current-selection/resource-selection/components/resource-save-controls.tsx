@@ -1,8 +1,44 @@
 import { Save } from "lucide-react";
 import { DashboardActionButton } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
+import { EditableConfigurationDiscardHeaderAction } from "../../base/public";
 import type { EditableResourceSaveState } from "../lib/detail-card-types";
 import { getResourceDetailMessages } from "../messages/resource-detail";
+
+export function EditableResourceConfigurationHeaderActions({
+  canDiscard,
+  canSave,
+  locale,
+  onDiscard,
+  onSave,
+  saveState,
+}: {
+  canDiscard: boolean;
+  canSave: boolean;
+  locale?: string;
+  onDiscard: () => void;
+  onSave: () => void;
+  saveState: EditableResourceSaveState;
+}) {
+  const isSaving = saveState.status === "submitting";
+
+  return (
+    <>
+      <EditableConfigurationDiscardHeaderAction
+        canDiscard={canDiscard}
+        isSaving={isSaving}
+        locale={locale}
+        onClick={onDiscard}
+      />
+      <EditableResourceSaveHeaderAction
+        canSave={canSave}
+        locale={locale}
+        onClick={onSave}
+        saveState={saveState}
+      />
+    </>
+  );
+}
 
 export function EditableResourceSaveHeaderAction({
   canSave,

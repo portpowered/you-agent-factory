@@ -14,7 +14,6 @@ import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
 } from "../../base/components/detail-card-shared";
-import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
 import type {
   EditableWorkTypeConfigurationState,
   EditableWorkTypeSaveState,
@@ -26,14 +25,12 @@ import { WorkTypeStatesList } from "./work-type-states-list";
 
 export function WorkTypeReadySection({
   messages,
-  onSaveConfiguration,
   onSelectWorkStateGraphNode,
   saveState,
   state,
   workTypeName,
 }: {
   messages: ReturnType<typeof getWorkTypeDetailMessages>;
-  onSaveConfiguration?: () => void;
   onSelectWorkStateGraphNode?: (graphNodeId: string) => void;
   saveState?: EditableWorkTypeSaveState;
   state: Extract<EditableWorkTypeConfigurationState, { status: "ready" }>;
@@ -45,7 +42,6 @@ export function WorkTypeReadySection({
   >(state.validationErrors, saveState);
   const hasDefaultHandlingBehavior =
     state.draft.handlingBehavior?.includes("DEFAULT") ?? false;
-  const isSaving = saveState?.status === "submitting";
 
   return (
     <form className="grid gap-2.5" onSubmit={(event) => event.preventDefault()}>
@@ -145,15 +141,6 @@ export function WorkTypeReadySection({
           workTypeName={workTypeName}
         />
       </div>
-      {onSaveConfiguration ? (
-        <EditableConfigurationSaveRow
-          busyLabel={messages.editableConfigurationSaveBusyAction}
-          canSave={state.canSave}
-          isSaving={isSaving}
-          onSave={onSaveConfiguration}
-          saveLabel={messages.editableConfigurationSaveAction}
-        />
-      ) : null}
     </form>
   );
 }

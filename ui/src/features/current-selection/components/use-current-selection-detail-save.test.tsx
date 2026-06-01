@@ -2,6 +2,8 @@ import { renderHook } from "@testing-library/react";
 import type { DashboardSelection } from "../base/state/selection-types";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useSaveEditableResourceConfiguration } from "../resource-selection/hooks/use-save-editable-resource-configuration";
+import { useSaveEditableWorkStateConfiguration } from "../work-state-selection/hooks/use-save-editable-work-state-configuration";
+import { useSaveEditableWorkTypeConfiguration } from "../work-type-selection/hooks/use-save-editable-work-type-configuration";
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
 import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import { useCurrentSelectionDetailSave } from "./use-current-selection-detail-save";
@@ -24,6 +26,20 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  "../work-state-selection/hooks/use-save-editable-work-state-configuration",
+  () => ({
+    useSaveEditableWorkStateConfiguration: vi.fn(),
+  }),
+);
+
+vi.mock(
+  "../work-type-selection/hooks/use-save-editable-work-type-configuration",
+  () => ({
+    useSaveEditableWorkTypeConfiguration: vi.fn(),
+  }),
+);
+
 function buildIdleSaveHookReturn() {
   return {
     beginSaveConfirmation: vi.fn(),
@@ -38,8 +54,30 @@ function buildIdleSaveHookReturn() {
 function buildCurrentSelectionStub(): CurrentSelectionState {
   return {
     selectResource: vi.fn(),
+    selectStateNode: vi.fn(),
+    selectWorkType: vi.fn(),
     selectWorker: vi.fn(),
   } as never;
+}
+
+function buildHookArgs(
+  overrides: Partial<Parameters<typeof useCurrentSelectionDetailSave>[0]> = {},
+) {
+  return {
+    currentSelection: buildCurrentSelectionStub(),
+    editableConfigurationState: { status: "loading" },
+    editableResourceConfigurationState: { status: "loading" },
+    editableWorkStateConfigurationState: { status: "loading" },
+    editableWorkerConfigurationState: { status: "loading" },
+    editableWorkTypeConfigurationState: { status: "loading" },
+    selectedNode: null,
+    selectedResourceName: null,
+    selectedWorkerName: null,
+    selectedWorkTypeName: null,
+    selection: null,
+    workStatePlaceId: null,
+    ...overrides,
+  };
 }
 
 describe("useCurrentSelectionDetailSave", () => {
@@ -53,6 +91,12 @@ describe("useCurrentSelectionDetailSave", () => {
     vi.mocked(useSaveEditableResourceConfiguration).mockReturnValue(
       buildIdleSaveHookReturn(),
     );
+    vi.mocked(useSaveEditableWorkStateConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkTypeConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
   });
 
   it("scopes resource saves to the selected resource name", () => {
@@ -62,16 +106,12 @@ describe("useCurrentSelectionDetailSave", () => {
     };
 
     renderHook(() =>
-      useCurrentSelectionDetailSave({
-        currentSelection: buildCurrentSelectionStub(),
-        editableConfigurationState: { status: "loading" },
-        editableResourceConfigurationState: { status: "loading" },
-        editableWorkerConfigurationState: { status: "loading" },
-        selectedNode: null,
-        selectedResourceName: "agent-slot",
-        selectedWorkerName: null,
-        selection,
-      }),
+      useCurrentSelectionDetailSave(
+        buildHookArgs({
+          selectedResourceName: "agent-slot",
+          selection,
+        }),
+      ),
     );
 
     expect(useSaveEditableResourceConfiguration).toHaveBeenCalledWith(
@@ -86,22 +126,59 @@ describe("useCurrentSelectionDetailSave", () => {
     );
   });
 
+  it("scopes work state saves to the selected place id", () => {
+    const selection: DashboardSelection = {
+      kind: "state-node",
+      placeId: "review-ready",
+    };
+
+    renderHook(() =>
+      useCurrentSelectionDetailSave(
+        buildHookArgs({
+          selection,
+          workStatePlaceId: "review-ready",
+        }),
+      ),
+    );
+
+    expect(useSaveEditableWorkStateConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scopeKey: "review-ready",
+      }),
+    );
+  });
+
+  it("scopes work type saves to the selected work type name", () => {
+    const selection: DashboardSelection = {
+      kind: "work-type",
+      workTypeName: "inspection",
+    };
+
+    renderHook(() =>
+      useCurrentSelectionDetailSave(
+        buildHookArgs({
+          selectedWorkTypeName: "inspection",
+          selection,
+        }),
+      ),
+    );
+
+    expect(useSaveEditableWorkTypeConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scopeKey: "inspection",
+      }),
+    );
+  });
+
   it("returns header actions for each editable selection kind", () => {
     const { result } = renderHook(() =>
-      useCurrentSelectionDetailSave({
-        currentSelection: buildCurrentSelectionStub(),
-        editableConfigurationState: { status: "loading" },
-        editableResourceConfigurationState: { status: "loading" },
-        editableWorkerConfigurationState: { status: "loading" },
-        selectedNode: null,
-        selectedResourceName: null,
-        selectedWorkerName: null,
-        selection: null,
-      }),
+      useCurrentSelectionDetailSave(buildHookArgs()),
     );
 
     expect(result.current.resourceHeaderAction).toBeTruthy();
     expect(result.current.workerHeaderAction).toBeTruthy();
     expect(result.current.workstationHeaderAction).toBeTruthy();
+    expect(result.current.workStateHeaderAction).toBeTruthy();
+    expect(result.current.workTypeHeaderAction).toBeTruthy();
   });
 });

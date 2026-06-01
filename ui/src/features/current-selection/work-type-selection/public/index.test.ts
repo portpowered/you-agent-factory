@@ -3,6 +3,7 @@ import * as workTypeSelectionPublic from "./index";
 describe("work-type-selection/public", () => {
   it("exports the work type detail card and save controls", () => {
     expect(Object.keys(workTypeSelectionPublic).sort()).toEqual([
+      "EditableWorkTypeConfigurationHeaderActions",
       "EditableWorkTypeSaveDialog",
       "EditableWorkTypeSaveHeaderAction",
       "WorkTypeDetailCard",

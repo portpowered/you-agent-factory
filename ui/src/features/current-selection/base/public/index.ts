@@ -17,6 +17,11 @@ export {
   EditableConfigurationSaveRow,
   type EditableConfigurationSaveRowProps,
 } from "../components/editable-configuration-save-row";
+export { EditableConfigurationDiscardHeaderAction } from "../components/editable-configuration-discard-header-action";
+export {
+  getEditableConfigurationControlsMessages,
+  type EditableConfigurationControlsMessages,
+} from "../messages/editable-configuration-controls";
 export {
   DetailCardFactorySaveFeedback,
   mergeDetailCardSaveFieldErrors,
