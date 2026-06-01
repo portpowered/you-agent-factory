@@ -107,7 +107,7 @@ function buildReadyState(
   };
 }
 
-describe("EditableConfigurationSection", () => {
+describe("EditableConfigurationSection async states", () => {
   it("shows loading, error, and empty copy when expanded", () => {
     const { rerender } = render(
       <EditableConfigurationSection
@@ -141,7 +141,9 @@ describe("EditableConfigurationSection", () => {
     );
     expect(screen.getByText("No editable values.")).toBeInTheDocument();
   });
+});
 
+describe("EditableConfigurationSection footer save controls", () => {
   it("renders footer save and reset controls when onSaveConfiguration is provided", async () => {
     const user = userEvent.setup();
     const onSaveConfiguration = vi.fn();
@@ -194,7 +196,9 @@ describe("EditableConfigurationSection", () => {
     );
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
+});
 
+describe("EditableConfigurationSection worker options", () => {
   it("surfaces worker option empty state inside the ready form", () => {
     render(
       <EditableConfigurationSection
@@ -232,7 +236,9 @@ describe("EditableConfigurationSection", () => {
       "Worker selection unavailable. Worker list failed to load.",
     );
   });
+});
 
+describe("EditableConfigurationSection overwrite and field errors", () => {
   it("shows overwrite warning and merges save field errors into guard fields", () => {
     render(
       <EditableConfigurationSection
@@ -268,9 +274,7 @@ describe("EditableConfigurationSection", () => {
       screen.getByText(/Saving now will overwrite newer server values/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Max visits must be a positive whole number.",
-      ),
+      screen.getByText("Max visits must be a positive whole number."),
     ).toBeInTheDocument();
   });
 });
