@@ -258,12 +258,20 @@ async function expectEditorModeOff(page) {
   await graphCard
     .getByRole("button", { name: "Enter factory graph editor" })
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-  expect(
-    await graphCard
-      .getByRole("region", { name: "Factory graph editor tools" })
-      .count(),
-  ).toBe(0);
-  expect(await graphCard.getByText("Unsaved changes").count()).toBe(0);
+  await expect
+    .poll(
+      async () =>
+        graphCard
+          .getByRole("region", { name: "Factory graph editor tools" })
+          .count(),
+      { timeout: uiInteractionTimeoutMs },
+    )
+    .toBe(0);
+  await expect
+    .poll(async () => graphCard.getByText("Unsaved changes").count(), {
+      timeout: uiInteractionTimeoutMs,
+    })
+    .toBe(0);
 }
 
 async function runSessionSwitchClearsDirtyEditorScenario(preview) {
