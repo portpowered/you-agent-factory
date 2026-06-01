@@ -4,8 +4,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/bento/components/agent-bento.tsx#BENTO_GRID_CLASS",
   "src/features/bento/components/agent-bento.tsx#BENTO_ITEM_CLASS",
   "src/features/bento/components/agent-bento.tsx#BENTO_CARD_TITLE_CLASS",
-  "src/features/factory-graph-editor/components/factory-graph-editor-controls.tsx#TOOLBAR_SHELL_CLASS",
-  "src/features/factory-graph-editor/components/factory-graph-editor-controls.tsx#TOOLBAR_MIXED_ROW_CLASS",
   "src/features/factory-graph-editor/components/factory-graph-editor-controls.tsx#MENU_LIST_CLASS",
   "src/features/factory-graph-editor/components/factory-graph-editor-controls.tsx#MENU_ACTION_CLASS",
   "src/features/factory-graph-editor/components/factory-graph-editor-controls.tsx#MENU_ACTION_LABEL_CLASS",
