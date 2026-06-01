@@ -18,15 +18,23 @@ function expandConfiguration() {
 function buildReadyState(
   overrides?: Partial<{
     draft: {
+      behavior?: "STANDARD" | "REPEATER" | "POLLER";
       guards: Array<{
         type: "VISIT_COUNT";
         workstation: string;
         maxVisits: number;
       }>;
+      prompt?: string;
+      runnerName?: string;
     };
-    isDirty: boolean;
     hasValidationErrors: boolean;
+    initialValues: Partial<{
+      sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
+    }>;
+    isDirty: boolean;
     pendingFactoryDefinition: FactoryDefinition | null;
+    promptDiagnostics: Array<{ message: string; severity: "error" }>;
+    validationErrors: Record<string, string | undefined>;
     workerOptionsState:
       | { status: "ready"; options: string[] }
       | { message: string; status: "empty" | "error" };
@@ -36,11 +44,11 @@ function buildReadyState(
 ) {
   return {
     draft: {
-      behavior: "STANDARD" as const,
+      behavior: overrides?.draft?.behavior ?? ("STANDARD" as const),
       guards: overrides?.draft?.guards ?? [],
       inputs: [],
-      prompt: "Review prompt",
-      runnerName: "gemini",
+      prompt: overrides?.draft?.prompt ?? "Review prompt",
+      runnerName: overrides?.draft?.runnerName ?? "gemini",
       workerName: "reviewer",
     },
     hasValidationErrors: overrides?.hasValidationErrors ?? false,
@@ -60,7 +68,9 @@ function buildReadyState(
       runnerOptions: ["codex", "gemini"],
       runnerSelectionSource: "workstation" as const,
       sharedWorkerWorkstationNames: [],
-      sharedWorkerWorkstationNamesByWorkerName: {},
+      sharedWorkerWorkstationNamesByWorkerName:
+        overrides?.initialValues?.sharedWorkerWorkstationNamesByWorkerName ??
+        {},
       workerModelProvider: null,
       workerName: "reviewer",
       workerOptions: ["reviewer", "planner"],
@@ -87,7 +97,7 @@ function buildReadyState(
       overrides?.pendingFactoryDefinition === undefined
         ? ({ workstations: [] } as unknown as FactoryDefinition)
         : overrides.pendingFactoryDefinition,
-    promptDiagnostics: [],
+    promptDiagnostics: overrides?.promptDiagnostics ?? [],
     promptHelpState: { status: "empty" as const, message: "No prompt help." },
     promptValidationState: {
       diagnostics: [],
@@ -95,7 +105,7 @@ function buildReadyState(
       status: "ready" as const,
     },
     status: "ready" as const,
-    validationErrors: {},
+    validationErrors: overrides?.validationErrors ?? {},
     workerOptionsState: overrides?.workerOptionsState ?? {
       options: ["reviewer", "planner"],
       status: "ready" as const,
@@ -266,6 +276,151 @@ describe("EditableConfigurationSection logical move workstations", () => {
     expect(screen.queryByLabelText("Worker")).not.toBeInTheDocument();
     expect(screen.getByText("Workstation guards")).toBeInTheDocument();
     expect(screen.getByText("Input guards")).toBeInTheDocument();
+  });
+});
+
+describe("EditableConfigurationSection model workstation fields", () => {
+  it("renders kind, runner, and prompt fields and updates behavior", async () => {
+    const user = userEvent.setup();
+    const onBehaviorChange = vi.fn();
+
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={{
+          ...buildReadyState(),
+          onBehaviorChange,
+        }}
+      />,
+    );
+
+    expandConfiguration();
+
+    expect(screen.getByLabelText("Kind")).toHaveValue("STANDARD");
+    expect(screen.getByLabelText("Runner")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("Review prompt");
+
+    await user.selectOptions(screen.getByLabelText("Kind"), "REPEATER");
+    expect(onBehaviorChange).toHaveBeenCalledWith("REPEATER");
+  });
+
+  it("shows shared worker scope hint when the draft worker is shared", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildReadyState({
+          initialValues: {
+            sharedWorkerWorkstationNamesByWorkerName: {
+              reviewer: ["Plan"],
+            },
+          },
+        })}
+      />,
+    );
+
+    expandConfiguration();
+
+    expect(
+      screen.getByText(/Worker reviewer is also used by Plan/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows server-changed hints for overwritten worker, kind, runner, and prompt fields", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildReadyState({
+          overwriteFieldNames: ["worker", "behavior", "runner", "prompt"],
+        })}
+      />,
+    );
+
+    expandConfiguration();
+
+    expect(
+      screen.getAllByText(messages.editableConfigurationServerFieldChangedHint),
+    ).toHaveLength(4);
+  });
+});
+
+describe("EditableConfigurationSection model workstation save feedback", () => {
+  it("shows validation alert and save success feedback", () => {
+    const { rerender } = render(
+      <EditableConfigurationSection
+        messages={messages}
+        onSaveConfiguration={() => undefined}
+        state={buildReadyState({
+          hasValidationErrors: true,
+          validationErrors: { workerName: "Select a worker." },
+        })}
+      />,
+    );
+
+    expandConfiguration();
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      messages.editableConfigurationValidationStatus,
+    );
+
+    rerender(
+      <EditableConfigurationSection
+        messages={messages}
+        onSaveConfiguration={() => undefined}
+        saveState={{
+          status: "success",
+          message: messages.editableConfigurationSaveSuccess,
+        }}
+        state={buildReadyState({ isDirty: false })}
+      />,
+    );
+
+    expect(
+      screen.getByText(messages.editableConfigurationSaveSuccess),
+    ).toBeInTheDocument();
+  });
+
+  it("treats prompt-only validation as status instead of alert", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildReadyState({
+          hasValidationErrors: true,
+          isDirty: true,
+          promptDiagnostics: [
+            { message: "Unknown variable.", severity: "error" },
+          ],
+          validationErrors: { prompt: "Resolve prompt diagnostics." },
+        })}
+      />,
+    );
+
+    expandConfiguration();
+
+    const draftStatus = screen.getByText(
+      messages.editableConfigurationDirtyStatus,
+    );
+    expect(draftStatus).toHaveAttribute("role", "status");
+    expect(
+      screen.queryByText(messages.editableConfigurationValidationStatus),
+    ).not.toBeInTheDocument();
+  });
+
+  it("disables footer save and reset while submitting", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        onSaveConfiguration={() => undefined}
+        saveState={{ status: "submitting" }}
+        state={buildReadyState({ isDirty: true })}
+      />,
+    );
+
+    expandConfiguration();
+
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Reset to latest" }),
+    ).toBeDisabled();
   });
 });
 

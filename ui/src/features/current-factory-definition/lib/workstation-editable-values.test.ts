@@ -1094,3 +1094,53 @@ describe("resolveEditableWorkstationValues", () => {
     });
   });
 });
+
+describe("applyEditableWorkstationDraft failures", () => {
+  it("returns null when the selected workstation cannot be resolved", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [{ model: "gpt-5.5", name: "reviewer", type: "MODEL_WORKER" }],
+      workstations: [],
+      workTypes: [],
+    };
+
+    expect(
+      applyEditableWorkstationDraft(factory, selectedNode, {
+        behavior: "STANDARD",
+        guards: [],
+        inputs: [],
+        prompt: "Updated prompt",
+        runnerName: "gemini",
+        workerName: "reviewer",
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when workers are missing for a model workstation draft", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      applyEditableWorkstationDraft(factory, selectedNode, {
+        behavior: "STANDARD",
+        guards: [],
+        inputs: [],
+        prompt: "Updated prompt",
+        runnerName: "gemini",
+        workerName: "reviewer",
+      }),
+    ).toBeNull();
+  });
+});
