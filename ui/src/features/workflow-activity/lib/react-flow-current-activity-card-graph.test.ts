@@ -1056,7 +1056,7 @@ describe("current activity graph editor handles", () => {
     expect(workstationNode?.data.zAxisIncompleteHints).toBeNull();
   });
 
-  it("keeps hidden continue and reject handles for authored edges without stopWords", async () => {
+  it("renders visible continue and reject handles for authored edges when the assigned worker has stopToken", async () => {
     const factory = loadSampleFactoryDefinition();
     const snapshot = buildSampleFactorySnapshot(factory);
     const graphLayout =
@@ -1097,8 +1097,8 @@ describe("current activity graph editor handles", () => {
     ).toBe(true);
     expect(rejectionHandle).toEqual(
       expect.objectContaining({
-        connectable: false,
-        hidden: true,
+        connectable: true,
+        hidden: undefined,
         id: "workstation-on-rejection-source",
       }),
     );
@@ -1770,8 +1770,15 @@ describe("current activity graph active item labels", () => {
     );
   });
 
-  it("suppresses ON_REJECTION validation on hidden authored reject handles without stopWords", async () => {
-    const factory = loadSampleFactoryDefinition();
+  it("suppresses ON_REJECTION validation on hidden authored reject handles without stop markers", async () => {
+    const sampleFactory = loadSampleFactoryDefinition();
+    const factory = {
+      ...sampleFactory,
+      workers: sampleFactory.workers?.map((worker) => ({
+        ...worker,
+        stopToken: undefined,
+      })),
+    };
     const graphLayout =
       await buildCurrentActivityGraphLayoutFromFactory(factory);
     const validationTargets: FactoryValidationTarget[] = [

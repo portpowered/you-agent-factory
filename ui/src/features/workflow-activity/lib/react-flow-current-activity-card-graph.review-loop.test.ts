@@ -1,4 +1,5 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
@@ -13,6 +14,15 @@ import {
   EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
 import { loadFactoryGraphOnrejectionEdgeReproductionFactory } from "./test-data/factory-graph-onrejection-edge-reproduction.fixture";
+
+const REVIEW_LOOP_NOW = Date.parse("2026-06-01T00:00:00Z");
+const REVIEW_LOOP_EDITOR = {
+  activeTool: "connect" as const,
+  canInteractWithEditor: true,
+  editorMode: true,
+  onConnectionAnchorClick: vi.fn(),
+  pendingConnectionSource: null,
+};
 
 function buildReproductionSnapshot(): DashboardSnapshot {
   const factory = loadFactoryGraphOnrejectionEdgeReproductionFactory();
@@ -51,37 +61,58 @@ function buildReproductionSnapshot(): DashboardSnapshot {
   };
 }
 
+type ReviewLoopGraphContext = {
+  factory: CanonicalFactoryDefinition;
+  graphLayout: Awaited<
+    ReturnType<typeof buildCurrentActivityGraphLayoutFromFactory>
+  >;
+  snapshot: DashboardSnapshot;
+  visibleGraphEdges: ReturnType<typeof buildVisibleGraphEdges>;
+};
+
+async function loadReviewLoopGraphContext(): Promise<ReviewLoopGraphContext> {
+  const factory = loadFactoryGraphOnrejectionEdgeReproductionFactory();
+  const snapshot = buildReproductionSnapshot();
+  const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+  return {
+    factory,
+    graphLayout,
+    snapshot,
+    visibleGraphEdges: buildVisibleGraphEdges(graphLayout),
+  };
+}
+
+function buildReviewLoopActivityNodes(
+  context: ReviewLoopGraphContext,
+  editorMode: boolean,
+) {
+  return buildCurrentActivityNodes({
+    activeExecutionsByWorkstationNodeID: {},
+    activeGraphHighlights: buildActiveGraphHighlights(
+      [],
+      context.visibleGraphEdges,
+    ),
+    activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+    editor: editorMode ? REVIEW_LOOP_EDITOR : undefined,
+    factoryDefinition: context.factory,
+    graphLayout: context.graphLayout,
+    now: REVIEW_LOOP_NOW,
+    onSelectStateNode: vi.fn(),
+    onSelectWorkID: vi.fn(),
+    onSelectResource: vi.fn(),
+    onSelectWorker: vi.fn(),
+    onSelectWorkType: vi.fn(),
+    onSelectWorkstation: vi.fn(),
+    selection: null,
+    snapshot: context.snapshot,
+    storedNodePositions: EMPTY_NODE_POSITIONS,
+  });
+}
+
 describe("current activity graph review-loop worker stop token", () => {
   it("renders visible reject and continue handles for the reproduction factory in editor mode", async () => {
-    const factory = loadFactoryGraphOnrejectionEdgeReproductionFactory();
-    const snapshot = buildReproductionSnapshot();
-    const graphLayout =
-      await buildCurrentActivityGraphLayoutFromFactory(factory);
-    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
-    const nodes = buildCurrentActivityNodes({
-      activeExecutionsByWorkstationNodeID: {},
-      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
-      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
-      editor: {
-        activeTool: "connect",
-        canInteractWithEditor: true,
-        editorMode: true,
-        onConnectionAnchorClick: vi.fn(),
-        pendingConnectionSource: null,
-      },
-      factoryDefinition: factory,
-      graphLayout,
-      now: Date.parse("2026-06-01T00:00:00Z"),
-      onSelectStateNode: vi.fn(),
-      onSelectWorkID: vi.fn(),
-      onSelectResource: vi.fn(),
-      onSelectWorker: vi.fn(),
-      onSelectWorkType: vi.fn(),
-      onSelectWorkstation: vi.fn(),
-      selection: null,
-      snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
-    });
+    const context = await loadReviewLoopGraphContext();
+    const nodes = buildReviewLoopActivityNodes(context, true);
 
     const reviewNode = nodes.find((node) => node.id === "workstation:review");
     const processNode = nodes.find((node) => node.id === "workstation:process");
@@ -110,58 +141,15 @@ describe("current activity graph review-loop worker stop token", () => {
   });
 
   it("wires the review reject route to the rendered reject handle", async () => {
-    const factory = loadFactoryGraphOnrejectionEdgeReproductionFactory();
-    const snapshot = buildReproductionSnapshot();
-    const graphLayout =
-      await buildCurrentActivityGraphLayoutFromFactory(factory);
-    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const context = await loadReviewLoopGraphContext();
     const handleAssignments = buildHandleAssignments(
-      visibleGraphEdges,
-      graphLayout.nodes,
+      context.visibleGraphEdges,
+      context.graphLayout.nodes,
     );
-    const editorNodes = buildCurrentActivityNodes({
-      activeExecutionsByWorkstationNodeID: {},
-      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
-      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
-      editor: {
-        activeTool: "connect",
-        canInteractWithEditor: true,
-        editorMode: true,
-        onConnectionAnchorClick: vi.fn(),
-        pendingConnectionSource: null,
-      },
-      factoryDefinition: factory,
-      graphLayout,
-      now: Date.parse("2026-06-01T00:00:00Z"),
-      onSelectStateNode: vi.fn(),
-      onSelectWorkID: vi.fn(),
-      onSelectResource: vi.fn(),
-      onSelectWorker: vi.fn(),
-      onSelectWorkType: vi.fn(),
-      onSelectWorkstation: vi.fn(),
-      selection: null,
-      snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
-    });
-    const observerNodes = buildCurrentActivityNodes({
-      activeExecutionsByWorkstationNodeID: {},
-      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
-      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
-      factoryDefinition: factory,
-      graphLayout,
-      now: Date.parse("2026-06-01T00:00:00Z"),
-      onSelectStateNode: vi.fn(),
-      onSelectWorkID: vi.fn(),
-      onSelectResource: vi.fn(),
-      onSelectWorker: vi.fn(),
-      onSelectWorkType: vi.fn(),
-      onSelectWorkstation: vi.fn(),
-      selection: null,
-      snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
-    });
+    const editorNodes = buildReviewLoopActivityNodes(context, true);
+    const observerNodes = buildReviewLoopActivityNodes(context, false);
 
-    const reviewRejectEdge = visibleGraphEdges.find(
+    const reviewRejectEdge = context.visibleGraphEdges.find(
       (edge) =>
         edge.fromNodeId === "workstation:review" &&
         edge.outcomeKind === "rejected",
@@ -169,17 +157,17 @@ describe("current activity graph review-loop worker stop token", () => {
     expect(reviewRejectEdge).toBeTruthy();
 
     const editorEdges = buildGraphEdges(
-      buildActiveGraphHighlights([], visibleGraphEdges),
+      buildActiveGraphHighlights([], context.visibleGraphEdges),
       handleAssignments,
       new Set(),
-      visibleGraphEdges,
+      context.visibleGraphEdges,
       editorNodes,
     );
     const observerEdges = buildGraphEdges(
-      buildActiveGraphHighlights([], visibleGraphEdges),
+      buildActiveGraphHighlights([], context.visibleGraphEdges),
       handleAssignments,
       new Set(),
-      visibleGraphEdges,
+      context.visibleGraphEdges,
       observerNodes,
     );
 
