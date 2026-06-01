@@ -1,6 +1,6 @@
-import { JSDOM } from "jsdom";
 import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { JSDOM } from "jsdom";
 
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
@@ -43,6 +43,8 @@ describe("FactoryGraphEditorTooltipActionButton", () => {
     expect(tooltip.className).toContain("border-af-border-strong");
     expect(tooltip.className).toContain("bg-af-surface-raised");
     expect(tooltip.className).toContain("text-af-text");
+    expect(tooltip.className).toContain("top-full");
+    expect(tooltip.className).toContain("mt-2");
 
     await user.unhover(button);
     expect(button.getAttribute("aria-describedby")).toBeNull();
@@ -70,5 +72,26 @@ describe("FactoryGraphEditorTooltipActionButton", () => {
     await user.tab();
     expect(button.getAttribute("aria-describedby")).toBeNull();
     expect(view.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("positions the tooltip above the trigger when placement is above", async () => {
+    const user = userEvent.setup({ document: globalThis.document });
+
+    const view = render(
+      <FactoryGraphEditorTooltipActionButton
+        aria-label="Delete"
+        placement="above"
+        tooltip="Remove nodes or edges from the draft"
+      />,
+    );
+
+    await user.hover(view.getByRole("button", { name: "Delete" }));
+
+    const tooltip = await view.findByRole("tooltip", {
+      name: "Remove nodes or edges from the draft",
+    });
+    expect(tooltip.className).toContain("bottom-full");
+    expect(tooltip.className).toContain("mb-2");
+    expect(tooltip.className).not.toContain("top-full");
   });
 });
