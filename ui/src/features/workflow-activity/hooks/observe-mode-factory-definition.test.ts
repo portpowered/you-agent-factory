@@ -11,7 +11,9 @@ import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-defi
 
 describe("resolveObserveModeFactoryDefinition", () => {
   it("prefers the saved document when the snapshot plane is a strict workstation superset", () => {
-    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const snapshot = buildDashboardSnapshotFixture(
+      mediumBranchingDashboardTopology,
+    );
     snapshot.factory = buildDivergentSnapshotPlaneFactory();
 
     expect(
@@ -24,7 +26,9 @@ describe("resolveObserveModeFactoryDefinition", () => {
   });
 
   it("prefers the saved document when it adds work type states ahead of the snapshot", () => {
-    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const snapshot = buildDashboardSnapshotFixture(
+      mediumBranchingDashboardTopology,
+    );
     const savedDocument = sessionFactoryDocumentFromSnapshot(snapshot);
     savedDocument.workTypes = [
       ...(savedDocument.workTypes ?? []),
@@ -44,7 +48,9 @@ describe("resolveObserveModeFactoryDefinition", () => {
   });
 
   it("prefers the timeline snapshot factory when replay diverges structurally at the current tick", () => {
-    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const snapshot = buildDashboardSnapshotFixture(
+      mediumBranchingDashboardTopology,
+    );
     const persistedDocument = sessionFactoryDocumentFromSnapshot(snapshot);
     const replayFactory = {
       ...persistedDocument,
@@ -80,7 +86,9 @@ describe("resolveObserveModeFactoryDefinition", () => {
   });
 
   it("prefers the timeline snapshot factory while scrubbing a fixed tick", () => {
-    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const snapshot = buildDashboardSnapshotFixture(
+      mediumBranchingDashboardTopology,
+    );
 
     expect(
       resolveObserveModeFactoryDefinition({
@@ -92,7 +100,9 @@ describe("resolveObserveModeFactoryDefinition", () => {
   });
 
   it("prefers the timeline snapshot factory when the saved document is a minimal replay stub", () => {
-    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const snapshot = buildDashboardSnapshotFixture(
+      mediumBranchingDashboardTopology,
+    );
     const replayStubDocument = {
       name: "Browser Replay Factory",
       version: {
@@ -109,9 +119,13 @@ describe("resolveObserveModeFactoryDefinition", () => {
       }),
     ).toEqual(snapshot.factory);
   });
+});
 
+describe("resolveObserveModeFactoryDefinition — unrelated session imports", () => {
   it("prefers the timeline snapshot factory when the saved document defines unrelated work types", () => {
-    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const snapshot = buildDashboardSnapshotFixture(
+      mediumBranchingDashboardTopology,
+    );
     const replayFactory = {
       ...snapshot.factory,
       workTypes: [
