@@ -1,11 +1,15 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
 
 import {
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,
 } from "../../../notifications/public";
+import { getCurrentSelectionGraphDraftConflictMessages } from "../messages/current-selection-graph-draft-conflict";
+
+const graphDraftConflictMessages =
+  getCurrentSelectionGraphDraftConflictMessages("en");
 
 export const WORKSTATION_SAVE_SUCCESS_DESCRIPTION =
   "Running factory saved. The editable workstation values were refreshed to the saved definition.";
@@ -137,5 +141,28 @@ export async function expectWorkStateSaveSuccessToast(stateName: string) {
         ),
       }),
     );
+  });
+}
+
+export async function expectGraphDraftConflictWarningToast() {
+  await waitFor(() => {
+    expect(toast.warning).toHaveBeenCalledWith(
+      graphDraftConflictMessages.graphDraftConflictWarningTitle,
+      expect.objectContaining({
+        description:
+          graphDraftConflictMessages.graphDraftConflictWarningDescription,
+        duration: GLOBAL_TOAST_DURATION_MS,
+      }),
+    );
+  });
+}
+
+export async function expectNoGraphDraftConflictWarningToast() {
+  await waitFor(() => {
+    const conflictCalls = vi.mocked(toast.warning).mock.calls.filter(
+      (call) =>
+        call[0] === graphDraftConflictMessages.graphDraftConflictWarningTitle,
+    );
+    expect(conflictCalls).toHaveLength(0);
   });
 }
