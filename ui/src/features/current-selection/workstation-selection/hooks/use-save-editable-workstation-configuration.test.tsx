@@ -458,6 +458,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     onPromptChange: vi.fn(),
     onResetToLatest: vi.fn(),
     onGuardsChange: vi.fn(),
+    onInputsChange: vi.fn(),
     onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
     workstationOptionsState: {

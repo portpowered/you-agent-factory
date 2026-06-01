@@ -50,6 +50,7 @@ const readyEditableConfigurationState = {
   onPromptChange: () => {},
   onResetToLatest: () => {},
   onGuardsChange: () => {},
+  onInputsChange: () => {},
   onRunnerChange: () => {},
   onWorkerChange: () => {},
   workstationOptionsState: {

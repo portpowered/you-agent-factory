@@ -113,6 +113,7 @@ export type EditableWorkstationConfigurationState =
       onPromptChange: (value: string) => void;
       onResetToLatest: () => void;
       onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => void;
+      onInputsChange: (inputs: EditableWorkstationDraft["inputs"]) => void;
       onRunnerChange: (value: RunnerID | null) => void;
       onWorkerChange: (value: string) => void;
       workstationOptionsState: EditableWorkstationWorkstationOptionsState;

@@ -1,7 +1,11 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import type { EditableWorkstationDraft } from "./workstation-editable-values";
+import type {
+  EditableWorkstationDraft,
+  EditableWorkstationInputDraft,
+} from "./workstation-editable-values";
 
 type WorkstationGuard = EditableWorkstationDraft["guards"][number];
+type InputGuardBase = EditableWorkstationInputDraft["guards"][number];
 
 export type WorkstationLevelGuard =
   | (WorkstationGuard & { type: "VISIT_COUNT" })
@@ -14,6 +18,17 @@ export const WORKSTATION_LEVEL_GUARD_TYPES = [
 
 export type WorkstationLevelGuardType =
   (typeof WORKSTATION_LEVEL_GUARD_TYPES)[number];
+
+export const INPUT_GUARD_TYPES = [
+  "ALL_CHILDREN_COMPLETE",
+  "ANY_CHILD_FAILED",
+  "SAME_NAME",
+  "SAME_TRACE_ID",
+] as const satisfies ReadonlyArray<InputGuardBase["type"]>;
+
+export type InputGuardType = (typeof INPUT_GUARD_TYPES)[number];
+
+export type InputGuard = Extract<InputGuardBase, { type: InputGuardType }>;
 
 export function resolveFactoryWorkstationNameOptions(
   factory: CanonicalFactoryDefinition,
@@ -38,6 +53,45 @@ export function formatWorkstationGuardSummary(guard: WorkstationGuard): string {
   }
 
   return guard.type;
+}
+
+export function normalizeEditableInputGuards(
+  guards: InputGuardBase[],
+): InputGuardBase[] {
+  if (guards.length === 0) {
+    return [];
+  }
+
+  return [guards[0]];
+}
+
+export function createDefaultInputGuard(
+  type: InputGuardType,
+  peerWorkTypes: string[],
+): InputGuardBase {
+  const peerWorkType = peerWorkTypes[0] ?? "";
+
+  if (type === "SAME_NAME" || type === "SAME_TRACE_ID") {
+    return {
+      matchInput: peerWorkType,
+      type,
+    };
+  }
+
+  return {
+    parentInput: peerWorkType,
+    type,
+  };
+}
+
+export function setEditableInputSlotGuard(
+  input: EditableWorkstationInputDraft,
+  guard: InputGuardBase | null,
+): EditableWorkstationInputDraft {
+  return {
+    ...input,
+    guards: guard ? [guard] : [],
+  };
 }
 
 export function createDefaultWorkstationGuard(

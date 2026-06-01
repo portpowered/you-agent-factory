@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createDefaultInputGuard,
   createDefaultWorkstationGuard,
   editableWorkstationDraftsEqual,
   formatWorkstationGuardSummary,
   guardsDraftEqual,
+  normalizeEditableInputGuards,
+  setEditableInputSlotGuard,
 } from "./workstation-guards";
 
 describe("workstation-guards", () => {
@@ -35,6 +38,42 @@ describe("workstation-guards", () => {
     expect(createDefaultWorkstationGuard("MATCHES_FIELDS", [])).toEqual({
       matchConfig: { inputKey: ".Name" },
       type: "MATCHES_FIELDS",
+    });
+  });
+
+  it("normalizes input guards to at most one entry", () => {
+    expect(
+      normalizeEditableInputGuards([
+        { matchInput: "planItem", type: "SAME_NAME" },
+        { parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" },
+      ]),
+    ).toEqual([{ matchInput: "planItem", type: "SAME_NAME" }]);
+    expect(normalizeEditableInputGuards([])).toEqual([]);
+  });
+
+  it("creates default per-input guards and clears slot guards", () => {
+    expect(createDefaultInputGuard("SAME_NAME", ["planItem", "story"])).toEqual(
+      {
+        matchInput: "planItem",
+        type: "SAME_NAME",
+      },
+    );
+    expect(
+      createDefaultInputGuard("ALL_CHILDREN_COMPLETE", ["planItem"]),
+    ).toEqual({
+      parentInput: "planItem",
+      type: "ALL_CHILDREN_COMPLETE",
+    });
+
+    const input = {
+      guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" as const }],
+      state: "queued",
+      workType: "story",
+    };
+    expect(setEditableInputSlotGuard(input, null)).toEqual({
+      guards: [],
+      state: "queued",
+      workType: "story",
     });
   });
 

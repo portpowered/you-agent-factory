@@ -416,6 +416,19 @@ function buildReadyEditableWorkstationConfigurationState({
           : currentState,
       );
     },
+    onInputsChange: (inputs: EditableWorkstationDraft["inputs"]) => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              draft: {
+                ...currentState.draft,
+                inputs,
+              },
+            }
+          : currentState,
+      );
+    },
     onRunnerChange: (value: RunnerID | null) => {
       setSessionState((currentState) =>
         currentState

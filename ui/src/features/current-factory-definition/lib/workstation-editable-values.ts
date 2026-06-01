@@ -5,28 +5,37 @@ import {
   type RunnerID,
 } from "../../current-selection/workstation-selection/public";
 import {
-  resolveRunnerSelection,
   type ResolvedRunnerSelection,
   type RunnerSelectionSource,
+  resolveRunnerSelection,
 } from "./runner-selection";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
+  type EditableWorkstationBehavior,
   resolveEditableWorkstationBehavior,
   resolveEditableWorkstationBehaviorOptions,
-  type EditableWorkstationBehavior,
 } from "./workstation-behavior";
 import {
-  resolveEditableWorkstationType,
+  normalizeEditableInputGuards,
+  resolveFactoryWorkstationNameOptions,
+} from "./workstation-guards";
+import {
   type EditableWorkstationType,
+  resolveEditableWorkstationType,
 } from "./workstation-type";
-import { resolveFactoryWorkstationNameOptions } from "./workstation-guards";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
-type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
-type CanonicalWorkstationGuard = NonNullable<CanonicalWorkstation["guards"]>[number];
-type CanonicalWorkstationInput = NonNullable<CanonicalWorkstation["inputs"]>[number];
+type CanonicalWorker = NonNullable<
+  CanonicalFactoryDefinition["workers"]
+>[number];
+type CanonicalWorkstationGuard = NonNullable<
+  CanonicalWorkstation["guards"]
+>[number];
+type CanonicalWorkstationInput = NonNullable<
+  CanonicalWorkstation["inputs"]
+>[number];
 
 export interface EditableWorkstationInputDraft {
   guards: CanonicalWorkstationGuard[];
@@ -70,7 +79,10 @@ export function resolveEditableWorkstationValues(
   factory: CanonicalFactoryDefinition,
   selectedNode: DashboardWorkstationNode,
 ): EditableWorkstationValues | null {
-  const workstationResolution = resolveCanonicalWorkstation(factory, selectedNode);
+  const workstationResolution = resolveCanonicalWorkstation(
+    factory,
+    selectedNode,
+  );
   if (!workstationResolution) {
     return null;
   }
@@ -124,7 +136,7 @@ export function editableWorkstationDraftFromValues(
     behavior: values.behavior,
     guards: values.guards,
     inputs: values.inputs.map((input) => ({
-      guards: [...input.guards],
+      guards: normalizeEditableInputGuards([...input.guards]),
       state: input.state,
       workType: input.workType,
     })),
@@ -139,7 +151,10 @@ export function applyEditableWorkstationDraft(
   selectedNode: DashboardWorkstationNode,
   draft: EditableWorkstationDraft,
 ): CanonicalFactoryDefinition | null {
-  const workstationResolution = resolveCanonicalWorkstation(factory, selectedNode);
+  const workstationResolution = resolveCanonicalWorkstation(
+    factory,
+    selectedNode,
+  );
   if (!workstationResolution || !factory.workers || !factory.workstations) {
     return null;
   }
@@ -172,7 +187,9 @@ export function applyEditableWorkstationDraft(
     ...factory,
     workers: factory.workers,
     workstations: factory.workstations.map((workstation, index) =>
-      index === workstationResolution.workstationIndex ? nextWorkstation : workstation,
+      index === workstationResolution.workstationIndex
+        ? nextWorkstation
+        : workstation,
     ),
   };
 }
@@ -211,7 +228,9 @@ function resolveWorkerModelProvider(
   factory: CanonicalFactoryDefinition,
   workerName: string,
 ): string | null {
-  const worker = (factory.workers ?? []).find((entry) => entry.name === workerName);
+  const worker = (factory.workers ?? []).find(
+    (entry) => entry.name === workerName,
+  );
   return worker?.modelProvider ?? null;
 }
 
@@ -262,7 +281,10 @@ function resolveSharedWorkerWorkstationNamesByWorkerName(
     const sharedWorkstations =
       otherWorkstationNamesByWorkerName.get(workstation.worker) ?? [];
     sharedWorkstations.push(workstation.name);
-    otherWorkstationNamesByWorkerName.set(workstation.worker, sharedWorkstations);
+    otherWorkstationNamesByWorkerName.set(
+      workstation.worker,
+      sharedWorkstations,
+    );
   }
 
   return Object.fromEntries(otherWorkstationNamesByWorkerName);
@@ -284,7 +306,7 @@ function resolveEditableWorkstationInputs(
   workstation: CanonicalWorkstation,
 ): EditableWorkstationInputDraft[] {
   return (workstation.inputs ?? []).map((input) => ({
-    guards: [...(input.guards ?? [])],
+    guards: normalizeEditableInputGuards([...(input.guards ?? [])]),
     state: input.state,
     workType: input.workType,
   }));
@@ -293,9 +315,12 @@ function resolveEditableWorkstationInputs(
 function applyEditableWorkstationInputs(
   inputs: EditableWorkstationInputDraft[],
 ): CanonicalWorkstationInput[] {
-  return inputs.map((input) => ({
-    state: input.state,
-    workType: input.workType,
-    ...(input.guards.length > 0 ? { guards: input.guards } : {}),
-  }));
+  return inputs.map((input) => {
+    const guards = normalizeEditableInputGuards(input.guards);
+    return {
+      state: input.state,
+      workType: input.workType,
+      ...(guards.length > 0 ? { guards } : {}),
+    };
+  });
 }

@@ -394,7 +394,9 @@ describe("resolveEditableWorkstationValues", () => {
       workTypes: [],
     };
 
-    expect(resolveEditableWorkstationValues(factory, selectedNode)).toMatchObject({
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode),
+    ).toMatchObject({
       effectiveRunnerName: "codex",
       resolvedRunnerSelection: {
         runnerId: "codex",
@@ -604,7 +606,9 @@ describe("resolveEditableWorkstationValues", () => {
       workTypes: [],
     };
 
-    expect(resolveEditableWorkstationValues(factory, selectedNode)).toMatchObject({
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode),
+    ).toMatchObject({
       behavior: "CRON",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER", "CRON"],
       guards: [],
@@ -652,7 +656,9 @@ describe("resolveEditableWorkstationValues", () => {
       workTypes: [],
     };
 
-    expect(resolveEditableWorkstationValues(factory, selectedNode)).toMatchObject({
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode),
+    ).toMatchObject({
       guards: [
         {
           matchConfig: { inputKey: ".Name" },
@@ -696,14 +702,19 @@ describe("resolveEditableWorkstationValues", () => {
       ],
       workTypes: [],
     };
-    const editableValues = resolveEditableWorkstationValues(factory, selectedNode);
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
     expect(editableValues).not.toBeNull();
 
     const updatedFactory = applyEditableWorkstationDraft(
       factory,
       selectedNode,
       {
-        ...editableWorkstationDraftFromValues(editableValues as NonNullable<typeof editableValues>),
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
         guards: [{ maxVisits: 3, type: "VISIT_COUNT", workstation: "Review" }],
         inputs: [
           {
@@ -728,6 +739,247 @@ describe("resolveEditableWorkstationValues", () => {
     });
   });
 
+  it("normalizes multiple input guards to one when reading editable values", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          id: "review",
+          inputs: [
+            {
+              guards: [
+                { matchInput: "planItem", type: "SAME_NAME" },
+                { parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" },
+              ],
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "Review",
+          outputs: [],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode)?.inputs,
+    ).toEqual([
+      {
+        guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+        state: "queued",
+        workType: "story",
+      },
+    ]);
+  });
+
+  it("applies SAME_NAME and ALL_CHILDREN_COMPLETE input guards onto the selected workstation", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [
+            { state: "queued", workType: "planItem" },
+            { state: "queued", workType: "story" },
+          ],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
+    expect(editableValues).not.toBeNull();
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
+        inputs: [
+          {
+            guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+            state: "queued",
+            workType: "planItem",
+          },
+          {
+            guards: [
+              { parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" },
+            ],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]?.inputs).toEqual([
+      {
+        guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+        state: "queued",
+        workType: "planItem",
+      },
+      {
+        guards: [{ parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" }],
+        state: "queued",
+        workType: "story",
+      },
+    ]);
+  });
+
+  it("clears an input guard without removing the input slot", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          id: "review",
+          inputs: [
+            {
+              guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "Review",
+          outputs: [],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
+    expect(editableValues).not.toBeNull();
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
+        inputs: [{ guards: [], state: "queued", workType: "story" }],
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]?.inputs).toEqual([
+      { state: "queued", workType: "story" },
+    ]);
+  });
+
+  it("preserves outputs, special IO, workstation guards, and other workstations when only input guards change", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Plan work",
+          id: "plan",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Plan",
+          outputs: [],
+          worker: "reviewer",
+        },
+        {
+          body: "Review work",
+          guards: [{ maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" }],
+          id: "review",
+          inputs: [
+            {
+              guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "Review",
+          onRejection: [{ state: "rejected", workType: "story" }],
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
+    expect(editableValues).not.toBeNull();
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
+        inputs: [
+          {
+            guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]).toMatchObject({
+      body: "Plan work",
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Plan",
+    });
+    expect(updatedFactory?.workstations?.[1]).toMatchObject({
+      body: "Review work",
+      guards: [{ maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" }],
+      inputs: [
+        {
+          guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+          state: "queued",
+          workType: "story",
+        },
+      ],
+      onRejection: [{ state: "rejected", workType: "story" }],
+      outputs: [{ state: "approved", workType: "story" }],
+    });
+  });
+
   it("preserves workstation and input guards when only non-guard draft fields change", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
@@ -745,7 +997,9 @@ describe("resolveEditableWorkstationValues", () => {
           id: "review",
           inputs: [
             {
-              guards: [{ parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" }],
+              guards: [
+                { parentInput: "planItem", type: "ALL_CHILDREN_COMPLETE" },
+              ],
               state: "queued",
               workType: "story",
             },
@@ -757,14 +1011,19 @@ describe("resolveEditableWorkstationValues", () => {
       ],
       workTypes: [],
     };
-    const editableValues = resolveEditableWorkstationValues(factory, selectedNode);
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
     expect(editableValues).not.toBeNull();
 
     const updatedFactory = applyEditableWorkstationDraft(
       factory,
       selectedNode,
       {
-        ...editableWorkstationDraftFromValues(editableValues as NonNullable<typeof editableValues>),
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
         prompt: "Updated review prompt only.",
         runnerName: "gemini",
       },

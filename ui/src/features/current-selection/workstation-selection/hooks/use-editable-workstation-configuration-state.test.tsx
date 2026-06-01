@@ -743,6 +743,43 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("marks the draft dirty when per-input guards change", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onInputsChange([
+        {
+          guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+          state: "queued",
+          workType: "story",
+        },
+      ]);
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        inputs: [
+          {
+            guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+      },
+      isDirty: true,
+      status: "ready",
+    });
+  });
+
   it("keeps empty-body pollers saveable in the current-selection editor", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(
