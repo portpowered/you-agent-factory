@@ -107,6 +107,7 @@ describe("workstation-guards", () => {
   it("compares guard and full draft equality", () => {
     const left = {
       behavior: "STANDARD" as const,
+      cron: null,
       guards: [
         { maxVisits: 1, type: "VISIT_COUNT" as const, workstation: "A" },
       ],

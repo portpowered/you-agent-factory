@@ -163,18 +163,6 @@ export function editableWorkstationDraftFromValues(
   };
 }
 
-export function areEditableWorkstationCronDraftsEqual(
-  left: EditableWorkstationCronDraft,
-  right: EditableWorkstationCronDraft,
-): boolean {
-  return (
-    left.schedule === right.schedule &&
-    left.triggerAtStart === right.triggerAtStart &&
-    left.jitter === right.jitter &&
-    left.expiryWindow === right.expiryWindow
-  );
-}
-
 export function applyEditableWorkstationDraft(
   factory: CanonicalFactoryDefinition,
   selectedNode: DashboardWorkstationNode,

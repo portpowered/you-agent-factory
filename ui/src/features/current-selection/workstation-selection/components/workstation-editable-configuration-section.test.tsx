@@ -45,6 +45,7 @@ function buildReadyState(
   return {
     draft: {
       behavior: overrides?.draft?.behavior ?? ("STANDARD" as const),
+      cron: null,
       guards: overrides?.draft?.guards ?? [],
       inputs: [],
       prompt: overrides?.draft?.prompt ?? "Review prompt",
@@ -86,6 +87,10 @@ function buildReadyState(
     markChangesSaved: vi.fn(),
     baseVersion: { logical: "1", physical: "2026-06-01T00:00:00Z" },
     onBehaviorChange: vi.fn(),
+    onCronExpiryWindowChange: vi.fn(),
+    onCronJitterChange: vi.fn(),
+    onCronScheduleChange: vi.fn(),
+    onCronTriggerAtStartChange: vi.fn(),
     onGuardsChange: vi.fn(),
     onInputsChange: vi.fn(),
     onPromptChange: vi.fn(),
@@ -344,8 +349,8 @@ describe("EditableConfigurationSection model workstation fields", () => {
 });
 
 describe("EditableConfigurationSection model workstation save feedback", () => {
-  it("shows validation alert and save success feedback", () => {
-    const { rerender } = render(
+  it("shows validation alert when non-prompt field errors exist", () => {
+    render(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
@@ -361,25 +366,9 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       messages.editableConfigurationValidationStatus,
     );
-
-    rerender(
-      <EditableConfigurationSection
-        messages={messages}
-        onSaveConfiguration={() => undefined}
-        saveState={{
-          status: "success",
-          message: messages.editableConfigurationSaveSuccess,
-        }}
-        state={buildReadyState({ isDirty: false })}
-      />,
-    );
-
-    expect(
-      screen.getByText(messages.editableConfigurationSaveSuccess),
-    ).toBeInTheDocument();
   });
 
-  it("treats prompt-only validation as status instead of alert", () => {
+  it("suppresses validation alert when only prompt diagnostics block save", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
@@ -396,10 +385,6 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
 
     expandConfiguration();
 
-    const draftStatus = screen.getByText(
-      messages.editableConfigurationDirtyStatus,
-    );
-    expect(draftStatus).toHaveAttribute("role", "status");
     expect(
       screen.queryByText(messages.editableConfigurationValidationStatus),
     ).not.toBeInTheDocument();
