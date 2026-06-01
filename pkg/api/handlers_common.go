@@ -201,19 +201,11 @@ func validatedRawURLContentPart(fields map[string]json.RawMessage, prefix string
 			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl and file cannot both be set on the same content part", prefix)}
 		}
 	}
-	contentURL, err := requiredNonEmptyStringField(fields, prefix, "url", usage)
-	if err != nil {
-		return interfaces.WorkContentPart{}, err
-	}
-	if err := workcontent.ValidateContentURL(contentURL); err != nil {
-		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl %s", prefix, err.Error())}
-	}
 	shared, err := validateSharedWorkContentFields(fields, prefix)
 	if err != nil {
 		return interfaces.WorkContentPart{}, err
 	}
 	shared.Type = partType
-	shared.URL = contentURL
 	if fileRaw, ok := fields["file"]; ok {
 		var file string
 		if err := json.Unmarshal(fileRaw, &file); err != nil || file == "" {
@@ -221,7 +213,27 @@ func validatedRawURLContentPart(fields map[string]json.RawMessage, prefix string
 		}
 		shared.File = file
 	}
-	return shared, nil
+	if urlRaw, ok := fields["url"]; ok {
+		var contentURL string
+		if err := json.Unmarshal(urlRaw, &contentURL); err != nil || contentURL == "" {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl must be a non-empty string", prefix)}
+		}
+		shared.URL = contentURL
+	}
+	normalized, err := workcontent.NormalizeFileBackedContentPart(shared)
+	if err != nil {
+		if strings.Contains(err.Error(), "url and file cannot both be set") {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
+		}
+		if strings.Contains(err.Error(), "url must be a non-empty string") {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl is required for %s", prefix, usage)}
+		}
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
+	}
+	if err := workcontent.ValidateContentURL(normalized.URL); err != nil {
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl %s", prefix, err.Error())}
+	}
+	return normalized, nil
 }
 
 func validatedRawJSONContentPart(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPart, error) {

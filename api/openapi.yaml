@@ -1316,7 +1316,11 @@ components:
         - fileName
         - mediaType
         - stagedFileRef
+        - url
       properties:
+        url:
+          $ref: '#/components/schemas/SubmitWorkContentURLProperty'
+          description: Canonical file:// URL for the staged bytes on the factory host.
         stagedFileRef:
           type: string
           minLength: 1

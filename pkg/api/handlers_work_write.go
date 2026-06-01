@@ -72,14 +72,14 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 		if err != nil {
 			return interfaces.WorkContentPart{}, false, err
 		}
-		return submitWorkFileItemContentPart(
+		part, err := submitWorkStagedFileItemContentPart(
 			interfaces.WorkContentPartTypeImage,
 			string(imageItem.Type),
-			string(imageItem.Url),
 			stagedFilePath,
 			imageItem.FileName,
 			imageItem.MediaType,
-		), true, nil
+		)
+		return part, true, err
 	}
 
 	videoItem, videoErr := item.AsSubmitWorkVideoItem()
@@ -88,14 +88,14 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 		if err != nil {
 			return interfaces.WorkContentPart{}, false, err
 		}
-		return submitWorkFileItemContentPart(
+		part, err := submitWorkStagedFileItemContentPart(
 			interfaces.WorkContentPartTypeBinary,
 			string(videoItem.Type),
-			string(videoItem.Url),
 			stagedFilePath,
 			videoItem.FileName,
 			videoItem.MediaType,
-		), true, nil
+		)
+		return part, true, err
 	}
 
 	audioItem, audioErr := item.AsSubmitWorkAudioItem()
@@ -104,14 +104,14 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 		if err != nil {
 			return interfaces.WorkContentPart{}, false, err
 		}
-		return submitWorkFileItemContentPart(
+		part, err := submitWorkStagedFileItemContentPart(
 			interfaces.WorkContentPartTypeAudio,
 			string(audioItem.Type),
-			string(audioItem.Url),
 			stagedFilePath,
 			audioItem.FileName,
 			audioItem.MediaType,
-		), true, nil
+		)
+		return part, true, err
 	}
 
 	documentItem, documentErr := item.AsSubmitWorkDocumentItem()
@@ -120,37 +120,39 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 		if err != nil {
 			return interfaces.WorkContentPart{}, false, err
 		}
-		return submitWorkFileItemContentPart(
+		part, err := submitWorkStagedFileItemContentPart(
 			interfaces.WorkContentPartTypeBinary,
 			string(documentItem.Type),
-			string(documentItem.Url),
 			stagedFilePath,
 			documentItem.FileName,
 			documentItem.MediaType,
-		), true, nil
+		)
+		return part, true, err
 	}
 
 	return interfaces.WorkContentPart{}, false, fmt.Errorf("unsupported item type")
 }
 
-func submitWorkFileItemContentPart(
+func submitWorkStagedFileItemContentPart(
 	partType interfaces.WorkContentPartType,
 	itemType string,
-	contentURL string,
-	stagedFileRef string,
+	stagedFilePath string,
 	fileName string,
 	mediaType string,
-) interfaces.WorkContentPart {
+) (interfaces.WorkContentPart, error) {
+	contentURL, err := workcontent.FilesystemPathToContentURL(stagedFilePath)
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
 	return interfaces.WorkContentPart{
 		Type:        partType,
 		URL:         contentURL,
-		File:        stagedFileRef,
 		ContentType: mediaType,
 		Metadata: map[string]any{
 			submitWorkItemTypeMetadataKey: itemType,
 			submitWorkFileNameMetadataKey: fileName,
 		},
-	}
+	}, nil
 }
 
 func validateSubmitWorkStructuredInputFields(fields map[string]json.RawMessage) error {

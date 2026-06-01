@@ -425,8 +425,8 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertRequiredFields(t, stageSubmitWorkFileRequest, "itemType", "fileName", "mediaType", "contentBase64")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileRequest, "StageSubmitWorkFileRequest"), "StageSubmitWorkFileRequest", "itemType", "fileName", "mediaType", "contentBase64")
 	stageSubmitWorkFileResponse := schemaObject(t, schemas, "StageSubmitWorkFileResponse")
-	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType")
-	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType")
+	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType", "url")
+	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType", "url")
 }
 
 func TestOpenAPIContract_MoveWorkRequestSchema(t *testing.T) {

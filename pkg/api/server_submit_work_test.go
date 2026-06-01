@@ -18,6 +18,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
@@ -184,12 +185,29 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].ContentType != "image/png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical staged image content", mf.Submitted[0].Content[1])
 	}
-	stagedContent, err := os.ReadFile(mf.Submitted[0].Content[1].File)
+	if mf.Submitted[0].Content[1].File != "" {
+		t.Fatalf("submitted content[1].file = %q, want empty canonical file field", mf.Submitted[0].Content[1].File)
+	}
+	stagedPath, err := resolveSubmitWorkStagedFileRef(staged.StagedFileRef)
+	if err != nil {
+		t.Fatalf("resolve staged file ref: %v", err)
+	}
+	wantURL, err := workcontent.FilesystemPathToContentURL(stagedPath)
+	if err != nil {
+		t.Fatalf("stage content url: %v", err)
+	}
+	if mf.Submitted[0].Content[1].URL != wantURL {
+		t.Fatalf("submitted content[1].url = %q, want %q", mf.Submitted[0].Content[1].URL, wantURL)
+	}
+	stagedContent, err := os.ReadFile(stagedPath)
 	if err != nil {
 		t.Fatalf("read submitted staged file: %v", err)
 	}
 	if string(stagedContent) != "png-bytes" {
 		t.Fatalf("submitted staged file content = %q, want png-bytes", stagedContent)
+	}
+	if string(staged.Url) != wantURL {
+		t.Fatalf("stage response url = %q, want %q", staged.Url, wantURL)
 	}
 	if mf.Submitted[0].Content[1].Metadata[submitWorkItemTypeMetadataKey] != "image" || mf.Submitted[0].Content[1].Metadata[submitWorkFileNameMetadataKey] != "ui.png" {
 		t.Fatalf("submitted content[1].metadata = %#v, want item type and file name metadata", mf.Submitted[0].Content[1].Metadata)
@@ -331,6 +349,9 @@ func TestStageSubmitWorkFile(t *testing.T) {
 	if response.StagedFileRef == "" {
 		t.Fatalf("stagedFileRef must be non-empty")
 	}
+	if response.Url == "" {
+		t.Fatalf("url must be non-empty")
+	}
 	stagedPath, err := resolveSubmitWorkStagedFileRef(response.StagedFileRef)
 	if err != nil {
 		t.Fatalf("resolve staged file ref: %v", err)
@@ -341,6 +362,13 @@ func TestStageSubmitWorkFile(t *testing.T) {
 	}
 	if string(stagedContent) != "png-bytes" {
 		t.Fatalf("staged file content = %q, want png-bytes", stagedContent)
+	}
+	wantURL, err := workcontent.FilesystemPathToContentURL(stagedPath)
+	if err != nil {
+		t.Fatalf("stage content url: %v", err)
+	}
+	if string(response.Url) != wantURL {
+		t.Fatalf("stage url = %q, want %q", response.Url, wantURL)
 	}
 }
 

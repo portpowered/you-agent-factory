@@ -622,6 +622,8 @@ export interface components {
             contentBase64: string;
         };
         StageSubmitWorkFileResponse: {
+            /** @description Canonical file:// URL for the staged bytes on the factory host. */
+            url: components["schemas"]["SubmitWorkContentURLProperty"];
             /** @description Backend-owned staged file reference returned for later structured submit-work items. */
             stagedFileRef: string;
             /** @description Browser-authored filename preserved for inline identification after staging. */

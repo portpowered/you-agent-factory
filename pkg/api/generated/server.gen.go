@@ -2080,6 +2080,9 @@ type StageSubmitWorkFileResponse struct {
 
 	// StagedFileRef Backend-owned staged file reference returned for later structured submit-work items.
 	StagedFileRef string `json:"stagedFileRef"`
+
+	// Url Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:.
+	Url SubmitWorkContentURLProperty `json:"url"`
 }
 
 // StatusCategories defines model for StatusCategories.
