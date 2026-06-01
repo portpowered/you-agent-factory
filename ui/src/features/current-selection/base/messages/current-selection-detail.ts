@@ -49,14 +49,6 @@ export interface CurrentSelectionDetailMessages {
   localizedTimezoneContext: string;
   localizedTimezoneLabel: string;
   runnerLabel: string;
-  runnerCapabilityImageInputLabel: string;
-  runnerCapabilitySessionResumeLabel: string;
-  runnerCapabilityStructuredOutputLabel: string;
-  runnerCapabilitySupportHeading: string;
-  runnerCapabilitySupportedLabel: string;
-  runnerCapabilityUnsupportedLabel: string;
-  runnerCapabilityWorkingDirectoryLabel: string;
-  runnerCapabilityWorktreeLabel: string;
   runnerSelectionSourceLabel: string;
   collapseAction: string;
   expandAction: string;
@@ -209,14 +201,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Times on this card are shown in your local timezone.",
     localizedTimezoneLabel: "Timezone",
     runnerLabel: "Runner",
-    runnerCapabilityImageInputLabel: "Image input",
-    runnerCapabilitySessionResumeLabel: "Session resume",
-    runnerCapabilityStructuredOutputLabel: "Structured output",
-    runnerCapabilitySupportHeading: "Runner capability support",
-    runnerCapabilitySupportedLabel: "Supported",
-    runnerCapabilityUnsupportedLabel: "Unsupported",
-    runnerCapabilityWorkingDirectoryLabel: "Working directory",
-    runnerCapabilityWorktreeLabel: "Worktree selection",
     runnerSelectionSourceLabel: "Runner source",
     collapseAction: "Collapse",
     expandAction: "Expand",
@@ -353,14 +337,6 @@ const currentSelectionDetailMessagesByLocale = {
       "このカードの時刻は、あなたのローカルタイムゾーンで表示されます。",
     localizedTimezoneLabel: "タイムゾーン",
     runnerLabel: "Runner",
-    runnerCapabilityImageInputLabel: "画像入力",
-    runnerCapabilitySessionResumeLabel: "セッション再開",
-    runnerCapabilityStructuredOutputLabel: "構造化出力",
-    runnerCapabilitySupportHeading: "Runner の機能サポート",
-    runnerCapabilitySupportedLabel: "対応",
-    runnerCapabilityUnsupportedLabel: "未対応",
-    runnerCapabilityWorkingDirectoryLabel: "作業ディレクトリ",
-    runnerCapabilityWorktreeLabel: "worktree 選択",
     runnerSelectionSourceLabel: "Runner source",
     collapseAction: "Collapse",
     expandAction: "Expand",
@@ -497,14 +473,6 @@ const currentSelectionDetailMessagesByLocale = {
       "이 카드의 시간은 사용자의 로컬 시간대로 표시됩니다.",
     localizedTimezoneLabel: "시간대",
     runnerLabel: "Runner",
-    runnerCapabilityImageInputLabel: "이미지 입력",
-    runnerCapabilitySessionResumeLabel: "세션 재개",
-    runnerCapabilityStructuredOutputLabel: "구조화된 출력",
-    runnerCapabilitySupportHeading: "Runner 기능 지원",
-    runnerCapabilitySupportedLabel: "지원",
-    runnerCapabilityUnsupportedLabel: "미지원",
-    runnerCapabilityWorkingDirectoryLabel: "작업 디렉터리",
-    runnerCapabilityWorktreeLabel: "worktree 선택",
     runnerSelectionSourceLabel: "Runner source",
     collapseAction: "Collapse",
     expandAction: "Expand",
@@ -628,14 +596,6 @@ const currentSelectionDetailMessagesByLocale = {
     localizedTimezoneContext: "此卡片中的时间会按你的本地时区显示。",
     localizedTimezoneLabel: "时区",
     runnerLabel: "Runner",
-    runnerCapabilityImageInputLabel: "图片输入",
-    runnerCapabilitySessionResumeLabel: "会话恢复",
-    runnerCapabilityStructuredOutputLabel: "结构化输出",
-    runnerCapabilitySupportHeading: "Runner 能力支持",
-    runnerCapabilitySupportedLabel: "支持",
-    runnerCapabilityUnsupportedLabel: "不支持",
-    runnerCapabilityWorkingDirectoryLabel: "工作目录",
-    runnerCapabilityWorktreeLabel: "worktree 选择",
     runnerSelectionSourceLabel: "Runner 来源",
     collapseAction: "折叠",
     expandAction: "展开",

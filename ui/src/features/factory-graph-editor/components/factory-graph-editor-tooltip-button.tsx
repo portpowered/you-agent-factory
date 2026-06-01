@@ -4,12 +4,25 @@ import {
   DashboardActionButton,
   type DashboardActionButtonProps,
 } from "../../../components/ui";
+import { cn } from "../../../lib/cn";
+
+export type FactoryGraphEditorTooltipPlacement = "above" | "below";
+
+const TOOLTIP_PLACEMENT_CLASS: Record<
+  FactoryGraphEditorTooltipPlacement,
+  string
+> = {
+  above: "bottom-full mb-2",
+  below: "top-full mt-2",
+};
 
 export function FactoryGraphEditorTooltipActionButton({
   children,
+  placement = "below",
   tooltip,
   ...props
 }: DashboardActionButtonProps & {
+  placement?: FactoryGraphEditorTooltipPlacement;
   tooltip: string;
 }) {
   const tooltipID = useId();
@@ -41,7 +54,10 @@ export function FactoryGraphEditorTooltipActionButton({
       </DashboardActionButton>
       {tooltipVisible ? (
         <span
-          className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 -translate-x-1/2 rounded-xl border border-af-border-strong bg-af-surface-raised px-3 py-2 text-center text-xs font-medium text-af-text shadow-af-panel"
+          className={cn(
+            "pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 rounded-xl border border-af-border-strong bg-af-surface-raised px-3 py-2 text-center text-xs font-medium text-af-text shadow-af-panel",
+            TOOLTIP_PLACEMENT_CLASS[placement],
+          )}
           id={tooltipID}
           role="tooltip"
         >

@@ -13,6 +13,7 @@ import type { useFactoryGraphAddEntityController } from "../components/react-flo
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 
 export type GraphEditorTransientControllerReset = {
+  setBlockedRemovalReason: (reason: string | null) => void;
   setConnectionNotice: ReturnType<
     typeof useFactoryGraphConnectionController
   >["setConnectionNotice"];
@@ -89,6 +90,7 @@ export function useGraphEditorSaveFlow({
     addEntityController.reset();
     saveEditableDefinition.reset();
     documentSaveControls.clearSaveFeedback();
+    transientControllerReset.setBlockedRemovalReason(null);
     transientControllerReset.setConnectionNotice(null);
     setIsConfirmingLeaveEditor(false);
     transientControllerReset.setPendingRemovalEdgeId(null);

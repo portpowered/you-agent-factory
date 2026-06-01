@@ -1,13 +1,12 @@
+import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../../components/ui/dashboard-typography";
 import { formatDurationMillis } from "../../../../components/ui/formatters";
 import { LocalizedTimezoneNote } from "../../../../components/ui/localized-timezone-note";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
-import { cn } from "../../../../lib/cn";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
+import {
+  useCurrentSelectionDetailMessages,
+  useCurrentSelectionLocale,
+} from "../../base/components/current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   MetadataSection,
@@ -15,8 +14,12 @@ import {
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
 } from "../../base/components/detail-card-shared";
+import { getRunnerDisplayName } from "../../editing/runner-metadata";
+import {
+  InferenceAttemptsSection,
+  WorkItemPayloadList,
+} from "../../work-selection/public";
 import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types";
-import { InferenceAttemptsSection } from "../../work-selection/public";
 import {
   ErrorDetailsSection,
   ResponseDetailsSection,
@@ -25,16 +28,6 @@ import {
   buildWorkstationRequestDetailView,
   type WorkstationRequestDetailView,
 } from "./workstation-request-detail-view";
-import {
-  useCurrentSelectionDetailMessages,
-  useCurrentSelectionLocale,
-} from "../../base/components/current-selection-locale";
-import { WorkItemPayloadList } from "../../work-selection/public";
-import {
-  getRunnerDisplayName,
-  resolveSelectedRunnerMetadata,
-  type RunnerOptionalCapability,
-} from "../../editing/runner-metadata";
 
 export function WorkstationRequestDetailCard({
   onSelectWorkID,
@@ -91,9 +84,6 @@ function WorkstationRequestSummary({
 }) {
   const messages = useCurrentSelectionDetailMessages();
   const locale = useCurrentSelectionLocale();
-  const requestRunnerMetadata = resolveSelectedRunnerMetadata(
-    view.requestRunner,
-  );
 
   return (
     <>
@@ -180,66 +170,8 @@ function WorkstationRequestSummary({
           </div>
         ) : null}
       </dl>
-      {requestRunnerMetadata ? (
-        <div className="mt-3 grid gap-2 rounded-xl border border-af-border bg-af-surface-subtle p-3">
-          <p className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-            {messages.runnerCapabilitySupportHeading}
-          </p>
-          <ul className="m-0 grid list-none gap-2 p-0">
-            {requestRunnerMetadata.capabilities.optionalCapabilities.map(
-              (capability) => (
-                <li
-                  className="grid gap-1 rounded-lg border border-af-border bg-af-surface-raised p-2"
-                  key={capability.capability}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className={cn("text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
-                      {labelForRunnerCapability(messages, capability.capability)}
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded-full border px-2 py-1 text-xs font-semibold",
-                        capability.status === "supported"
-                          ? "border-af-success-border bg-af-success-surface text-af-success"
-                          : "border-af-warning-border bg-af-warning-surface text-af-warning",
-                      )}
-                    >
-                      {capability.status === "supported"
-                        ? messages.runnerCapabilitySupportedLabel
-                        : messages.runnerCapabilityUnsupportedLabel}
-                    </span>
-                  </div>
-                  {capability.detail ? (
-                    <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-                      {capability.detail}
-                    </p>
-                  ) : null}
-                </li>
-              ),
-            )}
-          </ul>
-        </div>
-      ) : null}
     </>
   );
-}
-
-function labelForRunnerCapability(
-  messages: ReturnType<typeof useCurrentSelectionDetailMessages>,
-  capability: RunnerOptionalCapability,
-) {
-  switch (capability) {
-    case "image_input":
-      return messages.runnerCapabilityImageInputLabel;
-    case "session_resume":
-      return messages.runnerCapabilitySessionResumeLabel;
-    case "structured_output":
-      return messages.runnerCapabilityStructuredOutputLabel;
-    case "working_directory":
-      return messages.runnerCapabilityWorkingDirectoryLabel;
-    case "worktree":
-      return messages.runnerCapabilityWorktreeLabel;
-  }
 }
 
 function RequestDetailsSection({

@@ -1,5 +1,6 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing factory-graph connection coverage stayed intact during feature-root migration.
 
+import { buildEditorHandles } from "../../workflow-activity/lib/react-flow-current-activity-card-editor-handles";
 import type {
   FactoryGraphDraft,
   FactoryGraphTopology,
@@ -13,9 +14,8 @@ import {
   factoryGraphConnectionAnchorContext,
   getLocalizedFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
-  workstationRendersProgressOutcomeZAxisHintAnchors,
 } from "./factory-graph-editor-connections";
-import { buildEditorHandles } from "../../workflow-activity/lib/react-flow-current-activity-card-editor-handles";
+import { workstationRendersProgressOutcomeZAxisHintAnchors } from "./factory-graph-progress-outcome-handle-visibility";
 import { projectFactoryValidationTargets } from "./factory-validation-graph-projection";
 
 const baseDraft: FactoryGraphDraft = {

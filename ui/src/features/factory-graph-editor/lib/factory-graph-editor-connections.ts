@@ -1,8 +1,12 @@
-import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
-import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import {
+  type WorkstationProgressOutcomeRouteContext,
+  workstationSupportsProgressOutcomeRoutes,
+} from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import {
+  appendUniqueEdgeChange,
+  edgeChangeId,
   type FactoryGraphDraft,
   type FactoryGraphDraftEdgeChange,
   type FactoryGraphEdge,
@@ -10,8 +14,6 @@ import {
   type FactoryGraphNodeKind,
   type FactoryGraphTopology,
   type FactoryWorkstation,
-  appendUniqueEdgeChange,
-  edgeChangeId,
 } from "./factory-graph-draft-types";
 import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "./factory-graph-progress-outcome-connection-anchors";
 
@@ -218,8 +220,6 @@ export function getFactoryGraphConnectionAnchors(
 
   return filterWorkstationConnectionAnchors(anchors, context);
 }
-
-export { workstationRendersProgressOutcomeHandleValidation, workstationRendersProgressOutcomeZAxisHintAnchors } from "./factory-graph-progress-outcome-handle-visibility";
 
 export function getLocalizedFactoryGraphConnectionAnchors(
   kind: FactoryGraphNodeKind,
@@ -473,4 +473,3 @@ export function buildFactoryGraphConnectionNotice(options: {
     options.targetNode.label,
   );
 }
-

@@ -17,9 +17,11 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   mergeAuthoredProgressOutcomeConnectionAnchors,
   PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
+} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import {
   workstationRendersProgressOutcomeHandleValidation,
   workstationRendersProgressOutcomeZAxisHintAnchors,
-} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+} from "../../factory-graph-editor/lib/factory-graph-progress-outcome-handle-visibility";
 import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { validationHandleErrorsForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
@@ -39,6 +41,13 @@ export interface CurrentActivityEditorState {
   onConnectionAnchorClick: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
   validationTargets?: readonly FactoryValidationTarget[];
+}
+
+/** Graph node header selection competes with delete-tool onNodeClick when wired. */
+export function shouldWireGraphNodeSelectionHandlers(
+  editor?: CurrentActivityEditorState,
+): boolean {
+  return !(editor?.editorMode === true && editor.activeTool === "delete");
 }
 
 type CurrentActivityEndpointKind = Extract<
@@ -436,7 +445,10 @@ function connectionAnchorId(
   edgeKind: FactoryGraphEdgeKind,
   role: "source" | "target",
 ) {
-  if (edgeKind === "work-type-state" || edgeKind === "work-state-visibility-bypass") {
+  if (
+    edgeKind === "work-type-state" ||
+    edgeKind === "work-state-visibility-bypass"
+  ) {
     return null;
   }
 

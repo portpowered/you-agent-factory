@@ -5,25 +5,28 @@ import {
   type RunnerID,
 } from "../../current-selection/workstation-selection/public";
 import {
-  resolveRunnerSelection,
   type ResolvedRunnerSelection,
   type RunnerSelectionSource,
+  resolveRunnerSelection,
 } from "./runner-selection";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
+  type EditableWorkstationBehavior,
   resolveEditableWorkstationBehavior,
   resolveEditableWorkstationBehaviorOptions,
-  type EditableWorkstationBehavior,
 } from "./workstation-behavior";
 import {
-  resolveEditableWorkstationType,
   type EditableWorkstationType,
+  resolveEditableWorkstationType,
 } from "./workstation-type";
+import { workstationRequiresWorkerAssignment } from "./workstation-worker-assignment";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
-type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
+type CanonicalWorker = NonNullable<
+  CanonicalFactoryDefinition["workers"]
+>[number];
 
 export interface EditableWorkstationValues {
   behavior: EditableWorkstationBehavior;
@@ -56,7 +59,10 @@ export function resolveEditableWorkstationValues(
   factory: CanonicalFactoryDefinition,
   selectedNode: DashboardWorkstationNode,
 ): EditableWorkstationValues | null {
-  const workstationResolution = resolveCanonicalWorkstation(factory, selectedNode);
+  const workstationResolution = resolveCanonicalWorkstation(
+    factory,
+    selectedNode,
+  );
   if (!workstationResolution) {
     return null;
   }
@@ -116,8 +122,27 @@ export function applyEditableWorkstationDraft(
   selectedNode: DashboardWorkstationNode,
   draft: EditableWorkstationDraft,
 ): CanonicalFactoryDefinition | null {
-  const workstationResolution = resolveCanonicalWorkstation(factory, selectedNode);
-  if (!workstationResolution || !factory.workers || !factory.workstations) {
+  const workstationResolution = resolveCanonicalWorkstation(
+    factory,
+    selectedNode,
+  );
+  if (!workstationResolution || !factory.workstations) {
+    return null;
+  }
+
+  const { workstation, workstationIndex } = workstationResolution;
+
+  if (!workstationRequiresWorkerAssignment(workstation)) {
+    return {
+      ...factory,
+      workers: factory.workers,
+      workstations: factory.workstations.map((entry, index) =>
+        index === workstationIndex ? workstation : entry,
+      ),
+    };
+  }
+
+  if (!factory.workers) {
     return null;
   }
 
@@ -129,8 +154,7 @@ export function applyEditableWorkstationDraft(
     behavior: existingBehavior,
     runner: _existingRunner,
     ...workstationWithoutRunner
-  } =
-    workstationResolution.workstation;
+  } = workstation;
   const nextWorkstation = {
     ...workstationWithoutRunner,
     body: draft.prompt,
@@ -145,8 +169,8 @@ export function applyEditableWorkstationDraft(
   return {
     ...factory,
     workers: factory.workers,
-    workstations: factory.workstations.map((workstation, index) =>
-      index === workstationResolution.workstationIndex ? nextWorkstation : workstation,
+    workstations: factory.workstations.map((entry, index) =>
+      index === workstationIndex ? nextWorkstation : entry,
     ),
   };
 }
@@ -185,7 +209,9 @@ function resolveWorkerModelProvider(
   factory: CanonicalFactoryDefinition,
   workerName: string,
 ): string | null {
-  const worker = (factory.workers ?? []).find((entry) => entry.name === workerName);
+  const worker = (factory.workers ?? []).find(
+    (entry) => entry.name === workerName,
+  );
   return worker?.modelProvider ?? null;
 }
 
@@ -236,7 +262,10 @@ function resolveSharedWorkerWorkstationNamesByWorkerName(
     const sharedWorkstations =
       otherWorkstationNamesByWorkerName.get(workstation.worker) ?? [];
     sharedWorkstations.push(workstation.name);
-    otherWorkstationNamesByWorkerName.set(workstation.worker, sharedWorkstations);
+    otherWorkstationNamesByWorkerName.set(
+      workstation.worker,
+      sharedWorkstations,
+    );
   }
 
   return Object.fromEntries(otherWorkstationNamesByWorkerName);
