@@ -150,7 +150,7 @@ function renderProgressOutcomeRouteFlow(
   );
 }
 
-describe("factory graph editor progress outcome route handles", () => {
+function useProgressOutcomeRouteFlowTestHooks() {
   let restoreBrowserTestShims: (() => void) | null = null;
 
   beforeEach(() => {
@@ -162,6 +162,10 @@ describe("factory graph editor progress outcome route handles", () => {
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
   });
+}
+
+describe("factory graph editor progress outcome route handles", () => {
+  useProgressOutcomeRouteFlowTestHooks();
 
   it("hides continue and reject connect handles for standard processors without stopWords", async () => {
     const { container } = renderProgressOutcomeRouteFlow([
@@ -241,6 +245,10 @@ describe("factory graph editor progress outcome route handles", () => {
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
     ).toHaveLength(0);
   });
+});
+
+describe("factory graph editor logical-move progress outcome route handles", () => {
+  useProgressOutcomeRouteFlowTestHooks();
 
   it("hides continue, failure, and reject connect handles on logical-move workstations", async () => {
     renderProgressOutcomeRouteFlow([logicalMoveWorkstation], {
