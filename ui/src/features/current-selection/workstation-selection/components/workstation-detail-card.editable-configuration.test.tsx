@@ -14,6 +14,14 @@ import { EditableWorkstationConfigurationHeaderActions } from "./workstation-sav
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 const editableConfigurationCoverageTimeoutMs = 240_000;
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value == null) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 function currentSelectionHeaderActionSection() {
   const card = screen.getByRole("article", { name: "Current selection" });
   const undoButton = within(card).getByRole("button", {
@@ -155,6 +163,7 @@ function buildReadyEditableConfigurationState(overrides?: {
   workerOptionsState?:
     | { status: "ready"; options: string[] }
     | { message: string; status: "empty" | "error" };
+  workstationType?: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
 }) {
   return {
     draft: {
@@ -198,7 +207,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       },
       workstationName: overrides?.initialValuesWorkstationName ?? "Review",
       workstationOptions: ["Plan", "Review"],
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
       guards: [],
       inputs: [],
     },
@@ -1867,5 +1876,178 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.getByText(".Inputs[1]").className).toContain(
       "text-af-text-muted",
     );
+  });
+
+  it("hides worker, runner, prompt, and kind fields for LOGICAL_MOVE configuration", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      workstation_kind: "LOGICAL_MOVE",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "removed-worker",
+          workstationType: "LOGICAL_MOVE",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const configuration = editableConfigurationSection();
+    expect(within(configuration).queryByLabelText("Worker")).toBeNull();
+    expect(within(configuration).queryByLabelText("Kind")).toBeNull();
+    expect(within(configuration).queryByLabelText("Runner")).toBeNull();
+    expect(within(configuration).queryByLabelText("Prompt")).toBeNull();
+    expect(
+      within(configuration).queryByText("Worker selection unavailable."),
+    ).toBeNull();
+    expect(
+      configuration.querySelector(
+        `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+      ),
+    ).toBeNull();
+  });
+
+  it("does not surface worker-unavailable copy for LOGICAL_MOVE with a legacy missing worker", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      workstation_kind: "LOGICAL_MOVE",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "missing-worker",
+          workerOptionsState: {
+            message:
+              "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
+            status: "error",
+          },
+          workstationType: "LOGICAL_MOVE",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(screen.queryByText(/Worker selection unavailable/i)).toBeNull();
+    expect(
+      screen.queryByText(/no longer available in the current factory definition/i),
+    ).toBeNull();
+  });
+
+  it("hides worker, runner, and kind summary tiles for LOGICAL_MOVE while keeping workstation type", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      worker_type: "MODEL_WORKER",
+      workstation_kind: "LOGICAL_MOVE",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "removed-worker",
+          workstationType: "LOGICAL_MOVE",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const summarySection = screen
+      .getByRole("heading", { name: "Workstation summary" })
+      .closest("section");
+    const resolvedSummarySection = requireValue(
+      summarySection,
+      "expected workstation summary section",
+    );
+
+    expect(within(resolvedSummarySection).getByText("Logical move")).toBeTruthy();
+    expect(within(resolvedSummarySection).queryByText("Worker type")).toBeNull();
+    expect(
+      within(resolvedSummarySection).queryByText("Selected runner"),
+    ).toBeNull();
+    expect(within(resolvedSummarySection).queryByText("Kind")).toBeNull();
+    expect(within(resolvedSummarySection).queryByText("MODEL_WORKER")).toBeNull();
+  });
+
+  it("still renders worker-backed summary tiles for model workstations", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const summarySection = screen
+      .getByRole("heading", { name: "Workstation summary" })
+      .closest("section");
+    const resolvedSummarySection = requireValue(
+      summarySection,
+      "expected workstation summary section",
+    );
+
+    expect(within(resolvedSummarySection).getByText("Worker type")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Selected runner")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Kind")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Model workstation")).toBeTruthy();
+  });
+
+  it("still renders worker-backed configuration fields for model workstations", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workstationType: "MODEL_WORKSTATION",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const configuration = editableConfigurationSection();
+    expect(within(configuration).getByLabelText("Worker")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Kind")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Runner")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Prompt")).toBeTruthy();
   });
 });

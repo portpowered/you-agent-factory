@@ -9,22 +9,23 @@ import {
   resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { editableWorkstationDraftsEqual } from "../../../current-factory-definition/lib/workstation-guards";
+import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import {
   resolvePromptHelpState,
   resolvePromptValidationState,
 } from "../editing/editable-workstation-prompt-state";
 import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
+import { validateEditableWorkstationDraft } from "../lib/editable-workstation-configuration-validation";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { buildReadyEditableWorkstationConfigurationState } from "./editable-workstation-ready-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
-import { validateEditableWorkstationDraft } from "./editable-workstation-draft-validation";
-import { buildReadyEditableWorkstationConfigurationState } from "./editable-workstation-ready-configuration-state";
 
 export {
   hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
-} from "./editable-workstation-draft-validation";
+} from "../lib/editable-workstation-configuration-validation";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
@@ -54,6 +55,10 @@ export function useEditableWorkstationConfigurationState(
   const shouldValidatePrompt =
     isNodeSelection &&
     sessionState != null &&
+    selectedEditableValues != null &&
+    workstationRequiresWorkerAssignment({
+      type: selectedEditableValues.workstationType,
+    }) &&
     workstationBehaviorRequiresPrompt(sessionState.draft.behavior);
   const promptValidation = useCurrentWorkstationPromptTemplateValidation(
     selectedEditableValues?.workstationName,

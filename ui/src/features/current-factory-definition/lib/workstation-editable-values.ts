@@ -23,6 +23,7 @@ import {
   type EditableWorkstationType,
   resolveEditableWorkstationType,
 } from "./workstation-type";
+import { workstationRequiresWorkerAssignment } from "./workstation-worker-assignment";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
@@ -155,7 +156,23 @@ export function applyEditableWorkstationDraft(
     factory,
     selectedNode,
   );
-  if (!workstationResolution || !factory.workers || !factory.workstations) {
+  if (!workstationResolution || !factory.workstations) {
+    return null;
+  }
+
+  const { workstation, workstationIndex } = workstationResolution;
+
+  if (!workstationRequiresWorkerAssignment(workstation)) {
+    return {
+      ...factory,
+      workers: factory.workers,
+      workstations: factory.workstations.map((entry, index) =>
+        index === workstationIndex ? workstation : entry,
+      ),
+    };
+  }
+
+  if (!factory.workers) {
     return null;
   }
 
@@ -169,7 +186,7 @@ export function applyEditableWorkstationDraft(
     inputs: _existingInputs,
     runner: _existingRunner,
     ...workstationWithoutRunner
-  } = workstationResolution.workstation;
+  } = workstation;
   const nextWorkstation = {
     ...workstationWithoutRunner,
     body: draft.prompt,
@@ -186,10 +203,8 @@ export function applyEditableWorkstationDraft(
   return {
     ...factory,
     workers: factory.workers,
-    workstations: factory.workstations.map((workstation, index) =>
-      index === workstationResolution.workstationIndex
-        ? nextWorkstation
-        : workstation,
+    workstations: factory.workstations.map((entry, index) =>
+      index === workstationIndex ? nextWorkstation : entry,
     ),
   };
 }

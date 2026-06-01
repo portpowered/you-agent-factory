@@ -1,7 +1,11 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: current-selection editable workstation fields stay colocated so save feedback, overwrite hints, and responsive form structure evolve together.
 import { type ReactNode, useId, useState } from "react";
 
-import { ExpandablePanelTrigger, Select } from "../../../../components/ui";
+import {
+  DashboardActionButton,
+  ExpandablePanelTrigger,
+  Select,
+} from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -10,6 +14,7 @@ import {
 import { formatList } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
 import type { WorkstationLevelGuard } from "../../../current-factory-definition/lib/workstation-guards";
+import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import {
   DetailCardFactorySaveFeedback,
   mergeDetailCardSaveFieldErrors,
@@ -21,6 +26,7 @@ import {
   CurrentSelectionSectionHeader,
   WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "../../base/components/detail-card-shared";
+import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type {
   EditableWorkstationOverwriteField,
@@ -38,16 +44,19 @@ import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 import { EditableConfigurationRunnerField } from "./workstation-runner-field";
 import {
   resolveWorkstationSummaryKindValue,
+  resolveWorkstationSummaryRequiresWorkerAssignment,
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
 } from "./workstation-summary-field-values";
 
 export function EditableConfigurationSection({
   messages,
+  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
+  onSaveConfiguration?: () => void;
   saveState?: EditableWorkstationSaveState;
   state?: WorkstationDetailCardProps["editableConfigurationState"];
 }) {
@@ -117,6 +126,7 @@ export function EditableConfigurationSection({
           {state?.status === "ready" ? (
             <EditableConfigurationReadyForm
               messages={messages}
+              onSaveConfiguration={onSaveConfiguration}
               saveState={saveState}
               state={state}
             />
@@ -127,12 +137,15 @@ export function EditableConfigurationSection({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: workstation ready form keeps save feedback, overwrite hints, and vertical field wiring colocated.
 function EditableConfigurationReadyForm({
   messages,
+  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
+  onSaveConfiguration?: () => void;
   saveState?: EditableWorkstationSaveState;
   state: Extract<
     NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
@@ -143,10 +156,19 @@ function EditableConfigurationReadyForm({
     EditableWorkstationValidationErrors & Record<string, string | undefined>,
     EditableWorkstationSaveValidationErrors
   >(state.validationErrors, saveState);
+  const isSaving = saveState?.status === "submitting";
+  const canSave =
+    state.isDirty &&
+    !state.hasValidationErrors &&
+    state.pendingFactoryDefinition != null &&
+    !isSaving;
   const renderState = {
     ...state,
     validationErrors,
   };
+  const requiresWorkerAssignment = workstationRequiresWorkerAssignment({
+    type: state.initialValues.workstationType,
+  });
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
@@ -164,99 +186,121 @@ function EditableConfigurationReadyForm({
         overwriteFieldNames={state.overwriteFieldNames ?? []}
       />
       <EditableConfigurationDraftStatus messages={messages} state={state} />
-      <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
-        <EditableConfigurationField
-          fieldId="editable-workstation-worker"
-          errorMessage={validationErrors.workerName}
-          input={
-            <EditableConfigurationWorkerInput
-              messages={messages}
-              state={renderState}
-            />
-          }
-          label={messages.workerFieldLabel}
-          supportingContent={
-            <>
-              <EditableConfigurationSharedWorkerHint
+      {requiresWorkerAssignment ? (
+        <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
+          <EditableConfigurationField
+            fieldId="editable-workstation-worker"
+            errorMessage={validationErrors.workerName}
+            input={
+              <EditableConfigurationWorkerInput
                 messages={messages}
-                state={state}
+                state={renderState}
               />
+            }
+            label={messages.workerFieldLabel}
+            supportingContent={
+              <>
+                <EditableConfigurationSharedWorkerHint
+                  messages={messages}
+                  state={state}
+                />
+                <EditableConfigurationServerChangedHint
+                  fieldName="worker"
+                  messages={messages}
+                  state={state}
+                />
+              </>
+            }
+          />
+          <EditableConfigurationField
+            fieldId="editable-workstation-kind"
+            errorMessage={validationErrors.behavior}
+            input={
+              <EditableConfigurationBehaviorInput
+                messages={messages}
+                state={renderState}
+              />
+            }
+            label={messages.kindLabel}
+            supportingContent={
               <EditableConfigurationServerChangedHint
-                fieldName="worker"
+                fieldName="behavior"
                 messages={messages}
                 state={state}
               />
-            </>
+            }
+          />
+          <EditableConfigurationField
+            fieldId="editable-workstation-runner"
+            errorMessage={validationErrors.runnerName}
+            input={
+              <EditableConfigurationRunnerField
+                messages={messages}
+                state={renderState}
+              />
+            }
+            label={messages.runnerFieldLabel}
+            supportingContent={
+              <EditableConfigurationServerChangedHint
+                fieldName="runner"
+                messages={messages}
+                state={state}
+              />
+            }
+          />
+          <EditableConfigurationField
+            errorMessage={validationErrors.prompt}
+            fieldId="editable-workstation-prompt"
+            input={
+              <EditableConfigurationPromptInput
+                messages={messages}
+                state={renderState}
+              />
+            }
+            label={messages.promptFieldLabel}
+            supportingContent={
+              <EditableConfigurationServerChangedHint
+                fieldName="prompt"
+                messages={messages}
+                state={state}
+              />
+            }
+          />
+        </div>
+      ) : null}
+      <EditableConfigurationWorkstationGuardsField
+        fieldErrors={validationErrors}
+        guards={state.draft.guards as WorkstationLevelGuard[]}
+        messages={messages}
+        onGuardsChange={state.onGuardsChange}
+        workstationOptionsState={state.workstationOptionsState}
+      />
+      <EditableConfigurationWorkstationInputGuardsField
+        fieldErrors={validationErrors}
+        inputs={state.draft.inputs}
+        messages={messages}
+        onInputsChange={state.onInputsChange}
+      />
+      {onSaveConfiguration ? (
+        <EditableConfigurationSaveRow
+          busyLabel={messages.editableConfigurationSaveBusyAction}
+          canSave={canSave}
+          isSaving={isSaving}
+          onSave={onSaveConfiguration}
+          resetSlot={
+            state.isDirty ? (
+              <DashboardActionButton
+                disabled={isSaving}
+                onClick={state.onResetToLatest}
+                type="button"
+              >
+                {messages.editableConfigurationResetAction}
+              </DashboardActionButton>
+            ) : undefined
           }
+          saveLabel={messages.editableConfigurationSaveAction}
         />
-        <EditableConfigurationField
-          fieldId="editable-workstation-kind"
-          errorMessage={validationErrors.behavior}
-          input={
-            <EditableConfigurationBehaviorInput
-              messages={messages}
-              state={renderState}
-            />
-          }
-          label={messages.kindLabel}
-          supportingContent={
-            <EditableConfigurationServerChangedHint
-              fieldName="behavior"
-              messages={messages}
-              state={state}
-            />
-          }
-        />
-        <EditableConfigurationField
-          fieldId="editable-workstation-runner"
-          errorMessage={validationErrors.runnerName}
-          input={
-            <EditableConfigurationRunnerField
-              messages={messages}
-              state={renderState}
-            />
-          }
-          label={messages.runnerFieldLabel}
-          supportingContent={
-            <EditableConfigurationServerChangedHint
-              fieldName="runner"
-              messages={messages}
-              state={state}
-            />
-          }
-        />
-        <EditableConfigurationField
-          errorMessage={validationErrors.prompt}
-          fieldId="editable-workstation-prompt"
-          input={
-            <EditableConfigurationPromptInput
-              messages={messages}
-              state={renderState}
-            />
-          }
-          label={messages.promptFieldLabel}
-          supportingContent={
-            <EditableConfigurationServerChangedHint
-              fieldName="prompt"
-              messages={messages}
-              state={state}
-            />
-          }
-        />
-        <EditableConfigurationWorkstationGuardsField
-          fieldErrors={validationErrors}
-          guards={state.draft.guards as WorkstationLevelGuard[]}
-          messages={messages}
-          onGuardsChange={state.onGuardsChange}
-          workstationOptionsState={state.workstationOptionsState}
-        />
-        <EditableConfigurationWorkstationInputGuardsField
-          fieldErrors={validationErrors}
-          inputs={state.draft.inputs}
-          messages={messages}
-          onInputsChange={state.onInputsChange}
-        />
-      </div>
+      ) : null}
     </form>
   );
 }
@@ -527,6 +571,21 @@ export function WorkstationSummary({
   selectedNode,
 }: WorkstationSummaryProps) {
   const sectionId = `workstation-summary-${selectedNode.node_id}`;
+  const requiresWorkerAssignment =
+    resolveWorkstationSummaryRequiresWorkerAssignment(
+      editableConfigurationState,
+      selectedNode,
+    );
+  const summaryRunnerValue = resolveWorkstationSummaryRunnerValue(
+    editableConfigurationState,
+    messages,
+    selectedNode,
+  );
+  const summaryKindValue = resolveWorkstationSummaryKindValue(
+    editableConfigurationState,
+    selectedNode,
+    messages,
+  );
 
   return (
     <section
@@ -538,10 +597,12 @@ export function WorkstationSummary({
         title={messages.summaryHeading}
       />
       <ul className="m-0 grid list-none gap-2 p-0 [grid-template-columns:repeat(auto-fit,minmax(8.75rem,1fr))]">
-        <WorkstationSummaryItem
-          label={messages.workerTypeLabel}
-          value={selectedNode.worker_type || messages.unknownWorkerTypeValue}
-        />
+        {requiresWorkerAssignment ? (
+          <WorkstationSummaryItem
+            label={messages.workerTypeLabel}
+            value={selectedNode.worker_type || messages.unknownWorkerTypeValue}
+          />
+        ) : null}
         <WorkstationSummaryItem
           label={messages.workstationTypeLabel}
           value={resolveWorkstationSummaryTypeValue(
@@ -549,21 +610,18 @@ export function WorkstationSummary({
             messages,
           )}
         />
-        <WorkstationSummaryItem
-          label={messages.selectedRunnerLabel}
-          value={resolveWorkstationSummaryRunnerValue(
-            editableConfigurationState,
-            messages,
-          )}
-        />
-        <WorkstationSummaryItem
-          label={messages.kindLabel}
-          value={resolveWorkstationSummaryKindValue(
-            editableConfigurationState,
-            selectedNode,
-            messages,
-          )}
-        />
+        {summaryRunnerValue != null ? (
+          <WorkstationSummaryItem
+            label={messages.selectedRunnerLabel}
+            value={summaryRunnerValue}
+          />
+        ) : null}
+        {summaryKindValue != null ? (
+          <WorkstationSummaryItem
+            label={messages.kindLabel}
+            value={summaryKindValue}
+          />
+        ) : null}
         <WorkstationSummaryItem
           label={messages.inputWorkTypesLabel}
           value={formatList(selectedNode.input_work_type_ids)}

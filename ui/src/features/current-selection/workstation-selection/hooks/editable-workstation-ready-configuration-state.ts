@@ -12,55 +12,20 @@ import type {
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
   EditableWorkstationValidationErrors,
-  EditableWorkstationWorkerOptionsState,
   EditableWorkstationWorkstationOptionsState,
 } from "../lib/detail-card-types";
+import {
+  hasEditableWorkstationValidationErrors,
+  resolveWorkerOptionsState,
+} from "../lib/editable-workstation-configuration-validation";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail";
 import type { RunnerID } from "../editing/runner-metadata";
-import { hasEditableWorkstationValidationErrors } from "./editable-workstation-draft-validation";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
   latestDefinitionDraft: EditableWorkstationDraft;
   selectionKey: string;
   sessionStartDraft: EditableWorkstationDraft;
-}
-
-function resolveWorkerOptionsState(
-  draft: EditableWorkstationDraft,
-  selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
-  messages: Pick<
-    WorkstationDetailMessages,
-    | "editableConfigurationEmpty"
-    | "editableConfigurationWorkerMissing"
-    | "editableConfigurationWorkerOptionsEmpty"
-  >,
-): EditableWorkstationWorkerOptionsState {
-  if (!selectedEditableValues) {
-    return {
-      message: messages.editableConfigurationEmpty,
-      status: "error",
-    };
-  }
-
-  if (selectedEditableValues.workerOptions.length === 0) {
-    return {
-      message: messages.editableConfigurationWorkerOptionsEmpty,
-      status: "empty",
-    };
-  }
-
-  if (!selectedEditableValues.workerOptions.includes(draft.workerName)) {
-    return {
-      message: messages.editableConfigurationWorkerMissing,
-      status: "error",
-    };
-  }
-
-  return {
-    options: selectedEditableValues.workerOptions,
-    status: "ready",
-  };
 }
 
 function resolveWorkstationOptionsState(

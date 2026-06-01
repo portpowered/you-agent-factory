@@ -818,6 +818,98 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("skips worker and prompt validation for LOGICAL_MOVE drafts", () => {
+    const logicalMoveValues = {
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
+      prompt: null,
+      resolvedRunnerSelection: {
+        runnerId: "codex",
+        source: "default",
+      },
+      runnerName: null,
+      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      runnerSelectionSource: "default",
+      sharedWorkerWorkstationNamesByWorkerName: {},
+      sharedWorkerWorkstationNames: [],
+      workerModelProvider: null,
+      workerName: "legacy-missing-worker",
+      workerOptions: ["reviewer"],
+      workerTypeByName: {
+        reviewer: "MODEL_WORKER",
+      },
+      workstationName: "Route",
+      workstationOptions: ["Route"],
+      workstationType: "LOGICAL_MOVE" as const,
+      guards: [],
+      inputs: [],
+    };
+
+    expect(
+      validateEditableWorkstationDraft(
+        {
+          behavior: "STANDARD",
+          guards: [],
+          inputs: [],
+          prompt: "",
+          runnerName: null,
+          workerName: "",
+        },
+        logicalMoveValues,
+        { status: "loading" },
+      ),
+    ).toEqual({});
+    expect(
+      validateEditableWorkstationDraft(
+        {
+          behavior: "POLLER",
+          guards: [],
+          inputs: [],
+          prompt: "",
+          runnerName: null,
+          workerName: "legacy-missing-worker",
+        },
+        logicalMoveValues,
+        {
+          errorMessage: "Prompt validation API unavailable.",
+          status: "error",
+        },
+      ),
+    ).toEqual({});
+  });
+
+  it("does not surface worker option errors for LOGICAL_MOVE with a legacy missing worker", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          workerName: "legacy-missing-worker",
+          workerOptions: [{ name: "reviewer", type: "MODEL_WORKER" }],
+          workstationType: "LOGICAL_MOVE",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: false,
+      status: "ready",
+      validationErrors: {},
+      workerOptionsState: {
+        options: ["reviewer"],
+        status: "ready",
+      },
+    });
+  });
+
   it("keeps empty-body pollers saveable in the current-selection editor", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(
@@ -886,6 +978,7 @@ function buildEditableFactoryDefinition(overrides?: {
     name: string;
     type: "HOSTED_WORKER" | "MODEL_WORKER" | "SCRIPT_WORKER";
   }>;
+  workstationType?: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
 }): CurrentFactoryDocument {
   return {
     name: "Current Factory",
@@ -916,6 +1009,7 @@ function buildEditableFactoryDefinition(overrides?: {
         outputs: [{ state: "approved", workType: "story" }],
         promptFile: "prompts/review.md",
         runner: overrides?.runnerName ?? "gemini",
+        type: overrides?.workstationType,
         worker: overrides?.workerName ?? "reviewer",
       },
     ],

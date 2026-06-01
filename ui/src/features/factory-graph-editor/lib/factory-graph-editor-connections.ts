@@ -1,5 +1,7 @@
-import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
-import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import {
+  type WorkstationProgressOutcomeRouteContext,
+  workstationSupportsProgressOutcomeRoutes,
+} from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import {
@@ -219,7 +221,10 @@ export function getFactoryGraphConnectionAnchors(
   return filterWorkstationConnectionAnchors(anchors, context);
 }
 
-export { workstationRendersProgressOutcomeHandleValidation, workstationRendersProgressOutcomeZAxisHintAnchors } from "./factory-graph-progress-outcome-handle-visibility";
+export {
+  workstationRendersProgressOutcomeHandleValidation,
+  workstationRendersProgressOutcomeZAxisHintAnchors,
+} from "./factory-graph-progress-outcome-handle-visibility";
 
 export function getLocalizedFactoryGraphConnectionAnchors(
   kind: FactoryGraphNodeKind,
@@ -473,4 +478,3 @@ export function buildFactoryGraphConnectionNotice(options: {
     options.targetNode.label,
   );
 }
-
