@@ -16,6 +16,7 @@ import {
   renderTraceDrilldownHarness,
 } from "./testing/app-shell-trace-follow-up-test-utils";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+import { expectDashboardWorkItemRef } from "./testing/expectDashboardWorkItemRef";
 
 const traceSnapshot: DashboardTrace = {
   trace_id: "trace-active-story",
@@ -85,32 +86,32 @@ describe("App follow-up trace flows", () => {
     expect(
       dispatchRequest?.request?.input_work_items,
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-b",
         display_name: "Research Context",
         trace_id: "chain-b",
         work_id: "work-research-context",
         work_type_id: "story",
-      },
-      {
+      }),
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-a",
         display_name: "Reviewed Story",
         trace_id: "chain-a",
         work_id: "work-reviewed-story",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       dispatchRequest?.response?.output_work_items,
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-a",
         display_name: fanInResultLabel,
         previous_chaining_trace_ids: ["chain-a", "chain-b"],
         trace_id: "chain-a",
         work_id: fanInResultWorkID,
         work_type_id: "story",
-      },
+      }),
     ]);
 
     const traceCard = await screen.findByRole("article", {

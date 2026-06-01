@@ -1322,7 +1322,11 @@ describe("App current selection", () => {
     expect(stateSelectionSlot?.getAttribute("data-bento-card-id")).toBe(
       "current-selection",
     );
-    expect(within(stateInfo).getByTitle("story:implemented")).toBeTruthy();
+    expect(
+      within(stateInfo).getByRole("heading", {
+        name: "Work state configuration",
+      }),
+    ).toBeTruthy();
     expect(within(stateInfo).getByText("Count")).toBeTruthy();
     expect(within(stateInfo).getByText("Current work")).toBeTruthy();
     expect(within(stateInfo).getByText(activeWorkLabel)).toBeTruthy();
@@ -1350,8 +1354,11 @@ describe("App current selection", () => {
     const emptyStateInfo = await screen.findByRole("article", {
       name: "Current selection",
     });
-    expect(within(emptyStateInfo).getByText("story: blocked")).toBeTruthy();
-    expect(within(emptyStateInfo).getByTitle("story:blocked")).toBeTruthy();
+    expect(
+      within(emptyStateInfo).getByRole("heading", {
+        name: "Work state configuration",
+      }),
+    ).toBeTruthy();
     expect(
       within(emptyStateInfo).getByText(
         "No work is recorded for this place at the selected tick.",
@@ -2023,7 +2030,6 @@ describe("App current selection", () => {
     const completedDetail = await within(dashboardGrid).findByRole("article", {
       name: "Current selection",
     });
-    expect(within(completedDetail).getByTitle("story:complete")).toBeTruthy();
     expect(within(completedDetail).getByText("Count")).toBeTruthy();
     expect(within(completedDetail).getByText("Current work")).toBeTruthy();
     expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
@@ -2062,7 +2068,6 @@ describe("App current selection", () => {
         name: "Current selection",
       });
 
-      expect(within(failedDetail).getByText("story: blocked")).toBeTruthy();
       expect(within(failedDetail).getByText("Count")).toBeTruthy();
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();

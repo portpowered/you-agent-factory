@@ -20,6 +20,7 @@ import type {
   FactoryTerminalWork,
   FactoryWorkItem,
 } from "../../../../api/events";
+import type { WorkPayloadLineageProjection } from "./workPayloadLineage";
 
 export interface ResourceUnit {
   placeID: string;
@@ -167,6 +168,7 @@ export interface TimelineWorldViewBase {
 export interface ReplayWorldState extends TimelineWorldViewBase {
   factory?: FactoryDefinition;
   factory_state: string;
+  payloadLineage: WorkPayloadLineageProjection;
   runtime: DashboardRuntime;
   tick_count: number;
   topology: ProjectedInitialStructure;

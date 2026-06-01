@@ -1,0 +1,90 @@
+{
+  "provenance": {
+    "sessionId": "synthetic-golden-payload-lineage-work-request-with-content",
+    "capturedAt": "2026-06-01T12:00:00.000Z",
+    "description": "Synthetic golden fixture: WORK_REQUEST carries text content so Current selection replay resolves payload_status RESOLVED with submitted text."
+  },
+  "selectedTick": 1,
+  "events": [
+    {
+      "context": {
+        "eventTime": "2026-06-01T12:00:00.000Z",
+        "sequence": 0,
+        "tick": 0
+      },
+      "id": "event-structure",
+      "payload": {
+        "factory": {
+          "workers": [
+            {
+              "name": "reviewer",
+              "type": "MODEL_WORKER"
+            }
+          ],
+          "workTypes": [
+            {
+              "name": "task",
+              "states": [
+                { "name": "init", "type": "INITIAL" },
+                { "name": "review", "type": "PROCESSING" }
+              ]
+            }
+          ],
+          "workstations": [
+            {
+              "id": "t-review",
+              "inputs": [{ "state": "init", "workType": "task" }],
+              "name": "Review",
+              "outputs": [{ "state": "review", "workType": "task" }],
+              "worker": "reviewer"
+            }
+          ]
+        }
+      },
+      "type": "INITIAL_STRUCTURE_REQUEST"
+    },
+    {
+      "context": {
+        "eventTime": "2026-06-01T12:00:00.000Z",
+        "requestId": "request/work-1",
+        "sequence": 1,
+        "tick": 1,
+        "traceIds": ["trace-work-1"],
+        "workIds": ["work-1"]
+      },
+      "id": "event-work-request-work-1",
+      "payload": {
+        "source": "external-submit",
+        "type": "FACTORY_REQUEST_BATCH",
+        "works": [
+          {
+            "content": [{ "text": "Fix the login bug", "type": "text" }],
+            "name": "Fix login",
+            "traceId": "trace-work-1",
+            "workId": "work-1",
+            "workTypeName": "task"
+          }
+        ]
+      },
+      "type": "WORK_REQUEST"
+    }
+  ],
+  "expected": {
+    "selectedByWorkId": {
+      "work-1": {
+        "content": [{ "text": "Fix the login bug", "type": "text" }],
+        "lineage_continuity": "INITIAL_SUBMISSION",
+        "lineage_source_kind": "WORK_REQUEST",
+        "payload_status": "RESOLVED",
+        "work_id": "work-1"
+      }
+    },
+    "placeOccupancyByWorkId": {
+      "work-1": {
+        "content": [{ "text": "Fix the login bug", "type": "text" }],
+        "payload_status": "RESOLVED",
+        "work_id": "work-1"
+      }
+    }
+  }
+}

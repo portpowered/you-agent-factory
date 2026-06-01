@@ -13,7 +13,7 @@ import { projectRuntimeWorkstationRequests } from "./projectWorkstationRequests"
 import { uniqueSorted } from "./shared";
 import { isSystemTimePlace, isSystemTimeWorkItem } from "./systemTime";
 import type { ReplayWorldState, WorldDispatch } from "./types";
-import { workRef } from "./workItemRef";
+import { workItemRefsForIDs } from "./workItemRef";
 
 export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
   const activeDispatches = Object.values(state.activeDispatches);
@@ -23,7 +23,7 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
   const activeExecutions = Object.fromEntries(
     customerActiveDispatches.map((dispatch) => [
       dispatch.dispatchID,
-      projectActiveExecution(dispatch),
+      projectActiveExecution(state, dispatch),
     ]),
   );
   const activeDispatchIDs = Object.keys(activeExecutions).sort();
@@ -48,8 +48,10 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
       activeDispatches: customerActiveDispatches,
       attemptsByDispatchID: state.inferenceAttemptsByDispatchID,
       completedDispatches: customerCompletedDispatches,
+      payloadLineage: state.payloadLineage,
       scriptRequestsByDispatchID: state.scriptRequestsByDispatchID,
       scriptResponsesByDispatchID: state.scriptResponsesByDispatchID,
+      workItemsByID: state.workItemsByID,
     }),
     work_move_operations_by_work_id: projectWorkMoveOperationsByWorkID(
       state.workStateChangesByWorkID,
@@ -80,7 +82,7 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
         Object.values(state.workItemsByID).some((item) => !isSystemTimeWorkItem(item)),
       provider_sessions: cloneProviderSessionAttempts(state.providerSessions),
     },
-    workstation_activity_by_node_id: projectActivity(customerActiveDispatches),
+    workstation_activity_by_node_id: projectActivity(state, customerActiveDispatches),
   };
 }
 
@@ -96,12 +98,17 @@ function projectCurrentWorkItemsByPlaceID(state: ReplayWorldState): DashboardRun
     .sort((left, right) => left.id.localeCompare(right.id))
     .map((place) => {
       const occupancy = state.occupancyByID[place.id];
-      const workItems = uniqueSorted(occupancy?.workItemIDs ?? [])
-        .map((workID) => state.workItemsByID[workID])
-        .filter((item): item is FactoryWorkItem => item !== undefined)
-        .filter((item) => state.failedWorkItemsByID[item.id] === undefined)
-        .filter((item) => state.terminalWorkByID[item.id] === undefined)
-        .map(workRef);
+      const workItemIDs = uniqueSorted(occupancy?.workItemIDs ?? []).filter(
+        (workID) =>
+          state.workItemsByID[workID] !== undefined &&
+          state.failedWorkItemsByID[workID] === undefined &&
+          state.terminalWorkByID[workID] === undefined,
+      );
+      const workItems = workItemRefsForIDs(
+        state.payloadLineage,
+        workItemIDs,
+        state.workItemsByID,
+      );
       return [place.id, workItems] as const;
     });
   return Object.fromEntries(entries);
@@ -114,18 +121,28 @@ function projectOccupancyWorkItemsByPlaceID(
     .sort((left, right) => left.id.localeCompare(right.id))
     .map((place) => {
       const occupancy = state.occupancyByID[place.id];
-      const workItems = uniqueSorted(occupancy?.workItemIDs ?? [])
-        .map((workID) => state.workItemsByID[workID])
-        .filter((item): item is FactoryWorkItem => item !== undefined)
-        .map(workRef);
+      const workItems = workItemRefsForIDs(
+        state.payloadLineage,
+        uniqueSorted(occupancy?.workItemIDs ?? []).filter(
+          (workID) => state.workItemsByID[workID] !== undefined,
+        ),
+        state.workItemsByID,
+      );
       return [place.id, workItems] as const;
     });
   return Object.fromEntries(entries);
 }
 
 function projectActiveExecution(
+  state: ReplayWorldState,
   dispatch: WorldDispatch,
 ): NonNullable<DashboardRuntime["active_executions_by_dispatch_id"]>[string] {
+  const workItemIDs = uniqueSorted([
+    ...dispatch.workItems.map((item) => item.work_id),
+    ...dispatch.consumedTokens
+      .map((token) => token.work_id)
+      .filter((workID): workID is string => Boolean(workID)),
+  ]);
   return {
     consumed_tokens: dispatch.consumedTokens,
     dispatch_id: dispatch.dispatchID,
@@ -135,7 +152,11 @@ function projectActiveExecution(
     started_at: dispatch.startedAt,
     trace_ids: [...dispatch.traceIDs],
     transition_id: dispatch.transitionID,
-    work_items: dispatch.workItems.map(cloneWorkItemRef),
+    work_items: workItemRefsForIDs(
+      state.payloadLineage,
+      workItemIDs,
+      state.workItemsByID,
+    ).map(cloneWorkItemRef),
     work_type_ids: uniqueSorted(
       dispatch.workItems.map((item) => item.work_type_id ?? ""),
     ),
@@ -145,18 +166,31 @@ function projectActiveExecution(
 }
 
 function projectActivity(
+  state: ReplayWorldState,
   activeDispatches: WorldDispatch[],
 ): DashboardRuntime["workstation_activity_by_node_id"] {
   return Object.fromEntries(
-    activeDispatches.map((dispatch) => [
-      dispatch.transitionID,
-      {
-        active_dispatch_ids: [dispatch.dispatchID],
-        active_work_items: dispatch.workItems.map(cloneWorkItemRef),
-        trace_ids: [...dispatch.traceIDs],
-        workstation_node_id: dispatch.transitionID,
-      },
-    ]),
+    activeDispatches.map((dispatch) => {
+      const workItemIDs = uniqueSorted([
+        ...dispatch.workItems.map((item) => item.work_id),
+        ...dispatch.consumedTokens
+          .map((token) => token.work_id)
+          .filter((workID): workID is string => Boolean(workID)),
+      ]);
+      return [
+        dispatch.transitionID,
+        {
+          active_dispatch_ids: [dispatch.dispatchID],
+          active_work_items: workItemRefsForIDs(
+            state.payloadLineage,
+            workItemIDs,
+            state.workItemsByID,
+          ).map(cloneWorkItemRef),
+          trace_ids: [...dispatch.traceIDs],
+          workstation_node_id: dispatch.transitionID,
+        },
+      ];
+    }),
   );
 }
 

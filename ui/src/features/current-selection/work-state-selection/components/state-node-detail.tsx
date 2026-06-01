@@ -1,27 +1,27 @@
 import {
-  formatLocalDateTime,
-  formatWorkItemLabel,
-} from "../../../../components/ui/formatters";
-import { formatDashboardPlaceLabel } from "../../../../components/ui/place-labels";
-import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
 import {
+  formatLocalDateTime,
+  formatWorkItemLabel,
+} from "../../../../components/ui/formatters";
+import { formatDashboardPlaceLabel } from "../../../../components/ui/place-labels";
+import {
   DETAIL_COPY_CLASS,
   WIDGET_SUBTITLE_CLASS,
 } from "../../../../components/ui/widget-frame";
-import {
-  emptyStatePlaceMessage,
-  isTerminalOrFailedPlace,
-} from "../../base/components/detail-card-shared";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
 } from "../../base/components/current-selection-locale";
+import {
+  emptyStatePlaceMessage,
+  isTerminalOrFailedPlace,
+} from "../../base/components/detail-card-shared";
 import type {
   StateNodeDetailCardProps,
   StatePositionWorkListItemProps,
@@ -29,7 +29,6 @@ import type {
 } from "../lib/detail-card-types";
 import { getWorkStateDetailMessages } from "../messages/work-state-detail";
 import { WorkStateEditableConfigurationSection } from "./work-state-editable-configuration-section";
-import { WorkStateTopologyDeleteSection } from "./work-state-topology-delete-section";
 
 export function StateNodeDetailCard({
   currentWorkItems,
@@ -51,8 +50,6 @@ export function StateNodeDetailCard({
     : currentWorkItems;
   const messages = useCurrentSelectionDetailMessages();
   const workStateMessages = getWorkStateDetailMessages(locale);
-  const workTypeName = place.type_id?.trim() ?? "";
-  const stateName = place.state_value?.trim() ?? "";
   const summaryLabel = formatStateSelectionSummary(
     place.type_id,
     place.state_value,
@@ -71,14 +68,6 @@ export function StateNodeDetailCard({
           messages={workStateMessages}
           saveState={saveState}
           state={editableConfigurationState}
-        />
-      ) : null}
-      {workTypeName && stateName ? (
-        <WorkStateTopologyDeleteSection
-          messages={workStateMessages}
-          placeId={place.place_id}
-          stateName={stateName}
-          workTypeName={workTypeName}
         />
       ) : null}
       <dl>
@@ -149,7 +138,9 @@ function StatePositionWorkListItem({
     <>
       <strong className="min-w-0 [overflow-wrap:anywhere]">{workLabel}</strong>
       {workID ? (
-        <code className={`${DASHBOARD_BODY_CODE_CLASS} ${DASHBOARD_SUPPORTING_TEXT_CLASS}`}>
+        <code
+          className={`${DASHBOARD_BODY_CODE_CLASS} ${DASHBOARD_SUPPORTING_TEXT_CLASS}`}
+        >
           {workID}
         </code>
       ) : null}
@@ -160,7 +151,11 @@ function StatePositionWorkListItem({
           title={startedAt}
         >
           {messages.startedAtLabel}{" "}
-          {formatLocalDateTime(startedAt, messages.timestampUnavailable, locale)}
+          {formatLocalDateTime(
+            startedAt,
+            messages.timestampUnavailable,
+            locale,
+          )}
         </time>
       ) : null}
       {hasFailureReason || hasFailureMessage ? (
@@ -210,7 +205,10 @@ function StatePositionWorkListItem({
   );
 }
 
-function formatStateSelectionSummary(workType?: string, stateValue?: string): string {
+function formatStateSelectionSummary(
+  workType?: string,
+  stateValue?: string,
+): string {
   if (workType && stateValue) {
     return `${workType}: ${stateValue}`;
   }

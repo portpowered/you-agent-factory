@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { projectRuntime } from "./projectRuntime";
 import type { ReplayWorldState } from "./types";
 import { emptyWorldRuntime } from "./types";
+import { emptyWorkPayloadLineageProjection } from "./workPayloadLineage";
 
 function buildReplayWorldState(): ReplayWorldState {
   return {
@@ -32,6 +33,7 @@ function buildReplayWorldState(): ReplayWorldState {
       },
     },
     inferenceAttemptsByDispatchID: {},
+    payloadLineage: emptyWorkPayloadLineageProjection(),
     occupancyByID: {
       "plan:failed": {
         placeID: "plan:failed",

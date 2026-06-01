@@ -345,8 +345,8 @@ describe("EditableConfigurationSection model workstation fields", () => {
 });
 
 describe("EditableConfigurationSection model workstation save feedback", () => {
-  it("shows validation alert and omits inline save success feedback", () => {
-    const { rerender } = render(
+  it("shows validation alert for blocking field errors", () => {
+    render(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
@@ -358,27 +358,49 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     );
 
     expandConfiguration();
-    const configurationSection = screen.getByRole("region", {
-      name: messages.editableConfigurationHeading,
-    });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       messages.editableConfigurationValidationStatus,
+    );
+  });
+
+  it("does not render inline save outcome copy in the configuration section", () => {
+    const { container, rerender } = render(
+      <EditableConfigurationSection
+        messages={messages}
+        onSaveConfiguration={() => undefined}
+        saveState={{
+          status: "success",
+          message: messages.editableConfigurationSaveSuccess,
+        }}
+        state={buildReadyState({ isDirty: false })}
+      />,
+    );
+
+    expandConfiguration();
+
+    expectNoInlineSaveOutcomesIn(
+      container.querySelector("section") as HTMLElement,
     );
 
     rerender(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
-        saveState={{ status: "success" }}
-        state={buildReadyState({ isDirty: false })}
+        saveState={{
+          errorMessage: "The current factory rejected the workstation update.",
+          status: "error",
+        }}
+        state={buildReadyState({ isDirty: true })}
       />,
     );
 
-    expectNoInlineSaveOutcomesIn(configurationSection);
+    expectNoInlineSaveOutcomesIn(
+      container.querySelector("section") as HTMLElement,
+    );
   });
 
-  it("treats prompt-only validation as status instead of alert", () => {
+  it("omits global validation alert when only prompt diagnostics block save", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
@@ -395,13 +417,10 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
 
     expandConfiguration();
 
-    const draftStatus = screen.getByText(
-      messages.editableConfigurationDirtyStatus,
-    );
-    expect(draftStatus).toHaveAttribute("role", "status");
     expect(
       screen.queryByText(messages.editableConfigurationValidationStatus),
     ).not.toBeInTheDocument();
+    expect(screen.getByText("Resolve prompt diagnostics.")).toBeInTheDocument();
   });
 
   it("disables footer save and reset while submitting", () => {

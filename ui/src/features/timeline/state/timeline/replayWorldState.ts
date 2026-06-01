@@ -1,7 +1,4 @@
-import type {
-  FactoryEvent,
-  FactoryRelation,
-} from "../../../../api/events";
+import type { FactoryEvent, FactoryRelation } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import {
   completionToProviderSession,
@@ -36,13 +33,19 @@ import {
   traceToken,
 } from "./replayGraphState";
 import {
+  dispatchInputWorkItems,
+  recordDispatchConsumedInputPayloadLineage,
+  recordDispatchOutputPayloadLineage,
+  recordWorkRequestPayloadLineage,
+} from "./replayWorldStatePayloadLineage";
+import {
   applyScriptRequest,
   applyScriptResponse,
+  emptyReplayWorldState,
   inferenceAttemptsForDispatch,
   resolveDispatchTransitionID,
   syncCompletedDispatchAttempt,
 } from "./replayWorldStateSupport";
-import { applyWorkStateChange } from "./replayWorldStateWorkStateChange";
 import type {
   DispatchRequestEvent,
   DispatchResponseEvent,
@@ -58,37 +61,11 @@ import type {
   WorkRequestEvent,
   WorkStateChangeEvent,
 } from "./replayWorldStateTypes";
+import { applyWorkStateChange } from "./replayWorldStateWorkStateChange";
 import { orderedEvents, uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
-import { emptyWorldRuntime, type ReplayWorldState } from "./types";
+import type { ReplayWorldState } from "./types";
 import { workRef } from "./workItemRef";
-
-function emptyWorldState(tick: number): ReplayWorldState {
-  return {
-    activeDispatches: {},
-    completedDispatches: [],
-    factory_state: "UNKNOWN",
-    failedWorkDetailsByWorkID: {},
-    failedWorkItemsByID: {},
-    inferenceAttemptsByDispatchID: {},
-    occupancyByID: {},
-    providerSessions: [],
-    relationsByWorkID: {},
-    runtime: emptyWorldRuntime(),
-    scriptRequestsByDispatchID: {},
-    scriptResponsesByDispatchID: {},
-    terminalWorkByID: {},
-    tick_count: tick,
-    topology: {},
-    tracesByID: {},
-    tracesByWorkID: {},
-    uptime_seconds: 0,
-    workItemsByID: {},
-    workStateChangesByWorkID: {},
-    workstationRequestsByDispatchID: {},
-    workRequestsByID: {},
-  };
-}
 
 function seedResourceOccupancy(state: ReplayWorldState): void {
   seedResourceOccupancyBase(state, addToken, resourceTokenID);
@@ -106,7 +83,7 @@ export function reconstructWorldState(
   events: FactoryEvent[],
   selectedTick: number,
 ): ReplayWorldState {
-  const state = emptyWorldState(selectedTick);
+  const state = emptyReplayWorldState(selectedTick);
   for (const event of orderedEvents(events)) {
     if (event.context.tick <= selectedTick) {
       applyEvent(state, event);
@@ -200,6 +177,12 @@ function applyWorkRequest(
     type: event.payload.type,
     work_items: workItems,
   };
+  recordWorkRequestPayloadLineage(
+    state,
+    event.context.tick,
+    requestID,
+    workItems,
+  );
   for (const item of workItems) {
     state.workItemsByID[item.id] = item;
     if (isSystemTimeWorkItem(item)) {
@@ -256,6 +239,7 @@ function applyRequest(
   const workItems = (legacyPayload.inputs ?? event.payload.inputs).map((work) =>
     factoryWorkToItem(state, work),
   );
+  recordDispatchConsumedInputPayloadLineage(state, dispatchID, workItems);
   for (const item of workItems) {
     removeWorkToken(state, item.id);
     state.workItemsByID[item.id] = item;
@@ -392,6 +376,7 @@ function applyResponse(
   }
 
   const active = state.activeDispatches[dispatchID];
+  const consumedInputWorkItems = dispatchInputWorkItems(state, active);
   delete state.activeDispatches[dispatchID];
   releaseResourceUnits(
     state,
@@ -410,6 +395,13 @@ function applyResponse(
         factoryWorkStateName(work) ?? "",
       ),
     ),
+  );
+  recordDispatchOutputPayloadLineage(
+    state,
+    event.context.tick,
+    dispatchID,
+    consumedInputWorkItems,
+    outputItems,
   );
   for (const item of outputItems) {
     state.workItemsByID[item.id] = item;
