@@ -79,6 +79,4 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#PANEL_HEADER_CLASS",
   "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#PANEL_TITLE_CLASS",
   "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#COLLAPSE_BUTTON_CLASS",
-  "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_CARD_CLASS",
-  "src/features/workflow-activity/components/react-flow-current-activity-card.tsx#CURRENT_ACTIVITY_TITLE_CLASS",
 ];
