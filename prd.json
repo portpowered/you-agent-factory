@@ -47,7 +47,7 @@
         "Verify in browser: select a workstation, dirty a field, confirm header save/discard only in Configuration"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -64,7 +64,7 @@
         "Verify in browser: select a worker, dirty configuration, confirm header icons only"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
