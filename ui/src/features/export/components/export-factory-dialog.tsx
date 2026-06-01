@@ -25,17 +25,6 @@ import { writeFactoryExportPng } from "../lib/factory-png-export";
 import { getExportDialogMessages } from "../messages/export-dialog";
 import { ExportFactoryDialogImageField } from "./export-factory-dialog-image-field";
 
-const DIALOG_FORM_CLASS = "space-y-5";
-const DIALOG_FIELD_GROUP_CLASS = "space-y-2";
-const DIALOG_FIELD_LABEL_CLASS = cn(
-  "block text-sm font-semibold text-af-text",
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-);
-const DIALOG_FIELD_DESCRIPTION_CLASS = cn(
-  "m-0",
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
-const DIALOG_VALIDATION_CLASS = "m-0 text-sm font-medium text-af-danger-text";
 const DIALOG_ERROR_PANEL_CLASS =
   "rounded-2xl border border-af-danger-border bg-af-danger-surface px-4 py-3 text-sm text-af-danger-text";
 const DIALOG_SUCCESS_PANEL_CLASS =
@@ -169,10 +158,13 @@ function ExportFactoryDialogForm({
   messages: ReturnType<typeof getExportDialogMessages>;
 }) {
   return (
-    <div className={DIALOG_FORM_CLASS}>
-      <div className={DIALOG_FIELD_GROUP_CLASS}>
+    <div className="space-y-5">
+      <div className="space-y-2">
         <label
-          className={DIALOG_FIELD_LABEL_CLASS}
+          className={cn(
+            "block text-sm font-semibold text-af-text",
+            DASHBOARD_SUPPORTING_LABELS_CLASS,
+          )}
           htmlFor="export-factory-name"
         >
           {messages.nameLabel}
@@ -201,12 +193,12 @@ function ExportFactoryDialogForm({
           type="text"
           value={formState.exportName}
         />
-        <p className={DIALOG_FIELD_DESCRIPTION_CLASS}>
+        <p className={cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
           {messages.nameDescription}
         </p>
         {formState.nameValidationMessage ? (
           <p
-            className={DIALOG_VALIDATION_CLASS}
+            className="m-0 text-sm font-medium text-af-danger-text"
             id={formState.nameValidationId}
           >
             {formState.nameValidationMessage}
