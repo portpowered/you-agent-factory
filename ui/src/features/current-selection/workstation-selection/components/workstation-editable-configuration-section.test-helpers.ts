@@ -1,0 +1,140 @@
+import { fireEvent, screen } from "@testing-library/react";
+import { vi } from "vitest";
+
+import type { FactoryDefinition } from "../../../../api/factory-definition/api";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
+
+export const editableConfigurationSectionMessages =
+  getWorkstationDetailMessages();
+
+export function expandEditableConfigurationSection() {
+  fireEvent.click(
+    screen.getByRole("button", { name: "Expand editable configuration" }),
+  );
+}
+
+export function buildEditableConfigurationSectionReadyState(
+  overrides?: Partial<{
+    draft: {
+      behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
+      cron?: {
+        expiryWindow: string;
+        jitter: string;
+        schedule: string;
+        triggerAtStart: boolean;
+      } | null;
+      guards: Array<{
+        type: "VISIT_COUNT";
+        workstation: string;
+        maxVisits: number;
+      }>;
+      prompt?: string;
+      runnerName?: string;
+    };
+    hasValidationErrors: boolean;
+    initialValues: Partial<{
+      sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
+    }>;
+    isDirty: boolean;
+    pendingFactoryDefinition: FactoryDefinition | null;
+    promptDiagnostics: Array<{ message: string; severity: "error" }>;
+    validationErrors: Record<string, string | undefined>;
+    workerOptionsState:
+      | { status: "ready"; options: string[] }
+      | { message: string; status: "empty" | "error" };
+    overwriteFieldNames: Array<"worker" | "prompt" | "behavior" | "runner">;
+    workstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
+  }>,
+) {
+  const behavior = overrides?.draft?.behavior ?? ("STANDARD" as const);
+  const cron =
+    overrides?.draft?.cron !== undefined
+      ? overrides.draft.cron
+      : behavior === "CRON"
+        ? {
+            expiryWindow: "30m",
+            jitter: "5s",
+            schedule: "0 9 * * *",
+            triggerAtStart: true,
+          }
+        : null;
+
+  return {
+    draft: {
+      behavior,
+      cron,
+      guards: overrides?.draft?.guards ?? [],
+      inputs: [],
+      prompt: overrides?.draft?.prompt ?? "Review prompt",
+      runnerName: overrides?.draft?.runnerName ?? "gemini",
+      workerName: "reviewer",
+    },
+    hasValidationErrors: overrides?.hasValidationErrors ?? false,
+    initialValues: {
+      behavior: "STANDARD" as const,
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"] as const,
+      effectiveRunnerName: "gemini",
+      factoryRunnerName: "codex",
+      guards: [],
+      inputs: [],
+      prompt: "Review prompt",
+      resolvedRunnerSelection: {
+        runnerId: "gemini",
+        source: "workstation" as const,
+      },
+      runnerName: "gemini",
+      runnerOptions: ["codex", "gemini"],
+      runnerSelectionSource: "workstation" as const,
+      sharedWorkerWorkstationNames: [],
+      sharedWorkerWorkstationNamesByWorkerName:
+        overrides?.initialValues?.sharedWorkerWorkstationNamesByWorkerName ??
+        {},
+      workerModelProvider: null,
+      workerName: "reviewer",
+      workerOptions: ["reviewer", "planner"],
+      workerTypeByName: {
+        planner: "MODEL_WORKER" as const,
+        reviewer: "MODEL_WORKER" as const,
+      },
+      workstationName: "Review",
+      workstationOptions: ["Plan", "Review"],
+      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
+    },
+    isDirty: overrides?.isDirty ?? false,
+    markChangesSaved: vi.fn(),
+    baseVersion: { logical: "1", physical: "2026-06-01T00:00:00Z" },
+    onBehaviorChange: vi.fn(),
+    onCronExpiryWindowChange: vi.fn(),
+    onCronJitterChange: vi.fn(),
+    onCronScheduleChange: vi.fn(),
+    onCronTriggerAtStartChange: vi.fn(),
+    onGuardsChange: vi.fn(),
+    onInputsChange: vi.fn(),
+    onPromptChange: vi.fn(),
+    onResetToLatest: vi.fn(),
+    onRunnerChange: vi.fn(),
+    onWorkerChange: vi.fn(),
+    overwriteFieldNames: overrides?.overwriteFieldNames ?? [],
+    pendingFactoryDefinition:
+      overrides?.pendingFactoryDefinition === undefined
+        ? ({ workstations: [] } as unknown as FactoryDefinition)
+        : overrides.pendingFactoryDefinition,
+    promptDiagnostics: overrides?.promptDiagnostics ?? [],
+    promptHelpState: { status: "empty" as const, message: "" },
+    promptValidationState: {
+      diagnostics: [],
+      result: { diagnostics: [], valid: true },
+      status: "ready" as const,
+    },
+    status: "ready" as const,
+    validationErrors: overrides?.validationErrors ?? {},
+    workerOptionsState: overrides?.workerOptionsState ?? {
+      options: ["reviewer", "planner"],
+      status: "ready" as const,
+    },
+    workstationOptionsState: {
+      options: ["Plan", "Review"],
+      status: "ready" as const,
+    },
+  };
+}

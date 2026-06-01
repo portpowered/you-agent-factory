@@ -1,146 +1,17 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { FactoryDefinition } from "../../../../api/factory-definition/api";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
-import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
+import {
+  buildEditableConfigurationSectionReadyState,
+  editableConfigurationSectionMessages,
+  expandEditableConfigurationSection,
+} from "./workstation-editable-configuration-section.test-helpers";
 
-const messages = getWorkstationDetailMessages();
-
-function expandConfiguration() {
-  fireEvent.click(
-    screen.getByRole("button", { name: "Expand editable configuration" }),
-  );
-}
-
-function buildReadyState(
-  overrides?: Partial<{
-    draft: {
-      behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
-      cron?: {
-        expiryWindow: string;
-        jitter: string;
-        schedule: string;
-        triggerAtStart: boolean;
-      } | null;
-      guards: Array<{
-        type: "VISIT_COUNT";
-        workstation: string;
-        maxVisits: number;
-      }>;
-      prompt?: string;
-      runnerName?: string;
-    };
-    hasValidationErrors: boolean;
-    initialValues: Partial<{
-      sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
-    }>;
-    isDirty: boolean;
-    pendingFactoryDefinition: FactoryDefinition | null;
-    promptDiagnostics: Array<{ message: string; severity: "error" }>;
-    validationErrors: Record<string, string | undefined>;
-    workerOptionsState:
-      | { status: "ready"; options: string[] }
-      | { message: string; status: "empty" | "error" };
-    overwriteFieldNames: Array<"worker" | "prompt" | "behavior" | "runner">;
-    workstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
-  }>,
-) {
-  const behavior = overrides?.draft?.behavior ?? ("STANDARD" as const);
-  const cron =
-    overrides?.draft?.cron !== undefined
-      ? overrides.draft.cron
-      : behavior === "CRON"
-        ? {
-            expiryWindow: "30m",
-            jitter: "5s",
-            schedule: "0 9 * * *",
-            triggerAtStart: true,
-          }
-        : null;
-
-  return {
-    draft: {
-      behavior,
-      cron,
-      guards: overrides?.draft?.guards ?? [],
-      inputs: [],
-      prompt: overrides?.draft?.prompt ?? "Review prompt",
-      runnerName: overrides?.draft?.runnerName ?? "gemini",
-      workerName: "reviewer",
-    },
-    hasValidationErrors: overrides?.hasValidationErrors ?? false,
-    initialValues: {
-      behavior: "STANDARD" as const,
-      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"] as const,
-      effectiveRunnerName: "gemini",
-      factoryRunnerName: "codex",
-      guards: [],
-      inputs: [],
-      prompt: "Review prompt",
-      resolvedRunnerSelection: {
-        runnerId: "gemini",
-        source: "workstation" as const,
-      },
-      runnerName: "gemini",
-      runnerOptions: ["codex", "gemini"],
-      runnerSelectionSource: "workstation" as const,
-      sharedWorkerWorkstationNames: [],
-      sharedWorkerWorkstationNamesByWorkerName:
-        overrides?.initialValues?.sharedWorkerWorkstationNamesByWorkerName ??
-        {},
-      workerModelProvider: null,
-      workerName: "reviewer",
-      workerOptions: ["reviewer", "planner"],
-      workerTypeByName: {
-        planner: "MODEL_WORKER" as const,
-        reviewer: "MODEL_WORKER" as const,
-      },
-      workstationName: "Review",
-      workstationOptions: ["Plan", "Review"],
-      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
-    },
-    isDirty: overrides?.isDirty ?? false,
-    markChangesSaved: vi.fn(),
-    baseVersion: { logical: "1", physical: "2026-06-01T00:00:00Z" },
-    onBehaviorChange: vi.fn(),
-    onCronExpiryWindowChange: vi.fn(),
-    onCronJitterChange: vi.fn(),
-    onCronScheduleChange: vi.fn(),
-    onCronTriggerAtStartChange: vi.fn(),
-    onGuardsChange: vi.fn(),
-    onInputsChange: vi.fn(),
-    onPromptChange: vi.fn(),
-    onResetToLatest: vi.fn(),
-    onRunnerChange: vi.fn(),
-    onWorkerChange: vi.fn(),
-    overwriteFieldNames: overrides?.overwriteFieldNames ?? [],
-    pendingFactoryDefinition:
-      overrides?.pendingFactoryDefinition === undefined
-        ? ({ workstations: [] } as unknown as FactoryDefinition)
-        : overrides.pendingFactoryDefinition,
-    promptDiagnostics: overrides?.promptDiagnostics ?? [],
-    promptHelpState: { status: "empty" as const, message: "No prompt help." },
-    promptValidationState: {
-      diagnostics: [],
-      result: { diagnostics: [], valid: true },
-      status: "ready" as const,
-    },
-    status: "ready" as const,
-    validationErrors: overrides?.validationErrors ?? {},
-    workerOptionsState: overrides?.workerOptionsState ?? {
-      options: ["reviewer", "planner"],
-      status: "ready" as const,
-    },
-    workstationOptionsState: {
-      options: ["Plan", "Review"],
-      status: "ready" as const,
-    },
-  };
-}
+const messages = editableConfigurationSectionMessages;
 
 describe("EditableConfigurationSection async states", () => {
   it("shows loading, error, and empty copy when expanded", () => {
@@ -151,7 +22,7 @@ describe("EditableConfigurationSection async states", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(
       screen.getByText(
         "Loading the current factory definition for this workstation.",
@@ -189,13 +60,13 @@ describe("EditableConfigurationSection footer save controls", () => {
         messages={messages}
         onSaveConfiguration={onSaveConfiguration}
         state={{
-          ...buildReadyState({ isDirty: true }),
+          ...buildEditableConfigurationSectionReadyState({ isDirty: true }),
           onResetToLatest,
         }}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     const saveButton = screen.getByRole("button", { name: "Save changes" });
     expect(saveButton).toBeEnabled();
@@ -212,21 +83,21 @@ describe("EditableConfigurationSection footer save controls", () => {
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           hasValidationErrors: true,
           isDirty: true,
         })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
 
     rerender(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
-        state={buildReadyState({ isDirty: false })}
+        state={buildEditableConfigurationSectionReadyState({ isDirty: false })}
       />,
     );
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
@@ -238,7 +109,7 @@ describe("EditableConfigurationSection worker options", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           workerOptionsState: {
             message: "No workers are configured in this factory.",
             status: "empty",
@@ -247,7 +118,7 @@ describe("EditableConfigurationSection worker options", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(
       screen.getByText("No workers are configured in this factory."),
     ).toBeInTheDocument();
@@ -257,7 +128,7 @@ describe("EditableConfigurationSection worker options", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           workerOptionsState: {
             message: "Worker list failed to load.",
             status: "error",
@@ -266,7 +137,7 @@ describe("EditableConfigurationSection worker options", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Worker selection unavailable. Worker list failed to load.",
     );
@@ -276,11 +147,11 @@ describe("EditableConfigurationSection worker options", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState()}
+        state={buildEditableConfigurationSectionReadyState()}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(screen.getByLabelText("Worker")).toHaveValue("reviewer");
   });
 });
@@ -290,13 +161,13 @@ describe("EditableConfigurationSection logical move workstations", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           workstationType: "LOGICAL_MOVE",
         })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(screen.queryByLabelText("Worker")).not.toBeInTheDocument();
     expect(screen.getByText("Workstation guards")).toBeInTheDocument();
@@ -313,13 +184,13 @@ describe("EditableConfigurationSection model workstation fields", () => {
       <EditableConfigurationSection
         messages={messages}
         state={{
-          ...buildReadyState(),
+          ...buildEditableConfigurationSectionReadyState(),
           onBehaviorChange,
         }}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(screen.getByLabelText("Kind")).toHaveValue("STANDARD");
     expect(screen.getByLabelText("Runner")).toBeInTheDocument();
@@ -333,7 +204,7 @@ describe("EditableConfigurationSection model workstation fields", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           initialValues: {
             sharedWorkerWorkstationNamesByWorkerName: {
               reviewer: ["Plan"],
@@ -343,64 +214,24 @@ describe("EditableConfigurationSection model workstation fields", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(
       screen.getByText(/Worker reviewer is also used by Plan/i),
     ).toBeInTheDocument();
   });
 
-  it("renders cron fields for CRON workstations and wires cron mutators", async () => {
-    const user = userEvent.setup();
-    const onCronScheduleChange = vi.fn();
-    const onCronTriggerAtStartChange = vi.fn();
-
-    render(
-      <EditableConfigurationSection
-        messages={messages}
-        state={{
-          ...buildReadyState({
-            draft: { behavior: "CRON" },
-          }),
-          onCronScheduleChange,
-          onCronTriggerAtStartChange,
-        }}
-      />,
-    );
-
-    expandConfiguration();
-
-    expect(screen.getByLabelText(messages.cronScheduleFieldLabel)).toHaveValue(
-      "0 9 * * *",
-    );
-    expect(
-      screen.getByLabelText(messages.cronTriggerAtStartFieldLabel),
-    ).toBeChecked();
-
-    await user.clear(screen.getByLabelText(messages.cronScheduleFieldLabel));
-    await user.type(
-      screen.getByLabelText(messages.cronScheduleFieldLabel),
-      "0 8 * * *",
-    );
-    expect(onCronScheduleChange).toHaveBeenCalled();
-
-    await user.click(
-      screen.getByLabelText(messages.cronTriggerAtStartFieldLabel),
-    );
-    expect(onCronTriggerAtStartChange).toHaveBeenCalledWith(false);
-  });
-
   it("shows server-changed hints for overwritten worker, kind, runner, and prompt fields", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           overwriteFieldNames: ["worker", "behavior", "runner", "prompt"],
         })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(
       screen.getAllByText(messages.editableConfigurationServerFieldChangedHint),
@@ -414,38 +245,18 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           hasValidationErrors: true,
           validationErrors: { workerName: "Select a worker." },
         })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       messages.editableConfigurationValidationStatus,
     );
-  });
-
-  it("shows validation alert when cron field errors exist", () => {
-    render(
-      <EditableConfigurationSection
-        messages={messages}
-        state={buildReadyState({
-          draft: { behavior: "CRON" },
-          hasValidationErrors: true,
-          validationErrors: { cronSchedule: "Enter a cron schedule." },
-        })}
-      />,
-    );
-
-    expandConfiguration();
-
-    expect(
-      screen.getByText(messages.editableConfigurationValidationStatus),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Enter a cron schedule.")).toBeInTheDocument();
   });
 
   it("does not render inline save outcome copy in the configuration section", () => {
@@ -457,11 +268,13 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
           status: "success",
           message: messages.editableConfigurationSaveSuccess,
         }}
-        state={buildReadyState({ isDirty: false })}
+        state={buildEditableConfigurationSectionReadyState({
+          isDirty: false,
+        })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expectNoInlineSaveOutcomesIn(
       container.querySelector("section") as HTMLElement,
@@ -475,7 +288,7 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
           errorMessage: "The current factory rejected the workstation update.",
           status: "error",
         }}
-        state={buildReadyState({ isDirty: true })}
+        state={buildEditableConfigurationSectionReadyState({ isDirty: true })}
       />,
     );
 
@@ -488,7 +301,7 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           hasValidationErrors: true,
           isDirty: true,
           promptDiagnostics: [
@@ -499,7 +312,7 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(
       screen.queryByText(messages.editableConfigurationValidationStatus),
@@ -513,11 +326,11 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
         messages={messages}
         onSaveConfiguration={() => undefined}
         saveState={{ status: "submitting" }}
-        state={buildReadyState({ isDirty: true })}
+        state={buildEditableConfigurationSectionReadyState({ isDirty: true })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
     expect(
@@ -540,7 +353,7 @@ describe("EditableConfigurationSection overwrite and field errors", () => {
           status: "error",
           message: "Saving failed.",
         }}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           draft: {
             guards: [
               {
@@ -556,7 +369,7 @@ describe("EditableConfigurationSection overwrite and field errors", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(
       screen.getByText(/Saving now will overwrite newer server values/i),
