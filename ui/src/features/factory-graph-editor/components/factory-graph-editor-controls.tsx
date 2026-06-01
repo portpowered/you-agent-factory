@@ -50,11 +50,6 @@ export interface FactoryGraphEditorVisibilityPresetOption {
 
 const TOOLBAR_ACTIONS_CLASS =
   "flex items-center gap-2 border-l border-af-border pl-2 max-md:ml-auto";
-const MENU_LIST_CLASS = "grid gap-1";
-const MENU_ACTION_CLASS =
-  "min-h-0 w-full justify-start rounded-2xl border-transparent px-3 py-2 text-left [&>span]:grid [&>span]:w-full [&>span]:justify-items-start";
-const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-text";
-const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-text-muted";
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
   danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
@@ -336,11 +331,11 @@ function FactoryGraphEditorAddMenu({
             {messages.toolbarVisibilityMenuDescription}
           </p>
         </div>
-        <div className={MENU_LIST_CLASS}>
+        <div className="grid gap-1">
           {actions.map((action) => (
             <DashboardActionButton
               aria-label={action.label}
-              className={MENU_ACTION_CLASS}
+              className="min-h-0 w-full justify-start rounded-2xl border-transparent px-3 py-2 text-left [&>span]:grid [&>span]:w-full [&>span]:justify-items-start"
               disabled={action.disabled}
               key={action.id}
               onClick={() => {
@@ -350,9 +345,11 @@ function FactoryGraphEditorAddMenu({
               tone="ghost"
               type="button"
             >
-              <span className={MENU_ACTION_LABEL_CLASS}>{action.label}</span>
+              <span className="text-sm font-semibold text-af-text">
+                {action.label}
+              </span>
               {action.description ? (
-                <span className={MENU_ACTION_DESCRIPTION_CLASS}>
+                <span className="text-xs leading-5 text-af-text-muted">
                   {action.description}
                 </span>
               ) : null}
