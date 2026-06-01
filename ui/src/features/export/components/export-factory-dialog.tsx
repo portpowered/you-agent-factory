@@ -27,8 +27,6 @@ import { ExportFactoryDialogImageField } from "./export-factory-dialog-image-fie
 
 const DIALOG_ERROR_PANEL_CLASS =
   "rounded-2xl border border-af-danger-border bg-af-danger-surface px-4 py-3 text-sm text-af-danger-text";
-const DIALOG_SUCCESS_PANEL_CLASS =
-  "rounded-2xl border border-af-success-border bg-af-success-surface px-4 py-3 text-sm text-af-success-text";
 
 export interface ExportFactoryDialogProps {
   factory: ImportFactoryValue | null;
@@ -258,7 +256,7 @@ function ExportFactoryDialogMessages({
       {dialogState.status === "success" ? (
         <div
           aria-live="polite"
-          className={DIALOG_SUCCESS_PANEL_CLASS}
+          className="rounded-2xl border border-af-success-border bg-af-success-surface px-4 py-3 text-sm text-af-success-text"
           role="status"
         >
           {messages.successMessage(dialogState.filename)}
