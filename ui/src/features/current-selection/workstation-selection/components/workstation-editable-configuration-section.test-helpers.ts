@@ -1,8 +1,14 @@
 import { fireEvent, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
-import type { FactoryDefinition } from "../../../../api/factory-definition/api";
+import type { CanonicalFactoryDefinition } from "../../../../api/factory-definition/api";
+import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
+
+type EditableConfigurationSectionReadyState = Extract<
+  EditableWorkstationConfigurationState,
+  { status: "ready" }
+>;
 
 export const editableConfigurationSectionMessages =
   getWorkstationDetailMessages();
@@ -36,7 +42,7 @@ export function buildEditableConfigurationSectionReadyState(
       sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
     }>;
     isDirty: boolean;
-    pendingFactoryDefinition: FactoryDefinition | null;
+    pendingFactoryDefinition: CanonicalFactoryDefinition | null;
     promptDiagnostics: Array<{ message: string; severity: "error" }>;
     validationErrors: Record<string, string | undefined>;
     workerOptionsState:
@@ -45,7 +51,7 @@ export function buildEditableConfigurationSectionReadyState(
     overwriteFieldNames: Array<"worker" | "prompt" | "behavior" | "runner">;
     workstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
   }>,
-) {
+): EditableConfigurationSectionReadyState {
   const behavior = overrides?.draft?.behavior ?? ("STANDARD" as const);
   const cron =
     overrides?.draft?.cron !== undefined
@@ -66,13 +72,14 @@ export function buildEditableConfigurationSectionReadyState(
       guards: overrides?.draft?.guards ?? [],
       inputs: [],
       prompt: overrides?.draft?.prompt ?? "Review prompt",
-      runnerName: overrides?.draft?.runnerName ?? "gemini",
+      runnerName: overrides?.draft?.runnerName ?? ("gemini" as const),
       workerName: "reviewer",
     },
     hasValidationErrors: overrides?.hasValidationErrors ?? false,
     initialValues: {
       behavior: "STANDARD" as const,
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"] as const,
+      cron: null,
       effectiveRunnerName: "gemini",
       factoryRunnerName: "codex",
       guards: [],
@@ -117,7 +124,7 @@ export function buildEditableConfigurationSectionReadyState(
     overwriteFieldNames: overrides?.overwriteFieldNames ?? [],
     pendingFactoryDefinition:
       overrides?.pendingFactoryDefinition === undefined
-        ? ({ workstations: [] } as unknown as FactoryDefinition)
+        ? ({ workstations: [] } as unknown as CanonicalFactoryDefinition)
         : overrides.pendingFactoryDefinition,
     promptDiagnostics: overrides?.promptDiagnostics ?? [],
     promptHelpState: { status: "empty" as const, message: "" },
@@ -136,5 +143,5 @@ export function buildEditableConfigurationSectionReadyState(
       options: ["Plan", "Review"],
       status: "ready" as const,
     },
-  };
+  } as unknown as EditableConfigurationSectionReadyState;
 }
