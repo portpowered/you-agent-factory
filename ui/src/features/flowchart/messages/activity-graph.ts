@@ -9,6 +9,7 @@ import type { WorkstationSemanticKind } from "../lib/workstation-icon-metadata";
 export interface ActivityGraphMessages {
   activeBadgeLabel: string;
   activeItemCountLabel: (count: number) => string;
+  defaultWorkTypeLabel: string;
   graphSemanticIconLabel: (kind: GraphSemanticIconKind) => string;
   placeKindLabel: (place: DashboardPlaceRef) => string;
   placeSemanticIconLabel: (place: DashboardPlaceRef) => string;
@@ -89,6 +90,7 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
       activeBadgeLabel: "Active",
       activeItemCountLabel: (count) =>
         `${count} active ${count === 1 ? "item" : "items"}`,
+      defaultWorkTypeLabel: "Default work type",
       graphSemanticIconLabel: (kind) => {
         switch (kind) {
           case "active-work":
@@ -142,6 +144,7 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
     "zh-CN": {
       activeBadgeLabel: "活动",
       activeItemCountLabel: (count) => `${count} 个活动项`,
+      defaultWorkTypeLabel: "默认工作类型",
       graphSemanticIconLabel: (kind) => {
         switch (kind) {
           case "active-work":

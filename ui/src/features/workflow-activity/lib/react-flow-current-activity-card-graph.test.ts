@@ -440,6 +440,51 @@ describe("current activity graph editor handles", () => {
     });
   });
 
+  it("marks default work-type nodes from the canonical factory definition", async () => {
+    const factory = {
+      ...loadSampleFactoryDefinition(),
+      workTypes: [
+        {
+          handlingBehavior: ["DEFAULT"],
+          name: "task",
+          states: [{ name: "queued", type: "INITIAL" }],
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(nodes.find((node) => node.id === "work-type:task")?.data).toMatchObject(
+      {
+        isDefaultWorkType: true,
+        kind: "work-type",
+      },
+    );
+  });
+
   it("wires editor-mode work type nodes to onSelectWorkType instead of onSelectWorkstation", async () => {
     const factory = loadSampleFactoryDefinition();
     const snapshot = buildSampleFactorySnapshot(factory);

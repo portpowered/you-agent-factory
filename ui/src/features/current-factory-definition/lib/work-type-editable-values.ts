@@ -65,8 +65,7 @@ export function applyEditableWorkTypeDraft(
     draft,
   );
   const renamed = trimmedName !== workTypeName;
-
-  return {
+  const factoryWithDraftApplied: CanonicalFactoryDefinition = {
     ...factory,
     workTypes: factory.workTypes.map((workType, index) =>
       index === workTypeResolution.workTypeIndex ? nextWorkType : workType,
@@ -81,6 +80,15 @@ export function applyEditableWorkTypeDraft(
         )
       : factory.workstations,
   };
+
+  if (draft.handlingBehavior?.includes("DEFAULT")) {
+    return transferDefaultHandlingToWorkType(
+      factoryWithDraftApplied,
+      trimmedName,
+    );
+  }
+
+  return factoryWithDraftApplied;
 }
 
 function buildWorkTypeFromDraft(
@@ -175,6 +183,41 @@ function rewriteWorkstationIORoutes(
       ? { ...route, workType: nextWorkTypeName }
       : route,
   );
+}
+
+function transferDefaultHandlingToWorkType(
+  factory: CanonicalFactoryDefinition,
+  defaultWorkTypeName: string,
+): CanonicalFactoryDefinition {
+  return {
+    ...factory,
+    workTypes: (factory.workTypes ?? []).map((workType) =>
+      workType.name === defaultWorkTypeName
+        ? workType
+        : clearDefaultHandlingBehavior(workType),
+    ),
+  };
+}
+
+function clearDefaultHandlingBehavior(
+  workType: CanonicalWorkType,
+): CanonicalWorkType {
+  if (!workType.handlingBehavior?.includes("DEFAULT")) {
+    return workType;
+  }
+
+  const withoutDefault = workType.handlingBehavior.filter(
+    (behavior) => behavior !== "DEFAULT",
+  );
+  if (withoutDefault.length === 0) {
+    const { handlingBehavior: _removed, ...workTypeWithoutHandling } = workType;
+    return workTypeWithoutHandling;
+  }
+
+  return {
+    ...workType,
+    handlingBehavior: withoutDefault,
+  };
 }
 
 function resolveCanonicalWorkType(

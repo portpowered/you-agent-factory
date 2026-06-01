@@ -28,6 +28,8 @@ const workTypeDetailMessagesByLocale = {
       "Loading the current factory definition for this work type.",
     editableConfigurationContractInvalidPrefix:
       "Work type configuration is invalid.",
+    editableConfigurationHandlingBehaviorMultipleDefault:
+      "Only one work type can be the factory default.",
     editableConfigurationNameDuplicate: (workTypeName: string) =>
       `A work type named "${workTypeName}" already exists in the running factory definition.`,
     editableConfigurationNameRequired:
@@ -49,7 +51,10 @@ const workTypeDetailMessagesByLocale = {
       `Running factory saved. "${workTypeName}" was refreshed to the saved definition.`,
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this work type.",
-    handlingBehaviorDefaultLabel: "Default CLI handling",
+    handlingBehaviorDefaultHelper:
+      "When marked default, this work type receives prompt text from simplified you run --factory flows.",
+    handlingBehaviorDefaultLabel: "Mark as default work type",
+    handlingBehaviorDefaultStatusLabel: "Default work type",
     localizeWorkStateType: localizeEnglishWorkStateType,
     selectWorkStateGraphNodeLabel: (stateName) =>
       `Select ${stateName} state on factory graph`,
@@ -66,6 +71,8 @@ const workTypeDetailMessagesByLocale = {
     configurationLoading:
       "このワークタイプの現在のファクトリ定義を読み込んでいます。",
     editableConfigurationContractInvalidPrefix: "ワークタイプ設定が無効です。",
+    editableConfigurationHandlingBehaviorMultipleDefault:
+      "既定のファクトリワークタイプは 1 つだけにできます。",
     editableConfigurationNameDuplicate: (workTypeName: string) =>
       `実行中のファクトリ定義には、すでに「${workTypeName}」というワークタイプが存在します。`,
     editableConfigurationNameRequired:
@@ -87,7 +94,10 @@ const workTypeDetailMessagesByLocale = {
       `実行中のファクトリを保存しました。「${workTypeName}」は保存済み定義に更新されました。`,
     editableConfigurationValidationStatus:
       "このワークタイプを保存する前に、強調表示されたフィールドを修正してください。",
-    handlingBehaviorDefaultLabel: "既定の CLI 処理",
+    handlingBehaviorDefaultHelper:
+      "既定にすると、このワークタイプは簡略化された you run --factory フローからのプロンプトを受け取ります。",
+    handlingBehaviorDefaultLabel: "既定のワークタイプにする",
+    handlingBehaviorDefaultStatusLabel: "既定のワークタイプ",
     localizeWorkStateType: (workStateType) => {
       switch (workStateType) {
         case "INITIAL":
@@ -116,6 +126,8 @@ const workTypeDetailMessagesByLocale = {
       "이 작업 유형의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationContractInvalidPrefix:
       "작업 유형 구성이 유효하지 않습니다.",
+    editableConfigurationHandlingBehaviorMultipleDefault:
+      "팩토리 기본 작업 유형은 하나만 지정할 수 있습니다.",
     editableConfigurationNameDuplicate: (workTypeName: string) =>
       `실행 중인 팩토리 정의에 "${workTypeName}" 작업 유형이 이미 있습니다.`,
     editableConfigurationNameRequired:
@@ -137,7 +149,10 @@ const workTypeDetailMessagesByLocale = {
       `실행 중인 팩토리를 저장했습니다. "${workTypeName}"이(가) 저장된 정의로 새로고침되었습니다.`,
     editableConfigurationValidationStatus:
       "이 작업 유형을 저장하기 전에 강조 표시된 필드를 수정하세요.",
-    handlingBehaviorDefaultLabel: "기본 CLI 처리",
+    handlingBehaviorDefaultHelper:
+      "기본으로 지정하면 이 작업 유형은 간소화된 you run --factory 흐름의 프롬프트를 받습니다.",
+    handlingBehaviorDefaultLabel: "기본 작업 유형으로 지정",
+    handlingBehaviorDefaultStatusLabel: "기본 작업 유형",
     localizeWorkStateType: (workStateType) => {
       switch (workStateType) {
         case "INITIAL":
@@ -163,6 +178,8 @@ const workTypeDetailMessagesByLocale = {
     configurationErrorPrefix: "工作类型定义不可用。",
     configurationLoading: "正在加载此工作类型的当前工厂定义。",
     editableConfigurationContractInvalidPrefix: "工作类型配置无效。",
+    editableConfigurationHandlingBehaviorMultipleDefault:
+      "只能将一个工作类型设为工厂默认类型。",
     editableConfigurationNameDuplicate: (workTypeName: string) =>
       `运行中的工厂定义中已存在名为“${workTypeName}”的工作类型。`,
     editableConfigurationNameRequired: "保存此工作类型前请输入工作类型名称。",
@@ -180,7 +197,10 @@ const workTypeDetailMessagesByLocale = {
     editableConfigurationSaveSuccess: (workTypeName) =>
       `已保存运行中的工厂。“${workTypeName}”已刷新为保存后的定义。`,
     editableConfigurationValidationStatus: "保存此工作类型前请修正高亮字段。",
-    handlingBehaviorDefaultLabel: "默认 CLI 处理",
+    handlingBehaviorDefaultHelper:
+      "标记为默认后，此工作类型将接收来自简化 you run --factory 流程的提示文本。",
+    handlingBehaviorDefaultLabel: "标记为默认工作类型",
+    handlingBehaviorDefaultStatusLabel: "默认工作类型",
     localizeWorkStateType: (workStateType) => {
       switch (workStateType) {
         case "INITIAL":

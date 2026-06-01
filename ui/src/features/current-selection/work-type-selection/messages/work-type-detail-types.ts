@@ -21,7 +21,9 @@ export interface WorkTypeDetailMessages
   editableConfigurationSaveStaleVersionDetail: string;
   editableConfigurationSaveSuccess: (workTypeName: string) => string;
   editableConfigurationValidationStatus: string;
+  handlingBehaviorDefaultHelper: string;
   handlingBehaviorDefaultLabel: string;
+  handlingBehaviorDefaultStatusLabel: string;
   localizeWorkStateType: (workStateType: WorkStateType) => string;
   selectWorkStateGraphNodeLabel: (stateName: string) => string;
   stateNameColumnLabel: string;
