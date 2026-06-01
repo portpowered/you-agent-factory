@@ -1,9 +1,41 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import {
+  EditableWorkstationConfigurationHeaderActions,
   EditableWorkstationSaveDialog,
   EditableWorkstationSaveHeaderAction,
 } from "./workstation-save-controls";
+
+describe("EditableWorkstationConfigurationHeaderActions", () => {
+  it("renders discard before save and wires both actions", () => {
+    const onDiscard = vi.fn();
+    const onSave = vi.fn();
+
+    render(
+      <EditableWorkstationConfigurationHeaderActions
+        canDiscard
+        canSave
+        onDiscard={onDiscard}
+        onSave={onSave}
+        saveState={{ status: "idle" }}
+      />,
+    );
+
+    const buttons = screen.getAllByRole("button");
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Discard local changes",
+      "Save changes",
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    );
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("EditableWorkstationSaveHeaderAction", () => {
   it("uses warning styling when save is available and not submitting", () => {
@@ -28,9 +60,9 @@ describe("EditableWorkstationSaveHeaderAction", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Save changes" }).className).not.toContain(
-      "border-af-warning-border",
-    );
+    expect(
+      screen.getByRole("button", { name: "Save changes" }).className,
+    ).not.toContain("border-af-warning-border");
   });
 
   it("does not use warning styling while save is submitting", () => {

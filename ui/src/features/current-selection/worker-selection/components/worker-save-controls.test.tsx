@@ -1,6 +1,40 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
-import { EditableWorkerSaveHeaderAction } from "./worker-save-controls";
+import {
+  EditableWorkerConfigurationHeaderActions,
+  EditableWorkerSaveHeaderAction,
+} from "./worker-save-controls";
+
+describe("EditableWorkerConfigurationHeaderActions", () => {
+  it("renders discard before save and wires both actions", () => {
+    const onDiscard = vi.fn();
+    const onSave = vi.fn();
+
+    render(
+      <EditableWorkerConfigurationHeaderActions
+        canDiscard
+        canSave
+        onDiscard={onDiscard}
+        onSave={onSave}
+        saveState={{ status: "idle" }}
+      />,
+    );
+
+    const buttons = screen.getAllByRole("button");
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Discard local changes",
+      "Save worker",
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    );
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save worker" }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("EditableWorkerSaveHeaderAction", () => {
   it("uses warning styling when save is available and not submitting", () => {

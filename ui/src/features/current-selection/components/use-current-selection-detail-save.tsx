@@ -1,31 +1,46 @@
 import type { DashboardSelection } from "../base/state/selection-types";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { EditableResourceSaveHeaderAction } from "../resource-selection/components/resource-save-controls";
+import { EditableResourceConfigurationHeaderActions } from "../resource-selection/components/resource-save-controls";
 import type { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
 import { useSaveEditableResourceConfiguration } from "../resource-selection/hooks/use-save-editable-resource-configuration";
+import { EditableWorkStateConfigurationHeaderActions } from "../work-state-selection/components/work-state-save-controls";
+import type { useEditableWorkStateConfigurationState } from "../work-state-selection/hooks/use-editable-work-state-configuration-state";
+import { useSaveEditableWorkStateConfiguration } from "../work-state-selection/hooks/use-save-editable-work-state-configuration";
+import {
+  EditableWorkTypeConfigurationHeaderActions,
+  EditableWorkTypeSaveDialog,
+} from "../work-type-selection/components/work-type-save-controls";
+import type { useEditableWorkTypeConfigurationState } from "../work-type-selection/hooks/use-editable-work-type-configuration-state";
+import {
+  type UseSaveEditableWorkTypeConfigurationResult,
+  useSaveEditableWorkTypeConfiguration,
+} from "../work-type-selection/hooks/use-save-editable-work-type-configuration";
 import type { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
-import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
+import { EditableWorkerConfigurationHeaderActions } from "../worker-selection/components/worker-save-controls";
+import { EditableWorkstationConfigurationHeaderActions } from "../workstation-selection/components/workstation-save-controls";
 import type { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
 import {
   type UseSaveEditableWorkstationConfigurationResult,
   useSaveEditableWorkstationConfiguration,
 } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
-import {
-  EditableWorkstationSaveDialog,
-  EditableWorkstationSaveHeaderAction,
-} from "../workstation-selection/public";
+import { EditableWorkstationSaveDialog } from "../workstation-selection/public";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one hook wires save scopes and paired header actions for every editable selection kind.
 export function useCurrentSelectionDetailSave({
   currentSelection,
   editableConfigurationState,
   editableResourceConfigurationState,
+  editableWorkStateConfigurationState,
   editableWorkerConfigurationState,
+  editableWorkTypeConfigurationState,
   locale,
   selectedNode,
   selectedResourceName,
   selectedWorkerName,
+  selectedWorkTypeName,
   selection,
+  workStatePlaceId,
 }: {
   currentSelection: CurrentSelectionState;
   editableConfigurationState: ReturnType<
@@ -34,14 +49,22 @@ export function useCurrentSelectionDetailSave({
   editableResourceConfigurationState: ReturnType<
     typeof useEditableResourceConfigurationState
   >;
+  editableWorkStateConfigurationState: ReturnType<
+    typeof useEditableWorkStateConfigurationState
+  >;
   editableWorkerConfigurationState: ReturnType<
     typeof useEditableWorkerConfigurationState
+  >;
+  editableWorkTypeConfigurationState: ReturnType<
+    typeof useEditableWorkTypeConfigurationState
   >;
   locale?: string | null;
   selectedNode: CurrentSelectionState["selectedNode"];
   selectedResourceName: string | null;
   selectedWorkerName: string | null;
+  selectedWorkTypeName: string | null;
   selection: DashboardSelection | null;
+  workStatePlaceId: string | null;
 }) {
   const workstationSaveScopeKey =
     selection?.kind === "node" && selectedNode
@@ -72,29 +95,106 @@ export function useCurrentSelectionDetailSave({
     onResourceRenamed: currentSelection.selectResource,
     scopeKey: resourceSaveScopeKey,
   });
+  const workStateSave = useSaveEditableWorkStateConfiguration({
+    editableConfigurationState: editableWorkStateConfigurationState,
+    locale,
+    onWorkStateRenamed: currentSelection.selectStateNode,
+    scopeKey: workStatePlaceId,
+  });
+  const workTypeSaveScopeKey =
+    selection?.kind === "work-type" && selectedWorkTypeName
+      ? selectedWorkTypeName
+      : null;
+  const workTypeSave = useSaveEditableWorkTypeConfiguration({
+    editableConfigurationState: editableWorkTypeConfigurationState,
+    locale,
+    onWorkTypeRenamed: currentSelection.selectWorkType,
+    scopeKey: workTypeSaveScopeKey,
+  });
 
   const workstationHeaderAction = (
-    <EditableWorkstationSaveHeaderAction
+    <EditableWorkstationConfigurationHeaderActions
+      canDiscard={
+        editableConfigurationState?.status === "ready" &&
+        editableConfigurationState.isDirty
+      }
       canSave={workstationSave.canSave}
       locale={locale ?? undefined}
-      onClick={workstationSave.beginSaveConfirmation}
+      onDiscard={() => {
+        if (editableConfigurationState?.status === "ready") {
+          editableConfigurationState.onResetToLatest();
+        }
+      }}
+      onSave={workstationSave.beginSaveConfirmation}
       saveState={workstationSave.saveState}
     />
   );
   const workerHeaderAction = (
-    <EditableWorkerSaveHeaderAction
+    <EditableWorkerConfigurationHeaderActions
+      canDiscard={
+        editableWorkerConfigurationState?.status === "ready" &&
+        editableWorkerConfigurationState.isDirty
+      }
       canSave={workerSave.canSave}
       locale={locale ?? undefined}
-      onClick={() => void workerSave.save()}
+      onDiscard={() => {
+        if (editableWorkerConfigurationState?.status === "ready") {
+          editableWorkerConfigurationState.onResetToLatest();
+        }
+      }}
+      onSave={() => void workerSave.save()}
       saveState={workerSave.saveState}
     />
   );
   const resourceHeaderAction = (
-    <EditableResourceSaveHeaderAction
+    <EditableResourceConfigurationHeaderActions
+      canDiscard={
+        editableResourceConfigurationState?.status === "ready" &&
+        editableResourceConfigurationState.isDirty
+      }
       canSave={resourceSave.canSave}
       locale={locale ?? undefined}
-      onClick={() => void resourceSave.save()}
+      onDiscard={() => {
+        if (editableResourceConfigurationState?.status === "ready") {
+          editableResourceConfigurationState.onResetToLatest();
+        }
+      }}
+      onSave={() => void resourceSave.save()}
       saveState={resourceSave.saveState}
+    />
+  );
+  const workStateHeaderAction = (
+    <EditableWorkStateConfigurationHeaderActions
+      canDiscard={
+        editableWorkStateConfigurationState?.status === "ready" &&
+        editableWorkStateConfigurationState.isDirty
+      }
+      canSave={workStateSave.canSave}
+      locale={locale ?? undefined}
+      onDiscard={() => {
+        if (editableWorkStateConfigurationState?.status === "ready") {
+          editableWorkStateConfigurationState.onResetToLatest();
+        }
+      }}
+      onSave={() => void workStateSave.save()}
+      saveState={workStateSave.saveState}
+    />
+  );
+  const workTypeHeaderAction = (
+    <EditableWorkTypeConfigurationHeaderActions
+      canDiscard={
+        editableWorkTypeConfigurationState?.status === "ready" &&
+        editableWorkTypeConfigurationState.isDirty
+      }
+      canSave={workTypeSave.canSave}
+      locale={locale ?? undefined}
+      onDiscard={() => {
+        if (editableWorkTypeConfigurationState?.status === "ready") {
+          editableWorkTypeConfigurationState.onResetToLatest();
+        }
+      }}
+      onSave={workTypeSave.beginSaveConfirmation}
+      saveState={workTypeSave.saveState}
     />
   );
 
@@ -102,11 +202,17 @@ export function useCurrentSelectionDetailSave({
     resourceHeaderAction,
     resourceSaveState: resourceSave.saveState,
     saveWorkerConfiguration: () => void workerSave.save(),
+    saveWorkStateConfiguration: () => void workStateSave.save(),
     workstationHeaderAction,
     workstationSave,
     workstationSaveState: workstationSave.saveState,
     workerHeaderAction,
     workerSaveState: workerSave.saveState,
+    workStateHeaderAction,
+    workStateSaveState: workStateSave.saveState,
+    workTypeHeaderAction,
+    workTypeSave,
+    workTypeSaveState: workTypeSave.saveState,
   };
 }
 
@@ -132,6 +238,23 @@ export function CurrentSelectionWorkstationSaveDialog({
           : []
       }
       saveState={workstationSave.saveState}
+    />
+  );
+}
+
+export function CurrentSelectionWorkTypeSaveDialog({
+  locale,
+  workTypeSave,
+}: {
+  locale?: string | null;
+  workTypeSave: UseSaveEditableWorkTypeConfigurationResult;
+}) {
+  return (
+    <EditableWorkTypeSaveDialog
+      locale={locale ?? undefined}
+      onCancel={workTypeSave.cancelSaveConfirmation}
+      onConfirm={() => void workTypeSave.confirmSave()}
+      saveState={workTypeSave.saveState}
     />
   );
 }

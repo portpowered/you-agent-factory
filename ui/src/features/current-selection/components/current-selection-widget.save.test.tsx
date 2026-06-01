@@ -1461,6 +1461,7 @@ describe("CurrentSelectionWidget work state save flow", () => {
 
     await waitFor(() => {
       const saveButtons = screen.getAllByRole("button", { name: "Save work state" });
+      expect(saveButtons).toHaveLength(1);
       expect(saveButtons[0]?.getAttribute("disabled")).not.toBeNull();
     });
     expect(
@@ -1508,10 +1509,8 @@ describe("CurrentSelectionWidget work state save flow", () => {
     const saveWorkStateButtons = screen.getAllByRole("button", {
       name: "Save work state",
     });
-    fireEvent.click(
-      saveWorkStateButtons[saveWorkStateButtons.length - 1] ??
-        saveWorkStateButtons[0],
-    );
+    expect(saveWorkStateButtons).toHaveLength(1);
+    fireEvent.click(saveWorkStateButtons[0]);
 
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
