@@ -25,9 +25,6 @@ import { writeFactoryExportPng } from "../lib/factory-png-export";
 import { getExportDialogMessages } from "../messages/export-dialog";
 import { ExportFactoryDialogImageField } from "./export-factory-dialog-image-field";
 
-const DIALOG_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
-const DIALOG_BODY_CLASS = cn("m-0 max-w-lg", DASHBOARD_BODY_TEXT_CLASS);
-const DIALOG_HINT_CLASS = cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
 const DIALOG_FORM_CLASS = "space-y-5";
 const DIALOG_FIELD_GROUP_CLASS = "space-y-2";
 const DIALOG_FIELD_LABEL_CLASS = cn(
@@ -43,7 +40,6 @@ const DIALOG_ERROR_PANEL_CLASS =
   "rounded-2xl border border-af-danger-border bg-af-danger-surface px-4 py-3 text-sm text-af-danger-text";
 const DIALOG_SUCCESS_PANEL_CLASS =
   "rounded-2xl border border-af-success-border bg-af-success-surface px-4 py-3 text-sm text-af-success-text";
-const DIALOG_CONTENT_CLASS = "w-full max-w-2xl gap-6";
 
 export interface ExportFactoryDialogProps {
   factory: ImportFactoryValue | null;
@@ -112,21 +108,25 @@ export function ExportFactoryDialog({
   return (
     <Dialog onOpenChange={formState.handleOpenChange} open={isOpen}>
       <DialogContent
-        className={DIALOG_CONTENT_CLASS}
+        className="w-full max-w-2xl gap-6"
         closeLabel={messages.closeLabel}
       >
         <DialogHeader>
           <div className="space-y-2">
-            <DialogTitle className={DIALOG_TITLE_CLASS}>
+            <DialogTitle className={cn("m-0", DASHBOARD_SECTION_HEADING_CLASS)}>
               {messages.title}
             </DialogTitle>
-            <DialogDescription className={DIALOG_BODY_CLASS}>
+            <DialogDescription
+              className={cn("m-0 max-w-lg", DASHBOARD_BODY_TEXT_CLASS)}
+            >
               {messages.description}
             </DialogDescription>
           </div>
         </DialogHeader>
 
-        <p className={DIALOG_HINT_CLASS}>{messages.hint}</p>
+        <p className={cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          {messages.hint}
+        </p>
 
         <ExportFactoryDialogForm formState={formState} messages={messages} />
         <ExportFactoryDialogMessages
