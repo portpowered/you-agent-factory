@@ -13,6 +13,7 @@ import {
 } from "../../../../components/ui/dashboard-typography";
 import { formatList } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
+import type { WorkstationLevelGuard } from "../../../current-factory-definition/lib/workstation-guards";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
@@ -34,6 +35,8 @@ import type {
   WorkstationSummaryProps,
 } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { EditableConfigurationWorkstationGuardsField } from "./workstation-guards-field";
+import { EditableConfigurationWorkstationInputGuardsField } from "./workstation-input-guards-field";
 import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 import { EditableConfigurationRunnerField } from "./workstation-runner-field";
 import {
@@ -253,6 +256,19 @@ function EditableConfigurationReadyForm({
           />
         </div>
       ) : null}
+      <EditableConfigurationWorkstationGuardsField
+        fieldErrors={validationErrors}
+        guards={state.draft.guards as WorkstationLevelGuard[]}
+        messages={messages}
+        onGuardsChange={state.onGuardsChange}
+        workstationOptionsState={state.workstationOptionsState}
+      />
+      <EditableConfigurationWorkstationInputGuardsField
+        fieldErrors={validationErrors}
+        inputs={state.draft.inputs}
+        messages={messages}
+        onInputsChange={state.onInputsChange}
+      />
       {onSaveConfiguration ? (
         <EditableConfigurationSaveRow
           busyLabel={messages.editableConfigurationSaveBusyAction}

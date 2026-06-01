@@ -2,41 +2,30 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
-  type EditableWorkstationBehavior,
-  workstationBehaviorRequiresPrompt,
-} from "../../../current-factory-definition/lib/workstation-behavior";
-import {
-  applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
+import { editableWorkstationDraftsEqual } from "../../../current-factory-definition/lib/workstation-guards";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import type { DashboardSelection } from "../../base/state/selection-types";
-import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import {
   resolvePromptHelpState,
   resolvePromptValidationState,
 } from "../editing/editable-workstation-prompt-state";
-import type { RunnerID } from "../editing/runner-metadata";
-import type {
-  EditableWorkstationConfigurationState,
-  EditableWorkstationPromptHelpState,
-  EditableWorkstationPromptValidationState,
-  EditableWorkstationValidationErrors,
-} from "../lib/detail-card-types";
-import {
-  hasEditableWorkstationValidationErrors,
-  resolveWorkerOptionsState,
-  validateEditableWorkstationDraft,
-} from "../lib/editable-workstation-configuration-validation";
-import {
-  getWorkstationDetailMessages,
-  type WorkstationDetailMessages,
-} from "../messages/workstation-detail";
+import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
+import { validateEditableWorkstationDraft } from "../lib/editable-workstation-configuration-validation";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { buildReadyEditableWorkstationConfigurationState } from "./editable-workstation-ready-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
+
+export {
+  hasEditableWorkstationValidationErrors,
+  validateEditableWorkstationDraft,
+} from "../lib/editable-workstation-configuration-validation";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
@@ -165,169 +154,6 @@ function useEditableWorkstationSession(
   };
 }
 
-export {
-  hasEditableWorkstationValidationErrors,
-  validateEditableWorkstationDraft,
-} from "../lib/editable-workstation-configuration-validation";
-
-function areEditableDraftsEqual(
-  left: EditableWorkstationDraft,
-  right: EditableWorkstationDraft,
-): boolean {
-  return (
-    left.behavior === right.behavior &&
-    left.prompt === right.prompt &&
-    left.runnerName === right.runnerName &&
-    left.workerName === right.workerName
-  );
-}
-
-function buildReadyEditableWorkstationConfigurationState({
-  editableDefinition,
-  messages,
-  promptHelpState,
-  promptValidationState,
-  resolvedValidationErrors,
-  selectedEditableValues,
-  selectedNode,
-  sessionState,
-  setSessionState,
-}: {
-  editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentFactoryDocument>["data"]
-  >;
-  messages: WorkstationDetailMessages;
-  promptHelpState: EditableWorkstationPromptHelpState;
-  promptValidationState: EditableWorkstationPromptValidationState;
-  resolvedValidationErrors: EditableWorkstationValidationErrors;
-  selectedEditableValues: NonNullable<
-    ReturnType<typeof resolveEditableWorkstationValues>
-  >;
-  selectedNode: DashboardWorkstationNode;
-  sessionState: EditableWorkstationSessionState;
-  setSessionState: (
-    updater: (
-      currentState: EditableWorkstationSessionState | null,
-    ) => EditableWorkstationSessionState | null,
-  ) => void;
-}) {
-  const pendingFactoryDefinition = hasEditableWorkstationValidationErrors(
-    resolvedValidationErrors,
-  )
-    ? null
-    : applyEditableWorkstationDraft(
-        editableDefinition,
-        selectedNode,
-        sessionState.draft,
-      );
-
-  return {
-    baseVersion: editableDefinition.version,
-    draft: sessionState.draft,
-    hasValidationErrors: hasEditableWorkstationValidationErrors(
-      resolvedValidationErrors,
-    ),
-    initialValues: selectedEditableValues,
-    isDirty: !areEditableDraftsEqual(
-      sessionState.draft,
-      sessionState.sessionStartDraft,
-    ),
-    markChangesSaved: () => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              latestDefinitionDraft: currentState.draft,
-              sessionStartDraft: currentState.draft,
-            }
-          : currentState,
-      );
-    },
-    onPromptChange: (value: string) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                prompt: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onResetToLatest: () => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: currentState.latestDefinitionDraft,
-              sessionStartDraft: currentState.latestDefinitionDraft,
-            }
-          : currentState,
-      );
-    },
-    onBehaviorChange: (value: EditableWorkstationBehavior) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                behavior: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onRunnerChange: (value: RunnerID | null) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                runnerName: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onWorkerChange: (value: string) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                workerName: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    overwriteFieldNames: resolveEditableWorkstationOverwriteFields(
-      sessionState.sessionStartDraft,
-      sessionState.draft,
-      sessionState.latestDefinitionDraft,
-    ),
-    pendingFactoryDefinition,
-    promptDiagnostics:
-      promptValidationState.status === "ready"
-        ? promptValidationState.diagnostics
-        : [],
-    promptHelpState,
-    promptValidationState,
-    status: "ready" as const,
-    validationErrors: resolvedValidationErrors,
-    workerOptionsState: resolveWorkerOptionsState(
-      sessionState.draft,
-      selectedEditableValues,
-      messages,
-    ),
-  };
-}
-
 function syncEditableWorkstationSession(
   currentState: EditableWorkstationSessionState | null,
   selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
@@ -350,7 +176,10 @@ function syncEditableWorkstationSession(
   }
 
   if (
-    areEditableDraftsEqual(currentState.draft, currentState.sessionStartDraft)
+    editableWorkstationDraftsEqual(
+      currentState.draft,
+      currentState.sessionStartDraft,
+    )
   ) {
     return {
       draft: initialDraft,
@@ -360,7 +189,7 @@ function syncEditableWorkstationSession(
     };
   }
 
-  return areEditableDraftsEqual(
+  return editableWorkstationDraftsEqual(
     currentState.latestDefinitionDraft,
     initialDraft,
   )

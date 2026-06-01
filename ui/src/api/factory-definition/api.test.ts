@@ -791,9 +791,43 @@ describe("normalizeFactoryDefinition", () => {
       }),
     ).toThrowError(
       new FactoryDefinitionAPIError(
-        "factory.workstations[0].inputs[0].guards[0].type must be one of VISIT_COUNT, ALL_CHILDREN_COMPLETE, ANY_CHILD_FAILED, SAME_NAME.",
+        "factory.workstations[0].inputs[0].guards[0].type must be one of VISIT_COUNT, ALL_CHILDREN_COMPLETE, ANY_CHILD_FAILED, SAME_NAME, SAME_TRACE_ID.",
       ),
     );
+  });
+
+  it("accepts SAME_TRACE_ID input guards", () => {
+    expect(
+      normalizeFactoryDefinition({
+        name: "agent-factory",
+        workers: [{ name: "writer" }],
+        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workstations: [
+          {
+            inputs: [
+              {
+                guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+                state: "new",
+                workType: "story",
+              },
+            ],
+            name: "Draft",
+            outputs: [{ state: "done", workType: "story" }],
+            worker: "writer",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      workstations: [
+        {
+          inputs: [
+            {
+              guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" }],
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it("rejects retired legacy field aliases in the UI boundary", () => {

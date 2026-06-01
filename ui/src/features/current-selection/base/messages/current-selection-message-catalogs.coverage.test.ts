@@ -22,6 +22,10 @@ import {
   getCurrentSelectionDispatchHistoryMessages,
 } from "./current-selection-dispatch-history";
 import {
+  type EditableConfigurationControlsMessages,
+  getEditableConfigurationControlsMessages,
+} from "./editable-configuration-controls";
+import {
   getWorkTypeDetailMessages,
   type WorkTypeDetailMessages,
 } from "../../work-type-selection/messages/work-type-detail";
@@ -234,6 +238,18 @@ const invokeWorkTypeDetail = (
   }
 };
 
+const invokeEditableConfigurationControls = (
+  key: string,
+  _formatter: (...args: never[]) => unknown,
+) => {
+  switch (key satisfies keyof EditableConfigurationControlsMessages) {
+    default:
+      throw new Error(
+        `Unhandled editable-configuration-controls formatter ${key}`,
+      );
+  }
+};
+
 const invokeWorkstationDetail = (
   key: string,
   formatter: (...args: never[]) => unknown,
@@ -285,6 +301,21 @@ const invokeWorkstationDetail = (
         formatter(1 as never, 1 as never),
         formatter(3 as never, 2 as never),
       ];
+    case "editableConfigurationVisitCountWorkstationInvalid":
+    case "editableConfigurationInputGuardMatchInputInvalid":
+    case "editableConfigurationInputGuardParentInputInvalid":
+      return [formatter("Review" as never)];
+    case "editableConfigurationInputGuardSpawnedByInvalid":
+      return [formatter("Plan" as never)];
+    case "localizeInputGuardType":
+    case "localizeWorkstationGuardType":
+      return [
+        formatter("VISIT_COUNT" as never),
+        formatter("SAME_NAME" as never),
+        formatter("future-guard" as never),
+      ];
+    case "workstationInputSlotHeading":
+      return [formatter("story" as never, "queued" as never)];
     case "openNamedWorkItemAction":
     case "selectWorkItemLabel":
       return [formatter("Review Story" as never)];
@@ -360,6 +391,18 @@ describe("current-selection message catalogs", () => {
     assertCatalogValuesResolve(
       getResourceDetailMessages(locale) as unknown as Record<string, unknown>,
       invokeResourceDetail,
+    );
+  });
+
+  it.each(
+    SUPPORTED_LOCALES,
+  )("resolves every %s editable-configuration-controls value", (locale) => {
+    assertCatalogValuesResolve(
+      getEditableConfigurationControlsMessages(locale) as unknown as Record<
+        string,
+        unknown
+      >,
+      invokeEditableConfigurationControls,
     );
   });
 

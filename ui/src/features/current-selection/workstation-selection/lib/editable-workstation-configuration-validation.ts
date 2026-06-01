@@ -16,6 +16,7 @@ import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
 } from "../messages/workstation-detail";
+import { validateEditableWorkstationGuardDraft } from "./workstation-editable-validation";
 
 export function validateEditableWorkstationDraft(
   draft: EditableWorkstationDraft,
@@ -32,6 +33,18 @@ export function validateEditableWorkstationDraft(
     | "editableConfigurationBehaviorPollerWorkerUnsupported"
     | "editableConfigurationWorkerRequired"
     | "editableConfigurationWorkerUnavailable"
+    | "editableConfigurationVisitCountMaxVisitsInvalid"
+    | "editableConfigurationVisitCountWorkstationInvalid"
+    | "editableConfigurationVisitCountWorkstationRequired"
+    | "editableConfigurationMatchesFieldsInputKeyRequired"
+    | "editableConfigurationInputGuardMultipleGuards"
+    | "editableConfigurationInputGuardMatchInputRequired"
+    | "editableConfigurationInputGuardMatchInputInvalid"
+    | "editableConfigurationInputGuardMatchInputSelfReference"
+    | "editableConfigurationInputGuardParentInputRequired"
+    | "editableConfigurationInputGuardParentInputInvalid"
+    | "editableConfigurationInputGuardParentInputSelfReference"
+    | "editableConfigurationInputGuardSpawnedByInvalid"
   > = getWorkstationDetailMessages(undefined),
 ): EditableWorkstationValidationErrors {
   const validationErrors: EditableWorkstationValidationErrors = {};
@@ -87,17 +100,23 @@ export function validateEditableWorkstationDraft(
     validationErrors.prompt = messages.editableConfigurationPromptFieldHint;
   }
 
-  return validationErrors;
+  return {
+    ...validationErrors,
+    ...validateEditableWorkstationGuardDraft(
+      draft,
+      {
+        workstationOptions: selectedEditableValues?.workstationOptions ?? [],
+      },
+      messages,
+    ),
+  };
 }
 
 export function hasEditableWorkstationValidationErrors(
   validationErrors: EditableWorkstationValidationErrors,
 ): boolean {
-  return Boolean(
-    validationErrors.behavior ||
-      validationErrors.prompt ||
-      validationErrors.runnerName ||
-      validationErrors.workerName,
+  return Object.values(validationErrors).some(
+    (message) => typeof message === "string" && message.length > 0,
   );
 }
 
