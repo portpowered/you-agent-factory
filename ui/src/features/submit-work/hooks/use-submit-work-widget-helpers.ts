@@ -238,12 +238,12 @@ export function buildStructuredSubmitItems(draft: SubmitWorkDraft) {
       continue;
     }
 
-    if (!item.stagedFileRef || !item.fileName || !item.mediaType) {
+    if (!item.url || !item.stagedFileRef || !item.fileName || !item.mediaType) {
       continue;
     }
 
     items.push({
-      url: `file://staged/${item.stagedFileRef}`,
+      url: item.url,
       fileName: item.fileName,
       mediaType: item.mediaType,
       stagedFileRef: item.stagedFileRef,
@@ -297,7 +297,11 @@ function hasIncompleteFileItems(draft: SubmitWorkDraft): boolean {
   return draft.items.some(
     (item) =>
       item.type !== "text" &&
-      item.stagingStatus !== "ready",
+      (item.stagingStatus !== "ready" ||
+        !item.url ||
+        !item.stagedFileRef ||
+        !item.fileName ||
+        !item.mediaType),
   );
 }
 

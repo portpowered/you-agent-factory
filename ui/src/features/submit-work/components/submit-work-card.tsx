@@ -40,6 +40,7 @@ export interface SubmitWorkDraftFileItem {
   stagingError?: string;
   stagingStatus: "failure" | "idle" | "ready" | "staging";
   type: "audio" | "document" | "image" | "video";
+  url?: string;
 }
 
 export type SubmitWorkDraftItem = SubmitWorkDraftFileItem | SubmitWorkDraftTextItem;

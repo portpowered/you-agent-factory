@@ -16,6 +16,7 @@ describe("stageSubmitWorkFile", () => {
           fileName: "ui.png",
           mediaType: "image/png",
           stagedFileRef: "/tmp/submit-work-stage/ui.png",
+          url: "file:///tmp/submit-work-stage/ui.png",
         }),
         {
           headers: {
@@ -41,6 +42,7 @@ describe("stageSubmitWorkFile", () => {
       fileName: "ui.png",
       mediaType: "image/png",
       stagedFileRef: "/tmp/submit-work-stage/ui.png",
+      url: "file:///tmp/submit-work-stage/ui.png",
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/factory-sessions/session-beta/work/staged-files",

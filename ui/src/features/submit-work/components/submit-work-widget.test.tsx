@@ -402,6 +402,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
               stagedFileRef: "/tmp/submit-work-stage/ui.png",
               stagingStatus: "ready",
               type: "image",
+              url: "file:///tmp/submit-work-stage/ui.png",
             },
           ],
           requestName: "Image review",
@@ -827,6 +828,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
               stagedFileRef: "/tmp/submit-work-stage/ui.png",
               stagingStatus: "ready",
               type: "image",
+              url: "file:///tmp/submit-work-stage/ui.png",
             },
           ],
           requestName: "中文请求",
@@ -948,6 +950,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
             fileName: "first.png",
             mediaType: "image/png",
             stagedFileRef: "/tmp/submit-work-stage/first.png",
+            url: "file:///tmp/submit-work-stage/first.png",
           }),
           {
             headers: {
@@ -963,6 +966,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
             fileName: "second.png",
             mediaType: "image/png",
             stagedFileRef: "/tmp/submit-work-stage/second.png",
+            url: "file:///tmp/submit-work-stage/second.png",
           }),
           {
             headers: {
@@ -1019,6 +1023,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
           stagingError: undefined,
           stagingStatus: "ready",
           type: "image",
+          url: "file:///tmp/submit-work-stage/first.png",
         },
         {
           fileName: "second.png",
@@ -1028,6 +1033,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
           stagingError: undefined,
           stagingStatus: "ready",
           type: "image",
+          url: "file:///tmp/submit-work-stage/second.png",
         },
       ]);
     });
@@ -1051,6 +1057,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
         stagingError: undefined,
         stagingStatus: "ready",
         type: "image",
+        url: "file:///tmp/submit-work-stage/second.png",
       },
     ]);
   });

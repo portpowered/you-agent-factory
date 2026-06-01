@@ -243,6 +243,7 @@ describe("App follow-up flows", () => {
             fileName: "review.png",
             mediaType: "image/png",
             stagedFileRef: "/tmp/staged/review.png",
+            url: "file:///tmp/staged/review.png",
           }),
           {
             headers: { "Content-Type": "application/json" },
@@ -322,6 +323,7 @@ describe("App follow-up flows", () => {
           mediaType: "image/png",
           stagedFileRef: "/tmp/staged/review.png",
           type: "image",
+          url: "file:///tmp/staged/review.png",
         },
       ],
       name: "Dashboard multimodal request",

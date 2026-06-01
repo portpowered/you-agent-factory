@@ -93,6 +93,7 @@ export function useSubmitWorkWidget(
               stagedFileRef: undefined,
               stagingError: undefined,
               stagingStatus: "staging",
+              url: undefined,
             }
           : item,
       ),
@@ -122,6 +123,7 @@ export function useSubmitWorkWidget(
                 stagedFileRef: response.stagedFileRef,
                 stagingError: undefined,
                 stagingStatus: "ready",
+                url: response.url,
               }
             : item,
         ),
@@ -141,6 +143,7 @@ export function useSubmitWorkWidget(
                 stagedFileRef: undefined,
                 stagingError: stageSubmitWorkErrorMessage(error, messages),
                 stagingStatus: "failure",
+                url: undefined,
               }
             : item,
         ),
