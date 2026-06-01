@@ -1,9 +1,6 @@
 import type { EditableWorkStateDraft } from "../../../current-factory-definition/lib/work-state-editable-values";
 
 export interface WorkStateDetailMessages {
-  topologyDeleteAction: (workTypeName: string, stateName: string) => string;
-  topologyDeleteBlockedPrefix: string;
-  topologyDeleteHeading: string;
   configurationEmpty: string;
   configurationErrorPrefix: string;
   configurationLoading: string;
