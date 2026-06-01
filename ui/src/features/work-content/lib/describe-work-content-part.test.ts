@@ -10,6 +10,24 @@ describe("describeWorkContentPart", () => {
     ).toBe("Text: notes.md");
   });
 
+  it("derives a readable label from file-backed content urls", () => {
+    expect(
+      describeWorkContentPart({
+        type: "image",
+        url: "file://screenshot.png",
+      }),
+    ).toBe("Image: screenshot.png");
+  });
+
+  it("derives a readable label from absolute file urls", () => {
+    expect(
+      describeWorkContentPart({
+        type: "image",
+        url: "file:///tmp/assets/diagram.png",
+      }),
+    ).toBe("Image: diagram.png");
+  });
+
   it("uses label when file is absent", () => {
     expect(
       describeWorkContentPart({
