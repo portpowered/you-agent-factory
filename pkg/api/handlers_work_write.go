@@ -75,6 +75,7 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 		return submitWorkFileItemContentPart(
 			interfaces.WorkContentPartTypeImage,
 			string(imageItem.Type),
+			string(imageItem.Url),
 			stagedFilePath,
 			imageItem.FileName,
 			imageItem.MediaType,
@@ -90,6 +91,7 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 		return submitWorkFileItemContentPart(
 			interfaces.WorkContentPartTypeBinary,
 			string(videoItem.Type),
+			string(videoItem.Url),
 			stagedFilePath,
 			videoItem.FileName,
 			videoItem.MediaType,
@@ -105,6 +107,7 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 		return submitWorkFileItemContentPart(
 			interfaces.WorkContentPartTypeAudio,
 			string(audioItem.Type),
+			string(audioItem.Url),
 			stagedFilePath,
 			audioItem.FileName,
 			audioItem.MediaType,
@@ -120,6 +123,7 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 		return submitWorkFileItemContentPart(
 			interfaces.WorkContentPartTypeBinary,
 			string(documentItem.Type),
+			string(documentItem.Url),
 			stagedFilePath,
 			documentItem.FileName,
 			documentItem.MediaType,
@@ -132,12 +136,14 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 func submitWorkFileItemContentPart(
 	partType interfaces.WorkContentPartType,
 	itemType string,
+	contentURL string,
 	stagedFileRef string,
 	fileName string,
 	mediaType string,
 ) interfaces.WorkContentPart {
 	return interfaces.WorkContentPart{
 		Type:        partType,
+		URL:         contentURL,
 		File:        stagedFileRef,
 		ContentType: mediaType,
 		Metadata: map[string]any{
@@ -210,8 +216,15 @@ func validateSubmitWorkItemField(fields map[string]json.RawMessage, prefix strin
 		}
 		return strings.TrimSpace(text) != "", nil
 	case factoryapi.SubmitWorkItemTypeImage, factoryapi.SubmitWorkItemTypeVideo, factoryapi.SubmitWorkItemTypeAudio, factoryapi.SubmitWorkItemTypeDocument:
-		if err := requireOnlyFields(fields, prefix, "type", "stagedFileRef", "fileName", "mediaType"); err != nil {
+		if err := requireOnlyFields(fields, prefix, "type", "url", "stagedFileRef", "fileName", "mediaType"); err != nil {
 			return false, err
+		}
+		contentURL, err := requiredNonEmptyStringField(fields, prefix, "url", string(itemType)+" items")
+		if err != nil {
+			return false, err
+		}
+		if err := workcontent.ValidateContentURL(contentURL); err != nil {
+			return false, requestFieldValidationError{message: fmt.Sprintf("%surl %s", prefix, err.Error())}
 		}
 		if _, err := requiredNonEmptyStringField(fields, prefix, "stagedFileRef", string(itemType)+" items"); err != nil {
 			return false, err

@@ -97,6 +97,7 @@ type Work struct {
 type WorkContentPart struct {
 	Type        WorkContentPartType `json:"type"`
 	Text        string              `json:"text,omitempty"`
+	URL         string              `json:"url,omitempty"`
 	File        string              `json:"file,omitempty"`
 	JSON        json.RawMessage     `json:"json,omitempty"`
 	Slot        string              `json:"slot,omitempty"`

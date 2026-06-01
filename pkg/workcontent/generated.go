@@ -73,7 +73,8 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 		case factoryapi.WorkContentPartTypeImage, factoryapi.WorkContentPartTypeImageUpper:
 			return interfaces.WorkContentPart{
 				Type:        interfaces.WorkContentPartType(imagePart.Type).Normalized(),
-				File:        imagePart.File,
+				URL:         string(imagePart.Url),
+				File:        deprecatedFileValue(imagePart.File),
 				Slot:        stringValue(imagePart.Slot),
 				Label:       stringValue(imagePart.Label),
 				Role:        stringValue(imagePart.Role),
@@ -88,7 +89,8 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 	if audioErr == nil && audioPart.Type == factoryapi.WorkContentPartTypeAudio {
 		return interfaces.WorkContentPart{
 			Type:        interfaces.WorkContentPartTypeAudio,
-			File:        audioPart.File,
+			URL:         string(audioPart.Url),
+			File:        deprecatedFileValue(audioPart.File),
 			Slot:        stringValue(audioPart.Slot),
 			Label:       stringValue(audioPart.Label),
 			Role:        stringValue(audioPart.Role),
@@ -120,7 +122,8 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 	if binaryErr == nil && binaryPart.Type == factoryapi.WorkContentPartTypeBinary {
 		return interfaces.WorkContentPart{
 			Type:        interfaces.WorkContentPartTypeBinary,
-			File:        binaryPart.File,
+			URL:         string(binaryPart.Url),
+			File:        deprecatedFileValue(binaryPart.File),
 			Slot:        stringValue(binaryPart.Slot),
 			Label:       stringValue(binaryPart.Label),
 			Role:        stringValue(binaryPart.Role),
@@ -154,7 +157,8 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 	case interfaces.WorkContentPartTypeImage:
 		if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
 			Type:        factoryapi.WorkContentPartType(part.Type.Normalized()),
-			File:        part.File,
+			Url:         factoryapi.WorkContentURLProperty(part.URL),
+			File:        deprecatedFilePtr(part.File),
 			Slot:        stringPtr(part.Slot),
 			Label:       stringPtr(part.Label),
 			Role:        stringPtr(part.Role),
@@ -167,7 +171,8 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 	case interfaces.WorkContentPartTypeAudio:
 		if err := generated.FromWorkAudioContentPart(factoryapi.WorkAudioContentPart{
 			Type:        factoryapi.WorkContentPartTypeAudio,
-			File:        part.File,
+			Url:         factoryapi.WorkContentURLProperty(part.URL),
+			File:        deprecatedFilePtr(part.File),
 			Slot:        stringPtr(part.Slot),
 			Label:       stringPtr(part.Label),
 			Role:        stringPtr(part.Role),
@@ -199,7 +204,8 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 	case interfaces.WorkContentPartTypeBinary:
 		if err := generated.FromWorkBinaryContentPart(factoryapi.WorkBinaryContentPart{
 			Type:        factoryapi.WorkContentPartTypeBinary,
-			File:        part.File,
+			Url:         factoryapi.WorkContentURLProperty(part.URL),
+			File:        deprecatedFilePtr(part.File),
 			Slot:        stringPtr(part.Slot),
 			Label:       stringPtr(part.Label),
 			Role:        stringPtr(part.Role),
@@ -214,6 +220,21 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 	}
 
 	return generated, true
+}
+
+func deprecatedFileValue(file *factoryapi.WorkContentDeprecatedFileProperty) string {
+	if file == nil {
+		return ""
+	}
+	return string(*file)
+}
+
+func deprecatedFilePtr(value string) *factoryapi.WorkContentDeprecatedFileProperty {
+	if value == "" {
+		return nil
+	}
+	typed := factoryapi.WorkContentDeprecatedFileProperty(value)
+	return &typed
 }
 
 func stringPtr(value string) *string {

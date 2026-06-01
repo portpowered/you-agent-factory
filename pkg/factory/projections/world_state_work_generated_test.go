@@ -26,7 +26,7 @@ func TestGeneratedWorkContentToDomain_PreservesNilEmptyAndOrderedParts(t *testin
 	got := generatedWorkContentToDomain(&content)
 	want := []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "outline"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "diagram.png"},
+		{Type: interfaces.WorkContentPartTypeImage, URL: "file://diagram.png"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("content part count = %d, want %d (%#v)", len(got), len(want), got)
@@ -66,7 +66,7 @@ func TestFactoryWorkItemFromGenerated_FallsBackCurrentTraceAndPreservesOptionalF
 	if len(got.PreviousChainingTraceIDs) != 2 || got.PreviousChainingTraceIDs[0] != "chain-a" || got.PreviousChainingTraceIDs[1] != "chain-b" {
 		t.Fatalf("previous chaining trace IDs = %#v, want [chain-a chain-b]", got.PreviousChainingTraceIDs)
 	}
-	if len(got.Content) != 2 || got.Content[0].Text != "draft" || got.Content[1].File != "draft.png" {
+	if len(got.Content) != 2 || got.Content[0].Text != "draft" || got.Content[1].URL != "file://draft.png" {
 		t.Fatalf("content = %#v, want preserved ordered parts", got.Content)
 	}
 	if got.Tags["priority"] != "high" {
@@ -97,7 +97,7 @@ func workImageContentPartForProjectionTest(t *testing.T, file string) factoryapi
 	var part factoryapi.WorkContentPart
 	if err := part.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
 		Type: factoryapi.WorkContentPartTypeImage,
-		File: file,
+		Url:  factoryapi.WorkContentURLProperty("file://" + file),
 	}); err != nil {
 		t.Fatalf("build image part: %v", err)
 	}
@@ -107,6 +107,7 @@ func workImageContentPartForProjectionTest(t *testing.T, file string) factoryapi
 func projectionWorkContentPartEqual(left, right interfaces.WorkContentPart) bool {
 	if left.Type != right.Type ||
 		left.Text != right.Text ||
+		left.URL != right.URL ||
 		left.File != right.File ||
 		left.Label != right.Label ||
 		left.Role != right.Role ||

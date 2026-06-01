@@ -59,7 +59,7 @@ paths:
                     - type: text
                       text: Review this screenshot and list the highest-risk UI issues.
                     - type: image
-                      file: fixtures/ui/dashboard-error-state.png
+                      url: file://fixtures/ui/dashboard-error-state.png
       responses:
         '201':
           description: Work was accepted for processing.

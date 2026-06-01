@@ -126,7 +126,7 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","file":"fixtures/ui.png"}]}`)
+	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","url":"file://fixtures/ui.png"}]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -145,7 +145,7 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].File != "fixtures/ui.png" {
+	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
 	}
 	if len(mf.WorkRequests[0].Works[0].Content) != 2 {
@@ -154,7 +154,7 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	if mf.WorkRequests[0].Works[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.WorkRequests[0].Works[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted work request content[0] = %#v, want canonical text content", mf.WorkRequests[0].Works[0].Content[0])
 	}
-	if mf.WorkRequests[0].Works[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.WorkRequests[0].Works[0].Content[1].File != "fixtures/ui.png" {
+	if mf.WorkRequests[0].Works[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.WorkRequests[0].Works[0].Content[1].URL != "file://fixtures/ui.png" {
 		t.Fatalf("submitted work request content[1] = %#v, want canonical image content", mf.WorkRequests[0].Works[0].Content[1])
 	}
 }
@@ -165,7 +165,7 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 
 	staged := stageSubmitWorkTestFile(t, srv, "image", "ui.png", "image/png", []byte("png-bytes"))
 
-	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","items":[{"type":"text","text":"Review this UI."},{"type":"image","stagedFileRef":"`+staged.StagedFileRef+`","fileName":"ui.png","mediaType":"image/png"}]}`)
+	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","items":[{"type":"text","text":"Review this UI."},{"type":"image","url":"file://staged/ui.png","stagedFileRef":"`+staged.StagedFileRef+`","fileName":"ui.png","mediaType":"image/png"}]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -205,7 +205,7 @@ func TestSubmitWork_AcceptsUppercaseAndExtendedCanonicalContent(t *testing.T) {
 		"workTypeName":"prd",
 		"content":[
 			{"type":"TEXT","text":"Synthesize this","label":"prompt"},
-			{"type":"AUDIO","file":"artifacts/output.wav","contentType":"audio/wav","artifactId":"artifact-audio-1","metadata":{"voice":"alloy"}},
+			{"type":"AUDIO","url":"file://artifacts/output.wav","contentType":"audio/wav","artifactId":"artifact-audio-1","metadata":{"voice":"alloy"}},
 			{"type":"JSON","json":{"voice":"alloy","speed":1}}
 		]
 	}`)
@@ -237,7 +237,7 @@ func assertUppercaseExtendedTextPart(t *testing.T, part interfaces.WorkContentPa
 
 func assertUppercaseExtendedAudioPart(t *testing.T, part interfaces.WorkContentPart) {
 	t.Helper()
-	if part.Type != interfaces.WorkContentPartTypeAudio || part.File != "artifacts/output.wav" || part.ContentType != "audio/wav" || part.ArtifactID != "artifact-audio-1" {
+	if part.Type != interfaces.WorkContentPartTypeAudio || part.URL != "file://artifacts/output.wav" || part.ContentType != "audio/wav" || part.ArtifactID != "artifact-audio-1" {
 		t.Fatalf("submitted content[1] = %#v, want canonical audio content", part)
 	}
 	audioMetadata, _ := json.Marshal(part.Metadata)
@@ -310,14 +310,14 @@ func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {
 
 func TestSubmitWork_RejectsStructuredFileItemWithoutStagedReference(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
-	rec := submitWorkRequest(t, srv, `{"name":"missing-staged-ref","workTypeName":"prd","items":[{"type":"document","stagedFileRef":"","fileName":"spec.pdf","mediaType":"application/pdf"}]}`)
+	rec := submitWorkRequest(t, srv, `{"name":"missing-staged-ref","workTypeName":"prd","items":[{"type":"document","url":"file://staged/spec.pdf","stagedFileRef":"","fileName":"spec.pdf","mediaType":"application/pdf"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0].stagedFileRef must be a non-empty string")
 }
 
 func TestSubmitWork_RejectsForgedStructuredFileReference(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
 
-	rec := submitWorkRequest(t, srv, `{"name":"forged-staged-ref","workTypeName":"prd","items":[{"type":"image","stagedFileRef":"staged://forged-ui.png","fileName":"ui.png","mediaType":"image/png"}]}`)
+	rec := submitWorkRequest(t, srv, `{"name":"forged-staged-ref","workTypeName":"prd","items":[{"type":"image","url":"file://staged/ui.png","stagedFileRef":"staged://forged-ui.png","fileName":"ui.png","mediaType":"image/png"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0]: stagedFileRef must be a backend-issued staged file reference")
 }
 
@@ -403,7 +403,7 @@ func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
 func TestSubmitWork_RejectsInvalidExtendedContentMetadata(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
-	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"AUDIO","file":"voice.wav","metadata":"wrong"}]}`)
+	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"AUDIO","url":"file://voice.wav","metadata":"wrong"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].metadata must be an object")
 	if len(mf.Submitted) != 0 || len(mf.WorkRequests) != 0 {
 		t.Fatalf("submissions = workRequests:%d submitted:%d, want 0/0", len(mf.WorkRequests), len(mf.Submitted))

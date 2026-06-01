@@ -79,7 +79,7 @@ func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.Moc
 			TraceID:    submitted.TraceID,
 			Content: []interfaces.WorkContentPart{
 				{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
-				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/inventory.png"},
+				{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
 			},
 			Tags: submitted.Tags,
 		},
@@ -111,7 +111,7 @@ func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.Moc
 	}
 	assertGeneratedWorkContentParts(t, work.Content, []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/inventory.png"},
+		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
 	})
 	if work.Tags == nil || (*work.Tags)["branch"] != "api-standardization" {
 		t.Fatalf("tags = %#v, want branch api-standardization", work.Tags)
@@ -132,7 +132,7 @@ func TestGetWork(t *testing.T) {
 					CurrentChainingTraceID:   "chain-1",
 					PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
 					TraceID:                  "trace-1",
-					Content:                  []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"}, {Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"}},
+					Content:                  []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"}, {Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"}},
 				},
 				CreatedAt: now,
 				EnteredAt: now,
@@ -161,7 +161,7 @@ func TestGetWork(t *testing.T) {
 	}
 	assertGeneratedWorkContentParts(t, resp.Content, []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
 	})
 }
 
@@ -675,7 +675,7 @@ func TestUpsertWorkRequest_AcceptsCanonicalContent(t *testing.T) {
 	rec := upsertWorkRequest(t, srv, "/work-requests/request-canonical", `{
 		"requestId":"request-canonical",
 		"type":"FACTORY_REQUEST_BATCH",
-		"works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","file":"fixtures/ui.png"}]}]
+		"works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","url":"file://fixtures/ui.png"}]}]
 	}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -689,7 +689,7 @@ func TestUpsertWorkRequest_AcceptsCanonicalContent(t *testing.T) {
 	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].File != "fixtures/ui.png" {
+	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
 	}
 }
@@ -705,8 +705,8 @@ func TestUpsertWorkRequest_AcceptsUppercaseAndExtendedContent(t *testing.T) {
 			"name":"draft",
 			"workTypeName":"prd",
 			"content":[
-				{"type":"IMAGE","file":"fixtures/ui.png","label":"reference"},
-				{"type":"BINARY","file":"artifacts/raw.bin","contentType":"application/octet-stream"},
+				{"type":"IMAGE","url":"file://fixtures/ui.png","label":"reference"},
+				{"type":"BINARY","url":"file://artifacts/raw.bin","contentType":"application/octet-stream"},
 				{"type":"JSON","json":{"mode":"preview"}}
 			]
 		}]

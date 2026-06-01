@@ -243,6 +243,7 @@ export function buildStructuredSubmitItems(draft: SubmitWorkDraft) {
     }
 
     items.push({
+      url: `file://staged/${item.stagedFileRef}`,
       fileName: item.fileName,
       mediaType: item.mediaType,
       stagedFileRef: item.stagedFileRef,

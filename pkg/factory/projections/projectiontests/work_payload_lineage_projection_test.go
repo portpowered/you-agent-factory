@@ -434,7 +434,7 @@ func workImageContentPartForProjectionTest(t *testing.T, file string) factoryapi
 	var part factoryapi.WorkContentPart
 	if err := part.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
 		Type: factoryapi.WorkContentPartTypeImage,
-		File: file,
+		Url:  factoryapi.WorkContentURLProperty("file://" + file),
 	}); err != nil {
 		t.Fatalf("build image part: %v", err)
 	}

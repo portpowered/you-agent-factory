@@ -5,14 +5,14 @@ allOf:
     additionalProperties: false
     required:
       - type
-      - file
+      - url
     properties:
       type:
         allOf:
           - $ref: './WorkContentPartType.yaml'
         enum:
           - AUDIO
+      url:
+        $ref: './WorkContentURLProperty.yaml'
       file:
-        type: string
-        minLength: 1
-        description: Audio file or artifact reference preserved for later runtime materialization.
+        $ref: './WorkContentDeprecatedFileProperty.yaml'

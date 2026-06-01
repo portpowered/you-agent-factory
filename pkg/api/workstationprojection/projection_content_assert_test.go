@@ -57,8 +57,8 @@ func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPar
 	if err != nil {
 		t.Fatalf("content[%d] decode image: %v", index, err)
 	}
-	if part.Type != factoryapi.WorkContentPartTypeImage || part.File != want.File {
-		t.Fatalf("content[%d] = %#v, want image %q", index, part, want.File)
+	if part.Type != factoryapi.WorkContentPartTypeImage || string(part.Url) != want.URL || deprecatedGeneratedFile(part.File) != want.File {
+		t.Fatalf("content[%d] = %#v, want image url %q", index, part, want.URL)
 	}
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
@@ -69,8 +69,8 @@ func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPar
 	if err != nil {
 		t.Fatalf("content[%d] decode audio: %v", index, err)
 	}
-	if part.Type != factoryapi.WorkContentPartTypeAudio || part.File != want.File {
-		t.Fatalf("content[%d] = %#v, want audio %q", index, part, want.File)
+	if part.Type != factoryapi.WorkContentPartTypeAudio || string(part.Url) != want.URL || deprecatedGeneratedFile(part.File) != want.File {
+		t.Fatalf("content[%d] = %#v, want audio url %q", index, part, want.URL)
 	}
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
@@ -97,8 +97,8 @@ func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPa
 	if err != nil {
 		t.Fatalf("content[%d] decode binary: %v", index, err)
 	}
-	if part.Type != factoryapi.WorkContentPartTypeBinary || part.File != want.File {
-		t.Fatalf("content[%d] = %#v, want binary %q", index, part, want.File)
+	if part.Type != factoryapi.WorkContentPartTypeBinary || string(part.Url) != want.URL || deprecatedGeneratedFile(part.File) != want.File {
+		t.Fatalf("content[%d] = %#v, want binary url %q", index, part, want.URL)
 	}
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
@@ -125,4 +125,11 @@ func derefString(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func deprecatedGeneratedFile(file *factoryapi.WorkContentDeprecatedFileProperty) string {
+	if file == nil {
+		return ""
+	}
+	return string(*file)
 }

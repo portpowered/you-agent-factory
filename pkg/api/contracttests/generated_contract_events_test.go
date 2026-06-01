@@ -797,7 +797,7 @@ func mustGeneratedModelAudioPart(t *testing.T, file string) factoryapi.WorkConte
 	var part factoryapi.WorkContentPart
 	if err := part.FromWorkAudioContentPart(factoryapi.WorkAudioContentPart{
 		Type: factoryapi.WorkContentPartTypeAudio,
-		File: file,
+		Url:  factoryapi.WorkContentURLProperty("file://" + file),
 	}); err != nil {
 		t.Fatalf("build generated audio part: %v", err)
 	}

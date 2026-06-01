@@ -26,7 +26,7 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 			TraceID:                  "trace-generated-current",
 			Content: []interfaces.WorkContentPart{
 				{Type: interfaces.WorkContentPartTypeText, Text: "review image"},
-				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+				{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
 			},
 		}},
 	}, eventTime)
@@ -51,7 +51,7 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 	}
 	assertEventHistoryWorkContent(t, work.Content, []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "review image"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
 	})
 }
 
@@ -72,7 +72,7 @@ func TestFactoryEventHistory_RecordWorkRequest_UsesCanonicalGeneratedWorkContent
 				Content: []interfaces.WorkContentPart{
 					{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
 					{Type: interfaces.WorkContentPartType("audio"), File: "fixtures/ignored.wav"},
-					{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/diagram.png"},
+					{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/diagram.png"},
 				},
 			},
 			{
@@ -97,7 +97,7 @@ func TestFactoryEventHistory_RecordWorkRequest_UsesCanonicalGeneratedWorkContent
 	}
 	assertEventHistoryWorkContent(t, (*payload.Works)[0].Content, []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/diagram.png"},
+		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/diagram.png"},
 	})
 	if (*payload.Works)[1].Content != nil {
 		t.Fatalf("work content = %#v, want nil for empty content", (*payload.Works)[1].Content)
@@ -155,8 +155,8 @@ func assertEventHistoryWorkContent(t *testing.T, content *factoryapi.WorkContent
 	if err != nil {
 		t.Fatalf("decode image content: %v", err)
 	}
-	if imagePart.File != want[1].File {
-		t.Fatalf("image content = %q, want %q", imagePart.File, want[1].File)
+	if string(imagePart.Url) != want[1].URL {
+		t.Fatalf("image content url = %q, want %q", imagePart.Url, want[1].URL)
 	}
 }
 

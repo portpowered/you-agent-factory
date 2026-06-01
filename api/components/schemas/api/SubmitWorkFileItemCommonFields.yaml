@@ -1,5 +1,9 @@
 type: object
+required:
+  - url
 properties:
+  url:
+    $ref: './SubmitWorkContentURLProperty.yaml'
   stagedFileRef:
     type: string
     minLength: 1

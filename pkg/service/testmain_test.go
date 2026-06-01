@@ -244,7 +244,7 @@ func assertLocalModelHTTPInvocationResponse(t *testing.T, decoded factoryapi.Mod
 	if err != nil {
 		t.Fatalf("decode response audio content: %v", err)
 	}
-	if audioPart.File != audioPath || stringValue(audioPart.ContentType) != "audio/wav" {
+	if generatedAudioFileValue(audioPart.File) != audioPath || stringValue(audioPart.ContentType) != "audio/wav" {
 		t.Fatalf("response audio part = %#v, want file %q and audio/wav", audioPart, audioPath)
 	}
 }
@@ -1910,4 +1910,11 @@ func assertRecordedInferenceEvents(t *testing.T, recorded []factoryapi.FactoryEv
 	if recorded[1].Type != factoryapi.FactoryEventTypeInferenceResponse {
 		t.Fatalf("second event type = %s, want %s", recorded[1].Type, factoryapi.FactoryEventTypeInferenceResponse)
 	}
+}
+
+func generatedAudioFileValue(file *factoryapi.WorkContentDeprecatedFileProperty) string {
+	if file == nil {
+		return ""
+	}
+	return string(*file)
 }

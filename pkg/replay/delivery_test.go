@@ -23,7 +23,7 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 		TraceId:      stringPtrIfNotEmpty("trace-1"),
 		Content: replayWorkContentForDeliveryTest(t, []interfaces.WorkContentPart{
 			{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-			{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+			{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/alpha.png"},
 		}),
 	}, {
 		Name:         "work-2",
@@ -68,7 +68,7 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 	if batch.Request.Works[0].WorkID != "work-1" || batch.Metadata.Source != "api" {
 		t.Fatalf("replayed generated batch = %#v, want work-1 from api", batch)
 	}
-	if got := batch.Request.Works[0].Content; len(got) != 2 || got[0].Text != "alpha" || got[1].File != "fixtures/alpha.png" {
+	if got := batch.Request.Works[0].Content; len(got) != 2 || got[0].Text != "alpha" || got[1].URL != "file://fixtures/alpha.png" {
 		t.Fatalf("replayed content = %#v, want ordered text and image parts", got)
 	}
 	if len(batch.Request.Relations) != 1 || batch.Request.Relations[0].SourceWorkName != "work-2" || batch.Request.Relations[0].TargetWorkName != "work-1" {
@@ -95,7 +95,7 @@ func replayWorkContentForDeliveryTest(t *testing.T, parts []interfaces.WorkConte
 		case interfaces.WorkContentPartTypeImage:
 			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
 				Type: factoryapi.WorkContentPartTypeImage,
-				File: part.File,
+				Url:  factoryapi.WorkContentURLProperty(contentURLForTestPath(part.URL, part.File)),
 			}); err != nil {
 				t.Fatalf("encode image content: %v", err)
 			}
@@ -544,6 +544,13 @@ func replayTestCompletion(_ string, dispatchID string, transitionID string, _ in
 		TransitionID: transitionID,
 		Outcome:      interfaces.OutcomeAccepted,
 	}
+}
+
+func contentURLForTestPath(url string, file string) string {
+	if strings.TrimSpace(url) != "" {
+		return url
+	}
+	return "file://" + file
 }
 
 func resourceReplayToken(id string) interfaces.Token {

@@ -1,0 +1,5 @@
+type: string
+minLength: 1
+description: >-
+  Canonical content URL for the submitted file-backed item. Supported schemes
+  are file://, http://, https://, and data:.
