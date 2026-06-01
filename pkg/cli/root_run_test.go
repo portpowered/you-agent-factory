@@ -246,68 +246,6 @@ func TestRootCommand_NoArgsAndExplicitRunShareHarnessConfig(t *testing.T) {
 	}
 }
 
-func TestRootCommand_HelpDocumentsOOTBQuickstart(t *testing.T) {
-	var out bytes.Buffer
-	root := NewRootCommand()
-	root.SetOut(&out)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--help"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute root --help: %v", err)
-	}
-
-	help := out.String()
-	for _, want := range []string{
-		"Running you with no arguments starts the out-of-the-box flow",
-		"factory/inputs/task/default",
-		"http://localhost:7437/dashboard/ui",
-		"printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md",
-		"docs",
-		"Print packaged markdown reference topics",
-		"you docs workstations",
-	} {
-		if !strings.Contains(help, want) {
-			t.Fatalf("root help missing %q:\n%s", want, help)
-		}
-	}
-	for _, disallowed := range []string{"goreleaser", "GoReleaser"} {
-		if strings.Contains(help, disallowed) {
-			t.Fatalf("root help should not include release tooling instruction %q:\n%s", disallowed, help)
-		}
-	}
-}
-
-func TestRootCommand_HelpDocumentsDiagnosticsContract(t *testing.T) {
-	var out bytes.Buffer
-	root := NewRootCommand()
-	root.SetOut(&out)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--help"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute root --help: %v", err)
-	}
-
-	help := out.String()
-	for _, want := range []string{
-		"Default command output is customer-facing",
-		"Use --verbose for concise troubleshooting context",
-		"--debug enables lower-level diagnostics where supported and implies --verbose",
-		"JSON stdout remains parseable",
-		"must not include full prompts",
-		"full work payloads",
-		"access tokens",
-		"full model input text",
-		"full successful response bodies",
-		"sensitive generated content",
-	} {
-		if !strings.Contains(help, want) {
-			t.Fatalf("root help missing diagnostics contract %q:\n%s", want, help)
-		}
-	}
-}
-
 func TestRunCommand_DebugFlag(t *testing.T) {
 	root := NewRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})

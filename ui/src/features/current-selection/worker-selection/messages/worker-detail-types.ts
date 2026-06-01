@@ -16,8 +16,6 @@ export interface WorkerDetailMessages {
   editableConfigurationBodyRequired: string;
   editableConfigurationCommandRequired: string;
   editableConfigurationContractInvalidPrefix: string;
-  editableConfigurationDirtyStatus: string;
-  editableConfigurationDraftNote: string;
   editableConfigurationOverwriteWarning: (fields: string) => string;
   editableConfigurationOverwriteWarningDetail: string;
   editableConfigurationServerFieldChangedHint: string;

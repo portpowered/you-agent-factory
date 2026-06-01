@@ -10,35 +10,34 @@ Use this guide when accepting work into a running factory: `POST /work`,
 watched `inputs/`, and how submitted payloads become tokens in the workflow.
 
 For `factory.json` topology—work types, states, workers, workstations,
-resources, routing, and portability—see [Config](config.md) (`you docs config`).
+resources, routing, and portability—see `you docs config`.
 
 For watched batch files under `inputs/`, relation fields, and the
-`FACTORY_REQUEST_BATCH` contract, see [Batch Inputs](batch-inputs.md).
+`FACTORY_REQUEST_BATCH` contract, see `you docs batch-inputs`.
 
 For confirming a factory service is running and routing `--server` or
-`--session` on submit and work commands, see [Sessions](sessions.md)
-(`you docs sessions`).
+`--session` on submit and work commands, see `you docs sessions`.
 
 This is the canonical customer-facing guide for submitted-work contracts.
 Keep single-work API fields, batch cross-links, tag propagation, and
 submission-oriented runtime flow here. Keep `factory.json` topology in
-[Config](config.md).
+`you docs config`.
 
 ## When To Use This Guide
 
 | Need | Use |
 |------|-----|
-| Define `factory.json`, work types, states, routing, or portability fields | [Config](config.md) |
-| Confirm the factory is running, choose run modes, or route `--server` / `--session` | [Sessions](sessions.md) |
+| Define `factory.json`, work types, states, routing, or portability fields | `you docs config` |
+| Confirm the factory is running, choose run modes, or route `--server` / `--session` | `you docs sessions` |
 | Submit one work item with `POST /work` or understand required API fields | This guide |
-| Place batch request files under `inputs/`, define `FACTORY_REQUEST_BATCH`, or choose `DEPENDS_ON` versus `PARENT_CHILD` | [Batch Inputs](batch-inputs.md) |
-| Walk through a full factory setup with example files and commands | [Author factories](authoring-factories.md) |
+| Place batch request files under `inputs/`, define `FACTORY_REQUEST_BATCH`, or choose `DEPENDS_ON` versus `PARENT_CHILD` | `you docs batch-inputs` |
+| Walk through a full factory setup with example files and commands | `you docs authoring-factories` |
 
 ## How Submitted Work Fits The Runtime
 
 Submitted work enters the factory as a token in a work type's initial state.
 The runtime validates the request against the topology declared in
-`factory.json` (see [Config](config.md)), then places the token in the
+`factory.json` (see `you docs config`), then places the token in the
 matching initial place (for example `task:init`).
 
 From there, enabled workstations consume tokens from their input places,
@@ -53,10 +52,10 @@ dispatch to workers, and route outcomes based on worker results:
 
 Each accepted submission references a `workTypeName` that must exist in
 `factory.json`. Workstation routing details are owned by
-[Config](config.md) and [Workstations](workstations.md).
+`you docs config` and `you docs workstations`.
 
 Submitted work payloads are not part of the `factory.json` topology contract.
-Use [Batch Inputs](batch-inputs.md) for the watched-file and API request
+Use `you docs batch-inputs` for the watched-file and API request
 schema, validation rules, relation fields, and submitted `PARENT_CHILD`
 examples.
 
@@ -88,7 +87,7 @@ Required fields for `POST /work`:
 required as `works[].name` for batch requests. Both `POST /work` (`SubmitWorkRequest`)
 and batch `WorkRequest` payloads use the OpenAPI camelCase fields from
 `api/openapi.yaml`, such as `workTypeName` and `traceId` on submitted work items.
-See [Batch Inputs](batch-inputs.md) for the full `FACTORY_REQUEST_BATCH` contract,
+See `you docs batch-inputs` for the full `FACTORY_REQUEST_BATCH` contract,
 including `requestId`, relation fields, and optional `currentChainingTraceId`.
 
 ## CLI `you submit` success and verify loop
@@ -99,7 +98,7 @@ operators and scripts; failures never print the success confirmation.
 
 Use the same `--server` base URI and `--session` target as `you work list` and
 `you work show` when verifying work in a non-default factory session. See
-[Sessions](sessions.md) for session list, routing tables, and run-mode guidance.
+`you docs sessions` for session list, routing tables, and run-mode guidance.
 
 ### Human success output
 
@@ -217,16 +216,16 @@ Prompt templates: {{ index (index .Inputs 0).Tags "branch" }}
 Parameterized fields: "workingDirectory": "{{ index (index .Inputs 0).Tags \"worktree\" }}"
 ```
 
-Use [Templates](templates.md) for the full template variable inventory and
+Use `you docs templates` for the full template variable inventory and
 quoting rules.
 
 ## Related
 
-- [Config](config.md)
-- [Batch Inputs](batch-inputs.md)
-- [Author factories](authoring-factories.md)
-- [Templates](templates.md)
-- [Relationships](relationships.md)
-- [Guards](guards.md)
-- [Workstations](workstations.md)
-- [Workers](workers.md)
+- `you docs config`
+- `you docs batch-inputs`
+- `you docs authoring-factories`
+- `you docs templates`
+- `you docs relationships`
+- `you docs guards`
+- `you docs workstations`
+- `you docs workers`

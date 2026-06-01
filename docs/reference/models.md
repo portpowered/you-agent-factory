@@ -12,10 +12,10 @@ capabilities, typed model resources, multimodal `WorkContent`, and the
 runtime `/models` discovery, pull, and invocation surface.
 
 Keep the workflow topology and field-by-field `factory.json` contract in
-[Config](config.md). Keep worker-only runtime fields
-in [Workers](workers.md), workstation-only routing and prompt fields in
-[Workstations](workstations.md), and resource pool semantics in
-[Resources](resources.md).
+`you docs config`. Keep worker-only runtime fields
+in `you docs workers`, workstation-only routing and prompt fields in
+`you docs workstations`, and resource pool semantics in
+`you docs resources`.
 
 ## Current Contract
 
@@ -340,9 +340,9 @@ inference coverage.
 
 ## Related
 
-- [Config](config.md)
-- [Submitted work](work.md)
-- [Author factories](authoring-factories.md)
-- [Workstations](workstations.md)
-- [Workers](workers.md)
-- [Resources](resources.md)
+- `you docs config`
+- `you docs work`
+- `you docs authoring-factories`
+- `you docs workstations`
+- `you docs workers`
+- `you docs resources`

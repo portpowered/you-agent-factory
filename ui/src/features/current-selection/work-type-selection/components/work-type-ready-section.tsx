@@ -3,11 +3,9 @@ import type { ReactNode } from "react";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 import {
-  DetailCardFactorySaveFeedback,
   mergeDetailCardSaveFieldErrors,
 } from "../../base/components/detail-card-factory-save-feedback";
 import {
@@ -45,16 +43,6 @@ export function WorkTypeReadySection({
 
   return (
     <form className="grid gap-2.5" onSubmit={(event) => event.preventDefault()}>
-      <DetailCardFactorySaveFeedback<EditableWorkTypeSaveValidationErrors>
-        messages={{
-          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
-          staleVersionDetail: messages.editableConfigurationSaveStaleVersionDetail,
-          successMessage: messages.editableConfigurationSaveSuccess(
-            state.draft.name.trim() || workTypeName,
-          ),
-        }}
-        saveState={saveState}
-      />
       {validationErrors.contract ? (
         <p
           className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
@@ -69,11 +57,6 @@ export function WorkTypeReadySection({
           role="alert"
         >
           {messages.editableConfigurationValidationStatus}
-        </p>
-      ) : null}
-      {state.isDirty ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-          {messages.editableConfigurationDirtyStatus}
         </p>
       ) : null}
       <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>

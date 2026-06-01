@@ -17,6 +17,8 @@ concept owners below when you need the complete customer-facing contract.
 
 ## Packaged CLI Topics
 
+> **Terminal / agent readers:** cross-references between packaged CLI topics are runnable as `you docs <topic>` (for example `you docs config`). The `.md` links in maintainer tables below point at source files in this directory for editing only; they do not resolve in `you docs` terminal output.
+
 `you docs <topic>` accepts these topics:
 
 | Topic | Packaged scope | Canonical or broader customer guide |

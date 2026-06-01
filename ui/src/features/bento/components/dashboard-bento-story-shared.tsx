@@ -12,6 +12,7 @@ import {
   currentSelectionWorkContentsDashboardSnapshot,
   semanticWorkflowDashboardSnapshot,
 } from "../../../components/dashboard/test-fixtures";
+import { incrementSessionFactoryVersion } from "../../../testing/session-factory-mocks";
 
 export {
   currentSelectionWorkContentsDashboardSnapshot,
@@ -548,10 +549,7 @@ export function promptTemplateSyntaxValidationResponse(init?: RequestInit) {
   const prompt =
     typeof requestBody.prompt === "string" ? requestBody.prompt : "";
 
-  if (
-    prompt.includes("{{ if .WorkID }}") &&
-    !prompt.includes("{{ end }}")
-  ) {
+  if (prompt.includes("{{ if .WorkID }}") && !prompt.includes("{{ end }}")) {
     return {
       diagnostics: [
         {
@@ -1254,6 +1252,97 @@ export async function expectEditableConfigurationPromptSyntaxSaveStoryFlow(
       name: "Overwrite the running factory definition?",
     }),
   ).toBeVisible();
+}
+
+export function buildEditableConfigurationSaveFetchMocks() {
+  return [
+    {
+      method: "GET",
+      path: "/factory-sessions/~default/factory",
+      response: {
+        body: buildEditableConfigurationDocument(),
+      },
+    },
+    {
+      method: "GET",
+      path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract",
+      response: {
+        body: editableConfigurationPromptTemplateContract,
+      },
+    },
+    {
+      method: "POST",
+      path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+      response: (_input: RequestInfo | URL, init?: RequestInit) => ({
+        body: promptTemplateValidationResponse(init),
+      }),
+    },
+    {
+      method: "PUT",
+      path: "/factory-sessions/~default/factory",
+      response: (_input: RequestInfo | URL, init?: RequestInit) => {
+        const payload = JSON.parse(String(init?.body ?? "{}")) as {
+          baseVersion?: { logical: string; physical: string };
+          factory?: ReturnType<typeof buildEditableConfigurationDocument>;
+        };
+        const savedFactory =
+          payload.factory ?? buildEditableConfigurationDocument();
+        const nextVersion = incrementSessionFactoryVersion(
+          payload.baseVersion ?? savedFactory.version,
+        );
+
+        return {
+          body: {
+            ...savedFactory,
+            version: nextVersion,
+          },
+        };
+      },
+    },
+  ];
+}
+
+export async function expectEditableConfigurationSaveNotificationStoryFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+  const card = await canvas.findByRole("article", {
+    name: "Current selection",
+  });
+  const cardScope = within(card);
+  const pageScope = within(document.body);
+
+  await userEvent.click(
+    cardScope.getByRole("button", { name: "Expand editable configuration" }),
+  );
+  const promptField = await cardScope.findByRole("textbox", { name: "Prompt" });
+  await userEvent.click(promptField, { pointerEventsCheck: 0 });
+  await userEvent.keyboard("{Control>}{KeyA}{/Control}");
+  await userEvent.paste("Browser verified save notification prompt.");
+
+  await waitFor(() => {
+    expect(
+      cardScope.getByRole("button", { name: "Save changes" }),
+    ).toBeEnabled();
+  });
+
+  await userEvent.click(
+    cardScope.getByRole("button", { name: "Save changes" }),
+  );
+  await userEvent.click(
+    canvas.getByRole("button", { name: "Overwrite factory" }),
+  );
+
+  await waitFor(() => {
+    expect(pageScope.getByText("Workstation saved")).toBeVisible();
+    expect(
+      pageScope.getByText(
+        "The editable workstation values were refreshed to the saved definition.",
+      ),
+    ).toBeVisible();
+  });
+  expect(cardScope.queryByText(/^Running factory saved\./)).toBeNull();
+  expect(cardScope.queryByText(/^Saving failed\./)).toBeNull();
 }
 
 export function InlineAddWidgetCardStory() {

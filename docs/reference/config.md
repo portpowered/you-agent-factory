@@ -9,10 +9,10 @@ behavior that the runtime turns into a Petri-net execution model.
 
 Use this page when you need the canonical factory directory layout, the
 field-by-field `factory.json` topology contract, and where each authored file
-lives. Use [Submitted work](work.md) for `POST /work`, tags, and batch
+lives. Use `you docs work` for `POST /work`, tags, and batch
 cross-links. For live session inspection (`you session list`, `you factory query`,
 status API fields, and `--server` / `--session` on HTTP client commands), see
-[Sessions](sessions.md).
+`you docs sessions`.
 
 ## Current Contract
 
@@ -127,8 +127,8 @@ Each `workType` and `state` pair becomes a place named
 | `resources` | No | Bounded concurrency pools. Workers and workstations declare requirements against these pools through their `resources` entries. |
 | `supportingFiles` | No | Portability-only manifest for validation-only external tools and bundled files. This is distinct from runtime-capacity `resources`. |
 | `runner` | No | Factory-level default runner ID. Supported built-ins are `codex`, `gemini`, `kiro`, `cursor-cli`, and `opencode`. |
-| `workers` | Yes | Worker identities that workstations reference by `name`; see [Workers](workers.md) for worker runtime fields. |
-| `workstations` | Yes | Dispatch steps that consume input states and produce output states; see [Workstations](workstations.md) for the workstation field contract. |
+| `workers` | Yes | Worker identities that workstations reference by `name`; see `you docs workers` for worker runtime fields. |
+| `workstations` | Yes | Dispatch steps that consume input states and produce output states; see `you docs workstations` for the workstation field contract. |
 
 Do not rely on stale top-level `global_limits` or `exhaustionRules` examples.
 The current public `factory.json` authoring contract uses guarded
@@ -225,7 +225,7 @@ live-linked to the source factory.
 
 A work type describes one kind of work and every state that work can occupy.
 Submitted work references `workTypes[].name` as `workTypeName`. See
-[Submitted work](work.md) for API and batch submission fields.
+`you docs work` for API and batch submission fields.
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -247,7 +247,7 @@ one work type.
 
 Workstation inputs, outputs, rejection routes, failure routes, and guarded
 loop-breaker routes use `{ "workType": "<name>", "state": "<name>" }`. See
-[Workstations](workstations.md) and [Guards](guards.md) for field-level
+`you docs workstations` and `you docs guards` for field-level
 contracts.
 
 ## Resources
@@ -274,8 +274,8 @@ Resources limit concurrent dispatches across workstations:
 
 Each declared resource creates `<resource>:available` tokens equal to
 `capacity`. Runtime `resources` entries consume the requested capacity while the
-workstation is in flight. See [Resources](resources.md) for typed model pools
-and [Workers](workers.md) for worker-side requirement metadata.
+workstation is in flight. See `you docs resources` for typed model pools
+and `you docs workers` for worker-side requirement metadata.
 
 ## Topology Authoring Checklist
 
@@ -390,9 +390,9 @@ you run --factory ./factory.json "Fix the lint issues"
 `--factory` cannot be combined with `--dir`. Use `--dir` for the traditional
 factory-directory layout and inbox workflows.
 
-Canonical guides: [Mock workers](mock-workers.md) and
-[Record and replay](record-replay.md). For an end-to-end authoring walkthrough,
-see [Author factories](authoring-factories.md).
+Canonical guides: `you docs mock-workers` and
+`you docs record-replay`. For an end-to-end authoring walkthrough,
+see `you docs authoring-factories`.
 
 ## Factory validation matrix
 
@@ -460,5 +460,5 @@ save paths need identical failure codes for the same file.
 - `you docs resources`
 - `you docs batch-work`
 - `you docs templates`
-- [CLI reference landing page](README.md)
-- [Package docs index](../README.md)
+- `docs/reference/README.md`
+- `docs/README.md`

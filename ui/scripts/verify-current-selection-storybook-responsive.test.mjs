@@ -47,7 +47,10 @@ function createSaveFlowHarness() {
       .mockResolvedValueOnce(true),
   });
   saveButton.click = vi.fn().mockResolvedValue(undefined);
-  const successMessage = createVisibleLocator("Save success message");
+  const successToast = createVisibleLocator("Save success toast");
+  successToast.filter = vi.fn(function filter() {
+    return this;
+  });
   const confirmationDialog = createVisibleLocator("Confirmation dialog", {
     count: vi.fn().mockResolvedValue(0),
   });
@@ -79,11 +82,10 @@ function createSaveFlowHarness() {
       return createVisibleLocator(`${role}:${options?.name}`);
     }),
     getByText: vi.fn((text) => {
-      if (
-        text ===
-        "Running factory saved. The editable workstation values were refreshed to the saved definition."
-      ) {
-        return successMessage;
+      if (text instanceof RegExp) {
+        return createVisibleLocator(`text:${text}`, {
+          count: vi.fn().mockResolvedValue(0),
+        });
       }
       if (text === "Validating prompt variables for the current draft.") {
         return createVisibleLocator("Prompt validation status", {
@@ -97,6 +99,12 @@ function createSaveFlowHarness() {
   };
   const page = {
     evaluate: vi.fn().mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
+    locator: vi.fn((selector) => {
+      if (selector === "[data-sonner-toast]") {
+        return successToast;
+      }
+      return createVisibleLocator(selector);
+    }),
     getByRole: vi.fn((role, options) => {
       if (role === "article" && options?.name === "Current selection") {
         return currentSelection;
@@ -123,7 +131,7 @@ function createSaveFlowHarness() {
     page,
     promptField,
     saveButton,
-    successMessage,
+    successToast,
     workerField,
   };
 }
@@ -339,7 +347,7 @@ describe("verifyCurrentSelectionSaveFlow", () => {
       page,
       promptField,
       saveButton,
-      successMessage,
+      successToast,
       workerField,
     } = createSaveFlowHarness();
     const expectVisible = vi.fn((_locator) => Promise.resolve());
@@ -361,9 +369,13 @@ describe("verifyCurrentSelectionSaveFlow", () => {
     );
     expect(saveButton.click).toHaveBeenCalled();
     expect(overwriteButton.click).toHaveBeenCalled();
+    expect(page.locator).toHaveBeenCalledWith("[data-sonner-toast]");
+    expect(successToast.filter).toHaveBeenCalledWith({
+      hasText: "Workstation saved",
+    });
     expect(expectVisible).toHaveBeenCalledWith(
-      successMessage,
-      "Editable workstation save success message",
+      successToast,
+      "Save success toast: Workstation saved",
     );
     expect(confirmationDialog.count).toHaveBeenCalled();
     expect(saveButton.isDisabled).toHaveBeenCalled();

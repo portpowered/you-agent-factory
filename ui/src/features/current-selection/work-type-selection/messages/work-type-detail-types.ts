@@ -10,7 +10,6 @@ export interface WorkTypeDetailMessages
   configurationEmpty: string;
   configurationErrorPrefix: string;
   configurationLoading: string;
-  editableConfigurationDirtyStatus: string;
   editableConfigurationSaveAction: string;
   editableConfigurationSaveBusyAction: string;
   editableConfigurationSaveConfirmationCancelAction: string;

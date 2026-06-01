@@ -33,6 +33,10 @@ export function workstationSupportsProgressOutcomeRoutes(
     return false;
   }
 
+  if (resolveEditableWorkstationType(workstation) === "LOGICAL_MOVE") {
+    return false;
+  }
+
   const behavior = resolveEditableWorkstationBehavior(workstation);
   if (behavior === "REPEATER") {
     return true;
@@ -51,6 +55,13 @@ export function workstationSupportsProgressOutcomeRoutes(
   }
 
   return workstationHasConfiguredStopWords(workstation.stopWords);
+}
+
+/** True when the Failure progress-outcome connect anchor may render (false for logical-move only). */
+export function workstationSupportsProgressOutcomeFailureRoute(
+  workstation: WorkstationProgressOutcomeRouteContext,
+): boolean {
+  return resolveEditableWorkstationType(workstation) !== "LOGICAL_MOVE";
 }
 
 /** True when Continue/Reject connect anchors are omitted for missing stopWords on a standard model processor. */

@@ -133,11 +133,19 @@ func TopicSummaries() []TopicSummary {
 	return summaries
 }
 
+// QuickStartMarkdown returns the quick-start blurb printed before the docs index.
+func QuickStartMarkdown(cliName string) string {
+	return "Start with `" + cliName + " docs agents` for orientation and the command matrix.\n" +
+		"Submit work with `" + cliName + " submit` or `" + cliName + " submit batch` after `" + cliName + " session list` confirms a live factory.\n" +
+		"Run `" + cliName + " docs <topic>` below for deep dives; use `--verbose` or `--debug` on supported commands for stderr diagnostics (full policy in `" + cliName + " docs`)."
+}
+
 // IndexMarkdown returns a terminal-friendly index of packaged docs topics.
 func IndexMarkdown(cliName string) string {
 	var builder strings.Builder
 	builder.WriteString("# Docs\n\n")
-	builder.WriteString("Packaged reference topics:\n\n")
+	builder.WriteString(QuickStartMarkdown(cliName))
+	builder.WriteString("\n\nPackaged reference topics:\n\n")
 	for _, summary := range TopicSummaries() {
 		builder.WriteString("- `")
 		builder.WriteString(summary.Name)

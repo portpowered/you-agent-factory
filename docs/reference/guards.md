@@ -5,8 +5,8 @@ when two inputs must match before dispatch, when parent work must wait for
 children, or when a retry loop needs an explicit terminal route.
 
 `you docs guards` is the canonical guide for guard types, attachment levels,
-and guarded `LOGICAL_MOVE` loop breakers. See [Workstations](workstations.md)
-for workstation kinds and route fields, and [Relationships](relationships.md)
+and guarded `LOGICAL_MOVE` loop breakers. See `you docs workstations`
+for workstation kinds and route fields, and `you docs relationships`
 for how `PARENT_CHILD` batch relations enable parent-aware input guards.
 
 ## Quick Choice
@@ -161,7 +161,7 @@ child set reaches a completion state. The child input carries the guard:
 `parentInput` names the parent input on the same workstation. `spawnedBy`
 names the workstation that created the children when the child count is known
 at runtime. For submitted batches without a splitter, see
-[Relationships](relationships.md) for when `PARENT_CHILD` lineage is enough.
+`you docs relationships` for when `PARENT_CHILD` lineage is enough.
 
 ## Per-Input `ANY_CHILD_FAILED`
 
@@ -189,7 +189,7 @@ Use `ANY_CHILD_FAILED` when one failed child should fail the parent:
 ```
 
 Submitted `PARENT_CHILD` batches can create the parent lineage these guards
-match. See [Relationships](relationships.md) and [Batch Inputs](batch-inputs.md).
+match. See `you docs relationships` and `you docs batch-inputs`.
 
 ## Factory `INFERENCE_THROTTLE_GUARD`
 
@@ -300,13 +300,13 @@ named failed or terminal state.
 - Putting `INFERENCE_THROTTLE_GUARD` on a workstation or input.
 - Expecting `DEPENDS_ON` batch relations to create parent lineage for
   `ALL_CHILDREN_COMPLETE` — use `PARENT_CHILD` instead (see
-  [Relationships](relationships.md)).
+  `you docs relationships`).
 
 ## Related
 
-- [Workstations](workstations.md)
-- [Relationships](relationships.md)
-- [Batch Inputs](batch-inputs.md)
-- [Config](config.md)
-- [Submitted work](work.md)
-- [Templates](templates.md)
+- `you docs workstations`
+- `you docs relationships`
+- `you docs batch-inputs`
+- `you docs config`
+- `you docs work`
+- `you docs templates`

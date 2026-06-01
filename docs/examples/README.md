@@ -1,7 +1,7 @@
 # CLI Mock-Worker And Replay Examples
 
 These files are reusable inputs for the factory authoring workflow in
-[`docs/reference/authoring-factories.md`](../reference/authoring-factories.md).
+`you docs authoring-factories`.
 
 - [`mock-workers.json`](mock-workers.json) enables deterministic mock-worker
   behavior for the review-loop example. It targets the `reviewer` worker at the

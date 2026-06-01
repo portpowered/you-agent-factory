@@ -41,10 +41,6 @@ const workerDetailMessagesByLocale = {
       "Enter a command before saving this worker.",
     editableConfigurationContractInvalidPrefix:
       "Worker configuration is invalid.",
-    editableConfigurationDirtyStatus:
-      "You have unsaved changes for this worker.",
-    editableConfigurationDraftNote:
-      "Changes stay local to this edit session until you save the running factory.",
     editableConfigurationOverwriteWarning: (fields) =>
       `The running factory changed after you started editing. Saving now will overwrite newer server values for ${fields}.`,
     editableConfigurationOverwriteWarningDetail:
@@ -127,9 +123,6 @@ const workerDetailMessagesByLocale = {
     editableConfigurationCommandRequired:
       "このワーカーを保存する前にコマンドを入力してください。",
     editableConfigurationContractInvalidPrefix: "ワーカー設定が無効です。",
-    editableConfigurationDirtyStatus: "このワーカーに未保存の変更があります。",
-    editableConfigurationDraftNote:
-      "保存するまで変更はこの編集セッション内にのみ保持されます。",
     editableConfigurationOverwriteWarning: (fields) =>
       `編集開始後に実行中のファクトリが変更されました。保存すると ${fields} の新しいサーバー値を上書きします。`,
     editableConfigurationOverwriteWarningDetail:
@@ -211,10 +204,6 @@ const workerDetailMessagesByLocale = {
       "이 워커를 저장하기 전에 명령을 입력하세요.",
     editableConfigurationContractInvalidPrefix:
       "워커 구성이 유효하지 않습니다.",
-    editableConfigurationDirtyStatus:
-      "이 워커에 저장되지 않은 변경 사항이 있습니다.",
-    editableConfigurationDraftNote:
-      "저장할 때까지 변경 사항은 이 편집 세션에만 유지됩니다.",
     editableConfigurationOverwriteWarning: (fields) =>
       `편집을 시작한 뒤 실행 중인 팩토리가 변경되었습니다. 저장하면 ${fields}의 최신 서버 값을 덮어씁니다.`,
     editableConfigurationOverwriteWarningDetail:
@@ -290,8 +279,6 @@ const workerDetailMessagesByLocale = {
     editableConfigurationBodyRequired: "保存此 worker 前请输入脚本正文。",
     editableConfigurationCommandRequired: "保存此 worker 前请输入命令。",
     editableConfigurationContractInvalidPrefix: "Worker 配置无效。",
-    editableConfigurationDirtyStatus: "此 worker 有未保存的更改。",
-    editableConfigurationDraftNote: "保存前，更改仅保留在此编辑会话中。",
     editableConfigurationOverwriteWarning: (fields) =>
       `开始编辑后运行中的工厂已更改。保存将覆盖 ${fields} 的较新服务器值。`,
     editableConfigurationOverwriteWarningDetail:

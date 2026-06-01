@@ -561,4 +561,82 @@ describe("ResourceDetailCard", () => {
       }),
     ).toBeNull();
   });
+
+  it("omits global unsaved helper paragraphs for dirty ready-state resource drafts", () => {
+    const editableConfigurationState: EditableResourceConfigurationState = {
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-23T16:22:24Z",
+      },
+      canSave: true,
+      draft: {
+        backend: "",
+        capacityText: "3",
+        loadPolicy: "",
+        model: "",
+        name: "agent-slot",
+        provider: "",
+        type: "INVOCATION_SLOT",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        backend: null,
+        capacity: 2,
+        loadPolicy: null,
+        model: null,
+        provider: null,
+        resourceName: "agent-slot",
+        type: "INVOCATION_SLOT",
+        workerNames: ["reviewer"],
+        workstationNames: ["Review"],
+      },
+      isDirty: true,
+      markChangesSaved: vi.fn(),
+      onBackendChange: vi.fn(),
+      onCapacityChange: vi.fn(),
+      onLoadPolicyChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    render(
+      <ResourceDetailCard
+        editableConfigurationState={editableConfigurationState}
+        headerAction={buildResourceHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
+        resourceName="agent-slot"
+      />,
+    );
+
+    expect(
+      screen.queryByText("You have unsaved changes for this resource."),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "Changes stay local to this edit session until you save the running factory.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Save resource" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Discard local changes" }),
+    ).toBeTruthy();
+  });
 });

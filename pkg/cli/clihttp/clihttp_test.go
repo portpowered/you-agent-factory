@@ -194,6 +194,132 @@ func TestPostJSON_SendsJSONBodyAndDecodesResponse(t *testing.T) {
 	}
 }
 
+func TestPostJSONCreated_DecodesSuccessResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Fatalf("content-type = %q, want application/json", r.Header.Get("Content-Type"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(map[string]string{"workId": "work-1"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var result map[string]string
+	resp, err := PostJSONCreated(
+		context.Background(),
+		srv.Client(),
+		srv.URL+"/work",
+		strings.NewReader(`{"name":"demo"}`),
+		&result,
+		RequestOptions{EndpointPath: "/work", LogLabel: "submit"},
+	)
+	if err != nil {
+		t.Fatalf("PostJSONCreated: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	if result["workId"] != "work-1" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestPostJSONCreated_ReturnsResponseForNonCreatedStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Message: "invalid work",
+			Code:    factoryapi.ErrorResponseCode("INVALID_REQUEST"),
+			Family:  factoryapi.ErrorFamilyBadRequest,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var result map[string]string
+	resp, err := PostJSONCreated(
+		context.Background(),
+		srv.Client(),
+		srv.URL,
+		strings.NewReader(`{"name":"demo"}`),
+		&result,
+		RequestOptions{EndpointPath: "/work", LogLabel: "submit"},
+	)
+	if err != nil {
+		t.Fatalf("PostJSONCreated: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestPostJSONCreated_PropagatesTransportFailure(t *testing.T) {
+	client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return nil, io.ErrUnexpectedEOF
+	})}
+
+	var diagnostics bytes.Buffer
+	_, err := PostJSONCreated(
+		context.Background(),
+		client,
+		"http://127.0.0.1:1/work",
+		strings.NewReader(`{"name":"demo"}`),
+		nil,
+		RequestOptions{
+			Diagnostics:  &diagnostics,
+			Verbose:      true,
+			EndpointPath: "/work",
+			LogLabel:     "submit",
+		},
+	)
+	if err == nil {
+		t.Fatal("PostJSONCreated: want transport error")
+	}
+	if !strings.Contains(diagnostics.String(), "submit response endpointPath=/work error=unreachable") {
+		t.Fatalf("diagnostics = %q", diagnostics.String())
+	}
+}
+
+func TestPostJSONCreated_LogsStatusDiagnosticForNonCreated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	var diagnostics bytes.Buffer
+	resp, err := PostJSONCreated(
+		context.Background(),
+		srv.Client(),
+		srv.URL,
+		strings.NewReader(`{"name":"demo"}`),
+		nil,
+		RequestOptions{
+			Diagnostics:  &diagnostics,
+			Verbose:      true,
+			EndpointPath: "/work",
+			LogLabel:     "submit",
+		},
+	)
+	if err != nil {
+		t.Fatalf("PostJSONCreated: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if !strings.Contains(diagnostics.String(), "submit response endpointPath=/work status=500") {
+		t.Fatalf("diagnostics = %q", diagnostics.String())
+	}
+}
+
 func TestPutJSON_SendsJSONBodyAndDecodesResponse(t *testing.T) {
 	var gotMethod string
 	var gotContentType string

@@ -12,9 +12,9 @@ configuration in split `AGENTS.md` files beside a canonical `factory.json`
 topology.
 
 Use this guide for file shape, placement, prompt bodies, prompt files, and
-authoring patterns. Use [Workers](workers.md) for the worker contract,
-[Workstations](workstations.md) for workstation runtime fields and routing, and
-[Config](config.md) for the `factory.json` topology.
+authoring patterns. Use `you docs workers` for the worker contract,
+`you docs workstations` for workstation runtime fields and routing, and
+`you docs config` for the `factory.json` topology.
 
 ## Overview
 
@@ -41,14 +41,14 @@ Every `AGENTS.md` file has the same structure:
 
 - Frontmatter is delimited by `---` on its own line (opening and closing).
 - The markdown body follows the closing `---`.
-- Frontmatter fields vary by type. See [Workers](workers.md) and
-  [Workstations](workstations.md) for the canonical field lists.
+- Frontmatter fields vary by type. See `you docs workers` and
+  `you docs workstations` for the canonical field lists.
 
 ## Worker AGENTS.md
 
 Workers live under `factory/workers/{worker-name}/AGENTS.md`. The markdown
 body is the system prompt for a model worker, or descriptive text for a script
-worker. Keep the complete worker field contract in [Workers](workers.md).
+worker. Keep the complete worker field contract in `you docs workers`.
 
 Minimal model worker:
 
@@ -73,7 +73,7 @@ timeout: 5m
 Deployment worker. Runs the staging deploy script.
 ```
 
-Use [Workers](workers.md#worker-owned-vs-workstation-owned-fields) when you
+Use `you docs workers` when you
 need to decide whether a field belongs on the worker or the workstation.
 
 ## Workstation AGENTS.md
@@ -81,7 +81,7 @@ need to decide whether a field belongs on the worker or the workstation.
 Workstations live under `factory/workstations/{workstation-name}/AGENTS.md`.
 The markdown body is the prompt template that tells the bound worker what to do
 with the current work token. Keep routing fields, runtime kinds, execution
-limits, stop words, and logical moves in [Workstations](workstations.md).
+limits, stop words, and logical moves in `you docs workstations`.
 
 Prompt-backed workstation:
 
@@ -136,7 +136,7 @@ The file `prompt.md` (in the same directory as `AGENTS.md`) contains the Go temp
 
 Workstation prompt bodies and `promptFile` contents are rendered with Go's
 `text/template` package. Use the common variables in examples, and use
-[Templates](./templates.md) for the complete supported
+`you docs templates` for the complete supported
 surface.
 
 Single-input workstations usually read from the first token:
@@ -172,7 +172,7 @@ Second input: {{ (index .Inputs 1).Payload }}
 ```
 
 For the full variable reference and template-surface contract, see
-[Templates](./templates.md). Older snake_case
+`you docs templates`. Older snake_case
 frontmatter aliases remain compatibility-only input during migration. Canonical
 examples and preferred configs should use camelCase keys.
 
@@ -209,7 +209,7 @@ If no workstation prompt template is configured, the first input token's payload
 
 In `factory.json`, workstation entries map directly to workstation directories
 and the `worker` field maps to the worker directory. The exact workstation
-routing fields belong in [Workstations](workstations.md).
+routing fields belong in `you docs workstations`.
 
 ```json
 {
@@ -288,8 +288,8 @@ For complete current examples that include workers and workstations, see:
 
 ## See Also
 
-- [Workers](workers.md) - worker field contract and backend settings
-- [Workstations](workstations.md) - workstation runtime fields, routing, and logical moves
-- [Authoring Factories](./authoring-factories.md) - factory sequencing and mock-worker checks
-- [Templates](./templates.md) - complete variable listing, supported surfaces, and quoting examples
+- `you docs workers` - worker field contract and backend settings
+- `you docs workstations` - workstation runtime fields, routing, and logical moves
+- `you docs authoring-factories` - factory sequencing and mock-worker checks
+- `you docs templates` - complete variable listing, supported surfaces, and quoting examples
 - [Architecture](../internal/development/architecture.md) - engine design and subsystem details

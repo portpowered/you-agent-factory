@@ -1,12 +1,13 @@
 import { useCallback, useMemo } from "react";
 
-import { mapWorkstationSaveErrorToFieldErrors } from "../lib/workstation-save-validation-field-mapping";
+import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { useScopedFactoryDocumentSave } from "../../base/public";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
   EditableWorkstationSaveValidationErrors,
 } from "../lib/detail-card-types";
+import { mapWorkstationSaveErrorToFieldErrors } from "../lib/workstation-save-validation-field-mapping";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 interface UseSaveEditableWorkstationConfigurationOptions {
@@ -20,6 +21,8 @@ export interface UseSaveEditableWorkstationConfigurationResult {
   canSave: boolean;
   cancelSaveConfirmation: () => void;
   confirmSave: () => Promise<void>;
+  saveAttemptRevision: number;
+  saveMutationError: CurrentFactoryDefinitionError | null;
   saveState: EditableWorkstationSaveState;
 }
 
@@ -37,7 +40,9 @@ export function useSaveEditableWorkstationConfiguration({
     beginConfirmation,
     cancelConfirmation,
     confirmSave: confirmScopedSave,
+    error: saveMutationError,
     isPending,
+    saveAttemptRevision,
     saveState,
   } = useScopedFactoryDocumentSave<EditableWorkstationSaveValidationErrors>({
     fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
@@ -84,6 +89,8 @@ export function useSaveEditableWorkstationConfiguration({
       canSave,
       cancelSaveConfirmation: cancelConfirmation,
       confirmSave,
+      saveAttemptRevision,
+      saveMutationError,
       saveState,
     }),
     [
@@ -91,6 +98,8 @@ export function useSaveEditableWorkstationConfiguration({
       canSave,
       cancelConfirmation,
       confirmSave,
+      saveAttemptRevision,
+      saveMutationError,
       saveState,
     ],
   );

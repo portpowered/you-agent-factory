@@ -3,6 +3,7 @@ package submit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,9 +14,12 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
+
+const submitRequestTimeout = 15 * time.Second
 
 // SubmitConfig holds parameters for the submit command.
 type SubmitConfig struct {
@@ -85,28 +89,39 @@ func Submit(cfg SubmitConfig) error {
 		len(body),
 	)
 	started := time.Now()
-	resp, err := http.Post(endpointURL, "application/json", bytes.NewReader(body))
+	client := &http.Client{Timeout: submitRequestTimeout}
+	var result factoryapi.SubmitWorkResponse
+	resp, err := clihttp.PostJSONCreated(
+		context.Background(),
+		client,
+		endpointURL,
+		bytes.NewReader(body),
+		&result,
+		clihttp.RequestOptions{
+			Diagnostics:  cfg.Diagnostics,
+			Verbose:      cfg.Verbose,
+			EndpointPath: endpointPath,
+			LogLabel:     "submit",
+		},
+	)
 	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s error=unreachable durationMillis=%d", endpointPath, time.Since(started).Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpointURL, err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read response: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusCreated {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody))
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("read response: %w", err)
+		}
 		return submitFailureError(resp.StatusCode, respBody)
 	}
 
-	var result factoryapi.SubmitWorkResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return fmt.Errorf("parse response: %w", err)
+	responseBytes := 0
+	if encoded, marshalErr := json.Marshal(result); marshalErr == nil {
+		responseBytes = len(encoded)
 	}
-	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d traceId=%s", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody), result.TraceId)
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit response endpointPath=%s status=%d durationMillis=%d responseBytes=%d traceId=%s", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), responseBytes, result.TraceId)
 
 	if cfg.JSON {
 		return writeJSONSubmitSuccess(

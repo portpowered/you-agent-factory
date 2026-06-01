@@ -4,6 +4,7 @@ import "../../../styles.css";
 import { expectNoPageHorizontalOverflow } from "../../../stories/dashboardStorySupport";
 import {
   buildEditableConfigurationDocument,
+  buildEditableConfigurationSaveFetchMocks,
   buildEditableResourceConfigurationDocument,
   CurrentSelectionCardStory,
   CurrentSelectionEditableConfigurationStory,
@@ -14,6 +15,7 @@ import {
   expectBentoHeaderDragSurface,
   expectCurrentSelectionRunHistoryExpandFlow,
   expectEditableConfigurationPromptSyntaxSaveStoryFlow,
+  expectEditableConfigurationSaveNotificationStoryFlow,
   expectEditableConfigurationStoryFlow,
   expectResourceSelectedStoryFlow,
   promptTemplateSyntaxValidationResponse,
@@ -123,6 +125,20 @@ export const CurrentSelectionResourceSelected = {
   render: () => <CurrentSelectionResourceSelectedStory width={960} />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await expectResourceSelectedStoryFlow(canvasElement);
+  },
+};
+
+export const CurrentSelectionSaveNotifications = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: buildEditableConfigurationSaveFetchMocks(),
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => <CurrentSelectionEditableConfigurationStory width={960} />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationSaveNotificationStoryFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
   },
 };
 

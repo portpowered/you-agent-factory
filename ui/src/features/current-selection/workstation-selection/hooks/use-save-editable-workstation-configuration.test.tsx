@@ -414,6 +414,8 @@ function buildReadyEditableConfigurationState(overrides?: {
   return {
     draft: {
       behavior: overrides?.behavior ?? "STANDARD",
+      guards: [],
+      inputs: [],
       prompt: overrides?.prompt ?? "Review the story.",
       runnerName: null,
       workerName: "reviewer",
@@ -441,7 +443,10 @@ function buildReadyEditableConfigurationState(overrides?: {
         reviewer: "MODEL_WORKER",
       },
       workstationName: "Review",
+      workstationOptions: ["Review"],
       workstationType: "MODEL_WORKSTATION",
+      guards: [],
+      inputs: [],
     },
     isDirty: true,
     markChangesSaved: overrides?.markChangesSaved ?? vi.fn(),
@@ -452,8 +457,14 @@ function buildReadyEditableConfigurationState(overrides?: {
     onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
     onResetToLatest: vi.fn(),
+    onGuardsChange: vi.fn(),
+    onInputsChange: vi.fn(),
     onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
+    workstationOptionsState: {
+      options: ["Review"],
+      status: "ready",
+    },
     overwriteFieldNames: [],
     pendingFactoryDefinition:
       overrides?.pendingFactoryDefinition ??
