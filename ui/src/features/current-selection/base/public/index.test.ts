@@ -16,5 +16,11 @@ describe("current-selection base public barrel", () => {
       "grid grid-cols-1 gap-3",
     );
     expect(currentSelectionBasePublic.EditableConfigurationSaveRow).toBeTypeOf("function");
+    expect(currentSelectionBasePublic.EditableConfigurationDiscardHeaderAction).toBeTypeOf(
+      "function",
+    );
+    expect(currentSelectionBasePublic.getEditableConfigurationControlsMessages).toBeTypeOf(
+      "function",
+    );
   });
 });
