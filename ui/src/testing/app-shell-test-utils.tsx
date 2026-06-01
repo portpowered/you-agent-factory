@@ -97,6 +97,7 @@ interface RenderAppOptions {
   locationSearch?: string | null;
   sessionID?: string | null;
   seedTimelineFromSnapshot?: boolean;
+  seedCurrentFactoryDocument?: boolean;
   snapshot: DashboardSnapshot;
   timelineEvents?: FactoryEvent[];
   timelineSnapshots?: DashboardSnapshot[];
@@ -206,6 +207,7 @@ export function renderApp({
   initialLocale,
   locationSearch,
   seedTimelineFromSnapshot = true,
+  seedCurrentFactoryDocument = true,
   sessionID,
   snapshot,
   timelineEvents,
@@ -222,10 +224,12 @@ export function renderApp({
     },
   });
   queryClients.push(queryClient);
-  queryClient.setQueryData(
-    currentFactoryDocumentQueryKey(sessionID ?? DEFAULT_FACTORY_SESSION_ID),
-    sessionFactoryDocumentFromSnapshot(snapshot),
-  );
+  if (seedCurrentFactoryDocument) {
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(sessionID ?? DEFAULT_FACTORY_SESSION_ID),
+      sessionFactoryDocumentFromSnapshot(snapshot),
+    );
+  }
 
   const fetchMock: FetchMock = vi
     .fn()

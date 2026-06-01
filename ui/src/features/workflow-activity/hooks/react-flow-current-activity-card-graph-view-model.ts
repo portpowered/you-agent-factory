@@ -31,6 +31,8 @@ import {
   useActiveExecutions,
 } from "./react-flow-current-activity-card-active-executions";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
+import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-definition";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
@@ -165,14 +167,15 @@ function useActiveGraphHighlights({
 
 export function currentActivityCardFactoryDefinition(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-  _snapshot: DashboardSnapshot,
+  snapshot: DashboardSnapshot,
+  timelineMode: ReturnType<typeof useFactoryTimelineStore.getState>["mode"],
 ): DashboardSnapshot["factory"] | null | undefined {
   if (editor.editableDefinitionQuery?.status !== "success") {
     return null;
   }
 
   if (!editor.editorMode) {
-    return observeModeFactoryDefinition(editor);
+    return observeModeFactoryDefinition(editor, snapshot, timelineMode);
   }
 
   return editorModeFactoryDefinition(editor) ?? null;
@@ -180,8 +183,19 @@ export function currentActivityCardFactoryDefinition(
 
 function observeModeFactoryDefinition(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+  snapshot: DashboardSnapshot,
+  timelineMode: ReturnType<typeof useFactoryTimelineStore.getState>["mode"],
 ): DashboardSnapshot["factory"] | undefined {
-  return editor.editableDefinitionQuery?.data ?? undefined;
+  const document = editor.editableDefinitionQuery?.data;
+  if (!document) {
+    return snapshot.factory;
+  }
+
+  return resolveObserveModeFactoryDefinition({
+    document,
+    snapshotFactory: snapshot.factory,
+    timelineMode,
+  });
 }
 
 function editorModeFactoryDefinition(
@@ -236,9 +250,11 @@ function useStableCurrentActivityGraphLayout(
   snapshot: DashboardSnapshot,
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
+  const timelineMode = useFactoryTimelineStore((state) => state.mode);
   const displayFactoryDefinition = currentActivityCardFactoryDefinition(
     editor,
     snapshot,
+    timelineMode,
   );
   const layoutFactoryDefinition = useTopologyStableFactoryForLayout(
     displayFactoryDefinition,

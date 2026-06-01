@@ -47,7 +47,8 @@ function useObserverGraphAfterCurrentSelectionSave({
 }) {
   const editor = createObserverEditorStub(savedDocument);
   const displayFactory =
-    currentActivityCardFactoryDefinition(editor, snapshot) ?? undefined;
+    currentActivityCardFactoryDefinition(editor, snapshot, "current") ??
+      undefined;
   const layoutFactory = useTopologyStableFactoryForLayout(displayFactory);
   const graphLayout = useCurrentActivityGraphLayoutForFactory(
     snapshot,

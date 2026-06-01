@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
   baseFactoryDefinitionDocument,
+  buildDivergentPlaneDashboardSnapshot,
   createMockGraphEditorDraftState,
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
@@ -41,12 +42,13 @@ describe("currentActivityCardFactoryDefinition", () => {
           editorMode: false,
         }),
         snapshot,
+        "current",
       ),
     ).toBeNull();
   });
 
   it("returns the saved factory document in observe mode once the scoped factory document succeeds", () => {
-    const snapshot = structuredClone(singleNodeDashboardSnapshot);
+    const snapshot = buildDivergentPlaneDashboardSnapshot();
 
     expect(
       currentActivityCardFactoryDefinition(
@@ -58,6 +60,7 @@ describe("currentActivityCardFactoryDefinition", () => {
           editorMode: false,
         }),
         snapshot,
+        "current",
       ),
     ).toEqual(divergentDocumentPlaneFactoryDocument);
   });
@@ -72,6 +75,7 @@ describe("currentActivityCardFactoryDefinition", () => {
           editorMode: true,
         }),
         snapshot,
+        "current",
       ),
     ).toBeNull();
   });
@@ -91,6 +95,7 @@ describe("currentActivityCardFactoryDefinition", () => {
           editorMode: true,
         }),
         snapshot,
+        "current",
       ),
     ).toEqual(baseFactoryDefinitionDocument);
   });
@@ -144,6 +149,7 @@ describe("currentActivityCardFactoryDefinition", () => {
           editorMode: true,
         }),
         snapshot,
+        "current",
       ),
     ).toEqual(pendingDraft);
   });
