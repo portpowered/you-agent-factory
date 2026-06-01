@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type {
   CanonicalFactoryDefinition,
@@ -21,10 +29,7 @@ export interface UseScopedFactoryDocumentSaveOptions<
   fallbackErrorMessage: string;
   isDirty?: boolean;
   mapSaveErrorToFieldErrors?: (
-    error: Pick<
-      CurrentFactoryDefinitionError,
-      "code" | "message" | "targets"
-    >,
+    error: Pick<CurrentFactoryDefinitionError, "code" | "message" | "targets">,
   ) => TFieldErrors | undefined;
   scopeKey: string | null;
 }
@@ -39,6 +44,7 @@ export interface UseScopedFactoryDocumentSaveResult<
   error: CurrentFactoryDefinitionError | null;
   isPending: boolean;
   reset: () => void;
+  saveAttemptRevision: number;
   saveNow: (request: ScopedFactoryDocumentSaveRequest) => Promise<void>;
   saveState: FactoryDocumentSaveState<TFieldErrors>;
 }
@@ -69,6 +75,7 @@ export function useScopedFactoryDocumentSave<
   const [submittingScopeKey, setSubmittingScopeKey] = useState<string | null>(
     null,
   );
+  const [saveAttemptRevision, setSaveAttemptRevision] = useState(0);
   const saveInFlightRef = useRef(false);
   const activeScopeKeyRef = useRef(scopeKey);
   activeScopeKeyRef.current = scopeKey;
@@ -79,6 +86,7 @@ export function useScopedFactoryDocumentSave<
     setIsConfirming,
     setLastFailedScope,
     setLastSuccessfulScopeKey,
+    setSaveAttemptRevision,
   });
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
   const hasScopeChanged = previousScopeKeyRef.current !== scopeKey;
@@ -123,13 +131,10 @@ export function useScopedFactoryDocumentSave<
         setIsConfirming,
         setLastFailedScope,
         setLastSuccessfulScopeKey,
+        setSaveAttemptRevision,
         setSubmittingScopeKey,
       }),
-    [
-      fallbackErrorMessage,
-      mapSaveErrorToFieldErrors,
-      saveAsync,
-    ],
+    [fallbackErrorMessage, mapSaveErrorToFieldErrors, saveAsync],
   );
 
   const beginConfirmation = useCallback(() => {
@@ -158,6 +163,7 @@ export function useScopedFactoryDocumentSave<
     error,
     isPending,
     reset,
+    saveAttemptRevision,
     saveNow: persistSave,
     saveState,
   };
@@ -175,15 +181,13 @@ async function executeScopedFactoryDocumentSave<
   setIsConfirming,
   setLastFailedScope,
   setLastSuccessfulScopeKey,
+  setSaveAttemptRevision,
   setSubmittingScopeKey,
 }: {
   activeScopeKeyRef: { current: string | null };
   fallbackErrorMessage: string;
   mapSaveErrorToFieldErrors?: (
-    error: Pick<
-      CurrentFactoryDefinitionError,
-      "code" | "message" | "targets"
-    >,
+    error: Pick<CurrentFactoryDefinitionError, "code" | "message" | "targets">,
   ) => TFieldErrors | undefined;
   request: ScopedFactoryDocumentSaveRequest;
   saveAsync: ReturnType<typeof useFactoryDocumentSave>["saveAsync"];
@@ -193,6 +197,7 @@ async function executeScopedFactoryDocumentSave<
     value: ScopedFactoryDocumentSaveErrorState<TFieldErrors> | null,
   ) => void;
   setLastSuccessfulScopeKey: (value: string | null) => void;
+  setSaveAttemptRevision: Dispatch<SetStateAction<number>>;
   setSubmittingScopeKey: (value: string | null) => void;
 }) {
   if (
@@ -203,6 +208,7 @@ async function executeScopedFactoryDocumentSave<
     return;
   }
 
+  setSaveAttemptRevision((revision) => revision + 1);
   setLastFailedScope(null);
   setLastSuccessfulScopeKey(null);
   saveInFlightRef.current = true;
@@ -293,13 +299,12 @@ function resolveDetailCardSaveState<
   return { status: "idle" };
 }
 
-function useResetExitedSaveScope<
-  TFieldErrors extends Record<string, string>,
->({
+function useResetExitedSaveScope<TFieldErrors extends Record<string, string>>({
   scopeKey,
   setIsConfirming,
   setLastFailedScope,
   setLastSuccessfulScopeKey,
+  setSaveAttemptRevision,
 }: {
   scopeKey: string | null;
   setIsConfirming: (value: boolean) => void;
@@ -307,6 +312,7 @@ function useResetExitedSaveScope<
     value: ScopedFactoryDocumentSaveErrorState<TFieldErrors> | null,
   ) => void;
   setLastSuccessfulScopeKey: (value: string | null) => void;
+  setSaveAttemptRevision: Dispatch<SetStateAction<number>>;
 }) {
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
 
@@ -315,6 +321,7 @@ function useResetExitedSaveScope<
       setIsConfirming(false);
       setLastFailedScope(null);
       setLastSuccessfulScopeKey(null);
+      setSaveAttemptRevision(0);
       previousScopeKeyRef.current = scopeKey;
     }
   }, [
@@ -322,6 +329,7 @@ function useResetExitedSaveScope<
     setIsConfirming,
     setLastFailedScope,
     setLastSuccessfulScopeKey,
+    setSaveAttemptRevision,
   ]);
 }
 
@@ -345,9 +353,7 @@ function useResetSuccessfulSaveStateOnDraftChange({
   }, [isDirty, scopeKey, setLastSuccessfulScopeKey]);
 }
 
-function normalizeSaveError<
-  TFieldErrors extends Record<string, string>,
->(
+function normalizeSaveError<TFieldErrors extends Record<string, string>>(
   error: unknown,
   {
     fallbackMessage,

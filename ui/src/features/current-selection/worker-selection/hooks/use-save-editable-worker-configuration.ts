@@ -1,12 +1,11 @@
 import { useCallback, useMemo } from "react";
-
-import { mapWorkerSaveErrorToFieldErrors } from "../lib/worker-save-validation-field-mapping";
 import { useScopedFactoryDocumentSave } from "../../base/public";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
   EditableWorkerSaveValidationErrors,
 } from "../lib/detail-card-types";
+import { mapWorkerSaveErrorToFieldErrors } from "../lib/worker-save-validation-field-mapping";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 
 interface UseSaveEditableWorkerConfigurationOptions {
@@ -19,6 +18,7 @@ interface UseSaveEditableWorkerConfigurationOptions {
 interface UseSaveEditableWorkerConfigurationResult {
   canSave: boolean;
   save: () => Promise<void>;
+  saveAttemptRevision: number;
   saveState: EditableWorkerSaveState;
 }
 
@@ -33,7 +33,7 @@ export function useSaveEditableWorkerConfiguration({
     editableConfigurationState?.status === "ready" &&
     editableConfigurationState.isDirty;
 
-  const { isPending, saveNow, saveState } =
+  const { isPending, saveAttemptRevision, saveNow, saveState } =
     useScopedFactoryDocumentSave<EditableWorkerSaveValidationErrors>({
       fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
       isDirty,
@@ -61,8 +61,7 @@ export function useSaveEditableWorkerConfiguration({
       factory: editableConfigurationState.pendingFactoryDefinition,
       onSaved: () => {
         editableConfigurationState.markChangesSaved();
-        const savedWorkerName =
-          editableConfigurationState.draft.name.trim();
+        const savedWorkerName = editableConfigurationState.draft.name.trim();
         if (
           scopeKey != null &&
           savedWorkerName.length > 0 &&
@@ -79,8 +78,9 @@ export function useSaveEditableWorkerConfiguration({
     () => ({
       canSave,
       save,
+      saveAttemptRevision,
       saveState,
     }),
-    [canSave, save, saveState],
+    [canSave, save, saveAttemptRevision, saveState],
   );
 }

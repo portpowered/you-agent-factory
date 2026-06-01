@@ -19,6 +19,7 @@ interface UseSaveEditableResourceConfigurationOptions {
 interface UseSaveEditableResourceConfigurationResult {
   canSave: boolean;
   save: () => Promise<void>;
+  saveAttemptRevision: number;
   saveState: EditableResourceSaveState;
 }
 
@@ -33,7 +34,7 @@ export function useSaveEditableResourceConfiguration({
     editableConfigurationState?.status === "ready" &&
     editableConfigurationState.isDirty;
 
-  const { isPending, saveNow, saveState } =
+  const { isPending, saveAttemptRevision, saveNow, saveState } =
     useScopedFactoryDocumentSave<EditableResourceSaveValidationErrors>({
       fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
       isDirty,
@@ -78,9 +79,10 @@ export function useSaveEditableResourceConfiguration({
     () => ({
       canSave,
       save,
+      saveAttemptRevision,
       saveState,
     }),
-    [canSave, save, saveState],
+    [canSave, save, saveAttemptRevision, saveState],
   );
 }
 

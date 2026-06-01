@@ -20,6 +20,7 @@ interface UseSaveEditableWorkStateConfigurationOptions {
 interface UseSaveEditableWorkStateConfigurationResult {
   canSave: boolean;
   save: () => Promise<void>;
+  saveAttemptRevision: number;
   saveState: EditableWorkStateSaveState;
 }
 
@@ -34,7 +35,7 @@ export function useSaveEditableWorkStateConfiguration({
     editableConfigurationState?.status === "ready" &&
     editableConfigurationState.isDirty;
 
-  const { isPending, saveNow, saveState } =
+  const { isPending, saveAttemptRevision, saveNow, saveState } =
     useScopedFactoryDocumentSave<EditableWorkStateSaveValidationErrors>({
       fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
       isDirty,
@@ -85,9 +86,10 @@ export function useSaveEditableWorkStateConfiguration({
     () => ({
       canSave,
       save,
+      saveAttemptRevision,
       saveState,
     }),
-    [canSave, save, saveState],
+    [canSave, save, saveAttemptRevision, saveState],
   );
 }
 
