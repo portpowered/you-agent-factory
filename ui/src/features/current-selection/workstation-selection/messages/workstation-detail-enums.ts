@@ -1,14 +1,20 @@
 import {
-  localizeEnumLabel,
   type LocalizedMessageCatalog,
+  localizeEnumLabel,
   resolveLocalizedMessages,
 } from "../../../../i18n";
-import type { WorkstationLevelGuardType } from "../../../current-factory-definition/lib/workstation-guards";
-import type { ApiWorkstationKind, ApiWorkstationType } from "./workstation-openapi-enums";
+import type {
+  InputGuardType,
+  WorkstationLevelGuardType,
+} from "../../../current-factory-definition/lib/workstation-guards";
 import {
-  localizeRunnerSelectionSourceValue,
   type ApiRunnerSelectionSource,
+  localizeRunnerSelectionSourceValue,
 } from "./runner-openapi-enums";
+import type {
+  ApiWorkstationKind,
+  ApiWorkstationType,
+} from "./workstation-openapi-enums";
 import {
   localizeWorkstationKindValue,
   localizeWorkstationTypeValue,
@@ -22,7 +28,10 @@ export interface WorkstationDetailEnumMessages {
   localizeWorkstationBehavior: (value: ApiWorkstationKind | string) => string;
   localizeWorkstationKind: (value: ApiWorkstationKind | string) => string;
   localizeWorkstationType: (value: ApiWorkstationType | string) => string;
-  localizeWorkstationGuardType: (value: WorkstationLevelGuardType | string) => string;
+  localizeWorkstationGuardType: (
+    value: WorkstationLevelGuardType | string,
+  ) => string;
+  localizeInputGuardType: (value: InputGuardType | string) => string;
 }
 
 const workstationDetailEnumMessagesByLocale = {
@@ -47,6 +56,7 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationTypeValue(value, "en"),
     localizeWorkstationGuardType: (value) =>
       localizeWorkstationGuardTypeValue(value, "en"),
+    localizeInputGuardType: (value) => localizeInputGuardTypeValue(value, "en"),
   },
   ja: {
     localizeRunnerSelectionSource: (value) =>
@@ -69,6 +79,7 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationTypeValue(value, "ja"),
     localizeWorkstationGuardType: (value) =>
       localizeWorkstationGuardTypeValue(value, "ja"),
+    localizeInputGuardType: (value) => localizeInputGuardTypeValue(value, "ja"),
   },
   ko: {
     localizeRunnerSelectionSource: (value) =>
@@ -91,6 +102,7 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationTypeValue(value, "ko"),
     localizeWorkstationGuardType: (value) =>
       localizeWorkstationGuardTypeValue(value, "ko"),
+    localizeInputGuardType: (value) => localizeInputGuardTypeValue(value, "ko"),
   },
   "zh-CN": {
     localizeRunnerSelectionSource: (value) =>
@@ -113,6 +125,8 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationTypeValue(value, "zh-CN"),
     localizeWorkstationGuardType: (value) =>
       localizeWorkstationGuardTypeValue(value, "zh-CN"),
+    localizeInputGuardType: (value) =>
+      localizeInputGuardTypeValue(value, "zh-CN"),
   },
 } satisfies LocalizedMessageCatalog<WorkstationDetailEnumMessages>;
 
@@ -147,8 +161,50 @@ function localizeWorkstationGuardTypeValue(
   });
 }
 
+function localizeInputGuardTypeValue(
+  value: InputGuardType | string,
+  locale: "en" | "ja" | "ko" | "zh-CN",
+): string {
+  return localizeEnumLabel({
+    category: "type",
+    labels:
+      locale === "ja"
+        ? {
+            ALL_CHILDREN_COMPLETE: "子完了待ち",
+            ANY_CHILD_FAILED: "子失敗で失敗",
+            SAME_NAME: "同名一致",
+            SAME_TRACE_ID: "同一トレース ID",
+          }
+        : locale === "ko"
+          ? {
+              ALL_CHILDREN_COMPLETE: "자식 완료 대기",
+              ANY_CHILD_FAILED: "자식 실패 시 실패",
+              SAME_NAME: "동일 이름",
+              SAME_TRACE_ID: "동일 추적 ID",
+            }
+          : locale === "zh-CN"
+            ? {
+                ALL_CHILDREN_COMPLETE: "等待子项完成",
+                ANY_CHILD_FAILED: "任一子项失败",
+                SAME_NAME: "同名匹配",
+                SAME_TRACE_ID: "相同追踪 ID",
+              }
+            : {
+                ALL_CHILDREN_COMPLETE: "All children complete",
+                ANY_CHILD_FAILED: "Any child failed",
+                SAME_NAME: "Same name",
+                SAME_TRACE_ID: "Same trace ID",
+              },
+    locale,
+    value,
+  });
+}
+
 export function getWorkstationDetailEnumMessages(
   locale?: string | null,
 ): WorkstationDetailEnumMessages {
-  return resolveLocalizedMessages(workstationDetailEnumMessagesByLocale, locale);
+  return resolveLocalizedMessages(
+    workstationDetailEnumMessagesByLocale,
+    locale,
+  );
 }

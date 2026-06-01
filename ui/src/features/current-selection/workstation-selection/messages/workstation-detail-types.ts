@@ -140,6 +140,10 @@ export interface WorkstationDetailMessages {
   localizeWorkstationKind: (value: string) => string;
   localizeWorkstationType: (value: string) => string;
   localizeWorkstationGuardType: (value: string) => string;
+  localizeInputGuardType: (value: string) => string;
+  inputGuardMatchInputFieldLabel: string;
+  inputGuardParentInputFieldLabel: string;
+  inputGuardSpawnedByFieldLabel: string;
   visitCountGuardMaxVisitsFieldLabel: string;
   visitCountGuardWorkstationFieldLabel: string;
   workstationGuardsAddLabel: string;
@@ -147,6 +151,12 @@ export interface WorkstationDetailMessages {
   workstationGuardsEmpty: string;
   workstationGuardsHeading: string;
   workstationGuardsRemoveAction: string;
+  workstationInputGuardNoneOption: string;
+  workstationInputGuardPeersEmpty: string;
+  workstationInputGuardTypeFieldLabel: string;
+  workstationInputGuardsEmpty: string;
+  workstationInputGuardsHeading: string;
+  workstationInputSlotHeading: (workType: string, state: string) => string;
   unknownWorkerTypeValue: string;
   unknownWorkLabel: string;
   workDetailsUnavailable: (dispatchId: string) => string;

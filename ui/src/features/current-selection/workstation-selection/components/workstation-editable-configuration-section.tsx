@@ -38,6 +38,7 @@ import type {
 } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationWorkstationGuardsField } from "./workstation-guards-field";
+import { EditableConfigurationWorkstationInputGuardsField } from "./workstation-input-guards-field";
 import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 import { EditableConfigurationRunnerField } from "./workstation-runner-field";
 import {
@@ -264,6 +265,11 @@ function EditableConfigurationReadyForm({
           messages={messages}
           onGuardsChange={state.onGuardsChange}
           workstationOptionsState={state.workstationOptionsState}
+        />
+        <EditableConfigurationWorkstationInputGuardsField
+          inputs={state.draft.inputs}
+          messages={messages}
+          onInputsChange={state.onInputsChange}
         />
       </div>
       {onSaveConfiguration ? (

@@ -28,7 +28,13 @@ export const INPUT_GUARD_TYPES = [
 
 export type InputGuardType = (typeof INPUT_GUARD_TYPES)[number];
 
-export type InputGuard = Extract<InputGuardBase, { type: InputGuardType }>;
+export type InputGuard =
+  | (InputGuardBase & { type: "ALL_CHILDREN_COMPLETE" })
+  | (InputGuardBase & { type: "ANY_CHILD_FAILED" })
+  | (InputGuardBase & { type: "SAME_NAME" })
+  | (InputGuardBase & { type: "SAME_TRACE_ID" });
+
+export type { InputGuardBase };
 
 export function resolveFactoryWorkstationNameOptions(
   factory: CanonicalFactoryDefinition,
@@ -36,6 +42,34 @@ export function resolveFactoryWorkstationNameOptions(
   return (factory.workstations ?? [])
     .map((workstation) => workstation.name)
     .filter((name) => name.length > 0);
+}
+
+export function formatInputGuardSummary(guard: InputGuardBase): string {
+  if (guard.type === "SAME_NAME" || guard.type === "SAME_TRACE_ID") {
+    return guard.matchInput?.trim() || "?";
+  }
+
+  if (
+    guard.type === "ALL_CHILDREN_COMPLETE" ||
+    guard.type === "ANY_CHILD_FAILED"
+  ) {
+    const parentInput = guard.parentInput?.trim() || "?";
+    const spawnedBy = guard.spawnedBy?.trim();
+    return spawnedBy ? `${parentInput} · ${spawnedBy}` : parentInput;
+  }
+
+  return guard.type;
+}
+
+export function resolvePeerInputWorkTypes(
+  inputs: EditableWorkstationDraft["inputs"],
+  slotIndex: number,
+): string[] {
+  return inputs.flatMap((input, index) =>
+    index === slotIndex || input.workType.trim().length === 0
+      ? []
+      : [input.workType.trim()],
+  );
 }
 
 export function formatWorkstationGuardSummary(guard: WorkstationGuard): string {

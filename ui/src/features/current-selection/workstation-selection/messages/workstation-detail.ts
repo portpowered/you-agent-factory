@@ -3,8 +3,8 @@ import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../../i18n";
-import type { WorkstationDetailMessages } from "./workstation-detail-types";
 import { getWorkstationDetailEnumMessages } from "./workstation-detail-enums";
+import type { WorkstationDetailMessages } from "./workstation-detail-types";
 
 type WorkstationDetailCatalogMessages = Omit<
   WorkstationDetailMessages,
@@ -12,6 +12,7 @@ type WorkstationDetailCatalogMessages = Omit<
   | "localizeRunnerSelectionSource"
   | "localizeWorkstationBehavior"
   | "localizeWorkstationGuardType"
+  | "localizeInputGuardType"
   | "localizeWorkstationKind"
   | "localizeWorkstationType"
 >;
@@ -91,7 +92,10 @@ const workstationDetailMessagesByLocale = {
       "Prompt variable help could not be loaded.",
     editableConfigurationPromptHelpErrorPrefix:
       "Prompt variable help unavailable.",
-    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+    editableConfigurationPromptAutocompleteSummary: (
+      variableCount,
+      inputCount,
+    ) =>
       `Autocomplete is ready with ${singularPlural(variableCount, "variable", "variables")} for ${singularPlural(inputCount, "authored input", "authored inputs")}.`,
     editableConfigurationPromptAutocompleteDetail:
       "Suggestions appear only while typing inside {{ ... }}.",
@@ -99,10 +103,8 @@ const workstationDetailMessagesByLocale = {
       "Open prompt variable help",
     editableConfigurationPromptHelpCollapseActionLabel:
       "Close prompt variable help",
-    editableConfigurationPromptAvailableVariablesHeading:
-      "Available variables",
-    editableConfigurationPromptUnavailableAccessHeading:
-      "Unavailable access",
+    editableConfigurationPromptAvailableVariablesHeading: "Available variables",
+    editableConfigurationPromptUnavailableAccessHeading: "Unavailable access",
     editableConfigurationPromptResizeHandleLabel: "Resize prompt editor width",
     editableConfigurationSaveFallbackError:
       "The running factory could not be saved.",
@@ -138,6 +140,16 @@ const workstationDetailMessagesByLocale = {
     workstationGuardsRemoveAction: "Remove guard",
     visitCountGuardWorkstationFieldLabel: "Counted workstation",
     visitCountGuardMaxVisitsFieldLabel: "Max visits",
+    inputGuardMatchInputFieldLabel: "Peer input",
+    inputGuardParentInputFieldLabel: "Parent input",
+    inputGuardSpawnedByFieldLabel: "Spawned by (optional)",
+    workstationInputGuardsHeading: "Input guards",
+    workstationInputGuardsEmpty: "This workstation has no authored inputs.",
+    workstationInputGuardTypeFieldLabel: "Input guard",
+    workstationInputGuardNoneOption: "None",
+    workstationInputGuardPeersEmpty:
+      "Add another input on this workstation to configure peer-based guards.",
+    workstationInputSlotHeading: (workType, state) => `${workType} · ${state}`,
     currentDispatchLabel: "Current dispatch",
     dispatchLabel: "Dispatch",
     elapsedLabel: "Elapsed",
@@ -291,7 +303,10 @@ const workstationDetailMessagesByLocale = {
       "プロンプト変数ヘルプを読み込めませんでした。",
     editableConfigurationPromptHelpErrorPrefix:
       "プロンプト変数ヘルプは利用できません。",
-    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+    editableConfigurationPromptAutocompleteSummary: (
+      variableCount,
+      inputCount,
+    ) =>
       `${inputCount} 件の入力コンテキストで ${variableCount} 件の補完候補を利用できます。`,
     editableConfigurationPromptAutocompleteDetail:
       "候補は {{ ... }} の中で入力しているときだけ表示されます。",
@@ -337,6 +352,17 @@ const workstationDetailMessagesByLocale = {
     workstationGuardsRemoveAction: "ガードを削除",
     visitCountGuardWorkstationFieldLabel: "カウント対象ワークステーション",
     visitCountGuardMaxVisitsFieldLabel: "最大訪問回数",
+    inputGuardMatchInputFieldLabel: "ピア入力",
+    inputGuardParentInputFieldLabel: "親入力",
+    inputGuardSpawnedByFieldLabel: "生成元（任意）",
+    workstationInputGuardsHeading: "入力ガード",
+    workstationInputGuardsEmpty:
+      "このワークステーションには作成済み入力がありません。",
+    workstationInputGuardTypeFieldLabel: "入力ガード",
+    workstationInputGuardNoneOption: "なし",
+    workstationInputGuardPeersEmpty:
+      "ピアベースのガードを設定するには、同じワークステーションに別の入力を追加してください。",
+    workstationInputSlotHeading: (workType, state) => `${workType} · ${state}`,
     currentDispatchLabel: "現在のディスパッチ",
     dispatchLabel: "ディスパッチ",
     elapsedLabel: "経過時間",
@@ -489,7 +515,10 @@ const workstationDetailMessagesByLocale = {
       "프롬프트 변수 도움말을 불러올 수 없습니다.",
     editableConfigurationPromptHelpErrorPrefix:
       "프롬프트 변수 도움말을 사용할 수 없습니다.",
-    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+    editableConfigurationPromptAutocompleteSummary: (
+      variableCount,
+      inputCount,
+    ) =>
       `${inputCount}개의 입력 컨텍스트에서 ${variableCount}개의 자동완성 변수를 사용할 수 있습니다.`,
     editableConfigurationPromptAutocompleteDetail:
       "추천은 {{ ... }} 안에서 입력할 때만 표시됩니다.",
@@ -534,6 +563,16 @@ const workstationDetailMessagesByLocale = {
     workstationGuardsRemoveAction: "가드 제거",
     visitCountGuardWorkstationFieldLabel: "카운트 대상 워크스테이션",
     visitCountGuardMaxVisitsFieldLabel: "최대 방문 횟수",
+    inputGuardMatchInputFieldLabel: "피어 입력",
+    inputGuardParentInputFieldLabel: "부모 입력",
+    inputGuardSpawnedByFieldLabel: "생성 주체(선택)",
+    workstationInputGuardsHeading: "입력 가드",
+    workstationInputGuardsEmpty: "이 워크스테이션에 작성된 입력이 없습니다.",
+    workstationInputGuardTypeFieldLabel: "입력 가드",
+    workstationInputGuardNoneOption: "없음",
+    workstationInputGuardPeersEmpty:
+      "피어 기반 가드를 구성하려면 이 워크스테이션에 다른 입력을 추가하세요.",
+    workstationInputSlotHeading: (workType, state) => `${workType} · ${state}`,
     currentDispatchLabel: "현재 디스패치",
     dispatchLabel: "디스패치",
     elapsedLabel: "경과 시간",
@@ -655,10 +694,12 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationBehaviorPollerWorkerUnsupported:
       "保存此工作站前，请先为轮询器工作站选择脚本或 hosted worker。",
     editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",
-    editableConfigurationPromptEditorLoading: "正在启动此工作站的提示词编辑器。",
+    editableConfigurationPromptEditorLoading:
+      "正在启动此工作站的提示词编辑器。",
     editableConfigurationPromptEditorError:
       "无法启动提示词编辑器。请重新加载此工作站后重试。",
-    editableConfigurationPromptValidationLoading: "正在校验当前草稿中的提示词变量。",
+    editableConfigurationPromptValidationLoading:
+      "正在校验当前草稿中的提示词变量。",
     editableConfigurationPromptValidationFallbackError: "无法完成提示词校验。",
     editableConfigurationPromptValidationErrorPrefix: "提示词校验不可用。",
     editableConfigurationPromptDiagnosticsSummary:
@@ -674,7 +715,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptHelpFallbackError:
       "无法加载提示词变量帮助信息。",
     editableConfigurationPromptHelpErrorPrefix: "提示词变量帮助信息不可用。",
-    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+    editableConfigurationPromptAutocompleteSummary: (
+      variableCount,
+      inputCount,
+    ) =>
       `自动补全已就绪，可为 ${inputCount} 个已编写输入上下文提供 ${variableCount} 个变量候选。`,
     editableConfigurationPromptAutocompleteDetail:
       "仅在 {{ ... }} 内输入时显示建议。",
@@ -713,6 +757,16 @@ const workstationDetailMessagesByLocale = {
     workstationGuardsRemoveAction: "移除守卫",
     visitCountGuardWorkstationFieldLabel: "计数工作站",
     visitCountGuardMaxVisitsFieldLabel: "最大访问次数",
+    inputGuardMatchInputFieldLabel: "对等输入",
+    inputGuardParentInputFieldLabel: "父输入",
+    inputGuardSpawnedByFieldLabel: "生成方（可选）",
+    workstationInputGuardsHeading: "输入守卫",
+    workstationInputGuardsEmpty: "此工作站没有已编写的输入。",
+    workstationInputGuardTypeFieldLabel: "输入守卫",
+    workstationInputGuardNoneOption: "无",
+    workstationInputGuardPeersEmpty:
+      "请在此工作站添加另一个输入，以配置基于对等的守卫。",
+    workstationInputSlotHeading: (workType, state) => `${workType} · ${state}`,
     currentDispatchLabel: "当前分派",
     dispatchLabel: "分派",
     elapsedLabel: "已用时间",
@@ -807,6 +861,7 @@ export function getWorkstationDetailMessages(
     localizeRunnerSelectionSource: enumMessages.localizeRunnerSelectionSource,
     localizeWorkstationBehavior: enumMessages.localizeWorkstationBehavior,
     localizeWorkstationGuardType: enumMessages.localizeWorkstationGuardType,
+    localizeInputGuardType: enumMessages.localizeInputGuardType,
     localizeWorkstationKind: enumMessages.localizeWorkstationKind,
     localizeWorkstationType: enumMessages.localizeWorkstationType,
   };

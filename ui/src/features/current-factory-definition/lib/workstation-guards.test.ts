@@ -4,9 +4,11 @@ import {
   createDefaultInputGuard,
   createDefaultWorkstationGuard,
   editableWorkstationDraftsEqual,
+  formatInputGuardSummary,
   formatWorkstationGuardSummary,
   guardsDraftEqual,
   normalizeEditableInputGuards,
+  resolvePeerInputWorkTypes,
   setEditableInputSlotGuard,
 } from "./workstation-guards";
 
@@ -49,6 +51,31 @@ describe("workstation-guards", () => {
       ]),
     ).toEqual([{ matchInput: "planItem", type: "SAME_NAME" }]);
     expect(normalizeEditableInputGuards([])).toEqual([]);
+  });
+
+  it("formats input guard summaries and resolves peer work types", () => {
+    expect(
+      formatInputGuardSummary({
+        matchInput: "planItem",
+        type: "SAME_NAME",
+      }),
+    ).toBe("planItem");
+    expect(
+      formatInputGuardSummary({
+        parentInput: "story",
+        spawnedBy: "split-story",
+        type: "ALL_CHILDREN_COMPLETE",
+      }),
+    ).toBe("story · split-story");
+    expect(
+      resolvePeerInputWorkTypes(
+        [
+          { guards: [], state: "queued", workType: "story" },
+          { guards: [], state: "complete", workType: "task" },
+        ],
+        0,
+      ),
+    ).toEqual(["task"]);
   });
 
   it("creates default per-input guards and clears slot guards", () => {
