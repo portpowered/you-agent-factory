@@ -258,15 +258,17 @@ async function expectEditorModeOff(page) {
   await graphCard
     .getByRole("button", { name: "Enter factory graph editor" })
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-  expect(
-    await graphCard
-      .getByRole("region", { name: "Factory graph editor tools" })
-      .count(),
-  ).toBe(0);
   await expect
-    .poll(async () => graphCard.getByText("Unsaved changes").count(), {
-      timeout: uiInteractionTimeoutMs,
-    })
+    .poll(
+      async () => {
+        const toolbarCount = await graphCard
+          .getByRole("region", { name: "Factory graph editor tools" })
+          .count();
+        const unsavedCount = await graphCard.getByText("Unsaved changes").count();
+        return toolbarCount + unsavedCount;
+      },
+      { timeout: uiInteractionTimeoutMs },
+    )
     .toBe(0);
 }
 

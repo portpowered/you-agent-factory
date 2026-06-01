@@ -199,40 +199,48 @@ function useEditorCurrentActivityGraphLayout(
   );
 }
 
-function useSyncedDisplayNodes(baseNodes: CurrentActivityNode[]) {
-  const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
+function useCurrentActivityGraphEdges({
+  activeGraphHighlights,
+  displayNodes,
+  handleAssignments,
+  pendingAdditionEdgeIds,
+  visibleGraphEdges,
+}: {
+  activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
+  displayNodes: CurrentActivityNode[];
+  handleAssignments: ReturnType<typeof buildHandleAssignments>;
+  pendingAdditionEdgeIds: ReadonlySet<string>;
+  visibleGraphEdges: GraphLayout["edges"];
+}) {
+  return useMemo(
+    () =>
+      buildGraphEdges(
+        activeGraphHighlights,
+        handleAssignments,
+        pendingAdditionEdgeIds,
+        visibleGraphEdges,
+        displayNodes,
+      ),
+    [
+      activeGraphHighlights,
+      displayNodes,
+      handleAssignments,
+      pendingAdditionEdgeIds,
+      visibleGraphEdges,
+    ],
+  );
+}
 
-  useEffect(() => {
-    setNodes((currentNodes) => {
-      const currentPositions = new Map(
-        currentNodes.map((node) => [node.id, node.position]),
-      );
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
-    });
-  }, [baseNodes]);
-
-  const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes(
-      (currentNodes) =>
-        applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
-    );
-  }, []);
-
-  const displayNodes = useMemo(() => {
-    const positionOverrides = new Map(
-      nodes.map((node) => [node.id, node.position] as const),
-    );
-
-    return baseNodes.map((node) => ({
-      ...node,
-      position: positionOverrides.get(node.id) ?? node.position,
-    }));
-  }, [baseNodes, nodes]);
-
-  return { displayNodes, handleNodesChange };
+function useInitialFitViewOptions(graphLayout: GraphLayout) {
+  return useMemo<FitViewOptions>(
+    () => ({
+      maxZoom: 1.15,
+      minZoom: 0.7,
+      nodes: initialFocusNodes(graphLayout),
+      padding: 0.18,
+    }),
+    [graphLayout],
+  );
 }
 
 export function useCurrentActivityGraphViewModel({
@@ -305,33 +313,44 @@ export function useCurrentActivityGraphViewModel({
     snapshot,
     storedNodePositions,
   });
-  const { displayNodes, handleNodesChange } = useSyncedDisplayNodes(baseNodes);
-  const edges = useMemo(
-    () =>
-      buildGraphEdges(
-        activeGraphHighlights,
-        handleAssignments,
-        pendingAdditionEdgeIds,
-        visibleGraphEdges,
-        displayNodes,
-      ),
-    [
-      activeGraphHighlights,
-      displayNodes,
-      handleAssignments,
-      pendingAdditionEdgeIds,
-      visibleGraphEdges,
-    ],
-  );
-  const initialFitViewOptions = useMemo<FitViewOptions>(
-    () => ({
-      maxZoom: 1.15,
-      minZoom: 0.7,
-      nodes: initialFocusNodes(graphLayout),
-      padding: 0.18,
-    }),
-    [graphLayout],
-  );
+  const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
+
+  useEffect(() => {
+    setNodes((currentNodes) => {
+      const currentPositions = new Map(
+        currentNodes.map((node) => [node.id, node.position]),
+      );
+      return baseNodes.map((node) => ({
+        ...node,
+        position: currentPositions.get(node.id) ?? node.position,
+      }));
+    });
+  }, [baseNodes]);
+
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes(
+      (currentNodes) =>
+        applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
+    );
+  }, []);
+  const displayNodes = useMemo(() => {
+    const positionOverrides = new Map(
+      nodes.map((node) => [node.id, node.position] as const),
+    );
+
+    return baseNodes.map((node) => ({
+      ...node,
+      position: positionOverrides.get(node.id) ?? node.position,
+    }));
+  }, [baseNodes, nodes]);
+  const edges = useCurrentActivityGraphEdges({
+    activeGraphHighlights,
+    displayNodes,
+    handleAssignments,
+    pendingAdditionEdgeIds,
+    visibleGraphEdges,
+  });
+  const initialFitViewOptions = useInitialFitViewOptions(graphLayout);
 
   return {
     edges,
