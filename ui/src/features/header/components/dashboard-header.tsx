@@ -29,15 +29,6 @@ import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { TickSliderControl } from "./tick-slider-control";
 
-const DASHBOARD_BRAND_SLOT_CLASS = "min-w-0 self-end pb-2";
-const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
-const DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS =
-  "max-md:w-full max-md:justify-end";
-const LOCALE_MENU_ITEM_CLASS = cn(
-  "min-h-0 w-full justify-start rounded-xl border-transparent px-3 py-2 text-sm",
-  "[&>span]:grid [&>span]:w-full [&>span]:grid-cols-[minmax(0,1fr)_auto] [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
-);
-
 interface HeaderLocaleOption {
   label: string;
   value: SupportedLocale;
@@ -71,7 +62,13 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             "max-md:flex-col px-2",
           )}
         >
-          <h1 className={cn(DASHBOARD_TITLE_CLASS, DASHBOARD_BRAND_SLOT_CLASS)}>
+          <h1
+            className={cn(
+              "m-0 shrink-0",
+              DASHBOARD_PAGE_HEADING_CLASS,
+              "min-w-0 self-end pb-2",
+            )}
+          >
             <DashboardBrandLockup
               locale={resolvedLocale}
               wordmarkClassName="truncate"
@@ -97,7 +94,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
                 />
               </fieldset>
             }
-            actionsClassName={DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS}
+            actionsClassName="max-md:w-full max-md:justify-end"
             className="justify-end max-md:w-full"
           />
         </div>
@@ -322,7 +319,8 @@ function DashboardLocaleMenuList({
             key={option.value}
             aria-checked={isSelected}
             className={cn(
-              LOCALE_MENU_ITEM_CLASS,
+              "min-h-0 w-full justify-start rounded-xl border-transparent px-3 py-2 text-sm",
+              "[&>span]:grid [&>span]:w-full [&>span]:grid-cols-[minmax(0,1fr)_auto] [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
               isSelected
                 ? "border-af-accent-border bg-af-accent-surface text-af-text"
                 : "text-af-text-muted",
