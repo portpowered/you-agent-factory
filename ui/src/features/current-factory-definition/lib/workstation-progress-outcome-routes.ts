@@ -9,12 +9,29 @@ type CanonicalWorkstation = NonNullable<
 export type WorkstationProgressOutcomeRouteContext = Pick<
   CanonicalWorkstation,
   "type" | "behavior" | "stopWords" | "classificationRoutes"
->;
+> & {
+  assignedWorkerStopToken?: string;
+};
 
 export function workstationHasConfiguredStopWords(
   stopWords: readonly string[] | undefined,
 ): boolean {
   return (stopWords ?? []).some((word) => word.trim().length > 0);
+}
+
+export function workerHasConfiguredStopToken(
+  stopToken: string | undefined,
+): boolean {
+  return (stopToken ?? "").trim().length > 0;
+}
+
+export function workstationHasEffectiveStopWords(
+  workstation: WorkstationProgressOutcomeRouteContext,
+): boolean {
+  return (
+    workstationHasConfiguredStopWords(workstation.stopWords) ||
+    workerHasConfiguredStopToken(workstation.assignedWorkerStopToken)
+  );
 }
 
 export function isClassifierWorkstation(
@@ -50,10 +67,10 @@ export function workstationSupportsProgressOutcomeRoutes(
     return true;
   }
 
-  return workstationHasConfiguredStopWords(workstation.stopWords);
+  return workstationHasEffectiveStopWords(workstation);
 }
 
-/** True when Continue/Reject connect anchors are omitted for missing stopWords on a standard model processor. */
+/** True when Continue/Reject connect anchors are omitted for missing stop markers on a standard model processor. */
 export function workstationHasZAxisIncompleteForConnections(
   workstation: WorkstationProgressOutcomeRouteContext,
 ): boolean {
@@ -74,5 +91,5 @@ export function workstationHasZAxisIncompleteForConnections(
     return false;
   }
 
-  return !workstationHasConfiguredStopWords(workstation.stopWords);
+  return !workstationHasEffectiveStopWords(workstation);
 }
