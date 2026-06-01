@@ -93,4 +93,23 @@ describe("resolveObserveModeFactoryDefinition", () => {
       }),
     ).toEqual(snapshot.factory);
   });
+
+  it("prefers the timeline snapshot factory when the saved document is a minimal replay stub", () => {
+    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const replayStubDocument = {
+      name: "Browser Replay Factory",
+      version: {
+        logical: "1",
+        physical: "2026-06-01T00:00:00Z",
+      },
+    };
+
+    expect(
+      resolveObserveModeFactoryDefinition({
+        document: replayStubDocument,
+        snapshotFactory: snapshot.factory,
+        timelineMode: "current",
+      }),
+    ).toEqual(snapshot.factory);
+  });
 });

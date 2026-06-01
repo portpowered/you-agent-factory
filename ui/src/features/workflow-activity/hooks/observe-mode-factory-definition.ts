@@ -58,7 +58,7 @@ function isSnapshotWorkTypeReplayProjection(
   return [...snapshotWorkTypes].some(([workTypeName, snapshotStates]) => {
     const documentStates = documentWorkTypes.get(workTypeName);
     if (!documentStates) {
-      return false;
+      return snapshotStates.size > 0;
     }
 
     return [...snapshotStates].some(
@@ -81,6 +81,10 @@ function isSnapshotFactoryStrictWorkstationSuperset(
 ): boolean {
   const snapshotWorkstations = factoryWorkstationIds(snapshotFactory);
   const documentWorkstations = factoryWorkstationIds(document);
+
+  if (documentWorkstations.size === 0) {
+    return false;
+  }
 
   if (snapshotWorkstations.size <= documentWorkstations.size) {
     return false;
