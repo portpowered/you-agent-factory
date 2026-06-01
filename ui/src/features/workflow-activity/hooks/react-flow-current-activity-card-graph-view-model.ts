@@ -11,6 +11,7 @@ import type {
 } from "../../../api/dashboard/types";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
+import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
 import {
   buildGraphEdges,
@@ -26,13 +27,12 @@ import {
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
+import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-definition";
 import {
   groupActiveExecutionsByWorkstationNodeID,
   useActiveExecutions,
 } from "./react-flow-current-activity-card-active-executions";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
-import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
-import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-definition";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
@@ -170,12 +170,16 @@ export function currentActivityCardFactoryDefinition(
   snapshot: DashboardSnapshot,
   timelineMode: ReturnType<typeof useFactoryTimelineStore.getState>["mode"],
 ): DashboardSnapshot["factory"] | null | undefined {
-  if (editor.editableDefinitionQuery?.status !== "success") {
-    return null;
+  if (!editor.editorMode) {
+    if (editor.editableDefinitionQuery?.status !== "success") {
+      return snapshot.factory ?? null;
+    }
+
+    return observeModeFactoryDefinition(editor, snapshot, timelineMode);
   }
 
-  if (!editor.editorMode) {
-    return observeModeFactoryDefinition(editor, snapshot, timelineMode);
+  if (editor.editableDefinitionQuery?.status !== "success") {
+    return null;
   }
 
   return editorModeFactoryDefinition(editor) ?? null;

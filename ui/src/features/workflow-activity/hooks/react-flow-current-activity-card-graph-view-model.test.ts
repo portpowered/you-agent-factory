@@ -32,7 +32,7 @@ function createEditorStub(
 }
 
 describe("currentActivityCardFactoryDefinition", () => {
-  it("returns null in observe mode while the scoped factory document is pending", () => {
+  it("returns the timeline snapshot in observe mode while the scoped factory document is pending", () => {
     const snapshot = structuredClone(singleNodeDashboardSnapshot);
 
     expect(
@@ -44,7 +44,7 @@ describe("currentActivityCardFactoryDefinition", () => {
         snapshot,
         "current",
       ),
-    ).toBeNull();
+    ).toEqual(snapshot.factory);
   });
 
   it("returns the saved factory document in observe mode once the scoped factory document succeeds", () => {
