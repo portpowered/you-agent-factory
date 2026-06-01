@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -16,7 +17,7 @@ func TestSupportedModelProviders_BuildCommandRequest_UsesCLICommand(t *testing.T
 				UserMessage:   "run dispatch verification",
 			}
 
-			args, err := behavior.BuildArgs(req, false)
+			args, err := behavior.BuildArgs(context.Background(), req, false, nil)
 			if err != nil {
 				t.Fatalf("BuildArgs: %v", err)
 			}

@@ -1,14 +1,15 @@
 package provider
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -43,8 +44,14 @@ var codexTemporaryServerFailureNeedles = []string{
 	codexHighDemandTemporaryErrorsNeedle,
 }
 
+// ProviderBuildContext carries dispatch-scoped resources for provider argument building.
+type ProviderBuildContext struct {
+	ContentCache    *materialize.DispatchCache
+	MaterializeOpts *materialize.Options
+}
+
 type providerBehavior interface {
-	BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error)
+	BuildArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error)
 	BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest
 	FormatExitFailure(provider string, result CommandResult) string
 	ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType
@@ -146,7 +153,7 @@ func (sharedNonCodexProviderBehavior) ClassifyExitFailure(result CommandResult) 
 	}
 }
 
-func (b claudeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+func (b claudeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	logger := logging.EnsureLogger(b.logger)
 	if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
 		return nil, err
@@ -197,7 +204,7 @@ func (b claudeProviderBehavior) ClassifyExitFailure(result CommandResult) interf
 	}
 }
 
-func (b codexProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+func (b codexProviderBehavior) BuildArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
 	if err := validateCodexOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -217,7 +224,7 @@ func (b codexProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
-	imageArgs, err := codexImageArgs(req)
+	imageArgs, err := codexImageArgs(ctx, req, buildCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +279,7 @@ func (b codexProviderBehavior) FormatTimeoutFailure(result CommandResult) string
 	return formatProviderOutputOrDefault(result, "execution timeout")
 }
 
-func (b geminiProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+func (b geminiProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateGeminiOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -297,7 +304,7 @@ func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interf
 	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 
-func (b kiroProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+func (b kiroProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateKiroOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -322,7 +329,7 @@ func (b kiroProviderBehavior) ClassifyExitFailure(result CommandResult) interfac
 	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 
-func (b cursorProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateCursorOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -356,7 +363,7 @@ func (b cursorProviderBehavior) ClassifyExitFailure(result CommandResult) interf
 	return codexProviderBehavior{}.ClassifyExitFailure(result)
 }
 
-func (b openCodeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateOpenCodeOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -534,10 +541,17 @@ func tailForCodexErrorScan(output []byte) string {
 	return string(output[len(output)-codexErrorLineScanBytes:])
 }
 
-func codexImageArgs(req interfaces.ProviderInferenceRequest) ([]string, error) {
+func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, buildCtx *ProviderBuildContext) ([]string, error) {
 	tokens := cloneInputTokens(req.InputTokens)
 	if len(tokens) == 0 {
 		return nil, nil
+	}
+
+	var materializeOpts *materialize.Options
+	var cache *materialize.DispatchCache
+	if buildCtx != nil {
+		materializeOpts = buildCtx.MaterializeOpts
+		cache = buildCtx.ContentCache
 	}
 
 	var args []string
@@ -546,39 +560,39 @@ func codexImageArgs(req interfaces.ProviderInferenceRequest) ([]string, error) {
 			if part.Type != interfaces.WorkContentPartTypeImage {
 				continue
 			}
-			if err := validateCodexImageFile(req.WorkingDirectory, part.File); err != nil {
-				return nil, fmt.Errorf("input_tokens[%d].color.content[%d].file: %w", tokenIndex, partIndex, err)
+			contentURL, err := codexImageContentURL(part)
+			if err != nil {
+				return nil, fmt.Errorf("input_tokens[%d].color.content[%d].url: %w", tokenIndex, partIndex, err)
 			}
-			args = append(args, "-i", part.File)
+			resolvedURL, err := workcontent.ResolveDispatchContentURL(req.WorkingDirectory, contentURL)
+			if err != nil {
+				return nil, fmt.Errorf("input_tokens[%d].color.content[%d].url: %w", tokenIndex, partIndex, err)
+			}
+			localPath, _, err := materializeCodexImageURL(ctx, cache, resolvedURL, materializeOpts)
+			if err != nil {
+				return nil, fmt.Errorf("input_tokens[%d].color.content[%d].url: %w", tokenIndex, partIndex, err)
+			}
+			args = append(args, "-i", localPath)
 		}
 	}
 	return args, nil
 }
 
-func validateCodexImageFile(workingDirectory, imageFile string) error {
-	if strings.TrimSpace(imageFile) == "" {
-		return fmt.Errorf("codex image content file is required")
+func codexImageContentURL(part interfaces.WorkContentPart) (string, error) {
+	if strings.TrimSpace(part.URL) != "" {
+		return part.URL, nil
 	}
+	if strings.TrimSpace(part.File) != "" {
+		return workcontent.FilesystemPathToContentURL(part.File)
+	}
+	return "", fmt.Errorf("codex image content url is required")
+}
 
-	statPath := imageFile
-	if workingDirectory != "" && !filepath.IsAbs(filepath.FromSlash(imageFile)) {
-		statPath = filepath.Join(workingDirectory, filepath.FromSlash(imageFile))
+func materializeCodexImageURL(ctx context.Context, cache *materialize.DispatchCache, rawURL string, opts *materialize.Options) (string, materialize.CleanupFunc, error) {
+	if cache != nil {
+		return cache.MaterializeContentURL(ctx, rawURL, opts)
 	}
-	info, err := os.Stat(statPath)
-	if err != nil {
-		return fmt.Errorf("codex image content file %q is not readable: %w", imageFile, err)
-	}
-	if info.IsDir() {
-		return fmt.Errorf("codex image content file %q is a directory", imageFile)
-	}
-	file, err := os.Open(statPath)
-	if err != nil {
-		return fmt.Errorf("codex image content file %q is not readable: %w", imageFile, err)
-	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("codex image content file %q could not be closed after validation: %w", imageFile, err)
-	}
-	return nil
+	return materialize.MaterializeContentURL(ctx, rawURL, opts)
 }
 
 func formatProviderOutputOrDefault(result CommandResult, fallback string) string {

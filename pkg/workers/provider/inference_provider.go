@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -90,6 +91,13 @@ func WithProviderCommandRunner(runner CommandRunner) ScriptWrapProviderOption {
 	}
 }
 
+// WithMaterializeOptions configures dispatch-time content URL materialization (used by Codex image args).
+func WithMaterializeOptions(opts *materialize.Options) ScriptWrapProviderOption {
+	return func(p *ScriptWrapProvider) {
+		p.MaterializeOptions = opts
+	}
+}
+
 // ScriptWrapProvider implements Provider by shelling out to a CLI tool
 // (Claude Code or Codex) as a subprocess. It supports configurable
 // dispatchers and skip-permissions.
@@ -97,6 +105,8 @@ type ScriptWrapProvider struct {
 	// SkipPermissions enables --dangerously-skip-permissions (claude) or
 	// --full-auto (codex).
 	SkipPermissions bool
+	// MaterializeOptions configures dispatch-time content URL materialization for Codex image args.
+	MaterializeOptions *materialize.Options
 	// Logger is the structured logger for inference diagnostics. Nil disables logging.
 	Logger logging.Logger
 	exec   CommandRunner
@@ -149,7 +159,12 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 			"model", req.Model)...)
 
 	behavior := providerBehaviorFor(req.ModelProvider, logger)
-	args, err := behavior.BuildArgs(req, p.SkipPermissions)
+	buildCtx := &ProviderBuildContext{
+		ContentCache:    materialize.NewDispatchCache(),
+		MaterializeOpts: p.MaterializeOptions,
+	}
+	defer buildCtx.ContentCache.Release()
+	args, err := behavior.BuildArgs(ctx, req, p.SkipPermissions, buildCtx)
 	if err != nil {
 		logger.Error("inferencer: request argument validation failed",
 			workLogFields(req.Dispatch.Execution,
