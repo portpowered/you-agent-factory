@@ -1,6 +1,30 @@
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
+import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import type { WorkstationDetailCardProps } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { resolveWorkerBackedWorkstationSummaryRunnerValue } from "./workstation-runner-field";
+
+const LOGICAL_MOVE_TOPOLOGY_KIND = "LOGICAL_MOVE";
+
+export function resolveWorkstationSummaryRequiresWorkerAssignment(
+  state: WorkstationDetailCardProps["editableConfigurationState"],
+  selectedNode: DashboardWorkstationNode,
+): boolean {
+  if (state?.status === "ready") {
+    return workstationRequiresWorkerAssignment({
+      type: state.initialValues.workstationType,
+    });
+  }
+
+  if (
+    selectedNode.workstation_kind?.trim().toUpperCase() ===
+    LOGICAL_MOVE_TOPOLOGY_KIND
+  ) {
+    return false;
+  }
+
+  return true;
+}
 
 function normalizeTopologyWorkstationKind(
   workstationKind: string | undefined,
@@ -13,7 +37,11 @@ export function resolveWorkstationSummaryKindValue(
   state: WorkstationDetailCardProps["editableConfigurationState"],
   selectedNode: DashboardWorkstationNode,
   messages: ReturnType<typeof getWorkstationDetailMessages>,
-): string {
+): string | null {
+  if (!resolveWorkstationSummaryRequiresWorkerAssignment(state, selectedNode)) {
+    return null;
+  }
+
   if (!state) {
     return messages.localizeWorkstationBehavior(
       normalizeTopologyWorkstationKind(
@@ -49,4 +77,14 @@ export function resolveWorkstationSummaryTypeValue(
   return messages.localizeWorkstationType(state.initialValues.workstationType);
 }
 
-export { resolveWorkstationSummaryRunnerValue } from "./workstation-runner-field";
+export function resolveWorkstationSummaryRunnerValue(
+  state: WorkstationDetailCardProps["editableConfigurationState"],
+  messages: ReturnType<typeof getWorkstationDetailMessages>,
+  selectedNode: DashboardWorkstationNode,
+): string | null {
+  if (!resolveWorkstationSummaryRequiresWorkerAssignment(state, selectedNode)) {
+    return null;
+  }
+
+  return resolveWorkerBackedWorkstationSummaryRunnerValue(state, messages);
+}

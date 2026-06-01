@@ -14,6 +14,14 @@ import { EditableWorkstationSaveHeaderAction } from "./workstation-save-controls
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 const editableConfigurationCoverageTimeoutMs = 240_000;
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value == null) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 function buildWorkstationHeaderSaveAction({
   canSave,
   onClick = vi.fn(),
@@ -1887,6 +1895,72 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(
       screen.queryByText(/no longer available in the current factory definition/i),
     ).toBeNull();
+  });
+
+  it("hides worker, runner, and kind summary tiles for LOGICAL_MOVE while keeping workstation type", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      worker_type: "MODEL_WORKER",
+      workstation_kind: "LOGICAL_MOVE",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "removed-worker",
+          workstationType: "LOGICAL_MOVE",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const summarySection = screen
+      .getByRole("heading", { name: "Workstation summary" })
+      .closest("section");
+    const resolvedSummarySection = requireValue(
+      summarySection,
+      "expected workstation summary section",
+    );
+
+    expect(within(resolvedSummarySection).getByText("Logical move")).toBeTruthy();
+    expect(within(resolvedSummarySection).queryByText("Worker type")).toBeNull();
+    expect(
+      within(resolvedSummarySection).queryByText("Selected runner"),
+    ).toBeNull();
+    expect(within(resolvedSummarySection).queryByText("Kind")).toBeNull();
+    expect(within(resolvedSummarySection).queryByText("MODEL_WORKER")).toBeNull();
+  });
+
+  it("still renders worker-backed summary tiles for model workstations", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const summarySection = screen
+      .getByRole("heading", { name: "Workstation summary" })
+      .closest("section");
+    const resolvedSummarySection = requireValue(
+      summarySection,
+      "expected workstation summary section",
+    );
+
+    expect(within(resolvedSummarySection).getByText("Worker type")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Selected runner")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Kind")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Model workstation")).toBeTruthy();
   });
 
   it("still renders worker-backed configuration fields for model workstations", () => {
