@@ -23,6 +23,11 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 	got := stdout.String()
 	for _, want := range []string{
 		"# Docs",
+		"`you docs agents` for orientation",
+		"`you submit batch`",
+		"`you session list`",
+		"`--verbose` or `--debug`",
+		"Packaged reference topics:",
 		"`agents` - Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router",
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`config` - factory.json topology, work types, states, workers, workstations, resources, and portability",
@@ -78,7 +83,7 @@ func TestDocsCommand_HelpStillUsesCobraHelp(t *testing.T) {
 		"Print packaged markdown reference topics",
 		"Usage:",
 		"docs [topic]",
-		"Run without a topic to print the packaged docs index.",
+		"Run without a topic to print the quick-start blurb and packaged docs index.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("docs help missing %q:\n%s", want, got)

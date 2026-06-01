@@ -44,8 +44,6 @@ func TestRootCommand_HelpDocumentsGlobalServerFlag(t *testing.T) {
 	for _, want := range []string{
 		"--server",
 		"factory API base URI",
-		"Global --server",
-		"--server http://localhost:9090 --json factory query",
 	} {
 		if !bytes.Contains([]byte(help), []byte(want)) {
 			t.Fatalf("root help missing %q:\n%s", want, help)

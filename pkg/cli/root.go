@@ -72,29 +72,18 @@ func NewRootCommand() *cobra.Command {
 		Short:        "Run and manage CPN-based workflow factories",
 		SilenceUsage: true,
 		Long: "Run and manage CPN-based workflow factories.\n\n" +
-			"Running " + cliBinaryName + " with no arguments starts the out-of-the-box flow: " +
-			"it prepares ./factory when needed, keeps the runtime alive in continuous mode, " +
-			"watches factory/inputs/task/default for Markdown or JSON task files, and reports " +
-			"the local dashboard at the first available port, preferring http://localhost:7437/dashboard/ui.\n\n" +
-			"Global --server selects the factory API base URI for HTTP client commands (default " +
-			cliserver.DefaultBaseURI + "); you run binds locally to the host and port encoded in --server. " +
-			"Global --json emits structured JSON on stdout for supported commands while diagnostics remain on stderr. " +
-			"Place both flags before the subcommand (for example, " + cliBinaryName +
-			" --server http://localhost:9090 --json factory query).\n\n" +
-			"Default command output is customer-facing. Use --verbose for concise troubleshooting context; " +
-			"--debug enables lower-level diagnostics where supported and implies --verbose. Diagnostics " +
-			"use stderr so JSON stdout remains parseable, and must not include full prompts, " +
-			"full work payloads, access tokens, full model input text, full successful response bodies, or sensitive generated content.\n\n" +
-			"Packaged reference topics are also available through " + cliBinaryName + " docs <topic>. " +
-			"Supported docs topics: " + supportedDocsTopicsHelpText() + ".",
+			"What:\n" +
+			"CPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\n" +
+			"How to use:\n" +
+			"Running " + cliBinaryName + " with no args starts the out-of-the-box continuous factory and local dashboard (http://localhost:7437/dashboard/ui).\n" +
+			"Use " + cliBinaryName + " run --dir factory for explicit runs. See " + cliBinaryName + " <cmd> --help for subcommand details.\n\n" +
+			"Agents:\n" +
+			"Start with " + cliBinaryName + " docs agents for orientation, " + cliBinaryName + " submit or " + cliBinaryName + " submit batch to enqueue work, and " + cliBinaryName + " session list to confirm a live factory.\n" +
+			"Run " + cliBinaryName + " docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in " + cliBinaryName + " docs.",
 		Example: "  # Start the default Codex-backed factory in the current project.\n" +
 			"  " + cliBinaryName + "\n\n" +
-			"  # In another terminal, submit a Markdown task to the default scaffold.\n" +
-			"  printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md\n\n" +
-			"  # Print the packaged workstations reference page from the installed binary.\n" +
-			"  " + cliBinaryName + " docs workstations\n\n" +
-			"  # Explicit batch-style runs are still available when you need them.\n" +
-			"  " + cliBinaryName + " run --dir factory",
+			"  # Agent orientation and command matrix.\n" +
+			"  " + cliBinaryName + " docs agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, globals, diagnostics.verboseEnabled(), diagnostics.debug)
 		},
@@ -578,7 +567,7 @@ func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 		Short:        "Print packaged markdown reference topics",
 		SilenceUsage: true,
 		Long: "Print packaged markdown reference topics from the installed binary.\n\n" +
-			"Run without a topic to print the packaged docs index. Use one supported topic argument to print the authored markdown page with no wrapper formatting.",
+			"Run without a topic to print the quick-start blurb and packaged docs index. Use one supported topic argument to print the authored markdown page with no wrapper formatting.",
 		Args:      cobra.MaximumNArgs(1),
 		ValidArgs: docscli.SupportedTopicCommands(),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -605,10 +594,6 @@ func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	}
 
 	return docsCmd
-}
-
-func supportedDocsTopicsHelpText() string {
-	return strings.Join(docscli.SupportedTopics(), ", ")
 }
 
 func newConfigCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {

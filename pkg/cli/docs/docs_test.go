@@ -148,6 +148,26 @@ func TestTopicSummaries_ReturnsTopicDescriptionsInSupportedOrder(t *testing.T) {
 	}
 }
 
+func TestQuickStartMarkdown_AtMostSixLines(t *testing.T) {
+	t.Parallel()
+
+	got := QuickStartMarkdown("you")
+	lines := strings.Split(strings.TrimSpace(got), "\n")
+	if len(lines) > 6 {
+		t.Fatalf("QuickStartMarkdown() has %d lines, want <= 6:\n%s", len(lines), got)
+	}
+	for _, want := range []string{
+		"`you docs agents`",
+		"`you submit batch`",
+		"`you session list`",
+		"`--verbose` or `--debug`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("QuickStartMarkdown() missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 	t.Parallel()
 
