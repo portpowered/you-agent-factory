@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
@@ -69,8 +70,12 @@ func TestFactoryEventHistory_RecordWorkRequest_SerializesContentURLNotMaterializ
 	if err != nil {
 		t.Fatalf("marshal WORK_REQUEST: %v", err)
 	}
-	payload := string(data)
+	assertWorkRequestWireJSON(t, string(data), localURL, remoteURL, materializedPath)
+	assertWorkRequestWireContentParts(t, events[0], localURL, remoteURL)
+}
 
+func assertWorkRequestWireJSON(t *testing.T, payload, localURL, remoteURL, materializedPath string) {
+	t.Helper()
 	for _, wantURL := range []string{localURL, remoteURL} {
 		if !strings.Contains(payload, wantURL) {
 			t.Fatalf("WORK_REQUEST JSON missing url %q: %s", wantURL, payload)
@@ -85,8 +90,11 @@ func TestFactoryEventHistory_RecordWorkRequest_SerializesContentURLNotMaterializ
 			t.Fatalf("WORK_REQUEST JSON must not contain materialized path fragment %q: %s", reject, payload)
 		}
 	}
+}
 
-	payloadStruct, err := events[0].Payload.AsWorkRequestEventPayload()
+func assertWorkRequestWireContentParts(t *testing.T, event factoryapi.FactoryEvent, localURL, remoteURL string) {
+	t.Helper()
+	payloadStruct, err := event.Payload.AsWorkRequestEventPayload()
 	if err != nil {
 		t.Fatalf("work request payload: %v", err)
 	}

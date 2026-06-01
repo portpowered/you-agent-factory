@@ -170,6 +170,11 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
+	assertStructuredSubmitWorkSubmission(t, mf, staged)
+}
+
+func assertStructuredSubmitWorkSubmission(t *testing.T, mf *testutil.MockFactory, staged factoryapi.StageSubmitWorkFileResponse) {
+	t.Helper()
 	if len(mf.Submitted) != 1 {
 		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
 	}
@@ -179,14 +184,28 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 	if len(mf.Submitted[0].Content) != 2 {
 		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
 	}
-	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
-		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
+	assertStructuredSubmitWorkTextPart(t, mf.Submitted[0].Content[0])
+	assertStructuredSubmitWorkStagedImagePart(t, mf.Submitted[0].Content[1], staged)
+}
+
+func assertStructuredSubmitWorkTextPart(t *testing.T, part interfaces.WorkContentPart) {
+	t.Helper()
+	if part.Type != interfaces.WorkContentPartTypeText || part.Text != "Review this UI." {
+		t.Fatalf("submitted content[0] = %#v, want canonical text content", part)
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].ContentType != "image/png" {
-		t.Fatalf("submitted content[1] = %#v, want canonical staged image content", mf.Submitted[0].Content[1])
+}
+
+func assertStructuredSubmitWorkStagedImagePart(
+	t *testing.T,
+	part interfaces.WorkContentPart,
+	staged factoryapi.StageSubmitWorkFileResponse,
+) {
+	t.Helper()
+	if part.Type != interfaces.WorkContentPartTypeImage || part.ContentType != "image/png" {
+		t.Fatalf("submitted content[1] = %#v, want canonical staged image content", part)
 	}
-	if mf.Submitted[0].Content[1].File != "" {
-		t.Fatalf("submitted content[1].file = %q, want empty canonical file field", mf.Submitted[0].Content[1].File)
+	if part.File != "" {
+		t.Fatalf("submitted content[1].file = %q, want empty canonical file field", part.File)
 	}
 	stagedPath, err := resolveSubmitWorkStagedFileRef(staged.StagedFileRef)
 	if err != nil {
@@ -196,8 +215,8 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stage content url: %v", err)
 	}
-	if mf.Submitted[0].Content[1].URL != wantURL {
-		t.Fatalf("submitted content[1].url = %q, want %q", mf.Submitted[0].Content[1].URL, wantURL)
+	if part.URL != wantURL {
+		t.Fatalf("submitted content[1].url = %q, want %q", part.URL, wantURL)
 	}
 	stagedContent, err := os.ReadFile(stagedPath)
 	if err != nil {
@@ -209,8 +228,8 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 	if string(staged.Url) != wantURL {
 		t.Fatalf("stage response url = %q, want %q", staged.Url, wantURL)
 	}
-	if mf.Submitted[0].Content[1].Metadata[submitWorkItemTypeMetadataKey] != "image" || mf.Submitted[0].Content[1].Metadata[submitWorkFileNameMetadataKey] != "ui.png" {
-		t.Fatalf("submitted content[1].metadata = %#v, want item type and file name metadata", mf.Submitted[0].Content[1].Metadata)
+	if part.Metadata[submitWorkItemTypeMetadataKey] != "image" || part.Metadata[submitWorkFileNameMetadataKey] != "ui.png" {
+		t.Fatalf("submitted content[1].metadata = %#v, want item type and file name metadata", part.Metadata)
 	}
 }
 

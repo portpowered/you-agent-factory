@@ -49,39 +49,9 @@ func TestURLMaterializationCorpus_CasesMatchExpectedOutcomes(t *testing.T) {
 
 			switch tc.Expect.Outcome {
 			case "success":
-				if err != nil {
-					t.Fatalf("materialize: %v", err)
-				}
-				if tc.Expect.SameAsLocalPath && gotPath != localPath {
-					t.Fatalf("path = %q, want local path %q", gotPath, localPath)
-				}
-				if tc.Expect.BodyMatch {
-					body, readErr := os.ReadFile(gotPath)
-					if readErr != nil {
-						t.Fatalf("read materialized path: %v", readErr)
-					}
-					if string(body) != tc.ResponseBody {
-						t.Fatalf("body = %q, want %q", body, tc.ResponseBody)
-					}
-				}
-				if prefix := tc.Expect.TempPrefix; prefix != "" && !strings.Contains(filepath.Base(gotPath), strings.TrimSuffix(prefix, "*")) {
-					t.Fatalf("path = %q, want temp prefix %q", gotPath, prefix)
-				}
-				if tc.Expect.TempRemovedOnCleanup {
-					cleanup()
-					if _, statErr := os.Stat(gotPath); !os.IsNotExist(statErr) {
-						t.Fatalf("expected temp removed after cleanup, stat err=%v", statErr)
-					}
-				}
+				assertURLMaterializationSuccess(t, tc, gotPath, localPath, cleanup, err)
 			case "error":
-				if err == nil {
-					t.Fatal("expected materialization error")
-				}
-				for _, fragment := range tc.Expect.ErrorContains {
-					if !strings.Contains(err.Error(), fragment) {
-						t.Fatalf("error = %v, want fragment %q", err, fragment)
-					}
-				}
+				assertURLMaterializationError(t, tc, err)
 			default:
 				t.Fatalf("unsupported expect.outcome %q", tc.Expect.Outcome)
 			}
@@ -130,5 +100,51 @@ func resolveURLMaterializationFixture(t *testing.T, tc materialize.URLMaterializ
 	default:
 		t.Fatalf("unsupported setup %q", tc.Setup)
 		return "", nil, ""
+	}
+}
+
+func assertURLMaterializationSuccess(
+	t *testing.T,
+	tc materialize.URLMaterializationCase,
+	gotPath, localPath string,
+	cleanup func(),
+	err error,
+) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	if tc.Expect.SameAsLocalPath && gotPath != localPath {
+		t.Fatalf("path = %q, want local path %q", gotPath, localPath)
+	}
+	if tc.Expect.BodyMatch {
+		body, readErr := os.ReadFile(gotPath)
+		if readErr != nil {
+			t.Fatalf("read materialized path: %v", readErr)
+		}
+		if string(body) != tc.ResponseBody {
+			t.Fatalf("body = %q, want %q", body, tc.ResponseBody)
+		}
+	}
+	if prefix := tc.Expect.TempPrefix; prefix != "" && !strings.Contains(filepath.Base(gotPath), strings.TrimSuffix(prefix, "*")) {
+		t.Fatalf("path = %q, want temp prefix %q", gotPath, prefix)
+	}
+	if tc.Expect.TempRemovedOnCleanup {
+		cleanup()
+		if _, statErr := os.Stat(gotPath); !os.IsNotExist(statErr) {
+			t.Fatalf("expected temp removed after cleanup, stat err=%v", statErr)
+		}
+	}
+}
+
+func assertURLMaterializationError(t *testing.T, tc materialize.URLMaterializationCase, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected materialization error")
+	}
+	for _, fragment := range tc.Expect.ErrorContains {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("error = %v, want fragment %q", err, fragment)
+		}
 	}
 }
