@@ -620,6 +620,106 @@ describe("current activity graph editor controllers", () => {
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
+  it("clears blocked removal notice when switching away from delete tool", () => {
+    const reset = vi.fn();
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph();
+
+    const { result, rerender } = renderHook(
+      ({ activeTool }: { activeTool: "connect" | "delete" }) =>
+        useFactoryGraphRemovalController({
+          activeTool,
+          canInteractWithEditor: true,
+          draftState,
+          editableGraph,
+          hiddenNodeClasses: new Set(),
+          saveEditableDefinition: {
+            reset,
+          } as never,
+        }),
+      { initialProps: { activeTool: "delete" as const } },
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete("worker:writer");
+    });
+
+    expect(result.current.blockedRemovalReason).toBe(
+      "This worker is still assigned to 1 workstation. Reassign or remove those workstations before deleting writer.",
+    );
+
+    rerender({ activeTool: "connect" });
+
+    expect(result.current.blockedRemovalReason).toBeNull();
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
+
+  it("clears blocked removal notice when canceling after a blocked delete attempt", () => {
+    const reset = vi.fn();
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        hiddenNodeClasses: new Set(),
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete("worker:writer");
+    });
+
+    expect(result.current.blockedRemovalReason).toBe(
+      "This worker is still assigned to 1 workstation. Reassign or remove those workstations before deleting writer.",
+    );
+
+    act(() => {
+      result.current.handleCancelRemoval();
+    });
+
+    expect(result.current.blockedRemovalReason).toBeNull();
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
+
+  it("clears pending removal intent when canceling a confirmation dialog", () => {
+    const reset = vi.fn();
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        hiddenNodeClasses: new Set(),
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete("work-type:story");
+    });
+
+    expect(result.current.pendingRemovalIntent).not.toBeNull();
+
+    act(() => {
+      result.current.handleCancelRemoval();
+    });
+
+    expect(result.current.pendingRemovalIntent).toBeNull();
+    expect(result.current.blockedRemovalReason).toBeNull();
+  });
+
   it("ignores delete-tool node clicks when activeTool is not delete", () => {
     const reset = vi.fn();
     const draftState = createDraftState();

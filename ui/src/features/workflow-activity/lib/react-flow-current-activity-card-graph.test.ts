@@ -491,6 +491,7 @@ describe("current activity graph editor handles", () => {
 
   it.each([
     ["delete", false],
+    ["add", true],
     ["connect", true],
     [null, true],
   ] as const)(
