@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 
 import {
   Button,
-  DashboardActionRow,
   DashboardActionButton,
+  DashboardActionRow,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -17,15 +17,15 @@ import {
 import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-export { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-work-state-phase-legend";
+
 export {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
 } from "./factory-graph-editor-mode-controls";
+export { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-work-state-phase-legend";
+
 import { FactoryGraphEditorHideShowMenu } from "./factory-graph-editor-hide-show-menu";
-import {
-  FactoryGraphEditorTooltipActionButton,
-} from "./factory-graph-editor-tooltip-button";
+import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
@@ -63,7 +63,8 @@ const VISIBILITY_PANEL_CLASS =
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
   danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
-  warning: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+  warning:
+    "border-af-warning-border bg-af-warning-surface text-af-warning-text",
 };
 
 export function FactoryGraphEditorToolbar({
@@ -115,8 +116,7 @@ export function FactoryGraphEditorToolbar({
     return null;
   }
   const messages = getFactoryGraphEditorMessages(locale);
-  const hideShowActive =
-    hideShowMenuOpen || hiddenNodeClasses.size > 0;
+  const hideShowActive = hideShowMenuOpen || hiddenNodeClasses.size > 0;
 
   return (
     <section
@@ -135,66 +135,71 @@ export function FactoryGraphEditorToolbar({
       ) : null}
       {visible ? (
         <>
-      <FactoryGraphEditorAddMenu
-        actions={addMenuActions}
-        canInteract={canInteract}
-        locale={locale}
-        onAction={onAddAction}
-        onOpenChange={onAddMenuOpenChange}
-        open={openAddMenu}
-      />
-      <FactoryGraphEditorToolbarButton
-        active={activeTool === "delete"}
-        description={messages.toolbarDeleteDescription}
-        disabled={!canInteract}
-        icon={<TrashIcon />}
-        label={messages.toolbarDeleteLabel}
-        onClick={() => onSelectTool(activeTool === "delete" ? null : "delete")}
-        tone={activeTool === "delete" ? "secondary" : "outline"}
-      />
-      <FactoryGraphEditorToolbarButton
-        active={activeTool === "connect"}
-        description={messages.toolbarConnectDescription}
-        disabled={!canInteract}
-        icon={<ConnectIcon />}
-        label={messages.toolbarConnectLabel}
-        onClick={() =>
-          onSelectTool(activeTool === "connect" ? null : "connect")
-        }
-        tone={activeTool === "connect" ? "secondary" : "outline"}
-      />
-      {hasPendingChanges ? (
-        <DashboardActionRow
-          actions={
-            <>
-              <DashboardActionButton
-                disabled={!canDiscard || isSaving}
-                onClick={onDiscard}
-                tone="outline"
-                type="button"
-              >
-                {messages.draftActionsDiscard}
-              </DashboardActionButton>
-              <FactoryGraphEditorTooltipActionButton
-                aria-label={
-                  isSaving ? messages.draftActionsSaving : messages.draftActionsSave
-                }
-                disabled={!canSave || isSaving}
-                executing={isSaving}
-                iconOnly
-                onClick={onSave}
-                tooltip={saveDisabledReason ?? messages.draftActionsSave}
-                tone={canSave && !isSaving ? "default" : "outline"}
-                type="button"
-              >
-                <SaveIcon />
-              </FactoryGraphEditorTooltipActionButton>
-            </>
-          }
-          actionsClassName={TOOLBAR_ACTIONS_CLASS}
-          className={TOOLBAR_MIXED_ROW_CLASS}
-        />
-      ) : null}
+          <FactoryGraphEditorAddMenu
+            actions={addMenuActions}
+            canInteract={canInteract}
+            locale={locale}
+            onAction={onAddAction}
+            onOpenChange={onAddMenuOpenChange}
+            open={openAddMenu}
+          />
+          <FactoryGraphEditorToolbarButton
+            active={activeTool === "delete"}
+            description={messages.toolbarDeleteDescription}
+            disabled={!canInteract}
+            icon={<TrashIcon />}
+            label={messages.toolbarDeleteLabel}
+            onClick={() =>
+              onSelectTool(activeTool === "delete" ? null : "delete")
+            }
+            tone={activeTool === "delete" ? "secondary" : "outline"}
+          />
+          <FactoryGraphEditorToolbarButton
+            active={activeTool === "connect"}
+            description={messages.toolbarConnectDescription}
+            disabled={!canInteract}
+            icon={<ConnectIcon />}
+            label={messages.toolbarConnectLabel}
+            onClick={() =>
+              onSelectTool(activeTool === "connect" ? null : "connect")
+            }
+            tone={activeTool === "connect" ? "secondary" : "outline"}
+          />
+          {hasPendingChanges ? (
+            <DashboardActionRow
+              actions={
+                <>
+                  <DashboardActionButton
+                    disabled={!canDiscard || isSaving}
+                    onClick={onDiscard}
+                    tone="outline"
+                    type="button"
+                  >
+                    {messages.draftActionsDiscard}
+                  </DashboardActionButton>
+                  <FactoryGraphEditorTooltipActionButton
+                    aria-label={
+                      isSaving
+                        ? messages.draftActionsSaving
+                        : messages.draftActionsSave
+                    }
+                    disabled={!canSave || isSaving}
+                    executing={isSaving}
+                    iconOnly
+                    onClick={onSave}
+                    placement="above"
+                    tooltip={saveDisabledReason ?? messages.draftActionsSave}
+                    tone={canSave && !isSaving ? "default" : "outline"}
+                    type="button"
+                  >
+                    <SaveIcon />
+                  </FactoryGraphEditorTooltipActionButton>
+                </>
+              }
+              actionsClassName={TOOLBAR_ACTIONS_CLASS}
+              className={TOOLBAR_MIXED_ROW_CLASS}
+            />
+          ) : null}
         </>
       ) : null}
     </section>
@@ -263,6 +268,7 @@ function FactoryGraphEditorToolbarButton({
       disabled={disabled}
       iconOnly
       onClick={onClick}
+      placement="above"
       tooltip={description}
       tone={tone}
       type="button"

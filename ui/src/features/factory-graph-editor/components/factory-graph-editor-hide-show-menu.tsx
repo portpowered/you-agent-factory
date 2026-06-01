@@ -1,4 +1,9 @@
-import { DashboardActionButton, Popover, PopoverContent, PopoverTrigger } from "../../../components/ui";
+import {
+  DashboardActionButton,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../../components/ui";
 import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
 import { FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS } from "../lib/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
@@ -28,6 +33,7 @@ export function FactoryGraphEditorHideShowMenu({
           aria-label={messages.toolbarOpenHideShowMenuLabel}
           aria-pressed={pressed}
           iconOnly
+          placement="above"
           tooltip={messages.toolbarHideShowDescription}
           tone={open ? "secondary" : "outline"}
           type="button"
@@ -70,7 +76,9 @@ export function FactoryGraphEditorHideShowMenu({
               >
                 <span className="flex w-full items-center justify-between gap-3">
                   <span className="grid justify-items-start gap-0.5">
-                    <span className="text-sm font-semibold text-af-text">{label}</span>
+                    <span className="text-sm font-semibold text-af-text">
+                      {label}
+                    </span>
                     <span className="text-xs leading-5 text-af-text-muted">
                       {messages.nodeClassVisibilityDescription(kind)}
                     </span>

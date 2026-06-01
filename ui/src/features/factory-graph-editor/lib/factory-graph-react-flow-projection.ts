@@ -26,19 +26,21 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
   resolveFactoryGraphConnectionAnchorContext,
+} from "./factory-graph-editor-connections";
+import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
+import {
   workstationRendersProgressOutcomeHandleValidation,
   workstationRendersProgressOutcomeZAxisHintAnchors,
-} from "./factory-graph-editor-connections";
-import {
-  filterValidationHandleErrorsForWorkstation,
-  type FactoryValidationGraphProjection,
-  validationHandleErrorsForNode,
-} from "./factory-validation-graph-projection";
-import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
+} from "./factory-graph-progress-outcome-handle-visibility";
 import {
   type FactoryGraphWorkStateType,
   resolveWorkStateTypeForGraphNode,
 } from "./factory-graph-work-state-type";
+import {
+  type FactoryValidationGraphProjection,
+  filterValidationHandleErrorsForWorkstation,
+  validationHandleErrorsForNode,
+} from "./factory-validation-graph-projection";
 
 export type FactoryGraphReactFlowMode = "editor" | "observer";
 
@@ -453,7 +455,10 @@ function getNodeHandleId(
   role: "source" | "target",
   workstationResolver?: FactoryGraphConnectionResolver,
 ) {
-  if (edgeKind === "work-type-state" || edgeKind === "work-state-visibility-bypass") {
+  if (
+    edgeKind === "work-type-state" ||
+    edgeKind === "work-state-visibility-bypass"
+  ) {
     return null;
   }
 
@@ -523,7 +528,9 @@ function projectEditorConnectionAnchorHandle(input: {
       : `${input.messages.toolbarConnectLabel}: ${input.node.label} ${input.anchor.label}`,
     buttonDisabled: !input.canEditConnections || input.nodeIsPendingRemoval,
     buttonPressed: input.selected || undefined,
-    buttonTitle: showHandleValidation ? validationMessage : input.anchor.description,
+    buttonTitle: showHandleValidation
+      ? validationMessage
+      : input.anchor.description,
     connectable: input.canEditConnections && !input.nodeIsPendingRemoval,
     id: input.anchor.id,
     label: input.anchor.label,

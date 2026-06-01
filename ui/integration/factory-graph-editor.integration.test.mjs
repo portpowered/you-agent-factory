@@ -251,6 +251,30 @@ async function expectConsolidatedDirtyGraphEditorChrome(page) {
   expect(await toolbar.locator('[role="status"]').count()).toBe(0);
 }
 
+async function expectTooltipPlacement(
+  scope,
+  triggerName,
+  tooltipName,
+  placement,
+) {
+  const trigger = scope.getByRole("button", { name: triggerName });
+  await trigger.hover();
+  const tooltip = scope.getByRole("tooltip", { name: tooltipName });
+  await tooltip.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+  const className = await tooltip.getAttribute("class");
+
+  if (placement === "above") {
+    expect(className).toContain("bottom-full");
+    expect(className).not.toContain("top-full");
+  } else {
+    expect(className).toContain("top-full");
+    expect(className).not.toContain("bottom-full");
+  }
+
+  await scope.page().mouse.move(0, 0);
+  await tooltip.waitFor({ state: "hidden", timeout: uiInteractionTimeoutMs });
+}
+
 async function expectConsolidatedCleanGraphEditorChrome(page) {
   const graphCard = factoryGraphCardScope(page);
   await expect
@@ -289,6 +313,72 @@ describe.sequential("factory graph editor browser integration", () => {
   });
 
   it(
+    "keeps toolbar hints above the trigger and mode-toggle hints below on short viewports",
+    async () => {
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: exportFactoryDefinition,
+        eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
+      });
+      const browserPage = await openBrowserPage();
+
+      try {
+        await browserPage.page.setViewportSize({ width: 480, height: 384 });
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await server.replayCompleted;
+
+        const graphCard = factoryGraphCardScope(browserPage.page);
+        await expectTooltipPlacement(
+          graphCard,
+          "Enter factory graph editor",
+          "Enter factory graph editor",
+          "below",
+        );
+
+        await graphCard
+          .getByRole("button", { name: "Enter factory graph editor" })
+          .click();
+
+        const toolbar = graphCard.getByRole("region", {
+          name: "Factory graph editor tools",
+        });
+        await toolbar.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+
+        for (const [triggerName, tooltipName] of [
+          ["Delete", "Remove nodes or edges from the draft"],
+          ["Connect", "Create compatible graph connections"],
+          [
+            "Open hide or show node classes menu",
+            "Show or hide node classes on the graph",
+          ],
+        ]) {
+          await expectTooltipPlacement(
+            toolbar,
+            triggerName,
+            tooltipName,
+            "above",
+          );
+        }
+
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
+
+  it(
     "enters graph editor mode through the graph card controls",
     async () => {
       const server = await startFactoryApiServer({
@@ -316,12 +406,17 @@ describe.sequential("factory graph editor browser integration", () => {
             name: "Factory graph editor tools",
           },
         );
-        await toolbar.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await toolbar.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
         await toolbar
           .getByRole("button", { name: "Open add entity menu" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         expect(
-          await toolbar.getByRole("button", { name: "Discard changes" }).count(),
+          await toolbar
+            .getByRole("button", { name: "Discard changes" })
+            .count(),
         ).toBe(0);
 
         expectNoBrowserErrors(
@@ -710,7 +805,9 @@ describe.sequential("factory graph editor browser integration", () => {
 
         await expectConsolidatedCleanGraphEditorChrome(browserPage.page);
         expect(
-          await toolbar.getByRole("button", { name: "Discard changes" }).count(),
+          await toolbar
+            .getByRole("button", { name: "Discard changes" })
+            .count(),
         ).toBe(0);
 
         expect(saveRequests).toHaveLength(1);
@@ -817,7 +914,9 @@ describe.sequential("factory graph editor browser integration", () => {
         await discardChangesButton.click();
         await expectConsolidatedCleanGraphEditorChrome(browserPage.page);
         expect(
-          await toolbar.getByRole("button", { name: "Discard changes" }).count(),
+          await toolbar
+            .getByRole("button", { name: "Discard changes" })
+            .count(),
         ).toBe(0);
 
         expectNoBrowserErrors(
@@ -898,7 +997,9 @@ describe.sequential("factory graph editor browser integration", () => {
 
         await discardChangesButton.click();
         expect(
-          await toolbar.getByRole("button", { name: "Discard changes" }).count(),
+          await toolbar
+            .getByRole("button", { name: "Discard changes" })
+            .count(),
         ).toBe(0);
 
         await browserPage.page
@@ -911,7 +1012,9 @@ describe.sequential("factory graph editor browser integration", () => {
         await expect
           .poll(
             async () =>
-              await toolbar.getByRole("button", { name: "Open add entity menu" }).count(),
+              await toolbar
+                .getByRole("button", { name: "Open add entity menu" })
+                .count(),
             { timeout: uiInteractionTimeoutMs },
           )
           .toBe(0);
