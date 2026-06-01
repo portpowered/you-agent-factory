@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseGoDurationNanoseconds } from "./go-duration";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("parseGoDurationNanoseconds", () => {
   it("parses common Go duration strings", () => {
@@ -20,5 +24,12 @@ describe("parseGoDurationNanoseconds", () => {
     expect(parseGoDurationNanoseconds("1.5s")).toBe(1.5 * 1_000_000_000);
     expect(parseGoDurationNanoseconds("250ms")).toBe(250 * 1_000_000);
     expect(parseGoDurationNanoseconds("500µs")).toBe(500 * 1_000);
+    expect(parseGoDurationNanoseconds("500μs")).toBe(500 * 1_000);
+  });
+
+  it("rejects non-finite parsed amounts", () => {
+    vi.spyOn(Number, "parseFloat").mockReturnValue(Number.NaN);
+
+    expect(parseGoDurationNanoseconds("5s")).toBeNull();
   });
 });

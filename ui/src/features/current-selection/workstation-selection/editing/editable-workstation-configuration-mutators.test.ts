@@ -50,26 +50,37 @@ const selectedEditableValues: EditableWorkstationValues = {
   workstationType: "WORKSTATION",
 };
 
-describe("buildEditableWorkstationConfigurationMutators", () => {
+type SessionState = {
+  draft: EditableWorkstationDraft;
+  latestDefinitionDraft: EditableWorkstationDraft;
+  sessionStartDraft: EditableWorkstationDraft;
+};
+
+function buildMutatorHarness(initialState: SessionState) {
+  let sessionState = initialState;
+  const setSessionState = vi.fn(
+    (updater: (current: SessionState | null) => SessionState | null) => {
+      sessionState = updater(sessionState) ?? sessionState;
+    },
+  );
+  const mutators = buildEditableWorkstationConfigurationMutators({
+    selectedEditableValues,
+    setSessionState,
+  });
+
+  return {
+    getSessionState: () => sessionState,
+    mutators,
+    setSessionState,
+  };
+}
+
+describe("buildEditableWorkstationConfigurationMutators cron fields", () => {
   it("updates cron draft fields through cron mutators", () => {
-    let sessionState = {
+    const { getSessionState, mutators } = buildMutatorHarness({
       draft: cronDraft,
       latestDefinitionDraft: cronDraft,
       sessionStartDraft: cronDraft,
-    };
-    const setSessionState = vi.fn(
-      (
-        updater: (
-          current: typeof sessionState | null,
-        ) => typeof sessionState | null,
-      ) => {
-        sessionState = updater(sessionState) ?? sessionState;
-      },
-    );
-
-    const mutators = buildEditableWorkstationConfigurationMutators({
-      selectedEditableValues,
-      setSessionState,
     });
 
     mutators.onCronScheduleChange("0 9 * * *");
@@ -77,14 +88,16 @@ describe("buildEditableWorkstationConfigurationMutators", () => {
     mutators.onCronExpiryWindowChange("2m");
     mutators.onCronTriggerAtStartChange(false);
 
-    expect(sessionState.draft.cron).toEqual({
+    expect(getSessionState().draft.cron).toEqual({
       expiryWindow: "2m",
       jitter: "15s",
       schedule: "0 9 * * *",
       triggerAtStart: false,
     });
   });
+});
 
+describe("buildEditableWorkstationConfigurationMutators session sync", () => {
   it("marks changes saved from the current draft", () => {
     const dirtyDraft: EditableWorkstationDraft = {
       ...cronDraft,
@@ -93,29 +106,15 @@ describe("buildEditableWorkstationConfigurationMutators", () => {
         schedule: "0 9 * * *",
       },
     };
-    let sessionState = {
+    const { getSessionState, mutators } = buildMutatorHarness({
       draft: dirtyDraft,
       latestDefinitionDraft: cronDraft,
       sessionStartDraft: cronDraft,
-    };
-    const setSessionState = vi.fn(
-      (
-        updater: (
-          current: typeof sessionState | null,
-        ) => typeof sessionState | null,
-      ) => {
-        sessionState = updater(sessionState) ?? sessionState;
-      },
-    );
-
-    const mutators = buildEditableWorkstationConfigurationMutators({
-      selectedEditableValues,
-      setSessionState,
     });
 
     mutators.markChangesSaved();
-    expect(sessionState.latestDefinitionDraft).toBe(dirtyDraft);
-    expect(sessionState.sessionStartDraft).toBe(dirtyDraft);
+    expect(getSessionState().latestDefinitionDraft).toBe(dirtyDraft);
+    expect(getSessionState().sessionStartDraft).toBe(dirtyDraft);
   });
 
   it("resets the draft to the latest factory definition", () => {
@@ -133,28 +132,60 @@ describe("buildEditableWorkstationConfigurationMutators", () => {
         schedule: "0 9 * * *",
       },
     };
-    let sessionState = {
+    const { getSessionState, mutators } = buildMutatorHarness({
       draft: dirtyDraft,
       latestDefinitionDraft,
       sessionStartDraft: cronDraft,
-    };
-    const setSessionState = vi.fn(
-      (
-        updater: (
-          current: typeof sessionState | null,
-        ) => typeof sessionState | null,
-      ) => {
-        sessionState = updater(sessionState) ?? sessionState;
-      },
-    );
+    });
 
+    mutators.onResetToLatest();
+    expect(getSessionState().draft).toBe(latestDefinitionDraft);
+    expect(getSessionState().sessionStartDraft).toBe(latestDefinitionDraft);
+  });
+});
+
+describe("buildEditableWorkstationConfigurationMutators other draft fields", () => {
+  it("updates prompt, runner, worker, and behavior on the session draft", () => {
+    const { getSessionState, mutators } = buildMutatorHarness({
+      draft: cronDraft,
+      latestDefinitionDraft: cronDraft,
+      sessionStartDraft: cronDraft,
+    });
+
+    mutators.onPromptChange("Updated prompt body.");
+    mutators.onRunnerChange(null);
+    mutators.onWorkerChange("operator");
+    mutators.onBehaviorChange("STANDARD");
+
+    expect(getSessionState().draft).toEqual({
+      behavior: "STANDARD",
+      cron: null,
+      prompt: "Updated prompt body.",
+      runnerName: null,
+      workerName: "operator",
+    });
+  });
+
+  it("no-ops mutators when session state is null", () => {
+    const setSessionState = vi.fn((updater: (current: null) => null) =>
+      updater(null),
+    );
     const mutators = buildEditableWorkstationConfigurationMutators({
       selectedEditableValues,
       setSessionState,
     });
 
+    mutators.onCronScheduleChange("0 0 * * *");
+    mutators.onPromptChange("ignored");
+    mutators.onRunnerChange("codex");
+    mutators.onWorkerChange("ignored");
+    mutators.onBehaviorChange("CRON");
+    mutators.markChangesSaved();
     mutators.onResetToLatest();
-    expect(sessionState.draft).toBe(latestDefinitionDraft);
-    expect(sessionState.sessionStartDraft).toBe(latestDefinitionDraft);
+
+    expect(setSessionState).toHaveBeenCalledTimes(7);
+    for (const call of setSessionState.mock.calls) {
+      expect(call[0](null)).toBeNull();
+    }
   });
 });
