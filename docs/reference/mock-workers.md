@@ -4,7 +4,7 @@ Use mock workers when you want to verify routing, rejection loops, failure
 paths, and script side effects without making live provider calls.
 
 `you docs mock-workers` is the canonical guide for `--with-mock-workers` and
-the mock-workers JSON contract. See [Authoring Factories](authoring-factories.md)
+the mock-workers JSON contract. See `you docs authoring-factories`
 for the full factory setup workflow.
 
 ## Enable Mock-Worker Mode
@@ -155,6 +155,6 @@ factory is a concrete starting point for adapting these commands.
 
 ## Related
 
-- [Config](config.md) — brief run-flag summary with pointers to this topic
-- [Authoring Factories](authoring-factories.md) — full factory authoring workflow
-- [Workers](workers.md) — worker types and configuration
+- `you docs config` — brief run-flag summary with pointers to this topic
+- `you docs authoring-factories` — full factory authoring workflow
+- `you docs workers` — worker types and configuration

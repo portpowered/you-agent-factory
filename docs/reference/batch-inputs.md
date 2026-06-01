@@ -34,8 +34,8 @@ the whole submission with no partial work.
 | `factory/inputs/BATCH/default/<request_id>.json` | Steady-state **watched-folder** ingress while the factory is already running. |
 | `PUT /work-requests/{request_id}` | HTTP upsert with the same JSON body (session-scoped routes use `/factory-sessions/{session}/work-requests/{request_id}`). |
 
-For single-work CLI or dashboard submission, see [Submitted work](work.md). For
-relation semantics, see [Relationships](relationships.md).
+For single-work CLI or dashboard submission, see `you docs work`. For
+relation semantics, see `you docs relationships`.
 
 ## Quick reference
 
@@ -465,11 +465,11 @@ Before dropping a batch file into `factory/inputs/...`, confirm:
 
 ## Related
 
-- [Agents](agents.md)
-- [Config](config.md)
-- [Submitted work](work.md)
-- [Author factories](../reference/authoring-factories.md)
-- [Relationships](relationships.md)
-- [Guards](guards.md)
-- [Workstations](../reference/workstations.md)
-- [Templates](../reference/templates.md)
+- `you docs agents`
+- `you docs config`
+- `you docs work`
+- `you docs authoring-factories`
+- `you docs relationships`
+- `you docs guards`
+- `you docs workstations`
+- `you docs templates`

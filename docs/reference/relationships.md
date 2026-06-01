@@ -5,9 +5,9 @@ attach children to a parent for fan-in, or when templates and runtime surfaces
 need to read how tokens relate to each other.
 
 `you docs relationships` is the canonical guide for `DEPENDS_ON`,
-`PARENT_CHILD`, and `SPAWNED_BY` semantics. See [Guards](guards.md) for
+`PARENT_CHILD`, and `SPAWNED_BY` semantics. See `you docs guards` for
 parent-aware input guards that match `PARENT_CHILD` lineage, and
-[Batch Inputs](batch-inputs.md) for full batch file field tables and watched
+`you docs batch-inputs` for full batch file field tables and watched
 folder placement.
 
 ## Quick Choice
@@ -17,7 +17,7 @@ folder placement.
 | One sibling work item must wait for another sibling to reach a state | `DEPENDS_ON` | `relations[]` on a `FACTORY_REQUEST_BATCH` |
 | Child membership under one parent for parent-aware guards | `PARENT_CHILD` | `relations[]` on a `FACTORY_REQUEST_BATCH` |
 | Read which workstation spawned a child token in templates or traces | `SPAWNED_BY` | Runtime on work tokens; appears in `.Relations` |
-| Gate dispatch until a condition is true | Guards, not relations | [Guards](guards.md) |
+| Gate dispatch until a condition is true | Guards, not relations | `you docs guards` |
 
 `DEPENDS_ON` and `PARENT_CHILD` can appear in the same submitted batch when
 the workflow needs both prerequisite ordering and parent membership.
@@ -145,7 +145,7 @@ initial state unless you intentionally need non-initial placement.
 After validation, the factory attaches each `PARENT_CHILD` relation to the child
 work token and sets the child's parent lineage. That lineage is what
 parent-aware input guards such as `ALL_CHILDREN_COMPLETE` and
-`ANY_CHILD_FAILED` match. See [Guards](guards.md).
+`ANY_CHILD_FAILED` match. See `you docs guards`.
 
 A splitter workstation can also create parent-scoped children at runtime. That
 path emits fanout metadata used by `spawnedBy` on input guards. Submitted
@@ -171,7 +171,7 @@ includes:
 Use `SPAWNED_BY` when reading spawn lineage in prompts or diagnostics, not
 when authoring a new batch file. For batch authoring, use `PARENT_CHILD` when
 you need parent membership and `DEPENDS_ON` when you need sibling ordering.
-See [Templates](templates.md) for template access to `.Relations`.
+See `you docs templates` for template access to `.Relations`.
 
 ## Whole-Batch Validation
 
@@ -244,7 +244,7 @@ parent-aware guards. Use `DEPENDS_ON` only for sibling prerequisite ordering.
 | Prompt templates | Not authored directly | `.Relations` on each input token |
 | CLI work listings and traces | Not authored directly | Human-readable relation summaries |
 
-Keep detailed batch field tables in [Batch Inputs](batch-inputs.md). Use this
+Keep detailed batch field tables in `you docs batch-inputs`. Use this
 page for relation semantics and scheduling impact.
 
 ## Common Mistakes
@@ -261,9 +261,9 @@ page for relation semantics and scheduling impact.
 
 ## Related
 
-- [Guards](guards.md)
-- [Batch Inputs](batch-inputs.md)
-- [Workstations](workstations.md)
-- [Config](config.md)
-- [Submitted work](work.md)
-- [Templates](templates.md)
+- `you docs guards`
+- `you docs batch-inputs`
+- `you docs workstations`
+- `you docs config`
+- `you docs work`
+- `you docs templates`

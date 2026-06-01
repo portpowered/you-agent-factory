@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -342,8 +343,8 @@ func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 		"stderr",
 		"## Tags And Prompt Templates",
 		"Token.Tags",
-		"[Config](config.md)",
-		"[Batch Inputs](batch-inputs.md)",
+		"`you docs config`",
+		"`you docs batch-inputs`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(work) missing %q:\n%s", want, got)
@@ -518,8 +519,8 @@ func TestMarkdown_GuardsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"matchInput",
 		"limits.maxExecutionTime",
 		"limits.maxRetries",
-		"[Workstations](workstations.md)",
-		"[Relationships](relationships.md)",
+		"`you docs workstations`",
+		"`you docs relationships`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(guards) missing %q:\n%s", want, got)
@@ -558,8 +559,8 @@ func TestMarkdown_RelationshipsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"Whole-Batch Validation",
 		"Parent-Aware Guard Linkage",
 		"ALL_CHILDREN_COMPLETE",
-		"[Guards](guards.md)",
-		"[Batch Inputs](batch-inputs.md)",
+		"`you docs guards`",
+		"`you docs batch-inputs`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(relationships) missing %q:\n%s", want, got)
@@ -645,9 +646,9 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"## `--server` and `--session` routing",
 		"you submit --session session-beta",
 		"you run --continuously",
-		"[Agents](agents.md)",
-		"[Work](work.md)",
-		"[Config](config.md)",
+		"`you docs agents`",
+		"`you docs work`",
+		"`you docs config`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(sessions) missing %q:\n%s", want, got)
@@ -659,6 +660,44 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 	} {
 		if strings.Contains(got, wrapper) {
 			t.Fatalf("Markdown(sessions) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
+func TestMarkdown_PackagedReferenceTopicsHaveNoPackagedTopicMarkdownLinks(t *testing.T) {
+	t.Parallel()
+
+	packagedTopicMD := regexp.MustCompile(`\[[^\]]+\]\((?:\./|\.\./reference/)?([a-z0-9-]+)\.md(?:#[^)]*)?\)`)
+	exempt := map[string]bool{"README": true}
+
+	repoRoot := testutil.MustRepoRoot(t)
+	referenceDir := filepath.Join(repoRoot, "docs", "reference")
+	entries, err := os.ReadDir(referenceDir)
+	if err != nil {
+		t.Fatalf("ReadDir(docs/reference) error = %v", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		if entry.Name() == "README.md" {
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(referenceDir, entry.Name()))
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", entry.Name(), err)
+		}
+		doc := string(content)
+		for _, match := range packagedTopicMD.FindAllString(doc, -1) {
+			stem := packagedTopicMD.FindStringSubmatch(match)[1]
+			if exempt[stem] {
+				continue
+			}
+			t.Fatalf("%s contains packaged-topic markdown link %q; use `you docs %s` instead", entry.Name(), match, stem)
+		}
+		if strings.Contains(doc, "you docs authoring-agents-md") {
+			t.Fatalf("%s references authoring-agents-md as a docs topic; use docs/reference/authoring-agents-md.md path instead", entry.Name())
 		}
 	}
 }
