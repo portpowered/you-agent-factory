@@ -185,19 +185,21 @@ function lineageDispatchResponseEvent(
   );
 }
 
-function assertLineageTextContent(item: FactoryWorkItem, want: string): void {
-  expect(item.content).toEqual([{ type: "text", text: want }]);
+function assertLineageTextContent(
+  snapshot: { work_item: FactoryWorkItem } | undefined,
+  want: string,
+): void {
+  expect(snapshot).toBeDefined();
+  if (!snapshot) {
+    return;
+  }
+  expect(snapshot.work_item.content).toEqual([{ type: "text", text: want }]);
 }
 
-describe("reconstructWorldState payload lineage", () => {
+describe("reconstructWorldState payload lineage recording", () => {
   it("records work-request, consumed-input, and dispatch-output snapshots during replay", () => {
     const initial = lineageWorkItem("work-1", "Draft", "trace-1", "draft-v1");
-    const continued = lineageWorkItem(
-      "work-1",
-      "Draft",
-      "trace-1",
-      "draft-v2",
-    );
+    const continued = lineageWorkItem("work-1", "Draft", "trace-1", "draft-v2");
     const downstream = lineageWorkItem(
       "work-2",
       "Follow up",
@@ -231,29 +233,48 @@ describe("reconstructWorldState payload lineage", () => {
 
     expect(Object.keys(lineage.snapshots_by_id)).toHaveLength(4);
 
-    const initialResolution = resolveInitialSubmittedSnapshot(lineage, "work-1");
+    const initialResolution = resolveInitialSubmittedSnapshot(
+      lineage,
+      "work-1",
+    );
     expect(initialResolution.status).toBe("RESOLVED");
-    assertLineageTextContent(initialResolution.snapshot!.work_item, "draft-v1");
+    assertLineageTextContent(initialResolution.snapshot, "draft-v1");
 
-    const consumed = resolveConsumedInputSnapshot(lineage, "dispatch-1", "work-1");
+    const consumed = resolveConsumedInputSnapshot(
+      lineage,
+      "dispatch-1",
+      "work-1",
+    );
     expect(consumed.status).toBe("RESOLVED");
-    assertLineageTextContent(consumed.snapshot!.work_item, "draft-v1");
+    assertLineageTextContent(consumed.snapshot, "draft-v1");
 
     const selected = resolveSelectedWorkSnapshot(lineage, "work-1");
     expect(selected.status).toBe("RESOLVED");
-    assertLineageTextContent(selected.snapshot!.work_item, "draft-v3");
+    assertLineageTextContent(selected.snapshot, "draft-v3");
 
-    const sameWorkOutput = resolveOutputWorkSnapshot(lineage, "dispatch-1", "work-1");
+    const sameWorkOutput = resolveOutputWorkSnapshot(
+      lineage,
+      "dispatch-1",
+      "work-1",
+    );
     expect(sameWorkOutput.status).toBe("RESOLVED");
-    expect(sameWorkOutput.snapshot?.continuity).toBe("SAME_WORK_ID_CONTINUATION");
-    assertLineageTextContent(sameWorkOutput.snapshot!.work_item, "draft-v2");
+    expect(sameWorkOutput.snapshot?.continuity).toBe(
+      "SAME_WORK_ID_CONTINUATION",
+    );
+    assertLineageTextContent(sameWorkOutput.snapshot, "draft-v2");
 
-    const downstreamOutput = resolveOutputWorkSnapshot(lineage, "dispatch-1", "work-2");
+    const downstreamOutput = resolveOutputWorkSnapshot(
+      lineage,
+      "dispatch-1",
+      "work-2",
+    );
     expect(downstreamOutput.status).toBe("RESOLVED");
     expect(downstreamOutput.snapshot?.continuity).toBe("NEW_DOWNSTREAM_WORK");
-    assertLineageTextContent(downstreamOutput.snapshot!.work_item, "follow-up-v1");
+    assertLineageTextContent(downstreamOutput.snapshot, "follow-up-v1");
   });
+});
 
+describe("reconstructWorldState payload lineage resolution", () => {
   it("marks consumed-input lineage unavailable when no work-request snapshot exists", () => {
     const events: FactoryEvent[] = [
       initialStructureRequest,
@@ -288,7 +309,12 @@ describe("reconstructWorldState payload lineage", () => {
   });
 
   it("preserves consumed-input pin when the same work ID is resubmitted later", () => {
-    const initial = lineageWorkItem("work-child", "Child", "trace-child", "child-v1");
+    const initial = lineageWorkItem(
+      "work-child",
+      "Child",
+      "trace-child",
+      "child-v1",
+    );
     const laterSelected = lineageWorkItem(
       "work-child",
       "Child",
@@ -299,7 +325,12 @@ describe("reconstructWorldState payload lineage", () => {
     const events: FactoryEvent[] = [
       initialStructureRequest,
       lineageWorkRequestEvent(1, "request/child-v1", initial),
-      lineageDispatchRequestEvent(2, "dispatch-consume-child", "t-follow-up", initial),
+      lineageDispatchRequestEvent(
+        2,
+        "dispatch-consume-child",
+        "t-follow-up",
+        initial,
+      ),
       lineageWorkRequestEvent(3, "request/child-v2", laterSelected),
     ];
 
@@ -312,10 +343,10 @@ describe("reconstructWorldState payload lineage", () => {
       "work-child",
     );
     expect(consumed.status).toBe("RESOLVED");
-    assertLineageTextContent(consumed.snapshot!.work_item, "child-v1");
+    assertLineageTextContent(consumed.snapshot, "child-v1");
 
     const selected = resolveSelectedWorkSnapshot(lineage, "work-child");
     expect(selected.status).toBe("RESOLVED");
-    assertLineageTextContent(selected.snapshot!.work_item, "child-v2");
+    assertLineageTextContent(selected.snapshot, "child-v2");
   });
 });
