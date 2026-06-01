@@ -18,6 +18,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
@@ -126,7 +127,7 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","file":"fixtures/ui.png"}]}`)
+	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","url":"file://fixtures/ui.png"}]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -145,7 +146,7 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].File != "fixtures/ui.png" {
+	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
 	}
 	if len(mf.WorkRequests[0].Works[0].Content) != 2 {
@@ -154,7 +155,7 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	if mf.WorkRequests[0].Works[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.WorkRequests[0].Works[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted work request content[0] = %#v, want canonical text content", mf.WorkRequests[0].Works[0].Content[0])
 	}
-	if mf.WorkRequests[0].Works[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.WorkRequests[0].Works[0].Content[1].File != "fixtures/ui.png" {
+	if mf.WorkRequests[0].Works[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.WorkRequests[0].Works[0].Content[1].URL != "file://fixtures/ui.png" {
 		t.Fatalf("submitted work request content[1] = %#v, want canonical image content", mf.WorkRequests[0].Works[0].Content[1])
 	}
 }
@@ -165,10 +166,15 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 
 	staged := stageSubmitWorkTestFile(t, srv, "image", "ui.png", "image/png", []byte("png-bytes"))
 
-	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","items":[{"type":"text","text":"Review this UI."},{"type":"image","stagedFileRef":"`+staged.StagedFileRef+`","fileName":"ui.png","mediaType":"image/png"}]}`)
+	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","items":[{"type":"text","text":"Review this UI."},{"type":"image","url":"file://staged/ui.png","stagedFileRef":"`+staged.StagedFileRef+`","fileName":"ui.png","mediaType":"image/png"}]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
+	assertStructuredSubmitWorkSubmission(t, mf, staged)
+}
+
+func assertStructuredSubmitWorkSubmission(t *testing.T, mf *testutil.MockFactory, staged factoryapi.StageSubmitWorkFileResponse) {
+	t.Helper()
 	if len(mf.Submitted) != 1 {
 		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
 	}
@@ -178,21 +184,52 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 	if len(mf.Submitted[0].Content) != 2 {
 		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
 	}
-	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
-		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
+	assertStructuredSubmitWorkTextPart(t, mf.Submitted[0].Content[0])
+	assertStructuredSubmitWorkStagedImagePart(t, mf.Submitted[0].Content[1], staged)
+}
+
+func assertStructuredSubmitWorkTextPart(t *testing.T, part interfaces.WorkContentPart) {
+	t.Helper()
+	if part.Type != interfaces.WorkContentPartTypeText || part.Text != "Review this UI." {
+		t.Fatalf("submitted content[0] = %#v, want canonical text content", part)
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].ContentType != "image/png" {
-		t.Fatalf("submitted content[1] = %#v, want canonical staged image content", mf.Submitted[0].Content[1])
+}
+
+func assertStructuredSubmitWorkStagedImagePart(
+	t *testing.T,
+	part interfaces.WorkContentPart,
+	staged factoryapi.StageSubmitWorkFileResponse,
+) {
+	t.Helper()
+	if part.Type != interfaces.WorkContentPartTypeImage || part.ContentType != "image/png" {
+		t.Fatalf("submitted content[1] = %#v, want canonical staged image content", part)
 	}
-	stagedContent, err := os.ReadFile(mf.Submitted[0].Content[1].File)
+	if part.File != "" {
+		t.Fatalf("submitted content[1].file = %q, want empty canonical file field", part.File)
+	}
+	stagedPath, err := resolveSubmitWorkStagedFileRef(staged.StagedFileRef)
+	if err != nil {
+		t.Fatalf("resolve staged file ref: %v", err)
+	}
+	wantURL, err := workcontent.FilesystemPathToContentURL(stagedPath)
+	if err != nil {
+		t.Fatalf("stage content url: %v", err)
+	}
+	if part.URL != wantURL {
+		t.Fatalf("submitted content[1].url = %q, want %q", part.URL, wantURL)
+	}
+	stagedContent, err := os.ReadFile(stagedPath)
 	if err != nil {
 		t.Fatalf("read submitted staged file: %v", err)
 	}
 	if string(stagedContent) != "png-bytes" {
 		t.Fatalf("submitted staged file content = %q, want png-bytes", stagedContent)
 	}
-	if mf.Submitted[0].Content[1].Metadata[submitWorkItemTypeMetadataKey] != "image" || mf.Submitted[0].Content[1].Metadata[submitWorkFileNameMetadataKey] != "ui.png" {
-		t.Fatalf("submitted content[1].metadata = %#v, want item type and file name metadata", mf.Submitted[0].Content[1].Metadata)
+	if string(staged.Url) != wantURL {
+		t.Fatalf("stage response url = %q, want %q", staged.Url, wantURL)
+	}
+	if part.Metadata[submitWorkItemTypeMetadataKey] != "image" || part.Metadata[submitWorkFileNameMetadataKey] != "ui.png" {
+		t.Fatalf("submitted content[1].metadata = %#v, want item type and file name metadata", part.Metadata)
 	}
 }
 
@@ -205,7 +242,7 @@ func TestSubmitWork_AcceptsUppercaseAndExtendedCanonicalContent(t *testing.T) {
 		"workTypeName":"prd",
 		"content":[
 			{"type":"TEXT","text":"Synthesize this","label":"prompt"},
-			{"type":"AUDIO","file":"artifacts/output.wav","contentType":"audio/wav","artifactId":"artifact-audio-1","metadata":{"voice":"alloy"}},
+			{"type":"AUDIO","url":"file://artifacts/output.wav","contentType":"audio/wav","artifactId":"artifact-audio-1","metadata":{"voice":"alloy"}},
 			{"type":"JSON","json":{"voice":"alloy","speed":1}}
 		]
 	}`)
@@ -237,7 +274,7 @@ func assertUppercaseExtendedTextPart(t *testing.T, part interfaces.WorkContentPa
 
 func assertUppercaseExtendedAudioPart(t *testing.T, part interfaces.WorkContentPart) {
 	t.Helper()
-	if part.Type != interfaces.WorkContentPartTypeAudio || part.File != "artifacts/output.wav" || part.ContentType != "audio/wav" || part.ArtifactID != "artifact-audio-1" {
+	if part.Type != interfaces.WorkContentPartTypeAudio || part.URL != "file://artifacts/output.wav" || part.ContentType != "audio/wav" || part.ArtifactID != "artifact-audio-1" {
 		t.Fatalf("submitted content[1] = %#v, want canonical audio content", part)
 	}
 	audioMetadata, _ := json.Marshal(part.Metadata)
@@ -310,14 +347,14 @@ func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {
 
 func TestSubmitWork_RejectsStructuredFileItemWithoutStagedReference(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
-	rec := submitWorkRequest(t, srv, `{"name":"missing-staged-ref","workTypeName":"prd","items":[{"type":"document","stagedFileRef":"","fileName":"spec.pdf","mediaType":"application/pdf"}]}`)
+	rec := submitWorkRequest(t, srv, `{"name":"missing-staged-ref","workTypeName":"prd","items":[{"type":"document","url":"file://staged/spec.pdf","stagedFileRef":"","fileName":"spec.pdf","mediaType":"application/pdf"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0].stagedFileRef must be a non-empty string")
 }
 
 func TestSubmitWork_RejectsForgedStructuredFileReference(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
 
-	rec := submitWorkRequest(t, srv, `{"name":"forged-staged-ref","workTypeName":"prd","items":[{"type":"image","stagedFileRef":"staged://forged-ui.png","fileName":"ui.png","mediaType":"image/png"}]}`)
+	rec := submitWorkRequest(t, srv, `{"name":"forged-staged-ref","workTypeName":"prd","items":[{"type":"image","url":"file://staged/ui.png","stagedFileRef":"staged://forged-ui.png","fileName":"ui.png","mediaType":"image/png"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0]: stagedFileRef must be a backend-issued staged file reference")
 }
 
@@ -331,6 +368,9 @@ func TestStageSubmitWorkFile(t *testing.T) {
 	if response.StagedFileRef == "" {
 		t.Fatalf("stagedFileRef must be non-empty")
 	}
+	if response.Url == "" {
+		t.Fatalf("url must be non-empty")
+	}
 	stagedPath, err := resolveSubmitWorkStagedFileRef(response.StagedFileRef)
 	if err != nil {
 		t.Fatalf("resolve staged file ref: %v", err)
@@ -341,6 +381,13 @@ func TestStageSubmitWorkFile(t *testing.T) {
 	}
 	if string(stagedContent) != "png-bytes" {
 		t.Fatalf("staged file content = %q, want png-bytes", stagedContent)
+	}
+	wantURL, err := workcontent.FilesystemPathToContentURL(stagedPath)
+	if err != nil {
+		t.Fatalf("stage content url: %v", err)
+	}
+	if string(response.Url) != wantURL {
+		t.Fatalf("stage url = %q, want %q", response.Url, wantURL)
 	}
 }
 
@@ -403,7 +450,7 @@ func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
 func TestSubmitWork_RejectsInvalidExtendedContentMetadata(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
-	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"AUDIO","file":"voice.wav","metadata":"wrong"}]}`)
+	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"AUDIO","url":"file://voice.wav","metadata":"wrong"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].metadata must be an object")
 	if len(mf.Submitted) != 0 || len(mf.WorkRequests) != 0 {
 		t.Fatalf("submissions = workRequests:%d submitted:%d, want 0/0", len(mf.WorkRequests), len(mf.Submitted))
@@ -866,5 +913,40 @@ func TestSubmitWorkResponseFromResult_IdempotentReplayPreservesWorkIdentity(t *t
 	}
 	if stringValue(resp1.WorkTypeName) != "prd" || stringValue(resp2.WorkTypeName) != "prd" {
 		t.Fatalf("workTypeName = %q/%q, want prd", stringValue(resp1.WorkTypeName), stringValue(resp2.WorkTypeName))
+	}
+}
+func TestSubmitWork_RejectsUnsupportedContentURLScheme(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{"name":"bad-url","workTypeName":"prd","content":[{"type":"image","url":"ftp://example.com/ui.png"}]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].url url scheme must be one of file, http, https, or data")
+}
+
+func TestSubmitWork_RejectsURLAndFileConflict(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{"name":"conflict","workTypeName":"prd","content":[{"type":"image","url":"file://fixtures/ui.png","file":"fixtures/ui.png"}]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].url and file cannot both be set on the same content part")
+}
+
+func TestSubmitWork_AcceptsLegacyFileOnlyContent(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{"name":"legacy-file","workTypeName":"prd","content":[{"type":"image","file":"fixtures/ui.png"}]}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 || len(mf.Submitted[0].Content) != 1 {
+		t.Fatalf("submitted = %#v, want one normalized image part", mf.Submitted)
+	}
+	part := mf.Submitted[0].Content[0]
+	if part.Type != interfaces.WorkContentPartTypeImage || part.URL != "file://fixtures/ui.png" {
+		t.Fatalf("content[0] = %#v, want image with normalized url", part)
+	}
+	if part.File != "" {
+		t.Fatalf("content[0].file = %q, want empty canonical file field", part.File)
 	}
 }

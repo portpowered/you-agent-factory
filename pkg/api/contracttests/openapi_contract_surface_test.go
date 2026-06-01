@@ -411,7 +411,9 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 		"#/components/schemas/SubmitWorkDocumentItem",
 	})
 	assertEnumValues(t, schemaObject(t, schemas, "SubmitWorkItemType"), "SubmitWorkItemType", []string{"text", "image", "video", "audio", "document"})
-	assertSchemaPropertiesPresent(t, schemaProperties(t, schemaObject(t, schemas, "SubmitWorkFileItemCommonFields"), "SubmitWorkFileItemCommonFields"), "SubmitWorkFileItemCommonFields", "stagedFileRef", "fileName", "mediaType")
+	submitWorkFileItemCommonFields := schemaObject(t, schemas, "SubmitWorkFileItemCommonFields")
+	assertRequiredFields(t, submitWorkFileItemCommonFields, "url")
+	assertSchemaPropertiesPresent(t, schemaProperties(t, submitWorkFileItemCommonFields, "SubmitWorkFileItemCommonFields"), "SubmitWorkFileItemCommonFields", "url", "stagedFileRef", "fileName", "mediaType")
 	submitWorkTextItemSchema := schemaObject(t, schemas, "SubmitWorkTextItem")
 	assertRequiredFields(t, submitWorkTextItemSchema, "type", "text")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, submitWorkTextItemSchema, "SubmitWorkTextItem"), "SubmitWorkTextItem", "type", "text")
@@ -423,8 +425,8 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertRequiredFields(t, stageSubmitWorkFileRequest, "itemType", "fileName", "mediaType", "contentBase64")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileRequest, "StageSubmitWorkFileRequest"), "StageSubmitWorkFileRequest", "itemType", "fileName", "mediaType", "contentBase64")
 	stageSubmitWorkFileResponse := schemaObject(t, schemas, "StageSubmitWorkFileResponse")
-	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType")
-	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType")
+	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType", "url")
+	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType", "url")
 }
 
 func TestOpenAPIContract_MoveWorkRequestSchema(t *testing.T) {
@@ -481,16 +483,49 @@ func assertWorkContentSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertEnumValues(t, schemaObject(t, schemas, "WorkContentPartType"), "WorkContentPartType", []string{"text", "image", "TEXT", "IMAGE", "AUDIO", "JSON", "BINARY"})
 
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkTextContentPart", "type", "text")
-	assertWorkContentPartSchemaVariant(t, schemas, "WorkImageContentPart", "type", "file")
-	assertWorkContentPartSchemaVariant(t, schemas, "WorkAudioContentPart", "type", "file")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkImageContentPart", "type", "url")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkAudioContentPart", "type", "url")
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkJsonContentPart", "type", "json")
-	assertWorkContentPartSchemaVariant(t, schemas, "WorkBinaryContentPart", "type", "file")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkBinaryContentPart", "type", "url")
+	assertDeprecatedWorkContentFileProperty(t, schemas, "WorkImageContentPart")
+	assertDeprecatedWorkContentFileProperty(t, schemas, "WorkAudioContentPart")
+	assertDeprecatedWorkContentFileProperty(t, schemas, "WorkBinaryContentPart")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, schemaObject(t, schemas, "WorkContentCommonFields"), "WorkContentCommonFields"), "WorkContentCommonFields", "slot", "label", "role", "contentType", "artifactId", "metadata")
 }
 
 func assertWorkContentPartSchemaVariant(t *testing.T, schemas map[string]any, schemaName string, requiredFields ...string) {
 	t.Helper()
 	assertSchemaAllOfVariant(t, schemas, schemaName, "#/components/schemas/WorkContentCommonFields", requiredFields...)
+}
+
+func assertDeprecatedWorkContentFileProperty(t *testing.T, schemas map[string]any, schemaName string) {
+	t.Helper()
+
+	schema := schemaObject(t, schemas, schemaName)
+	allOf, ok := schema["allOf"].([]any)
+	if !ok || len(allOf) != 2 {
+		t.Fatalf("%s.allOf has %d entries, want 2", schemaName, len(allOf))
+	}
+	inlineSchema, ok := allOf[1].(map[string]any)
+	if !ok {
+		t.Fatalf("%s inline allOf schema is missing", schemaName)
+	}
+	properties := schemaProperties(t, inlineSchema, schemaName)
+	fileProperty, ok := properties["file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s.properties.file is missing", schemaName)
+	}
+	if ref, ok := fileProperty["$ref"].(string); ok {
+		refName := strings.TrimPrefix(ref, "#/components/schemas/")
+		refSchema := schemaObject(t, schemas, refName)
+		if deprecated, ok := refSchema["deprecated"].(bool); !ok || !deprecated {
+			t.Fatalf("%s.properties.file must reference deprecated schema %s", schemaName, refName)
+		}
+		return
+	}
+	if deprecated, ok := fileProperty["deprecated"].(bool); !ok || !deprecated {
+		t.Fatalf("%s.properties.file must be deprecated", schemaName)
+	}
 }
 
 func assertSchemaAllOfVariant(t *testing.T, schemas map[string]any, schemaName string, commonSchemaRef string, requiredFields ...string) {

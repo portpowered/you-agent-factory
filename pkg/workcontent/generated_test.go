@@ -19,7 +19,7 @@ func TestPartsFromGeneratedPreservesSupportedPartOrderAndValues(t *testing.T) {
 
 	want := []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+		{Type: interfaces.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
 		{Type: interfaces.WorkContentPartTypeText, Text: "omega"},
 	}
 	assertWorkContentPartsEqual(t, got, want)
@@ -39,7 +39,7 @@ func TestPartsFromGeneratedReturnsNilForNilOrEmptyContent(t *testing.T) {
 func TestGeneratedPtrFromPartsPreservesSupportedPartOrderAndValues(t *testing.T) {
 	parts := []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+		{Type: interfaces.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
 		{Type: interfaces.WorkContentPartTypeText, Text: "omega"},
 	}
 
@@ -65,7 +65,7 @@ func TestGeneratedPtrFromPartsSkipsUnsupportedParts(t *testing.T) {
 	parts := []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
 		{Type: interfaces.WorkContentPartType("unsupported"), File: "fixtures/ignored.wav"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+		{Type: interfaces.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
 	}
 
 	got := GeneratedPtrFromParts(parts)
@@ -75,7 +75,7 @@ func TestGeneratedPtrFromPartsSkipsUnsupportedParts(t *testing.T) {
 	}
 	assertGeneratedWorkContentPartsEqual(t, got, []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+		{Type: interfaces.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
 	})
 }
 
@@ -102,9 +102,9 @@ func TestPartsFromGeneratedAcceptsUppercaseAndExtendedContentShapes(t *testing.T
 
 	assertWorkContentPartsEqual(t, got, []interfaces.WorkContentPart{
 		{Type: interfaces.WorkContentPartTypeText, Text: "Alpha", Label: "input"},
-		{Type: interfaces.WorkContentPartTypeAudio, File: "fixtures/output.wav", Metadata: map[string]any{"voice": "alloy"}},
+		{Type: interfaces.WorkContentPartTypeAudio, URL: testContentURL("fixtures/output.wav"), Metadata: map[string]any{"voice": "alloy"}},
 		{Type: interfaces.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"voice":"alloy"}`)},
-		{Type: interfaces.WorkContentPartTypeBinary, File: "fixtures/blob.bin"},
+		{Type: interfaces.WorkContentPartTypeBinary, URL: testContentURL("fixtures/blob.bin")},
 	})
 }
 
@@ -112,7 +112,7 @@ func TestGeneratedPtrFromPartsPreservesExtendedContentFields(t *testing.T) {
 	parts := []interfaces.WorkContentPart{
 		{
 			Type:        interfaces.WorkContentPartTypeAudio,
-			File:        "fixtures/output.wav",
+			URL:         testContentURL("fixtures/output.wav"),
 			Slot:        "audio",
 			Label:       "speech",
 			Role:        "assistant",
@@ -154,7 +154,7 @@ func mustGeneratedImagePart(t *testing.T, file string) factoryapi.WorkContentPar
 	var part factoryapi.WorkContentPart
 	if err := part.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
 		Type: factoryapi.WorkContentPartTypeImage,
-		File: file,
+		Url:  factoryapi.WorkContentURLProperty(testContentURL(file)),
 	}); err != nil {
 		t.Fatalf("encode image work content part: %v", err)
 	}
@@ -181,7 +181,7 @@ func mustGeneratedAudioPart(t *testing.T, file string, metadata *factoryapi.Work
 	var part factoryapi.WorkContentPart
 	if err := part.FromWorkAudioContentPart(factoryapi.WorkAudioContentPart{
 		Type:     factoryapi.WorkContentPartTypeAudio,
-		File:     file,
+		Url:      factoryapi.WorkContentURLProperty(testContentURL(file)),
 		Metadata: metadata,
 	}); err != nil {
 		t.Fatalf("encode audio work content part: %v", err)
@@ -208,7 +208,7 @@ func mustGeneratedBinaryPart(t *testing.T, file string) factoryapi.WorkContentPa
 	var part factoryapi.WorkContentPart
 	if err := part.FromWorkBinaryContentPart(factoryapi.WorkBinaryContentPart{
 		Type: factoryapi.WorkContentPartTypeBinary,
-		File: file,
+		Url:  factoryapi.WorkContentURLProperty(testContentURL(file)),
 	}); err != nil {
 		t.Fatalf("encode binary work content part: %v", err)
 	}
@@ -244,6 +244,7 @@ func assertGeneratedWorkContentPartsEqual(t *testing.T, got *factoryapi.WorkCont
 func workContentPartEqual(left, right interfaces.WorkContentPart) bool {
 	if left.Type != right.Type ||
 		left.Text != right.Text ||
+		left.URL != right.URL ||
 		left.File != right.File ||
 		left.Slot != right.Slot ||
 		left.Label != right.Label ||
@@ -282,4 +283,8 @@ func testStringPtr(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func testContentURL(path string) string {
+	return "file://" + path
 }

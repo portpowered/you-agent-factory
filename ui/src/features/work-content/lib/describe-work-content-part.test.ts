@@ -10,6 +10,60 @@ describe("describeWorkContentPart", () => {
     ).toBe("Text: notes.md");
   });
 
+  it("derives a readable label from file-backed content urls", () => {
+    expect(
+      describeWorkContentPart({
+        type: "image",
+        url: "file://screenshot.png",
+      }),
+    ).toBe("Image: screenshot.png");
+  });
+
+  it("derives a readable label from absolute file urls", () => {
+    expect(
+      describeWorkContentPart({
+        type: "image",
+        url: "file:///tmp/assets/diagram.png",
+      }),
+    ).toBe("Image: diagram.png");
+  });
+
+  it("uses the file url host when the path is host-only", () => {
+    expect(
+      describeWorkContentPart({
+        type: "image",
+        url: "file://fixtures",
+      }),
+    ).toBe("Image: fixtures");
+  });
+
+  it("derives a readable label from remote content urls", () => {
+    expect(
+      describeWorkContentPart({
+        type: "image",
+        url: "https://cdn.example.com/assets/hero.png",
+      }),
+    ).toBe("Image: hero.png");
+  });
+
+  it("uses the remote host when the url has no path segments", () => {
+    expect(
+      describeWorkContentPart({
+        type: "audio",
+        url: "https://audio.example.com",
+      }),
+    ).toBe("Audio: audio.example.com");
+  });
+
+  it("falls back to the full url when parsing fails", () => {
+    expect(
+      describeWorkContentPart({
+        type: "image",
+        url: "not-a-valid-url",
+      }),
+    ).toBe("Image: not-a-valid-url");
+  });
+
   it("uses label when file is absent", () => {
     expect(
       describeWorkContentPart({

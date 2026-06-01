@@ -67,7 +67,7 @@ func generatedSubmitRequestFixture(t *testing.T) factoryapi.SubmitWorkRequest {
 	}}
 	if err := json.Unmarshal([]byte(`[
 		{"type":"text","text":"Draft a summary."},
-		{"type":"image","stagedFileRef":"staged://work-item.png","fileName":"work-item.png","mediaType":"image/png"}
+		{"type":"image","url":"file://staged/work-item.png","stagedFileRef":"staged://work-item.png","fileName":"work-item.png","mediaType":"image/png"}
 	]`), &submitRequest.Items); err != nil {
 		t.Fatalf("unmarshal generated submit request items: %v", err)
 	}
@@ -197,7 +197,7 @@ func assertGeneratedWorkRequestJSON(t *testing.T, workRequest factoryapi.WorkReq
 
 	if err := json.Unmarshal([]byte(`[
 		{"type":"text","text":"Review the screenshot."},
-		{"type":"image","file":"fixtures/review.png"}
+		{"type":"image","url":"file://fixtures/review.png"}
 	]`), &(*workRequest.Works)[0].Content); err != nil {
 		t.Fatalf("unmarshal generated work content: %v", err)
 	}

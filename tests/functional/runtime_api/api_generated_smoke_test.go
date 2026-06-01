@@ -198,14 +198,14 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 		},
 		factory.WithServiceMode(),
 	)
-	stagedImageRef := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
+	stagedImageRef, stagedImageURL := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         "generated-api-items-mixed",
 		WorkTypeName: "task",
 		Items: &[]factoryapi.SubmitWorkItem{
 			mustSubmitWorkTextItem(t, "Review this screenshot."),
-			mustSubmitWorkImageItem(t, stagedImageRef, "review.png", "image/png"),
+			mustSubmitWorkImageItem(t, stagedImageRef, stagedImageURL, "review.png", "image/png"),
 		},
 	})
 
@@ -229,7 +229,13 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 	if stringPointerValue(imagePart.ContentType) != "image/png" {
 		t.Fatalf("projected image part = %#v, want staged image reference and media type", imagePart)
 	}
-	imageContent, err := os.ReadFile(imagePart.File)
+	imagePath := string(imagePart.Url)
+	if imagePart.File != nil && string(*imagePart.File) != "" {
+		imagePath = string(*imagePart.File)
+	} else if strings.HasPrefix(imagePath, "file://") {
+		imagePath = strings.TrimPrefix(imagePath, "file://")
+	}
+	imageContent, err := os.ReadFile(imagePath)
 	if err != nil {
 		t.Fatalf("read staged image content: %v", err)
 	}
@@ -252,14 +258,14 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubm
 		},
 		factory.WithServiceMode(),
 	)
-	stagedImageRef := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
+	stagedImageRef, stagedImageURL := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         "generated-api-items-unsupported-mixed",
 		WorkTypeName: "task",
 		Items: &[]factoryapi.SubmitWorkItem{
 			mustSubmitWorkTextItem(t, "Review this screenshot."),
-			mustSubmitWorkImageItem(t, stagedImageRef, "review.png", "image/png"),
+			mustSubmitWorkImageItem(t, stagedImageRef, stagedImageURL, "review.png", "image/png"),
 		},
 	})
 
@@ -299,7 +305,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileR
 		Name:         "generated-api-forged-staged-ref",
 		WorkTypeName: "task",
 		Items: &[]factoryapi.SubmitWorkItem{
-			mustSubmitWorkImageItem(t, "staged://forged-review.png", "review.png", "image/png"),
+			mustSubmitWorkImageItem(t, "staged://forged-review.png", "file://forged-review.png", "review.png", "image/png"),
 		},
 	}
 	body, err := json.Marshal(req)
@@ -457,7 +463,7 @@ func stageGeneratedSubmitWorkFile(
 	fileName string,
 	mediaType string,
 	content []byte,
-) string {
+) (stagedFileRef string, contentURL string) {
 	t.Helper()
 
 	req := map[string]string{
@@ -483,7 +489,7 @@ func stageGeneratedSubmitWorkFile(
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode staged-file response: %v", err)
 	}
-	return out.StagedFileRef
+	return out.StagedFileRef, string(out.Url)
 }
 
 func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
@@ -631,13 +637,14 @@ func mustSubmitWorkTextItem(t *testing.T, text string) factoryapi.SubmitWorkItem
 	return item
 }
 
-func mustSubmitWorkImageItem(t *testing.T, stagedFileRef string, fileName string, mediaType string) factoryapi.SubmitWorkItem {
+func mustSubmitWorkImageItem(t *testing.T, stagedFileRef string, contentURL string, fileName string, mediaType string) factoryapi.SubmitWorkItem {
 	t.Helper()
 
 	var item factoryapi.SubmitWorkItem
 	if err := item.FromSubmitWorkImageItem(factoryapi.SubmitWorkImageItem{
 		Type:          factoryapi.SubmitWorkItemTypeImage,
 		StagedFileRef: stagedFileRef,
+		Url:           factoryapi.SubmitWorkContentURLProperty(contentURL),
 		FileName:      fileName,
 		MediaType:     mediaType,
 	}); err != nil {

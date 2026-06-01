@@ -537,7 +537,7 @@ func assertRecordedLocalModelResponsePayload(t *testing.T, event factoryapi.Fact
 		t.Fatalf("response outputContent = %#v, want one audio content part", responsePayload.OutputContent)
 	}
 	audioPart, audioErr := (*responsePayload.OutputContent)[0].AsWorkAudioContentPart()
-	if audioErr != nil || audioPart.File != audioPath {
+	if audioErr != nil || generatedAudioFileValue(audioPart.File) != audioPath {
 		t.Fatalf("response output audio = %#v, %v, want file %q", responsePayload.OutputContent, audioErr, audioPath)
 	}
 }

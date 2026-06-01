@@ -192,7 +192,7 @@
       "outputContent": [
         {
           "type": "AUDIO",
-          "file": "/tmp/factory/out.wav"
+          "url": "file:///tmp/factory/out.wav"
         }
       ]
     }

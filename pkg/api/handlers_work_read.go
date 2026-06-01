@@ -516,15 +516,20 @@ func stageSubmitWorkFileRequest(r *http.Request) (factoryapi.StageSubmitWorkFile
 		}
 	}
 
-	stagedFileRef, err := writeStagedSubmitWorkFile(content, req.FileName)
+	stagedFileRef, stagedPath, err := writeStagedSubmitWorkFile(content, req.FileName)
 	if err != nil {
 		return factoryapi.StageSubmitWorkFileResponse{}, fmt.Errorf("write staged submit-work file: %w", err)
+	}
+	contentURL, err := workcontent.FilesystemPathToContentURL(stagedPath)
+	if err != nil {
+		return factoryapi.StageSubmitWorkFileResponse{}, fmt.Errorf("stage submit-work content url: %w", err)
 	}
 
 	return factoryapi.StageSubmitWorkFileResponse{
 		FileName:      req.FileName,
 		MediaType:     req.MediaType,
 		StagedFileRef: stagedFileRef,
+		Url:           factoryapi.SubmitWorkContentURLProperty(contentURL),
 	}, nil
 }
 
@@ -645,17 +650,17 @@ func validateStageSubmitWorkMediaType(itemType factoryapi.SubmitWorkItemType, me
 	}
 }
 
-func writeStagedSubmitWorkFile(content []byte, fileName string) (string, error) {
+func writeStagedSubmitWorkFile(content []byte, fileName string) (stagedFileRef string, stagedPath string, err error) {
 	stageDir, err := os.MkdirTemp("", submitWorkStageDirPrefix+"*")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	targetPath := filepath.Join(stageDir, safeSubmitWorkFileName(fileName))
 	if err := os.WriteFile(targetPath, content, 0o600); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return encodeSubmitWorkStagedFileRef(targetPath), nil
+	return encodeSubmitWorkStagedFileRef(targetPath), targetPath, nil
 }
 
 func safeSubmitWorkFileName(fileName string) string {

@@ -17,7 +17,7 @@ export const MULTIMODAL_SELECTED_WORK_PAYLOAD_CONTENT: MultimodalSelectedWorkPay
   [
     { text: "Primary selected-work payload text", type: "text" },
     { json: { priority: 1 }, type: "JSON" },
-    { file: "screenshot.png", type: "image" },
+    { url: "file://screenshot.png", type: "image" },
   ];
 
 export function multimodalSelectedWorkPayloadOverrides(): Partial<DashboardWorkItemRef> {

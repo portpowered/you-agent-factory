@@ -2080,6 +2080,9 @@ type StageSubmitWorkFileResponse struct {
 
 	// StagedFileRef Backend-owned staged file reference returned for later structured submit-work items.
 	StagedFileRef string `json:"stagedFileRef"`
+
+	// Url Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:.
+	Url SubmitWorkContentURLProperty `json:"url"`
 }
 
 // StatusCategories defines model for StatusCategories.
@@ -2125,7 +2128,13 @@ type SubmitWorkAudioItem struct {
 	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
 	StagedFileRef string             `json:"stagedFileRef"`
 	Type          SubmitWorkItemType `json:"type"`
+
+	// Url Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:.
+	Url SubmitWorkContentURLProperty `json:"url"`
 }
+
+// SubmitWorkContentURLProperty Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:.
+type SubmitWorkContentURLProperty = string
 
 // SubmitWorkDocumentItem defines model for SubmitWorkDocumentItem.
 type SubmitWorkDocumentItem struct {
@@ -2138,6 +2147,9 @@ type SubmitWorkDocumentItem struct {
 	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
 	StagedFileRef string             `json:"stagedFileRef"`
 	Type          SubmitWorkItemType `json:"type"`
+
+	// Url Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:.
+	Url SubmitWorkContentURLProperty `json:"url"`
 }
 
 // SubmitWorkFileItemCommonFields defines model for SubmitWorkFileItemCommonFields.
@@ -2150,6 +2162,9 @@ type SubmitWorkFileItemCommonFields struct {
 
 	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
 	StagedFileRef *string `json:"stagedFileRef,omitempty"`
+
+	// Url Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:.
+	Url SubmitWorkContentURLProperty `json:"url"`
 }
 
 // SubmitWorkImageItem defines model for SubmitWorkImageItem.
@@ -2163,6 +2178,9 @@ type SubmitWorkImageItem struct {
 	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
 	StagedFileRef string             `json:"stagedFileRef"`
 	Type          SubmitWorkItemType `json:"type"`
+
+	// Url Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:.
+	Url SubmitWorkContentURLProperty `json:"url"`
 }
 
 // SubmitWorkItem One ordered dashboard-authored submit-work item.
@@ -2246,6 +2264,9 @@ type SubmitWorkVideoItem struct {
 	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
 	StagedFileRef string             `json:"stagedFileRef"`
 	Type          SubmitWorkItemType `json:"type"`
+
+	// Url Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:.
+	Url SubmitWorkContentURLProperty `json:"url"`
 }
 
 // TokenHistory defines model for TokenHistory.
@@ -2353,8 +2374,9 @@ type WorkAudioContentPart struct {
 	// ContentType Optional MIME content type for file-backed or structured parts.
 	ContentType *string `json:"contentType,omitempty"`
 
-	// File Audio file or artifact reference preserved for later runtime materialization.
-	File string `json:"file"`
+	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
 
 	// Label Optional caller-defined label for slot binding or diagnostics.
 	Label *string `json:"label,omitempty"`
@@ -2368,6 +2390,9 @@ type WorkAudioContentPart struct {
 	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
 	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
+
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+	Url WorkContentURLProperty `json:"url"`
 }
 
 // WorkBinaryContentPart defines model for WorkBinaryContentPart.
@@ -2378,8 +2403,9 @@ type WorkBinaryContentPart struct {
 	// ContentType Optional MIME content type for file-backed or structured parts.
 	ContentType *string `json:"contentType,omitempty"`
 
-	// File Binary file or artifact reference preserved for later runtime materialization.
-	File string `json:"file"`
+	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
 
 	// Label Optional caller-defined label for slot binding or diagnostics.
 	Label *string `json:"label,omitempty"`
@@ -2393,6 +2419,9 @@ type WorkBinaryContentPart struct {
 	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
 	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
+
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+	Url WorkContentURLProperty `json:"url"`
 }
 
 // WorkContent Ordered canonical content parts for one work item.
@@ -2419,6 +2448,9 @@ type WorkContentCommonFields struct {
 	Slot *string `json:"slot,omitempty"`
 }
 
+// WorkContentDeprecatedFileProperty Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+type WorkContentDeprecatedFileProperty = string
+
 // WorkContentMetadata Optional metadata attached to one work content part.
 type WorkContentMetadata map[string]interface{}
 
@@ -2429,6 +2461,9 @@ type WorkContentPart struct {
 
 // WorkContentPartType Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
 type WorkContentPartType string
+
+// WorkContentURLProperty Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+type WorkContentURLProperty = string
 
 // WorkDiagnostics defines model for WorkDiagnostics.
 type WorkDiagnostics struct {
@@ -2453,8 +2488,9 @@ type WorkImageContentPart struct {
 	// ContentType Optional MIME content type for file-backed or structured parts.
 	ContentType *string `json:"contentType,omitempty"`
 
-	// File Image file reference preserved for later runtime materialization.
-	File string `json:"file"`
+	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
 
 	// Label Optional caller-defined label for slot binding or diagnostics.
 	Label *string `json:"label,omitempty"`
@@ -2468,6 +2504,9 @@ type WorkImageContentPart struct {
 	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
 	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
+
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+	Url WorkContentURLProperty `json:"url"`
 }
 
 // WorkJsonContentPart defines model for WorkJsonContentPart.

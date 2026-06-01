@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // NormalizeWorkRequest validates a FACTORY_REQUEST_BATCH and converts it into runtime submit requests.
@@ -571,7 +572,10 @@ func normalizeWorkContent(content []interfaces.WorkContentPart, payload any) ([]
 		return canonicalContentFromLegacyPayload(rawPayload), rawPayload, nil
 	}
 
-	canonical := append([]interfaces.WorkContentPart(nil), content...)
+	canonical, err := workcontent.NormalizeFileBackedContent(content)
+	if err != nil {
+		return nil, nil, err
+	}
 	legacyText, hasTextProjection, err := legacyTextPayloadFromCanonicalContent(canonical)
 	if err != nil {
 		return nil, nil, err

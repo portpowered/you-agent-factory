@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -325,7 +326,7 @@ func TestCodexProviderBehavior_StreamsUserMessageOnStdin(t *testing.T) {
 		WorkingDirectory: "workspace",
 	}
 
-	args, err := behavior.BuildArgs(req, false)
+	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
 	if err != nil {
 		t.Fatalf("BuildArgs returned error: %v", err)
 	}
@@ -347,7 +348,7 @@ func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
 		UserMessage:   "line one\nline two",
 	}
 
-	args, err := behavior.BuildArgs(req, false)
+	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
 	if err != nil {
 		t.Fatalf("BuildArgs returned error: %v", err)
 	}

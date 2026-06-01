@@ -1,10 +1,15 @@
 package provider
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 )
 
 func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
@@ -55,7 +60,7 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
 			if err != nil {
 				t.Fatalf("BuildArgs returned error: %v", err)
 			}
@@ -104,7 +109,7 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
 			if err != nil {
 				t.Fatalf("BuildArgs returned error: %v", err)
 			}
@@ -115,14 +120,14 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 
 func TestCodexProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderCodex),
 		UserMessage:   "summarize the workspace",
 		Worktree:      "feature-worktree",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityWorktree,
 		},
-	}, false)
+	}, false, nil)
 	if err == nil || err.Error() != "worktree selection is not supported by the codex runner in v1" {
 		t.Fatalf("BuildArgs error = %v, want worktree rejection", err)
 	}
@@ -130,7 +135,7 @@ func TestCodexProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(
 
 func TestCodexProviderBehavior_BuildArgs_AllowsWorktreeMetadataWithPreparedWorkingDirectory(t *testing.T) {
 	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
-	args, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+	args, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
 		ModelProvider:    string(interfaces.ModelProviderCodex),
 		UserMessage:      "summarize the workspace",
 		Worktree:         "feature-worktree",
@@ -138,7 +143,7 @@ func TestCodexProviderBehavior_BuildArgs_AllowsWorktreeMetadataWithPreparedWorki
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityWorkingDirectory,
 		},
-	}, false)
+	}, false, nil)
 	if err != nil {
 		t.Fatalf("BuildArgs() error = %v", err)
 	}
@@ -150,6 +155,41 @@ func TestCodexProviderBehavior_BuildArgs_AllowsWorktreeMetadataWithPreparedWorki
 			t.Fatalf("args = %#v, want no --worktree passthrough", args)
 		}
 	}
+}
+
+func TestCodexProviderBehavior_BuildArgs_MaterializesLocalFileURLWithoutCopy(t *testing.T) {
+	workspace := t.TempDir()
+	imagePath := filepath.Join(workspace, "img.png")
+	if err := os.WriteFile(imagePath, []byte("png"), 0o644); err != nil {
+		t.Fatalf("write image: %v", err)
+	}
+	rawURL, err := workcontent.FilesystemPathToContentURL(imagePath)
+	if err != nil {
+		t.Fatalf("content url: %v", err)
+	}
+
+	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
+	cache := materialize.NewDispatchCache()
+	defer cache.Release()
+
+	args, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex),
+		Model:         "gpt-5-codex",
+		UserMessage:   "inspect",
+		InputTokens: InputTokens(interfaces.Token{
+			ID: "token-1",
+			Color: interfaces.TokenColor{
+				Content: []interfaces.WorkContentPart{
+					{Type: interfaces.WorkContentPartTypeImage, URL: rawURL},
+				},
+			},
+		}),
+	}, false, &ProviderBuildContext{ContentCache: cache})
+	if err != nil {
+		t.Fatalf("BuildArgs() error = %v", err)
+	}
+	want := []string{"exec", "--model", "gpt-5-codex", "-i", imagePath, "-"}
+	assertStringSlicesEqual(t, want, args)
 }
 
 func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
@@ -182,7 +222,7 @@ func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
 	behavior := geminiProviderBehavior{logger: logging.NoopLogger{}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
 			if err != nil {
 				t.Fatalf("BuildArgs returned error: %v", err)
 			}
@@ -193,13 +233,13 @@ func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
 
 func TestGeminiProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := geminiProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderGemini),
 		UserMessage:   "summarize the workspace",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityStructuredOutput,
 		},
-	}, false)
+	}, false, nil)
 	if err == nil || err.Error() != "structured output is not supported by the gemini runner in v1" {
 		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
 	}
@@ -243,7 +283,7 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
 			if err != nil {
 				t.Fatalf("BuildArgs returned error: %v", err)
 			}
@@ -254,13 +294,13 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 
 func TestKiroProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderKiro),
 		UserMessage:   "summarize the workspace",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityStructuredOutput,
 		},
-	}, false)
+	}, false, nil)
 	if err == nil || err.Error() != "structured output is not supported by the kiro runner in v1" {
 		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
 	}
@@ -297,7 +337,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 	behavior := cursorProviderBehavior{logger: logging.NoopLogger{}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
 			if err != nil {
 				t.Fatalf("BuildArgs returned error: %v", err)
 			}
@@ -308,13 +348,13 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 
 func TestCursorProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := cursorProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderCursor),
 		UserMessage:   "summarize the workspace",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityStructuredOutput,
 		},
-	}, false)
+	}, false, nil)
 	if err == nil || err.Error() != "structured output is not supported by the cursor-cli runner in v1" {
 		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
 	}
@@ -374,7 +414,7 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
 			if err != nil {
 				t.Fatalf("BuildArgs returned error: %v", err)
 			}
@@ -385,13 +425,13 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 
 func TestOpenCodeProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderOpenCode),
 		UserMessage:   "summarize the workspace",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityStructuredOutput,
 		},
-	}, false)
+	}, false, nil)
 	if err == nil || err.Error() != "structured output is not supported by the opencode runner in v1" {
 		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
 	}

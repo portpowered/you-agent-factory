@@ -5,7 +5,7 @@ allOf:
     additionalProperties: false
     required:
       - type
-      - file
+      - url
     properties:
       type:
         allOf:
@@ -13,7 +13,7 @@ allOf:
         enum:
           - image
           - IMAGE
+      url:
+        $ref: './WorkContentURLProperty.yaml'
       file:
-        type: string
-        minLength: 1
-        description: Image file reference preserved for later runtime materialization.
+        $ref: './WorkContentDeprecatedFileProperty.yaml'

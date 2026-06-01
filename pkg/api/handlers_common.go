@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )
 
@@ -148,13 +149,13 @@ func validatedRawWorkContentPart(fields map[string]json.RawMessage, prefix strin
 	case interfaces.WorkContentPartTypeText:
 		return validatedRawTextContentPart(fields, prefix)
 	case interfaces.WorkContentPartTypeImage:
-		return validatedRawFileContentPart(fields, prefix, interfaces.WorkContentPartTypeImage, "image content parts")
+		return validatedRawURLContentPart(fields, prefix, interfaces.WorkContentPartTypeImage, "image content parts")
 	case interfaces.WorkContentPartTypeAudio:
-		return validatedRawFileContentPart(fields, prefix, interfaces.WorkContentPartTypeAudio, "audio content parts")
+		return validatedRawURLContentPart(fields, prefix, interfaces.WorkContentPartTypeAudio, "audio content parts")
 	case interfaces.WorkContentPartTypeJSON:
 		return validatedRawJSONContentPart(fields, prefix)
 	case interfaces.WorkContentPartTypeBinary:
-		return validatedRawFileContentPart(fields, prefix, interfaces.WorkContentPartTypeBinary, "binary content parts")
+		return validatedRawURLContentPart(fields, prefix, interfaces.WorkContentPartTypeBinary, "binary content parts")
 	default:
 		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, TEXT, IMAGE, AUDIO, JSON, or BINARY", prefix)}
 	}
@@ -191,21 +192,48 @@ func validatedRawTextContentPart(fields map[string]json.RawMessage, prefix strin
 	return shared, nil
 }
 
-func validatedRawFileContentPart(fields map[string]json.RawMessage, prefix string, partType interfaces.WorkContentPartType, usage string) (interfaces.WorkContentPart, error) {
-	if err := requireOnlyFields(fields, prefix, "type", "file", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
+func validatedRawURLContentPart(fields map[string]json.RawMessage, prefix string, partType interfaces.WorkContentPartType, usage string) (interfaces.WorkContentPart, error) {
+	if err := requireOnlyFields(fields, prefix, "type", "url", "file", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
 		return interfaces.WorkContentPart{}, err
 	}
-	file, err := requiredNonEmptyStringField(fields, prefix, "file", usage)
-	if err != nil {
-		return interfaces.WorkContentPart{}, err
+	if _, hasFile := fields["file"]; hasFile {
+		if _, hasURL := fields["url"]; hasURL {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl and file cannot both be set on the same content part", prefix)}
+		}
 	}
 	shared, err := validateSharedWorkContentFields(fields, prefix)
 	if err != nil {
 		return interfaces.WorkContentPart{}, err
 	}
 	shared.Type = partType
-	shared.File = file
-	return shared, nil
+	if fileRaw, ok := fields["file"]; ok {
+		var file string
+		if err := json.Unmarshal(fileRaw, &file); err != nil || file == "" {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sfile must be a non-empty string when provided", prefix)}
+		}
+		shared.File = file
+	}
+	if urlRaw, ok := fields["url"]; ok {
+		var contentURL string
+		if err := json.Unmarshal(urlRaw, &contentURL); err != nil || contentURL == "" {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl must be a non-empty string", prefix)}
+		}
+		shared.URL = contentURL
+	}
+	normalized, err := workcontent.NormalizeFileBackedContentPart(shared)
+	if err != nil {
+		if strings.Contains(err.Error(), "url and file cannot both be set") {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
+		}
+		if strings.Contains(err.Error(), "url must be a non-empty string") {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl is required for %s", prefix, usage)}
+		}
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
+	}
+	if err := workcontent.ValidateContentURL(normalized.URL); err != nil {
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl %s", prefix, err.Error())}
+	}
+	return normalized, nil
 }
 
 func validatedRawJSONContentPart(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPart, error) {

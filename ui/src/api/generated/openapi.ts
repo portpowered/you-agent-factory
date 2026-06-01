@@ -576,6 +576,7 @@ export interface components {
          */
         SubmitWorkItemType: "text" | "image" | "video" | "audio" | "document";
         SubmitWorkFileItemCommonFields: {
+            url: components["schemas"]["SubmitWorkContentURLProperty"];
             /** @description Backend-owned staged file reference preserved for later dispatch. */
             stagedFileRef?: string;
             /** @description Browser-authored filename preserved for inline identification and validation. */
@@ -621,6 +622,8 @@ export interface components {
             contentBase64: string;
         };
         StageSubmitWorkFileResponse: {
+            /** @description Canonical file:// URL for the staged bytes on the factory host. */
+            url: components["schemas"]["SubmitWorkContentURLProperty"];
             /** @description Backend-owned staged file reference returned for later structured submit-work items. */
             stagedFileRef: string;
             /** @description Browser-authored filename preserved for inline identification after staging. */
@@ -2446,15 +2449,15 @@ export interface components {
         WorkImageContentPart: components["schemas"]["WorkContentCommonFields"] & {
             /** @enum {unknown} */
             type: "image" | "IMAGE";
-            /** @description Image file reference preserved for later runtime materialization. */
-            file: string;
+            url: components["schemas"]["WorkContentURLProperty"];
+            file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
         };
         /** @description Ordered audio content for one work item. */
         WorkAudioContentPart: components["schemas"]["WorkContentCommonFields"] & {
             /** @enum {unknown} */
             type: "AUDIO";
-            /** @description Audio file or artifact reference preserved for later runtime materialization. */
-            file: string;
+            url: components["schemas"]["WorkContentURLProperty"];
+            file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
         };
         /** @description Ordered JSON content for one work item. */
         WorkJsonContentPart: components["schemas"]["WorkContentCommonFields"] & {
@@ -2467,8 +2470,8 @@ export interface components {
         WorkBinaryContentPart: components["schemas"]["WorkContentCommonFields"] & {
             /** @enum {unknown} */
             type: "BINARY";
-            /** @description Binary file or artifact reference preserved for later runtime materialization. */
-            file: string;
+            url: components["schemas"]["WorkContentURLProperty"];
+            file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
         };
         Relation: {
             type: components["schemas"]["RelationType"];
@@ -2482,6 +2485,15 @@ export interface components {
          * @enum {string}
          */
         RelationType: "DEPENDS_ON" | "PARENT_CHILD" | "SPAWNED_BY";
+        /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:. */
+        WorkContentURLProperty: string;
+        /**
+         * @deprecated
+         * @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+         */
+        WorkContentDeprecatedFileProperty: string;
+        /** @description Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:. */
+        SubmitWorkContentURLProperty: string;
         /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
         ModelOperationName: string;
         /** @description Selector fields used to resolve one content part from ordered runtime input. */

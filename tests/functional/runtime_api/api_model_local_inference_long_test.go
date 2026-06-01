@@ -316,8 +316,12 @@ func assertRecordedRealLocalModelEvents(t *testing.T, events []factoryapi.Factor
 			if err == nil && payload.Operation == "TTS" && payload.Outcome == factoryapi.InferenceOutcomeSucceeded {
 				if payload.OutputContent != nil && len(*payload.OutputContent) == 1 {
 					audio, audioErr := (*payload.OutputContent)[0].AsWorkAudioContentPart()
-					if audioErr == nil && stringPointerValue(audio.ContentType) == "audio/wav" && strings.TrimSpace(audio.File) != "" {
-						responseAudioPath = audio.File
+					if audioErr == nil && stringPointerValue(audio.ContentType) == "audio/wav" {
+						if audio.File != nil && strings.TrimSpace(string(*audio.File)) != "" {
+							responseAudioPath = string(*audio.File)
+						} else if strings.TrimSpace(string(audio.Url)) != "" {
+							responseAudioPath = strings.TrimPrefix(string(audio.Url), "file://")
+						}
 					}
 				}
 			}

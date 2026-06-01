@@ -315,6 +315,14 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     expandEditableConfigurationSection();
 
     expect(
+      screen.getByText(messages.editableConfigurationPromptDiagnosticsHeading),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `${messages.editableConfigurationPromptVariableDiagnosticLabel}: Unknown variable.`,
+      ),
+    ).toBeInTheDocument();
+    expect(
       screen.queryByText(messages.editableConfigurationValidationStatus),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Resolve prompt diagnostics.")).toBeInTheDocument();

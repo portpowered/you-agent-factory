@@ -755,6 +755,38 @@ func TestNormalizeWorkRequest_ExtendedContentKeepsLegacyTextProjection(t *testin
 	if len(normalized[0].Content) != 3 || normalized[0].Content[1].Type != interfaces.WorkContentPartTypeAudio || normalized[0].Content[2].Type != interfaces.WorkContentPartTypeJSON {
 		t.Fatalf("content = %#v, want preserved extended content", normalized[0].Content)
 	}
+	if normalized[0].Content[1].URL != "file://artifacts/output.wav" {
+		t.Fatalf("audio url = %q, want legacy file normalized to url", normalized[0].Content[1].URL)
+	}
+	if normalized[0].Content[1].File != "" {
+		t.Fatalf("audio file = %q, want empty canonical file field", normalized[0].Content[1].File)
+	}
+}
+
+func TestNormalizeWorkRequest_NormalizesLegacyFileOnlyImageContent(t *testing.T) {
+	normalized, err := NormalizeWorkRequest(interfaces.WorkRequest{
+		RequestID: "request-legacy-file",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{{
+			Name:       "raw",
+			WorkTypeID: "task",
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/example.png"},
+			},
+		}},
+	}, interfaces.WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	if err != nil {
+		t.Fatalf("NormalizeWorkRequest: %v", err)
+	}
+	if len(normalized) != 1 || len(normalized[0].Content) != 1 {
+		t.Fatalf("normalized = %#v, want one image part", normalized)
+	}
+	if normalized[0].Content[0].URL != "file://fixtures/example.png" {
+		t.Fatalf("url = %q, want file://fixtures/example.png", normalized[0].Content[0].URL)
+	}
+	if normalized[0].Content[0].File != "" {
+		t.Fatalf("file = %q, want empty canonical file field", normalized[0].Content[0].File)
+	}
 }
 
 func findSubmitRequest(t *testing.T, requests []interfaces.SubmitRequest, name string) interfaces.SubmitRequest {

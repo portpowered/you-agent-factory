@@ -62,7 +62,7 @@ export const multimodalActiveWorkPayload = {
   content: [
     { text: "Primary selected-work payload text", type: "text" as const },
     { json: { priority: 1 }, type: "JSON" as const },
-    { file: "screenshot.png", type: "image" as const },
+    { url: "file://screenshot.png", type: "image" as const },
   ],
   payload_status: "RESOLVED",
 } satisfies Pick<DashboardWorkItemRef, "content" | "payload_status">;
