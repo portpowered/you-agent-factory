@@ -356,7 +356,7 @@ describe("import story assertions", () => {
         if (options?.name === "Cancel import") {
           return cancelButton;
         }
-        if (options?.name === "Activate factory") {
+        if (options?.name === "Confirm import") {
           return activateButton;
         }
         return closeButton;
@@ -378,7 +378,7 @@ describe("import story assertions", () => {
     });
     expect(dialog.getByText).toHaveBeenCalledWith("factory-import.png");
     expect(dialog.getByRole).toHaveBeenCalledWith("button", {
-      name: "Activate factory",
+      name: "Confirm import",
     });
   });
 });

@@ -26,11 +26,12 @@ import {
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 
-const SESSION_TABS_SHELL_CLASS = "grid min-w-0 max-w-full flex-1 gap-2";
+const SESSION_TABS_SHELL_CLASS =
+  "grid min-w-0 max-w-full flex-1 gap-2 overflow-x-auto";
 const SESSION_TABS_ROW_CLASS =
-  "flex min-w-0 max-w-full items-stretch gap-1 overflow-hidden";
+  "flex min-w-0 max-w-full items-stretch gap-1 overflow-visible";
 const SESSION_TAB_LIST_CLASS =
-  "flex h-full min-w-full w-max items-left gap-1";
+  "flex h-full min-w-full w-max items-left gap-1 overflow-visible";
 const SESSION_TAB_ITEM_CLASS =
   "group relative flex min-h-0 h-full min-w-0 shrink-0 items-stretch self-stretch transition-colors";
 const SESSION_TAB_BUTTON_CLASS =
@@ -42,17 +43,13 @@ const OPEN_SESSION_TAB_BUTTON_CLASS = cn(
   "hover:bg-af-overlay-subtle hover:text-af-text",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
 );
-/** Matches `BUTTON_TONE_CLASS.outline` on the tab shell (not the full button chrome). */
-const SESSION_TAB_OUTLINE_SURFACE_CLASS =
-  "border border-af-border-strong bg-af-surface-raised text-af-text";
 const SESSION_TAB_ACTIVE_CLASS = cn(
-  SESSION_TAB_OUTLINE_SURFACE_CLASS,
-  "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none border-b-transparent",
-  "before:pointer-events-none before:absolute before:-left-4 before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-af-surface-raised)_1rem)]",
-  "after:pointer-events-none after:absolute after:-right-4 after:-bottom-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_top_right,transparent_1rem,var(--color-af-surface-raised)_1rem)]",
+  "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none bg-af-surface-subtle text-af-text",
+  "before:pointer-events-none before:absolute before:-left-4 before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-af-surface-subtle)_1rem)]",
+  "after:pointer-events-none after:absolute after:-right-4 after:-bottom-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_top_right,transparent_1rem,var(--color-af-surface-subtle)_1rem)]",
 );
 const SESSION_TAB_INACTIVE_CLASS =
-  "rounded-t-xl rounded-b-none border border-transparent text-af-text-muted hover:border-af-border hover:bg-af-overlay hover:text-af-text";
+  "rounded-t-xl rounded-b-none text-af-text-muted hover:bg-af-overlay hover:text-af-text";
 const SESSION_TAB_ACTIVE_BUTTON_CLASS =
   "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
 const SESSION_TAB_INACTIVE_BUTTON_CLASS =
@@ -301,7 +298,7 @@ function SessionTabsContent({
     <>
       <nav
         aria-label={messages.sessionTabsLabel}
-        className="min-w-0 overflow-x-auto overflow-y-hidden"
+        className="min-w-0 overflow-visible"
       >
         <div
           aria-orientation="horizontal"

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { FactoryDefinition } from "../../../../api/factory-definition/api";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
 
@@ -408,7 +409,7 @@ describe("EditableConfigurationSection model workstation fields", () => {
 });
 
 describe("EditableConfigurationSection model workstation save feedback", () => {
-  it("shows validation alert when non-prompt field errors exist", () => {
+  it("shows validation alert for blocking field errors", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
@@ -447,7 +448,43 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     expect(screen.getByText("Enter a cron schedule.")).toBeInTheDocument();
   });
 
-  it("suppresses validation alert when only prompt diagnostics block save", () => {
+  it("does not render inline save outcome copy in the configuration section", () => {
+    const { container, rerender } = render(
+      <EditableConfigurationSection
+        messages={messages}
+        onSaveConfiguration={() => undefined}
+        saveState={{
+          status: "success",
+          message: messages.editableConfigurationSaveSuccess,
+        }}
+        state={buildReadyState({ isDirty: false })}
+      />,
+    );
+
+    expandConfiguration();
+
+    expectNoInlineSaveOutcomesIn(
+      container.querySelector("section") as HTMLElement,
+    );
+
+    rerender(
+      <EditableConfigurationSection
+        messages={messages}
+        onSaveConfiguration={() => undefined}
+        saveState={{
+          errorMessage: "The current factory rejected the workstation update.",
+          status: "error",
+        }}
+        state={buildReadyState({ isDirty: true })}
+      />,
+    );
+
+    expectNoInlineSaveOutcomesIn(
+      container.querySelector("section") as HTMLElement,
+    );
+  });
+
+  it("omits global validation alert when only prompt diagnostics block save", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
@@ -467,6 +504,7 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     expect(
       screen.queryByText(messages.editableConfigurationValidationStatus),
     ).not.toBeInTheDocument();
+    expect(screen.getByText("Resolve prompt diagnostics.")).toBeInTheDocument();
   });
 
   it("disables footer save and reset while submitting", () => {

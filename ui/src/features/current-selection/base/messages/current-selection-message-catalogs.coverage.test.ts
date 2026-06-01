@@ -10,6 +10,10 @@ import {
   type ResourceDetailMessages,
 } from "../../resource-selection/messages/resource-detail";
 import {
+  getWorkTypeDetailMessages,
+  type WorkTypeDetailMessages,
+} from "../../work-type-selection/messages/work-type-detail";
+import {
   getWorkerDetailMessages,
   type WorkerDetailMessages,
 } from "../../worker-selection/messages/worker-detail";
@@ -25,10 +29,6 @@ import {
   type EditableConfigurationControlsMessages,
   getEditableConfigurationControlsMessages,
 } from "./editable-configuration-controls";
-import {
-  getWorkTypeDetailMessages,
-  type WorkTypeDetailMessages,
-} from "../../work-type-selection/messages/work-type-detail";
 
 const assertResolvedValue = (value: unknown) => {
   expect(typeof value).toBe("string");
@@ -208,8 +208,6 @@ const invokeWorkerDetail = (
         formatter("HOSTED_WORKER" as never),
         formatter("future-type" as never),
       ];
-    case "topologyDeleteAction":
-      return [formatter("reviewer" as never)];
     default:
       throw new Error(`Unhandled worker-detail formatter ${key}`);
   }
@@ -222,7 +220,6 @@ const invokeWorkTypeDetail = (
   switch (key satisfies keyof WorkTypeDetailMessages) {
     case "editableConfigurationNameDuplicate":
     case "editableConfigurationSaveSuccess":
-    case "topologyDeleteAction":
       return [formatter("story" as never)];
     case "localizeWorkStateType":
       return [

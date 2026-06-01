@@ -136,14 +136,6 @@ export function getDefaultDashboardFlowAxisLegendPhaseItems(
 
 const DEFAULT_CONTAINER_CLASS =
   "pointer-events-none z-10 flex flex-col items-stretch gap-2 md:items-start";
-const TOGGLE_BUTTON_CLASS =
-  "dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 text-af-text-muted shadow-af-card backdrop-blur-md transition-colors hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
-const PANEL_CLASS =
-  "dashboard-body-sm pointer-events-auto w-full rounded-lg border border-af-border bg-af-surface-raised px-3 py-3 text-af-text-muted shadow-af-card backdrop-blur-md md:max-w-md";
-const PANEL_HEADER_CLASS = "mb-2 flex items-center justify-between gap-3";
-const PANEL_TITLE_CLASS = "dashboard-eyebrow m-0 text-af-accent";
-const COLLAPSE_BUTTON_CLASS =
-  "dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-border bg-af-surface-subtle px-3 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const ITEMS_LIST_CLASS =
   "m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2";
 const PHASE_SWATCH_CLASS = "h-3 w-3 shrink-0 rounded-sm border";
@@ -289,18 +281,20 @@ export function DashboardFlowAxisLegend({
       {expanded ? (
         <aside
           aria-label={resolvedAriaLabel}
-          className={PANEL_CLASS}
+          className="dashboard-body-sm pointer-events-auto w-full rounded-lg border border-af-border bg-af-surface-raised px-3 py-3 text-af-text-muted shadow-af-card backdrop-blur-md md:max-w-md"
           data-dashboard-flow-axis-legend-panel=""
           id={panelId}
         >
-          <div className={PANEL_HEADER_CLASS}>
+          <div className="mb-2 flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <LegendToggleGlyph />
-              <h3 className={PANEL_TITLE_CLASS}>{resolvedAriaLabel}</h3>
+              <h3 className="dashboard-eyebrow m-0 text-af-accent">
+                {resolvedAriaLabel}
+              </h3>
             </div>
             <DisclosureButton
               aria-label={messages.collapseToggleLabel(actionTargetLabel)}
-              className={COLLAPSE_BUTTON_CLASS}
+              className="dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-border bg-af-surface-subtle px-3 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
               controlsID={panelId}
               data-dashboard-flow-axis-legend-toggle=""
               expanded={true}
@@ -321,7 +315,7 @@ export function DashboardFlowAxisLegend({
       ) : (
         <DisclosureButton
           aria-label={messages.expandToggleLabel(actionTargetLabel)}
-          className={TOGGLE_BUTTON_CLASS}
+          className="dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 text-af-text-muted shadow-af-card backdrop-blur-md transition-colors hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
           controlsID={panelId}
           data-dashboard-flow-axis-legend-toggle=""
           expanded={false}

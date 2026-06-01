@@ -232,7 +232,7 @@ export async function verifyImportDialog(page, dialog, viewport) {
     "Import cancel button",
   );
   await expectVisible(
-    dialog.getByRole("button", { name: "Activate factory" }),
+    dialog.getByRole("button", { name: "Confirm import" }),
     "Import activate button",
   );
   await expectVisible(

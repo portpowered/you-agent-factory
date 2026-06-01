@@ -28,8 +28,5 @@ export interface WorkTypeDetailMessages
   statesEmpty: string;
   statesHeading: string;
   stateTypeColumnLabel: string;
-  topologyDeleteAction: (workTypeName: string) => string;
-  topologyDeleteBlockedPrefix: string;
-  topologyDeleteHeading: string;
   workTypeNameLabel: string;
 }

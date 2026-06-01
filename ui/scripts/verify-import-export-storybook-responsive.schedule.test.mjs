@@ -273,7 +273,7 @@ describe("localized import/export assertions", () => {
         if (options?.name === "取消导入") {
           return cancelButton;
         }
-        if (options?.name === "启用工厂") {
+        if (options?.name === "确认导入") {
           return activateButton;
         }
         return closeButton;
@@ -300,7 +300,7 @@ describe("localized import/export assertions", () => {
       name: "取消导入",
     });
     expect(dialog.getByRole).toHaveBeenCalledWith("button", {
-      name: "启用工厂",
+      name: "确认导入",
     });
     expect(dialog.getByRole).toHaveBeenCalledWith("button", {
       name: "关闭导入预览",
