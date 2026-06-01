@@ -3,11 +3,41 @@ import {
   completionToProviderSession,
   completionToTraceDispatch,
 } from "./replayCompletion";
-import type {
-  ReplayWorldState,
-  WorldScriptRequest,
-  WorldScriptResponse,
+import {
+  emptyWorldRuntime,
+  type ReplayWorldState,
+  type WorldScriptRequest,
+  type WorldScriptResponse,
 } from "./types";
+import { emptyWorkPayloadLineageProjection } from "./workPayloadLineage";
+
+export function emptyReplayWorldState(tick: number): ReplayWorldState {
+  return {
+    activeDispatches: {},
+    completedDispatches: [],
+    factory_state: "UNKNOWN",
+    failedWorkDetailsByWorkID: {},
+    failedWorkItemsByID: {},
+    inferenceAttemptsByDispatchID: {},
+    occupancyByID: {},
+    payloadLineage: emptyWorkPayloadLineageProjection(),
+    providerSessions: [],
+    relationsByWorkID: {},
+    runtime: emptyWorldRuntime(),
+    scriptRequestsByDispatchID: {},
+    scriptResponsesByDispatchID: {},
+    terminalWorkByID: {},
+    tick_count: tick,
+    topology: {},
+    tracesByID: {},
+    tracesByWorkID: {},
+    uptime_seconds: 0,
+    workItemsByID: {},
+    workStateChangesByWorkID: {},
+    workstationRequestsByDispatchID: {},
+    workRequestsByID: {},
+  };
+}
 
 export function inferenceAttemptsForDispatch(
   state: ReplayWorldState,
@@ -30,7 +60,11 @@ export function resolveDispatchTransitionID(
   if (activeTransitionID) {
     return activeTransitionID;
   }
-  for (let index = state.completedDispatches.length - 1; index >= 0; index -= 1) {
+  for (
+    let index = state.completedDispatches.length - 1;
+    index >= 0;
+    index -= 1
+  ) {
     const completion = state.completedDispatches[index];
     if (completion.dispatchID === dispatchID) {
       return completion.transitionID;
@@ -44,21 +78,27 @@ export function syncCompletedDispatchAttempt(
   dispatchID: string,
   attempt: DashboardInferenceAttempt,
 ): void {
-  for (let index = state.completedDispatches.length - 1; index >= 0; index -= 1) {
+  for (
+    let index = state.completedDispatches.length - 1;
+    index >= 0;
+    index -= 1
+  ) {
     const completion = state.completedDispatches[index];
     if (completion.dispatchID !== dispatchID) {
       continue;
     }
 
     completion.diagnostics = attempt.diagnostics ?? completion.diagnostics;
-    completion.providerSession = attempt.provider_session ?? completion.providerSession;
+    completion.providerSession =
+      attempt.provider_session ?? completion.providerSession;
 
     if (
       completion.providerSession?.id &&
       !state.providerSessions.some(
         (providerSession) =>
           providerSession.dispatch_id === completion.dispatchID &&
-          providerSession.provider_session?.id === completion.providerSession?.id,
+          providerSession.provider_session?.id ===
+            completion.providerSession?.id,
       )
     ) {
       state.providerSessions = [

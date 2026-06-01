@@ -1,3 +1,4 @@
+import type { FactoryWorkItem } from "../../../../api/events";
 import type {
   DashboardInferenceAttempt,
   DashboardRuntimeWorkstationRequest,
@@ -20,9 +21,10 @@ import {
   requestIDsByWorkItemID,
   scriptResponseErrored,
   workstationScriptRequestForProjection,
-  workItemsFromTokens,
 } from "./projectWorkstationRequestHelpers";
+import { consumedWorkItemRefsForDispatch } from "./workItemRef";
 import { uniqueSorted } from "./shared";
+import type { WorkPayloadLineageProjection } from "./workPayloadLineage";
 import type {
   TimelineWorkRequestPayload,
   WorldCompletion,
@@ -35,14 +37,18 @@ export function projectRuntimeWorkstationRequests({
   activeDispatches,
   attemptsByDispatchID,
   completedDispatches,
+  payloadLineage,
   scriptRequestsByDispatchID,
   scriptResponsesByDispatchID,
+  workItemsByID,
 }: {
   activeDispatches: WorldDispatch[];
   attemptsByDispatchID: Record<string, Record<string, DashboardInferenceAttempt>>;
   completedDispatches: WorldCompletion[];
+  payloadLineage: WorkPayloadLineageProjection;
   scriptRequestsByDispatchID: Record<string, Record<string, WorldScriptRequest>>;
   scriptResponsesByDispatchID: Record<string, Record<string, WorldScriptResponse>>;
+  workItemsByID: Record<string, FactoryWorkItem>;
 }): Record<string, DashboardRuntimeWorkstationRequest> | undefined {
   const requests: Record<string, TimelineWorkstationRequest> = {};
 
@@ -58,6 +64,8 @@ export function projectRuntimeWorkstationRequests({
       dispatch,
       attemptsByDispatchID[dispatch.dispatchID],
       latestScriptRequest,
+      payloadLineage,
+      workItemsByID,
     );
   }
 
@@ -74,6 +82,8 @@ export function projectRuntimeWorkstationRequests({
       attemptsByDispatchID[completion.dispatchID],
       latestScriptRequest,
       latestScriptResponse,
+      payloadLineage,
+      workItemsByID,
     );
   }
 
@@ -167,8 +177,15 @@ function workstationRequestFromActiveDispatch(
   dispatch: WorldDispatch,
   _attempts: Record<string, DashboardInferenceAttempt> | undefined,
   latestScriptRequest: WorldScriptRequest | undefined,
+  payloadLineage: WorkPayloadLineageProjection,
+  workItemsByID: Record<string, FactoryWorkItem>,
 ): TimelineWorkstationRequest {
-  const inputWorkItems = workItemsFromTokens(dispatch.consumedTokens, dispatch.workItems);
+  const inputWorkItems = consumedWorkItemRefsForDispatch(
+    payloadLineage,
+    dispatch.dispatchID,
+    dispatch.consumedTokens,
+    workItemsByID,
+  );
   return {
     counts: workstationRequestCounts(undefined, undefined, undefined),
     dispatchId: dispatch.dispatchID,
@@ -194,8 +211,15 @@ function workstationRequestFromCompletion(
   _attempts: Record<string, DashboardInferenceAttempt> | undefined,
   latestScriptRequest: WorldScriptRequest | undefined,
   latestScriptResponse: WorldScriptResponse | undefined,
+  payloadLineage: WorkPayloadLineageProjection,
+  workItemsByID: Record<string, FactoryWorkItem>,
 ): TimelineWorkstationRequest {
-  const inputWorkItems = workItemsFromTokens(completion.consumedTokens, completion.workItems);
+  const inputWorkItems = consumedWorkItemRefsForDispatch(
+    payloadLineage,
+    completion.dispatchID,
+    completion.consumedTokens,
+    workItemsByID,
+  );
   return {
     counts: workstationRequestCounts(undefined, undefined, undefined),
     dispatchId: completion.dispatchID,
@@ -219,7 +243,11 @@ function workstationRequestFromCompletion(
       feedback: completion.feedback,
       outcome: completion.outcome,
       outputMutations: completion.outputMutations,
-      outputWorkItems: outputWorkItemsFromCompletion(completion),
+      outputWorkItems: outputWorkItemsFromCompletion(
+        payloadLineage,
+        completion,
+        workItemsByID,
+      ),
       scriptResponse: timelineScriptResponse(latestScriptResponse),
     },
     transitionId: completion.transitionID,
