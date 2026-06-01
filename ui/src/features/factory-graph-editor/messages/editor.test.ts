@@ -103,6 +103,15 @@ describe("getFactoryGraphEditorMessages", () => {
     );
   });
 
+  it("describes English default work type label", () => {
+    expect(getFactoryGraphEditorMessages("en").defaultWorkTypeLabel).toBe(
+      "Default work type",
+    );
+    expect(getFactoryGraphEditorMessages("zh-CN").defaultWorkTypeLabel).toBe(
+      "默认工作类型",
+    );
+  });
+
   it("resolves z-axis incomplete connection hint copy in English and zh-CN", () => {
     const english = getFactoryGraphEditorMessages("en");
     const chinese = getFactoryGraphEditorMessages("zh-CN");

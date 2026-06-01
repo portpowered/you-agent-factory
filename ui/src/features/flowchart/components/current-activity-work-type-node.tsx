@@ -3,6 +3,7 @@ import type { Node, NodeProps } from "@xyflow/react";
 import type { DashboardPlaceRef } from "../../../api/dashboard/types";
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
+import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { getActivityGraphMessages } from "../messages/activity-graph";
 import type { ActivityGraphNodeHandle } from "./current-activity-node-shell";
@@ -16,6 +17,7 @@ export interface WorkTypeNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   factoryGraphNodeId?: string;
   handles: ActivityGraphNodeHandle[];
+  isDefaultWorkType?: boolean;
   kind: "work-type";
   locale?: string;
   muted: boolean;
@@ -69,8 +71,20 @@ export function WorkTypeNodeView({
         locale={data.locale}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">
-        <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-af-info">
-          {workTypeLabel}
+        <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+          <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-af-info">
+            {workTypeLabel}
+          </span>
+          {data.isDefaultWorkType ? (
+            <ActivityGraphNodeBadge
+              className="max-w-full shrink"
+              role="status"
+              tone="info"
+              weight="label"
+            >
+              {activityGraphMessages.defaultWorkTypeLabel}
+            </ActivityGraphNodeBadge>
+          ) : null}
         </span>
         <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-af-text">
           {name}
