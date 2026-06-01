@@ -43,7 +43,7 @@ describe("WorkstationRequestDetailCard request fallbacks", () => {
     ).toBeTruthy();
   });
 
-  it("renders fallback Codex capability detail that matches factory-managed worktree support", () => {
+  it("renders runner identity without a capability support matrix for fallback Codex metadata", () => {
     render(
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-codex-fallback", {
@@ -59,17 +59,19 @@ describe("WorkstationRequestDetailCard request fallbacks", () => {
       />,
     );
 
-    const currentSelection = screen.getByRole("article", {
-      name: "Current selection",
-    });
+    const currentSelection = within(
+      screen.getByRole("article", {
+        name: "Current selection",
+      }),
+    );
+    expect(currentSelection.getByText("Runner")).toBeTruthy();
+    expect(currentSelection.getByText("Codex")).toBeTruthy();
+    expect(currentSelection.getByText("default")).toBeTruthy();
     expect(
-      within(currentSelection).getByText("Runner capability support"),
-    ).toBeTruthy();
-    expect(
-      within(currentSelection).getByText(
-        "Factory-managed git worktree preparation under the factory root.",
-      ),
-    ).toBeTruthy();
+      currentSelection.queryByText("Runner capability support"),
+    ).toBeNull();
+    expect(currentSelection.queryByText("Supported")).toBeNull();
+    expect(currentSelection.queryByText("Unsupported")).toBeNull();
   });
 });
 
@@ -135,7 +137,8 @@ describe("WorkstationRequestDetailCard failed outcome summaries", () => {
           failure_reason: "provider_rate_limit",
           inference_attempts: [
             {
-              ...workstationRequest("dispatch-review-error").inference_attempts[0],
+              ...workstationRequest("dispatch-review-error")
+                .inference_attempts[0],
               error_class: "provider_rate_limit",
               inference_request_id: "dispatch-review-error/inference-request/1",
               outcome: "FAILED",
