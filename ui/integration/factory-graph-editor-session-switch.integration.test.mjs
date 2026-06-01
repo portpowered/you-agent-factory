@@ -261,9 +261,7 @@ async function expectEditorModeOff(page) {
   await expect
     .poll(
       async () =>
-        graphCard
-          .getByRole("region", { name: "Factory graph editor tools" })
-          .count(),
+        graphCard.getByRole("button", { name: "Open add entity menu" }).count(),
       { timeout: uiInteractionTimeoutMs },
     )
     .toBe(0);
@@ -272,6 +270,11 @@ async function expectEditorModeOff(page) {
       timeout: uiInteractionTimeoutMs,
     })
     .toBe(0);
+  await graphCard
+    .getByRole("button", {
+      name: "Open hide or show node classes menu",
+    })
+    .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 }
 
 async function runSessionSwitchClearsDirtyEditorScenario(preview) {
