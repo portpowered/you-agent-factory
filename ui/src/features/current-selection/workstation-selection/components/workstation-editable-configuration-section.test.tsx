@@ -344,8 +344,8 @@ describe("EditableConfigurationSection model workstation fields", () => {
 });
 
 describe("EditableConfigurationSection model workstation save feedback", () => {
-  it("shows validation alert and save success feedback", () => {
-    const { rerender } = render(
+  it("shows validation alert when non-prompt fields are invalid", () => {
+    render(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
@@ -361,8 +361,10 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       messages.editableConfigurationValidationStatus,
     );
+  });
 
-    rerender(
+  it("does not render inline save success copy in the configuration section", () => {
+    render(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
@@ -374,12 +376,14 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       />,
     );
 
+    expandConfiguration();
+
     expect(
-      screen.getByText(messages.editableConfigurationSaveSuccess),
-    ).toBeInTheDocument();
+      screen.queryByText(messages.editableConfigurationSaveSuccess),
+    ).not.toBeInTheDocument();
   });
 
-  it("treats prompt-only validation as status instead of alert", () => {
+  it("suppresses top-level validation alert for prompt-only blocking errors", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
@@ -396,13 +400,10 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
 
     expandConfiguration();
 
-    const draftStatus = screen.getByText(
-      messages.editableConfigurationDirtyStatus,
-    );
-    expect(draftStatus).toHaveAttribute("role", "status");
     expect(
       screen.queryByText(messages.editableConfigurationValidationStatus),
     ).not.toBeInTheDocument();
+    expect(screen.getByText("Resolve prompt diagnostics.")).toBeInTheDocument();
   });
 
   it("disables footer save and reset while submitting", () => {
