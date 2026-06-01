@@ -602,7 +602,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(onCronTriggerAtStartChange).toHaveBeenCalledWith(false);
   });
 
-  it("does not render cron fields for STANDARD or POLLER workstations", () => {
+  it("does not render cron fields for STANDARD, REPEATER, or POLLER workstations", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const { rerender } = render(
@@ -618,6 +618,20 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expandEditableConfiguration();
+    expect(screen.queryByLabelText("Cron schedule")).toBeNull();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "REPEATER",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
     expect(screen.queryByLabelText("Cron schedule")).toBeNull();
 
     rerender(

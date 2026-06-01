@@ -121,4 +121,40 @@ describe("validateEditableWorkstationCronDraft", () => {
       ),
     ).toEqual({});
   });
+
+  it("accepts @every schedules with positive Go durations", () => {
+    expect(
+      validateEditableWorkstationCronDraft(
+        { ...validCron, schedule: "@every 5m" },
+        messages,
+      ),
+    ).toEqual({});
+  });
+
+  it("rejects invalid @every durations and unrecognized descriptors", () => {
+    expect(
+      validateEditableWorkstationCronDraft(
+        { ...validCron, schedule: "@every bad" },
+        messages,
+      ).cronSchedule,
+    ).toBe(
+      'invalid cron schedule "@every bad": invalid @every duration "bad"',
+    );
+
+    expect(
+      validateEditableWorkstationCronDraft(
+        { ...validCron, schedule: "@every 0s" },
+        messages,
+      ).cronSchedule,
+    ).toBe(
+      'invalid cron schedule "@every 0s": invalid @every duration "0s"',
+    );
+
+    expect(
+      validateEditableWorkstationCronDraft(
+        { ...validCron, schedule: "@unknown" },
+        messages,
+      ).cronSchedule,
+    ).toContain("unrecognized descriptor: @unknown");
+  });
 });
