@@ -13,6 +13,9 @@ describe("workstation-selection/public", () => {
     expect(
       workstationSelectionPublic.EditableWorkstationSaveHeaderAction,
     ).toBeTypeOf("function");
+    expect(
+      workstationSelectionPublic.EditableWorkstationConfigurationHeaderActions,
+    ).toBeTypeOf("function");
     expect(workstationSelectionPublic.getWorkstationDetailMessages).toBeTypeOf(
       "function",
     );

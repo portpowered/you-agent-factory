@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
@@ -7,7 +7,7 @@ import type {
   EditableWorkerSaveState,
 } from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
-import { EditableWorkerSaveHeaderAction } from "./worker-save-controls";
+import { EditableWorkerConfigurationHeaderActions } from "./worker-save-controls";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -53,19 +53,52 @@ function mockFactoryDocumentQuery(
   } as never);
 }
 
-function buildWorkerHeaderSaveAction({
+function workerDetailHeaderActionSection() {
+  const card = screen.getByRole("article", { name: "Current selection" });
+  const undoButton = within(card).getByRole("button", {
+    name: "Undo selection",
+  });
+  const actionSection = undoButton.closest(
+    "[data-dashboard-action-row-section='actions']",
+  );
+  if (!actionSection) {
+    throw new Error("expected header action section");
+  }
+
+  return actionSection as HTMLElement;
+}
+
+function editableConfigurationSection() {
+  const heading = screen.getByRole("heading", {
+    name: "Worker configuration",
+  });
+  const section = heading.closest("section");
+  if (!section) {
+    throw new Error("expected editable configuration section");
+  }
+
+  return section;
+}
+
+function buildWorkerHeaderActions({
+  canDiscard = false,
   canSave,
-  onClick = vi.fn(),
+  onDiscard = vi.fn(),
+  onSave = vi.fn(),
   saveState = { status: "idle" },
 }: {
+  canDiscard?: boolean;
   canSave: boolean;
-  onClick?: () => void;
+  onDiscard?: () => void;
+  onSave?: () => void;
   saveState?: EditableWorkerSaveState;
 }) {
   return (
-    <EditableWorkerSaveHeaderAction
+    <EditableWorkerConfigurationHeaderActions
+      canDiscard={canDiscard}
       canSave={canSave}
-      onClick={onClick}
+      onDiscard={onDiscard}
+      onSave={onSave}
       saveState={saveState}
     />
   );
@@ -346,8 +379,10 @@ describe("WorkerDetailCard", () => {
     render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
-        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
-        onSaveConfiguration={vi.fn()}
+        headerAction={buildWorkerHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
         workerName="reviewer"
       />,
     );
@@ -355,15 +390,29 @@ describe("WorkerDetailCard", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "Saving reviewer updates every workstation",
     );
-    expect(screen.getAllByRole("button", { name: "Save worker" })).toHaveLength(
-      2,
-    );
+
+    const headerActions = workerDetailHeaderActionSection();
     expect(
-      screen.getByRole("button", { name: "Discard local changes" }),
+      within(headerActions).getAllByRole("button", { name: "Save worker" }),
+    ).toHaveLength(1);
+    expect(
+      within(headerActions).getByRole("button", {
+        name: "Discard local changes",
+      }),
     ).toBeTruthy();
+    expect(
+      within(editableConfigurationSection()).queryByRole("button", {
+        name: "Save worker",
+      }),
+    ).toBeNull();
+    expect(
+      within(editableConfigurationSection()).queryByRole("button", {
+        name: "Discard local changes",
+      }),
+    ).toBeNull();
   });
 
-  it("stacks configuration fields vertically and renders a labeled footer Save", () => {
+  it("stacks configuration fields vertically and keeps save and discard in the header only", () => {
     const editableConfigurationState: EditableWorkerConfigurationState = {
       canSave: true,
       draft: {
@@ -419,13 +468,18 @@ describe("WorkerDetailCard", () => {
       status: "success",
     } as never);
 
-    const onSaveConfiguration = vi.fn();
+    const onSave = vi.fn();
+    const onDiscard = vi.fn();
 
     const { container } = render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
-        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
-        onSaveConfiguration={onSaveConfiguration}
+        headerAction={buildWorkerHeaderActions({
+          canDiscard: true,
+          canSave: true,
+          onDiscard,
+          onSave,
+        })}
         workerName="reviewer"
       />,
     );
@@ -437,15 +491,32 @@ describe("WorkerDetailCard", () => {
     expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);
     expect(fieldGroup?.className).not.toMatch(/xl:grid-cols-\d/);
 
-    const saveButtons = screen.getAllByRole("button", { name: "Save worker" });
-    expect(saveButtons).toHaveLength(2);
+    const headerActions = workerDetailHeaderActionSection();
+    const saveButtons = within(headerActions).getAllByRole("button", {
+      name: "Save worker",
+    });
+    const discardButtons = within(headerActions).getAllByRole("button", {
+      name: "Discard local changes",
+    });
+    expect(saveButtons).toHaveLength(1);
+    expect(discardButtons).toHaveLength(1);
 
-    fireEvent.click(saveButtons[1] ?? saveButtons[0]);
-    expect(onSaveConfiguration).toHaveBeenCalledTimes(1);
+    fireEvent.click(saveButtons[0]);
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(discardButtons[0]);
+    expect(onDiscard).toHaveBeenCalledTimes(1);
 
     expect(
-      screen.getByRole("button", { name: "Discard local changes" }),
-    ).toBeTruthy();
+      within(editableConfigurationSection()).queryByRole("button", {
+        name: "Save worker",
+      }),
+    ).toBeNull();
+    expect(
+      within(editableConfigurationSection()).queryByRole("button", {
+        name: "Discard local changes",
+      }),
+    ).toBeNull();
   });
 
   it("shows scoped save success feedback for the selected worker", () => {
@@ -962,8 +1033,7 @@ describe("WorkerDetailCard", () => {
     render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
-        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
-        onSaveConfiguration={vi.fn()}
+        headerAction={buildWorkerHeaderActions({ canSave: true })}
         workerName="reviewer"
       />,
     );
@@ -981,10 +1051,11 @@ describe("WorkerDetailCard", () => {
     expect(
       screen.queryByText("Enter a model before saving this worker."),
     ).toBeNull();
-    const footerSave = screen.getAllByRole("button", {
-      name: "Save worker",
-    })[1];
-    expect(footerSave?.hasAttribute("disabled")).toBe(false);
+    const headerSave = within(workerDetailHeaderActionSection()).getByRole(
+      "button",
+      { name: "Save worker" },
+    );
+    expect(headerSave.hasAttribute("disabled")).toBe(false);
   });
 
   it("disables save and shows field errors while validation is unresolved", () => {
@@ -1048,8 +1119,7 @@ describe("WorkerDetailCard", () => {
     render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
-        headerAction={buildWorkerHeaderSaveAction({ canSave: false })}
-        onSaveConfiguration={vi.fn()}
+        headerAction={buildWorkerHeaderActions({ canSave: false })}
         workerName="reviewer"
       />,
     );
@@ -1065,10 +1135,15 @@ describe("WorkerDetailCard", () => {
     expect(
       screen.queryByText("Enter a model before saving this worker."),
     ).toBeNull();
-    for (const saveButton of screen.getAllByRole("button", {
-      name: "Save worker",
-    })) {
-      expect(saveButton.hasAttribute("disabled")).toBe(true);
-    }
+    expect(
+      within(workerDetailHeaderActionSection())
+        .getByRole("button", { name: "Save worker" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      within(editableConfigurationSection()).queryByRole("button", {
+        name: "Save worker",
+      }),
+    ).toBeNull();
   });
 });

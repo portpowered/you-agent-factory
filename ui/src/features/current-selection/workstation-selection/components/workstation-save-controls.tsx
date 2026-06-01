@@ -1,13 +1,49 @@
 import { Save } from "lucide-react";
-import { DashboardMutationDialog } from "../../../workflow-activity/components/mutation-dialog";
 import { Button, DashboardActionButton } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
+import { DashboardMutationDialog } from "../../../workflow-activity/components/mutation-dialog";
+import { EditableConfigurationDiscardHeaderAction } from "../../base/public";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
-import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
 } from "../lib/detail-card-types";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
+
+export function EditableWorkstationConfigurationHeaderActions({
+  canDiscard,
+  canSave,
+  locale,
+  onDiscard,
+  onSave,
+  saveState,
+}: {
+  canDiscard: boolean;
+  canSave: boolean;
+  locale?: string;
+  onDiscard: () => void;
+  onSave: () => void;
+  saveState: EditableWorkstationSaveState;
+}) {
+  const isSaving = saveState.status === "submitting";
+
+  return (
+    <>
+      <EditableConfigurationDiscardHeaderAction
+        canDiscard={canDiscard}
+        isSaving={isSaving}
+        locale={locale}
+        onClick={onDiscard}
+      />
+      <EditableWorkstationSaveHeaderAction
+        canSave={canSave}
+        locale={locale}
+        onClick={onSave}
+        saveState={saveState}
+      />
+    </>
+  );
+}
 
 export function EditableWorkstationSaveHeaderAction({
   canSave,

@@ -15,6 +15,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/workquery"
 	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
@@ -111,7 +112,7 @@ func List(cfg ListConfig) error {
 }
 
 func validateListConfig(cfg ListConfig) error {
-	if cfg.StateType != "" && !validWorkStateType(cfg.StateType) {
+	if cfg.StateType != "" && !workquery.ValidWorkStateType(factoryapi.WorkStateType(cfg.StateType)) {
 		return fmt.Errorf("--state-type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
 	}
 	if cfg.SortBy != "" && cfg.SortBy != string(factoryapi.SortByStateType) {
@@ -258,17 +259,6 @@ func formatRelationSummary(relation factoryapi.Relation) string {
 	return builder.String()
 }
 
-func validWorkStateType(stateType string) bool {
-	switch factoryapi.WorkStateType(stateType) {
-	case factoryapi.WorkStateTypeINITIAL,
-		factoryapi.WorkStateTypePROCESSING,
-		factoryapi.WorkStateTypeTERMINAL,
-		factoryapi.WorkStateTypeFAILED:
-		return true
-	default:
-		return false
-	}
-}
 
 func stringValue(value *string) string {
 	if value == nil {

@@ -8,7 +8,9 @@ import type {
   EditableWorkTypeSaveState,
 } from "../lib/detail-card-types";
 import { WorkTypeDetailCard } from "./work-type-detail-card";
-import { EditableWorkTypeSaveHeaderAction } from "./work-type-save-controls";
+import {
+  EditableWorkTypeConfigurationHeaderActions,
+} from "./work-type-save-controls";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -62,22 +64,54 @@ function buildFactoryDocument(
   };
 }
 
-function buildWorkTypeHeaderSaveAction({
+function buildWorkTypeHeaderActions({
+  canDiscard = false,
   canSave,
-  onClick = vi.fn(),
+  onDiscard = vi.fn(),
+  onSave = vi.fn(),
   saveState = { status: "idle" },
 }: {
+  canDiscard?: boolean;
   canSave: boolean;
-  onClick?: () => void;
+  onDiscard?: () => void;
+  onSave?: () => void;
   saveState?: EditableWorkTypeSaveState;
 }) {
   return (
-    <EditableWorkTypeSaveHeaderAction
+    <EditableWorkTypeConfigurationHeaderActions
+      canDiscard={canDiscard}
       canSave={canSave}
-      onClick={onClick}
+      onDiscard={onDiscard}
+      onSave={onSave}
       saveState={saveState}
     />
   );
+}
+
+function workTypeDetailHeaderActionSection() {
+  const card = screen.getByRole("article", { name: "Current selection" });
+  const undoButton = within(card).getByRole("button", {
+    name: "Undo selection",
+  });
+  const actionSection = undoButton.closest(
+    "[data-dashboard-action-row-section='actions']",
+  );
+  if (!actionSection) {
+    throw new Error("expected header action section");
+  }
+
+  return actionSection as HTMLElement;
+}
+
+function editableWorkTypeConfigurationForm() {
+  const panel = screen.getByRole("article", { name: "Current selection" });
+  const nameInput = within(panel).getByLabelText("Work type");
+  const form = nameInput.closest("form");
+  if (!form) {
+    throw new Error("expected editable work type configuration form");
+  }
+
+  return form;
 }
 
 function WorkTypeDetailCardHarness({
@@ -213,7 +247,7 @@ describe("WorkTypeDetailCard", () => {
     );
   });
 
-  it("stacks configuration fields vertically and renders a labeled footer Save", () => {
+  it("stacks configuration fields vertically and renders header save and discard only when dirty", () => {
     const editableConfigurationState: EditableWorkTypeConfigurationState = {
       baseVersion: buildFactoryDocument().version,
       canSave: true,
@@ -239,18 +273,22 @@ describe("WorkTypeDetailCard", () => {
       status: "ready",
       validationErrors: {},
     };
-    const onSaveConfiguration = vi.fn();
+    const onSave = vi.fn();
+    const onDiscard = vi.fn();
 
     const { container } = render(
       <WorkTypeDetailCard
         editableConfigurationState={editableConfigurationState}
-        headerAction={buildWorkTypeHeaderSaveAction({ canSave: true })}
-        onSaveConfiguration={onSaveConfiguration}
+        headerAction={buildWorkTypeHeaderActions({
+          canDiscard: true,
+          canSave: true,
+          onDiscard,
+          onSave,
+        })}
         workTypeName="story"
       />,
     );
 
-    const panel = screen.getByRole("article", { name: "Current selection" });
     const fieldGroup = container.querySelector(
       `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
     );
@@ -259,12 +297,31 @@ describe("WorkTypeDetailCard", () => {
     expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);
     expect(fieldGroup?.className).not.toMatch(/xl:grid-cols-\d/);
 
-    const saveButtons = within(panel).getAllByRole("button", {
+    const headerActions = workTypeDetailHeaderActionSection();
+    const saveButtons = within(headerActions).getAllByRole("button", {
       name: "Save changes",
     });
-    expect(saveButtons).toHaveLength(2);
+    const discardButtons = within(headerActions).getAllByRole("button", {
+      name: "Discard local changes",
+    });
+    expect(saveButtons).toHaveLength(1);
+    expect(discardButtons).toHaveLength(1);
 
-    fireEvent.click(saveButtons[1] ?? saveButtons[0]);
-    expect(onSaveConfiguration).toHaveBeenCalledTimes(1);
+    fireEvent.click(saveButtons[0]);
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(discardButtons[0]);
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+
+    expect(
+      within(editableWorkTypeConfigurationForm()).queryByRole("button", {
+        name: "Save changes",
+      }),
+    ).toBeNull();
+    expect(
+      within(editableWorkTypeConfigurationForm()).queryByRole("button", {
+        name: "Discard local changes",
+      }),
+    ).toBeNull();
   });
 });

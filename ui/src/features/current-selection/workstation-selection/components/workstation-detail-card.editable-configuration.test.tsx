@@ -2,31 +2,52 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
-import { buildDetailCardEditableFactoryDocument } from "../../base/components/detail-card-test-helpers";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
+import { buildDetailCardEditableFactoryDocument } from "../../base/components/detail-card-test-helpers";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
 } from "../lib/detail-card-types";
 import { WorkstationDetailCard } from "./workstation-detail-card";
-import { EditableWorkstationSaveHeaderAction } from "./workstation-save-controls";
+import { EditableWorkstationConfigurationHeaderActions } from "./workstation-save-controls";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 const editableConfigurationCoverageTimeoutMs = 240_000;
 
-function buildWorkstationHeaderSaveAction({
+function currentSelectionHeaderActionSection() {
+  const card = screen.getByRole("article", { name: "Current selection" });
+  const undoButton = within(card).getByRole("button", {
+    name: "Undo selection",
+  });
+  const actionSection = undoButton.closest(
+    "[data-dashboard-action-row-section='actions']",
+  );
+  if (!actionSection) {
+    throw new Error("expected header action section");
+  }
+
+  return actionSection as HTMLElement;
+}
+
+function buildWorkstationHeaderActions({
+  canDiscard = false,
   canSave,
-  onClick = vi.fn(),
+  onDiscard = vi.fn(),
+  onSave = vi.fn(),
   saveState = { status: "idle" },
 }: {
+  canDiscard?: boolean;
   canSave: boolean;
-  onClick?: () => void;
+  onDiscard?: () => void;
+  onSave?: () => void;
   saveState?: EditableWorkstationSaveState;
 }) {
   return (
-    <EditableWorkstationSaveHeaderAction
+    <EditableWorkstationConfigurationHeaderActions
+      canDiscard={canDiscard}
       canSave={canSave}
-      onClick={onClick}
+      onDiscard={onDiscard}
+      onSave={onSave}
       saveState={saveState}
     />
   );
@@ -340,10 +361,11 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.queryByLabelText("Worker")).toBeNull();
   });
 
-  it("stacks configuration fields vertically and renders a labeled footer Save", () => {
+  it("stacks configuration fields vertically and keeps save and discard in the header only", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    const onSaveConfiguration = vi.fn();
+    const onSave = vi.fn();
+    const onDiscard = vi.fn();
 
     render(
       <WorkstationDetailCard
@@ -353,9 +375,13 @@ describe("WorkstationDetailCard editable configuration", () => {
           isDirty: true,
           pendingFactoryDefinition: buildDetailCardEditableFactoryDocument(),
         }}
-        headerAction={buildWorkstationHeaderSaveAction({ canSave: true })}
+        headerAction={buildWorkstationHeaderActions({
+          canDiscard: true,
+          canSave: true,
+          onDiscard,
+          onSave,
+        })}
         now={DETAIL_CARD_NOW}
-        onSaveConfiguration={onSaveConfiguration}
         providerSessions={[]}
         selectedNode={selectedNode}
       />,
@@ -374,15 +400,37 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);
     expect(fieldGroup?.className).not.toMatch(/xl:grid-cols-\d/);
 
-    const saveButtons = screen.getAllByRole("button", { name: "Save changes" });
-    expect(saveButtons).toHaveLength(2);
+    const headerActions = currentSelectionHeaderActionSection();
+    const saveButtons = within(headerActions).getAllByRole("button", {
+      name: "Save changes",
+    });
+    const discardButtons = within(headerActions).getAllByRole("button", {
+      name: "Discard local changes",
+    });
+    expect(saveButtons).toHaveLength(1);
+    expect(discardButtons).toHaveLength(1);
 
-    fireEvent.click(saveButtons[1] ?? saveButtons[0]);
-    expect(onSaveConfiguration).toHaveBeenCalledTimes(1);
+    fireEvent.click(saveButtons[0]);
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(discardButtons[0]);
+    expect(onDiscard).toHaveBeenCalledTimes(1);
 
     expect(
-      screen.getByRole("button", { name: "Reset to latest" }),
-    ).toBeTruthy();
+      within(editableConfigurationSection()).queryByRole("button", {
+        name: "Save changes",
+      }),
+    ).toBeNull();
+    expect(
+      within(editableConfigurationSection()).queryByRole("button", {
+        name: "Discard local changes",
+      }),
+    ).toBeNull();
+    expect(
+      within(editableConfigurationSection()).queryByRole("button", {
+        name: "Reset to latest",
+      }),
+    ).toBeNull();
   });
 
   it("starts collapsed and expands with accessible disclosure behavior", () => {
@@ -531,7 +579,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
   });
 
-  it("marks server-changed fields and resets the draft to the latest values", () => {
+  it("marks server-changed fields and resets the draft from the header discard action", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const onResetToLatest = vi.fn();
@@ -547,8 +595,12 @@ describe("WorkstationDetailCard editable configuration", () => {
           isDirty: true,
           onResetToLatest,
         }}
+        headerAction={buildWorkstationHeaderActions({
+          canDiscard: true,
+          canSave: false,
+          onDiscard: onResetToLatest,
+        })}
         now={DETAIL_CARD_NOW}
-        onSaveConfiguration={vi.fn()}
         providerSessions={[]}
         selectedNode={selectedNode}
       />,
@@ -567,12 +619,17 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toHaveLength(2);
 
     fireEvent.click(
-      within(editableConfigurationSection()).getByRole("button", {
-        name: "Reset to latest",
+      within(currentSelectionHeaderActionSection()).getByRole("button", {
+        name: "Discard local changes",
       }),
     );
 
     expect(onResetToLatest).toHaveBeenCalledTimes(1);
+    expect(
+      within(editableConfigurationSection()).queryByRole("button", {
+        name: "Reset to latest",
+      }),
+    ).toBeNull();
   });
 
   it("identifies shared workers and keeps worker-owned fields out of the workstation form", () => {
@@ -869,20 +926,18 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.getByText("Available variables")).toBeTruthy();
     expect(screen.getByText(".WorkID")).toBeTruthy();
     expect(screen.getByText("{{ .WorkID }}")).toBeTruthy();
-    expect(
-      screen.getByText("The current work item identifier."),
-    ).toBeTruthy();
+    expect(screen.getByText("The current work item identifier.")).toBeTruthy();
     expect(screen.getByText("Unavailable access")).toBeTruthy();
     expect(screen.getByText(".Inputs[1].Payload")).toBeTruthy();
     expect(
-      screen.getByText(
-        "Only input 0 is available for this workstation.",
-      ),
+      screen.getByText("Only input 0 is available for this workstation."),
     ).toBeTruthy();
     expect(
-      within(editableConfigurationSection()).getByRole("button", {
-        name: "Close prompt variable help",
-      }).getAttribute("aria-expanded"),
+      within(editableConfigurationSection())
+        .getByRole("button", {
+          name: "Close prompt variable help",
+        })
+        .getAttribute("aria-expanded"),
     ).toBe("true");
   });
 
@@ -906,8 +961,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             },
           ],
           validationErrors: {
-            prompt:
-              "See prompt diagnostics below.",
+            prompt: "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -977,8 +1031,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             },
           ],
           validationErrors: {
-            prompt:
-              "See prompt diagnostics below.",
+            prompt: "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -993,9 +1046,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    expect(
-      screen.getByText("line 1: unexpected EOF in if block"),
-    ).toBeTruthy();
+    expect(screen.getByText("line 1: unexpected EOF in if block")).toBeTruthy();
     expect(
       screen.queryByText("Template syntax: unexpected EOF in if block"),
     ).toBeNull();
@@ -1027,8 +1078,7 @@ describe("WorkstationDetailCard editable configuration", () => {
               },
             ],
             validationErrors: {
-              prompt:
-                "See prompt diagnostics below.",
+              prompt: "See prompt diagnostics below.",
             },
           })}
           now={DETAIL_CARD_NOW}
@@ -1175,7 +1225,9 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
     expectHeadingBefore(resizable, promptVariableHelpToggle());
     expectHeadingBefore(resizable, diagnosticsPanel as HTMLElement);
-    expect(container.querySelector("[data-prompt-editor-resizable='true']")).toBeTruthy();
+    expect(
+      container.querySelector("[data-prompt-editor-resizable='true']"),
+    ).toBeTruthy();
   });
 
   it("links prompt editor accessibility metadata to validation and diagnostic feedback", () => {
@@ -1195,8 +1247,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             },
           ],
           validationErrors: {
-            prompt:
-              "See prompt diagnostics below.",
+            prompt: "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1254,8 +1305,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             },
           ],
           validationErrors: {
-            prompt:
-              "See prompt diagnostics below.",
+            prompt: "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1299,8 +1349,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             },
           ],
           validationErrors: {
-            prompt:
-              "See prompt diagnostics below.",
+            prompt: "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1342,8 +1391,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             },
           ],
           validationErrors: {
-            prompt:
-              "See prompt diagnostics below.",
+            prompt: "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1389,8 +1437,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             },
           ],
           validationErrors: {
-            prompt:
-              "See prompt diagnostics below.",
+            prompt: "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}
@@ -1438,9 +1485,11 @@ describe("WorkstationDetailCard editable configuration", () => {
     await user.keyboard("{Enter}");
 
     expect(
-      within(editableConfigurationSection()).getByRole("button", {
-        name: "Close prompt variable help",
-      }).getAttribute("aria-expanded"),
+      within(editableConfigurationSection())
+        .getByRole("button", {
+          name: "Close prompt variable help",
+        })
+        .getAttribute("aria-expanded"),
     ).toBe("true");
     expect(screen.getByText("Available variables")).toBeTruthy();
     expect(screen.getByText(".WorkID")).toBeTruthy();
@@ -1789,8 +1838,7 @@ describe("WorkstationDetailCard editable configuration", () => {
             },
           ],
           validationErrors: {
-            prompt:
-              "See prompt diagnostics below.",
+            prompt: "See prompt diagnostics below.",
           },
         })}
         now={DETAIL_CARD_NOW}

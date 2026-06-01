@@ -220,6 +220,7 @@ function useCurrentActivityDisplayNodes(baseNodes: CurrentActivityNode[]) {
         applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
     );
   }, []);
+
   const displayNodes = useMemo(() => {
     const positionOverrides = new Map(
       nodes.map((node) => [node.id, node.position] as const),
@@ -232,6 +233,50 @@ function useCurrentActivityDisplayNodes(baseNodes: CurrentActivityNode[]) {
   }, [baseNodes, nodes]);
 
   return { displayNodes, handleNodesChange };
+}
+
+function useCurrentActivityGraphEdges({
+  activeGraphHighlights,
+  displayNodes,
+  handleAssignments,
+  pendingAdditionEdgeIds,
+  visibleGraphEdges,
+}: {
+  activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
+  displayNodes: CurrentActivityNode[];
+  handleAssignments: ReturnType<typeof buildHandleAssignments>;
+  pendingAdditionEdgeIds: ReadonlySet<string>;
+  visibleGraphEdges: GraphLayout["edges"];
+}) {
+  return useMemo(
+    () =>
+      buildGraphEdges(
+        activeGraphHighlights,
+        handleAssignments,
+        pendingAdditionEdgeIds,
+        visibleGraphEdges,
+        displayNodes,
+      ),
+    [
+      activeGraphHighlights,
+      displayNodes,
+      handleAssignments,
+      pendingAdditionEdgeIds,
+      visibleGraphEdges,
+    ],
+  );
+}
+
+function useInitialFitViewOptions(graphLayout: GraphLayout) {
+  return useMemo<FitViewOptions>(
+    () => ({
+      maxZoom: 1.15,
+      minZoom: 0.7,
+      nodes: initialFocusNodes(graphLayout),
+      padding: 0.18,
+    }),
+    [graphLayout],
+  );
 }
 
 export function useCurrentActivityGraphViewModel({
@@ -306,32 +351,14 @@ export function useCurrentActivityGraphViewModel({
   });
   const { displayNodes, handleNodesChange } =
     useCurrentActivityDisplayNodes(baseNodes);
-  const edges = useMemo(
-    () =>
-      buildGraphEdges(
-        activeGraphHighlights,
-        handleAssignments,
-        pendingAdditionEdgeIds,
-        visibleGraphEdges,
-        displayNodes,
-      ),
-    [
-      activeGraphHighlights,
-      displayNodes,
-      handleAssignments,
-      pendingAdditionEdgeIds,
-      visibleGraphEdges,
-    ],
-  );
-  const initialFitViewOptions = useMemo<FitViewOptions>(
-    () => ({
-      maxZoom: 1.15,
-      minZoom: 0.7,
-      nodes: initialFocusNodes(graphLayout),
-      padding: 0.18,
-    }),
-    [graphLayout],
-  );
+  const edges = useCurrentActivityGraphEdges({
+    activeGraphHighlights,
+    displayNodes,
+    handleAssignments,
+    pendingAdditionEdgeIds,
+    visibleGraphEdges,
+  });
+  const initialFitViewOptions = useInitialFitViewOptions(graphLayout);
 
   return {
     edges,

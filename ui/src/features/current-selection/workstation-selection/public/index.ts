@@ -4,6 +4,7 @@ export {
 } from "../components/provider-session-attempts";
 export { WorkstationDetailCard } from "../components/workstation-detail-card";
 export {
+  EditableWorkstationConfigurationHeaderActions,
   EditableWorkstationSaveDialog,
   EditableWorkstationSaveHeaderAction,
 } from "../components/workstation-save-controls";

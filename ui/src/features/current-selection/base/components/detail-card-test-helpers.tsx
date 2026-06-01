@@ -88,7 +88,9 @@ export {
   clickWorkstationSave,
   createDetailCardDeferredFactoryDocumentSave,
   DETAIL_CARD_SAVE_FACTORY_VERSION,
+  currentSelectionHeaderActionSection,
   expandDetailCardResourceConfiguration,
+  expandDetailCardWorkerConfiguration,
   expandDetailCardWorkstationConfiguration,
   workstationFooterSaveButton,
 } from "./detail-card-save-test-helpers";
