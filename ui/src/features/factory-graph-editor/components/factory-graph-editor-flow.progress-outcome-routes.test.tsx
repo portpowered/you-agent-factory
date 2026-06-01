@@ -63,6 +63,44 @@ const standardProcessorWithStopWords: FactoryWorkstation = {
   stopWords: ["DONE"],
 };
 
+const logicalMoveWorkstation: FactoryWorkstation = {
+  body: "Move work downstream.",
+  inputs: [
+    {
+      state: "queued",
+      workType: "story",
+    },
+  ],
+  name: "router",
+  outputs: [
+    {
+      state: "done",
+      workType: "story",
+    },
+  ],
+  resources: [
+    {
+      capacity: 2,
+      name: "gpu",
+    },
+  ],
+  type: "LOGICAL_MOVE",
+  worker: "",
+};
+
+const logicalMoveComparisonTopology: FactoryGraphTopology = {
+  ...PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+  nodes: [
+    ...PROGRESS_OUTCOME_ROUTE_TOPOLOGY.nodes,
+    {
+      id: "workstation:router",
+      key: { kind: "workstation", name: "router" },
+      kind: "workstation",
+      label: "router",
+    },
+  ],
+};
+
 const onRejectionValidationProjection = projectFactoryValidationTargets([
   {
     code: "factory.workstation.missingRejectionRoute",
@@ -79,6 +117,7 @@ const onRejectionValidationProjection = projectFactoryValidationTargets([
 function renderProgressOutcomeRouteFlow(
   workstations: readonly FactoryWorkstation[],
   options?: {
+    topology?: FactoryGraphTopology;
     validationProjection?: typeof onRejectionValidationProjection;
   },
 ) {
@@ -89,7 +128,7 @@ function renderProgressOutcomeRouteFlow(
     pendingConnectionSource: null,
     pendingRemovalEdgeIds: new Set<string>(),
     pendingRemovalNodeIds: new Set<string>(),
-    topology: PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+    topology: options?.topology ?? PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
     validationProjection: options?.validationProjection,
     workstations,
   });
@@ -201,5 +240,57 @@ describe("factory graph editor progress outcome route handles", () => {
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
     ).toHaveLength(0);
+  });
+
+  it("hides continue, failure, and reject connect handles on logical-move workstations", async () => {
+    renderProgressOutcomeRouteFlow([logicalMoveWorkstation], {
+      topology: logicalMoveComparisonTopology,
+    });
+
+    await screen.findByRole("button", { name: "Connect: router Success" });
+    expect(
+      screen.getByRole("button", { name: "Connect: router Input" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Connect: router Resource" }),
+    ).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Failure" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Continue" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Reject" }),
+    ).toBeNull();
+  });
+
+  it("keeps standard processor outcome handles when logical-move is on the same graph", async () => {
+    renderProgressOutcomeRouteFlow(
+      [standardProcessorWithoutStopWords, logicalMoveWorkstation],
+      { topology: logicalMoveComparisonTopology },
+    );
+
+    await screen.findByRole("button", { name: "Connect: draft Success" });
+    expect(
+      screen.getByRole("button", { name: "Connect: draft Failure" }),
+    ).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: draft Continue" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: draft Reject" }),
+    ).toBeNull();
+
+    await screen.findByRole("button", { name: "Connect: router Success" });
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Failure" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Continue" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Reject" }),
+    ).toBeNull();
   });
 });
