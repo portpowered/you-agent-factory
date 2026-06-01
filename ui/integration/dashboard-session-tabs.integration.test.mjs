@@ -250,7 +250,7 @@ describe.sequential("dashboard session tabs browser integration", () => {
           })
           .toBe("true");
 
-        expectOutlineActiveSessionTabShell(
+        expectSubtleActiveSessionTabShell(
           await readSessionTabShellClassName(rootTab),
         );
         expectMutedInactiveSessionTabShell(
@@ -269,7 +269,7 @@ describe.sequential("dashboard session tabs browser integration", () => {
           })
           .toBe("false");
 
-        expectOutlineActiveSessionTabShell(
+        expectSubtleActiveSessionTabShell(
           await readSessionTabShellClassName(betaTab),
         );
         expectMutedInactiveSessionTabShell(
@@ -300,13 +300,17 @@ async function readSessionTabShellClassName(tabLocator) {
   });
 }
 
-function expectOutlineActiveSessionTabShell(className) {
-  expect(className).toContain("border-af-border-strong");
-  expect(className).toContain("bg-af-surface-raised");
+function expectSubtleActiveSessionTabShell(className) {
+  expect(className).toContain("bg-af-surface-subtle");
+  expect(className).not.toContain("border-af-border-strong");
+  expect(className).not.toContain("bg-af-surface-raised");
   expect(className).not.toContain("bg-af-accent");
   expect(className).not.toContain("bg-af-accent-surface");
 }
 
 function expectMutedInactiveSessionTabShell(className) {
   expect(className).toContain("text-af-text-muted");
+  expect(className).not.toContain("bg-af-surface-subtle");
+  expect(className).not.toContain("bg-af-surface-raised");
+  expect(className).not.toContain("hover:border-af-border");
 }
