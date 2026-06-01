@@ -8,10 +8,6 @@ import {
   ChooseFileField,
 } from "../../choose-file/public";
 
-const IMAGE_FIELD_HINT_CLASS = cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
-const IMAGE_FIELD_VALIDATION_CLASS =
-  "m-0 text-sm font-medium text-af-danger-text";
-
 export interface ExportFactoryDialogImageFieldProps {
   imageDescription: string;
   imageLabel: string;
@@ -40,12 +36,15 @@ export function ExportFactoryDialogImageField({
       afterControl={
         <>
           {selectedImage ? (
-            <p className={IMAGE_FIELD_HINT_CLASS}>
+            <p className={cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
               {selectedImageLabel(selectedImage.name)}
             </p>
           ) : null}
           {imageValidationMessage ? (
-            <p className={IMAGE_FIELD_VALIDATION_CLASS} id={imageValidationId}>
+            <p
+              className="m-0 text-sm font-medium text-af-danger-text"
+              id={imageValidationId}
+            >
               {imageValidationMessage}
             </p>
           ) : null}
