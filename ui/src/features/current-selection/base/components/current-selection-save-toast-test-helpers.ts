@@ -104,18 +104,6 @@ export async function expectWorkerSaveSuccessToast(workerName: string) {
   });
 }
 
-export async function expectWorkerSaveFailedToast(errorDetail: string) {
-  await waitFor(() => {
-    expect(toast.error).toHaveBeenCalledWith(
-      "Worker save failed",
-      expect.objectContaining({
-        description: expect.stringContaining(errorDetail),
-        duration: PERSISTENT_TOAST_DURATION_MS,
-      }),
-    );
-  });
-}
-
 export async function expectResourceSaveSuccessToast(resourceName: string) {
   await waitFor(() => {
     expect(toast.success).toHaveBeenCalledWith(
@@ -147,31 +135,6 @@ export async function expectWorkStateSaveSuccessToast(stateName: string) {
         description: expect.stringContaining(
           `${stateName} was updated in the running factory definition`,
         ),
-      }),
-    );
-  });
-}
-
-export async function expectWorkTypeSaveSuccessToast(workTypeName: string) {
-  await waitFor(() => {
-    expect(toast.success).toHaveBeenCalledWith(
-      "Work type saved",
-      expect.objectContaining({
-        description: expect.stringContaining(
-          `"${workTypeName}" was refreshed to the saved definition`,
-        ),
-      }),
-    );
-  });
-}
-
-export async function expectWorkTypeSaveFailedToast(errorDetail: string) {
-  await waitFor(() => {
-    expect(toast.error).toHaveBeenCalledWith(
-      "Work type save failed",
-      expect.objectContaining({
-        description: expect.stringContaining(errorDetail),
-        duration: PERSISTENT_TOAST_DURATION_MS,
       }),
     );
   });
