@@ -131,6 +131,51 @@ describe("useEditableWorkTypeConfigurationState", () => {
     });
   });
 
+  it("blocks save when the pending factory would have multiple default work types", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        workTypes: [
+          {
+            handlingBehavior: ["DEFAULT"],
+            name: "story",
+            states: [{ name: "queued", type: "INITIAL" }],
+          },
+          {
+            name: "bug",
+            states: [{ name: "open", type: "INITIAL" }],
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkTypeConfigurationState(bugSelection, "bug"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable work type state");
+      }
+      result.current.onHandlingBehaviorChange(["DEFAULT"]);
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: false,
+      hasValidationErrors: true,
+      isDirty: true,
+      validationErrors: {
+        handlingBehavior: expect.stringContaining(
+          "Only one work type can be the factory default",
+        ),
+      },
+    });
+  });
+
   it("marks the session dirty when handlingBehavior changes", () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: buildFactoryDocument({
