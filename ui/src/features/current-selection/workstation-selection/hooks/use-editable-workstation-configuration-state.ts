@@ -2,40 +2,29 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
-  type EditableWorkstationBehavior,
-  workerSupportsPollerBehavior,
-  workstationBehaviorRequiresPrompt,
-} from "../../../current-factory-definition/lib/workstation-behavior";
-import {
-  applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { editableWorkstationDraftsEqual } from "../../../current-factory-definition/lib/workstation-guards";
 import type { DashboardSelection } from "../../base/state/selection-types";
-import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import {
   resolvePromptHelpState,
   resolvePromptValidationState,
 } from "../editing/editable-workstation-prompt-state";
-import type { RunnerID } from "../editing/runner-metadata";
-import type {
-  EditableWorkstationConfigurationState,
-  EditableWorkstationPromptHelpState,
-  EditableWorkstationPromptValidationState,
-  EditableWorkstationValidationErrors,
-  EditableWorkstationWorkerOptionsState,
-  EditableWorkstationWorkstationOptionsState,
-} from "../lib/detail-card-types";
-import {
-  getWorkstationDetailMessages,
-  type WorkstationDetailMessages,
-} from "../messages/workstation-detail";
-import { validateEditableWorkstationGuardDraft } from "../lib/workstation-editable-validation";
+import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
+import { validateEditableWorkstationDraft } from "./editable-workstation-draft-validation";
+import { buildReadyEditableWorkstationConfigurationState } from "./editable-workstation-ready-configuration-state";
+
+export {
+  hasEditableWorkstationValidationErrors,
+  validateEditableWorkstationDraft,
+} from "./editable-workstation-draft-validation";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
@@ -160,346 +149,6 @@ function useEditableWorkstationSession(
   };
 }
 
-export function validateEditableWorkstationDraft(
-  draft: EditableWorkstationDraft,
-  selectedEditableValues?: ReturnType<typeof resolveEditableWorkstationValues>,
-  promptValidationState: EditableWorkstationPromptValidationState = {
-    status: "idle",
-  },
-  messages: Pick<
-    WorkstationDetailMessages,
-    | "editableConfigurationPromptRequired"
-    | "editableConfigurationPromptValidationLoading"
-    | "editableConfigurationPromptValidationErrorPrefix"
-    | "editableConfigurationPromptFieldHint"
-    | "editableConfigurationBehaviorPollerWorkerUnsupported"
-    | "editableConfigurationWorkerRequired"
-    | "editableConfigurationWorkerUnavailable"
-    | "editableConfigurationVisitCountMaxVisitsInvalid"
-    | "editableConfigurationVisitCountWorkstationInvalid"
-    | "editableConfigurationVisitCountWorkstationRequired"
-    | "editableConfigurationMatchesFieldsInputKeyRequired"
-    | "editableConfigurationInputGuardMultipleGuards"
-    | "editableConfigurationInputGuardMatchInputRequired"
-    | "editableConfigurationInputGuardMatchInputInvalid"
-    | "editableConfigurationInputGuardMatchInputSelfReference"
-    | "editableConfigurationInputGuardParentInputRequired"
-    | "editableConfigurationInputGuardParentInputInvalid"
-    | "editableConfigurationInputGuardParentInputSelfReference"
-    | "editableConfigurationInputGuardSpawnedByInvalid"
-  > = getWorkstationDetailMessages(undefined),
-): EditableWorkstationValidationErrors {
-  const validationErrors: EditableWorkstationValidationErrors = {};
-  const promptIsRequired = workstationBehaviorRequiresPrompt(draft.behavior);
-
-  if (draft.workerName.trim().length === 0) {
-    validationErrors.workerName = messages.editableConfigurationWorkerRequired;
-  } else if (
-    selectedEditableValues &&
-    !selectedEditableValues.workerOptions.includes(draft.workerName)
-  ) {
-    validationErrors.workerName =
-      messages.editableConfigurationWorkerUnavailable;
-  }
-  if (
-    draft.behavior === "POLLER" &&
-    selectedEditableValues &&
-    !workerSupportsPollerBehavior(
-      draft.workerName.trim().length === 0
-        ? null
-        : {
-            type: selectedEditableValues.workerTypeByName[draft.workerName],
-          },
-    )
-  ) {
-    validationErrors.behavior =
-      messages.editableConfigurationBehaviorPollerWorkerUnsupported;
-  }
-
-  if (promptIsRequired && draft.prompt.trim().length === 0) {
-    validationErrors.prompt = messages.editableConfigurationPromptRequired;
-  } else if (promptIsRequired && promptValidationState.status === "loading") {
-    validationErrors.prompt =
-      messages.editableConfigurationPromptValidationLoading;
-  } else if (promptIsRequired && promptValidationState.status === "error") {
-    validationErrors.prompt = `${messages.editableConfigurationPromptValidationErrorPrefix} ${promptValidationState.errorMessage}`;
-  } else if (
-    promptIsRequired &&
-    promptValidationState.status === "ready" &&
-    (!promptValidationState.result.valid ||
-      promptValidationState.diagnostics.length > 0)
-  ) {
-    validationErrors.prompt = messages.editableConfigurationPromptFieldHint;
-  }
-
-  return {
-    ...validationErrors,
-    ...validateEditableWorkstationGuardDraft(
-      draft,
-      {
-        workstationOptions: selectedEditableValues?.workstationOptions ?? [],
-      },
-      messages,
-    ),
-  };
-}
-
-export function hasEditableWorkstationValidationErrors(
-  validationErrors: EditableWorkstationValidationErrors,
-): boolean {
-  return Object.values(validationErrors).some(
-    (message) => typeof message === "string" && message.length > 0,
-  );
-}
-
-function areEditableDraftsEqual(
-  left: EditableWorkstationDraft,
-  right: EditableWorkstationDraft,
-): boolean {
-  return editableWorkstationDraftsEqual(left, right);
-}
-
-function resolveWorkerOptionsState(
-  draft: EditableWorkstationDraft,
-  selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
-  messages: Pick<
-    WorkstationDetailMessages,
-    | "editableConfigurationEmpty"
-    | "editableConfigurationWorkerMissing"
-    | "editableConfigurationWorkerOptionsEmpty"
-  >,
-): EditableWorkstationWorkerOptionsState {
-  if (!selectedEditableValues) {
-    return {
-      message: messages.editableConfigurationEmpty,
-      status: "error",
-    };
-  }
-
-  if (selectedEditableValues.workerOptions.length === 0) {
-    return {
-      message: messages.editableConfigurationWorkerOptionsEmpty,
-      status: "empty",
-    };
-  }
-
-  if (!selectedEditableValues.workerOptions.includes(draft.workerName)) {
-    return {
-      message: messages.editableConfigurationWorkerMissing,
-      status: "error",
-    };
-  }
-
-  return {
-    options: selectedEditableValues.workerOptions,
-    status: "ready",
-  };
-}
-
-function resolveWorkstationOptionsState(
-  selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
-  messages: Pick<
-    WorkstationDetailMessages,
-    | "editableConfigurationEmpty"
-    | "editableConfigurationWorkstationOptionsEmpty"
-  >,
-): EditableWorkstationWorkstationOptionsState {
-  if (!selectedEditableValues) {
-    return {
-      message: messages.editableConfigurationEmpty,
-      status: "error",
-    };
-  }
-
-  if (selectedEditableValues.workstationOptions.length === 0) {
-    return {
-      message: messages.editableConfigurationWorkstationOptionsEmpty,
-      status: "empty",
-    };
-  }
-
-  return {
-    options: selectedEditableValues.workstationOptions,
-    status: "ready",
-  };
-}
-
-function buildReadyEditableWorkstationConfigurationState({
-  editableDefinition,
-  messages,
-  promptHelpState,
-  promptValidationState,
-  resolvedValidationErrors,
-  selectedEditableValues,
-  selectedNode,
-  sessionState,
-  setSessionState,
-}: {
-  editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentFactoryDocument>["data"]
-  >;
-  messages: WorkstationDetailMessages;
-  promptHelpState: EditableWorkstationPromptHelpState;
-  promptValidationState: EditableWorkstationPromptValidationState;
-  resolvedValidationErrors: EditableWorkstationValidationErrors;
-  selectedEditableValues: NonNullable<
-    ReturnType<typeof resolveEditableWorkstationValues>
-  >;
-  selectedNode: DashboardWorkstationNode;
-  sessionState: EditableWorkstationSessionState;
-  setSessionState: (
-    updater: (
-      currentState: EditableWorkstationSessionState | null,
-    ) => EditableWorkstationSessionState | null,
-  ) => void;
-}) {
-  const pendingFactoryDefinition = hasEditableWorkstationValidationErrors(
-    resolvedValidationErrors,
-  )
-    ? null
-    : applyEditableWorkstationDraft(
-        editableDefinition,
-        selectedNode,
-        sessionState.draft,
-      );
-
-  return {
-    baseVersion: editableDefinition.version,
-    draft: sessionState.draft,
-    hasValidationErrors: hasEditableWorkstationValidationErrors(
-      resolvedValidationErrors,
-    ),
-    initialValues: selectedEditableValues,
-    isDirty: !areEditableDraftsEqual(
-      sessionState.draft,
-      sessionState.sessionStartDraft,
-    ),
-    markChangesSaved: () => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              latestDefinitionDraft: currentState.draft,
-              sessionStartDraft: currentState.draft,
-            }
-          : currentState,
-      );
-    },
-    onPromptChange: (value: string) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                prompt: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onResetToLatest: () => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: currentState.latestDefinitionDraft,
-              sessionStartDraft: currentState.latestDefinitionDraft,
-            }
-          : currentState,
-      );
-    },
-    onBehaviorChange: (value: EditableWorkstationBehavior) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                behavior: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                guards,
-              },
-            }
-          : currentState,
-      );
-    },
-    onInputsChange: (inputs: EditableWorkstationDraft["inputs"]) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                inputs,
-              },
-            }
-          : currentState,
-      );
-    },
-    onRunnerChange: (value: RunnerID | null) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                runnerName: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onWorkerChange: (value: string) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                workerName: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    overwriteFieldNames: resolveEditableWorkstationOverwriteFields(
-      sessionState.sessionStartDraft,
-      sessionState.draft,
-      sessionState.latestDefinitionDraft,
-    ),
-    pendingFactoryDefinition,
-    promptDiagnostics:
-      promptValidationState.status === "ready"
-        ? promptValidationState.diagnostics
-        : [],
-    promptHelpState,
-    promptValidationState,
-    status: "ready" as const,
-    validationErrors: resolvedValidationErrors,
-    workerOptionsState: resolveWorkerOptionsState(
-      sessionState.draft,
-      selectedEditableValues,
-      messages,
-    ),
-    workstationOptionsState: resolveWorkstationOptionsState(
-      selectedEditableValues,
-      messages,
-    ),
-  };
-}
-
 function syncEditableWorkstationSession(
   currentState: EditableWorkstationSessionState | null,
   selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
@@ -522,7 +171,10 @@ function syncEditableWorkstationSession(
   }
 
   if (
-    areEditableDraftsEqual(currentState.draft, currentState.sessionStartDraft)
+    editableWorkstationDraftsEqual(
+      currentState.draft,
+      currentState.sessionStartDraft,
+    )
   ) {
     return {
       draft: initialDraft,
@@ -532,7 +184,7 @@ function syncEditableWorkstationSession(
     };
   }
 
-  return areEditableDraftsEqual(
+  return editableWorkstationDraftsEqual(
     currentState.latestDefinitionDraft,
     initialDraft,
   )

@@ -11,7 +11,7 @@ import type {
   FactoryGraphTopology,
   FactoryWorkstation,
 } from "./factory-graph-draft-types";
-import { edgeChangeId } from "./factory-graph-draft-types";
+import { appendUniqueEdgeChange, edgeChangeId } from "./factory-graph-draft-types";
 import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "./factory-graph-progress-outcome-connection-anchors";
 
 export {
@@ -473,14 +473,4 @@ export function buildFactoryGraphConnectionNotice(options: {
   );
 }
 
-function appendUniqueEdgeChange(
-  edges: FactoryGraphDraftEdgeChange[],
-  edgeChange: FactoryGraphDraftEdgeChange,
-) {
-  const nextEdgeId = edgeChangeId(edgeChange);
-  if (edges.some((entry) => edgeChangeId(entry) === nextEdgeId)) {
-    return edges;
-  }
-  return [...edges, edgeChange];
-}
 

@@ -285,6 +285,21 @@ const invokeWorkstationDetail = (
         formatter(1 as never, 1 as never),
         formatter(3 as never, 2 as never),
       ];
+    case "editableConfigurationVisitCountWorkstationInvalid":
+    case "editableConfigurationInputGuardMatchInputInvalid":
+    case "editableConfigurationInputGuardParentInputInvalid":
+      return [formatter("Review" as never)];
+    case "editableConfigurationInputGuardSpawnedByInvalid":
+      return [formatter("Plan" as never)];
+    case "localizeInputGuardType":
+    case "localizeWorkstationGuardType":
+      return [
+        formatter("VISIT_COUNT" as never),
+        formatter("SAME_NAME" as never),
+        formatter("future-guard" as never),
+      ];
+    case "workstationInputSlotHeading":
+      return [formatter("story" as never, "queued" as never)];
     case "openNamedWorkItemAction":
     case "selectWorkItemLabel":
       return [formatter("Review Story" as never)];
