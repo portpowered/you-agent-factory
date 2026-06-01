@@ -417,6 +417,108 @@ describe("current activity graph editor controllers", () => {
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
+  it("opens confirmation before deleting a workstation with connected edges and applies removal on confirm", () => {
+    const reset = vi.fn();
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph();
+    const onNodeRemovedFromDraft = vi.fn();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        hiddenNodeClasses: new Set(),
+        onNodeRemovedFromDraft,
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete("workstation:review");
+    });
+
+    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(result.current.pendingRemovalIntent).toMatchObject({
+      confirmDescription: expect.stringContaining("graph edge"),
+      requiresConfirmation: true,
+      title: "Remove review workstation?",
+    });
+
+    act(() => {
+      result.current.handleConfirmRemoval();
+    });
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
+      "workstation:review",
+    );
+    expect(onNodeRemovedFromDraft).toHaveBeenCalledWith("workstation:review");
+    expect(result.current.pendingRemovalIntent).toBeNull();
+    expect(result.current.blockedRemovalReason).toBeNull();
+  });
+
+  it("applies work-type removal through removeNode after delete-tool confirmation", () => {
+    const reset = vi.fn();
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        hiddenNodeClasses: new Set(),
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete("work-type:story");
+    });
+
+    act(() => {
+      result.current.handleConfirmRemoval();
+    });
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith("work-type:story");
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
+
+  it("ignores delete-tool node clicks when activeTool is not delete", () => {
+    const reset = vi.fn();
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        hiddenNodeClasses: new Set(),
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete("worker:editor");
+    });
+
+    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
+
   it("applies selection-panel node removal without requiring delete tool mode", () => {
     const reset = vi.fn();
     const unassignedDefinition: CanonicalFactoryDefinition = {
