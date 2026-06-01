@@ -158,7 +158,9 @@ export function CurrentSelectionWidgetSaveNotifications({
           <CurrentSelectionGraphDraftConflictNotifications
             documentSave={workstationSaveState}
             graphDraftHasPendingChanges={graphDraftHasPendingChanges}
-            isTopologyAffectingSave={false}
+            isTopologyAffectingSave={
+              workstationSave.lastSuccessfulSaveWasTopologyAffecting
+            }
             locale={locale}
             saveAttemptRevision={workstationSave.saveAttemptRevision}
           />
@@ -184,7 +186,9 @@ export function CurrentSelectionWidgetSaveNotifications({
           <CurrentSelectionGraphDraftConflictNotifications
             documentSave={workerSaveState}
             graphDraftHasPendingChanges={graphDraftHasPendingChanges}
-            isTopologyAffectingSave={false}
+            isTopologyAffectingSave={
+              workerSave.lastSuccessfulSaveWasTopologyAffecting
+            }
             locale={locale}
             saveAttemptRevision={workerSave.saveAttemptRevision}
           />
@@ -210,7 +214,9 @@ export function CurrentSelectionWidgetSaveNotifications({
           <CurrentSelectionGraphDraftConflictNotifications
             documentSave={resourceSaveState}
             graphDraftHasPendingChanges={graphDraftHasPendingChanges}
-            isTopologyAffectingSave={false}
+            isTopologyAffectingSave={
+              resourceSave.lastSuccessfulSaveWasTopologyAffecting
+            }
             locale={locale}
             saveAttemptRevision={resourceSave.saveAttemptRevision}
           />
@@ -236,7 +242,9 @@ export function CurrentSelectionWidgetSaveNotifications({
           <CurrentSelectionGraphDraftConflictNotifications
             documentSave={workTypeSave.saveState}
             graphDraftHasPendingChanges={graphDraftHasPendingChanges}
-            isTopologyAffectingSave={false}
+            isTopologyAffectingSave={
+              workTypeSave.lastSuccessfulSaveWasTopologyAffecting
+            }
             locale={locale}
             saveAttemptRevision={workTypeSave.saveAttemptRevision}
           />
@@ -262,7 +270,9 @@ export function CurrentSelectionWidgetSaveNotifications({
           <CurrentSelectionGraphDraftConflictNotifications
             documentSave={workStateSave.saveState}
             graphDraftHasPendingChanges={graphDraftHasPendingChanges}
-            isTopologyAffectingSave={false}
+            isTopologyAffectingSave={
+              workStateSave.lastSuccessfulSaveWasTopologyAffecting
+            }
             locale={locale}
             saveAttemptRevision={workStateSave.saveAttemptRevision}
           />

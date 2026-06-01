@@ -113,6 +113,7 @@ export type EditableWorkstationConfigurationState =
       onWorkerChange: (value: string) => void;
       overwriteFieldNames: EditableWorkstationOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      savedFactoryDefinition: CanonicalFactoryDefinition;
       promptDiagnostics: EditableWorkstationPromptDiagnostic[];
       promptHelpState: EditableWorkstationPromptHelpState;
       promptValidationState: EditableWorkstationPromptValidationState;

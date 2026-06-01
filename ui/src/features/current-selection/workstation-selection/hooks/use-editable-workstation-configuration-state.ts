@@ -312,6 +312,7 @@ function buildReadyEditableWorkstationConfigurationState({
       sessionState.latestDefinitionDraft,
     ),
     pendingFactoryDefinition,
+    savedFactoryDefinition: editableDefinition,
     promptDiagnostics:
       promptValidationState.status === "ready"
         ? promptValidationState.diagnostics

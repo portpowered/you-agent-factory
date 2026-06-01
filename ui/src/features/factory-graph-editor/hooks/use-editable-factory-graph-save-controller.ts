@@ -130,6 +130,7 @@ function useSaveEditableFactoryGraph({
     await confirmSave({
       baseVersion: draftState.latestDocument.version,
       factory: saveInput.value,
+      previousFactory: draftState.latestDocument,
       onSaved: () => {
         draftState.replaceDraft(createEmptyFactoryGraphDraft());
         setBlockedOperation(null);

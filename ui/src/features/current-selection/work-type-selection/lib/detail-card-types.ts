@@ -37,6 +37,7 @@ export type EditableWorkTypeConfigurationState =
       markChangesSaved: () => void;
       onResetToLatest: () => void;
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      savedFactoryDefinition: CanonicalFactoryDefinition;
       status: "ready";
       validationErrors: EditableWorkTypeValidationErrors;
     };

@@ -38,6 +38,7 @@ export type EditableWorkStateConfigurationState =
       onResetToLatest: () => void;
       originalStateName: string;
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      savedFactoryDefinition: CanonicalFactoryDefinition;
       status: "ready";
       validationErrors: EditableWorkStateValidationErrors;
       workTypeName: string;
