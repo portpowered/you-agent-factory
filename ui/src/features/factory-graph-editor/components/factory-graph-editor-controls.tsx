@@ -48,18 +48,8 @@ export interface FactoryGraphEditorVisibilityPresetOption {
   selected: boolean;
 }
 
-const TOOLBAR_SHELL_CLASS =
-  "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0";
 const TOOLBAR_ACTIONS_CLASS =
   "flex items-center gap-2 border-l border-af-border pl-2 max-md:ml-auto";
-const TOOLBAR_MIXED_ROW_CLASS = "min-w-0 flex-1";
-const MENU_LIST_CLASS = "grid gap-1";
-const MENU_ACTION_CLASS =
-  "min-h-0 w-full justify-start rounded-2xl border-transparent px-3 py-2 text-left [&>span]:grid [&>span]:w-full [&>span]:justify-items-start";
-const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-text";
-const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-text-muted";
-const VISIBILITY_PANEL_CLASS =
-  "pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4";
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
   danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
@@ -121,7 +111,7 @@ export function FactoryGraphEditorToolbar({
   return (
     <section
       aria-label={messages.toolbarAriaLabel}
-      className={TOOLBAR_SHELL_CLASS}
+      className="pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0"
     >
       {hideShowVisible && onToggleHiddenNodeClass ? (
         <FactoryGraphEditorHideShowMenu
@@ -197,7 +187,7 @@ export function FactoryGraphEditorToolbar({
                 </>
               }
               actionsClassName={TOOLBAR_ACTIONS_CLASS}
-              className={TOOLBAR_MIXED_ROW_CLASS}
+              className="min-w-0 flex-1"
             />
           ) : null}
         </>
@@ -225,7 +215,7 @@ export function FactoryGraphEditorVisibilityPanel({
   return (
     <section
       aria-label={messages.visibilityPresetsAriaLabel}
-      className={VISIBILITY_PANEL_CLASS}
+      className="pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4"
     >
       {options.map((option) => (
         <DashboardActionButton
@@ -341,11 +331,11 @@ function FactoryGraphEditorAddMenu({
             {messages.toolbarVisibilityMenuDescription}
           </p>
         </div>
-        <div className={MENU_LIST_CLASS}>
+        <div className="grid gap-1">
           {actions.map((action) => (
             <DashboardActionButton
               aria-label={action.label}
-              className={MENU_ACTION_CLASS}
+              className="min-h-0 w-full justify-start rounded-2xl border-transparent px-3 py-2 text-left [&>span]:grid [&>span]:w-full [&>span]:justify-items-start"
               disabled={action.disabled}
               key={action.id}
               onClick={() => {
@@ -355,9 +345,11 @@ function FactoryGraphEditorAddMenu({
               tone="ghost"
               type="button"
             >
-              <span className={MENU_ACTION_LABEL_CLASS}>{action.label}</span>
+              <span className="text-sm font-semibold text-af-text">
+                {action.label}
+              </span>
               {action.description ? (
-                <span className={MENU_ACTION_DESCRIPTION_CLASS}>
+                <span className="text-xs leading-5 text-af-text-muted">
                   {action.description}
                 </span>
               ) : null}
