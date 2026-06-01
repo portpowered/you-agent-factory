@@ -10,13 +10,18 @@ import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../factory-gr
  */
 export function useTopologyStableFactoryForLayout(
   factory: DashboardSnapshot["factory"] | null | undefined,
-): DashboardSnapshot["factory"] | undefined {
+): DashboardSnapshot["factory"] | null | undefined {
   const stableFactoryRef = useRef<
     NonNullable<DashboardSnapshot["factory"]> | undefined
   >(undefined);
 
   return useMemo(() => {
-    if (!factory) {
+    if (factory === null) {
+      stableFactoryRef.current = undefined;
+      return null;
+    }
+
+    if (factory === undefined) {
       stableFactoryRef.current = undefined;
       return undefined;
     }

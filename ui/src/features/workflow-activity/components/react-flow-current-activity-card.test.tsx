@@ -128,6 +128,8 @@ interface RenderCurrentActivityOptions {
   activateFactory?: (
     input: FactoryImportConfirmInput,
   ) => Promise<ImportFactoryValue>;
+  currentFactoryDocument?: typeof baseFactoryDefinitionDocument | null;
+  currentFactoryDocumentStatus?: "error" | "pending" | "success";
   importController?: CurrentActivityImportController;
   locale?: string;
   onFactoryActivated?: () => void;
@@ -364,6 +366,8 @@ function expectFixedWorkstationNodeDimensions(node: Element | null) {
 
 function renderCurrentActivity({
   activateFactory,
+  currentFactoryDocument,
+  currentFactoryDocumentStatus = "success",
   importController,
   locale,
   onFactoryActivated,
@@ -373,6 +377,17 @@ function renderCurrentActivity({
   selection = null,
   widgetInstanceID,
 }: RenderCurrentActivityOptions) {
+  const factoryDocument =
+    currentFactoryDocument !== undefined
+      ? currentFactoryDocument
+      : currentFactoryDocumentFromSnapshot(snapshot);
+
+  vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    data: factoryDocument ?? undefined,
+    error: null,
+    status: currentFactoryDocumentStatus,
+  } as never);
+
   const onSelectWorkID =
     vi.fn<
       (workID: string, hint?: { dispatchID?: string; nodeID?: string }) => void
@@ -873,11 +888,6 @@ function registerCurrentActivityCardTestLifecycle(): void {
     window.localStorage.clear();
     useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
     restoreBrowserTestShims = installDashboardBrowserTestShims();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: baseFactoryDefinitionDocument,
-      error: null,
-      status: "success",
-    } as never);
     vi.mocked(useFactoryDocumentSave).mockReturnValue({
       error: null,
       isPending: false,
@@ -956,11 +966,6 @@ function registerCurrentActivityCardEditorChromeTests(): void {
   });
 
   it("keeps classifier workstations out of the editable graph flow", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
-      error: null,
-      status: "pending",
-    } as never);
     const snapshot = dashboardSnapshotWithActiveWorkItemCount(0);
     snapshot.topology.workstation_nodes_by_id.review.workstation_kind =
       "CLASSIFIER_WORKSTATION";
@@ -982,6 +987,8 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     }
 
     renderCurrentActivity({
+      currentFactoryDocument: null,
+      currentFactoryDocumentStatus: "pending",
       snapshot,
     });
 
@@ -1296,11 +1303,6 @@ function registerCurrentActivityCardEditorChromeTests(): void {
 
   it("does not render prior-session snapshot workstations in observe mode while the factory document is pending", async () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
-      error: null,
-      status: "pending",
-    } as never);
     wireMockEditableFactoryGraph(
       {
         useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
@@ -1313,7 +1315,11 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       }),
     );
 
-    renderCurrentActivity({ snapshot });
+    renderCurrentActivity({
+      currentFactoryDocument: null,
+      currentFactoryDocumentStatus: "pending",
+      snapshot,
+    });
 
     expect(
       await screen.findByRole("region", { name: "Work graph viewport" }),
@@ -1332,11 +1338,6 @@ function registerCurrentActivityCardEditorChromeTests(): void {
 
   it("renders saved document workstations in observe mode when the document plane diverges from the snapshot", async () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: divergentDocumentPlaneFactoryDocument,
-      error: null,
-      status: "success",
-    } as never);
     wireMockEditableFactoryGraph(
       {
         useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
@@ -1349,7 +1350,10 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       }),
     );
 
-    renderCurrentActivity({ snapshot });
+    renderCurrentActivity({
+      currentFactoryDocument: divergentDocumentPlaneFactoryDocument,
+      snapshot,
+    });
 
     await waitFor(() => {
       expect(
@@ -1367,11 +1371,6 @@ function registerCurrentActivityCardEditorChromeTests(): void {
 
   it("renders document-only workstations in edit mode when the snapshot plane diverges", async () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: divergentDocumentPlaneFactoryDocument,
-      error: null,
-      status: "success",
-    } as never);
     wireMockEditableFactoryGraph(
       {
         useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
@@ -1384,7 +1383,10 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       }),
     );
 
-    renderCurrentActivity({ snapshot });
+    renderCurrentActivity({
+      currentFactoryDocument: divergentDocumentPlaneFactoryDocument,
+      snapshot,
+    });
 
     fireEvent.click(
       screen.getByRole("button", { name: "Enter factory graph editor" }),
@@ -1406,11 +1408,6 @@ function registerCurrentActivityCardEditorChromeTests(): void {
 
   it("does not render snapshot-only workstations in editor mode while the factory document is loading", async () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
-      error: null,
-      status: "pending",
-    } as never);
     wireMockEditableFactoryGraph(
       {
         useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
@@ -1423,7 +1420,11 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       }),
     );
 
-    renderCurrentActivity({ snapshot });
+    renderCurrentActivity({
+      currentFactoryDocument: null,
+      currentFactoryDocumentStatus: "pending",
+      snapshot,
+    });
 
     fireEvent.click(
       screen.getByRole("button", { name: "Enter factory graph editor" }),
@@ -1632,13 +1633,9 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
   });
 
   it("shows a loading editor state while the editable definition is still fetching", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
-      error: null,
-      status: "pending",
-    } as never);
-
     renderCurrentActivity({
+      currentFactoryDocument: null,
+      currentFactoryDocumentStatus: "pending",
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
@@ -2536,11 +2533,6 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
 
   it("renders active observer graph state from the canonical snapshot factory without topology fallback", async () => {
     const snapshot = canonicalObserverSnapshot();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: currentFactoryDocumentFromSnapshot(snapshot),
-      error: null,
-      status: "success",
-    } as never);
 
     renderCurrentActivity({ snapshot });
 

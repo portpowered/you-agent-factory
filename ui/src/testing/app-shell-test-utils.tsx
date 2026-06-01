@@ -19,7 +19,10 @@ import { installDashboardBrowserTestShims } from "../components/dashboard/test-b
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
-import { useCurrentFactoryDocument } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
+import {
+  currentFactoryDocumentQueryKey,
+  useCurrentFactoryDocument,
+} from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import {
@@ -43,7 +46,7 @@ import { DashboardSessionTestProvider } from "./dashboard-session-test-provider"
 import {
   isSessionFactoryRequest,
   mockGetSessionFactory,
-  sessionFactoryNamedExportDocument,
+  sessionFactoryDocumentFromSnapshot,
 } from "./session-factory-mocks";
 
 export {
@@ -219,6 +222,10 @@ export function renderApp({
     },
   });
   queryClients.push(queryClient);
+  queryClient.setQueryData(
+    currentFactoryDocumentQueryKey(sessionID ?? DEFAULT_FACTORY_SESSION_ID),
+    sessionFactoryDocumentFromSnapshot(snapshot),
+  );
 
   const fetchMock: FetchMock = vi
     .fn()
@@ -237,7 +244,7 @@ export function renderApp({
         isSessionFactoryRequest(path, method, sessionID ?? undefined)
       ) {
         return mockGetSessionFactory({
-          document: sessionFactoryNamedExportDocument,
+          document: sessionFactoryDocumentFromSnapshot(snapshot),
         });
       }
 

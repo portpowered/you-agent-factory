@@ -94,4 +94,57 @@ describe("currentActivityCardFactoryDefinition", () => {
       ),
     ).toEqual(baseFactoryDefinitionDocument);
   });
+
+  it("keeps the pending draft definition in editor mode when a topology save updates the saved document", () => {
+    const snapshot = structuredClone(singleNodeDashboardSnapshot);
+    const pendingDraft = {
+      ...baseFactoryDefinitionDocument,
+      workers: [
+        ...(baseFactoryDefinitionDocument.workers ?? []),
+        {
+          model: "gpt-5-mini",
+          name: "reviewer",
+          type: "MODEL_WORKER" as const,
+        },
+      ],
+    };
+    const savedAfterTopologyChange = {
+      ...baseFactoryDefinitionDocument,
+      version: {
+        logical: "10",
+        physical: "2026-06-01T12:00:00Z",
+      },
+      workstations: [
+        {
+          ...(baseFactoryDefinitionDocument.workstations?.[0] ?? {
+            inputs: [],
+            name: "draft",
+            outputs: [],
+            type: "MODEL_WORKSTATION" as const,
+          }),
+          worker: "reviewer",
+        },
+      ],
+    };
+    const draftState = createMockGraphEditorDraftState({
+      baseDocument: baseFactoryDefinitionDocument,
+      hasChanges: true,
+      latestDocument: savedAfterTopologyChange,
+      pendingFactoryDefinition: pendingDraft,
+    });
+
+    expect(
+      currentActivityCardFactoryDefinition(
+        createEditorStub({
+          draftState,
+          editableDefinitionQuery: {
+            data: savedAfterTopologyChange,
+            status: "success",
+          },
+          editorMode: true,
+        }),
+        snapshot,
+      ),
+    ).toEqual(pendingDraft);
+  });
 });
