@@ -88,6 +88,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
     topology: input.topology,
     workstationResolver: createFactoryGraphWorkstationResolver(
       input.workstations,
+      input.factoryDefinition?.workers,
     ),
   });
 
