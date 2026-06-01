@@ -1,4 +1,4 @@
-import { waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { expect } from "vitest";
 import { toast } from "sonner";
 
@@ -12,6 +12,47 @@ export const WORKSTATION_SAVE_SUCCESS_DESCRIPTION =
 
 export const WORKSTATION_STALE_VERSION_DETAIL =
   "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.";
+
+const INLINE_SAVE_SUCCESS_PATTERN = /^Running factory saved\./;
+const INLINE_SAVE_FAILURE_PREFIX = /^Saving failed\./;
+
+export function currentSelectionConfigurationSection(
+  headingName: string,
+): HTMLElement {
+  const heading = screen.getAllByRole("heading", { name: headingName }).at(-1);
+  const section = heading?.closest("section");
+  if (!section) {
+    throw new Error(`expected ${headingName} configuration section`);
+  }
+
+  return section;
+}
+
+export function expectNoInlineSaveOutcomesIn(configurationRoot: HTMLElement) {
+  const scoped = within(configurationRoot);
+  expect(scoped.queryByText(INLINE_SAVE_SUCCESS_PATTERN)).toBeNull();
+  expect(scoped.queryByText(INLINE_SAVE_FAILURE_PREFIX)).toBeNull();
+
+  for (const status of scoped.queryAllByRole("status")) {
+    const text = status.textContent ?? "";
+    expect(text).not.toMatch(INLINE_SAVE_SUCCESS_PATTERN);
+  }
+
+  for (const alert of scoped.queryAllByRole("alert")) {
+    const text = alert.textContent ?? "";
+    expect(text).not.toMatch(INLINE_SAVE_SUCCESS_PATTERN);
+    expect(text).not.toMatch(INLINE_SAVE_FAILURE_PREFIX);
+    expect(text).not.toContain(WORKSTATION_STALE_VERSION_DETAIL);
+  }
+}
+
+export async function expectNoSaveToastDelivery() {
+  await waitFor(() => {
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+}
 
 export async function expectWorkstationSaveSuccessToast() {
   await waitFor(() => {
@@ -81,6 +122,18 @@ export async function expectResourceSaveSuccessToast(resourceName: string) {
       "Resource saved",
       expect.objectContaining({
         description: expect.stringContaining(resourceName),
+      }),
+    );
+  });
+}
+
+export async function expectResourceSaveFailedToast(errorDetail: string) {
+  await waitFor(() => {
+    expect(toast.error).toHaveBeenCalledWith(
+      "Resource save failed",
+      expect.objectContaining({
+        description: expect.stringContaining(errorDetail),
+        duration: PERSISTENT_TOAST_DURATION_MS,
       }),
     );
   });

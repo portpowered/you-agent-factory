@@ -14,12 +14,16 @@ import {
   expandDetailCardResourceConfiguration,
 } from "../base/components/detail-card-save-test-helpers";
 import {
+  currentSelectionConfigurationSection,
+  expectNoInlineSaveOutcomesIn,
+  expectNoSaveToastDelivery,
+  expectResourceSaveFailedToast,
+  expectResourceSaveSuccessToast,
   expectWorkStateSaveSuccessToast,
   expectWorkstationSaveFailedToast,
   expectWorkstationSaveSuccessToast,
   expectWorkstationStaleSaveWarningToast,
   expectWorkerSaveSuccessToast,
-  WORKSTATION_SAVE_SUCCESS_DESCRIPTION,
 } from "../base/components/current-selection-save-toast-test-helpers";
 import {
   buildDetailCardCurrentSelection,
@@ -285,6 +289,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       );
     });
     await expectWorkstationSaveSuccessToast();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
 
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Review the diff and verify browser behavior.",
@@ -316,6 +323,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await expectWorkstationSaveFailedToast(
       "Current factory runtime must be idle before activation.",
     );
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
 
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep this draft while the save fails.",
@@ -338,6 +348,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationSaveFailedToast("Network dropped");
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
 
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep this draft through a generic failure.",
@@ -367,6 +380,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     await expectWorkstationStaleSaveWarningToast(
       "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
+    );
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
     );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep this draft through a stale write.",
@@ -684,12 +700,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     expandDetailCardWorkstationConfiguration();
 
     expect(screen.getByText("Plan")).toBeTruthy();
-    expect(
-      screen.queryByText(
-        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-      ),
-    ).toBeNull();
-    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Plan the implementation.",
     );
@@ -703,13 +716,10 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(
-        screen.queryByText(
-          "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-        ),
-      ).toBeNull();
-    });
+    await expectNoSaveToastDelivery();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Plan the implementation.",
     );
@@ -763,12 +773,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expect(
-      screen.queryByText(
-        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-      ),
-    ).toBeNull();
-
     rerender(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
@@ -782,12 +786,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     expandDetailCardWorkstationConfiguration();
 
-    expect(
-      screen.queryByText(
-        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-      ),
-    ).toBeNull();
-    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Review the saved factory before approval.",
     );
@@ -892,11 +893,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     expandDetailCardWorkstationConfiguration();
 
-    expect(
-      screen.queryByText(
-        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-      ),
-    ).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
 
     rerender(
       <CurrentSelectionWidget
@@ -911,12 +910,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     expandDetailCardWorkstationConfiguration();
 
-    expect(
-      screen.queryByText(
-        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-      ),
-    ).toBeNull();
-    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Review the saved factory before approval.",
     );
@@ -985,14 +981,10 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ),
     );
 
-    await waitFor(() => {
-      expect(screen.queryByText(/^Saving failed\./)).toBeNull();
-    });
-    expect(
-      screen.queryByText(
-        "Saving failed. Current factory runtime must be idle before activation.",
-      ),
-    ).toBeNull();
+    await expectNoSaveToastDelivery();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Plan the implementation.",
     );
@@ -1051,8 +1043,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
-
     rerender(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
@@ -1066,12 +1056,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     expandDetailCardWorkstationConfiguration();
 
-    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
-    expect(
-      screen.queryByText(
-        "Saving failed. Current factory runtime must be idle before activation.",
-      ),
-    ).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Review the latest story changes before approval.",
     );
@@ -1136,7 +1123,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     expandDetailCardWorkstationConfiguration();
 
-    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
 
     rerender(
       <CurrentSelectionWidget
@@ -1151,12 +1140,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     expandDetailCardWorkstationConfiguration();
 
-    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
-    expect(
-      screen.queryByText(
-        "Saving failed. Current factory runtime must be idle before activation.",
-      ),
-    ).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Configuration"),
+    );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Review the latest story changes before approval.",
     );
@@ -1245,12 +1231,9 @@ describe("CurrentSelectionWidget resource save flow", () => {
     expandDetailCardResourceConfiguration();
 
     expect(screen.getByDisplayValue("5")).toBeTruthy();
-    expect(
-      screen.queryByText(
-        "Running factory saved. agent-slot was updated in the running factory definition.",
-      ),
-    ).toBeNull();
-    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Resource configuration"),
+    );
     expect(
       screen
         .getByRole("button", { name: "Save resource" })
@@ -1274,13 +1257,10 @@ describe("CurrentSelectionWidget resource save flow", () => {
       ],
     });
 
-    await waitFor(() => {
-      expect(
-        screen.queryByText(
-          "Running factory saved. agent-slot was updated in the running factory definition.",
-        ),
-      ).toBeNull();
-    });
+    await expectNoSaveToastDelivery();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Resource configuration"),
+    );
     expect((screen.getByLabelText("Capacity") as HTMLInputElement).value).toBe(
       "5",
     );
@@ -1336,14 +1316,10 @@ describe("CurrentSelectionWidget resource save flow", () => {
       ),
     );
 
-    await waitFor(() => {
-      expect(screen.queryByText(/^Saving failed\./)).toBeNull();
-    });
-    expect(
-      screen.queryByText(
-        "Saving failed. Current factory runtime must be idle before activation.",
-      ),
-    ).toBeNull();
+    await expectNoSaveToastDelivery();
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Resource configuration"),
+    );
     expect((screen.getByLabelText("Capacity") as HTMLInputElement).value).toBe(
       "5",
     );
@@ -1509,6 +1485,9 @@ describe("CurrentSelectionWidget work state save flow", () => {
       expect(selectStateNode).toHaveBeenCalledWith("story:ready");
     });
     await expectWorkStateSaveSuccessToast("ready");
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Work state configuration"),
+    );
   });
 });
 
@@ -1574,6 +1553,9 @@ describe("CurrentSelectionWidget worker save flow", () => {
       );
     });
     await expectWorkerSaveSuccessToast("reviewer");
+    expectNoInlineSaveOutcomesIn(
+      currentSelectionConfigurationSection("Worker configuration"),
+    );
     for (const saveButton of screen.getAllByRole("button", {
       name: "Save worker",
     })) {

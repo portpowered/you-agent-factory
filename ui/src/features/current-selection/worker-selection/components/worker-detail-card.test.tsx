@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkerConfigurationState,
@@ -580,11 +581,10 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(
-      screen.queryByText(
-        /reviewer was updated in the running factory definition/,
-      ),
-    ).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      screen.getByRole("heading", { name: "Worker configuration" }).closest("section") ??
+        document.body,
+    );
   });
 
   it("shows overwrite warning and server-changed hints for dirty worker drafts", () => {
@@ -966,10 +966,10 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
-    expect(
-      screen.queryByText("The running factory could not be saved."),
-    ).toBeNull();
+    expectNoInlineSaveOutcomesIn(
+      screen.getByRole("heading", { name: "Worker configuration" }).closest("section") ??
+        document.body,
+    );
   });
 
   it("shows model worker field help and allows save with provider only", () => {

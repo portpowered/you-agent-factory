@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import { buildDetailCardEditableFactoryDocument } from "../../base/components/detail-card-test-helpers";
 import type {
@@ -1779,15 +1780,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    let configuration = editableConfigurationSection();
-    expect(
-      within(configuration).queryByText(
-        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-      ),
-    ).toBeNull();
-    expect(
-      within(configuration).queryByText(/^Saving failed\./),
-    ).toBeNull();
+    expectNoInlineSaveOutcomesIn(editableConfigurationSection());
 
     rerender(
       <WorkstationDetailCard
@@ -1803,12 +1796,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    configuration = editableConfigurationSection();
-    expect(
-      within(configuration).queryByText(
-        "Saving failed. The current factory rejected the workstation update.",
-      ),
-    ).toBeNull();
+    expectNoInlineSaveOutcomesIn(editableConfigurationSection());
   });
 
   it("uses semantic panels for autocomplete and diagnostics feedback", () => {

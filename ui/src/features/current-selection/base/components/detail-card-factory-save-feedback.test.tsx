@@ -35,50 +35,6 @@ describe("DetailCardFactorySaveFeedback", () => {
     );
     expect(container.firstChild).toBeNull();
   });
-
-  it("renders success feedback with role=status and caller-supplied success copy", () => {
-    render(
-      <DetailCardFactorySaveFeedback
-        messages={messages}
-        saveState={{ status: "success" }}
-      />,
-    );
-
-    expect(screen.getByRole("status").textContent).toBe(messages.successMessage);
-  });
-
-  it("renders stale-version warning with role=alert and shared stale-version detail copy", () => {
-    render(
-      <DetailCardFactorySaveFeedback
-        messages={messages}
-        saveState={{
-          message: "The running factory changed while this draft was open.",
-          status: "warning",
-        }}
-      />,
-    );
-
-    expect(screen.getByRole("alert").textContent).toContain(
-      "The running factory changed while this draft was open.",
-    );
-    expect(screen.getByText(messages.staleVersionDetail)).toBeTruthy();
-  });
-
-  it("renders API error feedback with role=alert and the shared error prefix", () => {
-    render(
-      <DetailCardFactorySaveFeedback
-        messages={messages}
-        saveState={{
-          errorMessage: "Factory validation failed.",
-          status: "error",
-        }}
-      />,
-    );
-
-    expect(screen.getByRole("alert").textContent).toBe(
-      "Saving failed. Factory validation failed.",
-    );
-  });
 });
 
 describe("mergeDetailCardSaveFieldErrors", () => {
