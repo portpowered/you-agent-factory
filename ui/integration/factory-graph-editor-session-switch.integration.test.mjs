@@ -263,7 +263,11 @@ async function expectEditorModeOff(page) {
       .getByRole("region", { name: "Factory graph editor tools" })
       .count(),
   ).toBe(0);
-  expect(await graphCard.getByText("Unsaved changes").count()).toBe(0);
+  await expect
+    .poll(async () => graphCard.getByText("Unsaved changes").count(), {
+      timeout: uiInteractionTimeoutMs,
+    })
+    .toBe(0);
 }
 
 async function runSessionSwitchClearsDirtyEditorScenario(preview) {
