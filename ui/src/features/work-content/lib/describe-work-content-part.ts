@@ -15,9 +15,6 @@ function workContentURLDisplayName(url: string): string | undefined {
         return parsed.hostname;
       }
     }
-    if (parsed.protocol === "data:") {
-      return "embedded data";
-    }
     const pathSegments = parsed.pathname.split("/").filter(Boolean);
     if (pathSegments.length > 0) {
       return pathSegments[pathSegments.length - 1];
