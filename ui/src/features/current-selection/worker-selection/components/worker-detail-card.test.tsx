@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkerConfigurationState,
@@ -597,7 +598,7 @@ describe("WorkerDetailCard", () => {
     ).toBeNull();
   });
 
-  it("shows scoped save success feedback for the selected worker", () => {
+  it("does not render inline save success feedback for the selected worker", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument(),
       isPending: false,
@@ -658,11 +659,10 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(
-      screen.getByText(
-        /reviewer was updated in the running factory definition/,
-      ),
-    ).toBeTruthy();
+    expectNoInlineSaveOutcomesIn(
+      screen.getByRole("heading", { name: "Worker configuration" }).closest("section") ??
+        document.body,
+    );
   });
 
   it("shows overwrite warning and server-changed hints for dirty worker drafts", () => {
@@ -972,17 +972,15 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "Current factory definition is stale",
-    );
+    expect(screen.queryByText(/Current factory definition is stale/)).toBeNull();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
-  it("shows scoped save error feedback when persistence fails", () => {
+  it("does not render inline save error feedback when persistence fails", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument(),
       isPending: false,
@@ -1046,9 +1044,9 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(screen.getByRole("alert").textContent).toContain("Saving failed.");
-    expect(screen.getByRole("alert").textContent).toContain(
-      "The running factory could not be saved.",
+    expectNoInlineSaveOutcomesIn(
+      screen.getByRole("heading", { name: "Worker configuration" }).closest("section") ??
+        document.body,
     );
   });
 

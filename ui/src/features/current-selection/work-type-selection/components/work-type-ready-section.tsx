@@ -7,7 +7,6 @@ import {
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 import {
-  DetailCardFactorySaveFeedback,
   mergeDetailCardSaveFieldErrors,
 } from "../../base/components/detail-card-factory-save-feedback";
 import {
@@ -45,16 +44,6 @@ export function WorkTypeReadySection({
 
   return (
     <form className="grid gap-2.5" onSubmit={(event) => event.preventDefault()}>
-      <DetailCardFactorySaveFeedback<EditableWorkTypeSaveValidationErrors>
-        messages={{
-          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
-          staleVersionDetail: messages.editableConfigurationSaveStaleVersionDetail,
-          successMessage: messages.editableConfigurationSaveSuccess(
-            state.draft.name.trim() || workTypeName,
-          ),
-        }}
-        saveState={saveState}
-      />
       {validationErrors.contract ? (
         <p
           className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}

@@ -5,6 +5,7 @@ export {
   resolveAppNotificationToastDuration,
 } from "../lib/notification-toaster-config";
 export {
+  buildCurrentSelectionSaveSuccessStableIdentity,
   buildSaveErrorStableIdentity,
   buildSaveErrorToastOptions,
   buildSaveNotificationDeliveryKey,
@@ -12,6 +13,7 @@ export {
   buildSaveSuccessToastOptions,
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,
+  type CurrentSelectionSaveEntityKind,
   type SaveNotificationDeliveryKey,
   type SaveNotificationKind,
   type SaveNotificationStableIdentity,

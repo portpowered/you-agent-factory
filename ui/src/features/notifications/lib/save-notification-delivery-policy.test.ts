@@ -1,4 +1,5 @@
 import {
+  buildCurrentSelectionSaveSuccessStableIdentity,
   buildSaveErrorStableIdentity,
   buildSaveErrorToastOptions,
   buildSaveNotificationDeliveryKey,
@@ -75,5 +76,15 @@ describe("save notification delivery policy", () => {
       kind: "success",
       stableId: "graph-save-success",
     });
+  });
+
+  it("builds per-entity stable identities for current-selection save success", () => {
+    expect(buildCurrentSelectionSaveSuccessStableIdentity("worker")).toEqual({
+      kind: "success",
+      stableId: "worker-save-success",
+    });
+    expect(
+      buildCurrentSelectionSaveSuccessStableIdentity("workstation").stableId,
+    ).not.toBe(buildSaveSuccessStableIdentity().stableId);
   });
 });

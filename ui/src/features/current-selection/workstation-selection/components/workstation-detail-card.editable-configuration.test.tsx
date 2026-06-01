@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import { buildDetailCardEditableFactoryDocument } from "../../base/components/detail-card-test-helpers";
 import type {
@@ -1821,7 +1822,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toContain("text-af-text-muted");
   });
 
-  it("keeps save feedback inside the configuration section after the reorder", () => {
+  it("does not render inline save outcome copy in the configuration section", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const { rerender } = render(
@@ -1841,20 +1842,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    let configuration = editableConfigurationSection();
-    expect(
-      within(configuration).getByText(
-        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-      ),
-    ).toBeTruthy();
-    expect(
-      within(configuration)
-        .getAllByRole("status")
-        .map((element) => element.textContent)
-        .join(" "),
-    ).toContain(
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-    );
+    expectNoInlineSaveOutcomesIn(editableConfigurationSection());
 
     rerender(
       <WorkstationDetailCard
@@ -1870,12 +1858,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    configuration = editableConfigurationSection();
-    expect(
-      within(configuration).getByText(
-        "Saving failed. The current factory rejected the workstation update.",
-      ),
-    ).toBeTruthy();
+    expectNoInlineSaveOutcomesIn(editableConfigurationSection());
   });
 
   it("uses semantic panels for autocomplete and diagnostics feedback", () => {

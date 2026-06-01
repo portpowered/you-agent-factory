@@ -50,6 +50,23 @@ export function buildSaveSuccessStableIdentity(): SaveNotificationStableIdentity
   };
 }
 
+export type CurrentSelectionSaveEntityKind =
+  | "workstation"
+  | "worker"
+  | "resource"
+  | "work-type"
+  | "work-state";
+
+/** Stable identity for a current-selection entity save success toast. */
+export function buildCurrentSelectionSaveSuccessStableIdentity(
+  entityKind: CurrentSelectionSaveEntityKind,
+): SaveNotificationStableIdentity {
+  return {
+    kind: "success",
+    stableId: `${entityKind}-save-success`,
+  };
+}
+
 /**
  * Attempt-scoped delivery key. Includes save-attempt revision so operator retries
  * always qualify as new delivery even when stable identity is unchanged.

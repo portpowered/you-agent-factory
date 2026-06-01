@@ -7,7 +7,6 @@ import {
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 import {
-  DetailCardFactorySaveFeedback,
   mergeDetailCardSaveFieldErrors,
 } from "../../base/components/detail-card-factory-save-feedback";
 import {
@@ -84,18 +83,9 @@ function WorkStateEditableConfigurationReadyForm({
     EditableWorkStateValidationErrors & Record<string, string | undefined>,
     EditableWorkStateSaveValidationErrors
   >(state.validationErrors, saveState);
-  const displayStateName = state.draft.name.trim() || state.originalStateName;
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
-      <DetailCardFactorySaveFeedback<EditableWorkStateSaveValidationErrors>
-        messages={{
-          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
-          staleVersionDetail: messages.editableConfigurationSaveStaleVersionDetail,
-          successMessage: messages.editableConfigurationSaveSuccess(displayStateName),
-        }}
-        saveState={saveState}
-      />
       {validationErrors.contract ? (
         <p
           className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}

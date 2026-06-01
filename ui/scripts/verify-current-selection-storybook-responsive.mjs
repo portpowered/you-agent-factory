@@ -249,6 +249,46 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
   );
 }
 
+const INLINE_SAVE_SUCCESS_PATTERN = /^Running factory saved\./;
+const INLINE_SAVE_FAILURE_PREFIX = /^Saving failed\./;
+
+export async function expectCurrentSelectionSaveSuccessToast(
+  page,
+  expectVisible,
+  { description, title },
+) {
+  const toast = page.locator("[data-sonner-toast]").filter({ hasText: title });
+  await expectVisible(toast, `Save success toast: ${title}`);
+  if (description) {
+    await expectVisible(
+      toast.filter({ hasText: description }),
+      `Save success toast description for ${title}`,
+    );
+  }
+}
+
+export async function expectNoInlineSaveOutcomesInConfiguration(
+  configurationScope,
+) {
+  const inlineSuccessCount = await configurationScope
+    .getByText(INLINE_SAVE_SUCCESS_PATTERN)
+    .count();
+  if (inlineSuccessCount > 0) {
+    throw new Error(
+      "Configuration body should not render inline save success copy.",
+    );
+  }
+
+  const inlineFailureCount = await configurationScope
+    .getByText(INLINE_SAVE_FAILURE_PREFIX)
+    .count();
+  if (inlineFailureCount > 0) {
+    throw new Error(
+      "Configuration body should not render inline save failure copy.",
+    );
+  }
+}
+
 export async function verifyCurrentSelectionSaveFlow({
   expectNoHorizontalOverflow,
   expectVisible,
@@ -291,12 +331,12 @@ export async function verifyCurrentSelectionSaveFlow({
   });
   await overwriteButton.click();
 
-  await expectVisible(
-    currentSelection.getByText(
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-    ),
-    "Editable workstation save success message",
-  );
+  await expectCurrentSelectionSaveSuccessToast(page, expectVisible, {
+    description:
+      "The editable workstation values were refreshed to the saved definition.",
+    title: "Workstation saved",
+  });
+  await expectNoInlineSaveOutcomesInConfiguration(currentSelection);
   const overwriteDialogCount = await page
     .getByRole("dialog", {
       name: "Overwrite the running factory definition?",

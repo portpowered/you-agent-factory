@@ -10,10 +10,7 @@ import {
 import { formatList } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
-import {
-  DetailCardFactorySaveFeedback,
-  mergeDetailCardSaveFieldErrors,
-} from "../../base/components/detail-card-factory-save-feedback";
+import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
@@ -151,17 +148,6 @@ function ResourceEditableConfigurationReadyForm({
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
-      <DetailCardFactorySaveFeedback<EditableResourceSaveValidationErrors>
-        messages={{
-          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
-          staleVersionDetail:
-            messages.editableConfigurationSaveStaleVersionDetail,
-          successMessage: messages.editableConfigurationSaveSuccess(
-            state.draft.name.trim() || resourceName,
-          ),
-        }}
-        saveState={saveState}
-      />
       <ResourceEditableConfigurationSharedImpactWarning
         messages={messages}
         resourceName={resourceName}

@@ -1,12 +1,13 @@
 import { useCallback, useMemo } from "react";
 
-import { mapWorkerSaveErrorToFieldErrors } from "../lib/worker-save-validation-field-mapping";
+import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { useScopedFactoryDocumentSave } from "../../base/public";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
   EditableWorkerSaveValidationErrors,
 } from "../lib/detail-card-types";
+import { mapWorkerSaveErrorToFieldErrors } from "../lib/worker-save-validation-field-mapping";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 
 interface UseSaveEditableWorkerConfigurationOptions {
@@ -16,9 +17,11 @@ interface UseSaveEditableWorkerConfigurationOptions {
   scopeKey: string | null;
 }
 
-interface UseSaveEditableWorkerConfigurationResult {
+export interface UseSaveEditableWorkerConfigurationResult {
   canSave: boolean;
   save: () => Promise<void>;
+  saveAttemptRevision: number;
+  saveMutationError: CurrentFactoryDefinitionError | null;
   saveState: EditableWorkerSaveState;
 }
 
@@ -33,7 +36,7 @@ export function useSaveEditableWorkerConfiguration({
     editableConfigurationState?.status === "ready" &&
     editableConfigurationState.isDirty;
 
-  const { isPending, saveNow, saveState } =
+  const { error: saveMutationError, isPending, saveAttemptRevision, saveNow, saveState } =
     useScopedFactoryDocumentSave<EditableWorkerSaveValidationErrors>({
       fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
       isDirty,
@@ -61,8 +64,7 @@ export function useSaveEditableWorkerConfiguration({
       factory: editableConfigurationState.pendingFactoryDefinition,
       onSaved: () => {
         editableConfigurationState.markChangesSaved();
-        const savedWorkerName =
-          editableConfigurationState.draft.name.trim();
+        const savedWorkerName = editableConfigurationState.draft.name.trim();
         if (
           scopeKey != null &&
           savedWorkerName.length > 0 &&
@@ -79,8 +81,10 @@ export function useSaveEditableWorkerConfiguration({
     () => ({
       canSave,
       save,
+      saveAttemptRevision,
+      saveMutationError,
       saveState,
     }),
-    [canSave, save, saveState],
+    [canSave, save, saveAttemptRevision, saveMutationError, saveState],
   );
 }

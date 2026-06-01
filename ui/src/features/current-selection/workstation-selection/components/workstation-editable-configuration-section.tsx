@@ -14,10 +14,7 @@ import {
 import { formatList } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
-import {
-  DetailCardFactorySaveFeedback,
-  mergeDetailCardSaveFieldErrors,
-} from "../../base/components/detail-card-factory-save-feedback";
+import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
@@ -169,15 +166,6 @@ function EditableConfigurationReadyForm({
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
-      <DetailCardFactorySaveFeedback<EditableWorkstationSaveValidationErrors>
-        messages={{
-          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
-          staleVersionDetail:
-            messages.editableConfigurationSaveStaleVersionDetail,
-          successMessage: messages.editableConfigurationSaveSuccess,
-        }}
-        saveState={saveState}
-      />
       <EditableConfigurationOverwriteWarning
         messages={messages}
         overwriteFieldNames={state.overwriteFieldNames ?? []}
