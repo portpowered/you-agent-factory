@@ -18,9 +18,9 @@ import type {
   SelectedWorkRelationshipGraph,
 } from "../work-selection/public";
 import { WorkItemDetailCard } from "../work-selection/public";
+import { EditableWorkStateConfigurationHeaderActions } from "../work-state-selection/components/work-state-save-controls";
 import { useEditableWorkStateConfigurationState } from "../work-state-selection/hooks/use-editable-work-state-configuration-state";
 import { useSaveEditableWorkStateConfiguration } from "../work-state-selection/hooks/use-save-editable-work-state-configuration";
-import { EditableWorkStateSaveHeaderAction } from "../work-state-selection/public";
 import {
   EditableWorkTypeConfigurationHeaderActions,
   EditableWorkTypeSaveDialog,
@@ -397,10 +397,19 @@ export function CurrentSelectionWidget({
   const handleSelectProviderSession =
     onSelectProviderSession ?? providerSessionState.setSelectedProviderSession;
   const workStateHeaderAction = (
-    <EditableWorkStateSaveHeaderAction
+    <EditableWorkStateConfigurationHeaderActions
+      canDiscard={
+        editableWorkStateConfigurationState?.status === "ready" &&
+        editableWorkStateConfigurationState.isDirty
+      }
       canSave={workStateSave.canSave}
       locale={locale ?? undefined}
-      onClick={() => void workStateSave.save()}
+      onDiscard={() => {
+        if (editableWorkStateConfigurationState?.status === "ready") {
+          editableWorkStateConfigurationState.onResetToLatest();
+        }
+      }}
+      onSave={() => void workStateSave.save()}
       saveState={workStateSave.saveState}
     />
   );
