@@ -777,6 +777,154 @@ describe("useEditableWorkstationConfigurationState", () => {
     expect(standardErrors.cronExpiryWindow).toBeUndefined();
   });
 
+  it("builds pendingFactoryDefinition with updated cron when schedule changes", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "CRON",
+          cron: {
+            schedule: "0 0 * * *",
+          },
+          prompt: "Run daily refresh.",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onCronScheduleChange("0 9 * * *");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        behavior: "CRON",
+        cron: {
+          schedule: "0 9 * * *",
+        },
+      },
+      hasValidationErrors: false,
+      isDirty: true,
+      status: "ready",
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition?.workstations?.[0]?.cron
+        : undefined,
+    ).toEqual({
+      schedule: "0 9 * * *",
+      triggerAtStart: false,
+    });
+  });
+
+  it("markChangesSaved clears dirty cron edits after a successful save", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "CRON",
+          cron: {
+            schedule: "0 0 * * *",
+          },
+          prompt: "Run daily refresh.",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onCronScheduleChange("0 9 * * *");
+      result.current.markChangesSaved();
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        behavior: "CRON",
+        cron: {
+          schedule: "0 9 * * *",
+        },
+      },
+      isDirty: false,
+      overwriteFieldNames: [],
+      status: "ready",
+    });
+  });
+
+  it("tracks cron overwrite fields when the running factory cron changes during an edit session", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "CRON",
+          cron: {
+            schedule: "0 0 * * *",
+          },
+          prompt: "Run daily refresh.",
+        }),
+      ),
+    );
+
+    const { rerender, result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onCronScheduleChange("0 9 * * *");
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "CRON",
+          cron: {
+            jitter: "5m",
+            schedule: "*/15 * * * *",
+          },
+          prompt: "Run daily refresh.",
+        }),
+      ),
+    );
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        draft: {
+          cron: {
+            schedule: "0 9 * * *",
+          },
+        },
+        isDirty: true,
+        overwriteFieldNames: ["cronSchedule", "cronJitter"],
+        status: "ready",
+      });
+    });
+  });
+
   it("blocks save for CRON workstations with invalid cron settings", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(

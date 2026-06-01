@@ -81,6 +81,26 @@ describe("EditableWorkstationSaveDialog", () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
+  it("lists cron overwrite fields in the save confirmation dialog", () => {
+    render(
+      <EditableWorkstationSaveDialog
+        onCancel={() => undefined}
+        onConfirm={() => undefined}
+        overwriteFieldNames={["cronSchedule", "cronJitter"]}
+        saveState={{ status: "confirming" }}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Overwrite the running factory definition?",
+    });
+    expect(
+      within(dialog).getByText(
+        "Saving will overwrite newer server values for cron schedule, cron jitter with the draft currently shown in the editor.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("keeps the save dialog locked while submitting", () => {
     const onCancel = vi.fn();
     const onConfirm = vi.fn();
