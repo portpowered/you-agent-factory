@@ -11,6 +11,7 @@ type WorkstationDetailCatalogMessages = Omit<
   | "localizeProviderSessionKind"
   | "localizeRunnerSelectionSource"
   | "localizeWorkstationBehavior"
+  | "localizeWorkstationGuardType"
   | "localizeWorkstationKind"
   | "localizeWorkstationType"
 >;
@@ -120,11 +121,23 @@ const workstationDetailMessagesByLocale = {
       "The selected worker is no longer available. Choose another worker before saving this workstation.",
     editableConfigurationWorkerUnavailablePrefix:
       "Worker selection unavailable.",
+    editableConfigurationWorkstationOptionsEmpty:
+      "No workstations are available in the current factory definition.",
+    editableConfigurationWorkstationUnavailablePrefix:
+      "Workstation selection unavailable.",
+    matchesFieldsGuardInputKeyFieldLabel: "Field selector",
     modelFieldLabel: "Model",
     notConfiguredValue: "Not configured",
     promptFieldLabel: "Prompt",
     templateFieldLabel: "Template",
     workerFieldLabel: "Worker",
+    workstationGuardsHeading: "Workstation guards",
+    workstationGuardsEmpty: "No workstation guards are configured.",
+    workstationGuardsAddLabel: "Add guard",
+    workstationGuardsAddPlaceholder: "Choose a guard type",
+    workstationGuardsRemoveAction: "Remove guard",
+    visitCountGuardWorkstationFieldLabel: "Counted workstation",
+    visitCountGuardMaxVisitsFieldLabel: "Max visits",
     currentDispatchLabel: "Current dispatch",
     dispatchLabel: "Dispatch",
     elapsedLabel: "Elapsed",
@@ -307,11 +320,23 @@ const workstationDetailMessagesByLocale = {
       "選択したワーカーは利用できなくなりました。保存前に別のワーカーを選択してください。",
     editableConfigurationWorkerUnavailablePrefix:
       "ワーカー選択は利用できません。",
+    editableConfigurationWorkstationOptionsEmpty:
+      "現在のファクトリー定義に利用可能なワークステーションがありません。",
+    editableConfigurationWorkstationUnavailablePrefix:
+      "ワークステーション選択は利用できません。",
+    matchesFieldsGuardInputKeyFieldLabel: "フィールドセレクター",
     modelFieldLabel: "モデル",
     notConfiguredValue: "未設定",
     promptFieldLabel: "プロンプト",
     templateFieldLabel: "テンプレート",
     workerFieldLabel: "ワーカー",
+    workstationGuardsHeading: "ワークステーションガード",
+    workstationGuardsEmpty: "ワークステーションガードは設定されていません。",
+    workstationGuardsAddLabel: "ガードを追加",
+    workstationGuardsAddPlaceholder: "ガード種別を選択",
+    workstationGuardsRemoveAction: "ガードを削除",
+    visitCountGuardWorkstationFieldLabel: "カウント対象ワークステーション",
+    visitCountGuardMaxVisitsFieldLabel: "最大訪問回数",
     currentDispatchLabel: "現在のディスパッチ",
     dispatchLabel: "ディスパッチ",
     elapsedLabel: "経過時間",
@@ -492,11 +517,23 @@ const workstationDetailMessagesByLocale = {
       "선택한 워커를 더 이상 사용할 수 없습니다. 저장하기 전에 다른 워커를 선택하세요.",
     editableConfigurationWorkerUnavailablePrefix:
       "워커 선택을 사용할 수 없습니다.",
+    editableConfigurationWorkstationOptionsEmpty:
+      "현재 팩토리 정의에 사용 가능한 워크스테이션이 없습니다.",
+    editableConfigurationWorkstationUnavailablePrefix:
+      "워크스테이션 선택을 사용할 수 없습니다.",
+    matchesFieldsGuardInputKeyFieldLabel: "필드 선택자",
     modelFieldLabel: "모델",
     notConfiguredValue: "구성되지 않음",
     promptFieldLabel: "프롬프트",
     templateFieldLabel: "템플릿",
     workerFieldLabel: "워커",
+    workstationGuardsHeading: "워크스테이션 가드",
+    workstationGuardsEmpty: "구성된 워크스테이션 가드가 없습니다.",
+    workstationGuardsAddLabel: "가드 추가",
+    workstationGuardsAddPlaceholder: "가드 유형 선택",
+    workstationGuardsRemoveAction: "가드 제거",
+    visitCountGuardWorkstationFieldLabel: "카운트 대상 워크스테이션",
+    visitCountGuardMaxVisitsFieldLabel: "최대 방문 횟수",
     currentDispatchLabel: "현재 디스패치",
     dispatchLabel: "디스패치",
     elapsedLabel: "경과 시간",
@@ -660,11 +697,22 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationWorkerUnavailable:
       "所选工作器已不可用。保存前请选择其他工作器。",
     editableConfigurationWorkerUnavailablePrefix: "工作器选择不可用。",
+    editableConfigurationWorkstationOptionsEmpty:
+      "当前工厂定义中没有可用的工作站。",
+    editableConfigurationWorkstationUnavailablePrefix: "工作站选择不可用。",
+    matchesFieldsGuardInputKeyFieldLabel: "字段选择器",
     modelFieldLabel: "模型",
     notConfiguredValue: "未配置",
     promptFieldLabel: "提示词",
     templateFieldLabel: "模板",
     workerFieldLabel: "工作器",
+    workstationGuardsHeading: "工作站守卫",
+    workstationGuardsEmpty: "未配置工作站守卫。",
+    workstationGuardsAddLabel: "添加守卫",
+    workstationGuardsAddPlaceholder: "选择守卫类型",
+    workstationGuardsRemoveAction: "移除守卫",
+    visitCountGuardWorkstationFieldLabel: "计数工作站",
+    visitCountGuardMaxVisitsFieldLabel: "最大访问次数",
     currentDispatchLabel: "当前分派",
     dispatchLabel: "分派",
     elapsedLabel: "已用时间",
@@ -758,6 +806,7 @@ export function getWorkstationDetailMessages(
     localizeProviderSessionKind: enumMessages.localizeProviderSessionKind,
     localizeRunnerSelectionSource: enumMessages.localizeRunnerSelectionSource,
     localizeWorkstationBehavior: enumMessages.localizeWorkstationBehavior,
+    localizeWorkstationGuardType: enumMessages.localizeWorkstationGuardType,
     localizeWorkstationKind: enumMessages.localizeWorkstationKind,
     localizeWorkstationType: enumMessages.localizeWorkstationType,
   };

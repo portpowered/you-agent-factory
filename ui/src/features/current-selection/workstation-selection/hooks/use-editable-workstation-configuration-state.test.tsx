@@ -702,6 +702,47 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("marks the draft dirty when workstation guards change", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current?.status === "ready" ? result.current.isDirty : true).toBe(
+      false,
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onGuardsChange([
+        {
+          maxVisits: 2,
+          type: "VISIT_COUNT",
+          workstation: "Review",
+        },
+      ]);
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        guards: [
+          {
+            maxVisits: 2,
+            type: "VISIT_COUNT",
+            workstation: "Review",
+          },
+        ],
+      },
+      isDirty: true,
+      status: "ready",
+    });
+  });
+
   it("keeps empty-body pollers saveable in the current-selection editor", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(

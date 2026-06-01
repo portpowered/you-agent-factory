@@ -65,6 +65,9 @@ export interface WorkstationDetailMessages {
   ) => string;
   editableConfigurationWorkerUnavailable: string;
   editableConfigurationWorkerUnavailablePrefix: string;
+  editableConfigurationWorkstationOptionsEmpty: string;
+  editableConfigurationWorkstationUnavailablePrefix: string;
+  matchesFieldsGuardInputKeyFieldLabel: string;
   modelFieldLabel: string;
   notConfiguredValue: string;
   promptFieldLabel: string;
@@ -136,6 +139,14 @@ export interface WorkstationDetailMessages {
   localizeWorkstationBehavior: (value: string) => string;
   localizeWorkstationKind: (value: string) => string;
   localizeWorkstationType: (value: string) => string;
+  localizeWorkstationGuardType: (value: string) => string;
+  visitCountGuardMaxVisitsFieldLabel: string;
+  visitCountGuardWorkstationFieldLabel: string;
+  workstationGuardsAddLabel: string;
+  workstationGuardsAddPlaceholder: string;
+  workstationGuardsEmpty: string;
+  workstationGuardsHeading: string;
+  workstationGuardsRemoveAction: string;
   unknownWorkerTypeValue: string;
   unknownWorkLabel: string;
   workDetailsUnavailable: (dispatchId: string) => string;

@@ -64,6 +64,7 @@ describe("resolveEditableWorkstationValues", () => {
       guards: [],
       inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
+      workstationOptions: ["Review"],
       workstationType: "MODEL_WORKSTATION",
     });
   });
@@ -191,6 +192,7 @@ describe("resolveEditableWorkstationValues", () => {
       guards: [],
       inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
+      workstationOptions: ["Review"],
       workstationType: "MODEL_WORKSTATION",
     });
   });
@@ -363,6 +365,7 @@ describe("resolveEditableWorkstationValues", () => {
       guards: [],
       inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
+      workstationOptions: ["Review", "Plan", "Code"],
       workstationType: "MODEL_WORKSTATION",
     });
   });

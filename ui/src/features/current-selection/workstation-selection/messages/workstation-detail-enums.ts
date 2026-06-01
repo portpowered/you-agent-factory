@@ -3,6 +3,7 @@ import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
 } from "../../../../i18n";
+import type { WorkstationLevelGuardType } from "../../../current-factory-definition/lib/workstation-guards";
 import type { ApiWorkstationKind, ApiWorkstationType } from "./workstation-openapi-enums";
 import {
   localizeRunnerSelectionSourceValue,
@@ -21,6 +22,7 @@ export interface WorkstationDetailEnumMessages {
   localizeWorkstationBehavior: (value: ApiWorkstationKind | string) => string;
   localizeWorkstationKind: (value: ApiWorkstationKind | string) => string;
   localizeWorkstationType: (value: ApiWorkstationType | string) => string;
+  localizeWorkstationGuardType: (value: WorkstationLevelGuardType | string) => string;
 }
 
 const workstationDetailEnumMessagesByLocale = {
@@ -43,6 +45,8 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationKindValue(value, "en"),
     localizeWorkstationType: (value) =>
       localizeWorkstationTypeValue(value, "en"),
+    localizeWorkstationGuardType: (value) =>
+      localizeWorkstationGuardTypeValue(value, "en"),
   },
   ja: {
     localizeRunnerSelectionSource: (value) =>
@@ -63,6 +67,8 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationKindValue(value, "ja"),
     localizeWorkstationType: (value) =>
       localizeWorkstationTypeValue(value, "ja"),
+    localizeWorkstationGuardType: (value) =>
+      localizeWorkstationGuardTypeValue(value, "ja"),
   },
   ko: {
     localizeRunnerSelectionSource: (value) =>
@@ -83,6 +89,8 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationKindValue(value, "ko"),
     localizeWorkstationType: (value) =>
       localizeWorkstationTypeValue(value, "ko"),
+    localizeWorkstationGuardType: (value) =>
+      localizeWorkstationGuardTypeValue(value, "ko"),
   },
   "zh-CN": {
     localizeRunnerSelectionSource: (value) =>
@@ -103,8 +111,41 @@ const workstationDetailEnumMessagesByLocale = {
       localizeWorkstationKindValue(value, "zh-CN"),
     localizeWorkstationType: (value) =>
       localizeWorkstationTypeValue(value, "zh-CN"),
+    localizeWorkstationGuardType: (value) =>
+      localizeWorkstationGuardTypeValue(value, "zh-CN"),
   },
 } satisfies LocalizedMessageCatalog<WorkstationDetailEnumMessages>;
+
+function localizeWorkstationGuardTypeValue(
+  value: WorkstationLevelGuardType | string,
+  locale: "en" | "ja" | "ko" | "zh-CN",
+): string {
+  return localizeEnumLabel({
+    category: "type",
+    labels:
+      locale === "ja"
+        ? {
+            MATCHES_FIELDS: "フィールド一致",
+            VISIT_COUNT: "訪問回数",
+          }
+        : locale === "ko"
+          ? {
+              MATCHES_FIELDS: "필드 일치",
+              VISIT_COUNT: "방문 횟수",
+            }
+          : locale === "zh-CN"
+            ? {
+                MATCHES_FIELDS: "字段匹配",
+                VISIT_COUNT: "访问次数",
+              }
+            : {
+                MATCHES_FIELDS: "Matches fields",
+                VISIT_COUNT: "Visit count",
+              },
+    locale,
+    value,
+  });
+}
 
 export function getWorkstationDetailEnumMessages(
   locale?: string | null,

@@ -13,6 +13,7 @@ import {
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
+import { editableWorkstationDraftsEqual } from "../../../current-factory-definition/lib/workstation-guards";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import {
@@ -26,6 +27,7 @@ import type {
   EditableWorkstationPromptValidationState,
   EditableWorkstationValidationErrors,
   EditableWorkstationWorkerOptionsState,
+  EditableWorkstationWorkstationOptionsState,
 } from "../lib/detail-card-types";
 import {
   getWorkstationDetailMessages,
@@ -235,12 +237,7 @@ function areEditableDraftsEqual(
   left: EditableWorkstationDraft,
   right: EditableWorkstationDraft,
 ): boolean {
-  return (
-    left.behavior === right.behavior &&
-    left.prompt === right.prompt &&
-    left.runnerName === right.runnerName &&
-    left.workerName === right.workerName
-  );
+  return editableWorkstationDraftsEqual(left, right);
 }
 
 function resolveWorkerOptionsState(
@@ -276,6 +273,34 @@ function resolveWorkerOptionsState(
 
   return {
     options: selectedEditableValues.workerOptions,
+    status: "ready",
+  };
+}
+
+function resolveWorkstationOptionsState(
+  selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
+  messages: Pick<
+    WorkstationDetailMessages,
+    | "editableConfigurationEmpty"
+    | "editableConfigurationWorkstationOptionsEmpty"
+  >,
+): EditableWorkstationWorkstationOptionsState {
+  if (!selectedEditableValues) {
+    return {
+      message: messages.editableConfigurationEmpty,
+      status: "error",
+    };
+  }
+
+  if (selectedEditableValues.workstationOptions.length === 0) {
+    return {
+      message: messages.editableConfigurationWorkstationOptionsEmpty,
+      status: "empty",
+    };
+  }
+
+  return {
+    options: selectedEditableValues.workstationOptions,
     status: "ready",
   };
 }
@@ -378,6 +403,19 @@ function buildReadyEditableWorkstationConfigurationState({
           : currentState,
       );
     },
+    onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              draft: {
+                ...currentState.draft,
+                guards,
+              },
+            }
+          : currentState,
+      );
+    },
     onRunnerChange: (value: RunnerID | null) => {
       setSessionState((currentState) =>
         currentState
@@ -420,6 +458,10 @@ function buildReadyEditableWorkstationConfigurationState({
     validationErrors: resolvedValidationErrors,
     workerOptionsState: resolveWorkerOptionsState(
       sessionState.draft,
+      selectedEditableValues,
+      messages,
+    ),
+    workstationOptionsState: resolveWorkstationOptionsState(
       selectedEditableValues,
       messages,
     ),

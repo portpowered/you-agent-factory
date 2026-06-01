@@ -19,6 +19,7 @@ import {
   resolveEditableWorkstationType,
   type EditableWorkstationType,
 } from "./workstation-type";
+import { resolveFactoryWorkstationNameOptions } from "./workstation-guards";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
@@ -52,6 +53,7 @@ export interface EditableWorkstationValues {
   guards: CanonicalWorkstationGuard[];
   inputs: EditableWorkstationInputDraft[];
   workstationName: string;
+  workstationOptions: string[];
   workstationType: EditableWorkstationType;
 }
 
@@ -110,6 +112,7 @@ export function resolveEditableWorkstationValues(
     guards: resolveEditableWorkstationGuards(workstation),
     inputs: resolveEditableWorkstationInputs(workstation),
     workstationName: workstation.name,
+    workstationOptions: resolveFactoryWorkstationNameOptions(factory),
     workstationType: resolveEditableWorkstationType(workstation),
   };
 }

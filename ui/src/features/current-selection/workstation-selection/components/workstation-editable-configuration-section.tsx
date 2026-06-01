@@ -13,18 +13,20 @@ import {
 } from "../../../../components/ui/dashboard-typography";
 import { formatList } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
+import type { WorkstationLevelGuard } from "../../../current-factory-definition/lib/workstation-guards";
 import {
   DetailCardFactorySaveFeedback,
   mergeDetailCardSaveFieldErrors,
 } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CurrentSelectionSectionHeader,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
+  CurrentSelectionSectionHeader,
   WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "../../base/components/detail-card-shared";
 import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
+import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
@@ -34,15 +36,15 @@ import type {
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
 } from "../lib/detail-card-types";
-import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { EditableConfigurationWorkstationGuardsField } from "./workstation-guards-field";
+import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 import { EditableConfigurationRunnerField } from "./workstation-runner-field";
 import {
   resolveWorkstationSummaryKindValue,
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
 } from "./workstation-summary-field-values";
-import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({
   messages,
@@ -88,20 +90,33 @@ export function EditableConfigurationSection({
       {expanded ? (
         <div className="grid gap-2.5" id={contentId}>
           {state?.status === "loading" ? (
-            <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p
+              className={cn(
+                "m-0 text-af-text-muted",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+            >
               {messages.editableConfigurationLoading}
             </p>
           ) : null}
           {state?.status === "error" ? (
             <p
-              className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+              className={cn(
+                "m-0 text-af-danger-text",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
               role="alert"
             >
               {messages.editableConfigurationErrorPrefix} {state.errorMessage}
             </p>
           ) : null}
           {state?.status === "empty" ? (
-            <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p
+              className={cn(
+                "m-0 text-af-text-muted",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+            >
               {state.message || messages.editableConfigurationEmpty}
             </p>
           ) : null}
@@ -154,7 +169,8 @@ function EditableConfigurationReadyForm({
       <DetailCardFactorySaveFeedback<EditableWorkstationSaveValidationErrors>
         messages={{
           errorPrefix: messages.editableConfigurationSaveErrorPrefix,
-          staleVersionDetail: messages.editableConfigurationSaveStaleVersionDetail,
+          staleVersionDetail:
+            messages.editableConfigurationSaveStaleVersionDetail,
           successMessage: messages.editableConfigurationSaveSuccess,
         }}
         saveState={saveState}
@@ -243,6 +259,12 @@ function EditableConfigurationReadyForm({
             />
           }
         />
+        <EditableConfigurationWorkstationGuardsField
+          guards={state.draft.guards as WorkstationLevelGuard[]}
+          messages={messages}
+          onGuardsChange={state.onGuardsChange}
+          workstationOptionsState={state.workstationOptionsState}
+        />
       </div>
       {onSaveConfiguration ? (
         <EditableConfigurationSaveRow
@@ -267,7 +289,6 @@ function EditableConfigurationReadyForm({
     </form>
   );
 }
-
 
 function hasOnlyPromptBlockingValidationErrors(
   validationErrors: EditableWorkstationValidationErrors,
@@ -322,7 +343,12 @@ function EditableConfigurationDraftStatus({
             ? messages.editableConfigurationDirtyStatus
             : messages.editableConfigurationDraftNote}
       </p>
-      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
         {messages.editableConfigurationDraftNote}
       </p>
     </div>
@@ -353,7 +379,12 @@ function EditableConfigurationOverwriteWarning({
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
-      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
         {messages.editableConfigurationOverwriteWarningDetail}
       </p>
     </div>
@@ -433,7 +464,9 @@ function EditableConfigurationBehaviorInput({
       className={DASHBOARD_BODY_TEXT_CLASS}
       id="editable-workstation-kind"
       onChange={(event) =>
-        state.onBehaviorChange(event.target.value as typeof state.draft.behavior)
+        state.onBehaviorChange(
+          event.target.value as typeof state.draft.behavior,
+        )
       }
       value={state.draft.behavior}
     >
@@ -462,7 +495,9 @@ function EditableConfigurationSharedWorkerHint({
   }
 
   return (
-    <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+    <p
+      className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+    >
       {messages.editableConfigurationSharedWorkerScopeHint(
         valueOrFallback(state.draft.workerName, messages.notConfiguredValue),
         formatList(sharedWorkstationNames),
@@ -480,8 +515,7 @@ function resolveSharedWorkerWorkstationNames(
   return (
     state.initialValues.sharedWorkerWorkstationNamesByWorkerName[
       state.draft.workerName
-    ] ??
-    []
+    ] ?? []
   );
 }
 
@@ -524,7 +558,10 @@ export function WorkstationSummary({
   const sectionId = `workstation-summary-${selectedNode.node_id}`;
 
   return (
-    <section aria-labelledby={sectionId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
+    <section
+      aria-labelledby={sectionId}
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    >
       <CurrentSelectionSectionHeader
         headingId={sectionId}
         title={messages.summaryHeading}

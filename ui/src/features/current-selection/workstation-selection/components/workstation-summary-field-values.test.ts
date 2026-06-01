@@ -11,6 +11,8 @@ import {
 const readyEditableConfigurationState = {
   draft: {
     behavior: "STANDARD" as const,
+    guards: [],
+    inputs: [],
     prompt: "Review",
     runnerName: null,
     workerName: "reviewer",
@@ -36,7 +38,10 @@ const readyEditableConfigurationState = {
     workerOptions: ["reviewer"],
     workerTypeByName: {},
     workstationName: "Review",
+    workstationOptions: ["Review"],
     workstationType: "MODEL_WORKSTATION" as const,
+    guards: [],
+    inputs: [],
   },
   isDirty: false,
   markChangesSaved: () => {},
@@ -44,8 +49,13 @@ const readyEditableConfigurationState = {
   onBehaviorChange: () => {},
   onPromptChange: () => {},
   onResetToLatest: () => {},
+  onGuardsChange: () => {},
   onRunnerChange: () => {},
   onWorkerChange: () => {},
+  workstationOptionsState: {
+    options: ["Review"],
+    status: "ready",
+  },
   overwriteFieldNames: [],
   pendingFactoryDefinition: null,
   promptDiagnostics: [],
