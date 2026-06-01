@@ -116,6 +116,50 @@ func TestValidateFactory_OperationalCronRulesRemainConfigScoped(t *testing.T) {
 	assertConfigFindingRule(t, configFindings, "cron-config")
 }
 
+func TestValidateFactory_RejectsDuplicateDefaultHandlingWorkTypes(t *testing.T) {
+	t.Parallel()
+
+	srv := newAPITestServer(&testutil.MockFactory{})
+	body := `{
+		"name":"alpha",
+		"workTypes":[
+			{"name":"story","handlingBehavior":["DEFAULT"],"states":[
+				{"name":"queued","type":"INITIAL"},
+				{"name":"done","type":"TERMINAL"}
+			]},
+			{"name":"task","handlingBehavior":["DEFAULT"],"states":[
+				{"name":"queued","type":"INITIAL"},
+				{"name":"done","type":"TERMINAL"}
+			]}
+		],
+		"workers":[{"name":"worker-a"}],
+		"workstations":[{
+			"name":"process",
+			"worker":"worker-a",
+			"inputs":[{"workType":"story","state":"queued"}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	result := decodeJSONResponse[factoryapi.FactoryValidationResult](t, rec)
+	assertHasValidationTargetCode(t, result.Targets, factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault)
+	for _, target := range result.Targets {
+		if target.Code == factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault &&
+			!strings.Contains(target.Message, "handlingBehavior DEFAULT") {
+			t.Fatalf("target message = %q, want duplicate default handling explanation", target.Message)
+		}
+	}
+}
+
 func TestValidateFactory_PreservesCanonicalStructuralCodesFromCrossPathFixture(t *testing.T) {
 	srv := newAPITestServer(&testutil.MockFactory{})
 

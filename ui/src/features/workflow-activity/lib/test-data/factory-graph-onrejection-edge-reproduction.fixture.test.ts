@@ -24,6 +24,11 @@ describe("factory-graph-onrejection-edge-reproduction fixture", () => {
     expect(process?.stopWords).toBeUndefined();
     expect(review?.stopWords).toBeUndefined();
     expect(plan?.stopWords).toBeUndefined();
+
+    const processor = factory.workers?.find((worker) => worker.name === "processor");
+    expect(processor?.stopToken).toBe("<COMPLETE>");
+    expect(review?.type).toBe("MODEL_WORKSTATION");
+    expect(review?.behavior).toBeUndefined();
   });
 
   it("builds current-activity graph layout from the committed fixture", async () => {

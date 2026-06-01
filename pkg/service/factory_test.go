@@ -1790,6 +1790,157 @@ func TestFactoryService_SaveCurrentFactory_RejectsMissingOutcomeRoutes(t *testin
 	assertHasValidationTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkstationMissingRejectionRoute, "missing rejection route target")
 }
 
+func TestFactoryService_SaveFactoryForSession_RejectsDuplicateDefaultHandlingWorkTypes(t *testing.T) {
+	rootDir := t.TempDir()
+	initialVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  11,
+		Physical: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"name": "alpha",
+		"id":   "alpha",
+		"version": map[string]any{
+			"logical":  initialVersion.Logical,
+			"physical": initialVersion.Physical.UTC().Format(time.RFC3339Nano),
+		},
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{"name": "worker-a", "type": "MODEL_WORKER", "body": "worker"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"type":      "MODEL_WORKSTATION",
+			"body":      "process",
+			"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "story", "state": "failed"}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal alpha payload: %v", err)
+	}
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", payload); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
+
+	current, err := harness.svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory before rejected save: %v", err)
+	}
+	if current.Version == nil {
+		t.Fatal("expected current factory version metadata")
+	}
+
+	replacement, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
+	}
+	if replacement.WorkTypes == nil {
+		t.Fatal("expected alpha fixture work types")
+	}
+	defaultBehavior := factoryapi.WorkTypeHandlingBehaviorDefault
+	(*replacement.WorkTypes)[0].HandlingBehavior = &[]factoryapi.WorkTypeHandlingBehavior{defaultBehavior}
+	second := (*replacement.WorkTypes)[0]
+	second.Name = "task"
+	second.HandlingBehavior = &[]factoryapi.WorkTypeHandlingBehavior{defaultBehavior}
+	*replacement.WorkTypes = append(*replacement.WorkTypes, second)
+	replacement.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  current.Version.Logical + 1,
+		Physical: current.Version.Physical.Add(time.Second),
+	}
+
+	_, err = harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		replacement,
+	)
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(err, &topologyErr) {
+		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
+	}
+	assertHasValidationTargetCode(
+		t,
+		topologyErr.Targets,
+		factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault,
+		"duplicate default handling target",
+	)
+
+	currentAfterRejectedSave, err := harness.svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory after rejected save: %v", err)
+	}
+	if currentAfterRejectedSave.WorkTypes == nil || len(*currentAfterRejectedSave.WorkTypes) != 1 {
+		t.Fatalf("current work types after rejected save = %#v, want unchanged single story work type", currentAfterRejectedSave.WorkTypes)
+	}
+}
+
+func TestFactoryService_SaveFactoryForSession_AllowsSingleDefaultHandlingWorkType(t *testing.T) {
+	rootDir := t.TempDir()
+	initialVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  11,
+		Physical: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithVersion(t, "alpha", initialVersion)); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	harness := startRunningSessionServiceOnDir(t, rootDir)
+	defer harness.stop(t)
+
+	current, err := harness.svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory before save: %v", err)
+	}
+	if current.Version == nil {
+		t.Fatal("expected current factory version metadata")
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
+	defaultBehavior := factoryapi.WorkTypeHandlingBehaviorDefault
+	if replacement.WorkTypes == nil {
+		t.Fatal("expected replacement work types")
+	}
+	(*replacement.WorkTypes)[0].HandlingBehavior = &[]factoryapi.WorkTypeHandlingBehavior{defaultBehavior}
+	replacement.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  current.Version.Logical + 1,
+		Physical: current.Version.Physical.Add(time.Second),
+	}
+
+	saved, err := harness.svc.SaveFactoryForSession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySaveModeReplaceCurrent,
+		replacement,
+	)
+	if err != nil {
+		t.Fatalf("SaveFactoryForSession error = %v, want success", err)
+	}
+	if saved.WorkTypes == nil || (*saved.WorkTypes)[0].HandlingBehavior == nil || len(*(*saved.WorkTypes)[0].HandlingBehavior) != 1 {
+		t.Fatalf("saved work types = %#v, want one DEFAULT handlingBehavior", saved.WorkTypes)
+	}
+	if (*(*saved.WorkTypes)[0].HandlingBehavior)[0] != defaultBehavior {
+		t.Fatalf("saved handlingBehavior = %#v, want DEFAULT", (*saved.WorkTypes)[0].HandlingBehavior)
+	}
+}
+
 func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.FactoryValidationTarget) {
 	t.Helper()
 

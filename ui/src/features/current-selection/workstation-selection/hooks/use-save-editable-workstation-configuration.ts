@@ -21,6 +21,7 @@ export interface UseSaveEditableWorkstationConfigurationResult {
   canSave: boolean;
   cancelSaveConfirmation: () => void;
   confirmSave: () => Promise<void>;
+  lastSuccessfulSaveWasTopologyAffecting: boolean;
   saveAttemptRevision: number;
   saveMutationError: CurrentFactoryDefinitionError | null;
   saveState: EditableWorkstationSaveState;
@@ -42,6 +43,7 @@ export function useSaveEditableWorkstationConfiguration({
     confirmSave: confirmScopedSave,
     error: saveMutationError,
     isPending,
+    lastSuccessfulSaveWasTopologyAffecting,
     saveAttemptRevision,
     saveState,
   } = useScopedFactoryDocumentSave<EditableWorkstationSaveValidationErrors>({
@@ -79,6 +81,7 @@ export function useSaveEditableWorkstationConfiguration({
       baseVersion: editableConfigurationState.baseVersion,
       factory: editableConfigurationState.pendingFactoryDefinition,
       onSaved: editableConfigurationState.markChangesSaved,
+      previousFactory: editableConfigurationState.savedFactoryDefinition,
       scopeKey,
     });
   }, [confirmScopedSave, editableConfigurationState, scopeKey]);
@@ -89,6 +92,7 @@ export function useSaveEditableWorkstationConfiguration({
       canSave,
       cancelSaveConfirmation: cancelConfirmation,
       confirmSave,
+      lastSuccessfulSaveWasTopologyAffecting,
       saveAttemptRevision,
       saveMutationError,
       saveState,
@@ -98,6 +102,7 @@ export function useSaveEditableWorkstationConfiguration({
       canSave,
       cancelConfirmation,
       confirmSave,
+      lastSuccessfulSaveWasTopologyAffecting,
       saveAttemptRevision,
       saveMutationError,
       saveState,

@@ -89,6 +89,19 @@ export function useCurrentActivityGraphEditor(
 
   const { resetEditorChromeForScopeChange } = saveFlow;
   const lastFactoryDocumentScopeKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    useFactoryGraphTopologyEditorBridge
+      .getState()
+      .setGraphDraftHasPendingChanges(draftState.hasChanges);
+
+    return () => {
+      useFactoryGraphTopologyEditorBridge
+        .getState()
+        .setGraphDraftHasPendingChanges(false);
+    };
+  }, [draftState.hasChanges]);
+
   useEffect(() => {
     const normalizedScopeKey = factoryDocumentScopeKey ?? null;
     const previousScopeKey = lastFactoryDocumentScopeKeyRef.current;
@@ -101,7 +114,9 @@ export function useCurrentActivityGraphEditor(
     }
 
     resetEditorChromeForScopeChange();
-    useFactoryGraphTopologyEditorBridge.getState().setHandlers(null);
+    const bridge = useFactoryGraphTopologyEditorBridge.getState();
+    bridge.setHandlers(null);
+    bridge.setGraphDraftHasPendingChanges(false);
   }, [factoryDocumentScopeKey, resetEditorChromeForScopeChange]);
 
   return buildCurrentActivityGraphEditorValue({

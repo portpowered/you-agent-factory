@@ -77,6 +77,7 @@ export type EditableResourceConfigurationState =
       onTypeChange: (value: EditableResourceDraft["type"]) => void;
       overwriteFieldNames: EditableResourceOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      savedFactoryDefinition: CanonicalFactoryDefinition;
       status: "ready";
       validationErrors: EditableResourceValidationErrors;
     };

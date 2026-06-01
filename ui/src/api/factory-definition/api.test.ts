@@ -1044,6 +1044,51 @@ describe("worker modelProvider validation", () => {
   );
 });
 
+describe("normalizeFactoryDefinition work type handlingBehavior", () => {
+  it("round-trips a factory with one DEFAULT work type", () => {
+    const input = {
+      name: "default-work-factory",
+      workTypes: [
+        {
+          handlingBehavior: ["DEFAULT"],
+          name: "story",
+          states: [{ name: "queued", type: "INITIAL" }],
+        },
+        {
+          name: "task",
+          states: [{ name: "queued", type: "INITIAL" }],
+        },
+      ],
+    };
+
+    const normalized = normalizeFactoryDefinition(input);
+    expect(normalized.workTypes?.[0]?.handlingBehavior).toEqual(["DEFAULT"]);
+    expect(normalized.workTypes?.[1]?.handlingBehavior).toBeUndefined();
+    expect(normalizeFactoryDefinition(JSON.parse(JSON.stringify(normalized)))).toEqual(
+      normalized,
+    );
+  });
+
+  it("rejects invalid handlingBehavior tokens with a handlingBehavior path", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "invalid-default-factory",
+        workTypes: [
+          {
+            handlingBehavior: ["INVALID"],
+            name: "story",
+            states: [{ name: "queued", type: "INITIAL" }],
+          },
+        ],
+      }),
+    ).toThrow(
+      new FactoryDefinitionAPIError(
+        "factory.workTypes[0].handlingBehavior[0] must be one of DEFAULT.",
+      ),
+    );
+  });
+});
+
 describe("normalizeFactoryDefinition openCodeAgent", () => {
   it("accepts non-empty openCodeAgent on workers and workstations", () => {
     const normalized = normalizeFactoryDefinition({

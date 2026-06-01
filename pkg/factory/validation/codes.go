@@ -11,4 +11,8 @@ const (
 	CodeWorkTypeMissingCompletionState   = "factory.workType.missingCompletionState"
 	CodeWorkTypeMissingFailureState      = "factory.workType.missingFailureState"
 	CodeWorkStateMissingTerminalPath     = "factory.workState.missingTerminalCompletionPath"
+	CodeWorkTypeHandlingBehaviorValue    = "work-type-handling-behavior-value"
+	CodeWorkTypeHandlingBehaviorDuplicate = "work-type-handling-behavior-duplicate"
+	CodeWorkTypeHandlingBehaviorUniqueDefault = "work-type-handling-behavior-unique-default"
+	CodeWorkTypeHandlingBehaviorRequiredDefault = "work-type-handling-behavior-required-default"
 )

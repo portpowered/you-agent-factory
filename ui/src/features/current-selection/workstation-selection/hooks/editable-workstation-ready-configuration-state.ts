@@ -1,5 +1,5 @@
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { EditableWorkstationBehavior } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
   applyEditableWorkstationDraft,
@@ -13,6 +13,7 @@ import {
   updateEditableWorkstationCronDraft,
 } from "../editing/editable-workstation-cron-draft-mutators";
 import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
+import type { RunnerID } from "../editing/runner-metadata";
 import type {
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
@@ -24,7 +25,6 @@ import {
   resolveWorkerOptionsState,
 } from "../lib/editable-workstation-configuration-validation";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail";
-import type { RunnerID } from "../editing/runner-metadata";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
@@ -213,6 +213,7 @@ export function buildReadyEditableWorkstationConfigurationState({
       sessionState.latestDefinitionDraft,
     ),
     pendingFactoryDefinition,
+    savedFactoryDefinition: editableDefinition,
     promptDiagnostics:
       promptValidationState.status === "ready"
         ? promptValidationState.diagnostics

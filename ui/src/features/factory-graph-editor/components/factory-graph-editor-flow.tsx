@@ -88,6 +88,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
     topology: input.topology,
     workstationResolver: createFactoryGraphWorkstationResolver(
       input.workstations,
+      input.factoryDefinition?.workers,
     ),
   });
 
@@ -143,6 +144,16 @@ function FactoryGraphEditorNodeView({
               weight="label"
             >
               {data.workerStatusLabel}
+            </ActivityGraphNodeBadge>
+          ) : null}
+          {data.kind === "work-type" && data.isDefaultWorkType ? (
+            <ActivityGraphNodeBadge
+              className="shrink-0"
+              role="status"
+              tone="info"
+              weight="label"
+            >
+              {data.defaultWorkTypeLabel}
             </ActivityGraphNodeBadge>
           ) : null}
           {data.draftStatus === "addition" ? (

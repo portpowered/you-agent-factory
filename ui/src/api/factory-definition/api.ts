@@ -30,6 +30,7 @@ type FactoryWorkstationCron = FactorySchemas["WorkstationCron"];
 type FactoryWorkstationIO = FactorySchemas["WorkstationIO"];
 type FactoryWorkstationLimits = FactorySchemas["WorkstationLimits"];
 type FactoryWorkType = FactorySchemas["WorkType"];
+type FactoryWorkTypeHandlingBehavior = FactorySchemas["WorkTypeHandlingBehavior"];
 const FACTORY_KEYS = new Set([
   "factoryDirectory",
   "guards",
@@ -48,7 +49,10 @@ const FACTORY_KEYS = new Set([
 ]);
 const FACTORY_GUARD_KEYS = new Set(["model", "modelProvider", "refreshWindow", "type"]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
-const WORK_TYPE_KEYS = new Set(["name", "states"]);
+const WORK_TYPE_KEYS = new Set(["handlingBehavior", "name", "states"]);
+const WORK_TYPE_HANDLING_BEHAVIOR_VALUES = new Set<FactoryWorkTypeHandlingBehavior>([
+  "DEFAULT",
+]);
 const WORK_STATE_KEYS = new Set(["name", "type"]);
 const RESOURCE_KEYS = new Set(["capacity", "name"]);
 const WORKER_KEYS = new Set([
@@ -298,10 +302,20 @@ function decodeWorkType(value: unknown, path: string): FactoryWorkType {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, WORK_TYPE_KEYS, path);
 
-  return {
+  const workType: FactoryWorkType = {
     name: readRequiredString(record, "name", path),
     states: readRequiredArray(record, "states", path, decodeWorkState),
   };
+  const handlingBehavior = readOptionalEnumArray(
+    record,
+    "handlingBehavior",
+    path,
+    WORK_TYPE_HANDLING_BEHAVIOR_VALUES,
+  );
+  if (handlingBehavior !== undefined) {
+    workType.handlingBehavior = handlingBehavior;
+  }
+  return workType;
 }
 
 function decodeWorkState(value: unknown, path: string): FactoryWorkState {
@@ -856,6 +870,33 @@ function readRequiredInteger(value: Record<string, unknown>, key: string, path: 
     throw new FactoryDefinitionAPIError(`${path}.${key} is required.`);
   }
   return item;
+}
+
+function readOptionalEnumArray<T extends string>(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+  allowedValues: Set<T>,
+): T[] | undefined {
+  const item = value[key];
+  if (item === undefined || item === null) {
+    return undefined;
+  }
+  if (!Array.isArray(item)) {
+    throw new FactoryDefinitionAPIError(`${path}.${key} must be an array.`);
+  }
+  return item.map((entry, index) => {
+    const entryPath = `${path}.${key}[${index}]`;
+    if (typeof entry !== "string") {
+      throw new FactoryDefinitionAPIError(`${entryPath} must be a string.`);
+    }
+    if (!allowedValues.has(entry as T)) {
+      throw new FactoryDefinitionAPIError(
+        `${entryPath} must be one of ${Array.from(allowedValues).join(", ")}.`,
+      );
+    }
+    return entry as T;
+  });
 }
 
 function readOptionalStringArray(

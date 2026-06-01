@@ -11,6 +11,7 @@ import type {
   CanonicalFactoryDefinition,
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
+import { createFactoryGraphWorkstationResolver } from "./factory-graph-editor-connections";
 import { projectFactoryGraphToReactFlow } from "./factory-graph-react-flow-projection";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: projection contract scenarios stay together around one adapter.
@@ -155,6 +156,35 @@ describe("factory graph React Flow projection", () => {
     expect(
       projection.nodes.find((node) => node.id === "worker:writer")?.data,
     ).not.toHaveProperty("workStateType");
+  });
+
+  it("marks default work-type nodes from the canonical factory definition", () => {
+    const factoryDefinition = {
+      ...baseFactoryDefinition,
+      workTypes: [
+        {
+          handlingBehavior: ["DEFAULT"],
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(factoryDefinition);
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition,
+      topology,
+    });
+
+    expect(
+      projection.nodes.find((node) => node.id === "work-type:story")?.data,
+    ).toMatchObject({
+      defaultWorkTypeLabel: "Default work type",
+      isDefaultWorkType: true,
+    });
   });
 
   it("omits workStateType when factory definition is not provided", () => {
@@ -635,5 +665,148 @@ describe("factory graph React Flow projection", () => {
     expect(anchorIds).toContain("workstation-on-rejection-source");
     expect(edgeKinds).toContain("workstation-on-continue");
     expect(edgeKinds).toContain("workstation-on-rejection");
+  });
+
+  it("exposes continue and reject handles when the assigned worker has a stop token", () => {
+    const factoryWithWorkerStopToken = {
+      ...baseFactoryDefinition,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "rejected", type: "FAILED" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workers: [
+        {
+          name: "processor",
+          stopToken: "<COMPLETE>",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations[0],
+          behavior: "STANDARD",
+          onContinue: [{ state: "queued", workType: "story" }],
+          onFailure: [{ state: "rejected", workType: "story" }],
+          onRejection: [{ state: "rejected", workType: "story" }],
+          stopWords: undefined,
+          worker: "processor",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      factoryWithWorkerStopToken,
+    );
+    const workstationResolver = createFactoryGraphWorkstationResolver(
+      factoryWithWorkerStopToken.workstations,
+      factoryWithWorkerStopToken.workers,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      filterEdgesToRenderedHandles: true,
+      topology,
+      workstationResolver,
+    });
+    const anchorIds =
+      projection.nodes
+        .find((node) => node.id === "workstation:draft")
+        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+    const progressOutcomeEdges = projection.edges.filter((edge) =>
+      ["workstation-on-continue", "workstation-on-rejection"].includes(
+        edge.data?.kind ?? "",
+      ),
+    );
+
+    expect(anchorIds).toContain("workstation-on-continue-source");
+    expect(anchorIds).toContain("workstation-on-rejection-source");
+    expect(progressOutcomeEdges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-on-continue:workstation:draft->work-state:story:queued",
+          sourceHandle: "workstation-on-continue-source",
+          targetHandle: "work-state-input-target",
+        }),
+        expect.objectContaining({
+          id: "workstation-on-rejection:workstation:draft->work-state:story:rejected",
+          sourceHandle: "workstation-on-rejection-source",
+          targetHandle: "work-state-input-target",
+        }),
+      ]),
+    );
+  });
+
+  it("highlights compatible continue targets in connect mode when worker stop token enables progress routes", () => {
+    const factoryWithWorkerStopToken = {
+      ...baseFactoryDefinition,
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workers: [
+        {
+          name: "processor",
+          stopToken: "<COMPLETE>",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations[0],
+          behavior: "STANDARD",
+          stopWords: undefined,
+          worker: "processor",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      factoryWithWorkerStopToken,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      editor: {
+        canEditConnections: true,
+        pendingAdditionEdgeIds: new Set<string>(),
+        pendingAdditionNodeIds: new Set<string>(),
+        pendingConnectionSource: {
+          anchorId: "workstation-on-continue-source",
+          nodeId: "workstation:draft",
+        },
+        pendingRemovalEdgeIds: new Set<string>(),
+        pendingRemovalNodeIds: new Set<string>(),
+      },
+      topology,
+      workstationResolver: createFactoryGraphWorkstationResolver(
+        factoryWithWorkerStopToken.workstations,
+        factoryWithWorkerStopToken.workers,
+      ),
+    });
+    const queuedNode = projection.nodes.find(
+      (node) => node.id === "work-state:story:queued",
+    );
+
+    expect(
+      projection.nodes
+        .find((node) => node.id === "workstation:draft")
+        ?.data.connectionAnchors.some(
+          (anchor) => anchor.id === "workstation-on-continue-source",
+        ),
+    ).toBe(true);
+    expect(
+      queuedNode?.data.connectionAnchors.find(
+        (anchor) => anchor.id === "work-state-input-target",
+      ),
+    ).toMatchObject({
+      variant: "valid-target",
+    });
   });
 });

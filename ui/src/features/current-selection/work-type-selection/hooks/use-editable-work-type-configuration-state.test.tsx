@@ -131,6 +131,66 @@ describe("useEditableWorkTypeConfigurationState", () => {
     });
   });
 
+  it("transfers default handling when marking a different work type as default", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        workTypes: [
+          {
+            handlingBehavior: ["DEFAULT"],
+            name: "story",
+            states: [{ name: "queued", type: "INITIAL" }],
+          },
+          {
+            name: "bug",
+            states: [{ name: "open", type: "INITIAL" }],
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkTypeConfigurationState(bugSelection, "bug"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable work type state");
+      }
+      result.current.onHandlingBehaviorChange(["DEFAULT"]);
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      hasValidationErrors: false,
+      isDirty: true,
+      draft: {
+        handlingBehavior: ["DEFAULT"],
+        name: "bug",
+      },
+    });
+
+    if (result.current?.status !== "ready") {
+      return;
+    }
+
+    expect(result.current.pendingFactoryDefinition?.workTypes).toEqual([
+      {
+        name: "story",
+        states: [{ name: "queued", type: "INITIAL" }],
+      },
+      {
+        handlingBehavior: ["DEFAULT"],
+        name: "bug",
+        states: [{ name: "open", type: "INITIAL" }],
+      },
+    ]);
+  });
+
   it("marks the session dirty when handlingBehavior changes", () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: buildFactoryDocument({

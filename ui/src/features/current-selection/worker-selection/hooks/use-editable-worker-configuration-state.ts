@@ -225,6 +225,7 @@ function buildReadyEditableWorkerConfigurationState({
       sessionState.latestDefinitionDraft,
     ),
     pendingFactoryDefinition,
+    savedFactoryDefinition: editableDefinition,
     status: "ready",
     validationErrors,
   };

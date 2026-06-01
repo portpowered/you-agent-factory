@@ -440,6 +440,51 @@ describe("current activity graph editor handles", () => {
     });
   });
 
+  it("marks default work-type nodes from the canonical factory definition", async () => {
+    const factory = {
+      ...loadSampleFactoryDefinition(),
+      workTypes: [
+        {
+          handlingBehavior: ["DEFAULT"],
+          name: "task",
+          states: [{ name: "queued", type: "INITIAL" }],
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    expect(nodes.find((node) => node.id === "work-type:task")?.data).toMatchObject(
+      {
+        isDefaultWorkType: true,
+        kind: "work-type",
+      },
+    );
+  });
+
   it("wires editor-mode work type nodes to onSelectWorkType instead of onSelectWorkstation", async () => {
     const factory = loadSampleFactoryDefinition();
     const snapshot = buildSampleFactorySnapshot(factory);
@@ -494,71 +539,68 @@ describe("current activity graph editor handles", () => {
     ["add", true],
     ["connect", true],
     [null, true],
-  ] as const)(
-    "omits graph node selection callbacks in delete mode and restores them for other tools (activeTool=%s)",
-    async (activeTool, expectSelectionCallbacks) => {
-      const factory = loadSampleFactoryDefinition();
-      const snapshot = buildSampleFactorySnapshot(factory);
-      const graphLayout =
-        await buildCurrentActivityGraphLayoutFromFactory(factory);
-      const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
-      const nodes = buildCurrentActivityNodes({
-        activeExecutionsByWorkstationNodeID: {},
-        activeGraphHighlights: buildActiveGraphHighlights(
-          [],
-          visibleGraphEdges,
-          graphLayout.nodes,
-        ),
-        activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
-        editor: {
-          activeTool,
-          canInteractWithEditor: true,
-          editorMode: true,
-          onConnectionAnchorClick: vi.fn(),
-          pendingConnectionSource: null,
-        },
-        graphLayout,
-        now: Date.parse("2026-05-24T00:00:00Z"),
-        onSelectStateNode: vi.fn(),
-        onSelectWorkID: vi.fn(),
-        onSelectResource: vi.fn(),
-        onSelectWorker: vi.fn(),
-        onSelectWorkType: vi.fn(),
-        onSelectWorkstation: vi.fn(),
-        selection: null,
-        snapshot,
-        storedNodePositions: EMPTY_NODE_POSITIONS,
-      });
+  ] as const)("omits graph node selection callbacks in delete mode and restores them for other tools (activeTool=%s)", async (activeTool, expectSelectionCallbacks) => {
+    const factory = loadSampleFactoryDefinition();
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool,
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
 
-      const workerNode = nodes.find((node) => node.id === "worker:processor");
-      const resourceNode = nodes.find(
-        (node) => node.id === "resource:executor-slot",
-      );
-      const workTypeNode = nodes.find((node) => node.id === "work-type:task");
-      const workStateNode = nodes.find(
-        (node) => node.id === "work-state:task:init",
-      );
-      const workstationNode = nodes.find(
-        (node) => node.id === "workstation:process",
-      );
+    const workerNode = nodes.find((node) => node.id === "worker:processor");
+    const resourceNode = nodes.find(
+      (node) => node.id === "resource:executor-slot",
+    );
+    const workTypeNode = nodes.find((node) => node.id === "work-type:task");
+    const workStateNode = nodes.find(
+      (node) => node.id === "work-state:task:init",
+    );
+    const workstationNode = nodes.find(
+      (node) => node.id === "workstation:process",
+    );
 
-      if (expectSelectionCallbacks) {
-        expect(workerNode?.data).toHaveProperty("onSelectWorker");
-        expect(resourceNode?.data).toHaveProperty("onSelectResource");
-        expect(workTypeNode?.data).toHaveProperty("onSelectWorkType");
-        expect(workStateNode?.data).toHaveProperty("onSelectStateNode");
-        expect(workstationNode?.data).toHaveProperty("onSelectWorkstation");
-        expect(workstationNode?.data).toHaveProperty("onSelectWorkID");
-      } else {
-        expect(workerNode?.data).not.toHaveProperty("onSelectWorker");
-        expect(resourceNode?.data).not.toHaveProperty("onSelectResource");
-        expect(workTypeNode?.data).not.toHaveProperty("onSelectWorkType");
-        expect(workStateNode?.data).not.toHaveProperty("onSelectStateNode");
-        expect(workstationNode?.data).not.toHaveProperty("onSelectWorkstation");
-        expect(workstationNode?.data).not.toHaveProperty("onSelectWorkID");
-      }
-    },
-  );
+    if (expectSelectionCallbacks) {
+      expect(workerNode?.data).toHaveProperty("onSelectWorker");
+      expect(resourceNode?.data).toHaveProperty("onSelectResource");
+      expect(workTypeNode?.data).toHaveProperty("onSelectWorkType");
+      expect(workStateNode?.data).toHaveProperty("onSelectStateNode");
+      expect(workstationNode?.data).toHaveProperty("onSelectWorkstation");
+      expect(workstationNode?.data).toHaveProperty("onSelectWorkID");
+    } else {
+      expect(workerNode?.data).not.toHaveProperty("onSelectWorker");
+      expect(resourceNode?.data).not.toHaveProperty("onSelectResource");
+      expect(workTypeNode?.data).not.toHaveProperty("onSelectWorkType");
+      expect(workStateNode?.data).not.toHaveProperty("onSelectStateNode");
+      expect(workstationNode?.data).not.toHaveProperty("onSelectWorkstation");
+      expect(workstationNode?.data).not.toHaveProperty("onSelectWorkID");
+    }
+  });
 
   it("uses semantic handles for visible worker and resource relationships in editor mode", async () => {
     const factory = {
@@ -1056,7 +1098,7 @@ describe("current activity graph editor handles", () => {
     expect(workstationNode?.data.zAxisIncompleteHints).toBeNull();
   });
 
-  it("keeps hidden continue and reject handles for authored edges without stopWords", async () => {
+  it("renders visible continue and reject handles for authored edges when the assigned worker has stopToken", async () => {
     const factory = loadSampleFactoryDefinition();
     const snapshot = buildSampleFactorySnapshot(factory);
     const graphLayout =
@@ -1097,8 +1139,8 @@ describe("current activity graph editor handles", () => {
     ).toBe(true);
     expect(rejectionHandle).toEqual(
       expect.objectContaining({
-        connectable: false,
-        hidden: true,
+        connectable: true,
+        hidden: undefined,
         id: "workstation-on-rejection-source",
       }),
     );
@@ -1770,8 +1812,15 @@ describe("current activity graph active item labels", () => {
     );
   });
 
-  it("suppresses ON_REJECTION validation on hidden authored reject handles without stopWords", async () => {
-    const factory = loadSampleFactoryDefinition();
+  it("suppresses ON_REJECTION validation on hidden authored reject handles without stop markers", async () => {
+    const sampleFactory = loadSampleFactoryDefinition();
+    const factory = {
+      ...sampleFactory,
+      workers: sampleFactory.workers?.map((worker) => ({
+        ...worker,
+        stopToken: undefined,
+      })),
+    };
     const graphLayout =
       await buildCurrentActivityGraphLayoutFromFactory(factory);
     const validationTargets: FactoryValidationTarget[] = [

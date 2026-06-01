@@ -246,6 +246,43 @@ it("resolves workstation context from factory definitions for handle filtering",
   ).toBe("MODEL_WORKSTATION");
 });
 
+it("resolves assigned worker stop tokens from factory definitions", () => {
+  const factoryWithWorkerStopToken = {
+    ...baseFactoryDefinition,
+    workers: [
+      {
+        name: "processor",
+        stopToken: "<COMPLETE>",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      ...(baseFactoryDefinition.workstations ?? []),
+      {
+        body: "Review the story.",
+        inputs: [],
+        name: "review",
+        outputs: [],
+        type: "MODEL_WORKSTATION",
+        behavior: "STANDARD",
+        worker: "processor",
+      },
+    ],
+  } satisfies CanonicalFactoryDefinition;
+
+  expect(
+    resolveWorkstationConnectionAnchorContext(
+      factoryWithWorkerStopToken,
+      "workstation:review",
+    )?.workstation,
+  ).toEqual(
+    expect.objectContaining({
+      assignedWorkerStopToken: "<COMPLETE>",
+      type: "MODEL_WORKSTATION",
+    }),
+  );
+});
+
 it("builds current-activity workstation nodes without worker-assignment handles on logical-move stations", async () => {
   const graphLayout =
     await buildCurrentActivityGraphLayoutFromFactory(factoryWithLogicalMove);

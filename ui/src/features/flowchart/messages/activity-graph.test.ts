@@ -76,6 +76,7 @@ describe("getActivityGraphMessages", () => {
     );
     expect(messages.activeItemCountLabel(1)).toBe("1 active item");
     expect(messages.activeItemCountLabel(2)).toBe("2 active items");
+    expect(messages.defaultWorkTypeLabel).toBe("Default work type");
   });
 
   it("resolves zh-CN graph labels and count helpers", () => {

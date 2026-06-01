@@ -643,6 +643,13 @@ function buildReadyEditableConfigurationState(overrides?: {
         workers: [],
         workstations: [],
       } as const),
+    savedFactoryDefinition:
+      overrides?.savedFactoryDefinition ??
+      ({
+        name: "Current Factory",
+        workers: [],
+        workstations: [],
+      } as const),
     promptDiagnostics: [],
     promptHelpState: {
       contract: {

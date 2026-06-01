@@ -889,7 +889,7 @@ func TestConfigValidator_WorkTypeHandlingBehavior_RejectsMultipleDefaultWorkType
 	}
 
 	findings := NewConfigValidator().Validate(cfg).Findings
-	assertFindingMatch(t, findings, "work-type-handling-behavior-unique-default", "workTypes", "expected at most one work type with handlingBehavior DEFAULT")
+	assertFindingMatch(t, findings, "work-type-handling-behavior-unique-default", "factory.workTypes", "expected at most one work type with handlingBehavior DEFAULT")
 }
 
 func TestConfigValidator_WorkTypeHandlingBehavior_RequiresDefaultWhenConfigured(t *testing.T) {
@@ -897,7 +897,7 @@ func TestConfigValidator_WorkTypeHandlingBehavior_RequiresDefaultWhenConfigured(
 	cfg.WorkTypes = []interfaces.WorkTypeConfig{{Name: "story", States: testStoryStates()}}
 
 	findings := NewConfigValidator(WithRequireDefaultHandlingWorkType()).Validate(cfg).Findings
-	assertFindingMatch(t, findings, "work-type-handling-behavior-required-default", "workTypes", "expected exactly one work type with handlingBehavior DEFAULT")
+	assertFindingMatch(t, findings, "work-type-handling-behavior-required-default", "factory.workTypes", "expected exactly one work type with handlingBehavior DEFAULT")
 }
 
 func TestConfigValidator_WorkTypeHandlingBehavior_RejectsUnsupportedValues(t *testing.T) {
@@ -909,7 +909,7 @@ func TestConfigValidator_WorkTypeHandlingBehavior_RejectsUnsupportedValues(t *te
 	}}
 
 	findings := NewConfigValidator().Validate(cfg).Findings
-	assertFindingMatch(t, findings, "work-type-handling-behavior-value", `workTypes[0](story).handlingBehavior[0]`, `unsupported handlingBehavior value "PROMPT"`)
+	assertFindingMatch(t, findings, "work-type-handling-behavior-value", `factory.workTypes[0].handlingBehavior[0]`, `unsupported handlingBehavior value "PROMPT"`)
 }
 
 func testStoryStates() []interfaces.StateConfig {

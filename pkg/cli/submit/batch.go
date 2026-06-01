@@ -2,6 +2,7 @@ package submit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -130,34 +132,39 @@ func upsertBatchHTTP(cfg BatchConfig, req interfaces.WorkRequest, body []byte, b
 	)
 
 	started := time.Now()
-	httpReq, err := http.NewRequest(http.MethodPut, endpointURL, bytes.NewReader(body))
+	client := &http.Client{Timeout: submitRequestTimeout}
+	var result factoryapi.UpsertWorkRequestResponse
+	resp, err := clihttp.PutJSONCreated(
+		context.Background(),
+		client,
+		endpointURL,
+		bytes.NewReader(body),
+		&result,
+		clihttp.RequestOptions{
+			Diagnostics:  cfg.Diagnostics,
+			Verbose:      cfg.Verbose,
+			EndpointPath: endpointPath,
+			LogLabel:     "submit batch",
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("build request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s error=unreachable durationMillis=%d", endpointPath, time.Since(started).Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpointURL, err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read response: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusCreated {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody))
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("read response: %w", err)
+		}
 		return batchSubmissionHTTPError(resp.StatusCode, respBody)
 	}
 
-	var result factoryapi.UpsertWorkRequestResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return fmt.Errorf("parse response: %w", err)
+	responseBytes := 0
+	if encoded, marshalErr := json.Marshal(result); marshalErr == nil {
+		responseBytes = len(encoded)
 	}
-	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s status=%d durationMillis=%d responseBytes=%d requestId=%s traceId=%s workCount=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), len(respBody), result.RequestId, result.TraceId, len(result.Works))
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "submit batch response endpointPath=%s status=%d durationMillis=%d responseBytes=%d requestId=%s traceId=%s workCount=%d", endpointPath, resp.StatusCode, time.Since(started).Milliseconds(), responseBytes, result.RequestId, result.TraceId, len(result.Works))
 
 	if cfg.JSON {
 		return printBatchSuccessJSON(cfg.Output, cfg.SessionID, endpointPath, batchSource, req, result)
