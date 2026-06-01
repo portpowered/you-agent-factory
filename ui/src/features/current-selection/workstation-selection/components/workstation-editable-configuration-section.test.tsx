@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { FactoryDefinition } from "../../../../api/factory-definition/api";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
 
@@ -344,7 +345,7 @@ describe("EditableConfigurationSection model workstation fields", () => {
 });
 
 describe("EditableConfigurationSection model workstation save feedback", () => {
-  it("shows validation alert and save success feedback", () => {
+  it("shows validation alert and omits inline save success feedback", () => {
     const { rerender } = render(
       <EditableConfigurationSection
         messages={messages}
@@ -357,6 +358,9 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     );
 
     expandConfiguration();
+    const configurationSection = screen.getByRole("region", {
+      name: messages.editableConfigurationHeading,
+    });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       messages.editableConfigurationValidationStatus,
@@ -366,17 +370,12 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
-        saveState={{
-          status: "success",
-          message: messages.editableConfigurationSaveSuccess,
-        }}
+        saveState={{ status: "success" }}
         state={buildReadyState({ isDirty: false })}
       />,
     );
 
-    expect(
-      screen.getByText(messages.editableConfigurationSaveSuccess),
-    ).toBeInTheDocument();
+    expectNoInlineSaveOutcomesIn(configurationSection);
   });
 
   it("treats prompt-only validation as status instead of alert", () => {
