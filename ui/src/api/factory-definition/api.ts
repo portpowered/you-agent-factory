@@ -187,6 +187,7 @@ const INPUT_GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
   "ALL_CHILDREN_COMPLETE",
   "ANY_CHILD_FAILED",
   "SAME_NAME",
+  "SAME_TRACE_ID",
 ]);
 
 export class FactoryDefinitionAPIError extends Error {

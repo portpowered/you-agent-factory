@@ -97,6 +97,44 @@ const factoryWithWorkerStopToken = {
   ],
 } satisfies CanonicalFactoryDefinition;
 
+const logicalMoveWorkstation: FactoryWorkstation = {
+  body: "Move work downstream.",
+  inputs: [
+    {
+      state: "queued",
+      workType: "story",
+    },
+  ],
+  name: "router",
+  outputs: [
+    {
+      state: "done",
+      workType: "story",
+    },
+  ],
+  resources: [
+    {
+      capacity: 2,
+      name: "gpu",
+    },
+  ],
+  type: "LOGICAL_MOVE",
+  worker: "",
+};
+
+const logicalMoveComparisonTopology: FactoryGraphTopology = {
+  ...PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+  nodes: [
+    ...PROGRESS_OUTCOME_ROUTE_TOPOLOGY.nodes,
+    {
+      id: "workstation:router",
+      key: { kind: "workstation", name: "router" },
+      kind: "workstation",
+      label: "router",
+    },
+  ],
+};
+
 const onRejectionValidationProjection = projectFactoryValidationTargets([
   {
     code: "factory.workstation.missingRejectionRoute",
@@ -121,6 +159,7 @@ function renderProgressOutcomeRouteFlow(
         workstations: readonly FactoryWorkstation[];
       },
   options?: {
+    topology?: FactoryGraphTopology;
     validationProjection?: typeof onRejectionValidationProjection;
   },
 ) {
@@ -133,10 +172,12 @@ function renderProgressOutcomeRouteFlow(
     pendingConnectionSource: null,
     pendingRemovalEdgeIds: new Set<string>(),
     pendingRemovalNodeIds: new Set<string>(),
-    topology: PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+    topology: options?.topology ?? PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
     validationProjection: options?.validationProjection,
     workstations:
-      "workstations" in input ? input.workstations : input.factoryDefinition.workstations,
+      "workstations" in input
+        ? input.workstations
+        : input.factoryDefinition.workstations,
   });
 
   return render(
@@ -156,7 +197,7 @@ function renderProgressOutcomeRouteFlow(
   );
 }
 
-describe("factory graph editor progress outcome route handles", () => {
+function useProgressOutcomeRouteFlowTestHooks() {
   let restoreBrowserTestShims: (() => void) | null = null;
 
   beforeEach(() => {
@@ -168,6 +209,10 @@ describe("factory graph editor progress outcome route handles", () => {
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
   });
+}
+
+describe("factory graph editor progress outcome route handles", () => {
+  useProgressOutcomeRouteFlowTestHooks();
 
   it("hides continue and reject connect handles for standard processors without stopWords", async () => {
     const { container } = renderProgressOutcomeRouteFlow({
@@ -199,9 +244,9 @@ describe("factory graph editor progress outcome route handles", () => {
     expect(
       screen.getByRole("button", { name: "Connect: draft Reject" }),
     ).not.toBeNull();
-    expect(container.querySelectorAll("[data-z-axis-incomplete-hint]")).toHaveLength(
-      0,
-    );
+    expect(
+      container.querySelectorAll("[data-z-axis-incomplete-hint]"),
+    ).toHaveLength(0);
   });
 
   it("shows continue and reject connect handles when stopWords are configured", async () => {
@@ -213,9 +258,9 @@ describe("factory graph editor progress outcome route handles", () => {
     expect(
       screen.getByRole("button", { name: "Connect: draft Reject" }),
     ).not.toBeNull();
-    expect(container.querySelectorAll("[data-z-axis-incomplete-hint]")).toHaveLength(
-      0,
-    );
+    expect(
+      container.querySelectorAll("[data-z-axis-incomplete-hint]"),
+    ).toHaveLength(0);
   });
 
   it("does not show API validation or z-axis hints on omitted continue and reject handles without stopWords", async () => {
@@ -240,9 +285,7 @@ describe("factory graph editor progress outcome route handles", () => {
       ),
     ).toHaveLength(0);
     expect(
-      container.querySelectorAll(
-        '[aria-invalid="true"].ring-af-danger-border',
-      ),
+      container.querySelectorAll('[aria-invalid="true"].ring-af-danger-border'),
     ).toHaveLength(0);
   });
 
@@ -260,5 +303,67 @@ describe("factory graph editor progress outcome route handles", () => {
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
     ).toHaveLength(0);
+  });
+});
+
+describe("factory graph editor logical-move progress outcome route handles", () => {
+  useProgressOutcomeRouteFlowTestHooks();
+
+  it("hides continue, failure, and reject connect handles on logical-move workstations", async () => {
+    renderProgressOutcomeRouteFlow(
+      { workstations: [logicalMoveWorkstation] },
+      { topology: logicalMoveComparisonTopology },
+    );
+
+    await screen.findByRole("button", { name: "Connect: router Success" });
+    expect(
+      screen.getByRole("button", { name: "Connect: router Input" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Connect: router Resource" }),
+    ).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Failure" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Continue" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Reject" }),
+    ).toBeNull();
+  });
+
+  it("keeps standard processor outcome handles when logical-move is on the same graph", async () => {
+    renderProgressOutcomeRouteFlow(
+      {
+        workstations: [
+          standardProcessorWithoutStopWords,
+          logicalMoveWorkstation,
+        ],
+      },
+      { topology: logicalMoveComparisonTopology },
+    );
+
+    await screen.findByRole("button", { name: "Connect: draft Success" });
+    expect(
+      screen.getByRole("button", { name: "Connect: draft Failure" }),
+    ).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: draft Continue" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: draft Reject" }),
+    ).toBeNull();
+
+    await screen.findByRole("button", { name: "Connect: router Success" });
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Failure" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Continue" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect: router Reject" }),
+    ).toBeNull();
   });
 });

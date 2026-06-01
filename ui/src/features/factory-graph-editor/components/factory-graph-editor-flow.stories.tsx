@@ -11,14 +11,14 @@ import type {
   FactoryWorkstation,
 } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphConnectionEndpoint } from "../lib/factory-graph-editor-connections";
-import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-import { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-work-state-phase-legend";
+import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-controls";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "./factory-graph-editor-flow";
+import { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-work-state-phase-legend";
 
 const PENDING_REMOVAL_TOPOLOGY: FactoryGraphTopology = {
   edges: [
@@ -524,8 +524,47 @@ const factoryWithWorkerStopToken = {
   ],
 } satisfies CanonicalFactoryDefinition;
 
+const logicalMoveWorkstation: FactoryWorkstation = {
+  body: "Move work downstream.",
+  inputs: [
+    {
+      state: "queued",
+      workType: "story",
+    },
+  ],
+  name: "router",
+  outputs: [
+    {
+      state: "done",
+      workType: "story",
+    },
+  ],
+  resources: [
+    {
+      capacity: 2,
+      name: "gpu",
+    },
+  ],
+  type: "LOGICAL_MOVE",
+  worker: "",
+};
+
+const logicalMoveComparisonTopology: FactoryGraphTopology = {
+  ...PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+  nodes: [
+    ...PROGRESS_OUTCOME_ROUTE_TOPOLOGY.nodes,
+    {
+      id: "workstation:router",
+      key: { kind: "workstation", name: "router" },
+      kind: "workstation",
+      label: "router",
+    },
+  ],
+};
+
 function ProgressOutcomeRoutesStory(input: {
   factoryDefinition?: CanonicalFactoryDefinition;
+  topology?: FactoryGraphTopology;
   workstations?: readonly FactoryWorkstation[];
 }) {
   const flow = buildFactoryGraphEditorFlowModel({
@@ -536,7 +575,7 @@ function ProgressOutcomeRoutesStory(input: {
     pendingAdditionNodeIds: new Set<string>(),
     pendingRemovalEdgeIds: new Set<string>(),
     pendingRemovalNodeIds: new Set<string>(),
-    topology: PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
+    topology: input.topology ?? PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
     workstations:
       input.workstations ?? input.factoryDefinition?.workstations ?? [],
   });
@@ -557,6 +596,29 @@ function ProgressOutcomeRoutesStory(input: {
       </ReactFlow>
     </div>
   );
+}
+
+async function expectLogicalMoveConnectHandles(
+  canvas: ReturnType<typeof within>,
+) {
+  await expect(
+    canvas.getByRole("button", { name: "Connect: router Success" }),
+  ).toBeVisible();
+  await expect(
+    canvas.getByRole("button", { name: "Connect: router Input" }),
+  ).toBeVisible();
+  await expect(
+    canvas.getByRole("button", { name: "Connect: router Resource" }),
+  ).toBeVisible();
+  await expect(
+    canvas.queryByRole("button", { name: "Connect: router Failure" }),
+  ).toBeNull();
+  await expect(
+    canvas.queryByRole("button", { name: "Connect: router Continue" }),
+  ).toBeNull();
+  await expect(
+    canvas.queryByRole("button", { name: "Connect: router Reject" }),
+  ).toBeNull();
 }
 
 async function expectProgressOutcomeRouteHandles(
@@ -697,8 +759,12 @@ export const WorkStateLifecyclePhases = {
     if (!legend) {
       throw new Error("Expected work state phase legend");
     }
-    await expect(within(legend as HTMLElement).getByText("Initial")).toBeVisible();
-    await expect(within(legend as HTMLElement).getByText("Completed")).toBeVisible();
+    await expect(
+      within(legend as HTMLElement).getByText("Initial"),
+    ).toBeVisible();
+    await expect(
+      within(legend as HTMLElement).getByText("Completed"),
+    ).toBeVisible();
   },
 };
 
@@ -829,6 +895,42 @@ export const ProgressOutcomeRoutesWithWorkerStopToken = {
     await expectProgressOutcomeRouteHandles(canvas, {
       includeContinueAndReject: true,
     });
+    await expectZAxisIncompleteHints(canvasElement, { expectHints: false });
+  },
+};
+
+export const LogicalMoveProgressOutcomeHandles = {
+  render: () => (
+    <ProgressOutcomeRoutesStory
+      topology={logicalMoveComparisonTopology}
+      workstations={[logicalMoveWorkstation]}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByText("router")).toBeVisible();
+    await expectLogicalMoveConnectHandles(canvas);
+    await expectZAxisIncompleteHints(canvasElement, { expectHints: false });
+  },
+};
+
+export const LogicalMoveComparedToStandardProcessor = {
+  render: () => (
+    <ProgressOutcomeRoutesStory
+      topology={logicalMoveComparisonTopology}
+      workstations={[standardProcessorWithoutStopWords, logicalMoveWorkstation]}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByText("draft")).toBeVisible();
+    await expect(canvas.getByText("router")).toBeVisible();
+    await expectProgressOutcomeRouteHandles(canvas, {
+      includeContinueAndReject: false,
+    });
+    await expectLogicalMoveConnectHandles(canvas);
     await expectZAxisIncompleteHints(canvasElement, { expectHints: false });
   },
 };

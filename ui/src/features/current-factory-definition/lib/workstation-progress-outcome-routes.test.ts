@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   workstationHasZAxisIncompleteForConnections,
+  workstationSupportsProgressOutcomeFailureRoute,
   workstationSupportsProgressOutcomeRoutes,
 } from "./workstation-progress-outcome-routes";
 
@@ -71,6 +72,14 @@ describe("workstationSupportsProgressOutcomeRoutes", () => {
     ).toBe(false);
   });
 
+  it("returns false for logical-move workstations", () => {
+    expect(
+      workstationSupportsProgressOutcomeRoutes({
+        type: "LOGICAL_MOVE",
+      }),
+    ).toBe(false);
+  });
+
   it("returns true for a standard model processor with a trimmed worker stopToken", () => {
     expect(
       workstationSupportsProgressOutcomeRoutes({
@@ -125,6 +134,35 @@ describe("workstationSupportsProgressOutcomeRoutes", () => {
         assignedWorkerStopToken: undefined,
       }),
     ).toBe(false);
+  });
+});
+
+describe("workstationSupportsProgressOutcomeFailureRoute", () => {
+  it("returns false for logical-move workstations", () => {
+    expect(
+      workstationSupportsProgressOutcomeFailureRoute({
+        type: "LOGICAL_MOVE",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true for a standard model processor without stopWords", () => {
+    expect(
+      workstationSupportsProgressOutcomeFailureRoute({
+        type: "MODEL_WORKSTATION",
+        behavior: "STANDARD",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for a standard model processor with stopWords", () => {
+    expect(
+      workstationSupportsProgressOutcomeFailureRoute({
+        type: "MODEL_WORKSTATION",
+        behavior: "STANDARD",
+        stopWords: ["DONE"],
+      }),
+    ).toBe(true);
   });
 });
 

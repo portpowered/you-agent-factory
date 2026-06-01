@@ -317,9 +317,13 @@ async function runSessionSwitchClearsDirtyEditorScenario(preview) {
 
     await enterGraphEditor(browserPage.page);
     await addUnsavedWorkType(browserPage.page, "essay");
-    expect(
-      await browserPage.page.getByTestId("rf__node-work-type:essay").count(),
-    ).toBe(1);
+    await expect
+      .poll(
+        async () =>
+          await browserPage.page.getByTestId("rf__node-work-type:essay").count(),
+        { timeout: uiInteractionTimeoutMs },
+      )
+      .toBe(1);
 
     await betaTab.click();
     await expect
