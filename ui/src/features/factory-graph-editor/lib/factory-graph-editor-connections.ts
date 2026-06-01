@@ -1,7 +1,10 @@
-import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
-import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
+import {
+  type WorkstationProgressOutcomeRouteContext,
+  workstationSupportsProgressOutcomeRoutes,
+} from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
+import { appendUniqueFactoryGraphEdgeChange } from "./factory-graph-draft-edge-changes";
 import type {
   FactoryGraphDraft,
   FactoryGraphDraftEdgeChange,
@@ -218,7 +221,10 @@ export function getFactoryGraphConnectionAnchors(
   return filterWorkstationConnectionAnchors(anchors, context);
 }
 
-export { workstationRendersProgressOutcomeHandleValidation, workstationRendersProgressOutcomeZAxisHintAnchors } from "./factory-graph-progress-outcome-handle-visibility";
+export {
+  workstationRendersProgressOutcomeHandleValidation,
+  workstationRendersProgressOutcomeZAxisHintAnchors,
+} from "./factory-graph-progress-outcome-handle-visibility";
 
 export function getLocalizedFactoryGraphConnectionAnchors(
   kind: FactoryGraphNodeKind,
@@ -389,7 +395,7 @@ export function applyFactoryGraphEdgeAddition(
     );
   }
 
-  nextDraft.edgeChanges.additions = appendUniqueEdgeChange(
+  nextDraft.edgeChanges.additions = appendUniqueFactoryGraphEdgeChange(
     nextDraft.edgeChanges.additions,
     edgeChange,
   );
@@ -423,7 +429,7 @@ export function applyFactoryGraphEdgeRemoval(
     return nextDraft;
   }
 
-  nextDraft.edgeChanges.removals = appendUniqueEdgeChange(
+  nextDraft.edgeChanges.removals = appendUniqueFactoryGraphEdgeChange(
     nextDraft.edgeChanges.removals,
     {
       kind: edge.kind,
@@ -472,15 +478,3 @@ export function buildFactoryGraphConnectionNotice(options: {
     options.targetNode.label,
   );
 }
-
-function appendUniqueEdgeChange(
-  edges: FactoryGraphDraftEdgeChange[],
-  edgeChange: FactoryGraphDraftEdgeChange,
-) {
-  const nextEdgeId = edgeChangeId(edgeChange);
-  if (edges.some((entry) => edgeChangeId(entry) === nextEdgeId)) {
-    return edges;
-  }
-  return [...edges, edgeChange];
-}
-
