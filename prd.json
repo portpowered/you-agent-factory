@@ -80,7 +80,7 @@
         "Verify in browser: select a resource, dirty a field, confirm header save/discard only"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
