@@ -55,6 +55,49 @@ func TestValidateEditableFactoryTopology_ValidFactory_NoError(t *testing.T) {
 	}
 }
 
+func TestValidateEditableFactoryTopology_RejectsDuplicateDefaultHandlingWorkTypes(t *testing.T) {
+	t.Parallel()
+
+	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
+	}
+	if factory.WorkTypes == nil || len(*factory.WorkTypes) < 1 {
+		t.Fatal("expected alpha fixture work types")
+	}
+	defaultBehavior := factoryapi.WorkTypeHandlingBehaviorDefault
+	(*factory.WorkTypes)[0].HandlingBehavior = &[]factoryapi.WorkTypeHandlingBehavior{defaultBehavior}
+	second := (*factory.WorkTypes)[0]
+	second.Name = "second-default"
+	second.HandlingBehavior = &[]factoryapi.WorkTypeHandlingBehavior{defaultBehavior}
+	*factory.WorkTypes = append(*factory.WorkTypes, second)
+
+	saveErr := validateEditableFactoryTopology(factory, nil)
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(saveErr, &topologyErr) {
+		t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
+	}
+	validationassert.HasTargetCode(t, topologyErr.Targets, factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault)
+}
+
+func TestValidateEditableFactoryTopology_AllowsSingleDefaultHandlingWorkType(t *testing.T) {
+	t.Parallel()
+
+	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
+	}
+	if factory.WorkTypes == nil || len(*factory.WorkTypes) < 1 {
+		t.Fatal("expected alpha fixture work types")
+	}
+	defaultBehavior := factoryapi.WorkTypeHandlingBehaviorDefault
+	(*factory.WorkTypes)[0].HandlingBehavior = &[]factoryapi.WorkTypeHandlingBehavior{defaultBehavior}
+
+	if err := validateEditableFactoryTopology(factory, nil); err != nil {
+		t.Fatalf("validateEditableFactoryTopology: %v", err)
+	}
+}
+
 func TestValidateUpsertNamedFactoryRequest_RejectsInvalidFactoryName(t *testing.T) {
 	t.Parallel()
 

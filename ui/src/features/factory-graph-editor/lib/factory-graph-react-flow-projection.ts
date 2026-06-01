@@ -28,6 +28,7 @@ import {
   resolveFactoryGraphConnectionAnchorContext,
 } from "./factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
+import { workTypeHasDefaultHandling } from "../../current-factory-definition/lib/work-type-default-handling";
 import {
   workstationRendersProgressOutcomeHandleValidation,
   workstationRendersProgressOutcomeZAxisHintAnchors,
@@ -52,8 +53,10 @@ export type FactoryGraphReactFlowNode = Node<
     canEditConnections: boolean;
     connectionAnchors: ActivityGraphNodeHandle[];
     connectionHint: string;
+    defaultWorkTypeLabel?: string;
     draftStatus: "addition" | "none" | "removal";
     focused: boolean;
+    isDefaultWorkType?: boolean;
     kind: FactoryGraphNodeKind;
     kindLabel: string;
     label: string;
@@ -181,6 +184,10 @@ export function projectFactoryGraphToReactFlow(
         node.kind === "work-state" && node.key.kind === "work-state"
           ? resolveWorkStateTypeForGraphNode(input.factoryDefinition, node.key)
           : undefined;
+      const isDefaultWorkType =
+        node.kind === "work-type"
+          ? workTypeHasDefaultHandling(input.factoryDefinition, node.label)
+          : false;
 
       return {
         className: nodeClassName(node.id, input),
@@ -197,6 +204,12 @@ export function projectFactoryGraphToReactFlow(
             workstationResolver: input.workstationResolver,
           }),
           connectionHint: messages.flowConnectionHint,
+          ...(isDefaultWorkType
+            ? {
+                defaultWorkTypeLabel: messages.defaultWorkTypeLabel,
+                isDefaultWorkType: true,
+              }
+            : {}),
           draftStatus: draftStatusForNode(node.id, input.editor),
           focused: input.runtime?.focusedNodeIds?.has(node.id) ?? false,
           kind: node.kind,

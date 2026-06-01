@@ -158,6 +158,35 @@ describe("factory graph React Flow projection", () => {
     ).not.toHaveProperty("workStateType");
   });
 
+  it("marks default work-type nodes from the canonical factory definition", () => {
+    const factoryDefinition = {
+      ...baseFactoryDefinition,
+      workTypes: [
+        {
+          handlingBehavior: ["DEFAULT"],
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(factoryDefinition);
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition,
+      topology,
+    });
+
+    expect(
+      projection.nodes.find((node) => node.id === "work-type:story")?.data,
+    ).toMatchObject({
+      defaultWorkTypeLabel: "Default work type",
+      isDefaultWorkType: true,
+    });
+  });
+
   it("omits workStateType when factory definition is not provided", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,

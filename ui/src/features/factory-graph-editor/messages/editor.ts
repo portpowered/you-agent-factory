@@ -46,6 +46,7 @@ export interface FactoryGraphEditorMessages {
     targetNode: string,
   ) => string;
   connectionSelectSourceNotice: string;
+  defaultWorkTypeLabel: string;
   draftActionsAriaLabel: string;
   draftActionsDiscard: string;
   draftActionsSave: string;
@@ -473,6 +474,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `${sourceAnchor} connections from ${sourceNode} cannot connect to ${targetAnchor} on ${targetNode}.`,
       connectionSelectSourceNotice:
         "Select a source anchor before choosing a target anchor.",
+      defaultWorkTypeLabel: "Default work type",
       draftActionsAriaLabel: "Pending graph changes",
       draftActionsDiscard: "Discard changes",
       draftActionsSave: "Save changes",
@@ -803,6 +805,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       ) =>
         `${sourceNode} 的${sourceAnchor}连接不能连接到 ${targetNode} 上的${targetAnchor}。`,
       connectionSelectSourceNotice: "请先选择源锚点，再选择目标锚点。",
+      defaultWorkTypeLabel: "默认工作类型",
       draftActionsAriaLabel: "待处理图更改",
       draftActionsDiscard: "放弃更改",
       draftActionsSave: "保存更改",

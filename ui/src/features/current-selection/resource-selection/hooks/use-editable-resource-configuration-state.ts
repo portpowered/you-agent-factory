@@ -217,6 +217,7 @@ function buildReadyEditableResourceConfigurationState({
       sessionState.latestDefinitionDraft,
     ),
     pendingFactoryDefinition,
+    savedFactoryDefinition: editableDefinition,
     status: "ready",
     validationErrors,
   };

@@ -81,6 +81,7 @@ export type EditableWorkerConfigurationState =
       onTypeChange: (value: EditableWorkerDraft["type"]) => void;
       overwriteFieldNames: EditableWorkerOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      savedFactoryDefinition: CanonicalFactoryDefinition;
       status: "ready";
       validationErrors: EditableWorkerValidationErrors;
     };

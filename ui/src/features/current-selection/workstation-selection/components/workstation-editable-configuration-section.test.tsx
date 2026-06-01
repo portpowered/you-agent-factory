@@ -1,132 +1,17 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { FactoryDefinition } from "../../../../api/factory-definition/api";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
-import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
+import {
+  buildEditableConfigurationSectionReadyState,
+  editableConfigurationSectionMessages,
+  expandEditableConfigurationSection,
+} from "./workstation-editable-configuration-section.test-helpers";
 
-const messages = getWorkstationDetailMessages();
-
-function expandConfiguration() {
-  fireEvent.click(
-    screen.getByRole("button", { name: "Expand editable configuration" }),
-  );
-}
-
-function buildReadyState(
-  overrides?: Partial<{
-    draft: {
-      behavior?: "STANDARD" | "REPEATER" | "POLLER";
-      guards: Array<{
-        type: "VISIT_COUNT";
-        workstation: string;
-        maxVisits: number;
-      }>;
-      prompt?: string;
-      runnerName?: string;
-    };
-    hasValidationErrors: boolean;
-    initialValues: Partial<{
-      sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
-    }>;
-    isDirty: boolean;
-    pendingFactoryDefinition: FactoryDefinition | null;
-    promptDiagnostics: Array<{ message: string; severity: "error" }>;
-    validationErrors: Record<string, string | undefined>;
-    workerOptionsState:
-      | { status: "ready"; options: string[] }
-      | { message: string; status: "empty" | "error" };
-    overwriteFieldNames: Array<"worker" | "prompt" | "behavior" | "runner">;
-    workstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
-  }>,
-) {
-  return {
-    draft: {
-      behavior: overrides?.draft?.behavior ?? ("STANDARD" as const),
-      guards: overrides?.draft?.guards ?? [],
-      inputs: [],
-      prompt: overrides?.draft?.prompt ?? "Review prompt",
-      runnerName: overrides?.draft?.runnerName ?? "gemini",
-      workerName: "reviewer",
-    },
-    hasValidationErrors: overrides?.hasValidationErrors ?? false,
-    initialValues: {
-      behavior: "STANDARD" as const,
-      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"] as const,
-      effectiveRunnerName: "gemini",
-      factoryRunnerName: "codex",
-      guards: [],
-      inputs: [],
-      prompt: "Review prompt",
-      resolvedRunnerSelection: {
-        runnerId: "gemini",
-        source: "workstation" as const,
-      },
-      runnerName: "gemini",
-      runnerOptions: ["codex", "gemini"],
-      runnerSelectionSource: "workstation" as const,
-      sharedWorkerWorkstationNames: [],
-      sharedWorkerWorkstationNamesByWorkerName:
-        overrides?.initialValues?.sharedWorkerWorkstationNamesByWorkerName ??
-        {},
-      workerModelProvider: null,
-      workerName: "reviewer",
-      workerOptions: ["reviewer", "planner"],
-      workerTypeByName: {
-        planner: "MODEL_WORKER" as const,
-        reviewer: "MODEL_WORKER" as const,
-      },
-      workstationName: "Review",
-      workstationOptions: ["Plan", "Review"],
-      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
-    },
-    isDirty: overrides?.isDirty ?? false,
-    markChangesSaved: vi.fn(),
-    baseVersion: { logical: "1", physical: "2026-06-01T00:00:00Z" },
-    onBehaviorChange: vi.fn(),
-    onGuardsChange: vi.fn(),
-    onInputsChange: vi.fn(),
-    onPromptChange: vi.fn(),
-    onResetToLatest: vi.fn(),
-    onRunnerChange: vi.fn(),
-    onWorkerChange: vi.fn(),
-    overwriteFieldNames: overrides?.overwriteFieldNames ?? [],
-    pendingFactoryDefinition:
-      overrides?.pendingFactoryDefinition === undefined
-        ? ({ workstations: [] } as unknown as FactoryDefinition)
-        : overrides.pendingFactoryDefinition,
-    promptDiagnostics: overrides?.promptDiagnostics ?? [],
-    promptHelpState: { status: "empty" as const, message: "No prompt help." },
-    promptValidationState:
-      overrides?.promptDiagnostics && overrides.promptDiagnostics.length > 0
-        ? {
-            diagnostics: overrides.promptDiagnostics,
-            result: {
-              diagnostics: overrides.promptDiagnostics,
-              valid: false,
-            },
-            status: "ready" as const,
-          }
-        : {
-            diagnostics: [],
-            result: { diagnostics: [], valid: true },
-            status: "ready" as const,
-          },
-    status: "ready" as const,
-    validationErrors: overrides?.validationErrors ?? {},
-    workerOptionsState: overrides?.workerOptionsState ?? {
-      options: ["reviewer", "planner"],
-      status: "ready" as const,
-    },
-    workstationOptionsState: {
-      options: ["Plan", "Review"],
-      status: "ready" as const,
-    },
-  };
-}
+const messages = editableConfigurationSectionMessages;
 
 describe("EditableConfigurationSection async states", () => {
   it("shows loading, error, and empty copy when expanded", () => {
@@ -137,7 +22,7 @@ describe("EditableConfigurationSection async states", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(
       screen.getByText(
         "Loading the current factory definition for this workstation.",
@@ -175,13 +60,13 @@ describe("EditableConfigurationSection footer save controls", () => {
         messages={messages}
         onSaveConfiguration={onSaveConfiguration}
         state={{
-          ...buildReadyState({ isDirty: true }),
+          ...buildEditableConfigurationSectionReadyState({ isDirty: true }),
           onResetToLatest,
         }}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     const saveButton = screen.getByRole("button", { name: "Save changes" });
     expect(saveButton).toBeEnabled();
@@ -198,21 +83,21 @@ describe("EditableConfigurationSection footer save controls", () => {
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           hasValidationErrors: true,
           isDirty: true,
         })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
 
     rerender(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
-        state={buildReadyState({ isDirty: false })}
+        state={buildEditableConfigurationSectionReadyState({ isDirty: false })}
       />,
     );
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
@@ -224,7 +109,7 @@ describe("EditableConfigurationSection worker options", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           workerOptionsState: {
             message: "No workers are configured in this factory.",
             status: "empty",
@@ -233,7 +118,7 @@ describe("EditableConfigurationSection worker options", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(
       screen.getByText("No workers are configured in this factory."),
     ).toBeInTheDocument();
@@ -243,7 +128,7 @@ describe("EditableConfigurationSection worker options", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           workerOptionsState: {
             message: "Worker list failed to load.",
             status: "error",
@@ -252,7 +137,7 @@ describe("EditableConfigurationSection worker options", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Worker selection unavailable. Worker list failed to load.",
     );
@@ -262,11 +147,11 @@ describe("EditableConfigurationSection worker options", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState()}
+        state={buildEditableConfigurationSectionReadyState()}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
     expect(screen.getByLabelText("Worker")).toHaveValue("reviewer");
   });
 });
@@ -276,13 +161,13 @@ describe("EditableConfigurationSection logical move workstations", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           workstationType: "LOGICAL_MOVE",
         })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(screen.queryByLabelText("Worker")).not.toBeInTheDocument();
     expect(screen.getByText("Workstation guards")).toBeInTheDocument();
@@ -299,13 +184,13 @@ describe("EditableConfigurationSection model workstation fields", () => {
       <EditableConfigurationSection
         messages={messages}
         state={{
-          ...buildReadyState(),
+          ...buildEditableConfigurationSectionReadyState(),
           onBehaviorChange,
         }}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(screen.getByLabelText("Kind")).toHaveValue("STANDARD");
     expect(screen.getByLabelText("Runner")).toBeInTheDocument();
@@ -319,7 +204,7 @@ describe("EditableConfigurationSection model workstation fields", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           initialValues: {
             sharedWorkerWorkstationNamesByWorkerName: {
               reviewer: ["Plan"],
@@ -329,7 +214,7 @@ describe("EditableConfigurationSection model workstation fields", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(
       screen.getByText(/Worker reviewer is also used by Plan/i),
@@ -340,13 +225,13 @@ describe("EditableConfigurationSection model workstation fields", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           overwriteFieldNames: ["worker", "behavior", "runner", "prompt"],
         })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(
       screen.getAllByText(messages.editableConfigurationServerFieldChangedHint),
@@ -360,14 +245,14 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           hasValidationErrors: true,
           validationErrors: { workerName: "Select a worker." },
         })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       messages.editableConfigurationValidationStatus,
@@ -383,11 +268,13 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
           status: "success",
           message: messages.editableConfigurationSaveSuccess,
         }}
-        state={buildReadyState({ isDirty: false })}
+        state={buildEditableConfigurationSectionReadyState({
+          isDirty: false,
+        })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expectNoInlineSaveOutcomesIn(
       container.querySelector("section") as HTMLElement,
@@ -401,7 +288,7 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
           errorMessage: "The current factory rejected the workstation update.",
           status: "error",
         }}
-        state={buildReadyState({ isDirty: true })}
+        state={buildEditableConfigurationSectionReadyState({ isDirty: true })}
       />,
     );
 
@@ -414,7 +301,7 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           hasValidationErrors: true,
           isDirty: true,
           promptDiagnostics: [
@@ -425,7 +312,7 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(
       screen.getByText(messages.editableConfigurationPromptDiagnosticsHeading),
@@ -447,11 +334,11 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
         messages={messages}
         onSaveConfiguration={() => undefined}
         saveState={{ status: "submitting" }}
-        state={buildReadyState({ isDirty: true })}
+        state={buildEditableConfigurationSectionReadyState({ isDirty: true })}
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
     expect(
@@ -474,7 +361,7 @@ describe("EditableConfigurationSection overwrite and field errors", () => {
           status: "error",
           message: "Saving failed.",
         }}
-        state={buildReadyState({
+        state={buildEditableConfigurationSectionReadyState({
           draft: {
             guards: [
               {
@@ -490,7 +377,7 @@ describe("EditableConfigurationSection overwrite and field errors", () => {
       />,
     );
 
-    expandConfiguration();
+    expandEditableConfigurationSection();
 
     expect(
       screen.getByText(/Saving now will overwrite newer server values/i),

@@ -35,6 +35,8 @@ import type {
   WorkstationSummaryProps,
 } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { EditableConfigurationServerChangedHint } from "./editable-configuration-server-changed-hint";
+import { EditableConfigurationCronFields } from "./workstation-cron-fields";
 import { EditableConfigurationWorkstationGuardsField } from "./workstation-guards-field";
 import { EditableConfigurationWorkstationInputGuardsField } from "./workstation-input-guards-field";
 import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
@@ -218,6 +220,10 @@ function EditableConfigurationReadyForm({
               />
             }
           />
+          <EditableConfigurationCronFields
+            messages={messages}
+            state={renderState}
+          />
           <EditableConfigurationField
             fieldId="editable-workstation-runner"
             errorMessage={validationErrors.runnerName}
@@ -304,6 +310,10 @@ function hasOnlyPromptBlockingValidationErrors(
     promptDiagnostics.length > 0 &&
     Boolean(validationErrors.prompt) &&
     !validationErrors.behavior &&
+    !validationErrors.cronExpiryWindow &&
+    !validationErrors.cronJitter &&
+    !validationErrors.cronSchedule &&
+    !validationErrors.cronTriggerAtStart &&
     !validationErrors.runnerName &&
     !validationErrors.workerName
   );
@@ -501,34 +511,6 @@ function resolveSharedWorkerWorkstationNames(
     state.initialValues.sharedWorkerWorkstationNamesByWorkerName[
       state.draft.workerName
     ] ?? []
-  );
-}
-
-function EditableConfigurationServerChangedHint({
-  fieldName,
-  messages,
-  state,
-}: {
-  fieldName: EditableWorkstationOverwriteField;
-  messages: ReturnType<typeof getWorkstationDetailMessages>;
-  state: Extract<
-    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
-    { status: "ready" }
-  >;
-}) {
-  if (!state.overwriteFieldNames.includes(fieldName)) {
-    return null;
-  }
-
-  return (
-    <p
-      className={cn(
-        "m-0 text-af-warning-text",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
-    >
-      {messages.editableConfigurationServerFieldChangedHint}
-    </p>
   );
 }
 

@@ -1,3 +1,4 @@
+import { validateEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/editable-workstation-cron-validation";
 import {
   workerSupportsPollerBehavior,
   workstationBehaviorRequiresPrompt,
@@ -45,6 +46,10 @@ export function validateEditableWorkstationDraft(
     | "editableConfigurationInputGuardParentInputInvalid"
     | "editableConfigurationInputGuardParentInputSelfReference"
     | "editableConfigurationInputGuardSpawnedByInvalid"
+    | "editableConfigurationCronExpiryWindowInvalid"
+    | "editableConfigurationCronJitterInvalid"
+    | "editableConfigurationCronScheduleInvalid"
+    | "editableConfigurationCronScheduleRequired"
   > = getWorkstationDetailMessages(undefined),
 ): EditableWorkstationValidationErrors {
   const validationErrors: EditableWorkstationValidationErrors = {};
@@ -100,15 +105,31 @@ export function validateEditableWorkstationDraft(
     validationErrors.prompt = messages.editableConfigurationPromptFieldHint;
   }
 
+  const guardValidationErrors = validateEditableWorkstationGuardDraft(
+    draft,
+    {
+      workstationOptions: selectedEditableValues?.workstationOptions ?? [],
+    },
+    messages,
+  );
+
+  if (draft.behavior === "CRON") {
+    Object.assign(
+      validationErrors,
+      validateEditableWorkstationCronDraft(draft.cron, {
+        cronExpiryWindowInvalid:
+          messages.editableConfigurationCronExpiryWindowInvalid,
+        cronJitterInvalid: messages.editableConfigurationCronJitterInvalid,
+        cronScheduleInvalid: messages.editableConfigurationCronScheduleInvalid,
+        cronScheduleRequired:
+          messages.editableConfigurationCronScheduleRequired,
+      }),
+    );
+  }
+
   return {
     ...validationErrors,
-    ...validateEditableWorkstationGuardDraft(
-      draft,
-      {
-        workstationOptions: selectedEditableValues?.workstationOptions ?? [],
-      },
-      messages,
-    ),
+    ...guardValidationErrors,
   };
 }
 

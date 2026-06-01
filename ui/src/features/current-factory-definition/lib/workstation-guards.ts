@@ -161,6 +161,24 @@ export function editableWorkstationInputsDraftEqual(
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function editableWorkstationCronDraftsEqualOrNull(
+  left: EditableWorkstationDraft["cron"],
+  right: EditableWorkstationDraft["cron"],
+): boolean {
+  if (left === null && right === null) {
+    return true;
+  }
+  if (left === null || right === null) {
+    return false;
+  }
+  return (
+    left.schedule === right.schedule &&
+    left.triggerAtStart === right.triggerAtStart &&
+    left.jitter === right.jitter &&
+    left.expiryWindow === right.expiryWindow
+  );
+}
+
 export function editableWorkstationDraftsEqual(
   left: EditableWorkstationDraft,
   right: EditableWorkstationDraft,
@@ -170,6 +188,7 @@ export function editableWorkstationDraftsEqual(
     left.prompt === right.prompt &&
     left.runnerName === right.runnerName &&
     left.workerName === right.workerName &&
+    editableWorkstationCronDraftsEqualOrNull(left.cron, right.cron) &&
     guardsDraftEqual(left.guards, right.guards) &&
     editableWorkstationInputsDraftEqual(left.inputs, right.inputs)
   );

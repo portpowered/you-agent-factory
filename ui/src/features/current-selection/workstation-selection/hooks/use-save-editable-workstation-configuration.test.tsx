@@ -314,6 +314,154 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     expect(result.current.canSave).toBe(true);
   });
 
+  it("does not open save confirmation when cron validation errors block save", () => {
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            behavior: "CRON",
+            cron: {
+              expiryWindow: "bad",
+              jitter: "bad",
+              schedule: "",
+            },
+            hasValidationErrors: true,
+            pendingFactoryDefinition: null,
+            validationErrors: {
+              cronSchedule: "cron workstation requires non-empty 'schedule'",
+            },
+          }),
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    expect(result.current.canSave).toBe(false);
+
+    act(() => {
+      result.current.beginSaveConfirmation();
+    });
+
+    expect(result.current.saveState).toEqual({ status: "idle" });
+  });
+
+  it("saves modified cron.schedule through the scoped running-factory save payload", async () => {
+    const saveAsync = vi.fn().mockResolvedValue({
+      name: "Current Factory",
+      version: {
+        logical: "8",
+        physical: "2026-05-23T15:52:00.001Z",
+      },
+      workers: [
+        {
+          model: "gpt-5.5",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          behavior: "CRON",
+          body: "",
+          cron: {
+            schedule: "0 9 * * *",
+            triggerAtStart: true,
+          },
+          id: "daily-refresh",
+          name: "Daily Refresh",
+          worker: "reviewer",
+        },
+      ],
+    });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
+      isPending: false,
+      saveAsync,
+    } as never);
+    const markChangesSaved = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            behavior: "CRON",
+            cron: {
+              schedule: "0 9 * * *",
+              triggerAtStart: true,
+            },
+            markChangesSaved,
+            pendingFactoryDefinition: {
+              name: "Current Factory",
+              workers: [
+                {
+                  model: "gpt-5.5",
+                  name: "reviewer",
+                  type: "MODEL_WORKER",
+                },
+              ],
+              workstations: [
+                {
+                  behavior: "CRON",
+                  body: "",
+                  cron: {
+                    schedule: "0 9 * * *",
+                    triggerAtStart: true,
+                  },
+                  id: "daily-refresh",
+                  name: "Daily Refresh",
+                  worker: "reviewer",
+                },
+              ],
+            },
+            prompt: "",
+          }),
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    act(() => {
+      result.current.beginSaveConfirmation();
+    });
+
+    await act(async () => {
+      await result.current.confirmSave();
+    });
+
+    expect(saveAsync).toHaveBeenCalledWith({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      factory: {
+        name: "Current Factory",
+        workers: [
+          {
+            model: "gpt-5.5",
+            name: "reviewer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [
+          {
+            behavior: "CRON",
+            body: "",
+            cron: {
+              schedule: "0 9 * * *",
+              triggerAtStart: true,
+            },
+            id: "daily-refresh",
+            name: "Daily Refresh",
+            worker: "reviewer",
+          },
+        ],
+      },
+    });
+    expect(markChangesSaved).toHaveBeenCalledTimes(1);
+  });
+
   it("maps targeted save validation failures onto workstation field errors", async () => {
     const saveAsync = vi.fn().mockRejectedValue(
       new CurrentFactoryDefinitionError(
@@ -388,7 +536,13 @@ function createQueryClientWrapper() {
 }
 
 function buildReadyEditableConfigurationState(overrides?: {
-  behavior?: "STANDARD" | "REPEATER" | "POLLER";
+  behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
+  cron?: {
+    expiryWindow?: string;
+    jitter?: string;
+    schedule: string;
+    triggerAtStart?: boolean;
+  };
   hasValidationErrors?: boolean;
   markChangesSaved?: () => void;
   pendingFactoryDefinition?: EditableWorkstationConfigurationState extends {
@@ -411,9 +565,21 @@ function buildReadyEditableConfigurationState(overrides?: {
     { status: "ready" }
   >["validationErrors"];
 }): EditableWorkstationConfigurationState {
+  const behavior = overrides?.behavior ?? "STANDARD";
+  const cron =
+    behavior === "CRON"
+      ? {
+          expiryWindow: overrides?.cron?.expiryWindow ?? "",
+          jitter: overrides?.cron?.jitter ?? "",
+          schedule: overrides?.cron?.schedule ?? "0 0 * * *",
+          triggerAtStart: overrides?.cron?.triggerAtStart ?? false,
+        }
+      : null;
+
   return {
     draft: {
-      behavior: overrides?.behavior ?? "STANDARD",
+      behavior,
+      cron,
       guards: [],
       inputs: [],
       prompt: overrides?.prompt ?? "Review the story.",
@@ -422,8 +588,12 @@ function buildReadyEditableConfigurationState(overrides?: {
     },
     hasValidationErrors: overrides?.hasValidationErrors ?? false,
     initialValues: {
-      behavior: "STANDARD",
-      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      behavior,
+      behaviorOptions:
+        behavior === "CRON"
+          ? ["CRON"]
+          : ["STANDARD", "REPEATER", "POLLER"],
+      cron,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: overrides?.prompt ?? "Review the story.",
@@ -468,6 +638,13 @@ function buildReadyEditableConfigurationState(overrides?: {
     overwriteFieldNames: [],
     pendingFactoryDefinition:
       overrides?.pendingFactoryDefinition ??
+      ({
+        name: "Current Factory",
+        workers: [],
+        workstations: [],
+      } as const),
+    savedFactoryDefinition:
+      overrides?.savedFactoryDefinition ??
       ({
         name: "Current Factory",
         workers: [],

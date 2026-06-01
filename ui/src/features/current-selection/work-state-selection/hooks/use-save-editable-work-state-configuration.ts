@@ -21,6 +21,7 @@ interface UseSaveEditableWorkStateConfigurationOptions {
 
 export interface UseSaveEditableWorkStateConfigurationResult {
   canSave: boolean;
+  lastSuccessfulSaveWasTopologyAffecting: boolean;
   save: () => Promise<void>;
   saveAttemptRevision: number;
   saveMutationError: CurrentFactoryDefinitionError | null;
@@ -38,8 +39,14 @@ export function useSaveEditableWorkStateConfiguration({
     editableConfigurationState?.status === "ready" &&
     editableConfigurationState.isDirty;
 
-  const { error: saveMutationError, isPending, saveAttemptRevision, saveNow, saveState } =
-    useScopedFactoryDocumentSave<EditableWorkStateSaveValidationErrors>({
+  const {
+    error: saveMutationError,
+    isPending,
+    lastSuccessfulSaveWasTopologyAffecting,
+    saveAttemptRevision,
+    saveNow,
+    saveState,
+  } = useScopedFactoryDocumentSave<EditableWorkStateSaveValidationErrors>({
       fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
       isDirty,
       mapSaveErrorToFieldErrors: resolveSaveFieldErrors,
@@ -67,6 +74,7 @@ export function useSaveEditableWorkStateConfiguration({
     await saveNow({
       baseVersion: editableConfigurationState.baseVersion,
       factory: editableConfigurationState.pendingFactoryDefinition,
+      previousFactory: editableConfigurationState.savedFactoryDefinition,
       onSaved: () => {
         editableConfigurationState.markChangesSaved();
         const savedStateName = editableConfigurationState.draft.name.trim();
@@ -88,12 +96,20 @@ export function useSaveEditableWorkStateConfiguration({
   return useMemo(
     () => ({
       canSave,
+      lastSuccessfulSaveWasTopologyAffecting,
       save,
       saveAttemptRevision,
       saveMutationError,
       saveState,
     }),
-    [canSave, save, saveAttemptRevision, saveMutationError, saveState],
+    [
+      canSave,
+      lastSuccessfulSaveWasTopologyAffecting,
+      save,
+      saveAttemptRevision,
+      saveMutationError,
+      saveState,
+    ],
   );
 }
 

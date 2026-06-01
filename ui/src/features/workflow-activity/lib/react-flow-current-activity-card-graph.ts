@@ -4,6 +4,7 @@ import type {
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
+import { workTypeHasDefaultHandling } from "../../current-factory-definition/lib/work-type-default-handling";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
@@ -612,6 +613,12 @@ function buildPlaceNode(
   if (factoryGraphNode?.kind === "work-type") {
     const workTypeName =
       place.state_value ?? factoryGraphNodeId.replace(/^work-type:/, "");
+    const resolvedFactoryDefinition =
+      input.factoryDefinition ?? input.snapshot.factory;
+    const isDefaultWorkType = workTypeHasDefaultHandling(
+      resolvedFactoryDefinition,
+      workTypeName,
+    );
     return {
       ...basePlaceNode,
       data: {
@@ -620,6 +627,7 @@ function buildPlaceNode(
         ...(input.editor?.editorMode && wireSelectionHandlers
           ? { onSelectWorkType: input.onSelectWorkType }
           : {}),
+        isDefaultWorkType,
         place,
         selectedWorkType:
           input.editor?.editorMode === true &&

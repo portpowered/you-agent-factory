@@ -4,9 +4,10 @@ import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashbo
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import {
-  useEditableWorkstationConfigurationState,
+  hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
-} from "./use-editable-workstation-configuration-state";
+} from "../lib/editable-workstation-configuration-validation";
+import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
@@ -595,8 +596,7 @@ describe("useEditableWorkstationConfigurationState", () => {
         },
         status: "ready",
         validationErrors: {
-          prompt:
-            "See prompt diagnostics below.",
+          prompt: "See prompt diagnostics below.",
         },
       });
     });
@@ -638,6 +638,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       validateEditableWorkstationDraft(
         {
           behavior: "STANDARD",
+          cron: null,
           guards: [],
           inputs: [],
           prompt: "Review the story.",
@@ -655,6 +656,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       validateEditableWorkstationDraft(
         {
           behavior: "STANDARD",
+          cron: null,
           guards: [],
           inputs: [],
           prompt: "Review the story.",
@@ -822,6 +824,7 @@ describe("useEditableWorkstationConfigurationState", () => {
     const logicalMoveValues = {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      cron: null,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: null,
@@ -851,6 +854,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       validateEditableWorkstationDraft(
         {
           behavior: "STANDARD",
+          cron: null,
           guards: [],
           inputs: [],
           prompt: "",
@@ -865,6 +869,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       validateEditableWorkstationDraft(
         {
           behavior: "POLLER",
+          cron: null,
           guards: [],
           inputs: [],
           prompt: "",
@@ -954,6 +959,236 @@ describe("useEditableWorkstationConfigurationState", () => {
       ],
     });
   });
+
+  it("validates cron fields for CRON workstations and skips them for other behaviors", () => {
+    const cronDraft = {
+      behavior: "CRON" as const,
+      cron: {
+        schedule: "",
+        triggerAtStart: false,
+        jitter: "-1s",
+        expiryWindow: "0s",
+      },
+      guards: [],
+      inputs: [],
+      prompt: "",
+      runnerName: null,
+      workerName: "reviewer",
+    };
+
+    const cronErrors = validateEditableWorkstationDraft(cronDraft);
+    expect(cronErrors).toMatchObject({
+      cronSchedule: "cron workstation requires non-empty 'schedule'",
+      cronJitter: 'jitter must be a non-negative duration, got "-1s"',
+      cronExpiryWindow: 'expiry_window must be a positive duration, got "0s"',
+    });
+    expect(hasEditableWorkstationValidationErrors(cronErrors)).toBe(true);
+
+    const standardErrors = validateEditableWorkstationDraft({
+      behavior: "STANDARD",
+      cron: null,
+      guards: [],
+      inputs: [],
+      prompt: "Review the story.",
+      runnerName: null,
+      workerName: "reviewer",
+    });
+    expect(standardErrors.cronSchedule).toBeUndefined();
+    expect(standardErrors.cronJitter).toBeUndefined();
+    expect(standardErrors.cronExpiryWindow).toBeUndefined();
+  });
+
+  it("builds pendingFactoryDefinition with updated cron when schedule changes", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "CRON",
+          cron: {
+            schedule: "0 0 * * *",
+          },
+          prompt: "Run daily refresh.",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onCronScheduleChange("0 9 * * *");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        behavior: "CRON",
+        cron: {
+          schedule: "0 9 * * *",
+        },
+      },
+      hasValidationErrors: false,
+      isDirty: true,
+      status: "ready",
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition?.workstations?.[0]?.cron
+        : undefined,
+    ).toEqual({
+      schedule: "0 9 * * *",
+      triggerAtStart: false,
+    });
+  });
+
+  it("markChangesSaved clears dirty cron edits after a successful save", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "CRON",
+          cron: {
+            schedule: "0 0 * * *",
+          },
+          prompt: "Run daily refresh.",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onCronScheduleChange("0 9 * * *");
+      result.current.markChangesSaved();
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        behavior: "CRON",
+        cron: {
+          schedule: "0 9 * * *",
+        },
+      },
+      isDirty: false,
+      overwriteFieldNames: [],
+      status: "ready",
+    });
+  });
+
+  it("tracks cron overwrite fields when the running factory cron changes during an edit session", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "CRON",
+          cron: {
+            schedule: "0 0 * * *",
+          },
+          prompt: "Run daily refresh.",
+        }),
+      ),
+    );
+
+    const { rerender, result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onCronScheduleChange("0 9 * * *");
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "CRON",
+          cron: {
+            jitter: "5m",
+            schedule: "*/15 * * * *",
+          },
+          prompt: "Run daily refresh.",
+        }),
+      ),
+    );
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        draft: {
+          cron: {
+            schedule: "0 9 * * *",
+          },
+        },
+        isDirty: true,
+        overwriteFieldNames: ["cronSchedule", "cronJitter"],
+        status: "ready",
+      });
+    });
+  });
+
+  it("blocks save for CRON workstations with invalid cron settings", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "CRON",
+          cron: {
+            expiryWindow: "bad",
+            jitter: "bad",
+            schedule: "not a cron",
+          },
+          prompt: "",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: true,
+      status: "ready",
+      validationErrors: {
+        cronJitter: 'jitter must be a non-negative duration, got "bad"',
+        cronExpiryWindow:
+          'expiry_window must be a positive duration, got "bad"',
+      },
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.validationErrors.cronSchedule
+        : undefined,
+    ).toContain('invalid cron schedule "not a cron"');
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toBeNull();
+  });
 });
 
 function buildEditableDefinitionResult(
@@ -971,6 +1206,12 @@ function buildEditableDefinitionResult(
 
 function buildEditableFactoryDefinition(overrides?: {
   behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
+  cron?: {
+    expiryWindow?: string;
+    jitter?: string;
+    schedule: string;
+    triggerAtStart?: boolean;
+  };
   prompt?: string;
   runnerName?: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode" | null;
   workerName?: string;
@@ -1003,6 +1244,16 @@ function buildEditableFactoryDefinition(overrides?: {
         body:
           overrides?.prompt ??
           "Review the latest story changes before approval.",
+        ...(overrides?.behavior === "CRON" && overrides.cron
+          ? {
+              cron: {
+                expiryWindow: overrides.cron.expiryWindow,
+                jitter: overrides.cron.jitter,
+                schedule: overrides.cron.schedule,
+                triggerAtStart: overrides.cron.triggerAtStart ?? false,
+              },
+            }
+          : {}),
         id: "review",
         inputs: [{ state: "queued", workType: "story" }],
         name: "Review",

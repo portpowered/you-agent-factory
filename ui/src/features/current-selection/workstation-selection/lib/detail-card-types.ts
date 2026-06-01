@@ -45,6 +45,10 @@ export interface WorkstationDetailCardProps {
 
 export type EditableWorkstationValidationErrors = {
   behavior?: string;
+  cronExpiryWindow?: string;
+  cronJitter?: string;
+  cronSchedule?: string;
+  cronTriggerAtStart?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
@@ -52,6 +56,10 @@ export type EditableWorkstationValidationErrors = {
 
 export type EditableWorkstationSaveValidationErrors = {
   behavior?: string;
+  cronExpiryWindow?: string;
+  cronJitter?: string;
+  cronSchedule?: string;
+  cronTriggerAtStart?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
@@ -84,6 +92,10 @@ export type EditableWorkstationPromptValidationState =
 
 export type EditableWorkstationOverwriteField =
   | "behavior"
+  | "cronExpiryWindow"
+  | "cronJitter"
+  | "cronSchedule"
+  | "cronTriggerAtStart"
   | "prompt"
   | "runner"
   | "worker";
@@ -110,6 +122,10 @@ export type EditableWorkstationConfigurationState =
       markChangesSaved: () => void;
       baseVersion: CurrentFactoryVersion;
       onBehaviorChange: (value: EditableWorkstationBehavior) => void;
+      onCronExpiryWindowChange: (value: string) => void;
+      onCronJitterChange: (value: string) => void;
+      onCronScheduleChange: (value: string) => void;
+      onCronTriggerAtStartChange: (value: boolean) => void;
       onPromptChange: (value: string) => void;
       onResetToLatest: () => void;
       onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => void;
@@ -119,6 +135,7 @@ export type EditableWorkstationConfigurationState =
       workstationOptionsState: EditableWorkstationWorkstationOptionsState;
       overwriteFieldNames: EditableWorkstationOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      savedFactoryDefinition: CanonicalFactoryDefinition;
       promptDiagnostics: EditableWorkstationPromptDiagnostic[];
       promptHelpState: EditableWorkstationPromptHelpState;
       promptValidationState: EditableWorkstationPromptValidationState;

@@ -21,6 +21,7 @@ export interface ValidateEditableWorkTypeDraftContext {
 
 export interface EditableWorkTypeValidationMessages {
   editableConfigurationContractInvalidPrefix: string;
+  editableConfigurationHandlingBehaviorMultipleDefault: string;
   editableConfigurationNameDuplicate: (workTypeName: string) => string;
   editableConfigurationNameRequired: string;
 }
@@ -52,16 +53,23 @@ export function mergeEditableWorkTypeContractValidationErrors(
   pendingFactoryDefinition: CanonicalFactoryDefinition | null,
   messages: Pick<
     EditableWorkTypeValidationMessages,
-    "editableConfigurationContractInvalidPrefix"
+    | "editableConfigurationContractInvalidPrefix"
+    | "editableConfigurationHandlingBehaviorMultipleDefault"
   >,
 ): EditableWorkTypeValidationErrors {
+  const errorsWithDefaultHandling = mergeEditableWorkTypeDefaultHandlingErrors(
+    validationErrors,
+    pendingFactoryDefinition,
+    messages,
+  );
+
   if (!pendingFactoryDefinition) {
-    return validationErrors;
+    return errorsWithDefaultHandling;
   }
 
   try {
     normalizeFactoryDefinition(pendingFactoryDefinition);
-    return validationErrors;
+    return errorsWithDefaultHandling;
   } catch (error) {
     const contractMessage = resolveEditableWorkTypeContractErrorMessage(
       error,
@@ -69,22 +77,53 @@ export function mergeEditableWorkTypeContractValidationErrors(
     );
     const contractField = resolveEditableWorkTypeContractField(error);
 
-    if (contractField && !validationErrors[contractField]) {
+    if (contractField && !errorsWithDefaultHandling[contractField]) {
       return {
-        ...validationErrors,
+        ...errorsWithDefaultHandling,
         [contractField]: contractMessage,
       };
     }
 
-    if (validationErrors.contract) {
-      return validationErrors;
+    if (errorsWithDefaultHandling.contract) {
+      return errorsWithDefaultHandling;
     }
 
     return {
-      ...validationErrors,
+      ...errorsWithDefaultHandling,
       contract: contractMessage,
     };
   }
+}
+
+function mergeEditableWorkTypeDefaultHandlingErrors(
+  validationErrors: EditableWorkTypeValidationErrors,
+  pendingFactoryDefinition: CanonicalFactoryDefinition | null,
+  messages: Pick<
+    EditableWorkTypeValidationMessages,
+    "editableConfigurationHandlingBehaviorMultipleDefault"
+  >,
+): EditableWorkTypeValidationErrors {
+  if (
+    !pendingFactoryDefinition ||
+    validationErrors.handlingBehavior ||
+    countWorkTypesWithDefaultHandling(pendingFactoryDefinition) <= 1
+  ) {
+    return validationErrors;
+  }
+
+  return {
+    ...validationErrors,
+    handlingBehavior:
+      messages.editableConfigurationHandlingBehaviorMultipleDefault,
+  };
+}
+
+function countWorkTypesWithDefaultHandling(
+  factory: CanonicalFactoryDefinition,
+): number {
+  return (factory.workTypes ?? []).filter((workType) =>
+    workType.handlingBehavior?.includes("DEFAULT"),
+  ).length;
 }
 
 export function hasEditableWorkTypeValidationErrors(

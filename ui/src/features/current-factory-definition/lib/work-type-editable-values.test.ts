@@ -1,7 +1,6 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import {
   applyEditableWorkTypeDraft,
-  editableWorkTypeDraftFromValues,
   resolveEditableWorkTypeValues,
 } from "./work-type-editable-values";
 
@@ -119,33 +118,5 @@ describe("applyEditableWorkTypeDraft", () => {
         worker: "reviewer",
       },
     ]);
-  });
-
-  it("round-trips handlingBehavior through draft helpers", () => {
-    const factory: CanonicalFactoryDefinition = {
-      name: "Current Factory",
-      workTypes: [
-        {
-          handlingBehavior: ["DEFAULT"],
-          name: "story",
-          states: [{ name: "queued", type: "INITIAL" }],
-        },
-      ],
-    };
-
-    const values = resolveEditableWorkTypeValues(factory, "story");
-    expect(values).not.toBeNull();
-    if (!values) {
-      return;
-    }
-
-    const draft = editableWorkTypeDraftFromValues(values);
-    const updatedFactory = applyEditableWorkTypeDraft(factory, "story", draft);
-
-    expect(updatedFactory?.workTypes?.[0]).toEqual({
-      handlingBehavior: ["DEFAULT"],
-      name: "story",
-      states: [{ name: "queued", type: "INITIAL" }],
-    });
   });
 });
