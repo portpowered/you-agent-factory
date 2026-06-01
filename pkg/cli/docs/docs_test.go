@@ -261,6 +261,7 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you factory query",
 		"you docs sessions",
 		"## Operator loop",
+		"you work list --name",
 		"you submit",
 		"--name driver-incident-review",
 		"--work-type-name task",
@@ -292,6 +293,37 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 	topicRouter := got[strings.Index(got, "## Topic router"):]
 	if strings.Contains(topicRouter, ".md)") {
 		t.Fatalf("Markdown(agents) topic router must not use packaged-topic .md links:\n%s", topicRouter)
+	}
+}
+
+func TestMarkdown_AgentsDocumentsMinimalOperatorSpotCheckFlow(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("agents")
+	if err != nil {
+		t.Fatalf("Markdown(agents) error = %v", err)
+	}
+
+	for _, cmd := range []string{
+		"you session list",
+		"you submit batch",
+		"you work list --name",
+	} {
+		if !strings.Contains(got, cmd) {
+			t.Fatalf("Markdown(agents) missing operator spot-check command %q", cmd)
+		}
+	}
+	if !strings.Contains(got, "you submit batch ./") {
+		t.Fatalf("Markdown(agents) missing file-path batch example (you submit batch ./…)")
+	}
+	operatorLoop := got[strings.Index(got, "## Operator loop"):]
+	if operatorLoop == got {
+		t.Fatal("Markdown(agents) missing ## Operator loop section")
+	}
+	for _, step := range []string{"Check running", "Submit", "Verify"} {
+		if !strings.Contains(operatorLoop, step) {
+			t.Fatalf("Markdown(agents) operator loop missing step %q", step)
+		}
 	}
 }
 
