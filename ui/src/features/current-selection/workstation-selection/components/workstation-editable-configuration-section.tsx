@@ -34,6 +34,7 @@ import type {
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
 } from "../lib/detail-card-types";
+import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationRunnerField } from "./workstation-runner-field";
@@ -148,6 +149,9 @@ function EditableConfigurationReadyForm({
     ...state,
     validationErrors,
   };
+  const requiresWorkerAssignment = workstationRequiresWorkerAssignment({
+    type: state.initialValues.workstationType,
+  });
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
@@ -164,86 +168,88 @@ function EditableConfigurationReadyForm({
         overwriteFieldNames={state.overwriteFieldNames ?? []}
       />
       <EditableConfigurationDraftStatus messages={messages} state={state} />
-      <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
-        <EditableConfigurationField
-          fieldId="editable-workstation-worker"
-          errorMessage={validationErrors.workerName}
-          input={
-            <EditableConfigurationWorkerInput
-              messages={messages}
-              state={renderState}
-            />
-          }
-          label={messages.workerFieldLabel}
-          supportingContent={
-            <>
-              <EditableConfigurationSharedWorkerHint
+      {requiresWorkerAssignment ? (
+        <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
+          <EditableConfigurationField
+            fieldId="editable-workstation-worker"
+            errorMessage={validationErrors.workerName}
+            input={
+              <EditableConfigurationWorkerInput
                 messages={messages}
-                state={state}
+                state={renderState}
               />
+            }
+            label={messages.workerFieldLabel}
+            supportingContent={
+              <>
+                <EditableConfigurationSharedWorkerHint
+                  messages={messages}
+                  state={state}
+                />
+                <EditableConfigurationServerChangedHint
+                  fieldName="worker"
+                  messages={messages}
+                  state={state}
+                />
+              </>
+            }
+          />
+          <EditableConfigurationField
+            fieldId="editable-workstation-kind"
+            errorMessage={validationErrors.behavior}
+            input={
+              <EditableConfigurationBehaviorInput
+                messages={messages}
+                state={renderState}
+              />
+            }
+            label={messages.kindLabel}
+            supportingContent={
               <EditableConfigurationServerChangedHint
-                fieldName="worker"
+                fieldName="behavior"
                 messages={messages}
                 state={state}
               />
-            </>
-          }
-        />
-        <EditableConfigurationField
-          fieldId="editable-workstation-kind"
-          errorMessage={validationErrors.behavior}
-          input={
-            <EditableConfigurationBehaviorInput
-              messages={messages}
-              state={renderState}
-            />
-          }
-          label={messages.kindLabel}
-          supportingContent={
-            <EditableConfigurationServerChangedHint
-              fieldName="behavior"
-              messages={messages}
-              state={state}
-            />
-          }
-        />
-        <EditableConfigurationField
-          fieldId="editable-workstation-runner"
-          errorMessage={validationErrors.runnerName}
-          input={
-            <EditableConfigurationRunnerField
-              messages={messages}
-              state={renderState}
-            />
-          }
-          label={messages.runnerFieldLabel}
-          supportingContent={
-            <EditableConfigurationServerChangedHint
-              fieldName="runner"
-              messages={messages}
-              state={state}
-            />
-          }
-        />
-        <EditableConfigurationField
-          errorMessage={validationErrors.prompt}
-          fieldId="editable-workstation-prompt"
-          input={
-            <EditableConfigurationPromptInput
-              messages={messages}
-              state={renderState}
-            />
-          }
-          label={messages.promptFieldLabel}
-          supportingContent={
-            <EditableConfigurationServerChangedHint
-              fieldName="prompt"
-              messages={messages}
-              state={state}
-            />
-          }
-        />
-      </div>
+            }
+          />
+          <EditableConfigurationField
+            fieldId="editable-workstation-runner"
+            errorMessage={validationErrors.runnerName}
+            input={
+              <EditableConfigurationRunnerField
+                messages={messages}
+                state={renderState}
+              />
+            }
+            label={messages.runnerFieldLabel}
+            supportingContent={
+              <EditableConfigurationServerChangedHint
+                fieldName="runner"
+                messages={messages}
+                state={state}
+              />
+            }
+          />
+          <EditableConfigurationField
+            errorMessage={validationErrors.prompt}
+            fieldId="editable-workstation-prompt"
+            input={
+              <EditableConfigurationPromptInput
+                messages={messages}
+                state={renderState}
+              />
+            }
+            label={messages.promptFieldLabel}
+            supportingContent={
+              <EditableConfigurationServerChangedHint
+                fieldName="prompt"
+                messages={messages}
+                state={state}
+              />
+            }
+          />
+        </div>
+      ) : null}
       {onSaveConfiguration ? (
         <EditableConfigurationSaveRow
           busyLabel={messages.editableConfigurationSaveBusyAction}

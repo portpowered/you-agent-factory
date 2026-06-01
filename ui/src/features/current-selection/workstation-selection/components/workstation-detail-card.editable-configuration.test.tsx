@@ -134,6 +134,7 @@ function buildReadyEditableConfigurationState(overrides?: {
   workerOptionsState?:
     | { status: "ready"; options: string[] }
     | { message: string; status: "empty" | "error" };
+  workstationType?: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
 }) {
   return {
     draft: {
@@ -174,7 +175,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         reviewer: "MODEL_WORKER",
       },
       workstationName: overrides?.initialValuesWorkstationName ?? "Review",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
     },
     isDirty: Boolean(
       overrides?.behavior ||
@@ -1808,5 +1809,112 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.getByText(".Inputs[1]").className).toContain(
       "text-af-text-muted",
     );
+  });
+
+  it("hides worker, runner, prompt, and kind fields for LOGICAL_MOVE configuration", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      workstation_kind: "LOGICAL_MOVE",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "removed-worker",
+          workstationType: "LOGICAL_MOVE",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const configuration = editableConfigurationSection();
+    expect(within(configuration).queryByLabelText("Worker")).toBeNull();
+    expect(within(configuration).queryByLabelText("Kind")).toBeNull();
+    expect(within(configuration).queryByLabelText("Runner")).toBeNull();
+    expect(within(configuration).queryByLabelText("Prompt")).toBeNull();
+    expect(
+      within(configuration).queryByText("Worker selection unavailable."),
+    ).toBeNull();
+    expect(
+      configuration.querySelector(
+        `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+      ),
+    ).toBeNull();
+  });
+
+  it("does not surface worker-unavailable copy for LOGICAL_MOVE with a legacy missing worker", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      workstation_kind: "LOGICAL_MOVE",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerName: "missing-worker",
+          workerOptionsState: {
+            message:
+              "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
+            status: "error",
+          },
+          workstationType: "LOGICAL_MOVE",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(screen.queryByText(/Worker selection unavailable/i)).toBeNull();
+    expect(
+      screen.queryByText(/no longer available in the current factory definition/i),
+    ).toBeNull();
+  });
+
+  it("still renders worker-backed configuration fields for model workstations", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workstationType: "MODEL_WORKSTATION",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const configuration = editableConfigurationSection();
+    expect(within(configuration).getByLabelText("Worker")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Kind")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Runner")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Prompt")).toBeTruthy();
   });
 });
