@@ -165,6 +165,12 @@ const workstationDetailMessagesByLocale = {
     runnerCapabilityWorktreeLabel: "Worktree selection",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `Effective runner: ${runnerName} (${sourceLabel}).`,
+    editableConfigurationCronExpiryWindowInvalid: (value) =>
+      `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronJitterInvalid: (value) =>
+      `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleRequired:
+      "cron workstation requires non-empty 'schedule'",
     cronExpiryWindowFieldLabel: "Cron expiry window",
     cronJitterFieldLabel: "Cron jitter",
     cronScheduleFieldLabel: "Cron schedule",
@@ -356,6 +362,12 @@ const workstationDetailMessagesByLocale = {
     runnerCapabilityWorktreeLabel: "worktree 選択",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `有効な runner: ${runnerName}（${sourceLabel}）。`,
+    editableConfigurationCronExpiryWindowInvalid: (value) =>
+      `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronJitterInvalid: (value) =>
+      `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleRequired:
+      "cron workstation requires non-empty 'schedule'",
     cronExpiryWindowFieldLabel: "Cron 有効期限ウィンドウ",
     cronJitterFieldLabel: "Cron ジッター",
     cronScheduleFieldLabel: "Cron スケジュール",
@@ -544,6 +556,12 @@ const workstationDetailMessagesByLocale = {
     runnerCapabilityWorktreeLabel: "worktree 선택",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `유효 runner: ${runnerName} (${sourceLabel}).`,
+    editableConfigurationCronExpiryWindowInvalid: (value) =>
+      `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronJitterInvalid: (value) =>
+      `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleRequired:
+      "cron workstation requires non-empty 'schedule'",
     cronExpiryWindowFieldLabel: "Cron 만료 윈도우",
     cronJitterFieldLabel: "Cron 지터",
     cronScheduleFieldLabel: "Cron 스케줄",
@@ -714,6 +732,12 @@ const workstationDetailMessagesByLocale = {
     runnerCapabilityWorktreeLabel: "worktree 选择",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `当前生效的 runner：${runnerName}（${sourceLabel}）。`,
+    editableConfigurationCronExpiryWindowInvalid: (value) =>
+      `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronJitterInvalid: (value) =>
+      `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleRequired:
+      "cron workstation requires non-empty 'schedule'",
     cronExpiryWindowFieldLabel: "Cron 过期窗口",
     cronJitterFieldLabel: "Cron 抖动",
     cronScheduleFieldLabel: "Cron 调度",

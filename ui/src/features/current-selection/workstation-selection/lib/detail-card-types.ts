@@ -45,6 +45,9 @@ export interface WorkstationDetailCardProps {
 
 export type EditableWorkstationValidationErrors = {
   behavior?: string;
+  cronExpiryWindow?: string;
+  cronJitter?: string;
+  cronSchedule?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;

@@ -65,6 +65,9 @@ export interface WorkstationDetailMessages {
   ) => string;
   editableConfigurationWorkerUnavailable: string;
   editableConfigurationWorkerUnavailablePrefix: string;
+  editableConfigurationCronExpiryWindowInvalid: (value: string) => string;
+  editableConfigurationCronJitterInvalid: (value: string) => string;
+  editableConfigurationCronScheduleRequired: string;
   cronExpiryWindowFieldLabel: string;
   cronJitterFieldLabel: string;
   cronScheduleFieldLabel: string;
