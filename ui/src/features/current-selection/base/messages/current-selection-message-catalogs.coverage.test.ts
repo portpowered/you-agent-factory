@@ -298,6 +298,14 @@ const invokeWorkstationDetail = (
         formatter(1 as never, 1 as never),
         formatter(3 as never, 2 as never),
       ];
+    case "editableConfigurationCronExpiryWindowInvalid":
+    case "editableConfigurationCronJitterInvalid":
+      return [formatter("0s" as never), formatter("bad" as never)];
+    case "editableConfigurationCronScheduleInvalid":
+      return [
+        formatter("0 * * * *" as never, "bad field" as never),
+        formatter("@every bad" as never, "invalid @every duration" as never),
+      ];
     case "editableConfigurationVisitCountWorkstationInvalid":
     case "editableConfigurationInputGuardMatchInputInvalid":
     case "editableConfigurationInputGuardParentInputInvalid":

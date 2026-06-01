@@ -95,7 +95,13 @@ function editableConfigurationSection() {
 }
 
 function buildReadyEditableConfigurationState(overrides?: {
-  behavior?: "STANDARD" | "REPEATER" | "POLLER";
+  behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
+  cron?: {
+    expiryWindow: string;
+    jitter: string;
+    schedule: string;
+    triggerAtStart: boolean;
+  };
   promptDiagnostics?: Array<{
     endOffset?: number;
     kind: string;
@@ -157,6 +163,10 @@ function buildReadyEditableConfigurationState(overrides?: {
   initialValuesWorkstationName?: string;
   validationErrors?: {
     behavior?: string;
+    cronExpiryWindow?: string;
+    cronJitter?: string;
+    cronSchedule?: string;
+    cronTriggerAtStart?: string;
     prompt?: string;
     workerName?: string;
   };
@@ -166,9 +176,21 @@ function buildReadyEditableConfigurationState(overrides?: {
     | { message: string; status: "empty" | "error" };
   workstationType?: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
 }) {
+  const behavior = overrides?.behavior ?? "STANDARD";
+  const cron =
+    behavior === "CRON"
+      ? (overrides?.cron ?? {
+          schedule: "*/5 * * * *",
+          triggerAtStart: true,
+          jitter: "1s",
+          expiryWindow: "30s",
+        })
+      : null;
+
   return {
     draft: {
-      behavior: overrides?.behavior ?? "STANDARD",
+      behavior,
+      cron,
       guards: [],
       inputs: [],
       prompt:
@@ -178,11 +200,19 @@ function buildReadyEditableConfigurationState(overrides?: {
     },
     hasValidationErrors: Boolean(
       overrides?.validationErrors?.prompt ||
-        overrides?.validationErrors?.workerName,
+        overrides?.validationErrors?.workerName ||
+        overrides?.validationErrors?.cronSchedule ||
+        overrides?.validationErrors?.cronJitter ||
+        overrides?.validationErrors?.cronExpiryWindow ||
+        overrides?.validationErrors?.cronTriggerAtStart,
     ),
     initialValues: {
-      behavior: "STANDARD",
-      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      behavior,
+      behaviorOptions:
+        behavior === "CRON"
+          ? ["STANDARD", "REPEATER", "POLLER", "CRON"]
+          : ["STANDARD", "REPEATER", "POLLER"],
+      cron,
       effectiveRunnerName: "gemini",
       factoryRunnerName: "codex",
       prompt: "Review the latest story changes before approval.",
@@ -214,9 +244,14 @@ function buildReadyEditableConfigurationState(overrides?: {
     },
     isDirty: Boolean(
       overrides?.behavior ||
+        overrides?.cron ||
         overrides?.validationErrors?.prompt ||
         overrides?.validationErrors?.behavior ||
         overrides?.validationErrors?.workerName ||
+        overrides?.validationErrors?.cronSchedule ||
+        overrides?.validationErrors?.cronJitter ||
+        overrides?.validationErrors?.cronExpiryWindow ||
+        overrides?.validationErrors?.cronTriggerAtStart ||
         overrides?.prompt,
     ),
     markChangesSaved: vi.fn(),
@@ -225,6 +260,10 @@ function buildReadyEditableConfigurationState(overrides?: {
       physical: "2026-05-23T15:52:00Z",
     },
     onBehaviorChange: vi.fn(),
+    onCronExpiryWindowChange: vi.fn(),
+    onCronJitterChange: vi.fn(),
+    onCronScheduleChange: vi.fn(),
+    onCronTriggerAtStartChange: vi.fn(),
     onPromptChange: vi.fn(),
     onResetToLatest: vi.fn(),
     onGuardsChange: vi.fn(),
@@ -594,6 +633,221 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(
       within(configuration).queryByText("Runner capability support"),
     ).toBeNull();
+  });
+
+  it("renders cron fields for CRON workstations with prefilled values", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const onCronScheduleChange = vi.fn();
+    const onCronTriggerAtStartChange = vi.fn();
+    const onCronJitterChange = vi.fn();
+    const onCronExpiryWindowChange = vi.fn();
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          ...buildReadyEditableConfigurationState({
+            behavior: "CRON",
+            cron: {
+              expiryWindow: "45s",
+              jitter: "5s",
+              schedule: "0 9 * * 1-5",
+              triggerAtStart: true,
+            },
+          }),
+          onCronExpiryWindowChange,
+          onCronJitterChange,
+          onCronScheduleChange,
+          onCronTriggerAtStartChange,
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    expect(screen.getByLabelText("Cron schedule")).toBeTruthy();
+    expect(screen.getByDisplayValue("0 9 * * 1-5")).toBeTruthy();
+    expect(screen.getByLabelText("Cron trigger at start")).toBeTruthy();
+    expect(
+      (screen.getByLabelText("Cron trigger at start") as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    expect(screen.getByLabelText("Cron jitter")).toBeTruthy();
+    expect(screen.getByDisplayValue("5s")).toBeTruthy();
+    expect(screen.getByLabelText("Cron expiry window")).toBeTruthy();
+    expect(screen.getByDisplayValue("45s")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Required five-field cron expression (for example */5 * * * *).",
+      ),
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Cron schedule"), {
+      target: { value: "*/10 * * * *" },
+    });
+    fireEvent.change(screen.getByLabelText("Cron jitter"), {
+      target: { value: "10s" },
+    });
+    fireEvent.change(screen.getByLabelText("Cron expiry window"), {
+      target: { value: "2m" },
+    });
+    fireEvent.click(screen.getByLabelText("Cron trigger at start"));
+
+    expect(onCronScheduleChange).toHaveBeenCalledWith("*/10 * * * *");
+    expect(onCronJitterChange).toHaveBeenCalledWith("10s");
+    expect(onCronExpiryWindowChange).toHaveBeenCalledWith("2m");
+    expect(onCronTriggerAtStartChange).toHaveBeenCalledWith(false);
+  });
+
+  it("does not render cron fields for STANDARD, REPEATER, or POLLER workstations", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "STANDARD",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+    expect(screen.queryByLabelText("Cron schedule")).toBeNull();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "REPEATER",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Cron schedule")).toBeNull();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "POLLER",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Cron schedule")).toBeNull();
+    expect(screen.queryByLabelText("Cron trigger at start")).toBeNull();
+  });
+
+  it("shows cron validation errors and overwrite hints in the editable form", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "CRON",
+          overwriteFieldNames: ["cronSchedule", "cronJitter"],
+          validationErrors: {
+            cronJitter: 'jitter must be a non-negative duration, got "bad"',
+            cronSchedule: "cron workstation requires non-empty 'schedule'",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    expect(
+      screen.getByText("cron workstation requires non-empty 'schedule'"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText('jitter must be a non-negative duration, got "bad"'),
+    ).toBeTruthy();
+    expect(
+      screen.getAllByText(
+        "The running factory changed this field while you were editing. Reset to latest to discard the local draft value.",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("shows cron trigger-at-start save validation errors on the checkbox field", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "CRON",
+          validationErrors: {
+            cronTriggerAtStart: "trigger_at_start must be a boolean",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    expect(screen.getByText("trigger_at_start must be a boolean")).toBeTruthy();
+  });
+
+  it("localizes cron field labels in zh-CN for CRON workstations", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "CRON",
+        })}
+        locale="zh-CN"
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const configurationSection = screen
+      .getByRole("heading", { name: "配置" })
+      .closest("section");
+    if (!configurationSection) {
+      throw new Error("expected localized editable configuration section");
+    }
+
+    fireEvent.click(
+      within(configurationSection).getByRole("button", {
+        name: "展开可编辑配置",
+      }),
+    );
+
+    expect(screen.getByLabelText("Cron 调度")).toBeTruthy();
+    expect(screen.getByLabelText("Cron 启动时触发")).toBeTruthy();
+    expect(screen.getByLabelText("Cron 抖动")).toBeTruthy();
+    expect(screen.getByLabelText("Cron 过期窗口")).toBeTruthy();
+    expect(
+      screen.getByText("必填的五字段 cron 表达式（例如 */5 * * * *）。"),
+    ).toBeTruthy();
   });
 
   it("renders behavior, worker, and prompt controls in the editable form", () => {

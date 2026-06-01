@@ -1,5 +1,6 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
+import type { components } from "../../../api/generated/openapi";
 import {
   BUILT_IN_RUNNER_IDS,
   type RunnerID,
@@ -31,12 +32,23 @@ type CanonicalWorkstation = NonNullable<
 type CanonicalWorker = NonNullable<
   CanonicalFactoryDefinition["workers"]
 >[number];
+type CanonicalWorkstationCron = NonNullable<CanonicalWorkstation["cron"]>;
 type CanonicalWorkstationGuard = NonNullable<
   CanonicalWorkstation["guards"]
 >[number];
 type CanonicalWorkstationInput = NonNullable<
   CanonicalWorkstation["inputs"]
 >[number];
+
+export type EditableWorkstationCronDraft = Pick<
+  components["schemas"]["WorkstationCron"],
+  "schedule" | "triggerAtStart"
+> & {
+  /** Empty when omitted from the factory definition. */
+  expiryWindow: string;
+  /** Empty when omitted from the factory definition. */
+  jitter: string;
+};
 
 export interface EditableWorkstationInputDraft {
   guards: CanonicalWorkstationGuard[];
@@ -47,6 +59,7 @@ export interface EditableWorkstationInputDraft {
 export interface EditableWorkstationValues {
   behavior: EditableWorkstationBehavior;
   behaviorOptions: EditableWorkstationBehavior[];
+  cron: EditableWorkstationCronDraft | null;
   effectiveRunnerName: RunnerID;
   factoryRunnerName: RunnerID | null;
   prompt: string | null;
@@ -69,6 +82,7 @@ export interface EditableWorkstationValues {
 
 export interface EditableWorkstationDraft {
   behavior: EditableWorkstationBehavior;
+  cron: EditableWorkstationCronDraft | null;
   guards: CanonicalWorkstationGuard[];
   inputs: EditableWorkstationInputDraft[];
   prompt: string;
@@ -89,6 +103,7 @@ export function resolveEditableWorkstationValues(
   }
 
   const { workstation } = workstationResolution;
+  const behavior = resolveEditableWorkstationBehavior(workstation);
   const workerModelProvider = resolveWorkerModelProvider(
     factory,
     workstation.worker,
@@ -100,10 +115,10 @@ export function resolveEditableWorkstationValues(
   );
 
   return {
-    behavior: resolveEditableWorkstationBehavior(workstation),
-    behaviorOptions: resolveEditableWorkstationBehaviorOptions(
-      resolveEditableWorkstationBehavior(workstation),
-    ),
+    behavior,
+    behaviorOptions: resolveEditableWorkstationBehaviorOptions(behavior),
+    cron:
+      behavior === "CRON" ? resolveEditableWorkstationCron(workstation) : null,
     effectiveRunnerName: resolvedRunnerSelection.runnerId,
     factoryRunnerName: factory.runner ?? null,
     prompt: workstation.body ?? null,
@@ -135,6 +150,7 @@ export function editableWorkstationDraftFromValues(
 ): EditableWorkstationDraft {
   return {
     behavior: values.behavior,
+    cron: values.cron ? { ...values.cron } : null,
     guards: values.guards,
     inputs: values.inputs.map((input) => ({
       guards: normalizeEditableInputGuards([...input.guards]),
@@ -182,13 +198,14 @@ export function applyEditableWorkstationDraft(
 
   const {
     behavior: existingBehavior,
+    cron: _existingCron,
     guards: _existingGuards,
     inputs: _existingInputs,
     runner: _existingRunner,
-    ...workstationWithoutRunner
+    ...workstationWithoutCronRunner
   } = workstation;
   const nextWorkstation = {
-    ...workstationWithoutRunner,
+    ...workstationWithoutCronRunner,
     body: draft.prompt,
     inputs: applyEditableWorkstationInputs(draft.inputs),
     worker: draft.workerName,
@@ -198,6 +215,9 @@ export function applyEditableWorkstationDraft(
     existingBehavior === undefined
       ? {}
       : { behavior: draft.behavior }),
+    ...(draft.behavior === "CRON" && draft.cron
+      ? { cron: buildCanonicalWorkstationCron(draft.cron) }
+      : {}),
   };
 
   return {
@@ -207,6 +227,45 @@ export function applyEditableWorkstationDraft(
       index === workstationIndex ? nextWorkstation : entry,
     ),
   };
+}
+
+export function createEmptyEditableWorkstationCronDraft(): EditableWorkstationCronDraft {
+  return {
+    schedule: "",
+    triggerAtStart: false,
+    jitter: "",
+    expiryWindow: "",
+  };
+}
+
+export function resolveEditableWorkstationCron(
+  workstation: Pick<CanonicalWorkstation, "cron">,
+): EditableWorkstationCronDraft {
+  const cron = workstation.cron;
+  return {
+    schedule: cron?.schedule ?? "",
+    triggerAtStart: cron?.triggerAtStart ?? false,
+    jitter: cron?.jitter ?? "",
+    expiryWindow: cron?.expiryWindow ?? "",
+  };
+}
+
+function buildCanonicalWorkstationCron(
+  draft: EditableWorkstationCronDraft,
+): CanonicalWorkstationCron {
+  const cron: CanonicalWorkstationCron = {
+    schedule: draft.schedule,
+    triggerAtStart: draft.triggerAtStart,
+  };
+  const jitter = draft.jitter.trim();
+  if (jitter.length > 0) {
+    cron.jitter = jitter;
+  }
+  const expiryWindow = draft.expiryWindow.trim();
+  if (expiryWindow.length > 0) {
+    cron.expiryWindow = expiryWindow;
+  }
+  return cron;
 }
 
 function resolveCanonicalWorkstation(

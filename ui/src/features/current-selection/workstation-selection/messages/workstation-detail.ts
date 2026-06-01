@@ -202,6 +202,24 @@ const workstationDetailMessagesByLocale = {
     requestStatusStartedAgo: (elapsed) => `Started ${elapsed}`,
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `Effective runner: ${runnerName} (${sourceLabel}).`,
+    editableConfigurationCronExpiryWindowInvalid: (value) =>
+      `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronJitterInvalid: (value) =>
+      `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleInvalid: (schedule, detail) =>
+      `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
+    editableConfigurationCronScheduleRequired:
+      "cron workstation requires non-empty 'schedule'",
+    cronExpiryWindowFieldHint:
+      "Optional positive Go duration after due time before stale cron work expires (for example 30s, 5m, 1h).",
+    cronExpiryWindowFieldLabel: "Cron expiry window",
+    cronJitterFieldHint:
+      "Optional non-negative Go duration for maximum deterministic schedule jitter (for example 0s, 30s, 5m).",
+    cronJitterFieldLabel: "Cron jitter",
+    cronScheduleFieldHint:
+      "Required five-field cron expression (for example */5 * * * *).",
+    cronScheduleFieldLabel: "Cron schedule",
+    cronTriggerAtStartFieldLabel: "Cron trigger at start",
     runnerFieldLabel: "Runner",
     runnerInheritanceFactoryLabel: (runnerName) =>
       `Inherit factory runner (${runnerName})`,
@@ -427,6 +445,23 @@ const workstationDetailMessagesByLocale = {
     requestStatusStartedAgo: (elapsed) => `${elapsed} に開始`,
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `有効な runner: ${runnerName}（${sourceLabel}）。`,
+    editableConfigurationCronExpiryWindowInvalid: (value) =>
+      `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronJitterInvalid: (value) =>
+      `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleInvalid: (schedule, detail) =>
+      `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
+    editableConfigurationCronScheduleRequired:
+      "cron workstation requires non-empty 'schedule'",
+    cronExpiryWindowFieldHint:
+      "期限切れ前の正の Go duration（例: 30s、5m、1h）。省略可。",
+    cronExpiryWindowFieldLabel: "Cron 有効期限ウィンドウ",
+    cronJitterFieldHint:
+      "スケジュールに加える最大ジッターの非負 Go duration（例: 0s、30s、5m）。省略可。",
+    cronJitterFieldLabel: "Cron ジッター",
+    cronScheduleFieldHint: "必須の 5 フィールド cron 式（例: */5 * * * *）。",
+    cronScheduleFieldLabel: "Cron スケジュール",
+    cronTriggerAtStartFieldLabel: "Cron 起動時トリガー",
     runnerFieldLabel: "Runner",
     runnerInheritanceFactoryLabel: (runnerName) =>
       `ファクトリー runner を継承 (${runnerName})`,
@@ -648,6 +683,23 @@ const workstationDetailMessagesByLocale = {
     requestStatusStartedAgo: (elapsed) => `${elapsed} 시작`,
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `유효 runner: ${runnerName} (${sourceLabel}).`,
+    editableConfigurationCronExpiryWindowInvalid: (value) =>
+      `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronJitterInvalid: (value) =>
+      `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleInvalid: (schedule, detail) =>
+      `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
+    editableConfigurationCronScheduleRequired:
+      "cron workstation requires non-empty 'schedule'",
+    cronExpiryWindowFieldHint:
+      "만료 전 양의 Go duration(예: 30s, 5m, 1h). 선택 사항.",
+    cronExpiryWindowFieldLabel: "Cron 만료 윈도우",
+    cronJitterFieldHint:
+      "최대 결정적 지터의 비음 Go duration(예: 0s, 30s, 5m). 선택 사항.",
+    cronJitterFieldLabel: "Cron 지터",
+    cronScheduleFieldHint: "필수 5필드 cron 식(예: */5 * * * *).",
+    cronScheduleFieldLabel: "Cron 스케줄",
+    cronTriggerAtStartFieldLabel: "Cron 시작 시 트리거",
     runnerFieldLabel: "Runner",
     runnerInheritanceFactoryLabel: (runnerName) =>
       `팩토리 runner 상속 (${runnerName})`,
@@ -853,6 +905,23 @@ const workstationDetailMessagesByLocale = {
     requestStatusStartedAgo: (elapsed) => `开始于 ${elapsed}`,
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `当前生效的 runner：${runnerName}（${sourceLabel}）。`,
+    editableConfigurationCronExpiryWindowInvalid: (value) =>
+      `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronJitterInvalid: (value) =>
+      `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleInvalid: (schedule, detail) =>
+      `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
+    editableConfigurationCronScheduleRequired:
+      "cron workstation requires non-empty 'schedule'",
+    cronExpiryWindowFieldHint:
+      "可选的正 Go duration，表示到期后过期前的窗口（例如 30s、5m、1h）。",
+    cronExpiryWindowFieldLabel: "Cron 过期窗口",
+    cronJitterFieldHint:
+      "可选的非负 Go duration，表示最大确定性调度抖动（例如 0s、30s、5m）。",
+    cronJitterFieldLabel: "Cron 抖动",
+    cronScheduleFieldHint: "必填的五字段 cron 表达式（例如 */5 * * * *）。",
+    cronScheduleFieldLabel: "Cron 调度",
+    cronTriggerAtStartFieldLabel: "Cron 启动时触发",
     runnerFieldLabel: "Runner",
     runnerInheritanceFactoryLabel: (runnerName) =>
       `继承工厂 runner（${runnerName}）`,

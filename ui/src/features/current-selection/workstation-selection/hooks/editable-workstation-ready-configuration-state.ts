@@ -4,9 +4,14 @@ import type { EditableWorkstationBehavior } from "../../../current-factory-defin
 import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
-  type resolveEditableWorkstationValues,
+  type EditableWorkstationValues,
+  resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { editableWorkstationDraftsEqual } from "../../../current-factory-definition/lib/workstation-guards";
+import {
+  resolveDraftForBehaviorChange,
+  updateEditableWorkstationCronDraft,
+} from "../editing/editable-workstation-cron-draft-mutators";
 import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import type { RunnerID } from "../editing/runner-metadata";
 import type {
@@ -57,6 +62,7 @@ function resolveWorkstationOptionsState(
 }
 
 function createEditableWorkstationDraftHandlers(
+  selectedEditableValues: EditableWorkstationValues,
   setSessionState: (
     updater: (
       currentState: EditableWorkstationSessionState | null,
@@ -81,7 +87,33 @@ function createEditableWorkstationDraftHandlers(
       updateDraft((draft) => ({ ...draft, prompt: value }));
     },
     onBehaviorChange: (value: EditableWorkstationBehavior) => {
-      updateDraft((draft) => ({ ...draft, behavior: value }));
+      updateDraft((draft) =>
+        resolveDraftForBehaviorChange(
+          draft,
+          value,
+          selectedEditableValues,
+        ),
+      );
+    },
+    onCronExpiryWindowChange: (value: string) => {
+      updateDraft((draft) =>
+        updateEditableWorkstationCronDraft(draft, { expiryWindow: value }),
+      );
+    },
+    onCronJitterChange: (value: string) => {
+      updateDraft((draft) =>
+        updateEditableWorkstationCronDraft(draft, { jitter: value }),
+      );
+    },
+    onCronScheduleChange: (value: string) => {
+      updateDraft((draft) =>
+        updateEditableWorkstationCronDraft(draft, { schedule: value }),
+      );
+    },
+    onCronTriggerAtStartChange: (value: boolean) => {
+      updateDraft((draft) =>
+        updateEditableWorkstationCronDraft(draft, { triggerAtStart: value }),
+      );
     },
     onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => {
       updateDraft((draft) => ({ ...draft, guards }));
@@ -136,7 +168,10 @@ export function buildReadyEditableWorkstationConfigurationState({
         selectedNode,
         sessionState.draft,
       );
-  const draftHandlers = createEditableWorkstationDraftHandlers(setSessionState);
+  const draftHandlers = createEditableWorkstationDraftHandlers(
+    selectedEditableValues,
+    setSessionState,
+  );
 
   return {
     baseVersion: editableDefinition.version,
