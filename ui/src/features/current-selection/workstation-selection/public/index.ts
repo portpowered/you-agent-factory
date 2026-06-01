@@ -12,12 +12,8 @@ export {
 export {
   BUILT_IN_RUNNER_IDS,
   getRunnerMetadata,
-  type RunnerCapabilitiesMetadata,
-  type RunnerCapabilitySupport,
   type RunnerID,
   type RunnerMetadata,
-  type RunnerOptionalCapability,
-  type RunnerOptionalCapabilityStatus,
 } from "../editing/runner-metadata";
 export type {
   EditableWorkstationConfigurationState,
