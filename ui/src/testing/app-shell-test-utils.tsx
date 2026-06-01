@@ -19,7 +19,10 @@ import { installDashboardBrowserTestShims } from "../components/dashboard/test-b
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
-import { useCurrentFactoryDocument } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
+import {
+  currentFactoryDocumentQueryKey,
+  useCurrentFactoryDocument,
+} from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import {
@@ -43,7 +46,7 @@ import { DashboardSessionTestProvider } from "./dashboard-session-test-provider"
 import {
   isSessionFactoryRequest,
   mockGetSessionFactory,
-  sessionFactoryNamedExportDocument,
+  sessionFactoryDocumentFromSnapshot,
 } from "./session-factory-mocks";
 
 export {
@@ -94,6 +97,7 @@ interface RenderAppOptions {
   locationSearch?: string | null;
   sessionID?: string | null;
   seedTimelineFromSnapshot?: boolean;
+  seedCurrentFactoryDocument?: boolean;
   snapshot: DashboardSnapshot;
   timelineEvents?: FactoryEvent[];
   timelineSnapshots?: DashboardSnapshot[];
@@ -203,6 +207,7 @@ export function renderApp({
   initialLocale,
   locationSearch,
   seedTimelineFromSnapshot = true,
+  seedCurrentFactoryDocument = true,
   sessionID,
   snapshot,
   timelineEvents,
@@ -219,6 +224,12 @@ export function renderApp({
     },
   });
   queryClients.push(queryClient);
+  if (seedCurrentFactoryDocument) {
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(sessionID ?? DEFAULT_FACTORY_SESSION_ID),
+      sessionFactoryDocumentFromSnapshot(snapshot),
+    );
+  }
 
   const fetchMock: FetchMock = vi
     .fn()
@@ -237,7 +248,7 @@ export function renderApp({
         isSessionFactoryRequest(path, method, sessionID ?? undefined)
       ) {
         return mockGetSessionFactory({
-          document: sessionFactoryNamedExportDocument,
+          document: sessionFactoryDocumentFromSnapshot(snapshot),
         });
       }
 

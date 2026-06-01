@@ -74,9 +74,4 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/work-outcome/components/trend-cards.tsx#TREND_CAUSE_LABEL_CLASS",
   "src/features/work-outcome/components/trend-cards.tsx#TIMING_RANGE_SUMMARY_CLASS",
   "src/features/work-outcome/components/work-chart.tsx#WORK_CHART_TOOLBAR_CLASS",
-  "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#TOGGLE_BUTTON_CLASS",
-  "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#PANEL_CLASS",
-  "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#PANEL_HEADER_CLASS",
-  "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#PANEL_TITLE_CLASS",
-  "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx#COLLAPSE_BUTTON_CLASS",
 ];

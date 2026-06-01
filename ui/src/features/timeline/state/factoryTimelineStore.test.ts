@@ -6,6 +6,7 @@ import {
   resourceCountTimelineEvents,
 } from "../../../components/dashboard/fixtures";
 
+import { expectDashboardWorkItemRef } from "../../../testing/expectDashboardWorkItemRef";
 import {
   buildFactoryTimelineSnapshot,
   resolveConfiguredWorkTypeName,
@@ -1103,12 +1104,12 @@ describe("factory timeline reconstruction topology", () => {
     expect(
       snapshot.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         display_name: "Timeline Story",
         trace_id: "trace-1",
         work_id: "work-1",
         work_type_id: "story",
-      },
+      }),
     ]);
   });
 
@@ -1137,12 +1138,12 @@ describe("factory timeline reconstruction topology", () => {
     expect(
       tickTwo.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         display_name: "Timeline Story",
         trace_id: "trace-1",
         work_id: "work-1",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       tickTwo.runtime.current_work_items_by_place_id?.["story:review"],
@@ -1195,12 +1196,12 @@ describe("factory timeline reconstruction topology", () => {
     expect(
       tickTwo.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         display_name: "Timeline Story",
         trace_id: "trace-1",
         work_id: "work-1",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       tickTwo.runtime.current_work_items_by_place_id?.["story:review"],
@@ -1248,12 +1249,12 @@ describe("factory timeline reconstruction topology", () => {
     expect(
       continued.runtime.current_work_items_by_place_id?.["story:retry"],
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         display_name: "Continued Timeline Story",
         trace_id: "trace-continued",
         work_id: "work-continued",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       continued.runtime.current_work_items_by_place_id?.["story:done"],
@@ -1475,12 +1476,12 @@ describe("factory timeline reconstruction topology", () => {
     expect(
       queued.runtime.current_work_items_by_place_id?.["thoughts:init"],
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         display_name: "agents-04-21-2026",
         trace_id: "trace-camel-1",
         work_id: "work-camel-1",
         work_type_id: "thoughts",
-      },
+      }),
     ]);
 
     expect(active.runtime.in_flight_dispatch_count).toBe(1);
@@ -1511,12 +1512,12 @@ describe("factory timeline reconstruction topology", () => {
         "thoughts:complete"
       ],
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         display_name: "agents-04-21-2026",
         trace_id: "trace-camel-1",
         work_id: "work-camel-1",
         work_type_id: "thoughts",
-      },
+      }),
     ]);
     expect(
       completed.runtime.session.provider_sessions?.[0]?.provider_session?.id,
@@ -1750,97 +1751,97 @@ describe("factory timeline reconstruction trace lineage", () => {
       tickThree.runtime.active_executions_by_dispatch_id?.["dispatch-chain"]
         ?.work_items,
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-a",
         display_name: "Fan In A",
         trace_id: "chain-a",
         work_id: "work-chain-a",
         work_type_id: "story",
-      },
-      {
+      }),
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-b",
         display_name: "Fan In B",
         trace_id: "chain-b",
         work_id: "work-chain-b",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       tickThree.workstationRequestsByDispatchID["dispatch-chain"]?.request_view
         ?.input_work_items,
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-a",
         display_name: "Fan In A",
         trace_id: "chain-a",
         work_id: "work-chain-a",
         work_type_id: "story",
-      },
-      {
+      }),
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-b",
         display_name: "Fan In B",
         trace_id: "chain-b",
         work_id: "work-chain-b",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       tickFour.runtime.workstation_requests_by_dispatch_id?.["dispatch-chain"]
         ?.request?.input_work_items,
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-a",
         display_name: "Fan In A",
         trace_id: "chain-a",
         work_id: "work-chain-a",
         work_type_id: "story",
-      },
-      {
+      }),
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-b",
         display_name: "Fan In B",
         trace_id: "chain-b",
         work_id: "work-chain-b",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       tickFour.runtime.workstation_requests_by_dispatch_id?.["dispatch-chain"]
         ?.response?.output_work_items,
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-a",
         display_name: "Fan In Result",
         previous_chaining_trace_ids: ["chain-a", "chain-b"],
         trace_id: "chain-a",
         work_id: "work-chain-result",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       tickFour.workstationRequestsByDispatchID["dispatch-chain"]?.response_view
         ?.output_work_items,
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-a",
         display_name: "Fan In Result",
         previous_chaining_trace_ids: ["chain-a", "chain-b"],
         trace_id: "chain-a",
         work_id: "work-chain-result",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       tickFour.workstationRequestsByDispatchID["dispatch-chain"]?.work_items,
     ).toEqual(
       expect.arrayContaining([
-        {
+        expectDashboardWorkItemRef({
           current_chaining_trace_id: "chain-a",
           display_name: "Fan In Result",
           previous_chaining_trace_ids: ["chain-a", "chain-b"],
           trace_id: "chain-a",
           work_id: "work-chain-result",
           work_type_id: "story",
-        },
+        }),
       ]),
     );
     expect(
@@ -2029,14 +2030,14 @@ describe("factory timeline reconstruction trace lineage", () => {
       tickFour.runtime.workstation_requests_by_dispatch_id?.["dispatch-chain"]
         ?.response?.output_work_items,
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-a",
         display_name: "Fan In Result",
         previous_chaining_trace_ids: ["chain-a", "chain-b"],
         trace_id: "chain-a",
         work_id: "work-chain-result",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(
       tickFour.tracesByWorkID["work-chain-result"].dispatches[0],
@@ -3832,12 +3833,12 @@ describe("factory timeline store replay", () => {
     expect(
       activeTick.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         display_name: "Queued Analysis Story",
         trace_id: "trace-queued-analysis",
         work_id: "work-queued-analysis",
         work_type_id: "story",
-      },
+      }),
     ]);
 
     const failedTick = buildFactoryTimelineSnapshot(
@@ -3847,12 +3848,12 @@ describe("factory timeline store replay", () => {
     expect(
       failedTick.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([
-      {
+      expectDashboardWorkItemRef({
         display_name: "Queued Analysis Story",
         trace_id: "trace-queued-analysis",
         work_id: "work-queued-analysis",
         work_type_id: "story",
-      },
+      }),
     ]);
     expect(failedTick.runtime.session.failed_work_labels).toEqual([
       "Blocked Analysis Story",

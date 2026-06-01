@@ -11,6 +11,7 @@ import {
   syncCompletedDispatchAttempt,
 } from "./replayWorldStateSupport";
 import { emptyWorldRuntime, type ReplayWorldState } from "./types";
+import { emptyWorkPayloadLineageProjection } from "./workPayloadLineage";
 
 function emptyState(): ReplayWorldState {
   return {
@@ -21,6 +22,7 @@ function emptyState(): ReplayWorldState {
     failedWorkItemsByID: {},
     inferenceAttemptsByDispatchID: {},
     occupancyByID: {},
+    payloadLineage: emptyWorkPayloadLineageProjection(),
     providerSessions: [],
     relationsByWorkID: {},
     runtime: emptyWorldRuntime(),

@@ -345,8 +345,8 @@ describe("EditableConfigurationSection model workstation fields", () => {
 });
 
 describe("EditableConfigurationSection model workstation save feedback", () => {
-  it("shows validation alert without inline save outcome copy", () => {
-    const { rerender } = render(
+  it("shows validation alert for blocking field errors", () => {
+    render(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
@@ -359,16 +359,13 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
 
     expandConfiguration();
 
-    const configurationSection = screen
-      .getByRole("heading", { name: messages.editableConfigurationHeading })
-      .closest("section");
-    expect(configurationSection).toBeTruthy();
-
     expect(screen.getByRole("alert")).toHaveTextContent(
       messages.editableConfigurationValidationStatus,
     );
+  });
 
-    rerender(
+  it("does not render inline save outcome copy in the configuration section", () => {
+    const { container, rerender } = render(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
@@ -380,10 +377,30 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       />,
     );
 
-    expectNoInlineSaveOutcomesIn(configurationSection as HTMLElement);
+    expandConfiguration();
+
+    expectNoInlineSaveOutcomesIn(
+      container.querySelector("section") as HTMLElement,
+    );
+
+    rerender(
+      <EditableConfigurationSection
+        messages={messages}
+        onSaveConfiguration={() => undefined}
+        saveState={{
+          errorMessage: "The current factory rejected the workstation update.",
+          status: "error",
+        }}
+        state={buildReadyState({ isDirty: true })}
+      />,
+    );
+
+    expectNoInlineSaveOutcomesIn(
+      container.querySelector("section") as HTMLElement,
+    );
   });
 
-  it("omits global validation alert for prompt-only blocking errors", () => {
+  it("omits global validation alert when only prompt diagnostics block save", () => {
     render(
       <EditableConfigurationSection
         messages={messages}

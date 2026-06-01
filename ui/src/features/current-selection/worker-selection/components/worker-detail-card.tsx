@@ -6,7 +6,6 @@ import { useWorkerDetailState } from "../hooks/use-worker-detail-state";
 import type { WorkerDetailCardProps } from "../lib/detail-card-types";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
-import { WorkerTopologyDeleteSection } from "./worker-topology-delete-section";
 
 export function WorkerDetailCard({
   editableConfigurationState,
@@ -43,18 +42,12 @@ export function WorkerDetailCard({
         </p>
       ) : null}
       {detailState.status === "ready" ? (
-        <>
-          <WorkerTopologyDeleteSection
-            messages={messages}
-            workerName={workerName}
-          />
-          <WorkerEditableConfigurationSection
-            messages={messages}
-            saveState={saveState}
-            state={editableConfigurationState}
-            workerName={workerName}
-          />
-        </>
+        <WorkerEditableConfigurationSection
+          messages={messages}
+          saveState={saveState}
+          state={editableConfigurationState}
+          workerName={workerName}
+        />
       ) : null}
     </SelectionDetailLayout>
   );
