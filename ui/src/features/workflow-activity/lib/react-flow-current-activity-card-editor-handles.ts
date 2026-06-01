@@ -149,7 +149,7 @@ export function resolveWorkstationConnectionAnchorContext(
   );
 
   return workstation
-    ? factoryGraphConnectionAnchorContext(workstation)
+    ? factoryGraphConnectionAnchorContext(workstation, factory?.workers)
     : undefined;
 }
 

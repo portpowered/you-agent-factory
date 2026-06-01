@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: connection anchor registry and draft edge helpers stay co-located for one graph-editor seam.
 import {
   type WorkstationProgressOutcomeRouteContext,
   workstationSupportsProgressOutcomeFailureRoute,
@@ -14,14 +15,20 @@ import {
   type FactoryGraphNode,
   type FactoryGraphNodeKind,
   type FactoryGraphTopology,
+  type FactoryWorker,
   type FactoryWorkstation,
 } from "./factory-graph-draft-types";
 import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "./factory-graph-progress-outcome-connection-anchors";
+import { toWorkstationProgressOutcomeRouteContext } from "./factory-graph-workstation-connection-context";
 
 export {
   mergeAuthoredProgressOutcomeConnectionAnchors,
   PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
 } from "./factory-graph-progress-outcome-connection-anchors";
+export {
+  resolveAssignedWorkerStopToken,
+  toWorkstationProgressOutcomeRouteContext,
+} from "./factory-graph-workstation-connection-context";
 
 export interface FactoryGraphConnectionAnchor {
   description: string;
@@ -174,20 +181,32 @@ const ANCHORS_BY_KIND: Record<
 };
 
 export function factoryGraphConnectionAnchorContext(
-  workstation: WorkstationProgressOutcomeRouteContext,
+  workstation: WorkstationProgressOutcomeRouteContext | FactoryWorkstation,
+  workers?: readonly FactoryWorker[] | undefined,
 ): FactoryGraphConnectionAnchorContext {
-  return { workstation };
+  const routeContext: WorkstationProgressOutcomeRouteContext =
+    "worker" in workstation
+      ? toWorkstationProgressOutcomeRouteContext(workstation, workers)
+      : workstation;
+
+  return { workstation: routeContext };
 }
 
 export function createFactoryGraphWorkstationResolver(
   workstations: readonly FactoryWorkstation[] | undefined,
+  workers?: readonly FactoryWorker[] | undefined,
 ): FactoryGraphConnectionResolver {
   const byName = new Map(
     (workstations ?? []).map((workstation) => [workstation.name, workstation]),
   );
 
   return {
-    resolveWorkstation: (workstationName) => byName.get(workstationName),
+    resolveWorkstation: (workstationName) => {
+      const workstation = byName.get(workstationName);
+      return workstation
+        ? toWorkstationProgressOutcomeRouteContext(workstation, workers)
+        : undefined;
+    },
   };
 }
 

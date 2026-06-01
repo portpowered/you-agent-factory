@@ -7,6 +7,7 @@ import { installDashboardBrowserTestShims } from "../../../components/dashboard/
 import "../../../styles.css";
 import { baseFactoryDefinition } from "../lib/factory-graph-draft.test-helpers";
 import type {
+  CanonicalFactoryDefinition,
   FactoryGraphTopology,
   FactoryWorkstation,
 } from "../lib/factory-graph-draft-types";
@@ -63,6 +64,39 @@ const standardProcessorWithStopWords: FactoryWorkstation = {
   stopWords: ["DONE"],
 };
 
+const factoryWithWorkerStopToken = {
+  ...baseFactoryDefinition,
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        { name: "queued", type: "INITIAL" },
+        { name: "rejected", type: "FAILED" },
+        { name: "done", type: "TERMINAL" },
+      ],
+    },
+  ],
+  workers: [
+    {
+      name: "processor",
+      stopToken: "<COMPLETE>",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workstations: [
+    {
+      ...baseFactoryDefinition.workstations[0],
+      behavior: "STANDARD",
+      name: "draft",
+      onContinue: [{ state: "queued", workType: "story" }],
+      onFailure: [{ state: "rejected", workType: "story" }],
+      onRejection: [{ state: "rejected", workType: "story" }],
+      stopWords: undefined,
+      worker: "processor",
+    },
+  ],
+} satisfies CanonicalFactoryDefinition;
+
 const logicalMoveWorkstation: FactoryWorkstation = {
   body: "Move work downstream.",
   inputs: [
@@ -115,7 +149,15 @@ const onRejectionValidationProjection = projectFactoryValidationTargets([
 ]);
 
 function renderProgressOutcomeRouteFlow(
-  workstations: readonly FactoryWorkstation[],
+  input:
+    | {
+        factoryDefinition: CanonicalFactoryDefinition;
+        workstations?: never;
+      }
+    | {
+        factoryDefinition?: never;
+        workstations: readonly FactoryWorkstation[];
+      },
   options?: {
     topology?: FactoryGraphTopology;
     validationProjection?: typeof onRejectionValidationProjection;
@@ -123,6 +165,8 @@ function renderProgressOutcomeRouteFlow(
 ) {
   const flow = buildFactoryGraphEditorFlowModel({
     canEditConnections: true,
+    factoryDefinition:
+      "factoryDefinition" in input ? input.factoryDefinition : undefined,
     pendingAdditionEdgeIds: new Set<string>(),
     pendingAdditionNodeIds: new Set<string>(),
     pendingConnectionSource: null,
@@ -130,7 +174,10 @@ function renderProgressOutcomeRouteFlow(
     pendingRemovalNodeIds: new Set<string>(),
     topology: options?.topology ?? PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
     validationProjection: options?.validationProjection,
-    workstations,
+    workstations:
+      "workstations" in input
+        ? input.workstations
+        : input.factoryDefinition.workstations,
   });
 
   return render(
@@ -168,9 +215,9 @@ describe("factory graph editor progress outcome route handles", () => {
   useProgressOutcomeRouteFlowTestHooks();
 
   it("hides continue and reject connect handles for standard processors without stopWords", async () => {
-    const { container } = renderProgressOutcomeRouteFlow([
-      standardProcessorWithoutStopWords,
-    ]);
+    const { container } = renderProgressOutcomeRouteFlow({
+      workstations: [standardProcessorWithoutStopWords],
+    });
 
     await screen.findByRole("button", { name: "Connect: draft Success" });
     expect(
@@ -188,23 +235,37 @@ describe("factory graph editor progress outcome route handles", () => {
     ).toHaveLength(0);
   });
 
-  it("shows continue and reject connect handles when stopWords are configured", async () => {
-    const { container } = renderProgressOutcomeRouteFlow([
-      standardProcessorWithStopWords,
-    ]);
+  it("shows continue and reject connect handles when the assigned worker has a stop token", async () => {
+    const { container } = renderProgressOutcomeRouteFlow({
+      factoryDefinition: factoryWithWorkerStopToken,
+    });
 
     await screen.findByRole("button", { name: "Connect: draft Continue" });
     expect(
       screen.getByRole("button", { name: "Connect: draft Reject" }),
     ).not.toBeNull();
-    expect(container.querySelectorAll("[data-z-axis-incomplete-hint]")).toHaveLength(
-      0,
-    );
+    expect(
+      container.querySelectorAll("[data-z-axis-incomplete-hint]"),
+    ).toHaveLength(0);
+  });
+
+  it("shows continue and reject connect handles when stopWords are configured", async () => {
+    const { container } = renderProgressOutcomeRouteFlow({
+      workstations: [standardProcessorWithStopWords],
+    });
+
+    await screen.findByRole("button", { name: "Connect: draft Continue" });
+    expect(
+      screen.getByRole("button", { name: "Connect: draft Reject" }),
+    ).not.toBeNull();
+    expect(
+      container.querySelectorAll("[data-z-axis-incomplete-hint]"),
+    ).toHaveLength(0);
   });
 
   it("does not show API validation or z-axis hints on omitted continue and reject handles without stopWords", async () => {
     const { container } = renderProgressOutcomeRouteFlow(
-      [standardProcessorWithoutStopWords],
+      { workstations: [standardProcessorWithoutStopWords] },
       { validationProjection: onRejectionValidationProjection },
     );
 
@@ -224,15 +285,13 @@ describe("factory graph editor progress outcome route handles", () => {
       ),
     ).toHaveLength(0);
     expect(
-      container.querySelectorAll(
-        '[aria-invalid="true"].ring-af-danger-border',
-      ),
+      container.querySelectorAll('[aria-invalid="true"].ring-af-danger-border'),
     ).toHaveLength(0);
   });
 
   it("shows API validation on rendered reject handle when stopWords are configured", async () => {
     const { container } = renderProgressOutcomeRouteFlow(
-      [standardProcessorWithStopWords],
+      { workstations: [standardProcessorWithStopWords] },
       { validationProjection: onRejectionValidationProjection },
     );
 
@@ -251,9 +310,10 @@ describe("factory graph editor logical-move progress outcome route handles", () 
   useProgressOutcomeRouteFlowTestHooks();
 
   it("hides continue, failure, and reject connect handles on logical-move workstations", async () => {
-    renderProgressOutcomeRouteFlow([logicalMoveWorkstation], {
-      topology: logicalMoveComparisonTopology,
-    });
+    renderProgressOutcomeRouteFlow(
+      { workstations: [logicalMoveWorkstation] },
+      { topology: logicalMoveComparisonTopology },
+    );
 
     await screen.findByRole("button", { name: "Connect: router Success" });
     expect(
@@ -275,7 +335,12 @@ describe("factory graph editor logical-move progress outcome route handles", () 
 
   it("keeps standard processor outcome handles when logical-move is on the same graph", async () => {
     renderProgressOutcomeRouteFlow(
-      [standardProcessorWithoutStopWords, logicalMoveWorkstation],
+      {
+        workstations: [
+          standardProcessorWithoutStopWords,
+          logicalMoveWorkstation,
+        ],
+      },
       { topology: logicalMoveComparisonTopology },
     );
 

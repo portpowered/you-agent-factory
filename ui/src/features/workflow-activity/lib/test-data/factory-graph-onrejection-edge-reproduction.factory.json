@@ -107,7 +107,9 @@
   ],
   "workers": [
     {
-      "name": "processor"
+      "name": "processor",
+      "stopToken": "<COMPLETE>",
+      "type": "MODEL_WORKER"
     },
     {
       "name": "workspace-setup"
@@ -281,6 +283,7 @@
     },
     {
       "name": "review",
+      "type": "MODEL_WORKSTATION",
       "worker": "processor",
       "inputs": [
         {
