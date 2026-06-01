@@ -324,4 +324,52 @@ describe("WorkTypeDetailCard", () => {
       }),
     ).toBeNull();
   });
+
+  it("omits global unsaved helper paragraphs for dirty ready-state work type drafts", () => {
+    const editableConfigurationState: EditableWorkTypeConfigurationState = {
+      baseVersion: buildFactoryDocument().version,
+      canSave: true,
+      draft: {
+        handlingBehavior: null,
+        name: "story",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        handlingBehavior: null,
+        name: "story",
+        states: [
+          { name: "queued", type: "INITIAL" },
+          { name: "done", type: "TERMINAL" },
+        ],
+      },
+      isDirty: true,
+      markChangesSaved: vi.fn(),
+      onHandlingBehaviorChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onResetToLatest: vi.fn(),
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    render(
+      <WorkTypeDetailCard
+        editableConfigurationState={editableConfigurationState}
+        headerAction={buildWorkTypeHeaderSaveAction({ canSave: true })}
+        workTypeName="story"
+      />,
+    );
+
+    expect(
+      screen.queryByText("You have unsaved changes for this work type."),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "Changes stay local to this edit session until you save the running factory.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Save changes" }).length,
+    ).toBeGreaterThan(0);
+  });
 });

@@ -9,8 +9,6 @@ export interface WorkstationDetailMessages {
   editableConfigurationExpandActionLabel: string;
   editableConfigurationHeading: string;
   editableConfigurationLoading: string;
-  editableConfigurationDirtyStatus: string;
-  editableConfigurationDraftNote: string;
   editableConfigurationModelSharedWorkerHint: string;
   editableConfigurationResetAction: string;
   editableConfigurationServerFieldChangedHint: string;

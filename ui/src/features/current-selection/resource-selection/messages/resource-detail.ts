@@ -26,10 +26,6 @@ const resourceDetailMessagesByLocale = {
       "Collapse resource configuration editor",
     editableConfigurationContractInvalidPrefix:
       "Resource configuration is invalid.",
-    editableConfigurationDirtyStatus:
-      "You have unsaved changes for this resource.",
-    editableConfigurationDraftNote:
-      "Changes stay local to this edit session until you save the running factory.",
     editableConfigurationEmpty:
       "This running factory definition does not expose editable resource values.",
     editableConfigurationErrorPrefix: "Resource configuration unavailable.",
@@ -100,10 +96,6 @@ const resourceDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel:
       "リソース設定エディターを折りたたむ",
     editableConfigurationContractInvalidPrefix: "リソース設定が無効です。",
-    editableConfigurationDirtyStatus:
-      "このリソースに未保存の変更があります。",
-    editableConfigurationDraftNote:
-      "保存するまで変更はこの編集セッション内にのみ保持されます。",
     editableConfigurationEmpty:
       "実行中のファクトリ定義に編集可能なリソース値がありません。",
     editableConfigurationErrorPrefix: "リソース設定を利用できません。",
@@ -171,10 +163,6 @@ const resourceDetailMessagesByLocale = {
       "리소스 용량은 1보다 큰 정수여야 합니다.",
     editableConfigurationCollapseActionLabel: "리소스 구성 편집기 접기",
     editableConfigurationContractInvalidPrefix: "리소스 구성이 유효하지 않습니다.",
-    editableConfigurationDirtyStatus:
-      "이 리소스에 저장되지 않은 변경 사항이 있습니다.",
-    editableConfigurationDraftNote:
-      "저장하기 전까지 변경 사항은 이 편집 세션에만 유지됩니다.",
     editableConfigurationEmpty:
       "실행 중인 팩토리 정의에 편집 가능한 리소스 값이 없습니다.",
     editableConfigurationErrorPrefix: "리소스 구성을 사용할 수 없습니다.",
@@ -240,8 +228,6 @@ const resourceDetailMessagesByLocale = {
     editableConfigurationCapacityInvalid: "资源容量必须是大于零的整数。",
     editableConfigurationCollapseActionLabel: "收起资源配置编辑器",
     editableConfigurationContractInvalidPrefix: "资源配置无效。",
-    editableConfigurationDirtyStatus: "此资源有未保存的更改。",
-    editableConfigurationDraftNote: "保存前，更改仅保留在此编辑会话中。",
     editableConfigurationEmpty: "运行中的工厂定义没有可编辑的资源值。",
     editableConfigurationErrorPrefix: "无法加载资源配置。",
     editableConfigurationExpandActionLabel: "展开资源配置编辑器",

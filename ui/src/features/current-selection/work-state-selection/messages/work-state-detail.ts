@@ -24,10 +24,6 @@ const workStateDetailMessagesByLocale = {
     discardDraftAction: "Discard local changes",
     editableConfigurationContractInvalidPrefix:
       "Work state configuration is invalid.",
-    editableConfigurationDirtyStatus:
-      "You have unsaved changes for this work state.",
-    editableConfigurationDraftNote:
-      "Changes stay local to this edit session until you save the running factory.",
     editableConfigurationEmpty:
       "This running factory definition does not expose editable work state values.",
     editableConfigurationErrorPrefix: "Work state configuration unavailable.",
@@ -66,10 +62,6 @@ const workStateDetailMessagesByLocale = {
     discardDraftAction: "ローカルの変更を破棄",
     editableConfigurationContractInvalidPrefix:
       "ワーク状態の構成が無効です。",
-    editableConfigurationDirtyStatus:
-      "このワーク状態に未保存の変更があります。",
-    editableConfigurationDraftNote:
-      "実行中のファクトリーを保存するまで、変更はこの編集セッション内に留まります。",
     editableConfigurationEmpty:
       "実行中のファクトリー定義に、編集可能なワーク状態の値がありません。",
     editableConfigurationErrorPrefix: "ワーク状態の構成を利用できません。",
@@ -108,10 +100,6 @@ const workStateDetailMessagesByLocale = {
     discardDraftAction: "로컬 변경 사항 취소",
     editableConfigurationContractInvalidPrefix:
       "작업 상태 구성이 유효하지 않습니다.",
-    editableConfigurationDirtyStatus:
-      "이 작업 상태에 저장되지 않은 변경 사항이 있습니다.",
-    editableConfigurationDraftNote:
-      "실행 중인 팩토리를 저장할 때까지 변경 사항은 이 편집 세션에만 유지됩니다.",
     editableConfigurationEmpty:
       "실행 중인 팩토리 정의에 편집 가능한 작업 상태 값이 없습니다.",
     editableConfigurationErrorPrefix: "작업 상태 구성을 사용할 수 없습니다.",
@@ -147,9 +135,6 @@ const workStateDetailMessagesByLocale = {
     configurationLoading: "正在加载此工作状态的当前工厂定义。",
     discardDraftAction: "放弃本地更改",
     editableConfigurationContractInvalidPrefix: "工作状态配置无效。",
-    editableConfigurationDirtyStatus: "此工作状态有未保存的更改。",
-    editableConfigurationDraftNote:
-      "在保存运行中的工厂之前，更改仅保留在此编辑会话中。",
     editableConfigurationEmpty:
       "运行中的工厂定义未提供可编辑的工作状态值。",
     editableConfigurationErrorPrefix: "工作状态配置不可用。",

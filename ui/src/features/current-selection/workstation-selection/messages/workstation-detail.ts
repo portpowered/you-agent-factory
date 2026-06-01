@@ -30,10 +30,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel: "Collapse editable configuration",
     editableConfigurationExpandActionLabel: "Expand editable configuration",
     editableConfigurationHeading: "Configuration",
-    editableConfigurationDirtyStatus:
-      "You have unsaved changes for this workstation.",
-    editableConfigurationDraftNote:
-      "Changes stay local to this edit session until you save the running factory.",
     editableConfigurationModelSharedWorkerHint:
       "Model edits are disabled here because this workstation shares its worker with other workstations.",
     editableConfigurationResetAction: "Reset to latest",
@@ -217,10 +213,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel: "編集可能な構成を折りたたむ",
     editableConfigurationExpandActionLabel: "編集可能な構成を展開",
     editableConfigurationHeading: "構成",
-    editableConfigurationDirtyStatus:
-      "このワークステーションには未保存の変更があります。",
-    editableConfigurationDraftNote:
-      "変更は、実行中ファクトリーを保存するまでこの編集セッション内だけに保持されます。",
     editableConfigurationModelSharedWorkerHint:
       "このワークステーションは他のワークステーションと同じワーカーを共有しているため、ここではモデルを編集できません。",
     editableConfigurationResetAction: "最新へ戻す",
@@ -404,10 +396,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel: "편집 가능한 구성 접기",
     editableConfigurationExpandActionLabel: "편집 가능한 구성 펼치기",
     editableConfigurationHeading: "구성",
-    editableConfigurationDirtyStatus:
-      "이 워크스테이션에 저장되지 않은 변경 사항이 있습니다.",
-    editableConfigurationDraftNote:
-      "변경 사항은 실행 중인 팩토리를 저장할 때까지 이 편집 세션에만 로컬로 유지됩니다.",
     editableConfigurationModelSharedWorkerHint:
       "이 워크스테이션은 다른 워크스테이션과 같은 워커를 공유하므로 여기서는 모델을 편집할 수 없습니다.",
     editableConfigurationResetAction: "최신값으로 재설정",
@@ -587,9 +575,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel: "收起可编辑配置",
     editableConfigurationExpandActionLabel: "展开可编辑配置",
     editableConfigurationHeading: "配置",
-    editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
-    editableConfigurationDraftNote:
-      "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
     editableConfigurationModelSharedWorkerHint:
       "此工作站与其他工作站共享同一个 worker，因此这里不能编辑模型。",
     editableConfigurationResetAction: "重置为最新值",
