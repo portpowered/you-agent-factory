@@ -5,22 +5,66 @@ import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../factory-gr
 
 type FactoryDefinitionLike = NonNullable<DashboardSnapshot["factory"]>;
 
-function factoryWorkTypeStateSkeleton(
+function workTypeStateMap(
   factory: FactoryDefinitionLike,
-): string {
-  const workTypes = [...(factory.workTypes ?? [])].sort((left, right) =>
-    left.name.localeCompare(right.name),
-  );
+): Map<string, Set<string>> {
+  const statesByWorkType = new Map<string, Set<string>>();
 
-  return workTypes
-    .map((workType) => {
-      const states = [...(workType.states ?? [])]
-        .map((state) => state.name)
-        .sort()
-        .join(",");
-      return `${workType.name}:${states}`;
-    })
-    .join("|");
+  for (const workType of factory.workTypes ?? []) {
+    statesByWorkType.set(
+      workType.name,
+      new Set((workType.states ?? []).map((state) => state.name)),
+    );
+  }
+
+  return statesByWorkType;
+}
+
+function isDocumentWorkTypeStructureAheadOfSnapshot(
+  document: CurrentFactoryDocument,
+  snapshotFactory: FactoryDefinitionLike,
+): boolean {
+  const documentWorkTypes = workTypeStateMap(document);
+  const snapshotWorkTypes = workTypeStateMap(snapshotFactory);
+
+  for (const [workTypeName, documentStates] of documentWorkTypes) {
+    const snapshotStates = snapshotWorkTypes.get(workTypeName);
+    if (!snapshotStates) {
+      return true;
+    }
+
+    const includesAllSnapshotStates = [...snapshotStates].every((stateName) =>
+      documentStates.has(stateName),
+    );
+    const addsStates = [...documentStates].some(
+      (stateName) => !snapshotStates.has(stateName),
+    );
+
+    if (includesAllSnapshotStates && addsStates) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isSnapshotWorkTypeReplayProjection(
+  document: CurrentFactoryDocument,
+  snapshotFactory: FactoryDefinitionLike,
+): boolean {
+  const documentWorkTypes = workTypeStateMap(document);
+  const snapshotWorkTypes = workTypeStateMap(snapshotFactory);
+
+  return [...snapshotWorkTypes].some(([workTypeName, snapshotStates]) => {
+    const documentStates = documentWorkTypes.get(workTypeName);
+    if (!documentStates) {
+      return false;
+    }
+
+    return [...snapshotStates].some(
+      (stateName) => !documentStates.has(stateName),
+    );
+  });
 }
 
 function factoryWorkstationIds(factory: FactoryDefinitionLike): Set<string> {
@@ -75,10 +119,11 @@ export function resolveObserveModeFactoryDefinition({
     return document;
   }
 
-  if (
-    factoryWorkTypeStateSkeleton(document) !==
-    factoryWorkTypeStateSkeleton(snapshotFactory)
-  ) {
+  if (isDocumentWorkTypeStructureAheadOfSnapshot(document, snapshotFactory)) {
+    return document;
+  }
+
+  if (isSnapshotWorkTypeReplayProjection(document, snapshotFactory)) {
     return snapshotFactory;
   }
 

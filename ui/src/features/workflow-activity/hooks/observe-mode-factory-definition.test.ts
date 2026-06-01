@@ -7,6 +7,7 @@ import {
   buildDivergentSnapshotPlaneFactory,
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
+import { sessionFactoryDocumentFromSnapshot } from "../../../testing/session-factory-mocks";
 import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-definition";
 
 describe("resolveObserveModeFactoryDefinition", () => {
@@ -23,10 +24,33 @@ describe("resolveObserveModeFactoryDefinition", () => {
     ).toEqual(divergentDocumentPlaneFactoryDocument);
   });
 
+  it("prefers the saved document when it adds work type states ahead of the snapshot", () => {
+    const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const savedDocument = {
+      ...baseFactoryDefinitionDocument,
+      workTypes: [
+        ...(baseFactoryDefinitionDocument.workTypes ?? []),
+        {
+          name: "task",
+          states: [{ name: "open", type: "INITIAL" as const }],
+        },
+      ],
+    };
+
+    expect(
+      resolveObserveModeFactoryDefinition({
+        document: savedDocument,
+        snapshotFactory: snapshot.factory,
+        timelineMode: "current",
+      }),
+    ).toEqual(savedDocument);
+  });
+
   it("prefers the timeline snapshot factory when replay diverges structurally at the current tick", () => {
     const snapshot = buildDashboardSnapshotFixture(mediumBranchingDashboardTopology);
+    const persistedDocument = sessionFactoryDocumentFromSnapshot(snapshot);
     const replayFactory = {
-      ...baseFactoryDefinitionDocument,
+      ...persistedDocument,
       workTypes: [
         {
           name: "story",
@@ -51,7 +75,7 @@ describe("resolveObserveModeFactoryDefinition", () => {
 
     expect(
       resolveObserveModeFactoryDefinition({
-        document: baseFactoryDefinitionDocument,
+        document: persistedDocument,
         snapshotFactory: replayFactory,
         timelineMode: "current",
       }),
