@@ -1,0 +1,124 @@
+package events
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+)
+
+// T9: WORK_REQUEST after submit serializes canonical url on content parts, not dispatch temps.
+func TestFactoryEventHistory_RecordWorkRequest_SerializesContentURLNotMaterializedPaths(t *testing.T) {
+	dir := t.TempDir()
+	localPath := filepath.Join(dir, "submit.png")
+	if err := os.WriteFile(localPath, []byte("png"), 0o644); err != nil {
+		t.Fatalf("write local image: %v", err)
+	}
+	localURL, err := workcontent.FilesystemPathToContentURL(localPath)
+	if err != nil {
+		t.Fatalf("local content url: %v", err)
+	}
+	remoteURL := "https://cdn.example.test/assets/review.png"
+
+	// Simulate dispatch-time materialization; event history must never persist this path.
+	materializedPath, cleanup, err := materialize.MaterializeContentURL(
+		t.Context(),
+		"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("materialize data url: %v", err)
+	}
+	defer cleanup()
+
+	record := interfaces.WorkRequestRecord{
+		RequestID: "request-url-wire",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		TraceID:   "trace-url-wire",
+		Source:    "external-submit",
+		WorkItems: []interfaces.FactoryWorkItem{{
+			ID:          "work-url-wire",
+			WorkTypeID:  "task",
+			DisplayName: "url-wire",
+			TraceID:     "trace-url-wire",
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "review images"},
+				{Type: interfaces.WorkContentPartTypeImage, URL: localURL},
+				{Type: interfaces.WorkContentPartTypeImage, URL: remoteURL},
+			},
+		}},
+	}
+
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time {
+		return time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	})
+	history.RecordWorkRequest(3, record, time.Date(2026, 6, 1, 12, 0, 1, 0, time.UTC))
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+
+	data, err := json.Marshal(events[0])
+	if err != nil {
+		t.Fatalf("marshal WORK_REQUEST: %v", err)
+	}
+	payload := string(data)
+
+	for _, wantURL := range []string{localURL, remoteURL} {
+		if !strings.Contains(payload, wantURL) {
+			t.Fatalf("WORK_REQUEST JSON missing url %q: %s", wantURL, payload)
+		}
+	}
+	for _, reject := range []string{
+		materializedPath,
+		filepath.Base(materializedPath),
+		"workcontent-",
+	} {
+		if strings.Contains(payload, reject) {
+			t.Fatalf("WORK_REQUEST JSON must not contain materialized path fragment %q: %s", reject, payload)
+		}
+	}
+
+	payloadStruct, err := events[0].Payload.AsWorkRequestEventPayload()
+	if err != nil {
+		t.Fatalf("work request payload: %v", err)
+	}
+	if payloadStruct.Works == nil || len(*payloadStruct.Works) != 1 {
+		t.Fatalf("works = %#v, want one work item", payloadStruct.Works)
+	}
+	work := (*payloadStruct.Works)[0]
+	if work.Content == nil || len(*work.Content) != 3 {
+		t.Fatalf("content count = %d, want 3 parts", lenValue(work.Content))
+	}
+	imageOne, err := (*work.Content)[1].AsWorkImageContentPart()
+	if err != nil {
+		t.Fatalf("decode first image: %v", err)
+	}
+	if string(imageOne.Url) != localURL {
+		t.Fatalf("first image url = %q, want %q", imageOne.Url, localURL)
+	}
+	if imageOne.File != nil {
+		t.Fatalf("first image file = %#v, want omitted canonical file field", imageOne.File)
+	}
+	imageTwo, err := (*work.Content)[2].AsWorkImageContentPart()
+	if err != nil {
+		t.Fatalf("decode second image: %v", err)
+	}
+	if string(imageTwo.Url) != remoteURL {
+		t.Fatalf("second image url = %q, want %q", imageTwo.Url, remoteURL)
+	}
+}
+
+func lenValue[T any](slice *[]T) int {
+	if slice == nil {
+		return 0
+	}
+	return len(*slice)
+}
