@@ -43,6 +43,10 @@ export function uniqueSortedWorkRefs(
 export function cloneWorkItemRef(item: DashboardWorkItemRef): DashboardWorkItemRef {
   return {
     ...item,
+    content: item.content?.map((part) => ({ ...part })),
+    lineage_parent_work_ids: item.lineage_parent_work_ids
+      ? [...item.lineage_parent_work_ids]
+      : undefined,
     previous_chaining_trace_ids: item.previous_chaining_trace_ids
       ? [...item.previous_chaining_trace_ids]
       : undefined,

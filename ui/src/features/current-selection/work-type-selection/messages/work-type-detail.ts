@@ -57,9 +57,6 @@ const workTypeDetailMessagesByLocale = {
     statesEmpty: "This work type does not define any states yet.",
     statesHeading: "States",
     stateTypeColumnLabel: "Type",
-    topologyDeleteAction: (workTypeName) => `Delete ${workTypeName} work type`,
-    topologyDeleteBlockedPrefix: "Work type cannot be deleted:",
-    topologyDeleteHeading: "Factory graph",
     workTypeNameLabel: "Work type",
   },
   ja: {
@@ -76,8 +73,7 @@ const workTypeDetailMessagesByLocale = {
     editableConfigurationSaveAction: "変更を保存",
     editableConfigurationSaveBusyAction: "保存中...",
     editableConfigurationSaveConfirmationCancelAction: "キャンセル",
-    editableConfigurationSaveConfirmationConfirmAction:
-      "ファクトリを上書き",
+    editableConfigurationSaveConfirmationConfirmAction: "ファクトリを上書き",
     editableConfigurationSaveConfirmationDescription:
       "保存すると、このドラフトのワークタイプ名と CLI 処理動作で実行中のファクトリ定義が上書きされます。",
     editableConfigurationSaveConfirmationTitle:
@@ -110,9 +106,6 @@ const workTypeDetailMessagesByLocale = {
     statesEmpty: "このワークタイプにはまだ状態が定義されていません。",
     statesHeading: "状態",
     stateTypeColumnLabel: "種類",
-    topologyDeleteAction: (workTypeName) => `ワークタイプ ${workTypeName} を削除`,
-    topologyDeleteBlockedPrefix: "ワークタイプを削除できません:",
-    topologyDeleteHeading: "ファクトリグラフ",
     workTypeNameLabel: "ワークタイプ",
   },
   ko: {
@@ -163,9 +156,6 @@ const workTypeDetailMessagesByLocale = {
     statesEmpty: "이 작업 유형에는 아직 정의된 상태가 없습니다.",
     statesHeading: "상태",
     stateTypeColumnLabel: "유형",
-    topologyDeleteAction: (workTypeName) => `작업 유형 ${workTypeName} 삭제`,
-    topologyDeleteBlockedPrefix: "작업 유형을 삭제할 수 없습니다:",
-    topologyDeleteHeading: "팩토리 그래프",
     workTypeNameLabel: "작업 유형",
   },
   "zh-CN": {
@@ -189,8 +179,7 @@ const workTypeDetailMessagesByLocale = {
       "请重新加载最新的运行中工厂值，或在编辑器刷新后使用此草稿重试。",
     editableConfigurationSaveSuccess: (workTypeName) =>
       `已保存运行中的工厂。“${workTypeName}”已刷新为保存后的定义。`,
-    editableConfigurationValidationStatus:
-      "保存此工作类型前请修正高亮字段。",
+    editableConfigurationValidationStatus: "保存此工作类型前请修正高亮字段。",
     handlingBehaviorDefaultLabel: "默认 CLI 处理",
     localizeWorkStateType: (workStateType) => {
       switch (workStateType) {
@@ -210,9 +199,6 @@ const workTypeDetailMessagesByLocale = {
     statesEmpty: "此工作类型尚未定义任何状态。",
     statesHeading: "状态",
     stateTypeColumnLabel: "类型",
-    topologyDeleteAction: (workTypeName) => `删除工作类型 ${workTypeName}`,
-    topologyDeleteBlockedPrefix: "无法删除工作类型:",
-    topologyDeleteHeading: "工厂图",
     workTypeNameLabel: "工作类型",
   },
 } satisfies LocalizedMessages<WorkTypeDetailMessages>;

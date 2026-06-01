@@ -1,0 +1,108 @@
+{
+  "provenance": {
+    "sessionId": "synthetic-golden-payload-lineage-dispatch-without-input-content",
+    "capturedAt": "2026-06-01T12:00:00.000Z",
+    "description": "Synthetic golden fixture: DISPATCH_REQUEST input omits content but consumed-input lineage pins the prior WORK_REQUEST snapshot."
+  },
+  "selectedTick": 2,
+  "events": [
+    {
+      "context": {
+        "eventTime": "2026-06-01T12:00:00.000Z",
+        "sequence": 0,
+        "tick": 0
+      },
+      "id": "event-structure",
+      "payload": {
+        "factory": {
+          "workers": [
+            {
+              "name": "reviewer",
+              "type": "MODEL_WORKER"
+            }
+          ],
+          "workTypes": [
+            {
+              "name": "task",
+              "states": [
+                { "name": "init", "type": "INITIAL" },
+                { "name": "review", "type": "PROCESSING" },
+                { "name": "complete", "type": "TERMINAL" }
+              ]
+            }
+          ],
+          "workstations": [
+            {
+              "id": "t-review",
+              "inputs": [{ "state": "init", "workType": "task" }],
+              "name": "Review",
+              "outputs": [{ "state": "review", "workType": "task" }],
+              "worker": "reviewer"
+            }
+          ]
+        }
+      },
+      "type": "INITIAL_STRUCTURE_REQUEST"
+    },
+    {
+      "context": {
+        "eventTime": "2026-06-01T12:00:00.000Z",
+        "requestId": "request/work-1",
+        "sequence": 1,
+        "tick": 1,
+        "traceIds": ["trace-work-1"],
+        "workIds": ["work-1"]
+      },
+      "id": "event-work-request-work-1",
+      "payload": {
+        "source": "external-submit",
+        "type": "FACTORY_REQUEST_BATCH",
+        "works": [
+          {
+            "content": [{ "text": "submit payload", "type": "text" }],
+            "name": "Draft",
+            "traceId": "trace-work-1",
+            "workId": "work-1",
+            "workTypeName": "task"
+          }
+        ]
+      },
+      "type": "WORK_REQUEST"
+    },
+    {
+      "context": {
+        "dispatchId": "dispatch-1",
+        "eventTime": "2026-06-01T12:00:00.000Z",
+        "sequence": 2,
+        "tick": 2,
+        "traceIds": ["trace-work-1"],
+        "workIds": ["work-1"]
+      },
+      "id": "event-dispatch-request-dispatch-1",
+      "payload": {
+        "inputs": [{ "workId": "work-1" }],
+        "resources": [],
+        "transitionId": "t-review"
+      },
+      "type": "DISPATCH_REQUEST"
+    }
+  ],
+  "expected": {
+    "consumedByDispatchId": {
+      "dispatch-1": {
+        "work-1": {
+          "content": [{ "text": "submit payload", "type": "text" }],
+          "payload_status": "RESOLVED",
+          "work_id": "work-1"
+        }
+      }
+    },
+    "selectedByWorkId": {
+      "work-1": {
+        "content": [{ "text": "submit payload", "type": "text" }],
+        "payload_status": "RESOLVED",
+        "work_id": "work-1"
+      }
+    }
+  }
+}

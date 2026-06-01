@@ -12,10 +12,6 @@ type WorkStateDetailCatalogMessages = Omit<
 
 const workStateDetailMessagesByLocale = {
   en: {
-    topologyDeleteAction: (workTypeName, stateName) =>
-      `Delete ${workTypeName} ${stateName} work state`,
-    topologyDeleteBlockedPrefix: "Work state cannot be deleted:",
-    topologyDeleteHeading: "Factory graph",
     configurationEmpty:
       "This running factory definition does not include the selected work state.",
     configurationErrorPrefix: "Work state definition unavailable.",
@@ -24,6 +20,10 @@ const workStateDetailMessagesByLocale = {
     discardDraftAction: "Discard local changes",
     editableConfigurationContractInvalidPrefix:
       "Work state configuration is invalid.",
+    editableConfigurationDirtyStatus:
+      "You have unsaved changes for this work state.",
+    editableConfigurationDraftNote:
+      "Changes stay local to this edit session until you save the running factory.",
     editableConfigurationEmpty:
       "This running factory definition does not expose editable work state values.",
     editableConfigurationErrorPrefix: "Work state configuration unavailable.",
@@ -50,23 +50,23 @@ const workStateDetailMessagesByLocale = {
     typeFieldLabel: "Lifecycle type",
   },
   ja: {
-    topologyDeleteAction: (workTypeName, stateName) =>
-      `ワーク状態 ${workTypeName} ${stateName} を削除`,
-    topologyDeleteBlockedPrefix: "ワーク状態を削除できません:",
-    topologyDeleteHeading: "ファクトリグラフ",
     configurationEmpty:
       "実行中のファクトリー定義に、選択したワーク状態が含まれていません。",
     configurationErrorPrefix: "ワーク状態定義を利用できません。",
     configurationLoading:
       "このワーク状態の現在のファクトリー定義を読み込んでいます。",
     discardDraftAction: "ローカルの変更を破棄",
-    editableConfigurationContractInvalidPrefix:
-      "ワーク状態の構成が無効です。",
+    editableConfigurationContractInvalidPrefix: "ワーク状態の構成が無効です。",
+    editableConfigurationDirtyStatus:
+      "このワーク状態に未保存の変更があります。",
+    editableConfigurationDraftNote:
+      "実行中のファクトリーを保存するまで、変更はこの編集セッション内に留まります。",
     editableConfigurationEmpty:
       "実行中のファクトリー定義に、編集可能なワーク状態の値がありません。",
     editableConfigurationErrorPrefix: "ワーク状態の構成を利用できません。",
     editableConfigurationHeading: "ワーク状態の構成",
-    editableConfigurationLoading: "編集可能なワーク状態の構成を読み込んでいます。",
+    editableConfigurationLoading:
+      "編集可能なワーク状態の構成を読み込んでいます。",
     editableConfigurationNameDuplicate: (stateName) =>
       `このワークタイプには、すでに「${stateName}」というワーク状態があります。`,
     editableConfigurationNameRequired:
@@ -88,10 +88,6 @@ const workStateDetailMessagesByLocale = {
     typeFieldLabel: "ライフサイクル種別",
   },
   ko: {
-    topologyDeleteAction: (workTypeName, stateName) =>
-      `작업 상태 ${workTypeName} ${stateName} 삭제`,
-    topologyDeleteBlockedPrefix: "작업 상태를 삭제할 수 없습니다:",
-    topologyDeleteHeading: "팩토리 그래프",
     configurationEmpty:
       "실행 중인 팩토리 정의에 선택한 작업 상태가 포함되어 있지 않습니다.",
     configurationErrorPrefix: "작업 상태 정의를 사용할 수 없습니다.",
@@ -100,11 +96,16 @@ const workStateDetailMessagesByLocale = {
     discardDraftAction: "로컬 변경 사항 취소",
     editableConfigurationContractInvalidPrefix:
       "작업 상태 구성이 유효하지 않습니다.",
+    editableConfigurationDirtyStatus:
+      "이 작업 상태에 저장되지 않은 변경 사항이 있습니다.",
+    editableConfigurationDraftNote:
+      "실행 중인 팩토리를 저장할 때까지 변경 사항은 이 편집 세션에만 유지됩니다.",
     editableConfigurationEmpty:
       "실행 중인 팩토리 정의에 편집 가능한 작업 상태 값이 없습니다.",
     editableConfigurationErrorPrefix: "작업 상태 구성을 사용할 수 없습니다.",
     editableConfigurationHeading: "작업 상태 구성",
-    editableConfigurationLoading: "편집 가능한 작업 상태 구성을 불러오는 중입니다.",
+    editableConfigurationLoading:
+      "편집 가능한 작업 상태 구성을 불러오는 중입니다.",
     editableConfigurationNameDuplicate: (stateName) =>
       `이 작업 유형에 이미 "${stateName}" 작업 상태가 있습니다.`,
     editableConfigurationNameRequired:
@@ -126,17 +127,15 @@ const workStateDetailMessagesByLocale = {
     typeFieldLabel: "수명 주기 유형",
   },
   "zh-CN": {
-    topologyDeleteAction: (workTypeName, stateName) =>
-      `删除工作状态 ${workTypeName} ${stateName}`,
-    topologyDeleteBlockedPrefix: "无法删除工作状态:",
-    topologyDeleteHeading: "工厂图",
     configurationEmpty: "运行中的工厂定义不包含所选工作状态。",
     configurationErrorPrefix: "工作状态定义不可用。",
     configurationLoading: "正在加载此工作状态的当前工厂定义。",
     discardDraftAction: "放弃本地更改",
     editableConfigurationContractInvalidPrefix: "工作状态配置无效。",
-    editableConfigurationEmpty:
-      "运行中的工厂定义未提供可编辑的工作状态值。",
+    editableConfigurationDirtyStatus: "此工作状态有未保存的更改。",
+    editableConfigurationDraftNote:
+      "在保存运行中的工厂之前，更改仅保留在此编辑会话中。",
+    editableConfigurationEmpty: "运行中的工厂定义未提供可编辑的工作状态值。",
     editableConfigurationErrorPrefix: "工作状态配置不可用。",
     editableConfigurationHeading: "工作状态配置",
     editableConfigurationLoading: "正在加载可编辑的工作状态配置。",

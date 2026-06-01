@@ -325,7 +325,12 @@ export function factoryWorkToItem(
     (isSystemTimeWorkType(workTypeID)
       ? SYSTEM_TIME_PENDING_PLACE_ID
       : undefined);
+  const content =
+    "content" in work && work.content
+      ? work.content.map((part) => ({ ...part }))
+      : existing?.content;
   return {
+    content,
     current_chaining_trace_id:
       legacyWork.current_chaining_trace_id ??
       existing?.current_chaining_trace_id,
