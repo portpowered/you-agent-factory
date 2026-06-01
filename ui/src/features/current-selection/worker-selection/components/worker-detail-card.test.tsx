@@ -519,7 +519,7 @@ describe("WorkerDetailCard", () => {
     ).toBeNull();
   });
 
-  it("shows scoped save success feedback for the selected worker", () => {
+  it("does not render inline save success feedback for the selected worker", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument(),
       isPending: false,
@@ -581,10 +581,10 @@ describe("WorkerDetailCard", () => {
     );
 
     expect(
-      screen.getByText(
+      screen.queryByText(
         /reviewer was updated in the running factory definition/,
       ),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
   it("shows overwrite warning and server-changed hints for dirty worker drafts", () => {
@@ -894,17 +894,15 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "Current factory definition is stale",
-    );
+    expect(screen.queryByText(/Current factory definition is stale/)).toBeNull();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
-  it("shows scoped save error feedback when persistence fails", () => {
+  it("does not render inline save error feedback when persistence fails", () => {
     mockFactoryDocumentQuery({
       data: buildFactoryDocument(),
       isPending: false,
@@ -968,10 +966,10 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(screen.getByRole("alert").textContent).toContain("Saving failed.");
-    expect(screen.getByRole("alert").textContent).toContain(
-      "The running factory could not be saved.",
-    );
+    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    expect(
+      screen.queryByText("The running factory could not be saved."),
+    ).toBeNull();
   });
 
   it("shows model worker field help and allows save with provider only", () => {

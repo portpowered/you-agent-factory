@@ -1759,7 +1759,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toContain("text-af-text-muted");
   });
 
-  it("keeps save feedback inside the configuration section after the reorder", () => {
+  it("does not render inline save outcome copy in the configuration section", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const { rerender } = render(
@@ -1781,18 +1781,13 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     let configuration = editableConfigurationSection();
     expect(
-      within(configuration).getByText(
+      within(configuration).queryByText(
         "Running factory saved. The editable workstation values were refreshed to the saved definition.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
-      within(configuration)
-        .getAllByRole("status")
-        .map((element) => element.textContent)
-        .join(" "),
-    ).toContain(
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-    );
+      within(configuration).queryByText(/^Saving failed\./),
+    ).toBeNull();
 
     rerender(
       <WorkstationDetailCard
@@ -1810,10 +1805,10 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     configuration = editableConfigurationSection();
     expect(
-      within(configuration).getByText(
+      within(configuration).queryByText(
         "Saving failed. The current factory rejected the workstation update.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
   it("uses semantic panels for autocomplete and diagnostics feedback", () => {

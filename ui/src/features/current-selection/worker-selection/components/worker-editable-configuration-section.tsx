@@ -16,10 +16,7 @@ import {
   EDITABLE_MODEL_PROVIDERS,
   EDITABLE_WORKER_TYPES,
 } from "../../../current-factory-definition/lib/worker-editable-values";
-import {
-  DetailCardFactorySaveFeedback,
-  mergeDetailCardSaveFieldErrors,
-} from "../../base/components/detail-card-factory-save-feedback";
+import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
@@ -143,17 +140,6 @@ function WorkerEditableConfigurationReadyForm({
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
-      <DetailCardFactorySaveFeedback<EditableWorkerSaveValidationErrors>
-        messages={{
-          errorPrefix: messages.editableConfigurationSaveErrorPrefix,
-          staleVersionDetail:
-            messages.editableConfigurationSaveStaleVersionDetail,
-          successMessage: messages.editableConfigurationSaveSuccess(
-            state.draft.name.trim() || workerName,
-          ),
-        }}
-        saveState={saveState}
-      />
       <WorkerEditableConfigurationSharedImpactWarning
         messages={messages}
         state={state}

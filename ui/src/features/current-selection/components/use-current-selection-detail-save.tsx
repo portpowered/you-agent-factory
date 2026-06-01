@@ -200,6 +200,7 @@ export function useCurrentSelectionDetailSave({
 
   return {
     resourceHeaderAction,
+    resourceSave,
     resourceSaveState: resourceSave.saveState,
     saveWorkerConfiguration: () => void workerSave.save(),
     saveWorkStateConfiguration: () => void workStateSave.save(),
@@ -207,6 +208,7 @@ export function useCurrentSelectionDetailSave({
     workstationSave,
     workstationSaveState: workstationSave.saveState,
     workerHeaderAction,
+    workerSave,
     workerSaveState: workerSave.saveState,
     workStateHeaderAction,
     workStateSaveState: workStateSave.saveState,

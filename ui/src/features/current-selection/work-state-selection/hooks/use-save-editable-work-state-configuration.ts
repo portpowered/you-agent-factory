@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from "react";
 
-import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import type {
+  CurrentFactoryDefinitionError,
+} from "../../../../api/current-factory-definition";
 import { useCurrentActivityGraphStore } from "../../../workflow-activity/state/currentActivityGraphStore";
 import { useScopedFactoryDocumentSave } from "../../base/hooks/useScopedFactoryDocumentSave";
 import type {
@@ -21,6 +23,7 @@ interface UseSaveEditableWorkStateConfigurationResult {
   canSave: boolean;
   save: () => Promise<void>;
   saveAttemptRevision: number;
+  saveMutationError: CurrentFactoryDefinitionError | null;
   saveState: EditableWorkStateSaveState;
 }
 
@@ -35,7 +38,7 @@ export function useSaveEditableWorkStateConfiguration({
     editableConfigurationState?.status === "ready" &&
     editableConfigurationState.isDirty;
 
-  const { isPending, saveAttemptRevision, saveNow, saveState } =
+  const { error: saveMutationError, isPending, saveAttemptRevision, saveNow, saveState } =
     useScopedFactoryDocumentSave<EditableWorkStateSaveValidationErrors>({
       fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
       isDirty,
@@ -87,9 +90,10 @@ export function useSaveEditableWorkStateConfiguration({
       canSave,
       save,
       saveAttemptRevision,
+      saveMutationError,
       saveState,
     }),
-    [canSave, save, saveAttemptRevision, saveState],
+    [canSave, save, saveAttemptRevision, saveMutationError, saveState],
   );
 }
 

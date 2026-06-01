@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { toast } from "sonner";
 
 import {
   CurrentFactoryDefinitionError,
@@ -12,6 +13,14 @@ import {
   buildDetailCardMultiResourceFactoryDocument,
   expandDetailCardResourceConfiguration,
 } from "../base/components/detail-card-save-test-helpers";
+import {
+  expectWorkStateSaveSuccessToast,
+  expectWorkstationSaveFailedToast,
+  expectWorkstationSaveSuccessToast,
+  expectWorkstationStaleSaveWarningToast,
+  expectWorkerSaveSuccessToast,
+  WORKSTATION_SAVE_SUCCESS_DESCRIPTION,
+} from "../base/components/current-selection-save-toast-test-helpers";
 import {
   buildDetailCardCurrentSelection,
   buildDetailCardEditableFactoryDocument,
@@ -37,6 +46,15 @@ import {
 } from "./current-selection-widget-test-utils";
 
 const saveCurrentFactoryMutation = vi.fn();
+
+vi.mock("sonner", () => ({
+  toast: {
+    dismiss: vi.fn(),
+    error: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
 
 vi.mock(
   "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -71,6 +89,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     saveCurrentFactoryMutation.mockReset();
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+    vi.mocked(toast.warning).mockClear();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardEditableFactoryDocument(),
@@ -263,13 +284,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
         }),
       );
     });
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkstationSaveSuccessToast();
 
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Review the diff and verify browser behavior.",
@@ -298,13 +313,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Saving failed. Current factory runtime must be idle before activation.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkstationSaveFailedToast(
+      "Current factory runtime must be idle before activation.",
+    );
 
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep this draft while the save fails.",
@@ -326,9 +337,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
-    await waitFor(() => {
-      expect(screen.getByText("Saving failed. Network dropped")).toBeTruthy();
-    });
+    await expectWorkstationSaveFailedToast("Network dropped");
 
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep this draft through a generic failure.",
@@ -356,18 +365,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
-        ),
-      ).toBeTruthy();
-    });
-    expect(
-      screen.getByText(
-        "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
-      ),
-    ).toBeTruthy();
+    await expectWorkstationStaleSaveWarningToast(
+      "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
+    );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep this draft through a stale write.",
     );
@@ -408,13 +408,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Saving failed. Worker selection must reference a configured worker.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkstationSaveFailedToast(
+      "Worker selection must reference a configured worker.",
+    );
     expect(screen.getByLabelText("Worker").getAttribute("aria-invalid")).toBe(
       "true",
     );
@@ -753,13 +749,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkstationSaveSuccessToast();
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(savedFactory),
@@ -845,13 +835,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkstationSaveSuccessToast();
   });
 
   it("clears saved feedback after switching to another workstation and returning", async () => {
@@ -889,13 +873,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkstationSaveSuccessToast();
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(savedFactory),
@@ -1061,13 +1039,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Saving failed. Current factory runtime must be idle before activation.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkstationSaveFailedToast(
+      "Current factory runtime must be idle before activation.",
+    );
 
     rerender(
       <CurrentSelectionWidget
@@ -1145,13 +1119,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     clickWorkstationSave();
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Saving failed. Current factory runtime must be idle before activation.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkstationSaveFailedToast(
+      "Current factory runtime must be idle before activation.",
+    );
 
     rerender(
       <CurrentSelectionWidget
@@ -1200,6 +1170,9 @@ describe("CurrentSelectionWidget resource save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     saveCurrentFactoryMutation.mockReset();
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+    vi.mocked(toast.warning).mockClear();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardMultiResourceFactoryDocument(),
@@ -1422,6 +1395,9 @@ describe("CurrentSelectionWidget work state save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     saveCurrentFactoryMutation.mockReset();
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+    vi.mocked(toast.warning).mockClear();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardWorkStateFactoryDocument(),
@@ -1532,13 +1508,7 @@ describe("CurrentSelectionWidget work state save flow", () => {
     await waitFor(() => {
       expect(selectStateNode).toHaveBeenCalledWith("story:ready");
     });
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Running factory saved. ready was updated in the running factory definition.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkStateSaveSuccessToast("ready");
   });
 });
 
@@ -1546,6 +1516,9 @@ describe("CurrentSelectionWidget worker save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     saveCurrentFactoryMutation.mockReset();
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+    vi.mocked(toast.warning).mockClear();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(
         buildDetailCardEditableFactoryDocument(),
@@ -1600,13 +1573,7 @@ describe("CurrentSelectionWidget worker save flow", () => {
         }),
       );
     });
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Running factory saved. reviewer was updated in the running factory definition.",
-        ),
-      ).toBeTruthy();
-    });
+    await expectWorkerSaveSuccessToast("reviewer");
     for (const saveButton of screen.getAllByRole("button", {
       name: "Save worker",
     })) {

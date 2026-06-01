@@ -1,4 +1,6 @@
 import { useCallback, useMemo } from "react";
+
+import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { useScopedFactoryDocumentSave } from "../../base/public";
 import type {
   EditableWorkstationConfigurationState,
@@ -20,6 +22,7 @@ export interface UseSaveEditableWorkstationConfigurationResult {
   cancelSaveConfirmation: () => void;
   confirmSave: () => Promise<void>;
   saveAttemptRevision: number;
+  saveMutationError: CurrentFactoryDefinitionError | null;
   saveState: EditableWorkstationSaveState;
 }
 
@@ -37,6 +40,7 @@ export function useSaveEditableWorkstationConfiguration({
     beginConfirmation,
     cancelConfirmation,
     confirmSave: confirmScopedSave,
+    error: saveMutationError,
     isPending,
     saveAttemptRevision,
     saveState,
@@ -86,6 +90,7 @@ export function useSaveEditableWorkstationConfiguration({
       cancelSaveConfirmation: cancelConfirmation,
       confirmSave,
       saveAttemptRevision,
+      saveMutationError,
       saveState,
     }),
     [
@@ -94,6 +99,7 @@ export function useSaveEditableWorkstationConfiguration({
       cancelConfirmation,
       confirmSave,
       saveAttemptRevision,
+      saveMutationError,
       saveState,
     ],
   );

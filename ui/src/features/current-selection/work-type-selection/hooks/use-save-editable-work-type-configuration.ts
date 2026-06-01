@@ -22,6 +22,7 @@ export interface UseSaveEditableWorkTypeConfigurationResult {
   cancelSaveConfirmation: () => void;
   confirmSave: () => Promise<void>;
   saveAttemptRevision: number;
+  saveMutationError: CurrentFactoryDefinitionError | null;
   saveState: EditableWorkTypeSaveState;
 }
 
@@ -40,6 +41,7 @@ export function useSaveEditableWorkTypeConfiguration({
     beginConfirmation,
     cancelConfirmation,
     confirmSave: confirmScopedSave,
+    error: saveMutationError,
     isPending,
     saveAttemptRevision,
     saveState,
@@ -95,6 +97,7 @@ export function useSaveEditableWorkTypeConfiguration({
       cancelSaveConfirmation: cancelConfirmation,
       confirmSave,
       saveAttemptRevision,
+      saveMutationError,
       saveState,
     }),
     [
@@ -103,6 +106,7 @@ export function useSaveEditableWorkTypeConfiguration({
       cancelConfirmation,
       confirmSave,
       saveAttemptRevision,
+      saveMutationError,
       saveState,
     ],
   );

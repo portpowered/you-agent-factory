@@ -1,4 +1,6 @@
 import { useCallback, useMemo } from "react";
+
+import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { useScopedFactoryDocumentSave } from "../../base/public";
 import type {
   EditableWorkerConfigurationState,
@@ -15,10 +17,11 @@ interface UseSaveEditableWorkerConfigurationOptions {
   scopeKey: string | null;
 }
 
-interface UseSaveEditableWorkerConfigurationResult {
+export interface UseSaveEditableWorkerConfigurationResult {
   canSave: boolean;
   save: () => Promise<void>;
   saveAttemptRevision: number;
+  saveMutationError: CurrentFactoryDefinitionError | null;
   saveState: EditableWorkerSaveState;
 }
 
@@ -33,7 +36,7 @@ export function useSaveEditableWorkerConfiguration({
     editableConfigurationState?.status === "ready" &&
     editableConfigurationState.isDirty;
 
-  const { isPending, saveAttemptRevision, saveNow, saveState } =
+  const { error: saveMutationError, isPending, saveAttemptRevision, saveNow, saveState } =
     useScopedFactoryDocumentSave<EditableWorkerSaveValidationErrors>({
       fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
       isDirty,
@@ -79,8 +82,9 @@ export function useSaveEditableWorkerConfiguration({
       canSave,
       save,
       saveAttemptRevision,
+      saveMutationError,
       saveState,
     }),
-    [canSave, save, saveAttemptRevision, saveState],
+    [canSave, save, saveAttemptRevision, saveMutationError, saveState],
   );
 }
