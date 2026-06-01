@@ -4,7 +4,6 @@ import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   type EditableWorkstationBehavior,
-  workerSupportsPollerBehavior,
   workstationBehaviorRequiresPrompt,
 } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
@@ -13,6 +12,7 @@ import {
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
+import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import {
@@ -24,9 +24,12 @@ import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
-  EditableWorkstationValidationErrors,
-  EditableWorkstationWorkerOptionsState,
 } from "../lib/detail-card-types";
+import {
+  hasEditableWorkstationValidationErrors,
+  resolveWorkerOptionsState,
+  validateEditableWorkstationDraft,
+} from "../lib/editable-workstation-configuration-validation";
 import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
@@ -62,6 +65,10 @@ export function useEditableWorkstationConfigurationState(
   const shouldValidatePrompt =
     isNodeSelection &&
     sessionState != null &&
+    selectedEditableValues != null &&
+    workstationRequiresWorkerAssignment({
+      type: selectedEditableValues.workstationType,
+    }) &&
     workstationBehaviorRequiresPrompt(sessionState.draft.behavior);
   const promptValidation = useCurrentWorkstationPromptTemplateValidation(
     selectedEditableValues?.workstationName,
@@ -157,79 +164,10 @@ function useEditableWorkstationSession(
   };
 }
 
-export function validateEditableWorkstationDraft(
-  draft: EditableWorkstationDraft,
-  selectedEditableValues?: ReturnType<typeof resolveEditableWorkstationValues>,
-  promptValidationState: EditableWorkstationPromptValidationState = {
-    status: "idle",
-  },
-  messages: Pick<
-    WorkstationDetailMessages,
-    | "editableConfigurationPromptRequired"
-    | "editableConfigurationPromptValidationLoading"
-    | "editableConfigurationPromptValidationErrorPrefix"
-    | "editableConfigurationPromptFieldHint"
-    | "editableConfigurationBehaviorPollerWorkerUnsupported"
-    | "editableConfigurationWorkerRequired"
-    | "editableConfigurationWorkerUnavailable"
-  > = getWorkstationDetailMessages(undefined),
-): EditableWorkstationValidationErrors {
-  const validationErrors: EditableWorkstationValidationErrors = {};
-  const promptIsRequired = workstationBehaviorRequiresPrompt(draft.behavior);
-
-  if (draft.workerName.trim().length === 0) {
-    validationErrors.workerName = messages.editableConfigurationWorkerRequired;
-  } else if (
-    selectedEditableValues &&
-    !selectedEditableValues.workerOptions.includes(draft.workerName)
-  ) {
-    validationErrors.workerName =
-      messages.editableConfigurationWorkerUnavailable;
-  }
-  if (
-    draft.behavior === "POLLER" &&
-    selectedEditableValues &&
-    !workerSupportsPollerBehavior(
-      draft.workerName.trim().length === 0
-        ? null
-        : {
-            type: selectedEditableValues.workerTypeByName[draft.workerName],
-          },
-    )
-  ) {
-    validationErrors.behavior =
-      messages.editableConfigurationBehaviorPollerWorkerUnsupported;
-  }
-
-  if (promptIsRequired && draft.prompt.trim().length === 0) {
-    validationErrors.prompt = messages.editableConfigurationPromptRequired;
-  } else if (promptIsRequired && promptValidationState.status === "loading") {
-    validationErrors.prompt =
-      messages.editableConfigurationPromptValidationLoading;
-  } else if (promptIsRequired && promptValidationState.status === "error") {
-    validationErrors.prompt = `${messages.editableConfigurationPromptValidationErrorPrefix} ${promptValidationState.errorMessage}`;
-  } else if (
-    promptIsRequired &&
-    promptValidationState.status === "ready" &&
-    (!promptValidationState.result.valid ||
-      promptValidationState.diagnostics.length > 0)
-  ) {
-    validationErrors.prompt = messages.editableConfigurationPromptFieldHint;
-  }
-
-  return validationErrors;
-}
-
-export function hasEditableWorkstationValidationErrors(
-  validationErrors: EditableWorkstationValidationErrors,
-): boolean {
-  return Boolean(
-    validationErrors.behavior ||
-      validationErrors.prompt ||
-      validationErrors.runnerName ||
-      validationErrors.workerName,
-  );
-}
+export {
+  hasEditableWorkstationValidationErrors,
+  validateEditableWorkstationDraft,
+} from "../lib/editable-workstation-configuration-validation";
 
 function areEditableDraftsEqual(
   left: EditableWorkstationDraft,
@@ -241,43 +179,6 @@ function areEditableDraftsEqual(
     left.runnerName === right.runnerName &&
     left.workerName === right.workerName
   );
-}
-
-function resolveWorkerOptionsState(
-  draft: EditableWorkstationDraft,
-  selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
-  messages: Pick<
-    WorkstationDetailMessages,
-    | "editableConfigurationEmpty"
-    | "editableConfigurationWorkerMissing"
-    | "editableConfigurationWorkerOptionsEmpty"
-  >,
-): EditableWorkstationWorkerOptionsState {
-  if (!selectedEditableValues) {
-    return {
-      message: messages.editableConfigurationEmpty,
-      status: "error",
-    };
-  }
-
-  if (selectedEditableValues.workerOptions.length === 0) {
-    return {
-      message: messages.editableConfigurationWorkerOptionsEmpty,
-      status: "empty",
-    };
-  }
-
-  if (!selectedEditableValues.workerOptions.includes(draft.workerName)) {
-    return {
-      message: messages.editableConfigurationWorkerMissing,
-      status: "error",
-    };
-  }
-
-  return {
-    options: selectedEditableValues.workerOptions,
-    status: "ready",
-  };
 }
 
 function buildReadyEditableWorkstationConfigurationState({
