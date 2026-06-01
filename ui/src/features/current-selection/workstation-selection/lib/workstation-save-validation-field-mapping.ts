@@ -90,11 +90,13 @@ function resolveWorkstationGuardSaveValidationFieldName(
 
   const inputIndex = resolveInputGuardIndexFromTarget(target);
   if (inputIndex != null) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `inputs[${inputIndex}].guard.${guardFieldName}`;
   }
 
   const guardIndex = resolveWorkstationGuardIndexFromTarget(target);
   if (guardIndex != null) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `guards[${guardIndex}].${guardFieldName}`;
   }
 

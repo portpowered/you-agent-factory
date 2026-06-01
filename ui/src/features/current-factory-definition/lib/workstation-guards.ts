@@ -79,6 +79,7 @@ export function formatWorkstationGuardSummary(guard: WorkstationGuard): string {
       guard.maxVisits != null && Number.isFinite(guard.maxVisits)
         ? String(guard.maxVisits)
         : "?";
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `${workstation} · max ${maxVisits}`;
   }
 
