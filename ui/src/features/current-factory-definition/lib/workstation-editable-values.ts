@@ -1,29 +1,43 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
+import type { components } from "../../../api/generated/openapi";
 import {
   BUILT_IN_RUNNER_IDS,
   type RunnerID,
 } from "../../current-selection/workstation-selection/public";
 import {
-  resolveRunnerSelection,
   type ResolvedRunnerSelection,
   type RunnerSelectionSource,
+  resolveRunnerSelection,
 } from "./runner-selection";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
+  type EditableWorkstationBehavior,
   resolveEditableWorkstationBehavior,
   resolveEditableWorkstationBehaviorOptions,
-  type EditableWorkstationBehavior,
 } from "./workstation-behavior";
 import {
-  resolveEditableWorkstationType,
   type EditableWorkstationType,
+  resolveEditableWorkstationType,
 } from "./workstation-type";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
-type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
+type CanonicalWorker = NonNullable<
+  CanonicalFactoryDefinition["workers"]
+>[number];
+type CanonicalWorkstationCron = NonNullable<CanonicalWorkstation["cron"]>;
+
+export type EditableWorkstationCronDraft = Pick<
+  components["schemas"]["WorkstationCron"],
+  "schedule" | "triggerAtStart"
+> & {
+  /** Empty when omitted from the factory definition. */
+  expiryWindow: string;
+  /** Empty when omitted from the factory definition. */
+  jitter: string;
+};
 
 export interface EditableWorkstationValues {
   behavior: EditableWorkstationBehavior;
@@ -43,10 +57,12 @@ export interface EditableWorkstationValues {
   workerModelProvider: string | null;
   workstationName: string;
   workstationType: EditableWorkstationType;
+  cron: EditableWorkstationCronDraft | null;
 }
 
 export interface EditableWorkstationDraft {
   behavior: EditableWorkstationBehavior;
+  cron: EditableWorkstationCronDraft | null;
   prompt: string;
   runnerName: RunnerID | null;
   workerName: string;
@@ -56,12 +72,16 @@ export function resolveEditableWorkstationValues(
   factory: CanonicalFactoryDefinition,
   selectedNode: DashboardWorkstationNode,
 ): EditableWorkstationValues | null {
-  const workstationResolution = resolveCanonicalWorkstation(factory, selectedNode);
+  const workstationResolution = resolveCanonicalWorkstation(
+    factory,
+    selectedNode,
+  );
   if (!workstationResolution) {
     return null;
   }
 
   const { workstation } = workstationResolution;
+  const behavior = resolveEditableWorkstationBehavior(workstation);
   const workerModelProvider = resolveWorkerModelProvider(
     factory,
     workstation.worker,
@@ -73,10 +93,10 @@ export function resolveEditableWorkstationValues(
   );
 
   return {
-    behavior: resolveEditableWorkstationBehavior(workstation),
-    behaviorOptions: resolveEditableWorkstationBehaviorOptions(
-      resolveEditableWorkstationBehavior(workstation),
-    ),
+    behavior,
+    behaviorOptions: resolveEditableWorkstationBehaviorOptions(behavior),
+    cron:
+      behavior === "CRON" ? resolveEditableWorkstationCron(workstation) : null,
     effectiveRunnerName: resolvedRunnerSelection.runnerId,
     factoryRunnerName: factory.runner ?? null,
     prompt: workstation.body ?? null,
@@ -105,10 +125,36 @@ export function editableWorkstationDraftFromValues(
 ): EditableWorkstationDraft {
   return {
     behavior: values.behavior,
+    cron: values.cron ? { ...values.cron } : null,
     prompt: values.prompt ?? "",
     runnerName: values.runnerName,
     workerName: values.workerName,
   };
+}
+
+export function areEditableWorkstationCronDraftsEqual(
+  left: EditableWorkstationCronDraft,
+  right: EditableWorkstationCronDraft,
+): boolean {
+  return (
+    left.schedule === right.schedule &&
+    left.triggerAtStart === right.triggerAtStart &&
+    left.jitter === right.jitter &&
+    left.expiryWindow === right.expiryWindow
+  );
+}
+
+export function areEditableWorkstationDraftsEqual(
+  left: EditableWorkstationDraft,
+  right: EditableWorkstationDraft,
+): boolean {
+  return (
+    left.behavior === right.behavior &&
+    left.prompt === right.prompt &&
+    left.runnerName === right.runnerName &&
+    left.workerName === right.workerName &&
+    areEditableWorkstationCronDraftsEqualOrNull(left.cron, right.cron)
+  );
 }
 
 export function applyEditableWorkstationDraft(
@@ -116,7 +162,10 @@ export function applyEditableWorkstationDraft(
   selectedNode: DashboardWorkstationNode,
   draft: EditableWorkstationDraft,
 ): CanonicalFactoryDefinition | null {
-  const workstationResolution = resolveCanonicalWorkstation(factory, selectedNode);
+  const workstationResolution = resolveCanonicalWorkstation(
+    factory,
+    selectedNode,
+  );
   if (!workstationResolution || !factory.workers || !factory.workstations) {
     return null;
   }
@@ -127,12 +176,12 @@ export function applyEditableWorkstationDraft(
 
   const {
     behavior: existingBehavior,
+    cron: _existingCron,
     runner: _existingRunner,
-    ...workstationWithoutRunner
-  } =
-    workstationResolution.workstation;
+    ...workstationWithoutCronRunner
+  } = workstationResolution.workstation;
   const nextWorkstation = {
-    ...workstationWithoutRunner,
+    ...workstationWithoutCronRunner,
     body: draft.prompt,
     worker: draft.workerName,
     ...(draft.runnerName ? { runner: draft.runnerName } : {}),
@@ -140,15 +189,63 @@ export function applyEditableWorkstationDraft(
     existingBehavior === undefined
       ? {}
       : { behavior: draft.behavior }),
+    ...(draft.behavior === "CRON" && draft.cron
+      ? { cron: buildCanonicalWorkstationCron(draft.cron) }
+      : {}),
   };
 
   return {
     ...factory,
     workers: factory.workers,
     workstations: factory.workstations.map((workstation, index) =>
-      index === workstationResolution.workstationIndex ? nextWorkstation : workstation,
+      index === workstationResolution.workstationIndex
+        ? nextWorkstation
+        : workstation,
     ),
   };
+}
+
+export function resolveEditableWorkstationCron(
+  workstation: Pick<CanonicalWorkstation, "cron">,
+): EditableWorkstationCronDraft {
+  const cron = workstation.cron;
+  return {
+    schedule: cron?.schedule ?? "",
+    triggerAtStart: cron?.triggerAtStart ?? false,
+    jitter: cron?.jitter ?? "",
+    expiryWindow: cron?.expiryWindow ?? "",
+  };
+}
+
+function buildCanonicalWorkstationCron(
+  draft: EditableWorkstationCronDraft,
+): CanonicalWorkstationCron {
+  const cron: CanonicalWorkstationCron = {
+    schedule: draft.schedule,
+    triggerAtStart: draft.triggerAtStart,
+  };
+  const jitter = draft.jitter.trim();
+  if (jitter.length > 0) {
+    cron.jitter = jitter;
+  }
+  const expiryWindow = draft.expiryWindow.trim();
+  if (expiryWindow.length > 0) {
+    cron.expiryWindow = expiryWindow;
+  }
+  return cron;
+}
+
+function areEditableWorkstationCronDraftsEqualOrNull(
+  left: EditableWorkstationCronDraft | null,
+  right: EditableWorkstationCronDraft | null,
+): boolean {
+  if (left === null && right === null) {
+    return true;
+  }
+  if (left === null || right === null) {
+    return false;
+  }
+  return areEditableWorkstationCronDraftsEqual(left, right);
 }
 
 function resolveCanonicalWorkstation(
@@ -185,7 +282,9 @@ function resolveWorkerModelProvider(
   factory: CanonicalFactoryDefinition,
   workerName: string,
 ): string | null {
-  const worker = (factory.workers ?? []).find((entry) => entry.name === workerName);
+  const worker = (factory.workers ?? []).find(
+    (entry) => entry.name === workerName,
+  );
   return worker?.modelProvider ?? null;
 }
 
@@ -236,7 +335,10 @@ function resolveSharedWorkerWorkstationNamesByWorkerName(
     const sharedWorkstations =
       otherWorkstationNamesByWorkerName.get(workstation.worker) ?? [];
     sharedWorkstations.push(workstation.name);
-    otherWorkstationNamesByWorkerName.set(workstation.worker, sharedWorkstations);
+    otherWorkstationNamesByWorkerName.set(
+      workstation.worker,
+      sharedWorkstations,
+    );
   }
 
   return Object.fromEntries(otherWorkstationNamesByWorkerName);

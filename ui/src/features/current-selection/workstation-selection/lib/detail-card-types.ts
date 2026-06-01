@@ -14,7 +14,10 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import type { EditableWorkstationBehavior } from "../../../current-factory-definition/lib/workstation-behavior";
-import type { EditableWorkstationValues } from "../../../current-factory-definition/lib/workstation-editable-values";
+import type {
+  EditableWorkstationCronDraft,
+  EditableWorkstationValues,
+} from "../../../current-factory-definition/lib/workstation-editable-values";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import type { RunnerID } from "../editing/runner-metadata";
 import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
@@ -81,6 +84,10 @@ export type EditableWorkstationPromptValidationState =
 
 export type EditableWorkstationOverwriteField =
   | "behavior"
+  | "cronExpiryWindow"
+  | "cronJitter"
+  | "cronSchedule"
+  | "cronTriggerAtStart"
   | "prompt"
   | "runner"
   | "worker";
@@ -97,6 +104,7 @@ export type EditableWorkstationConfigurationState =
   | {
       draft: {
         behavior: EditableWorkstationBehavior;
+        cron: EditableWorkstationCronDraft | null;
         prompt: string;
         runnerName: RunnerID | null;
         workerName: string;

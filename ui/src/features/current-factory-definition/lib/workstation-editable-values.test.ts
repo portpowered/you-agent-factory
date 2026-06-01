@@ -1,8 +1,12 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: existing workstation-editable-values coverage stayed intact during feature-root migration.
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
+import { resolveEditableWorkstationOverwriteFields } from "../../current-selection/workstation-selection/editing/editable-workstation-overwrite-fields";
 import {
   applyEditableWorkstationDraft,
+  areEditableWorkstationDraftsEqual,
+  editableWorkstationDraftFromValues,
+  resolveEditableWorkstationCron,
   resolveEditableWorkstationValues,
 } from "./workstation-editable-values";
 
@@ -42,6 +46,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      cron: null,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: "Review the latest story changes before approval.",
@@ -169,6 +174,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      cron: null,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: "Review the latest story changes before approval.",
@@ -241,6 +247,7 @@ describe("resolveEditableWorkstationValues", () => {
       selectedNode,
       {
         behavior: "POLLER",
+        cron: null,
         prompt: "Review the updated prompt before approval.",
         runnerName: null,
         workerName: "reviewer",
@@ -332,6 +339,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      cron: null,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: "Review work",
@@ -382,7 +390,9 @@ describe("resolveEditableWorkstationValues", () => {
       workTypes: [],
     };
 
-    expect(resolveEditableWorkstationValues(factory, selectedNode)).toMatchObject({
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode),
+    ).toMatchObject({
       effectiveRunnerName: "codex",
       resolvedRunnerSelection: {
         runnerId: "codex",
@@ -440,6 +450,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
         behavior: "STANDARD",
+        cron: null,
         prompt: "Updated review work",
         runnerName: "gemini",
         workerName: "reviewer",
@@ -498,6 +509,7 @@ describe("resolveEditableWorkstationValues", () => {
       selectedNode,
       {
         behavior: "REPEATER",
+        cron: null,
         prompt: "Updated review prompt only.",
         runnerName: null,
         workerName: "processor",
@@ -556,6 +568,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
         behavior: "STANDARD",
+        cron: null,
         prompt: "Updated review work",
         runnerName: null,
         workerName: "missing-worker",
@@ -586,9 +599,225 @@ describe("resolveEditableWorkstationValues", () => {
       workTypes: [],
     };
 
-    expect(resolveEditableWorkstationValues(factory, selectedNode)).toMatchObject({
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode),
+    ).toMatchObject({
       behavior: "CRON",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER", "CRON"],
+      cron: {
+        schedule: "0 * * * *",
+        triggerAtStart: false,
+        jitter: "",
+        expiryWindow: "",
+      },
     });
+  });
+});
+
+describe("editable workstation cron draft", () => {
+  const cronWorkstationNode: DashboardWorkstationNode = {
+    model: "script",
+    node_id: "cron-node",
+    transition_id: "cron-node",
+    workstation_kind: "MODEL_WORKSTATION",
+    workstation_name: "Cron Tick",
+  };
+
+  const cronFactory: CanonicalFactoryDefinition = {
+    name: "Cron Factory",
+    workers: [
+      {
+        command: "./cron.sh",
+        name: "cron-runner",
+        type: "SCRIPT_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        behavior: "CRON",
+        cron: {
+          expiryWindow: "30m",
+          jitter: "5s",
+          schedule: "0 9 * * *",
+          triggerAtStart: true,
+        },
+        inputs: [],
+        name: "Cron Tick",
+        outputs: [],
+        worker: "cron-runner",
+      },
+    ],
+    workTypes: [],
+  };
+
+  it("resolves cron fields with defaults when optional values are absent", () => {
+    expect(
+      resolveEditableWorkstationCron({
+        cron: { schedule: "*/15 * * * *" },
+      }),
+    ).toEqual({
+      schedule: "*/15 * * * *",
+      triggerAtStart: false,
+      jitter: "",
+      expiryWindow: "",
+    });
+  });
+
+  it("builds editable drafts from cron values and detects cron dirty state", () => {
+    const values = resolveEditableWorkstationValues(
+      cronFactory,
+      cronWorkstationNode,
+    );
+    expect(values?.cron).toEqual({
+      schedule: "0 9 * * *",
+      triggerAtStart: true,
+      jitter: "5s",
+      expiryWindow: "30m",
+    });
+    if (!values) {
+      throw new Error("expected cron workstation values");
+    }
+
+    const draft = editableWorkstationDraftFromValues(values);
+    expect(draft.cron).toEqual(values.cron);
+    const draftCron = draft.cron ?? {
+      expiryWindow: "",
+      jitter: "",
+      schedule: "",
+      triggerAtStart: false,
+    };
+    expect(
+      areEditableWorkstationDraftsEqual(draft, {
+        ...draft,
+        cron: {
+          ...draftCron,
+          schedule: "0 10 * * *",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("persists cron edits for CRON workstations and omits cron for non-CRON drafts", () => {
+    const updatedCronFactory = applyEditableWorkstationDraft(
+      cronFactory,
+      cronWorkstationNode,
+      {
+        behavior: "CRON",
+        cron: {
+          schedule: "0 12 * * *",
+          triggerAtStart: false,
+          jitter: "1s",
+          expiryWindow: "10m",
+        },
+        prompt: "",
+        runnerName: null,
+        workerName: "cron-runner",
+      },
+    );
+
+    expect(updatedCronFactory?.workstations?.[0]).toMatchObject({
+      behavior: "CRON",
+      cron: {
+        schedule: "0 12 * * *",
+        triggerAtStart: false,
+        jitter: "1s",
+        expiryWindow: "10m",
+      },
+    });
+
+    const cronWorkstation = cronFactory.workstations?.[0];
+    if (!cronWorkstation) {
+      throw new Error("expected cron workstation fixture");
+    }
+    const standardFactory: CanonicalFactoryDefinition = {
+      ...cronFactory,
+      workstations: [
+        {
+          ...cronWorkstation,
+          behavior: "STANDARD",
+        },
+      ],
+    };
+
+    const updatedStandardFactory = applyEditableWorkstationDraft(
+      standardFactory,
+      cronWorkstationNode,
+      {
+        behavior: "STANDARD",
+        cron: {
+          schedule: "0 12 * * *",
+          triggerAtStart: true,
+          jitter: "1s",
+          expiryWindow: "10m",
+        },
+        prompt: "Run on demand.",
+        runnerName: null,
+        workerName: "cron-runner",
+      },
+    );
+
+    expect(updatedStandardFactory?.workstations?.[0]).toMatchObject({
+      behavior: "STANDARD",
+      body: "Run on demand.",
+    });
+    expect(updatedStandardFactory?.workstations?.[0]).not.toHaveProperty(
+      "cron",
+    );
+  });
+
+  it("detects external cron sub-field overwrites", () => {
+    const sessionStartDraft = editableWorkstationDraftFromValues({
+      behavior: "CRON",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER", "CRON"],
+      cron: {
+        schedule: "0 9 * * *",
+        triggerAtStart: true,
+        jitter: "5s",
+        expiryWindow: "30m",
+      },
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
+      prompt: null,
+      resolvedRunnerSelection: { runnerId: "codex", source: "default" },
+      runnerName: null,
+      runnerOptions: ["codex"],
+      runnerSelectionSource: "default",
+      sharedWorkerWorkstationNamesByWorkerName: {},
+      sharedWorkerWorkstationNames: [],
+      workerModelProvider: null,
+      workerName: "cron-runner",
+      workerOptions: ["cron-runner"],
+      workerTypeByName: { "cron-runner": "SCRIPT_WORKER" },
+      workstationName: "Cron Tick",
+      workstationType: "MODEL_WORKSTATION",
+    });
+    const sessionCron = sessionStartDraft.cron ?? {
+      expiryWindow: "",
+      jitter: "",
+      schedule: "",
+      triggerAtStart: false,
+    };
+    const draft = {
+      ...sessionStartDraft,
+      cron: {
+        ...sessionCron,
+        schedule: "0 10 * * *",
+      },
+    };
+    const latestDefinitionDraft = {
+      ...sessionStartDraft,
+      cron: {
+        ...sessionCron,
+        jitter: "10s",
+      },
+    };
+
+    expect(
+      resolveEditableWorkstationOverwriteFields(
+        sessionStartDraft,
+        draft,
+        latestDefinitionDraft,
+      ),
+    ).toEqual(["cronJitter"]);
   });
 });

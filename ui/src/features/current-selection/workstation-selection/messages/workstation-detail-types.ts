@@ -65,6 +65,10 @@ export interface WorkstationDetailMessages {
   ) => string;
   editableConfigurationWorkerUnavailable: string;
   editableConfigurationWorkerUnavailablePrefix: string;
+  cronExpiryWindowFieldLabel: string;
+  cronJitterFieldLabel: string;
+  cronScheduleFieldLabel: string;
+  cronTriggerAtStartFieldLabel: string;
   modelFieldLabel: string;
   notConfiguredValue: string;
   promptFieldLabel: string;

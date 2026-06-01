@@ -9,6 +9,7 @@ import {
 } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
   applyEditableWorkstationDraft,
+  areEditableWorkstationDraftsEqual,
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
@@ -231,18 +232,6 @@ export function hasEditableWorkstationValidationErrors(
   );
 }
 
-function areEditableDraftsEqual(
-  left: EditableWorkstationDraft,
-  right: EditableWorkstationDraft,
-): boolean {
-  return (
-    left.behavior === right.behavior &&
-    left.prompt === right.prompt &&
-    left.runnerName === right.runnerName &&
-    left.workerName === right.workerName
-  );
-}
-
 function resolveWorkerOptionsState(
   draft: EditableWorkstationDraft,
   selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
@@ -326,7 +315,7 @@ function buildReadyEditableWorkstationConfigurationState({
       resolvedValidationErrors,
     ),
     initialValues: selectedEditableValues,
-    isDirty: !areEditableDraftsEqual(
+    isDirty: !areEditableWorkstationDraftsEqual(
       sessionState.draft,
       sessionState.sessionStartDraft,
     ),
@@ -448,7 +437,10 @@ function syncEditableWorkstationSession(
   }
 
   if (
-    areEditableDraftsEqual(currentState.draft, currentState.sessionStartDraft)
+    areEditableWorkstationDraftsEqual(
+      currentState.draft,
+      currentState.sessionStartDraft,
+    )
   ) {
     return {
       draft: initialDraft,
@@ -458,7 +450,7 @@ function syncEditableWorkstationSession(
     };
   }
 
-  return areEditableDraftsEqual(
+  return areEditableWorkstationDraftsEqual(
     currentState.latestDefinitionDraft,
     initialDraft,
   )

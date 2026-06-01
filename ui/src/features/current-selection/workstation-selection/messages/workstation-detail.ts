@@ -165,6 +165,10 @@ const workstationDetailMessagesByLocale = {
     runnerCapabilityWorktreeLabel: "Worktree selection",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `Effective runner: ${runnerName} (${sourceLabel}).`,
+    cronExpiryWindowFieldLabel: "Cron expiry window",
+    cronJitterFieldLabel: "Cron jitter",
+    cronScheduleFieldLabel: "Cron schedule",
+    cronTriggerAtStartFieldLabel: "Cron trigger at start",
     runnerFieldLabel: "Runner",
     runnerInheritanceFactoryLabel: (runnerName) =>
       `Inherit factory runner (${runnerName})`,
@@ -352,6 +356,10 @@ const workstationDetailMessagesByLocale = {
     runnerCapabilityWorktreeLabel: "worktree 選択",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `有効な runner: ${runnerName}（${sourceLabel}）。`,
+    cronExpiryWindowFieldLabel: "Cron 有効期限ウィンドウ",
+    cronJitterFieldLabel: "Cron ジッター",
+    cronScheduleFieldLabel: "Cron スケジュール",
+    cronTriggerAtStartFieldLabel: "Cron 起動時トリガー",
     runnerFieldLabel: "Runner",
     runnerInheritanceFactoryLabel: (runnerName) =>
       `ファクトリー runner を継承 (${runnerName})`,
@@ -536,6 +544,10 @@ const workstationDetailMessagesByLocale = {
     runnerCapabilityWorktreeLabel: "worktree 선택",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `유효 runner: ${runnerName} (${sourceLabel}).`,
+    cronExpiryWindowFieldLabel: "Cron 만료 윈도우",
+    cronJitterFieldLabel: "Cron 지터",
+    cronScheduleFieldLabel: "Cron 스케줄",
+    cronTriggerAtStartFieldLabel: "Cron 시작 시 트리거",
     runnerFieldLabel: "Runner",
     runnerInheritanceFactoryLabel: (runnerName) =>
       `팩토리 runner 상속 (${runnerName})`,
@@ -702,6 +714,10 @@ const workstationDetailMessagesByLocale = {
     runnerCapabilityWorktreeLabel: "worktree 选择",
     runnerFieldHelp: (runnerName, sourceLabel) =>
       `当前生效的 runner：${runnerName}（${sourceLabel}）。`,
+    cronExpiryWindowFieldLabel: "Cron 过期窗口",
+    cronJitterFieldLabel: "Cron 抖动",
+    cronScheduleFieldLabel: "Cron 调度",
+    cronTriggerAtStartFieldLabel: "Cron 启动时触发",
     runnerFieldLabel: "Runner",
     runnerInheritanceFactoryLabel: (runnerName) =>
       `继承工厂 runner（${runnerName}）`,
