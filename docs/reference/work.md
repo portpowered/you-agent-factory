@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-05-30
+last-modified: 2026-06-01
 doc-id: agent-factory/work
 ---
 
