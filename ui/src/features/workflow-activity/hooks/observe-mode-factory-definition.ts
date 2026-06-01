@@ -39,7 +39,7 @@ function isDocumentWorkTypeStructureAheadOfSnapshot(
   const snapshotWorkTypes = workTypeStateMap(snapshotFactory);
 
   if (snapshotWorkTypes.size === 0) {
-    return documentWorkTypes.size > 0;
+    return false;
   }
 
   for (const [workTypeName, snapshotStates] of snapshotWorkTypes) {
@@ -69,6 +69,22 @@ function isDocumentWorkTypeStructureAheadOfSnapshot(
       if (!snapshotStates.has(stateName)) {
         return true;
       }
+    }
+  }
+
+  return false;
+}
+
+function sharesWorkTypeSkeletonWithSnapshot(
+  document: CurrentFactoryDocument,
+  snapshotFactory: FactoryDefinitionLike,
+): boolean {
+  const documentWorkTypes = workTypeStateMap(document);
+  const snapshotWorkTypes = workTypeStateMap(snapshotFactory);
+
+  for (const workTypeName of snapshotWorkTypes.keys()) {
+    if (documentWorkTypes.has(workTypeName)) {
+      return true;
     }
   }
 
@@ -148,10 +164,18 @@ export function resolveObserveModeFactoryDefinition({
     return snapshotFactory;
   }
 
+  if (workTypeStateMap(snapshotFactory).size === 0) {
+    return snapshotFactory;
+  }
+
   if (
     !doesFactoryDefinitionChangeAffectGraphTopology(document, snapshotFactory)
   ) {
     return document;
+  }
+
+  if (!sharesWorkTypeSkeletonWithSnapshot(document, snapshotFactory)) {
+    return snapshotFactory;
   }
 
   if (isDocumentWorkTypeStructureAheadOfSnapshot(document, snapshotFactory)) {

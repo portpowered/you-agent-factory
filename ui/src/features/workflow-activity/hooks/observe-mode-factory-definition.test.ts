@@ -122,6 +122,47 @@ describe("resolveObserveModeFactoryDefinition", () => {
 });
 
 describe("resolveObserveModeFactoryDefinition — unrelated session imports", () => {
+  it("prefers the timeline snapshot factory while replay has not hydrated work types yet", () => {
+    const snapshot = buildDashboardSnapshotFixture(
+      mediumBranchingDashboardTopology,
+    );
+    snapshot.factory = {
+      ...snapshot.factory,
+      workTypes: [],
+      workstations: [],
+    };
+
+    const importedSessionDocument = {
+      name: "Review Session Import Factory",
+      workTypes: [
+        {
+          name: "request",
+          states: [
+            { name: "queued", type: "INITIAL" as const },
+            { name: "done", type: "TERMINAL" as const },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          inputs: [{ state: "queued", workType: "request" }],
+          name: "Review import workstation",
+          outputs: [{ state: "done", workType: "request" }],
+          type: "MODEL_WORKSTATION" as const,
+          worker: "review-import-worker",
+        },
+      ],
+    };
+
+    expect(
+      resolveObserveModeFactoryDefinition({
+        document: importedSessionDocument,
+        snapshotFactory: snapshot.factory,
+        timelineMode: "current",
+      }),
+    ).toEqual(snapshot.factory);
+  });
+
   it("prefers the timeline snapshot factory when the saved document defines unrelated work types", () => {
     const snapshot = buildDashboardSnapshotFixture(
       mediumBranchingDashboardTopology,
