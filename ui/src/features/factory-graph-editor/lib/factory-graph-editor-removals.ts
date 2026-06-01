@@ -1,10 +1,6 @@
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
-import {
-  buildEdgeRemovalDescription,
-  describeEdgeLabel,
-} from "./factory-graph-editor-edge-removal-copy";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -13,6 +9,10 @@ import type {
   FactoryGraphNodeKey,
 } from "./factory-graph-draft-types";
 import { edgeChangeId, nodeKeyId } from "./factory-graph-draft-types";
+import {
+  buildEdgeRemovalDescription,
+  describeEdgeLabel,
+} from "./factory-graph-editor-edge-removal-copy";
 
 const REMOVABLE_NODE_KINDS = new Set([
   "resource",
@@ -282,6 +282,20 @@ function addDraftRemoval(
           draft.removals.workTypes,
           key.name,
         );
+        const ownedStates =
+          baseFactoryDefinition.workTypes?.find(
+            (workType) => workType.name === key.name,
+          )?.states ?? [];
+        for (const state of ownedStates) {
+          draft.removals.workStates = appendUniqueBy(
+            draft.removals.workStates,
+            {
+              stateName: state.name,
+              workTypeName: key.name,
+            },
+            (entry) => `${entry.workTypeName}:${entry.stateName}`,
+          );
+        }
       }
       return;
     case "work-state":

@@ -253,6 +253,40 @@ describe("factory graph editor removals", () => {
     });
   });
 
+  it("cascades owned work states when removing a work type from the draft", () => {
+    const draft = createEmptyFactoryGraphDraft();
+    const nextDraft = applyFactoryGraphEntityRemoval(
+      draft,
+      baseFactoryDefinition,
+      {
+        kind: "work-type",
+        name: "story",
+      },
+    );
+
+    expect(nextDraft.removals.workTypes).toEqual(["story"]);
+    expect(nextDraft.removals.workStates).toEqual([
+      { stateName: "queued", workTypeName: "story" },
+      { stateName: "done", workTypeName: "story" },
+    ]);
+    const pendingDefinition = buildPendingFactoryDefinition(
+      baseFactoryDefinition,
+      nextDraft,
+    );
+    expect(pendingDefinition?.workTypes).toEqual([]);
+    expect(
+      Array.from(
+        collectPendingRemovalNodeIds(baseFactoryDefinition, nextDraft),
+      ).sort(),
+    ).toEqual(
+      [
+        "work-state:story:done",
+        "work-state:story:queued",
+        "work-type:story",
+      ].sort(),
+    );
+  });
+
   it("summarizes work-type and resource removals with dependent topology impact", () => {
     const draft = createEmptyFactoryGraphDraft();
 

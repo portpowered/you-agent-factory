@@ -44,8 +44,8 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   selectedWorkstation: boolean;
   workstation: DashboardWorkstationNode;
   zAxisIncompleteHints?: ZAxisIncompleteHints | null;
-  onSelectWorkstation: (nodeId: string) => void;
-  onSelectWorkID: (
+  onSelectWorkstation?: (nodeId: string) => void;
+  onSelectWorkID?: (
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
@@ -148,16 +148,8 @@ function ExhaustionRuleNodeButton({
   semanticIconMetadata: ReturnType<typeof workstationIconMetadata>;
   workstationTitle: string;
 }) {
-  return (
-    <GraphNodeButton
-      aria-label={messages.selectExhaustionRuleLabel(workstationTitle)}
-      aria-pressed={data.selectedWorkstation}
-      className="flex h-full min-w-0 w-full items-center gap-2 overflow-hidden"
-      data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
-      data-workstation-kind={semanticIconMetadata.semanticKind}
-      onClick={() => data.onSelectWorkstation(data.workstation.node_id)}
-      title={workstationTitle}
-    >
+  const header = (
+    <>
       <span
         className="flex min-h-4 items-center"
         data-workstation-semantic-icon
@@ -176,6 +168,36 @@ function ExhaustionRuleNodeButton({
       >
         {workstationTitle}
       </span>
+    </>
+  );
+
+  if (data.onSelectWorkstation === undefined) {
+    return (
+      <div
+        className="flex h-full min-w-0 w-full items-center gap-2 overflow-hidden"
+        data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
+        data-workstation-kind={semanticIconMetadata.semanticKind}
+        title={workstationTitle}
+      >
+        {header}
+      </div>
+    );
+  }
+
+  return (
+    <GraphNodeButton
+      aria-label={messages.selectExhaustionRuleLabel(workstationTitle)}
+      aria-pressed={data.selectedWorkstation}
+      className="flex h-full min-w-0 w-full items-center gap-2 overflow-hidden"
+      data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
+      data-workstation-kind={semanticIconMetadata.semanticKind}
+      onClick={(event) => {
+        event.stopPropagation();
+        data.onSelectWorkstation?.(data.workstation.node_id);
+      }}
+      title={workstationTitle}
+    >
+      {header}
     </GraphNodeButton>
   );
 }
@@ -203,6 +225,8 @@ function ActiveWorkstationNodeContent({
   }>;
   workstationTitle: string;
 }) {
+  const workstationHeaderSelectable = data.onSelectWorkstation !== undefined;
+
   return (
     <div
       className="grid h-full min-w-0 grid-rows-[auto_1fr_auto]"
@@ -211,45 +235,35 @@ function ActiveWorkstationNodeContent({
       data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
       data-workstation-kind={semanticIconMetadata.semanticKind}
     >
-      <GraphNodeButton
-        aria-label={messages.selectWorkstationLabel(workstationTitle)}
-        aria-pressed={data.selectedWorkstation}
-        className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
-        onClick={() => data.onSelectWorkstation(data.workstation.node_id)}
-        title={workstationTitle}
-      >
-        <span
-          className="flex min-h-5 shrink-0 items-center"
-          data-workstation-semantic-icon
-          title={semanticIconMetadata.label}
+      {workstationHeaderSelectable ? (
+        <GraphNodeButton
+          aria-label={messages.selectWorkstationLabel(workstationTitle)}
+          aria-pressed={data.selectedWorkstation}
+          className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onSelectWorkstation?.(data.workstation.node_id);
+          }}
+          title={workstationTitle}
         >
-          <GraphSemanticIcon
-            className={cn("h-4 w-4", semanticIconMetadata.className)}
-            kind={semanticIconMetadata.iconKind}
-            label={semanticIconMetadata.label}
-            locale={data.locale}
+          <WorkstationHeaderContent
+            data={data}
+            semanticIconMetadata={semanticIconMetadata}
+            workstationTitle={workstationTitle}
           />
-        </span>
-        <span
-          className={workstationTitleClassName(workstationTitle)}
-          data-workstation-title
+        </GraphNodeButton>
+      ) : (
+        <div
+          className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
+          title={workstationTitle}
         >
-          {workstationTitle}
-        </span>
-        {data.active ? (
-          <ActivityGraphNodeBadge
-            className="min-h-5 shrink-0 justify-center px-1.5"
-            tone="success"
-          >
-            <GraphSemanticIcon
-              className="h-3.5 w-3.5 text-af-success"
-              kind="active-work"
-              label={getActivityGraphMessages(data.locale).activeBadgeLabel}
-              locale={data.locale}
-            />
-          </ActivityGraphNodeBadge>
-        ) : null}
-      </GraphNodeButton>
+          <WorkstationHeaderContent
+            data={data}
+            semanticIconMetadata={semanticIconMetadata}
+            workstationTitle={workstationTitle}
+          />
+        </div>
+      )}
 
       <ul className="mt-2 grid min-w-0 list-none content-start gap-1 p-0">
         {visibleWorkItemEntries.map(({ execution, workItem }) => {
@@ -259,39 +273,55 @@ function ActiveWorkstationNodeContent({
             execution.started_at,
             data.now,
           );
+          const workItemContent = (
+            <>
+              <span
+                className={workItemLabelClassName(workItemLabel)}
+                data-active-work-label
+              >
+                {workItemLabel}
+              </span>
+              <span
+                className="shrink-0 whitespace-nowrap text-right font-mono text-[0.72rem] text-af-text-subtle"
+                data-active-work-duration
+              >
+                {durationLabel}
+              </span>
+            </>
+          );
+          const workItemClassName = cn(
+            "grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-border bg-af-surface px-2 py-1.5 text-[0.74rem]",
+            workItemSelected &&
+              "border-af-info-border bg-af-info-surface shadow-af-info-chip",
+          );
 
           return (
             <li key={`${execution.dispatch_id}:${workItem.work_id}`}>
-              <GraphNodeButton
-                aria-pressed={workItemSelected}
-                className={cn(
-                  "grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-border bg-af-surface px-2 py-1.5 text-[0.74rem]",
-                  workItemSelected &&
-                    "border-af-info-border bg-af-info-surface shadow-af-info-chip",
-                )}
-                data-selected={workItemSelected ? "true" : undefined}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  data.onSelectWorkID(workItem.work_id, {
-                    dispatchID: execution.dispatch_id,
-                    nodeID: data.workstation.node_id,
-                  });
-                }}
-                title={`${workItemLabel} - ${durationLabel}`}
-              >
-                <span
-                  className={workItemLabelClassName(workItemLabel)}
-                  data-active-work-label
+              {data.onSelectWorkID ? (
+                <GraphNodeButton
+                  aria-pressed={workItemSelected}
+                  className={workItemClassName}
+                  data-selected={workItemSelected ? "true" : undefined}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    data.onSelectWorkID?.(workItem.work_id, {
+                      dispatchID: execution.dispatch_id,
+                      nodeID: data.workstation.node_id,
+                    });
+                  }}
+                  title={`${workItemLabel} - ${durationLabel}`}
                 >
-                  {workItemLabel}
-                </span>
-                <span
-                  className="shrink-0 whitespace-nowrap text-right font-mono text-[0.72rem] text-af-text-subtle"
-                  data-active-work-duration
+                  {workItemContent}
+                </GraphNodeButton>
+              ) : (
+                <div
+                  className={workItemClassName}
+                  data-selected={workItemSelected ? "true" : undefined}
+                  title={`${workItemLabel} - ${durationLabel}`}
                 >
-                  {durationLabel}
-                </span>
-              </GraphNodeButton>
+                  {workItemContent}
+                </div>
+              )}
             </li>
           );
         })}
@@ -302,6 +332,52 @@ function ActiveWorkstationNodeContent({
         data.locale,
       )}
     </div>
+  );
+}
+
+function WorkstationHeaderContent({
+  data,
+  semanticIconMetadata,
+  workstationTitle,
+}: {
+  data: WorkstationNodeData;
+  semanticIconMetadata: ReturnType<typeof workstationIconMetadata>;
+  workstationTitle: string;
+}) {
+  return (
+    <>
+      <span
+        className="flex min-h-5 shrink-0 items-center"
+        data-workstation-semantic-icon
+        title={semanticIconMetadata.label}
+      >
+        <GraphSemanticIcon
+          className={cn("h-4 w-4", semanticIconMetadata.className)}
+          kind={semanticIconMetadata.iconKind}
+          label={semanticIconMetadata.label}
+          locale={data.locale}
+        />
+      </span>
+      <span
+        className={workstationTitleClassName(workstationTitle)}
+        data-workstation-title
+      >
+        {workstationTitle}
+      </span>
+      {data.active ? (
+        <ActivityGraphNodeBadge
+          className="min-h-5 shrink-0 justify-center px-1.5"
+          tone="success"
+        >
+          <GraphSemanticIcon
+            className="h-3.5 w-3.5 text-af-success"
+            kind="active-work"
+            label={getActivityGraphMessages(data.locale).activeBadgeLabel}
+            locale={data.locale}
+          />
+        </ActivityGraphNodeBadge>
+      ) : null}
+    </>
   );
 }
 

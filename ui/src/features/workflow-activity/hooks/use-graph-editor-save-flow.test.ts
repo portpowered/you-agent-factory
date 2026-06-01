@@ -67,6 +67,7 @@ const fixtureState = vi.hoisted(() => {
     },
     saveStateIsStale: false,
     transientControllerReset: {
+      setBlockedRemovalReason: vi.fn(),
       setConnectionNotice: vi.fn(),
       setPendingRemovalEdgeId: vi.fn(),
       setPendingRemovalNodeId: vi.fn(),
@@ -153,6 +154,7 @@ function resetSaveFlowFixture() {
     reset: vi.fn(),
     saveAsync: vi.fn(async () => undefined),
   };
+  fixtureState.transientControllerReset.setBlockedRemovalReason.mockReset();
   fixtureState.transientControllerReset.setConnectionNotice.mockReset();
   fixtureState.transientControllerReset.setPendingRemovalEdgeId.mockReset();
   fixtureState.transientControllerReset.setPendingRemovalNodeId.mockReset();
