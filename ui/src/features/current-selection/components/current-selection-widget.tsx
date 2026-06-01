@@ -356,6 +356,7 @@ export function CurrentSelectionWidget({
     workerSave,
     workerSaveState,
     workStateHeaderAction,
+    workStateSave,
     workStateSaveState,
     workTypeHeaderAction,
     workTypeSave,

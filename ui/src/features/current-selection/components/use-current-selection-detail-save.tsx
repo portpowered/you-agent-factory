@@ -211,6 +211,7 @@ export function useCurrentSelectionDetailSave({
     workerSave,
     workerSaveState: workerSave.saveState,
     workStateHeaderAction,
+    workStateSave,
     workStateSaveState: workStateSave.saveState,
     workTypeHeaderAction,
     workTypeSave,

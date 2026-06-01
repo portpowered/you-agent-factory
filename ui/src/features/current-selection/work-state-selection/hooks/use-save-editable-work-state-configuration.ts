@@ -19,7 +19,7 @@ interface UseSaveEditableWorkStateConfigurationOptions {
   scopeKey: string | null;
 }
 
-interface UseSaveEditableWorkStateConfigurationResult {
+export interface UseSaveEditableWorkStateConfigurationResult {
   canSave: boolean;
   save: () => Promise<void>;
   saveAttemptRevision: number;
