@@ -189,6 +189,7 @@ function buildReadyEditableWorkTypeConfigurationState({
       );
     },
     pendingFactoryDefinition,
+    savedFactoryDefinition: editableDefinition,
     status: "ready",
     validationErrors,
   };

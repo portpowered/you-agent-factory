@@ -119,6 +119,7 @@ export type EditableWorkstationConfigurationState =
       workstationOptionsState: EditableWorkstationWorkstationOptionsState;
       overwriteFieldNames: EditableWorkstationOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      savedFactoryDefinition: CanonicalFactoryDefinition;
       promptDiagnostics: EditableWorkstationPromptDiagnostic[];
       promptHelpState: EditableWorkstationPromptHelpState;
       promptValidationState: EditableWorkstationPromptValidationState;

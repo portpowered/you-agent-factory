@@ -4,7 +4,10 @@ import { act, renderHook } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
+import {
+  readGraphDraftHasPendingChanges,
+  useFactoryGraphTopologyEditorBridge,
+} from "../state/factory-graph-topology-editor-bridge";
 import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 
 const fixtureState = vi.hoisted(() => {
@@ -228,7 +231,10 @@ vi.mock("./react-flow-current-activity-card-editor-value", () => ({
 
 describe("useCurrentActivityGraphEditor", () => {
   beforeEach(() => {
-    useFactoryGraphTopologyEditorBridge.setState({ handlers: null });
+    useFactoryGraphTopologyEditorBridge.setState({
+      graphDraftHasPendingChanges: false,
+      handlers: null,
+    });
     hookState.addEntityController.reset.mockReset();
     hookState.connectionController.handleConnectionAnchorClick.mockReset();
     hookState.connectionController.handleEditorConnect.mockReset();
@@ -417,6 +423,8 @@ describe("useCurrentActivityGraphEditor", () => {
       result.current.setIsConfirmingSave(true);
     });
     hookState.draftState.hasChanges = true;
+    rerender({ factoryDocumentScopeKey: "session-alpha" });
+    expect(readGraphDraftHasPendingChanges()).toBe(true);
     useFactoryGraphTopologyEditorBridge.setState({
       handlers: {
         blockedRemovalReason: null,
@@ -444,6 +452,38 @@ describe("useCurrentActivityGraphEditor", () => {
       hookState.removalController.setPendingRemovalNodeId,
     ).toHaveBeenCalledWith(null);
     expect(useFactoryGraphTopologyEditorBridge.getState().handlers).toBeNull();
+    expect(readGraphDraftHasPendingChanges()).toBe(false);
+  });
+
+  it("publishes graph draft pending state when draft dirtiness changes", () => {
+    const { rerender } = renderHook(() =>
+      useCurrentActivityGraphEditor(semanticWorkflowDashboardSnapshot),
+    );
+
+    expect(readGraphDraftHasPendingChanges()).toBe(false);
+
+    hookState.draftState.hasChanges = true;
+    rerender();
+
+    expect(readGraphDraftHasPendingChanges()).toBe(true);
+
+    hookState.draftState.hasChanges = false;
+    rerender();
+
+    expect(readGraphDraftHasPendingChanges()).toBe(false);
+  });
+
+  it("clears graph draft pending state on unmount", () => {
+    hookState.draftState.hasChanges = true;
+    const { unmount } = renderHook(() =>
+      useCurrentActivityGraphEditor(semanticWorkflowDashboardSnapshot),
+    );
+
+    expect(readGraphDraftHasPendingChanges()).toBe(true);
+
+    unmount();
+
+    expect(readGraphDraftHasPendingChanges()).toBe(false);
   });
 
   it("saves the draft and leaves editor mode when asked to save before leaving", async () => {
@@ -491,7 +531,10 @@ function renderEditorWithConstantScope(
 
 describe("useCurrentActivityGraphEditor in-session save and discard", () => {
   beforeEach(() => {
-    useFactoryGraphTopologyEditorBridge.setState({ handlers: null });
+    useFactoryGraphTopologyEditorBridge.setState({
+      graphDraftHasPendingChanges: false,
+      handlers: null,
+    });
     hookState.addEntityController.reset.mockReset();
     hookState.connectionController.setConnectionNotice.mockReset();
     hookState.currentFactoryQuery = {

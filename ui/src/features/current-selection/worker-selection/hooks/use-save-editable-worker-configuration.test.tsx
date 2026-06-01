@@ -494,6 +494,18 @@ function buildReadyEditableConfigurationState(overrides?: {
       ],
       workstations: [],
     },
+    savedFactoryDefinition: {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [],
+    },
     status: "ready",
     validationErrors: {},
   };

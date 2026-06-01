@@ -458,6 +458,11 @@ function buildReadyEditableConfigurationState(overrides?: {
       resources: [{ capacity: 3, name: "agent-slot" }],
       workTypes: [],
     },
+    savedFactoryDefinition: {
+      name: "Current Factory",
+      resources: [{ capacity: 2, name: "agent-slot" }],
+      workTypes: [],
+    },
     status: "ready",
     validationErrors: {},
   };

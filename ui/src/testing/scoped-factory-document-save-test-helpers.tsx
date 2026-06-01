@@ -16,6 +16,11 @@ export const defaultScopedFactoryDocumentSaveRequest: ScopedFactoryDocumentSaveR
       workers: [],
       workstations: [],
     },
+    previousFactory: {
+      name: "Current Factory",
+      workers: [],
+      workstations: [],
+    },
     scopeKey: "review:transition:Review",
   };
 

@@ -371,6 +371,18 @@ function buildReadyEditableConfigurationState(overrides?: {
       workstations: [],
       workers: [],
     },
+    savedFactoryDefinition: {
+      name: "Current Factory",
+      workTypes: [
+        {
+          handlingBehavior: undefined,
+          name: "story",
+          states: [{ name: "queued", type: "INITIAL" }],
+        },
+      ],
+      workstations: [],
+      workers: [],
+    },
     status: "ready",
     validationErrors: overrides?.validationErrors ?? {},
   };

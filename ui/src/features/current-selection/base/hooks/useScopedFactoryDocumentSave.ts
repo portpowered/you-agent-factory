@@ -13,6 +13,7 @@ import type {
   CurrentFactoryDefinitionError,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
+import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../../factory-graph-editor/lib/factory-graph-topology-impact";
 import { useFactoryDocumentSave } from "../../../current-factory-definition/public";
 import type { FactoryDocumentSaveState } from "./factory-document-save-types";
 
@@ -20,6 +21,7 @@ export interface ScopedFactoryDocumentSaveRequest {
   baseVersion: CurrentFactoryVersion;
   factory: CanonicalFactoryDefinition;
   onSaved?: () => void;
+  previousFactory: CanonicalFactoryDefinition;
   scopeKey: string;
 }
 
@@ -43,6 +45,7 @@ export interface UseScopedFactoryDocumentSaveResult<
   confirmSave: (request: ScopedFactoryDocumentSaveRequest) => Promise<void>;
   error: CurrentFactoryDefinitionError | null;
   isPending: boolean;
+  lastSuccessfulSaveWasTopologyAffecting: boolean;
   reset: () => void;
   saveAttemptRevision: number;
   saveNow: (request: ScopedFactoryDocumentSaveRequest) => Promise<void>;
@@ -76,6 +79,10 @@ export function useScopedFactoryDocumentSave<
     null,
   );
   const [saveAttemptRevision, setSaveAttemptRevision] = useState(0);
+  const [
+    lastSuccessfulSaveWasTopologyAffecting,
+    setLastSuccessfulSaveWasTopologyAffecting,
+  ] = useState(false);
   const saveInFlightRef = useRef(false);
   const activeScopeKeyRef = useRef(scopeKey);
   activeScopeKeyRef.current = scopeKey;
@@ -85,6 +92,7 @@ export function useScopedFactoryDocumentSave<
     scopeKey,
     setIsConfirming,
     setLastFailedScope,
+    setLastSuccessfulSaveWasTopologyAffecting,
     setLastSuccessfulScopeKey,
     setSaveAttemptRevision,
   });
@@ -96,6 +104,7 @@ export function useScopedFactoryDocumentSave<
   useResetSuccessfulSaveStateOnDraftChange({
     isDirty,
     scopeKey,
+    setLastSuccessfulSaveWasTopologyAffecting,
     setLastSuccessfulScopeKey,
   });
 
@@ -130,6 +139,7 @@ export function useScopedFactoryDocumentSave<
         saveInFlightRef,
         setIsConfirming,
         setLastFailedScope,
+        setLastSuccessfulSaveWasTopologyAffecting,
         setLastSuccessfulScopeKey,
         setSaveAttemptRevision,
         setSubmittingScopeKey,
@@ -153,6 +163,7 @@ export function useScopedFactoryDocumentSave<
     setIsConfirming(false);
     setLastFailedScope(null);
     setLastSuccessfulScopeKey(null);
+    setLastSuccessfulSaveWasTopologyAffecting(false);
   }, []);
 
   return {
@@ -162,6 +173,7 @@ export function useScopedFactoryDocumentSave<
     confirmSave: persistSave,
     error,
     isPending,
+    lastSuccessfulSaveWasTopologyAffecting,
     reset,
     saveAttemptRevision,
     saveNow: persistSave,
@@ -180,6 +192,7 @@ async function executeScopedFactoryDocumentSave<
   saveInFlightRef,
   setIsConfirming,
   setLastFailedScope,
+  setLastSuccessfulSaveWasTopologyAffecting,
   setLastSuccessfulScopeKey,
   setSaveAttemptRevision,
   setSubmittingScopeKey,
@@ -196,6 +209,7 @@ async function executeScopedFactoryDocumentSave<
   setLastFailedScope: (
     value: ScopedFactoryDocumentSaveErrorState<TFieldErrors> | null,
   ) => void;
+  setLastSuccessfulSaveWasTopologyAffecting: (value: boolean) => void;
   setLastSuccessfulScopeKey: (value: string | null) => void;
   setSaveAttemptRevision: Dispatch<SetStateAction<number>>;
   setSubmittingScopeKey: (value: string | null) => void;
@@ -211,6 +225,7 @@ async function executeScopedFactoryDocumentSave<
   setSaveAttemptRevision((revision) => revision + 1);
   setLastFailedScope(null);
   setLastSuccessfulScopeKey(null);
+  setLastSuccessfulSaveWasTopologyAffecting(false);
   saveInFlightRef.current = true;
   setSubmittingScopeKey(request.scopeKey);
   try {
@@ -226,6 +241,12 @@ async function executeScopedFactoryDocumentSave<
     setSubmittingScopeKey(null);
     setLastFailedScope(null);
     setLastSuccessfulScopeKey(request.scopeKey);
+    setLastSuccessfulSaveWasTopologyAffecting(
+      doesFactoryDefinitionChangeAffectGraphTopology(
+        request.previousFactory,
+        request.factory,
+      ),
+    );
   } catch (error) {
     setIsConfirming(false);
     setSubmittingScopeKey(null);
@@ -303,6 +324,7 @@ function useResetExitedSaveScope<TFieldErrors extends Record<string, string>>({
   scopeKey,
   setIsConfirming,
   setLastFailedScope,
+  setLastSuccessfulSaveWasTopologyAffecting,
   setLastSuccessfulScopeKey,
   setSaveAttemptRevision,
 }: {
@@ -311,6 +333,7 @@ function useResetExitedSaveScope<TFieldErrors extends Record<string, string>>({
   setLastFailedScope: (
     value: ScopedFactoryDocumentSaveErrorState<TFieldErrors> | null,
   ) => void;
+  setLastSuccessfulSaveWasTopologyAffecting: (value: boolean) => void;
   setLastSuccessfulScopeKey: (value: string | null) => void;
   setSaveAttemptRevision: Dispatch<SetStateAction<number>>;
 }) {
@@ -321,6 +344,7 @@ function useResetExitedSaveScope<TFieldErrors extends Record<string, string>>({
       setIsConfirming(false);
       setLastFailedScope(null);
       setLastSuccessfulScopeKey(null);
+      setLastSuccessfulSaveWasTopologyAffecting(false);
       setSaveAttemptRevision(0);
       previousScopeKeyRef.current = scopeKey;
     }
@@ -328,6 +352,7 @@ function useResetExitedSaveScope<TFieldErrors extends Record<string, string>>({
     scopeKey,
     setIsConfirming,
     setLastFailedScope,
+    setLastSuccessfulSaveWasTopologyAffecting,
     setLastSuccessfulScopeKey,
     setSaveAttemptRevision,
   ]);
@@ -336,10 +361,12 @@ function useResetExitedSaveScope<TFieldErrors extends Record<string, string>>({
 function useResetSuccessfulSaveStateOnDraftChange({
   isDirty,
   scopeKey,
+  setLastSuccessfulSaveWasTopologyAffecting,
   setLastSuccessfulScopeKey,
 }: {
   isDirty: boolean;
   scopeKey: string | null;
+  setLastSuccessfulSaveWasTopologyAffecting: (value: boolean) => void;
   setLastSuccessfulScopeKey: (
     value: string | null | ((currentScopeKey: string | null) => string | null),
   ) => void;
@@ -349,8 +376,14 @@ function useResetSuccessfulSaveStateOnDraftChange({
       setLastSuccessfulScopeKey((currentScopeKey) =>
         currentScopeKey === scopeKey ? null : currentScopeKey,
       );
+      setLastSuccessfulSaveWasTopologyAffecting(false);
     }
-  }, [isDirty, scopeKey, setLastSuccessfulScopeKey]);
+  }, [
+    isDirty,
+    scopeKey,
+    setLastSuccessfulSaveWasTopologyAffecting,
+    setLastSuccessfulScopeKey,
+  ]);
 }
 
 function normalizeSaveError<TFieldErrors extends Record<string, string>>(

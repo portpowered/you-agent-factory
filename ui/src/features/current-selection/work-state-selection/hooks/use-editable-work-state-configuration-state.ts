@@ -180,6 +180,7 @@ function buildReadyEditableWorkStateConfigurationState({
     },
     originalStateName: selectedEditableValues.stateName,
     pendingFactoryDefinition,
+    savedFactoryDefinition: editableDefinition,
     status: "ready",
     validationErrors,
     workTypeName: selectedEditableValues.workTypeName,
