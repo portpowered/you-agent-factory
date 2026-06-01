@@ -71,6 +71,52 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
   ],
 };
 
+const routingTransitionFactoryDefinition: CanonicalFactoryDefinition = {
+  ...baseFactoryDefinition,
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        {
+          name: "queued",
+          type: "INITIAL",
+        },
+        {
+          name: "done",
+          type: "TERMINAL",
+        },
+        {
+          name: "failed",
+          type: "TERMINAL",
+        },
+      ],
+    },
+  ],
+  workstations: [
+    {
+      ...baseFactoryDefinition.workstations?.[0],
+      onContinue: [
+        {
+          state: "done",
+          workType: "story",
+        },
+      ],
+      onFailure: [
+        {
+          state: "failed",
+          workType: "story",
+        },
+      ],
+      onRejection: [
+        {
+          state: "queued",
+          workType: "story",
+        },
+      ],
+    },
+  ],
+};
+
 const editableDocument = {
   ...baseFactoryDefinition,
   version: {
@@ -252,6 +298,21 @@ describe("current activity graph editor controllers", () => {
       edgeId: "workstation-output:workstation:review->work-state:story:done",
     },
     {
+      edgeId:
+        "workstation-on-continue:workstation:review->work-state:story:done",
+      factoryDefinition: routingTransitionFactoryDefinition,
+    },
+    {
+      edgeId:
+        "workstation-on-failure:workstation:review->work-state:story:failed",
+      factoryDefinition: routingTransitionFactoryDefinition,
+    },
+    {
+      edgeId:
+        "workstation-on-rejection:workstation:review->work-state:story:queued",
+      factoryDefinition: routingTransitionFactoryDefinition,
+    },
+    {
       edgeId: "workstation-resource:resource:gpu->workstation:review",
     },
     {
@@ -259,9 +320,12 @@ describe("current activity graph editor controllers", () => {
     },
   ])("opens confirmation before applying removable $edgeId draft edge removals", ({
     edgeId,
+    factoryDefinition = baseFactoryDefinition,
   }) => {
     const reset = vi.fn();
-    const draftState = createDraftState();
+    const draftState = createDraftState({
+      baseFactoryDefinition: factoryDefinition,
+    });
     const editableGraph = createEditableGraph();
 
     const { result } = renderHook(() =>
@@ -292,6 +356,70 @@ describe("current activity graph editor controllers", () => {
 
     expect(reset).toHaveBeenCalledTimes(1);
     expect(editableGraph.actions.disconnectEdge).toHaveBeenCalledWith(edgeId);
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
+
+  it("surfaces blocked work-type-state edge removal without mutating the draft", () => {
+    const reset = vi.fn();
+    const initialDraft = createEmptyFactoryGraphDraft();
+    const draftState = createDraftState({ draft: initialDraft });
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        hiddenNodeClasses: new Set(),
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorEdgeDelete(
+        "work-type-state:work-type:story->work-state:story:queued",
+      );
+    });
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(editableGraph.actions.disconnectEdge).not.toHaveBeenCalled();
+    expect(draftState.replaceDraft).not.toHaveBeenCalled();
+    expect(draftState.draft).toBe(initialDraft);
+    expect(result.current.blockedRemovalReason).toBe(
+      "Work type ordering edges are managed by work-state membership and cannot be removed directly.",
+    );
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
+
+  it("ignores delete-tool edge clicks when activeTool is not delete", () => {
+    const reset = vi.fn();
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        hiddenNodeClasses: new Set(),
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorEdgeDelete(
+        "workstation-output:workstation:review->work-state:story:done",
+      );
+    });
+
+    expect(editableGraph.actions.disconnectEdge).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
