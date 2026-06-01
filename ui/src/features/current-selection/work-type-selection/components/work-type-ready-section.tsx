@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 import {
@@ -58,11 +57,6 @@ export function WorkTypeReadySection({
           role="alert"
         >
           {messages.editableConfigurationValidationStatus}
-        </p>
-      ) : null}
-      {state.isDirty ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-          {messages.editableConfigurationDirtyStatus}
         </p>
       ) : null}
       <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>

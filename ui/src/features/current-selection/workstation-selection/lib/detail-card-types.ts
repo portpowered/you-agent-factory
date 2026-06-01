@@ -14,7 +14,10 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import type { EditableWorkstationBehavior } from "../../../current-factory-definition/lib/workstation-behavior";
-import type { EditableWorkstationValues } from "../../../current-factory-definition/lib/workstation-editable-values";
+import type {
+  EditableWorkstationDraft,
+  EditableWorkstationValues,
+} from "../../../current-factory-definition/lib/workstation-editable-values";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import type { RunnerID } from "../editing/runner-metadata";
 import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
@@ -90,17 +93,17 @@ export type EditableWorkstationWorkerOptionsState =
   | { message: string; status: "empty" }
   | { message: string; status: "error" };
 
+export type EditableWorkstationWorkstationOptionsState =
+  | { status: "ready"; options: string[] }
+  | { message: string; status: "empty" }
+  | { message: string; status: "error" };
+
 export type EditableWorkstationConfigurationState =
   | { status: "loading" }
   | { errorMessage: string; status: "error" }
   | { message: string; status: "empty" }
   | {
-      draft: {
-        behavior: EditableWorkstationBehavior;
-        prompt: string;
-        runnerName: RunnerID | null;
-        workerName: string;
-      };
+      draft: EditableWorkstationDraft;
       hasValidationErrors: boolean;
       initialValues: EditableWorkstationValues;
       isDirty: boolean;
@@ -109,8 +112,11 @@ export type EditableWorkstationConfigurationState =
       onBehaviorChange: (value: EditableWorkstationBehavior) => void;
       onPromptChange: (value: string) => void;
       onResetToLatest: () => void;
+      onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => void;
+      onInputsChange: (inputs: EditableWorkstationDraft["inputs"]) => void;
       onRunnerChange: (value: RunnerID | null) => void;
       onWorkerChange: (value: string) => void;
+      workstationOptionsState: EditableWorkstationWorkstationOptionsState;
       overwriteFieldNames: EditableWorkstationOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
       savedFactoryDefinition: CanonicalFactoryDefinition;

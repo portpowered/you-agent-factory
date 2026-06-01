@@ -630,12 +630,16 @@ describe("useEditableWorkstationConfigurationState", () => {
         reviewer: "MODEL_WORKER",
       },
       workstationName: "Review",
+      guards: [],
+      inputs: [],
     };
 
     expect(
       validateEditableWorkstationDraft(
         {
           behavior: "STANDARD",
+          guards: [],
+          inputs: [],
           prompt: "Review the story.",
           runnerName: null,
           workerName: "reviewer",
@@ -651,6 +655,8 @@ describe("useEditableWorkstationConfigurationState", () => {
       validateEditableWorkstationDraft(
         {
           behavior: "STANDARD",
+          guards: [],
+          inputs: [],
           prompt: "Review the story.",
           runnerName: null,
           workerName: "reviewer",
@@ -696,6 +702,122 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("marks the draft dirty when workstation guards change", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current?.status === "ready" ? result.current.isDirty : true).toBe(
+      false,
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onGuardsChange([
+        {
+          maxVisits: 2,
+          type: "VISIT_COUNT",
+          workstation: "Review",
+        },
+      ]);
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        guards: [
+          {
+            maxVisits: 2,
+            type: "VISIT_COUNT",
+            workstation: "Review",
+          },
+        ],
+      },
+      isDirty: true,
+      status: "ready",
+    });
+  });
+
+  it("blocks save when guard validation errors exist", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onGuardsChange([
+        {
+          maxVisits: 0,
+          type: "VISIT_COUNT",
+          workstation: "",
+        },
+      ]);
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: true,
+      status: "ready",
+      validationErrors: {
+        "guards[0].maxVisits": "Max visits must be a positive whole number.",
+        "guards[0].workstation":
+          "Select the workstation whose visits are counted.",
+      },
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toBeNull();
+  });
+
+  it("marks the draft dirty when per-input guards change", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onInputsChange([
+        {
+          guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+          state: "queued",
+          workType: "story",
+        },
+      ]);
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        inputs: [
+          {
+            guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+      },
+      isDirty: true,
+      status: "ready",
+    });
+  });
+
   it("skips worker and prompt validation for LOGICAL_MOVE drafts", () => {
     const logicalMoveValues = {
       behavior: "STANDARD",
@@ -719,13 +841,18 @@ describe("useEditableWorkstationConfigurationState", () => {
         reviewer: "MODEL_WORKER",
       },
       workstationName: "Route",
+      workstationOptions: ["Route"],
       workstationType: "LOGICAL_MOVE" as const,
+      guards: [],
+      inputs: [],
     };
 
     expect(
       validateEditableWorkstationDraft(
         {
           behavior: "STANDARD",
+          guards: [],
+          inputs: [],
           prompt: "",
           runnerName: null,
           workerName: "",
@@ -738,6 +865,8 @@ describe("useEditableWorkstationConfigurationState", () => {
       validateEditableWorkstationDraft(
         {
           behavior: "POLLER",
+          guards: [],
+          inputs: [],
           prompt: "",
           runnerName: null,
           workerName: "legacy-missing-worker",

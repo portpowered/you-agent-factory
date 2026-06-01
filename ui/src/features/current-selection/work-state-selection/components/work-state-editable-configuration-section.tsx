@@ -138,43 +138,26 @@ function WorkStateEditableConfigurationDraftStatus({
   messages: ReturnType<typeof getWorkStateDetailMessages>;
   state: Extract<EditableWorkStateConfigurationState, { status: "ready" }>;
 }) {
+  if (!state.hasValidationErrors) {
+    return null;
+  }
+
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
       <p
-        className={cn(
-          "m-0",
-          state.hasValidationErrors
-            ? "text-af-danger-text"
-            : "text-af-text-muted",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-        role={state.hasValidationErrors ? "alert" : "status"}
+        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+        role="alert"
       >
-        {state.hasValidationErrors
-          ? messages.editableConfigurationValidationStatus
-          : state.isDirty
-            ? messages.editableConfigurationDirtyStatus
-            : messages.editableConfigurationDraftNote}
+        {messages.editableConfigurationValidationStatus}
       </p>
-      {state.hasValidationErrors ? (
-        <p
-          className={cn(
-            "m-0 text-af-text-subtle",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
-          {messages.editableConfigurationSaveDisabledValidationDetail}
-        </p>
-      ) : (
-        <p
-          className={cn(
-            "m-0 text-af-text-subtle",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
-          {messages.editableConfigurationDraftNote}
-        </p>
-      )}
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
+        {messages.editableConfigurationSaveDisabledValidationDetail}
+      </p>
     </div>
   );
 }

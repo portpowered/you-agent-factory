@@ -55,6 +55,21 @@ describe("EditableConfigurationDiscardHeaderAction", () => {
     ).toBeDisabled();
   });
 
+  it("uses localized discard copy when locale is provided", () => {
+    render(
+      <EditableConfigurationDiscardHeaderAction
+        canDiscard
+        isSaving={false}
+        locale="ja"
+        onClick={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "ローカル変更を破棄" }),
+    ).toBeInTheDocument();
+  });
+
   it("uses a custom aria label when provided", () => {
     render(
       <EditableConfigurationDiscardHeaderAction
