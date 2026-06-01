@@ -47,6 +47,12 @@ func PutJSON(ctx context.Context, client *http.Client, url string, body io.Reade
 	return doJSON(ctx, client, http.MethodPut, url, body, dst, http.StatusOK, opts)
 }
 
+// PutJSONCreated executes an HTTP PUT with an optional JSON body and decodes JSON into dst when
+// the response status is 201 Created.
+func PutJSONCreated(ctx context.Context, client *http.Client, url string, body io.Reader, dst any, opts RequestOptions) (*http.Response, error) {
+	return doJSON(ctx, client, http.MethodPut, url, body, dst, http.StatusCreated, opts)
+}
+
 func doJSON(
 	ctx context.Context,
 	client *http.Client,
