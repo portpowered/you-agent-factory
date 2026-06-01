@@ -67,6 +67,18 @@ export interface WorkstationDetailMessages {
   editableConfigurationWorkerUnavailablePrefix: string;
   editableConfigurationWorkstationOptionsEmpty: string;
   editableConfigurationWorkstationUnavailablePrefix: string;
+  editableConfigurationVisitCountMaxVisitsInvalid: string;
+  editableConfigurationVisitCountWorkstationInvalid: (workstation: string) => string;
+  editableConfigurationVisitCountWorkstationRequired: string;
+  editableConfigurationMatchesFieldsInputKeyRequired: string;
+  editableConfigurationInputGuardMultipleGuards: string;
+  editableConfigurationInputGuardMatchInputRequired: string;
+  editableConfigurationInputGuardMatchInputInvalid: (workType: string) => string;
+  editableConfigurationInputGuardMatchInputSelfReference: string;
+  editableConfigurationInputGuardParentInputRequired: string;
+  editableConfigurationInputGuardParentInputInvalid: (workType: string) => string;
+  editableConfigurationInputGuardParentInputSelfReference: string;
+  editableConfigurationInputGuardSpawnedByInvalid: (workstation: string) => string;
   matchesFieldsGuardInputKeyFieldLabel: string;
   modelFieldLabel: string;
   notConfiguredValue: string;

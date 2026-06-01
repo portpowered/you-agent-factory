@@ -743,6 +743,44 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("blocks save when guard validation errors exist", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onGuardsChange([
+        {
+          maxVisits: 0,
+          type: "VISIT_COUNT",
+          workstation: "",
+        },
+      ]);
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: true,
+      status: "ready",
+      validationErrors: {
+        "guards[0].maxVisits": "Max visits must be a positive whole number.",
+        "guards[0].workstation":
+          "Select the workstation whose visits are counted.",
+      },
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toBeNull();
+  });
+
   it("marks the draft dirty when per-input guards change", async () => {
     const { result } = renderHook(() =>
       useEditableWorkstationConfigurationState(selection, selectedNode),

@@ -127,6 +127,30 @@ const workstationDetailMessagesByLocale = {
       "No workstations are available in the current factory definition.",
     editableConfigurationWorkstationUnavailablePrefix:
       "Workstation selection unavailable.",
+    editableConfigurationVisitCountMaxVisitsInvalid:
+      "Max visits must be a positive whole number.",
+    editableConfigurationVisitCountWorkstationInvalid: (workstation) =>
+      `Counted workstation ${workstation} is not available in this factory.`,
+    editableConfigurationVisitCountWorkstationRequired:
+      "Select the workstation whose visits are counted.",
+    editableConfigurationMatchesFieldsInputKeyRequired:
+      "Enter a field selector for this guard.",
+    editableConfigurationInputGuardMultipleGuards:
+      "Each input slot can have at most one guard.",
+    editableConfigurationInputGuardMatchInputRequired:
+      "Select a peer input for this guard.",
+    editableConfigurationInputGuardMatchInputInvalid: (workType) =>
+      `Peer input ${workType} is not available on this workstation.`,
+    editableConfigurationInputGuardMatchInputSelfReference:
+      "Peer input cannot reference the same input slot.",
+    editableConfigurationInputGuardParentInputRequired:
+      "Select a parent input for this guard.",
+    editableConfigurationInputGuardParentInputInvalid: (workType) =>
+      `Parent input ${workType} is not available on this workstation.`,
+    editableConfigurationInputGuardParentInputSelfReference:
+      "Parent input cannot reference the same input slot.",
+    editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
+      `Spawned-by workstation ${workstation} is not available in this factory.`,
     matchesFieldsGuardInputKeyFieldLabel: "Field selector",
     modelFieldLabel: "Model",
     notConfiguredValue: "Not configured",
@@ -339,6 +363,30 @@ const workstationDetailMessagesByLocale = {
       "現在のファクトリー定義に利用可能なワークステーションがありません。",
     editableConfigurationWorkstationUnavailablePrefix:
       "ワークステーション選択は利用できません。",
+    editableConfigurationVisitCountMaxVisitsInvalid:
+      "最大訪問回数は正の整数である必要があります。",
+    editableConfigurationVisitCountWorkstationInvalid: (workstation) =>
+      `カウント対象ワークステーション ${workstation} はこのファクトリーで利用できません。`,
+    editableConfigurationVisitCountWorkstationRequired:
+      "訪問回数をカウントするワークステーションを選択してください。",
+    editableConfigurationMatchesFieldsInputKeyRequired:
+      "このガードのフィールドセレクターを入力してください。",
+    editableConfigurationInputGuardMultipleGuards:
+      "各入力スロットには最大 1 つのガードしか設定できません。",
+    editableConfigurationInputGuardMatchInputRequired:
+      "このガードのピア入力を選択してください。",
+    editableConfigurationInputGuardMatchInputInvalid: (workType) =>
+      `ピア入力 ${workType} はこのワークステーションで利用できません。`,
+    editableConfigurationInputGuardMatchInputSelfReference:
+      "ピア入力は同じ入力スロットを参照できません。",
+    editableConfigurationInputGuardParentInputRequired:
+      "このガードの親入力を選択してください。",
+    editableConfigurationInputGuardParentInputInvalid: (workType) =>
+      `親入力 ${workType} はこのワークステーションで利用できません。`,
+    editableConfigurationInputGuardParentInputSelfReference:
+      "親入力は同じ入力スロットを参照できません。",
+    editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
+      `spawned-by ワークステーション ${workstation} はこのファクトリーで利用できません。`,
     matchesFieldsGuardInputKeyFieldLabel: "フィールドセレクター",
     modelFieldLabel: "モデル",
     notConfiguredValue: "未設定",
@@ -550,6 +598,30 @@ const workstationDetailMessagesByLocale = {
       "현재 팩토리 정의에 사용 가능한 워크스테이션이 없습니다.",
     editableConfigurationWorkstationUnavailablePrefix:
       "워크스테이션 선택을 사용할 수 없습니다.",
+    editableConfigurationVisitCountMaxVisitsInvalid:
+      "최대 방문 횟수는 양의 정수여야 합니다.",
+    editableConfigurationVisitCountWorkstationInvalid: (workstation) =>
+      `카운트 대상 워크스테이션 ${workstation} 은(는) 이 팩토리에서 사용할 수 없습니다.`,
+    editableConfigurationVisitCountWorkstationRequired:
+      "방문 횟수를 셀 워크스테이션을 선택하세요.",
+    editableConfigurationMatchesFieldsInputKeyRequired:
+      "이 가드의 필드 선택자를 입력하세요.",
+    editableConfigurationInputGuardMultipleGuards:
+      "각 입력 슬롯에는 가드를 하나만 설정할 수 있습니다.",
+    editableConfigurationInputGuardMatchInputRequired:
+      "이 가드의 피어 입력을 선택하세요.",
+    editableConfigurationInputGuardMatchInputInvalid: (workType) =>
+      `피어 입력 ${workType} 은(는) 이 워크스테이션에서 사용할 수 없습니다.`,
+    editableConfigurationInputGuardMatchInputSelfReference:
+      "피어 입력은 같은 입력 슬롯을 참조할 수 없습니다.",
+    editableConfigurationInputGuardParentInputRequired:
+      "이 가드의 부모 입력을 선택하세요.",
+    editableConfigurationInputGuardParentInputInvalid: (workType) =>
+      `부모 입력 ${workType} 은(는) 이 워크스테이션에서 사용할 수 없습니다.`,
+    editableConfigurationInputGuardParentInputSelfReference:
+      "부모 입력은 같은 입력 슬롯을 참조할 수 없습니다.",
+    editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
+      `spawned-by 워크스테이션 ${workstation} 은(는) 이 팩토리에서 사용할 수 없습니다.`,
     matchesFieldsGuardInputKeyFieldLabel: "필드 선택자",
     modelFieldLabel: "모델",
     notConfiguredValue: "구성되지 않음",
@@ -744,6 +816,30 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationWorkstationOptionsEmpty:
       "当前工厂定义中没有可用的工作站。",
     editableConfigurationWorkstationUnavailablePrefix: "工作站选择不可用。",
+    editableConfigurationVisitCountMaxVisitsInvalid:
+      "最大访问次数必须是正整数。",
+    editableConfigurationVisitCountWorkstationInvalid: (workstation) =>
+      `计数工作站 ${workstation} 在当前工厂中不可用。`,
+    editableConfigurationVisitCountWorkstationRequired:
+      "请选择要计数访问次数的工作站。",
+    editableConfigurationMatchesFieldsInputKeyRequired:
+      "请输入此守卫的字段选择器。",
+    editableConfigurationInputGuardMultipleGuards:
+      "每个输入槽最多只能配置一个守卫。",
+    editableConfigurationInputGuardMatchInputRequired:
+      "请为此守卫选择对等输入。",
+    editableConfigurationInputGuardMatchInputInvalid: (workType) =>
+      `对等输入 ${workType} 在此工作站上不可用。`,
+    editableConfigurationInputGuardMatchInputSelfReference:
+      "对等输入不能引用同一个输入槽。",
+    editableConfigurationInputGuardParentInputRequired:
+      "请为此守卫选择父输入。",
+    editableConfigurationInputGuardParentInputInvalid: (workType) =>
+      `父输入 ${workType} 在此工作站上不可用。`,
+    editableConfigurationInputGuardParentInputSelfReference:
+      "父输入不能引用同一个输入槽。",
+    editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
+      `spawned-by 工作站 ${workstation} 在当前工厂中不可用。`,
     matchesFieldsGuardInputKeyFieldLabel: "字段选择器",
     modelFieldLabel: "模型",
     notConfiguredValue: "未配置",

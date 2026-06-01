@@ -261,12 +261,14 @@ function EditableConfigurationReadyForm({
           }
         />
         <EditableConfigurationWorkstationGuardsField
+          fieldErrors={validationErrors}
           guards={state.draft.guards as WorkstationLevelGuard[]}
           messages={messages}
           onGuardsChange={state.onGuardsChange}
           workstationOptionsState={state.workstationOptionsState}
         />
         <EditableConfigurationWorkstationInputGuardsField
+          fieldErrors={validationErrors}
           inputs={state.draft.inputs}
           messages={messages}
           onInputsChange={state.onInputsChange}

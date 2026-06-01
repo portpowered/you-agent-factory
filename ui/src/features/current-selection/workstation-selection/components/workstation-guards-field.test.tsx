@@ -99,4 +99,34 @@ describe("EditableConfigurationWorkstationGuardsField", () => {
 
     expect(onGuardsChange).toHaveBeenCalledWith([]);
   });
+
+  it("renders guard field validation errors with role=alert", () => {
+    render(
+      <EditableConfigurationWorkstationGuardsField
+        fieldErrors={{
+          "guards[0].maxVisits": "Max visits must be a positive whole number.",
+          "guards[0].workstation":
+            "Select the workstation whose visits are counted.",
+        }}
+        guards={[
+          {
+            maxVisits: 0,
+            type: "VISIT_COUNT",
+            workstation: "",
+          },
+        ]}
+        messages={messages}
+        onGuardsChange={vi.fn()}
+        workstationOptionsState={{
+          options: ["Plan", "Review"],
+          status: "ready",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(
+      screen.getByText("Max visits must be a positive whole number."),
+    ).toBeTruthy();
+  });
 });

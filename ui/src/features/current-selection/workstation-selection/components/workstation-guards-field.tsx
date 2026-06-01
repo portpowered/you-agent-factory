@@ -23,11 +23,13 @@ import type { EditableWorkstationWorkstationOptionsState } from "../lib/detail-c
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 export function EditableConfigurationWorkstationGuardsField({
+  fieldErrors = {},
   messages,
   onGuardsChange,
   guards,
   workstationOptionsState,
 }: {
+  fieldErrors?: Record<string, string | undefined>;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   onGuardsChange: (guards: WorkstationLevelGuard[]) => void;
   guards: WorkstationLevelGuard[];
@@ -53,6 +55,7 @@ export function EditableConfigurationWorkstationGuardsField({
               key={`${guard.type}-${formatWorkstationGuardSummary(guard)}-${index}`}
             >
               <WorkstationGuardRow
+                fieldErrors={fieldErrors}
                 guard={guard}
                 guardIndex={index}
                 messages={messages}
@@ -115,6 +118,7 @@ export function EditableConfigurationWorkstationGuardsField({
 }
 
 function WorkstationGuardRow({
+  fieldErrors,
   guard,
   guardIndex,
   messages,
@@ -122,6 +126,7 @@ function WorkstationGuardRow({
   onRemove,
   workstationOptionsState,
 }: {
+  fieldErrors: Record<string, string | undefined>;
   guard: WorkstationLevelGuard;
   guardIndex: number;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
@@ -156,7 +161,9 @@ function WorkstationGuardRow({
       </div>
       {guard.type === "VISIT_COUNT" ? (
         <VisitCountGuardFields
+          fieldErrors={fieldErrors}
           guard={guard}
+          guardIndex={guardIndex}
           messages={messages}
           onChange={onChange}
           rowId={rowId}
@@ -165,7 +172,9 @@ function WorkstationGuardRow({
       ) : null}
       {guard.type === "MATCHES_FIELDS" ? (
         <MatchesFieldsGuardFields
+          fieldErrors={fieldErrors}
           guard={guard}
+          guardIndex={guardIndex}
           messages={messages}
           onChange={onChange}
           rowId={rowId}
@@ -176,13 +185,17 @@ function WorkstationGuardRow({
 }
 
 function VisitCountGuardFields({
+  fieldErrors,
   guard,
+  guardIndex,
   messages,
   onChange,
   rowId,
   workstationOptionsState,
 }: {
+  fieldErrors: Record<string, string | undefined>;
   guard: Extract<WorkstationLevelGuard, { type: "VISIT_COUNT" }>;
+  guardIndex: number;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   onChange: (guard: WorkstationLevelGuard) => void;
   rowId: string;
@@ -235,6 +248,21 @@ function VisitCountGuardFields({
             ))}
           </Select>
         ) : null}
+        {resolveWorkstationGuardFieldError(
+          fieldErrors,
+          guardIndex,
+          "workstation",
+        ) ? (
+          <GuardFieldError
+            message={
+              resolveWorkstationGuardFieldError(
+                fieldErrors,
+                guardIndex,
+                "workstation",
+              ) ?? ""
+            }
+          />
+        ) : null}
       </div>
       <div className="grid gap-1">
         <label
@@ -258,18 +286,37 @@ function VisitCountGuardFields({
           type="number"
           value={guard.maxVisits ?? ""}
         />
+        {resolveWorkstationGuardFieldError(
+          fieldErrors,
+          guardIndex,
+          "maxVisits",
+        ) ? (
+          <GuardFieldError
+            message={
+              resolveWorkstationGuardFieldError(
+                fieldErrors,
+                guardIndex,
+                "maxVisits",
+              ) ?? ""
+            }
+          />
+        ) : null}
       </div>
     </div>
   );
 }
 
 function MatchesFieldsGuardFields({
+  fieldErrors,
   guard,
+  guardIndex,
   messages,
   onChange,
   rowId,
 }: {
+  fieldErrors: Record<string, string | undefined>;
   guard: Extract<WorkstationLevelGuard, { type: "MATCHES_FIELDS" }>;
+  guardIndex: number;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   onChange: (guard: WorkstationLevelGuard) => void;
   rowId: string;
@@ -296,6 +343,40 @@ function MatchesFieldsGuardFields({
         type="text"
         value={guard.matchConfig?.inputKey ?? ""}
       />
+      {resolveWorkstationGuardFieldError(
+        fieldErrors,
+        guardIndex,
+        "matchConfig.inputKey",
+      ) ? (
+        <GuardFieldError
+          message={
+            resolveWorkstationGuardFieldError(
+              fieldErrors,
+              guardIndex,
+              "matchConfig.inputKey",
+            ) ?? ""
+          }
+        />
+      ) : null}
     </div>
   );
+}
+
+function GuardFieldError({ message }: { message: string }) {
+  return (
+    <p
+      className={cn("m-0 text-af-danger-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      role="alert"
+    >
+      {message}
+    </p>
+  );
+}
+
+function resolveWorkstationGuardFieldError(
+  fieldErrors: Record<string, string | undefined>,
+  guardIndex: number,
+  field: string,
+): string | undefined {
+  return fieldErrors[`guards[${guardIndex}].${field}`];
 }
