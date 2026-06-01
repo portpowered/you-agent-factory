@@ -20,6 +20,7 @@ import {
   traceToken,
 } from "./replayGraphState";
 import type { ReplayWorldState } from "./types";
+import { emptyWorkPayloadLineageProjection } from "./workPayloadLineage";
 
 function replayStateWithResourcePlaces(): ReplayWorldState {
   return {
@@ -30,6 +31,7 @@ function replayStateWithResourcePlaces(): ReplayWorldState {
     failedWorkItemsByID: {},
     inferenceAttemptsByDispatchID: {},
     occupancyByID: {},
+    payloadLineage: emptyWorkPayloadLineageProjection(),
     providerSessions: [],
     relationsByWorkID: {},
     runtime: { in_flight_dispatch_count: 0, session: { has_data: false } },

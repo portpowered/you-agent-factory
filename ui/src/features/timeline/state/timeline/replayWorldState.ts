@@ -1,6 +1,7 @@
 import type {
   FactoryEvent,
   FactoryRelation,
+  FactoryWorkItem,
 } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import {
@@ -60,8 +61,14 @@ import type {
 } from "./replayWorldStateTypes";
 import { orderedEvents, uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
-import { emptyWorldRuntime, type ReplayWorldState } from "./types";
+import { emptyWorldRuntime, type ReplayWorldState, type WorldDispatch } from "./types";
 import { workRef } from "./workItemRef";
+import {
+  emptyWorkPayloadLineageProjection,
+  recordConsumedInputSnapshot,
+  recordDispatchOutputSnapshot,
+  recordWorkRequestSnapshot,
+} from "./workPayloadLineage";
 
 function emptyWorldState(tick: number): ReplayWorldState {
   return {
@@ -72,6 +79,7 @@ function emptyWorldState(tick: number): ReplayWorldState {
     failedWorkItemsByID: {},
     inferenceAttemptsByDispatchID: {},
     occupancyByID: {},
+    payloadLineage: emptyWorkPayloadLineageProjection(),
     providerSessions: [],
     relationsByWorkID: {},
     runtime: emptyWorldRuntime(),
@@ -205,6 +213,12 @@ function applyWorkRequest(
     if (isSystemTimeWorkItem(item)) {
       continue;
     }
+    recordWorkRequestSnapshot(
+      state.payloadLineage,
+      event.context.tick,
+      requestID,
+      item,
+    );
     addToken(state, item.place_id, item.id, item.id);
     addTraceWork(state, item);
     addTraceRequest(state, item.trace_id ?? traceID, requestID);
@@ -259,6 +273,7 @@ function applyRequest(
   for (const item of workItems) {
     removeWorkToken(state, item.id);
     state.workItemsByID[item.id] = item;
+    recordConsumedInputSnapshot(state.payloadLineage, dispatchID, item);
     if (isSystemTimeWorkItem(item)) {
       continue;
     }
@@ -392,6 +407,7 @@ function applyResponse(
   }
 
   const active = state.activeDispatches[dispatchID];
+  const consumedInputWorkItems = dispatchInputWorkItems(state, active);
   delete state.activeDispatches[dispatchID];
   releaseResourceUnits(
     state,
@@ -411,8 +427,18 @@ function applyResponse(
       ),
     ),
   );
-  for (const item of outputItems) {
+  for (const [index, item] of outputItems.entries()) {
     state.workItemsByID[item.id] = item;
+    if (item.id !== "") {
+      recordDispatchOutputSnapshot(
+        state.payloadLineage,
+        event.context.tick,
+        dispatchID,
+        consumedInputWorkItems,
+        item,
+        index,
+      );
+    }
     if (isSystemTimeWorkItem(item)) {
       continue;
     }
@@ -441,4 +467,16 @@ function applyResponse(
   for (const traceID of completion.traceIDs) {
     addTraceDispatch(state, traceID, completion);
   }
+}
+
+function dispatchInputWorkItems(
+  state: ReplayWorldState,
+  dispatch: WorldDispatch | undefined,
+): FactoryWorkItem[] {
+  if (!dispatch) {
+    return [];
+  }
+  return dispatch.consumedTokens
+    .map((token) => state.workItemsByID[token.work_id])
+    .filter((item): item is FactoryWorkItem => item !== undefined);
 }
