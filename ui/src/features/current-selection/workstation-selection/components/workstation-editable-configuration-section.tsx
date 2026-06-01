@@ -223,7 +223,10 @@ function EditableConfigurationReadyForm({
             />
           }
         />
-        <EditableConfigurationCronFields messages={messages} state={state} />
+        <EditableConfigurationCronFields
+          messages={messages}
+          state={renderState}
+        />
         <EditableConfigurationField
           fieldId="editable-workstation-runner"
           errorMessage={validationErrors.runnerName}
@@ -299,6 +302,7 @@ function hasOnlyPromptBlockingValidationErrors(
     !validationErrors.cronExpiryWindow &&
     !validationErrors.cronJitter &&
     !validationErrors.cronSchedule &&
+    !validationErrors.cronTriggerAtStart &&
     !validationErrors.runnerName &&
     !validationErrors.workerName
   );

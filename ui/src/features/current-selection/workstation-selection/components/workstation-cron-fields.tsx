@@ -217,6 +217,18 @@ function EditableConfigurationCronTriggerAtStartField({
         messages={messages}
         state={state}
       />
+      {state.validationErrors.cronTriggerAtStart ? (
+        <p
+          className={cn(
+            "m-0 text-af-danger-text",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+          id={`${fieldId}-error`}
+          role="alert"
+        >
+          {state.validationErrors.cronTriggerAtStart}
+        </p>
+      ) : null}
     </div>
   );
 }

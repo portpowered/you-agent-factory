@@ -34,9 +34,45 @@ export function resolveWorkstationSaveValidationFieldName(
     if (subjectID === "runner" || subjectID === "runnername") {
       return "runnerName";
     }
+    const cronFieldName = resolveCronSaveValidationFieldName(subjectID);
+    if (cronFieldName != null) {
+      return cronFieldName;
+    }
   }
 
   return null;
+}
+
+function resolveCronSaveValidationFieldName(
+  subjectID: string,
+): keyof EditableWorkstationSaveValidationErrors | null {
+  if (matchesCronValidationSubject(subjectID, "cron.schedule")) {
+    return "cronSchedule";
+  }
+  if (matchesCronValidationSubject(subjectID, "cron.jitter")) {
+    return "cronJitter";
+  }
+  if (
+    matchesCronValidationSubject(subjectID, "cron.expiry_window") ||
+    matchesCronValidationSubject(subjectID, "cron.expirywindow")
+  ) {
+    return "cronExpiryWindow";
+  }
+  if (
+    matchesCronValidationSubject(subjectID, "cron.trigger_at_start") ||
+    matchesCronValidationSubject(subjectID, "cron.triggeratstart")
+  ) {
+    return "cronTriggerAtStart";
+  }
+
+  return null;
+}
+
+function matchesCronValidationSubject(
+  subjectID: string,
+  fieldPath: string,
+): boolean {
+  return subjectID === fieldPath || subjectID.endsWith(`.${fieldPath}`);
 }
 
 export function mapWorkstationSaveErrorToFieldErrors(

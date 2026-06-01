@@ -103,6 +103,7 @@ export function hasEditableWorkstationValidationErrors(
       validationErrors.cronExpiryWindow ||
       validationErrors.cronJitter ||
       validationErrors.cronSchedule ||
+      validationErrors.cronTriggerAtStart ||
       validationErrors.prompt ||
       validationErrors.runnerName ||
       validationErrors.workerName,

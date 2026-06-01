@@ -48,6 +48,7 @@ export type EditableWorkstationValidationErrors = {
   cronExpiryWindow?: string;
   cronJitter?: string;
   cronSchedule?: string;
+  cronTriggerAtStart?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
@@ -55,6 +56,10 @@ export type EditableWorkstationValidationErrors = {
 
 export type EditableWorkstationSaveValidationErrors = {
   behavior?: string;
+  cronExpiryWindow?: string;
+  cronJitter?: string;
+  cronSchedule?: string;
+  cronTriggerAtStart?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
