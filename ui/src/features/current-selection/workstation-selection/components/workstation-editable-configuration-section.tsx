@@ -1,11 +1,7 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: current-selection editable workstation fields stay colocated so save feedback, overwrite hints, and responsive form structure evolve together.
 import { type ReactNode, useId, useState } from "react";
 
-import {
-  DashboardActionButton,
-  ExpandablePanelTrigger,
-  Select,
-} from "../../../../components/ui";
+import { ExpandablePanelTrigger, Select } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -18,13 +14,13 @@ import {
   mergeDetailCardSaveFieldErrors,
 } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CurrentSelectionSectionHeader,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
+  CurrentSelectionSectionHeader,
   WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "../../base/components/detail-card-shared";
-import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
+import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
@@ -34,24 +30,21 @@ import type {
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
 } from "../lib/detail-card-types";
-import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 import { EditableConfigurationRunnerField } from "./workstation-runner-field";
 import {
   resolveWorkstationSummaryKindValue,
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
 } from "./workstation-summary-field-values";
-import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({
   messages,
-  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
-  onSaveConfiguration?: () => void;
   saveState?: EditableWorkstationSaveState;
   state?: WorkstationDetailCardProps["editableConfigurationState"];
 }) {
@@ -88,27 +81,39 @@ export function EditableConfigurationSection({
       {expanded ? (
         <div className="grid gap-2.5" id={contentId}>
           {state?.status === "loading" ? (
-            <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p
+              className={cn(
+                "m-0 text-af-text-muted",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+            >
               {messages.editableConfigurationLoading}
             </p>
           ) : null}
           {state?.status === "error" ? (
             <p
-              className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+              className={cn(
+                "m-0 text-af-danger-text",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
               role="alert"
             >
               {messages.editableConfigurationErrorPrefix} {state.errorMessage}
             </p>
           ) : null}
           {state?.status === "empty" ? (
-            <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p
+              className={cn(
+                "m-0 text-af-text-muted",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+            >
               {state.message || messages.editableConfigurationEmpty}
             </p>
           ) : null}
           {state?.status === "ready" ? (
             <EditableConfigurationReadyForm
               messages={messages}
-              onSaveConfiguration={onSaveConfiguration}
               saveState={saveState}
               state={state}
             />
@@ -119,15 +124,12 @@ export function EditableConfigurationSection({
   );
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: workstation ready form keeps save feedback, overwrite hints, and vertical field wiring colocated.
 function EditableConfigurationReadyForm({
   messages,
-  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
-  onSaveConfiguration?: () => void;
   saveState?: EditableWorkstationSaveState;
   state: Extract<
     NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
@@ -138,12 +140,6 @@ function EditableConfigurationReadyForm({
     EditableWorkstationValidationErrors & Record<string, string | undefined>,
     EditableWorkstationSaveValidationErrors
   >(state.validationErrors, saveState);
-  const isSaving = saveState?.status === "submitting";
-  const canSave =
-    state.isDirty &&
-    !state.hasValidationErrors &&
-    state.pendingFactoryDefinition != null &&
-    !isSaving;
   const renderState = {
     ...state,
     validationErrors,
@@ -154,7 +150,8 @@ function EditableConfigurationReadyForm({
       <DetailCardFactorySaveFeedback<EditableWorkstationSaveValidationErrors>
         messages={{
           errorPrefix: messages.editableConfigurationSaveErrorPrefix,
-          staleVersionDetail: messages.editableConfigurationSaveStaleVersionDetail,
+          staleVersionDetail:
+            messages.editableConfigurationSaveStaleVersionDetail,
           successMessage: messages.editableConfigurationSaveSuccess,
         }}
         saveState={saveState}
@@ -244,30 +241,9 @@ function EditableConfigurationReadyForm({
           }
         />
       </div>
-      {onSaveConfiguration ? (
-        <EditableConfigurationSaveRow
-          busyLabel={messages.editableConfigurationSaveBusyAction}
-          canSave={canSave}
-          isSaving={isSaving}
-          onSave={onSaveConfiguration}
-          resetSlot={
-            state.isDirty ? (
-              <DashboardActionButton
-                disabled={isSaving}
-                onClick={state.onResetToLatest}
-                type="button"
-              >
-                {messages.editableConfigurationResetAction}
-              </DashboardActionButton>
-            ) : undefined
-          }
-          saveLabel={messages.editableConfigurationSaveAction}
-        />
-      ) : null}
     </form>
   );
 }
-
 
 function hasOnlyPromptBlockingValidationErrors(
   validationErrors: EditableWorkstationValidationErrors,
@@ -322,7 +298,12 @@ function EditableConfigurationDraftStatus({
             ? messages.editableConfigurationDirtyStatus
             : messages.editableConfigurationDraftNote}
       </p>
-      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
         {messages.editableConfigurationDraftNote}
       </p>
     </div>
@@ -353,7 +334,12 @@ function EditableConfigurationOverwriteWarning({
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
-      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
         {messages.editableConfigurationOverwriteWarningDetail}
       </p>
     </div>
@@ -433,7 +419,9 @@ function EditableConfigurationBehaviorInput({
       className={DASHBOARD_BODY_TEXT_CLASS}
       id="editable-workstation-kind"
       onChange={(event) =>
-        state.onBehaviorChange(event.target.value as typeof state.draft.behavior)
+        state.onBehaviorChange(
+          event.target.value as typeof state.draft.behavior,
+        )
       }
       value={state.draft.behavior}
     >
@@ -462,7 +450,9 @@ function EditableConfigurationSharedWorkerHint({
   }
 
   return (
-    <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+    <p
+      className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+    >
       {messages.editableConfigurationSharedWorkerScopeHint(
         valueOrFallback(state.draft.workerName, messages.notConfiguredValue),
         formatList(sharedWorkstationNames),
@@ -480,8 +470,7 @@ function resolveSharedWorkerWorkstationNames(
   return (
     state.initialValues.sharedWorkerWorkstationNamesByWorkerName[
       state.draft.workerName
-    ] ??
-    []
+    ] ?? []
   );
 }
 
@@ -524,7 +513,10 @@ export function WorkstationSummary({
   const sectionId = `workstation-summary-${selectedNode.node_id}`;
 
   return (
-    <section aria-labelledby={sectionId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
+    <section
+      aria-labelledby={sectionId}
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    >
       <CurrentSelectionSectionHeader
         headingId={sectionId}
         title={messages.summaryHeading}

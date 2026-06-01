@@ -220,6 +220,7 @@ function useCurrentActivityDisplayNodes(baseNodes: CurrentActivityNode[]) {
         applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
     );
   }, []);
+
   const displayNodes = useMemo(() => {
     const positionOverrides = new Map(
       nodes.map((node) => [node.id, node.position] as const),

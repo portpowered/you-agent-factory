@@ -352,6 +352,38 @@ export function expandDetailCardResourceConfiguration(
   }
 }
 
+export function currentSelectionHeaderActionSection() {
+  const article = screen.getByRole("article", { name: "Current selection" });
+  const section = article.querySelector(
+    "[data-dashboard-action-row-section='actions']",
+  );
+  if (!section) {
+    throw new Error("expected current selection header action section");
+  }
+
+  return section as HTMLElement;
+}
+
+export function expandDetailCardWorkerConfiguration(
+  buttonName = "Expand worker configuration editor",
+  headingName = "Worker configuration",
+) {
+  const section = screen
+    .getAllByRole("heading", { name: headingName })
+    .at(-1)
+    ?.closest("section");
+  if (!section) {
+    throw new Error("expected editable worker configuration section");
+  }
+
+  const expandButton = within(section).queryByRole("button", {
+    name: buttonName,
+  });
+  if (expandButton) {
+    fireEvent.click(expandButton);
+  }
+}
+
 export function expandDetailCardWorkstationConfiguration(
   buttonName = "Expand editable configuration",
   headingName = "Configuration",

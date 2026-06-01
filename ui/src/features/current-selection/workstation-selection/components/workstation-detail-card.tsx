@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import type { DashboardWorkstationRequest } from "../../../../api/dashboard/types";
 import {
-  DETAIL_COPY_CLASS,
-  WIDGET_SUBTITLE_CLASS,
-} from "../../../../components/ui/widget-frame";
-import {
   DashboardActionButton,
   DashboardActionRow,
   DashboardStatusPill,
@@ -16,8 +12,11 @@ import {
   formatDurationMillis,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
+import {
+  DETAIL_COPY_CLASS,
+  WIDGET_SUBTITLE_CLASS,
+} from "../../../../components/ui/widget-frame";
 import { cn } from "../../../../lib/cn";
-import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
   CurrentSelectionSectionHeader,
@@ -29,6 +28,7 @@ import type {
   WorkstationActiveWorkListProps,
   WorkstationDetailCardProps,
 } from "../lib/detail-card-types";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { CollapsibleProviderSessionAttempts } from "./provider-session-attempts";
 import {
   EditableConfigurationSection,
@@ -41,7 +41,6 @@ export function WorkstationDetailCard({
   headerAction,
   locale,
   now,
-  onSaveConfiguration,
   onSelectProviderSession,
   onSelectWorkID,
   onSelectWorkstationRequest,
@@ -82,7 +81,6 @@ export function WorkstationDetailCard({
       <EditableConfigurationSection
         key={`editable-configuration:${selectedNode.node_id}`}
         messages={messages}
-        onSaveConfiguration={onSaveConfiguration}
         saveState={saveState}
         state={editableConfigurationState}
       />

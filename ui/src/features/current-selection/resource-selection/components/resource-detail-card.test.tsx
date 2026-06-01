@@ -1,11 +1,16 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: resource detail card regressions share one mocked factory-document seam.
-import { fireEvent, render, screen } from "@testing-library/react";
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: resource detail card regressions share one mocked factory-document seam.
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import { useEditableResourceConfigurationState } from "../hooks/use-editable-resource-configuration-state";
-import type { EditableResourceConfigurationState } from "../lib/detail-card-types";
+import type {
+  EditableResourceConfigurationState,
+  EditableResourceSaveState,
+} from "../lib/detail-card-types";
 import { ResourceDetailCard } from "./resource-detail-card";
+import { EditableResourceConfigurationHeaderActions } from "./resource-save-controls";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -124,6 +129,57 @@ function renderResourceDetailCard(
   }
 
   return render(<Harness />);
+}
+
+function resourceDetailHeaderActionSection() {
+  const card = screen.getByRole("article", { name: "Current selection" });
+  const undoButton = within(card).getByRole("button", {
+    name: "Undo selection",
+  });
+  const actionSection = undoButton.closest(
+    "[data-dashboard-action-row-section='actions']",
+  );
+  if (!actionSection) {
+    throw new Error("expected header action section");
+  }
+
+  return actionSection as HTMLElement;
+}
+
+function editableResourceConfigurationSection() {
+  const heading = screen.getByRole("heading", {
+    name: "Resource configuration",
+  });
+  const section = heading.closest("section");
+  if (!section) {
+    throw new Error("expected editable resource configuration section");
+  }
+
+  return section;
+}
+
+function buildResourceHeaderActions({
+  canDiscard = false,
+  canSave,
+  onDiscard = vi.fn(),
+  onSave = vi.fn(),
+  saveState = { status: "idle" },
+}: {
+  canDiscard?: boolean;
+  canSave: boolean;
+  onDiscard?: () => void;
+  onSave?: () => void;
+  saveState?: EditableResourceSaveState;
+}) {
+  return (
+    <EditableResourceConfigurationHeaderActions
+      canDiscard={canDiscard}
+      canSave={canSave}
+      onDiscard={onDiscard}
+      onSave={onSave}
+      saveState={saveState}
+    />
+  );
 }
 
 function renderReadOnlyResourceDetailCard(
@@ -409,5 +465,100 @@ describe("ResourceDetailCard", () => {
         /The running factory changed this field while you were editing/i,
       ),
     ).toBeTruthy();
+  });
+
+  it("keeps save and discard in the header only after dirty edits", () => {
+    const editableConfigurationState: EditableResourceConfigurationState = {
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-23T16:22:24Z",
+      },
+      canSave: true,
+      draft: {
+        backend: "",
+        capacityText: "3",
+        loadPolicy: "",
+        model: "",
+        name: "agent-slot",
+        provider: "",
+        type: "INVOCATION_SLOT",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        backend: null,
+        capacity: 2,
+        loadPolicy: null,
+        model: null,
+        provider: null,
+        resourceName: "agent-slot",
+        type: "INVOCATION_SLOT",
+        workerNames: ["reviewer"],
+        workstationNames: ["Review"],
+      },
+      isDirty: true,
+      markChangesSaved: vi.fn(),
+      onBackendChange: vi.fn(),
+      onCapacityChange: vi.fn(),
+      onLoadPolicyChange: vi.fn(),
+      onModelChange: vi.fn(),
+      onNameChange: vi.fn(),
+      onProviderChange: vi.fn(),
+      onResetToLatest: vi.fn(),
+      onTypeChange: vi.fn(),
+      overwriteFieldNames: [],
+      pendingFactoryDefinition: buildFactoryDocument(),
+      status: "ready",
+      validationErrors: {},
+    };
+
+    mockFactoryDocumentQuery({
+      data: buildFactoryDocument(),
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    const onSave = vi.fn();
+    const onDiscard = vi.fn();
+
+    render(
+      <ResourceDetailCard
+        editableConfigurationState={editableConfigurationState}
+        headerAction={buildResourceHeaderActions({
+          canDiscard: true,
+          canSave: true,
+          onDiscard,
+          onSave,
+        })}
+        resourceName="agent-slot"
+      />,
+    );
+
+    const headerActions = resourceDetailHeaderActionSection();
+    const saveButtons = within(headerActions).getAllByRole("button", {
+      name: "Save resource",
+    });
+    const discardButtons = within(headerActions).getAllByRole("button", {
+      name: "Discard local changes",
+    });
+    expect(saveButtons).toHaveLength(1);
+    expect(discardButtons).toHaveLength(1);
+
+    fireEvent.click(saveButtons[0]);
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(discardButtons[0]);
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+
+    expect(
+      within(editableResourceConfigurationSection()).queryByRole("button", {
+        name: "Save resource",
+      }),
+    ).toBeNull();
+    expect(
+      within(editableResourceConfigurationSection()).queryByRole("button", {
+        name: "Discard local changes",
+      }),
+    ).toBeNull();
   });
 });

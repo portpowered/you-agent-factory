@@ -3,8 +3,44 @@ import { Save } from "lucide-react";
 import { DashboardMutationDialog } from "../../../workflow-activity/components/mutation-dialog";
 import { Button, DashboardActionButton } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
-import { getWorkTypeDetailMessages } from "../messages/work-type-detail";
+import { EditableConfigurationDiscardHeaderAction } from "../../base/public";
 import type { EditableWorkTypeSaveState } from "../lib/detail-card-types";
+import { getWorkTypeDetailMessages } from "../messages/work-type-detail";
+
+export function EditableWorkTypeConfigurationHeaderActions({
+  canDiscard,
+  canSave,
+  locale,
+  onDiscard,
+  onSave,
+  saveState,
+}: {
+  canDiscard: boolean;
+  canSave: boolean;
+  locale?: string;
+  onDiscard: () => void;
+  onSave: () => void;
+  saveState: EditableWorkTypeSaveState;
+}) {
+  const isSaving = saveState.status === "submitting";
+
+  return (
+    <>
+      <EditableConfigurationDiscardHeaderAction
+        canDiscard={canDiscard}
+        isSaving={isSaving}
+        locale={locale}
+        onClick={onDiscard}
+      />
+      <EditableWorkTypeSaveHeaderAction
+        canSave={canSave}
+        locale={locale}
+        onClick={onSave}
+        saveState={saveState}
+      />
+    </>
+  );
+}
 
 export function EditableWorkTypeSaveHeaderAction({
   canSave,

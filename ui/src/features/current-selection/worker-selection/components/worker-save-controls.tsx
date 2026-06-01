@@ -1,8 +1,44 @@
 import { Save } from "lucide-react";
 import { DashboardActionButton } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
-import { getWorkerDetailMessages } from "../messages/worker-detail";
+import { EditableConfigurationDiscardHeaderAction } from "../../base/public";
 import type { EditableWorkerSaveState } from "../lib/detail-card-types";
+import { getWorkerDetailMessages } from "../messages/worker-detail";
+
+export function EditableWorkerConfigurationHeaderActions({
+  canDiscard,
+  canSave,
+  locale,
+  onDiscard,
+  onSave,
+  saveState,
+}: {
+  canDiscard: boolean;
+  canSave: boolean;
+  locale?: string;
+  onDiscard: () => void;
+  onSave: () => void;
+  saveState: EditableWorkerSaveState;
+}) {
+  const isSaving = saveState.status === "submitting";
+
+  return (
+    <>
+      <EditableConfigurationDiscardHeaderAction
+        canDiscard={canDiscard}
+        isSaving={isSaving}
+        locale={locale}
+        onClick={onDiscard}
+      />
+      <EditableWorkerSaveHeaderAction
+        canSave={canSave}
+        locale={locale}
+        onClick={onSave}
+        saveState={saveState}
+      />
+    </>
+  );
+}
 
 export function EditableWorkerSaveHeaderAction({
   canSave,
