@@ -26,7 +26,8 @@ import {
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 
-const SESSION_TABS_SHELL_CLASS = "grid min-w-0 max-w-full flex-1 gap-2";
+const SESSION_TABS_SHELL_CLASS =
+  "grid min-w-0 max-w-full flex-1 gap-2 overflow-x-auto";
 const SESSION_TABS_ROW_CLASS =
   "flex min-w-0 max-w-full items-stretch gap-1 overflow-visible";
 const SESSION_TAB_LIST_CLASS =
