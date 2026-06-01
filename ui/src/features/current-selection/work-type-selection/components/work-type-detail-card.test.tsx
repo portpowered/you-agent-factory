@@ -8,9 +8,7 @@ import type {
   EditableWorkTypeSaveState,
 } from "../lib/detail-card-types";
 import { WorkTypeDetailCard } from "./work-type-detail-card";
-import {
-  EditableWorkTypeConfigurationHeaderActions,
-} from "./work-type-save-controls";
+import { EditableWorkTypeConfigurationHeaderActions } from "./work-type-save-controls";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -200,9 +198,14 @@ describe("WorkTypeDetailCard", () => {
 
     expect(nameInput.getAttribute("value")).toBe("story");
     expect(
-      within(panel).getByRole("checkbox", { name: "Default CLI handling" })
+      within(panel).getByRole("checkbox", { name: "Mark as default work type" })
         .checked,
     ).toBe(false);
+    expect(
+      within(panel).getByText(
+        "When marked default, this work type receives prompt text from simplified you run --factory flows.",
+      ),
+    ).toBeTruthy();
     expect(within(panel).getByRole("heading", { name: "States" })).toBeTruthy();
     expect(within(panel).getByText("queued")).toBeTruthy();
     expect(within(panel).getByText("Initial")).toBeTruthy();

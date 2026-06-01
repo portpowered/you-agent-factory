@@ -51,7 +51,10 @@ const workTypeDetailMessagesByLocale = {
       `Running factory saved. "${workTypeName}" was refreshed to the saved definition.`,
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this work type.",
-    handlingBehaviorDefaultLabel: "Default CLI handling",
+    handlingBehaviorDefaultHelper:
+      "When marked default, this work type receives prompt text from simplified you run --factory flows.",
+    handlingBehaviorDefaultLabel: "Mark as default work type",
+    handlingBehaviorDefaultStatusLabel: "Default work type",
     localizeWorkStateType: localizeEnglishWorkStateType,
     selectWorkStateGraphNodeLabel: (stateName) =>
       `Select ${stateName} state on factory graph`,
@@ -91,7 +94,10 @@ const workTypeDetailMessagesByLocale = {
       `実行中のファクトリを保存しました。「${workTypeName}」は保存済み定義に更新されました。`,
     editableConfigurationValidationStatus:
       "このワークタイプを保存する前に、強調表示されたフィールドを修正してください。",
-    handlingBehaviorDefaultLabel: "既定の CLI 処理",
+    handlingBehaviorDefaultHelper:
+      "既定にすると、このワークタイプは簡略化された you run --factory フローからのプロンプトを受け取ります。",
+    handlingBehaviorDefaultLabel: "既定のワークタイプにする",
+    handlingBehaviorDefaultStatusLabel: "既定のワークタイプ",
     localizeWorkStateType: (workStateType) => {
       switch (workStateType) {
         case "INITIAL":
@@ -143,7 +149,10 @@ const workTypeDetailMessagesByLocale = {
       `실행 중인 팩토리를 저장했습니다. "${workTypeName}"이(가) 저장된 정의로 새로고침되었습니다.`,
     editableConfigurationValidationStatus:
       "이 작업 유형을 저장하기 전에 강조 표시된 필드를 수정하세요.",
-    handlingBehaviorDefaultLabel: "기본 CLI 처리",
+    handlingBehaviorDefaultHelper:
+      "기본으로 지정하면 이 작업 유형은 간소화된 you run --factory 흐름의 프롬프트를 받습니다.",
+    handlingBehaviorDefaultLabel: "기본 작업 유형으로 지정",
+    handlingBehaviorDefaultStatusLabel: "기본 작업 유형",
     localizeWorkStateType: (workStateType) => {
       switch (workStateType) {
         case "INITIAL":
@@ -188,7 +197,10 @@ const workTypeDetailMessagesByLocale = {
     editableConfigurationSaveSuccess: (workTypeName) =>
       `已保存运行中的工厂。“${workTypeName}”已刷新为保存后的定义。`,
     editableConfigurationValidationStatus: "保存此工作类型前请修正高亮字段。",
-    handlingBehaviorDefaultLabel: "默认 CLI 处理",
+    handlingBehaviorDefaultHelper:
+      "标记为默认后，此工作类型将接收来自简化 you run --factory 流程的提示文本。",
+    handlingBehaviorDefaultLabel: "标记为默认工作类型",
+    handlingBehaviorDefaultStatusLabel: "默认工作类型",
     localizeWorkStateType: (workStateType) => {
       switch (workStateType) {
         case "INITIAL":
