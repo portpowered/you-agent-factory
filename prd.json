@@ -1,0 +1,134 @@
+{
+  "project": "Infinite You Dashboard UI",
+  "branchName": "ralph/issues3-header-save-discard-icons",
+  "description": "Move primary Save and Discard actions for all editable current-selection configuration panels into the bento card header as icon buttons, and remove labeled footer save and body-level discard/reset controls from configuration forms.",
+  "context": {
+    "customerAsk": "Discard (and save where missing) should live in the bento header as icon buttons for every editable current-selection type, consistent with panels that already header-mount save. Configuration body no longer hosts primary save/discard actions.",
+    "problem": "Discard and labeled footer Save still appear inside Configuration forms for workers, workstations, work states, work types, and resources, while header save icons already exist—creating duplicate Save affordances and forcing operators to scroll the form to discard local edits.",
+    "solution": "Add a shared header discard icon pattern, wire save and discard together in each selection kind's bento header action slot, connect discard to existing onResetToLatest handlers, remove EditableConfigurationSaveRow and body discard rows from configuration forms, and update Vitest and browser verification so header actions are the only primary save/discard entry points."
+  },
+  "acceptanceCriteria": [
+    "Editable workstation, worker, work type, work state, and resource selections show Save and Discard local changes as icon-only controls in the bento header when configuration is dirty and editable",
+    "Configuration form bodies do not render EditableConfigurationSaveRow, labeled footer Save, or body-level Discard/Reset buttons",
+    "Header Discard invokes each kind's existing onResetToLatest behavior; header Save keeps existing save, validation, disabled, busy, and confirmation flows",
+    "Vitest on affected detail cards and CurrentSelectionWidget asserts single header save/discard and no duplicate body controls after dirty edits",
+    "Typecheck passes",
+    "Lint passes",
+    "Affected UI tests pass"
+  ],
+  "userStories": [
+    {
+      "id": "issues3-header-save-discard-icons-001",
+      "title": "Shared header discard icon for editable configuration",
+      "description": "As a maintainer, I want a reusable discard header action so every selection kind uses the same icon-only control, disabled rules, and localized accessible name.",
+      "acceptanceCriteria": [
+        "Shared current-selection component renders icon-only discard using DashboardActionButton with localized aria-label defaulting to Discard local changes",
+        "Discard button is disabled when canDiscard is false or isSaving is true",
+        "Component is exported for use by workstation, worker, work type, work state, and resource selection modules",
+        "Colocated unit test covers disabled vs enabled states and onClick wiring",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "issues3-header-save-discard-icons-002",
+      "title": "Workstation configuration uses header save and discard only",
+      "description": "As an operator editing a workstation, I want Save and Discard in the bento header so I can commit or revert without scrolling the Configuration form.",
+      "acceptanceCriteria": [
+        "Workstation bento header shows save and discard icon buttons when configuration is editable; discard accessible name is Discard local changes",
+        "Workstation configuration form removes EditableConfigurationSaveRow and body reset/save buttons",
+        "Discard calls onResetToLatest; save still uses existing confirm dialog and persistence flow",
+        "Workstation editable-configuration tests find exactly one save and one discard by aria-label after dirty edits, both in the header region",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser: select a workstation, dirty a field, confirm header save/discard only in Configuration"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "issues3-header-save-discard-icons-003",
+      "title": "Worker configuration uses header save and discard only",
+      "description": "As an operator editing a worker, I want Save and Discard in the bento header only, eliminating duplicate footer Save.",
+      "acceptanceCriteria": [
+        "Worker header action group includes discard icon wired to onResetToLatest when dirty",
+        "Worker configuration form removes EditableConfigurationSaveRow and body discard button",
+        "After dirty edits, tests find a single Save worker and a single Discard local changes control, not duplicate footer save",
+        "Save disabled, busy, and validation behavior unchanged",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser: select a worker, dirty configuration, confirm header icons only"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "issues3-header-save-discard-icons-004",
+      "title": "Resource configuration uses header save and discard only",
+      "description": "As an operator editing a resource, I want Save and Discard in the bento header instead of a body-only discard row.",
+      "acceptanceCriteria": [
+        "Resource header action group includes discard icon wired to onResetToLatest when dirty",
+        "Resource configuration form removes body DashboardActionRow discard/reset control",
+        "Resource detail tests assert header save and discard after dirty edits and no body discard button",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser: select a resource, dirty a field, confirm header save/discard only"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "issues3-header-save-discard-icons-005",
+      "title": "Work type configuration uses header save and discard only",
+      "description": "As an operator editing a work type, I want Discard in the header alongside Save so I can revert local edits without a body action row.",
+      "acceptanceCriteria": [
+        "Work type header action group includes discard icon wired to onResetToLatest when dirty",
+        "Work type configuration form removes EditableConfigurationSaveRow footer save",
+        "Work type detail tests assert header save and discard and no footer save after dirty edits",
+        "Work type save confirmation dialog flow unchanged",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser: select a work type, dirty fields, confirm header icons only"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "issues3-header-save-discard-icons-006",
+      "title": "Work state configuration uses header save and discard only",
+      "description": "As an operator renaming or editing a work state, I want Save and Discard in the bento header only.",
+      "acceptanceCriteria": [
+        "Work state header action group includes discard icon wired to onResetToLatest when dirty",
+        "Work state configuration form removes EditableConfigurationSaveRow and body discard",
+        "State node detail and CurrentSelectionWidget work-state save tests target header save only with no duplicate footer save",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser: select a work state, dirty the name, confirm header icons only"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "issues3-header-save-discard-icons-007",
+      "title": "Current-selection widget integration and regression guard",
+      "description": "As a maintainer, I want widget-level wiring to mount paired header save and discard for all editable selection kinds consistently.",
+      "acceptanceCriteria": [
+        "useCurrentSelectionDetailSave and CurrentSelectionWidget pass combined save and discard header actions for workstation, worker, resource, work type, and work state",
+        "Integration or widget test covers at least two selection kinds and asserts configuration body has no EditableConfigurationSaveRow save label after expand and dirty",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

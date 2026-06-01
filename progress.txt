@@ -1,0 +1,15 @@
+## Codebase Patterns
+- Shared editable-configuration header actions live under `ui/src/features/current-selection/base/components/` and export through `base/public/index.ts`.
+- Reuse `getEditableConfigurationControlsMessages(locale)` for shared discard aria-label copy (`Discard local changes` and localized variants).
+- Pair header save controls with `EditableConfigurationDiscardHeaderAction`; disable discard when `!canDiscard || isSaving`.
+- Colocated Vitest files import `@testing-library/jest-dom/vitest` when using `toBeEnabled` / `toBeDisabled`.
+- Per-kind save header actions use `DashboardActionButton` with `iconOnly`, lucide icons (`Save`), and warning surface classes when save is available.
+
+## [2026-06-01T12:18:00Z] - issues3-header-save-discard-icons-001
+- What was implemented: Added `EditableConfigurationDiscardHeaderAction` with localized default aria-label, `RotateCcw` icon, disabled rules (`!canDiscard || isSaving`), shared message catalog, barrel exports, and unit tests.
+- Files changed: `editable-configuration-discard-header-action.tsx`, `editable-configuration-discard-header-action.test.tsx`, `editable-configuration-controls.ts`, `editable-configuration-controls.test.ts`, `base/public/index.ts`, `base/public/index.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Mirror `EditableWorkerSaveHeaderAction` structure for header actions; keep discard copy in `base/messages/editable-configuration-controls.ts` so selection kinds can share one control.
+  - Gotchas encountered: Vitest needs explicit `@testing-library/jest-dom/vitest` import for enabled/disabled matchers used elsewhere in `editable-configuration-save-row.test.tsx`.
+  - Useful context: Header undo/redo already uses custom SVG icons in `current-selection-header-actions.tsx`; discard uses `RotateCcw` to avoid confusion with undo.
+---
