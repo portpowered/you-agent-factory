@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
-import { doesFactoryDefinitionChangeAffectGraphTopology } from "./factory-graph-topology-impact";
+import {
+  buildFactoryGraphLayoutTopologyKey,
+  doesFactoryDefinitionChangeAffectGraphTopology,
+} from "./factory-graph-topology-impact";
 
 function cloneDefinition(
   definition: CanonicalFactoryDefinition = baseFactoryDefinition,
@@ -216,6 +219,23 @@ describe("doesFactoryDefinitionChangeAffectGraphTopology resources", () => {
 
     expect(doesFactoryDefinitionChangeAffectGraphTopology(previous, next)).toBe(
       false,
+    );
+  });
+});
+
+describe("buildFactoryGraphLayoutTopologyKey", () => {
+  it("returns the same key when only workstation prompt body changes", () => {
+    const previous = cloneDefinition();
+    const next = cloneDefinition();
+    next.workstations = [
+      {
+        ...firstWorkstation(previous),
+        body: "Updated workstation instructions.",
+      },
+    ];
+
+    expect(buildFactoryGraphLayoutTopologyKey(previous)).toBe(
+      buildFactoryGraphLayoutTopologyKey(next),
     );
   });
 });

@@ -1,11 +1,13 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/factory-graph-topology-impact";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import {
   useCurrentActivityGraphLayout,
   useCurrentActivityGraphLayoutForFactory,
 } from "./react-flow-current-activity-card-graph-layout";
+import * as currentActivityFactoryGraphLayout from "../lib/current-activity-factory-graph-layout";
 
 type BuildGraphLayout = (
   topology: typeof singleNodeDashboardSnapshot.topology,
@@ -237,6 +239,88 @@ describe("useCurrentActivityGraphLayout", () => {
       expect(result.current.edges).toHaveLength(0);
     });
     expect(mockBuildGraphLayout).not.toHaveBeenCalled();
+  });
+
+  it("reuses cached layout when a non-topology factory override arrives", async () => {
+    const buildLayoutSpy = vi.spyOn(
+      currentActivityFactoryGraphLayout,
+      "buildCurrentActivityGraphLayoutFromFactory",
+    );
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        name: "prompt-only-cache-test",
+        resources: [{ capacity: 2, name: "gpu-prompt-cache" }],
+        workers: [
+          {
+            model: "gpt-5",
+            name: "writer-prompt-cache",
+            resources: [{ capacity: 1, name: "gpu-prompt-cache" }],
+            type: "MODEL_WORKER",
+          },
+        ],
+        workTypes: [
+          {
+            name: "story-prompt-cache",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            body: "Original prompt.",
+            id: "draft-prompt-cache",
+            inputs: [{ state: "queued", workType: "story-prompt-cache" }],
+            name: "Draft Prompt Cache",
+            outputs: [{ state: "done", workType: "story-prompt-cache" }],
+            resources: [{ capacity: 1, name: "gpu-prompt-cache" }],
+            type: "MODEL_WORKSTATION",
+            worker: "writer-prompt-cache",
+          },
+        ],
+      },
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+    const promptOnlyUpdate: NonNullable<DashboardSnapshot["factory"]> = {
+      ...structuredClone(snapshot.factory ?? {}),
+      workstations: [
+        {
+          ...(snapshot.factory?.workstations?.[0] ?? {}),
+          body: "Updated prompt only.",
+        },
+      ],
+    };
+
+    expect(buildFactoryGraphLayoutTopologyKey(snapshot.factory ?? {})).toBe(
+      buildFactoryGraphLayoutTopologyKey(promptOnlyUpdate),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ factoryOverride }) =>
+        useCurrentActivityGraphLayoutForFactory(snapshot, factoryOverride),
+      { initialProps: { factoryOverride: snapshot.factory } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.length).toBeGreaterThan(0);
+    });
+    const callsAfterInitialRender = buildLayoutSpy.mock.calls.length;
+    expect(callsAfterInitialRender).toBeGreaterThan(0);
+
+    rerender({ factoryOverride: promptOnlyUpdate });
+
+    await waitFor(() => {
+      expect(result.current.nodes.length).toBeGreaterThan(0);
+    });
+    expect(buildLayoutSpy.mock.calls.length).toBe(callsAfterInitialRender);
+
+    buildLayoutSpy.mockRestore();
   });
 });
 

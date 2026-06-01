@@ -11,12 +11,13 @@ export function doesFactoryDefinitionChangeAffectGraphTopology(
   next: CanonicalFactoryDefinition,
 ): boolean {
   return (
-    factoryGraphTopologySignature(previous) !==
-    factoryGraphTopologySignature(next)
+    buildFactoryGraphLayoutTopologyKey(previous) !==
+    buildFactoryGraphLayoutTopologyKey(next)
   );
 }
 
-function factoryGraphTopologySignature(
+/** Stable cache key for factory graph layout derived from rendered node/edge ids. */
+export function buildFactoryGraphLayoutTopologyKey(
   definition: CanonicalFactoryDefinition,
 ): string {
   const topology = buildFactoryGraphTopologyFromDefinition(definition);

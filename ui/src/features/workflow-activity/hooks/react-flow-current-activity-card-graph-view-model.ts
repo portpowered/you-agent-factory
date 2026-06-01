@@ -32,6 +32,7 @@ import {
 } from "./react-flow-current-activity-card-active-executions";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
+import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
 export type CurrentActivityGraphViewModelInput = {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
@@ -162,42 +163,6 @@ function useActiveGraphHighlights({
   );
 }
 
-function useCurrentActivityDisplayNodes(baseNodes: CurrentActivityNode[]) {
-  const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
-
-  useEffect(() => {
-    setNodes((currentNodes) => {
-      const currentPositions = new Map(
-        currentNodes.map((node) => [node.id, node.position]),
-      );
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
-    });
-  }, [baseNodes]);
-
-  const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes(
-      (currentNodes) =>
-        applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
-    );
-  }, []);
-
-  const displayNodes = useMemo(() => {
-    const positionOverrides = new Map(
-      nodes.map((node) => [node.id, node.position] as const),
-    );
-
-    return baseNodes.map((node) => ({
-      ...node,
-      position: positionOverrides.get(node.id) ?? node.position,
-    }));
-  }, [baseNodes, nodes]);
-
-  return { displayNodes, handleNodesChange };
-}
-
 export function currentActivityCardFactoryDefinition(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
   _snapshot: DashboardSnapshot,
@@ -230,15 +195,61 @@ function editorModeFactoryDefinition(
   );
 }
 
-function useEditorCurrentActivityGraphLayout(
+function useCurrentActivityGraphNodePresentation(
+  baseNodes: CurrentActivityNode[],
+) {
+  const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
+
+  useEffect(() => {
+    setNodes((currentNodes) => {
+      const currentPositions = new Map(
+        currentNodes.map((node) => [node.id, node.position]),
+      );
+      return baseNodes.map((node) => ({
+        ...node,
+        position: currentPositions.get(node.id) ?? node.position,
+      }));
+    });
+  }, [baseNodes]);
+
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes(
+      (currentNodes) =>
+        applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
+    );
+  }, []);
+  const displayNodes = useMemo(() => {
+    const positionOverrides = new Map(
+      nodes.map((node) => [node.id, node.position] as const),
+    );
+
+    return baseNodes.map((node) => ({
+      ...node,
+      position: positionOverrides.get(node.id) ?? node.position,
+    }));
+  }, [baseNodes, nodes]);
+
+  return { displayNodes, handleNodesChange };
+}
+
+function useStableCurrentActivityGraphLayout(
   snapshot: DashboardSnapshot,
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
-  return useCurrentActivityGraphLayoutForFactory(
+  const displayFactoryDefinition = currentActivityCardFactoryDefinition(
+    editor,
     snapshot,
-    currentActivityCardFactoryDefinition(editor, snapshot),
+  );
+  const layoutFactoryDefinition = useTopologyStableFactoryForLayout(
+    displayFactoryDefinition,
+  );
+  const graphLayout = useCurrentActivityGraphLayoutForFactory(
+    snapshot,
+    layoutFactoryDefinition,
     editor.hiddenNodeClasses,
   );
+
+  return { displayFactoryDefinition, graphLayout };
 }
 
 function useCurrentActivityGraphEdges({
@@ -303,7 +314,8 @@ export function useCurrentActivityGraphViewModel({
     () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),
     [activeExecutions],
   );
-  const graphLayout = useEditorCurrentActivityGraphLayout(snapshot, editor);
+  const { displayFactoryDefinition, graphLayout } =
+    useStableCurrentActivityGraphLayout(snapshot, editor);
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
@@ -340,8 +352,7 @@ export function useCurrentActivityGraphViewModel({
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
     editor,
-    factoryDefinition:
-      currentActivityCardFactoryDefinition(editor, snapshot) ?? undefined,
+    factoryDefinition: displayFactoryDefinition ?? undefined,
     graphLayout,
     locale,
     now,
@@ -356,7 +367,7 @@ export function useCurrentActivityGraphViewModel({
     storedNodePositions,
   });
   const { displayNodes, handleNodesChange } =
-    useCurrentActivityDisplayNodes(baseNodes);
+    useCurrentActivityGraphNodePresentation(baseNodes);
   const edges = useCurrentActivityGraphEdges({
     activeGraphHighlights,
     displayNodes,
