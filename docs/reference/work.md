@@ -90,6 +90,97 @@ and batch `WorkRequest` payloads use the OpenAPI camelCase fields from
 See `you docs batch-inputs` for the full `FACTORY_REQUEST_BATCH` contract,
 including `requestId`, relation fields, and optional `currentChainingTraceId`.
 
+## Multimedia content URLs
+
+File-backed work content (images, audio, video, and binary parts) is addressed
+by a canonical `url` on each `content[]` part. API clients can submit remote or
+inline media without copying bytes onto the factory host except through the
+optional stage API.
+
+Supported schemes:
+
+| Scheme | Typical use |
+|--------|-------------|
+| `file://` | Local assets already readable on the factory host |
+| `https://` / `http://` | CDN or remote assets fetched at dispatch time |
+| `data:` | Small inline payloads encoded in the URL |
+
+The legacy `file` field on canonical content parts is deprecated. During
+migration, ingest may normalize file-only parts to `url`, but new submissions
+should send `url` directly. Validation rejects empty `url`, unsupported schemes,
+and `url` plus `file` on the same part.
+
+### Stage then submit (dashboard or API)
+
+1. `POST /work/staged-files` with `itemType`, `fileName`, `mediaType`, and
+   `contentBase64`.
+2. Use the returned `url` (and `stagedFileRef` when needed) on structured
+   `POST /work` items.
+
+```json
+{
+  "name": "screenshot-review",
+  "workTypeName": "task",
+  "items": [
+    { "type": "text", "text": "Review this screenshot." },
+    {
+      "type": "image",
+      "url": "file:///var/factory/staged/review.png",
+      "stagedFileRef": "staged-abc123",
+      "fileName": "review.png",
+      "mediaType": "image/png"
+    }
+  ]
+}
+```
+
+### Direct URL submit examples
+
+Local file reference:
+
+```json
+{
+  "name": "local-image-review",
+  "workTypeName": "task",
+  "content": [
+    { "type": "text", "text": "Inspect the attached image." },
+    {
+      "type": "image",
+      "url": "file:///opt/assets/review.png",
+      "contentType": "image/png"
+    }
+  ]
+}
+```
+
+Remote HTTPS asset:
+
+```json
+{
+  "type": "image",
+  "url": "https://cdn.example.test/assets/review.png",
+  "contentType": "image/png"
+}
+```
+
+Inline `data:` URL:
+
+```json
+{
+  "type": "image",
+  "url": "data:image/png;base64,iVBORw0KGgo=",
+  "contentType": "image/png"
+}
+```
+
+At dispatch time the runtime materializes `url` values to readable local paths
+for providers such as Codex (`-i` flags). Remote fetch failures surface as
+`media url inaccessible` before the provider subprocess starts. Private,
+link-local, and metadata targets are blocked by default (SSRF guard).
+
+Event history and `WORK_REQUEST` payloads keep the canonical `url` values, not
+materialized temporary paths.
+
 ## CLI `you submit` success and verify loop
 
 `you submit` posts one work item to a running factory session (`POST /work` or

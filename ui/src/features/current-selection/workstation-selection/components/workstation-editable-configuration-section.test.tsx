@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { FactoryDefinition } from "../../../../api/factory-definition/api";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
 
@@ -99,11 +100,21 @@ function buildReadyState(
         : overrides.pendingFactoryDefinition,
     promptDiagnostics: overrides?.promptDiagnostics ?? [],
     promptHelpState: { status: "empty" as const, message: "No prompt help." },
-    promptValidationState: {
-      diagnostics: [],
-      result: { diagnostics: [], valid: true },
-      status: "ready" as const,
-    },
+    promptValidationState:
+      overrides?.promptDiagnostics && overrides.promptDiagnostics.length > 0
+        ? {
+            diagnostics: overrides.promptDiagnostics,
+            result: {
+              diagnostics: overrides.promptDiagnostics,
+              valid: false,
+            },
+            status: "ready" as const,
+          }
+        : {
+            diagnostics: [],
+            result: { diagnostics: [], valid: true },
+            status: "ready" as const,
+          },
     status: "ready" as const,
     validationErrors: overrides?.validationErrors ?? {},
     workerOptionsState: overrides?.workerOptionsState ?? {
@@ -344,8 +355,8 @@ describe("EditableConfigurationSection model workstation fields", () => {
 });
 
 describe("EditableConfigurationSection model workstation save feedback", () => {
-  it("shows validation alert and save success feedback", () => {
-    const { rerender } = render(
+  it("shows validation alert and keeps save outcomes out of the inline form", () => {
+    const { container, rerender } = render(
       <EditableConfigurationSection
         messages={messages}
         onSaveConfiguration={() => undefined}
@@ -374,12 +385,10 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       />,
     );
 
-    expect(
-      screen.getByText(messages.editableConfigurationSaveSuccess),
-    ).toBeInTheDocument();
+    expectNoInlineSaveOutcomesIn(container);
   });
 
-  it("treats prompt-only validation as status instead of alert", () => {
+  it("treats prompt-only validation as diagnostics instead of a form alert", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
@@ -396,10 +405,14 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
 
     expandConfiguration();
 
-    const draftStatus = screen.getByText(
-      messages.editableConfigurationDirtyStatus,
-    );
-    expect(draftStatus).toHaveAttribute("role", "status");
+    expect(
+      screen.getByText(messages.editableConfigurationPromptDiagnosticsHeading),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `${messages.editableConfigurationPromptVariableDiagnosticLabel}: Unknown variable.`,
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(messages.editableConfigurationValidationStatus),
     ).not.toBeInTheDocument();

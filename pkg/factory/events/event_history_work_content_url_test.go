@@ -95,30 +95,18 @@ func TestFactoryEventHistory_RecordWorkRequest_SerializesContentURLNotMaterializ
 	}
 	work := (*payloadStruct.Works)[0]
 	if work.Content == nil || len(*work.Content) != 3 {
-		t.Fatalf("content count = %d, want 3 parts", lenValue(work.Content))
+		t.Fatalf("content count = %d, want 3 parts", len(*work.Content))
 	}
-	imageOne, err := (*work.Content)[1].AsWorkImageContentPart()
-	if err != nil {
-		t.Fatalf("decode first image: %v", err)
+	for i, wantURL := range []string{localURL, remoteURL} {
+		imagePart, err := (*work.Content)[i+1].AsWorkImageContentPart()
+		if err != nil {
+			t.Fatalf("decode image %d: %v", i+1, err)
+		}
+		if string(imagePart.Url) != wantURL {
+			t.Fatalf("image %d url = %q, want %q", i+1, imagePart.Url, wantURL)
+		}
+		if imagePart.File != nil {
+			t.Fatalf("image %d file = %#v, want omitted canonical file field", i+1, imagePart.File)
+		}
 	}
-	if string(imageOne.Url) != localURL {
-		t.Fatalf("first image url = %q, want %q", imageOne.Url, localURL)
-	}
-	if imageOne.File != nil {
-		t.Fatalf("first image file = %#v, want omitted canonical file field", imageOne.File)
-	}
-	imageTwo, err := (*work.Content)[2].AsWorkImageContentPart()
-	if err != nil {
-		t.Fatalf("decode second image: %v", err)
-	}
-	if string(imageTwo.Url) != remoteURL {
-		t.Fatalf("second image url = %q, want %q", imageTwo.Url, remoteURL)
-	}
-}
-
-func lenValue[T any](slice *[]T) int {
-	if slice == nil {
-		return 0
-	}
-	return len(*slice)
 }
