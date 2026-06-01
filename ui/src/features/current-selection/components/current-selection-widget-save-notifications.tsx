@@ -1,3 +1,5 @@
+import { useFactoryGraphTopologyEditorBridge } from "../../workflow-activity/state/factory-graph-topology-editor-bridge";
+import { CurrentSelectionGraphDraftConflictNotifications } from "../base/components/current-selection-graph-draft-conflict-notifications";
 import { buildCurrentSelectionSaveToastMessages } from "../base/lib/build-current-selection-save-toast-messages";
 import { CurrentSelectionSaveNotifications } from "../base/public";
 import type { DashboardSelection } from "../base/state/selection-types";
@@ -100,6 +102,10 @@ export function CurrentSelectionWidgetSaveNotifications({
   workstationSaveState,
   workTypeSave,
 }: CurrentSelectionWidgetSaveNotificationsProps) {
+  const graphDraftHasPendingChanges = useFactoryGraphTopologyEditorBridge(
+    (state) => state.graphDraftHasPendingChanges,
+  );
+
   const workerDisplayName = resolveEditableDisplayName({
     draftName:
       editableWorkerConfigurationState?.status === "ready"
@@ -133,87 +139,134 @@ export function CurrentSelectionWidgetSaveNotifications({
   return (
     <>
       {selectedNode ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={workstationSaveState}
-          entityKind="workstation"
-          hasDraftChanges={hasEditableDraftChanges(editableConfigurationState)}
-          locale={locale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: selectedNode.workstation_name,
-            entityKind: "workstation",
-            locale,
-          })}
-          saveAttemptRevision={workstationSave.saveAttemptRevision}
-          saveMutationError={workstationSave.saveMutationError}
-        />
+        <>
+          <CurrentSelectionSaveNotifications
+            documentSave={workstationSaveState}
+            entityKind="workstation"
+            hasDraftChanges={hasEditableDraftChanges(
+              editableConfigurationState,
+            )}
+            locale={locale}
+            messages={buildCurrentSelectionSaveToastMessages({
+              entityDisplayName: selectedNode.workstation_name,
+              entityKind: "workstation",
+              locale,
+            })}
+            saveAttemptRevision={workstationSave.saveAttemptRevision}
+            saveMutationError={workstationSave.saveMutationError}
+          />
+          <CurrentSelectionGraphDraftConflictNotifications
+            documentSave={workstationSaveState}
+            graphDraftHasPendingChanges={graphDraftHasPendingChanges}
+            isTopologyAffectingSave={false}
+            locale={locale}
+            saveAttemptRevision={workstationSave.saveAttemptRevision}
+          />
+        </>
       ) : null}
       {selection?.kind === "worker" && selectedWorkerName ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={workerSaveState}
-          entityKind="worker"
-          hasDraftChanges={hasEditableDraftChanges(
-            editableWorkerConfigurationState,
-          )}
-          locale={locale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: workerDisplayName,
-            entityKind: "worker",
-            locale,
-          })}
-          saveAttemptRevision={workerSave.saveAttemptRevision}
-          saveMutationError={workerSave.saveMutationError}
-        />
+        <>
+          <CurrentSelectionSaveNotifications
+            documentSave={workerSaveState}
+            entityKind="worker"
+            hasDraftChanges={hasEditableDraftChanges(
+              editableWorkerConfigurationState,
+            )}
+            locale={locale}
+            messages={buildCurrentSelectionSaveToastMessages({
+              entityDisplayName: workerDisplayName,
+              entityKind: "worker",
+              locale,
+            })}
+            saveAttemptRevision={workerSave.saveAttemptRevision}
+            saveMutationError={workerSave.saveMutationError}
+          />
+          <CurrentSelectionGraphDraftConflictNotifications
+            documentSave={workerSaveState}
+            graphDraftHasPendingChanges={graphDraftHasPendingChanges}
+            isTopologyAffectingSave={false}
+            locale={locale}
+            saveAttemptRevision={workerSave.saveAttemptRevision}
+          />
+        </>
       ) : null}
       {selection?.kind === "resource" && selectedResourceName ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={resourceSaveState}
-          entityKind="resource"
-          hasDraftChanges={hasEditableDraftChanges(
-            editableResourceConfigurationState,
-          )}
-          locale={locale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: resourceDisplayName,
-            entityKind: "resource",
-            locale,
-          })}
-          saveAttemptRevision={resourceSave.saveAttemptRevision}
-          saveMutationError={resourceSave.saveMutationError}
-        />
+        <>
+          <CurrentSelectionSaveNotifications
+            documentSave={resourceSaveState}
+            entityKind="resource"
+            hasDraftChanges={hasEditableDraftChanges(
+              editableResourceConfigurationState,
+            )}
+            locale={locale}
+            messages={buildCurrentSelectionSaveToastMessages({
+              entityDisplayName: resourceDisplayName,
+              entityKind: "resource",
+              locale,
+            })}
+            saveAttemptRevision={resourceSave.saveAttemptRevision}
+            saveMutationError={resourceSave.saveMutationError}
+          />
+          <CurrentSelectionGraphDraftConflictNotifications
+            documentSave={resourceSaveState}
+            graphDraftHasPendingChanges={graphDraftHasPendingChanges}
+            isTopologyAffectingSave={false}
+            locale={locale}
+            saveAttemptRevision={resourceSave.saveAttemptRevision}
+          />
+        </>
       ) : null}
       {selection?.kind === "work-type" && selectedWorkTypeName ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={workTypeSave.saveState}
-          entityKind="work-type"
-          hasDraftChanges={hasEditableDraftChanges(
-            editableWorkTypeConfigurationState,
-          )}
-          locale={locale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: workTypeDisplayName,
-            entityKind: "work-type",
-            locale,
-          })}
-          saveAttemptRevision={workTypeSave.saveAttemptRevision}
-          saveMutationError={workTypeSave.saveMutationError}
-        />
+        <>
+          <CurrentSelectionSaveNotifications
+            documentSave={workTypeSave.saveState}
+            entityKind="work-type"
+            hasDraftChanges={hasEditableDraftChanges(
+              editableWorkTypeConfigurationState,
+            )}
+            locale={locale}
+            messages={buildCurrentSelectionSaveToastMessages({
+              entityDisplayName: workTypeDisplayName,
+              entityKind: "work-type",
+              locale,
+            })}
+            saveAttemptRevision={workTypeSave.saveAttemptRevision}
+            saveMutationError={workTypeSave.saveMutationError}
+          />
+          <CurrentSelectionGraphDraftConflictNotifications
+            documentSave={workTypeSave.saveState}
+            graphDraftHasPendingChanges={graphDraftHasPendingChanges}
+            isTopologyAffectingSave={false}
+            locale={locale}
+            saveAttemptRevision={workTypeSave.saveAttemptRevision}
+          />
+        </>
       ) : null}
       {selection?.kind === "state-node" && workStatePlaceId ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={workStateSave.saveState}
-          entityKind="work-state"
-          hasDraftChanges={hasEditableDraftChanges(
-            editableWorkStateConfigurationState,
-          )}
-          locale={locale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: workStateDisplayName,
-            entityKind: "work-state",
-            locale,
-          })}
-          saveAttemptRevision={workStateSave.saveAttemptRevision}
-          saveMutationError={workStateSave.saveMutationError}
-        />
+        <>
+          <CurrentSelectionSaveNotifications
+            documentSave={workStateSave.saveState}
+            entityKind="work-state"
+            hasDraftChanges={hasEditableDraftChanges(
+              editableWorkStateConfigurationState,
+            )}
+            locale={locale}
+            messages={buildCurrentSelectionSaveToastMessages({
+              entityDisplayName: workStateDisplayName,
+              entityKind: "work-state",
+              locale,
+            })}
+            saveAttemptRevision={workStateSave.saveAttemptRevision}
+            saveMutationError={workStateSave.saveMutationError}
+          />
+          <CurrentSelectionGraphDraftConflictNotifications
+            documentSave={workStateSave.saveState}
+            graphDraftHasPendingChanges={graphDraftHasPendingChanges}
+            isTopologyAffectingSave={false}
+            locale={locale}
+            saveAttemptRevision={workStateSave.saveAttemptRevision}
+          />
+        </>
       ) : null}
     </>
   );
