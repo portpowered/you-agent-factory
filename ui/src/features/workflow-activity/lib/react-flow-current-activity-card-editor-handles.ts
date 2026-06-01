@@ -41,6 +41,13 @@ export interface CurrentActivityEditorState {
   validationTargets?: readonly FactoryValidationTarget[];
 }
 
+/** Graph node header selection competes with delete-tool onNodeClick when wired. */
+export function shouldWireGraphNodeSelectionHandlers(
+  editor?: CurrentActivityEditorState,
+): boolean {
+  return !(editor?.editorMode === true && editor.activeTool === "delete");
+}
+
 type CurrentActivityEndpointKind = Extract<
   FactoryGraphNodeKind,
   "resource" | "worker" | "work-state" | "workstation"

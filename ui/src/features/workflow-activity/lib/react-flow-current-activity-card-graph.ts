@@ -31,6 +31,7 @@ import {
   authoredProgressOutcomeSourceHandlesByWorkstationNodeId,
   buildSemanticGraphHandles,
   type CurrentActivityEditorState,
+  shouldWireGraphNodeSelectionHandlers,
   resolveWorkstationConnectionAnchorContext,
   resolveZAxisIncompleteHints,
   supportedSemanticHandleIdsForEdge,
@@ -548,13 +549,17 @@ function buildPlaceNode(
     validationProjection,
   );
 
+  const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(input.editor);
+
   if (place.kind === "work_state") {
     return {
       ...basePlaceNode,
       data: {
         ...basePlaceData,
         kind: "work-state" as const,
-        onSelectStateNode: input.onSelectStateNode,
+        ...(wireSelectionHandlers
+          ? { onSelectStateNode: input.onSelectStateNode }
+          : {}),
         place,
       },
       selectable: true,
@@ -572,7 +577,9 @@ function buildPlaceNode(
       data: {
         ...basePlaceData,
         kind: "resource" as const,
-        onSelectResource: input.onSelectResource,
+        ...(wireSelectionHandlers
+          ? { onSelectResource: input.onSelectResource }
+          : {}),
         place,
         selectedResource:
           input.selection?.kind === "resource" &&
@@ -591,7 +598,7 @@ function buildPlaceNode(
       data: {
         ...basePlaceData,
         kind: "worker" as const,
-        onSelectWorker: input.onSelectWorker,
+        ...(wireSelectionHandlers ? { onSelectWorker: input.onSelectWorker } : {}),
         place,
         selectedWorker:
           input.selection?.kind === "worker" &&
@@ -610,9 +617,9 @@ function buildPlaceNode(
       data: {
         ...basePlaceData,
         kind: "work-type" as const,
-        onSelectWorkType: input.editor?.editorMode
-          ? input.onSelectWorkType
-          : undefined,
+        ...(input.editor?.editorMode && wireSelectionHandlers
+          ? { onSelectWorkType: input.onSelectWorkType }
+          : {}),
         place,
         selectedWorkType:
           input.editor?.editorMode === true &&
@@ -663,6 +670,7 @@ function buildWorkstationNode(
     | WorkstationProgressOutcomeRouteContext
     | undefined = connectionAnchorContext?.workstation;
 
+  const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(input.editor);
   const executions =
     input.activeExecutionsByWorkstationNodeID[workstation.node_id] ?? [];
   const position = nodePosition(
@@ -702,8 +710,12 @@ function buildWorkstationNode(
         input.activeGraphHighlights.hasActiveFlow &&
         !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
       now: input.now,
-      onSelectWorkID: input.onSelectWorkID,
-      onSelectWorkstation: input.onSelectWorkstation,
+      ...(wireSelectionHandlers
+        ? {
+            onSelectWorkID: input.onSelectWorkID,
+            onSelectWorkstation: input.onSelectWorkstation,
+          }
+        : {}),
       selectedWorkID:
         input.selection?.kind === "work-item" &&
         input.selection.nodeId === workstation.node_id
