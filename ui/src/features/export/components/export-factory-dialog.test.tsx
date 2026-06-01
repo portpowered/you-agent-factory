@@ -131,6 +131,70 @@ describe("ExportFactoryDialog", () => {
     expect(imageInput.className).not.toContain("border-af-accent-border");
   });
 
+  it("shows the selected cover image hint and ignores file changes while exporting", async () => {
+    let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null =
+      null;
+    vi.mocked(writeFactoryExportPng).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveExport = resolve;
+        }),
+    );
+    renderDialog();
+    const messages = getExportDialogMessages("en");
+    const exportImage = new File(["binary"], "cover.png", {
+      type: "image/png",
+    });
+    const fileInput = screen.getByLabelText(
+      messages.imageLabel,
+    ) as HTMLInputElement;
+
+    fireEvent.change(fileInput, { target: { files: [exportImage] } });
+    expect(
+      screen.getByText(messages.selectedImageLabel("cover.png")),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.exportAction }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.exportingAction }),
+      ).toBeTruthy();
+    });
+    expect(fileInput.disabled).toBe(true);
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(["binary"], "other.png", { type: "image/png" })],
+      },
+    });
+
+    expect(writeFactoryExportPng).toHaveBeenCalledTimes(1);
+    expect(writeFactoryExportPng).toHaveBeenCalledWith({
+      factory: {
+        ...factory,
+        name: "Factory Aurora",
+      },
+      image: exportImage,
+    });
+
+    if (!resolveExport) {
+      throw new Error("expected export request promise to be pending");
+    }
+
+    resolveExport({
+      blob: new Blob(["png"], { type: "image/png" }),
+      envelope: {
+        schemaVersion: "portos.agent-factory.png.v1",
+        ...factory,
+        name: "Factory Aurora",
+      },
+      ok: true,
+    });
+  });
+
   it("exports the selected image with the trimmed factory name and shows a visible success state", async () => {
     let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null =
       null;
