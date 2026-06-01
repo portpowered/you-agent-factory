@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { FactoryDefinition } from "../../../../api/factory-definition/api";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
 
@@ -344,7 +345,7 @@ describe("EditableConfigurationSection model workstation fields", () => {
 });
 
 describe("EditableConfigurationSection model workstation save feedback", () => {
-  it("shows validation alert and save success feedback", () => {
+  it("shows validation alert without inline save outcome copy", () => {
     const { rerender } = render(
       <EditableConfigurationSection
         messages={messages}
@@ -357,6 +358,11 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     );
 
     expandConfiguration();
+
+    const configurationSection = screen
+      .getByRole("heading", { name: messages.editableConfigurationHeading })
+      .closest("section");
+    expect(configurationSection).toBeTruthy();
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       messages.editableConfigurationValidationStatus,
@@ -374,12 +380,10 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       />,
     );
 
-    expect(
-      screen.getByText(messages.editableConfigurationSaveSuccess),
-    ).toBeInTheDocument();
+    expectNoInlineSaveOutcomesIn(configurationSection as HTMLElement);
   });
 
-  it("treats prompt-only validation as status instead of alert", () => {
+  it("omits global validation alert for prompt-only blocking errors", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
@@ -396,13 +400,10 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
 
     expandConfiguration();
 
-    const draftStatus = screen.getByText(
-      messages.editableConfigurationDirtyStatus,
-    );
-    expect(draftStatus).toHaveAttribute("role", "status");
     expect(
       screen.queryByText(messages.editableConfigurationValidationStatus),
     ).not.toBeInTheDocument();
+    expect(screen.getByText("Resolve prompt diagnostics.")).toBeInTheDocument();
   });
 
   it("disables footer save and reset while submitting", () => {
