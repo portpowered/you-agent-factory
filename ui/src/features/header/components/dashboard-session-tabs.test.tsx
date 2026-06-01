@@ -110,7 +110,7 @@ describe("DashboardSessionTabs", () => {
     expect(screen.getByRole("tabpanel")).toBeTruthy();
   });
 
-  it("uses outline-aligned styling on the active session tab shell without accent fill", async () => {
+  it("uses subtle active styling on the session tab shell without accent fill", async () => {
     listFactorySessions.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
