@@ -205,6 +205,15 @@ export function applyEditableWorkstationDraft(
   };
 }
 
+export function createEmptyEditableWorkstationCronDraft(): EditableWorkstationCronDraft {
+  return {
+    schedule: "",
+    triggerAtStart: false,
+    jitter: "",
+    expiryWindow: "",
+  };
+}
+
 export function resolveEditableWorkstationCron(
   workstation: Pick<CanonicalWorkstation, "cron">,
 ): EditableWorkstationCronDraft {

@@ -68,8 +68,11 @@ export interface WorkstationDetailMessages {
   editableConfigurationCronExpiryWindowInvalid: (value: string) => string;
   editableConfigurationCronJitterInvalid: (value: string) => string;
   editableConfigurationCronScheduleRequired: string;
+  cronExpiryWindowFieldHint: string;
   cronExpiryWindowFieldLabel: string;
+  cronJitterFieldHint: string;
   cronJitterFieldLabel: string;
+  cronScheduleFieldHint: string;
   cronScheduleFieldLabel: string;
   cronTriggerAtStartFieldLabel: string;
   modelFieldLabel: string;

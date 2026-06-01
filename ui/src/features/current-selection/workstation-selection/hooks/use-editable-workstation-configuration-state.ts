@@ -2,10 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import {
-  type EditableWorkstationBehavior,
-  workstationBehaviorRequiresPrompt,
-} from "../../../current-factory-definition/lib/workstation-behavior";
+import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
   applyEditableWorkstationDraft,
   areEditableWorkstationDraftsEqual,
@@ -15,6 +12,10 @@ import {
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import {
+  buildEditableWorkstationConfigurationMutators,
+  type EditableWorkstationSessionDraftState,
+} from "../editing/editable-workstation-configuration-mutators";
+import {
   hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
 } from "../editing/editable-workstation-draft-validation";
@@ -23,7 +24,6 @@ import {
   resolvePromptHelpState,
   resolvePromptValidationState,
 } from "../editing/editable-workstation-prompt-state";
-import type { RunnerID } from "../editing/runner-metadata";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationPromptHelpState,
@@ -38,12 +38,9 @@ import {
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
-interface EditableWorkstationSessionState {
-  draft: EditableWorkstationDraft;
-  latestDefinitionDraft: EditableWorkstationDraft;
+type EditableWorkstationSessionState = EditableWorkstationSessionDraftState & {
   selectionKey: string;
-  sessionStartDraft: EditableWorkstationDraft;
-}
+};
 
 export function useEditableWorkstationConfigurationState(
   selection: DashboardSelection | null,
@@ -241,6 +238,10 @@ function buildReadyEditableWorkstationConfigurationState({
         selectedNode,
         sessionState.draft,
       );
+  const mutators = buildEditableWorkstationConfigurationMutators({
+    selectedEditableValues,
+    setSessionState,
+  });
 
   return {
     baseVersion: editableDefinition.version,
@@ -253,80 +254,7 @@ function buildReadyEditableWorkstationConfigurationState({
       sessionState.draft,
       sessionState.sessionStartDraft,
     ),
-    markChangesSaved: () => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              latestDefinitionDraft: currentState.draft,
-              sessionStartDraft: currentState.draft,
-            }
-          : currentState,
-      );
-    },
-    onPromptChange: (value: string) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                prompt: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onResetToLatest: () => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: currentState.latestDefinitionDraft,
-              sessionStartDraft: currentState.latestDefinitionDraft,
-            }
-          : currentState,
-      );
-    },
-    onBehaviorChange: (value: EditableWorkstationBehavior) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                behavior: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onRunnerChange: (value: RunnerID | null) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                runnerName: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onWorkerChange: (value: string) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                workerName: value,
-              },
-            }
-          : currentState,
-      );
-    },
+    ...mutators,
     overwriteFieldNames: resolveEditableWorkstationOverwriteFields(
       sessionState.sessionStartDraft,
       sessionState.draft,

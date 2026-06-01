@@ -118,6 +118,10 @@ export type EditableWorkstationConfigurationState =
       markChangesSaved: () => void;
       baseVersion: CurrentFactoryVersion;
       onBehaviorChange: (value: EditableWorkstationBehavior) => void;
+      onCronExpiryWindowChange: (value: string) => void;
+      onCronJitterChange: (value: string) => void;
+      onCronScheduleChange: (value: string) => void;
+      onCronTriggerAtStartChange: (value: boolean) => void;
       onPromptChange: (value: string) => void;
       onResetToLatest: () => void;
       onRunnerChange: (value: RunnerID | null) => void;
