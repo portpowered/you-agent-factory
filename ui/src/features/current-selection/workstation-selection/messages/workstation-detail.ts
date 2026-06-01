@@ -56,6 +56,8 @@ const workstationDetailMessagesByLocale = {
       "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
     editableConfigurationSaveSuccess:
       "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    editableConfigurationDirtyStatus:
+      "Unsaved workstation changes. Resolve prompt diagnostics before saving.",
     editableConfigurationLoading:
       "Loading the current factory definition for this workstation.",
     editableConfigurationValidationStatus:
@@ -278,6 +280,8 @@ const workstationDetailMessagesByLocale = {
       "最新の実行中ファクトリー値を再読み込みするか、この下書きを保持したままエディターの更新後に再試行してください。",
     editableConfigurationSaveSuccess:
       "実行中ファクトリーを保存しました。編集可能なワークステーション値は保存済み定義へ更新されました。",
+    editableConfigurationDirtyStatus:
+      "未保存のワークステーション変更があります。保存する前にプロンプト診断を解決してください。",
     editableConfigurationLoading:
       "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
     editableConfigurationValidationStatus:
@@ -503,6 +507,8 @@ const workstationDetailMessagesByLocale = {
       "최신 실행 중 팩토리 값을 다시 불러오거나, 이 초안을 유지한 채 편집기가 새로고침된 뒤 다시 시도하세요.",
     editableConfigurationSaveSuccess:
       "실행 중인 팩토리를 저장했습니다. 편집 가능한 워크스테이션 값이 저장된 정의로 새로 고쳐졌습니다.",
+    editableConfigurationDirtyStatus:
+      "저장되지 않은 워크스테이션 변경 사항이 있습니다. 저장하기 전에 프롬프트 진단을 해결하세요.",
     editableConfigurationLoading:
       "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationValidationStatus:
@@ -722,6 +728,8 @@ const workstationDetailMessagesByLocale = {
       "请重新加载最新的运行中工厂值，或保留此草稿并在编辑器刷新后重试。",
     editableConfigurationSaveSuccess:
       "运行中的工厂已保存。可编辑的工作站值已刷新为保存后的定义。",
+    editableConfigurationDirtyStatus:
+      "工作站有未保存的更改。保存前请先解决提示词诊断问题。",
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
     editableConfigurationBehaviorPollerWorkerUnsupported:
