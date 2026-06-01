@@ -133,6 +133,66 @@ describe("factory graph editor connections", () => {
     expect(anchorIds).toContain("workstation-on-rejection-source");
   });
 
+  it("allows continue and reject connections when the assigned worker has a stop token", () => {
+    const resolver = createFactoryGraphWorkstationResolver(
+      [
+        {
+          body: "Review",
+          inputs: [],
+          name: "review",
+          outputs: [],
+          type: "MODEL_WORKSTATION",
+          behavior: "STANDARD",
+          worker: "processor",
+        },
+      ],
+      [
+        {
+          name: "processor",
+          stopToken: "<COMPLETE>",
+          type: "MODEL_WORKER",
+        },
+      ],
+    );
+    const reviewWorkstation = resolver.resolveWorkstation?.("review");
+    if (!reviewWorkstation) {
+      throw new Error("Expected review workstation to resolve.");
+    }
+
+    expect(
+      isValidFactoryGraphConnection({
+        sourceAnchorId: "workstation-on-continue-source",
+        sourceNodeKind: "workstation",
+        targetAnchorId: "work-state-input-target",
+        targetNodeKind: "work-state",
+        sourceWorkstation: reviewWorkstation,
+      }),
+    ).toBe(true);
+    expect(
+      buildFactoryGraphEdgeChangeFromConnection(
+        connectableTopology,
+        {
+          sourceAnchorId: "workstation-on-rejection-source",
+          sourceNodeId: "workstation:review",
+          targetAnchorId: "work-state-input-target",
+          targetNodeId: "work-state:story:queued",
+        },
+        resolver,
+      ),
+    ).toEqual({
+      kind: "workstation-on-rejection",
+      source: {
+        kind: "workstation",
+        name: "review",
+      },
+      target: {
+        kind: "work-state",
+        stateName: "queued",
+        workTypeName: "story",
+      },
+    });
+  });
+
   it("rejects new continue and reject connections when those anchors are hidden", () => {
     expect(
       isValidFactoryGraphConnection({

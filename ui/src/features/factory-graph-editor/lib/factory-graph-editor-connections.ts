@@ -14,6 +14,7 @@ import {
   type FactoryGraphNode,
   type FactoryGraphNodeKind,
   type FactoryGraphTopology,
+  type FactoryWorker,
   type FactoryWorkstation,
 } from "./factory-graph-draft-types";
 import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "./factory-graph-progress-outcome-connection-anchors";

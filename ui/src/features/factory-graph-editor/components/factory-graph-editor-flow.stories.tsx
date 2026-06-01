@@ -492,18 +492,53 @@ const standardProcessorWithStopWords: FactoryWorkstation = {
   stopWords: ["DONE"],
 };
 
+const factoryWithWorkerStopToken = {
+  ...baseFactoryDefinition,
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        { name: "queued", type: "INITIAL" },
+        { name: "rejected", type: "FAILED" },
+        { name: "done", type: "TERMINAL" },
+      ],
+    },
+  ],
+  workers: [
+    {
+      name: "processor",
+      stopToken: "<COMPLETE>",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workstations: [
+    {
+      ...baseFactoryDefinition.workstations[0],
+      behavior: "STANDARD",
+      onContinue: [{ state: "queued", workType: "story" }],
+      onFailure: [{ state: "rejected", workType: "story" }],
+      onRejection: [{ state: "rejected", workType: "story" }],
+      stopWords: undefined,
+      worker: "processor",
+    },
+  ],
+} satisfies CanonicalFactoryDefinition;
+
 function ProgressOutcomeRoutesStory(input: {
-  workstations: readonly FactoryWorkstation[];
+  factoryDefinition?: CanonicalFactoryDefinition;
+  workstations?: readonly FactoryWorkstation[];
 }) {
   const flow = buildFactoryGraphEditorFlowModel({
     canEditConnections: true,
+    factoryDefinition: input.factoryDefinition,
     pendingAdditionEdgeIds: new Set<string>(),
     pendingConnectionSource: null,
     pendingAdditionNodeIds: new Set<string>(),
     pendingRemovalEdgeIds: new Set<string>(),
     pendingRemovalNodeIds: new Set<string>(),
     topology: PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
-    workstations: input.workstations,
+    workstations:
+      input.workstations ?? input.factoryDefinition?.workstations ?? [],
   });
 
   return (
@@ -768,6 +803,23 @@ export const ProgressOutcomeRoutesWithStopWords = {
   render: () => (
     <ProgressOutcomeRoutesStory
       workstations={[standardProcessorWithStopWords]}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByText("draft")).toBeVisible();
+    await expectProgressOutcomeRouteHandles(canvas, {
+      includeContinueAndReject: true,
+    });
+    await expectZAxisIncompleteHints(canvasElement, { expectHints: false });
+  },
+};
+
+export const ProgressOutcomeRoutesWithWorkerStopToken = {
+  render: () => (
+    <ProgressOutcomeRoutesStory
+      factoryDefinition={factoryWithWorkerStopToken}
     />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
