@@ -8,14 +8,6 @@ import {
   ChooseFileField,
 } from "../../choose-file/public";
 
-const IMAGE_FIELD_LABEL_CLASS = cn(
-  "block text-sm font-semibold text-af-text",
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-);
-const IMAGE_FIELD_DESCRIPTION_CLASS = cn(
-  "m-0",
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
 const IMAGE_FIELD_HINT_CLASS = cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
 const IMAGE_FIELD_VALIDATION_CLASS =
   "m-0 text-sm font-medium text-af-danger-text";
@@ -80,12 +72,17 @@ export function ExportFactoryDialogImageField({
         />
       }
       description={
-        <p className={IMAGE_FIELD_DESCRIPTION_CLASS}>{imageDescription}</p>
+        <p className={cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          {imageDescription}
+        </p>
       }
       disabled={isExporting}
       label={
         <label
-          className={IMAGE_FIELD_LABEL_CLASS}
+          className={cn(
+            "block text-sm font-semibold text-af-text",
+            DASHBOARD_SUPPORTING_LABELS_CLASS,
+          )}
           htmlFor="export-factory-image"
         >
           {imageLabel}
