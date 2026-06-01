@@ -236,6 +236,37 @@ describe("EditableConfigurationSection worker options", () => {
       "Worker selection unavailable. Worker list failed to load.",
     );
   });
+
+  it("renders worker select when options are ready", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildReadyState()}
+      />,
+    );
+
+    expandConfiguration();
+    expect(screen.getByLabelText("Worker")).toHaveValue("reviewer");
+  });
+});
+
+describe("EditableConfigurationSection logical move workstations", () => {
+  it("shows guard fields without worker assignment controls", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildReadyState({
+          workstationType: "LOGICAL_MOVE",
+        })}
+      />,
+    );
+
+    expandConfiguration();
+
+    expect(screen.queryByLabelText("Worker")).not.toBeInTheDocument();
+    expect(screen.getByText("Workstation guards")).toBeInTheDocument();
+    expect(screen.getByText("Input guards")).toBeInTheDocument();
+  });
 });
 
 describe("EditableConfigurationSection overwrite and field errors", () => {
