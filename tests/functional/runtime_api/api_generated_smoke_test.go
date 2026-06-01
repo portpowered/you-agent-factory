@@ -229,7 +229,13 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 	if stringPointerValue(imagePart.ContentType) != "image/png" {
 		t.Fatalf("projected image part = %#v, want staged image reference and media type", imagePart)
 	}
-	imageContent, err := os.ReadFile(imagePart.File)
+	imagePath := string(imagePart.Url)
+	if imagePart.File != nil && string(*imagePart.File) != "" {
+		imagePath = string(*imagePart.File)
+	} else if strings.HasPrefix(imagePath, "file://") {
+		imagePath = strings.TrimPrefix(imagePath, "file://")
+	}
+	imageContent, err := os.ReadFile(imagePath)
 	if err != nil {
 		t.Fatalf("read staged image content: %v", err)
 	}
