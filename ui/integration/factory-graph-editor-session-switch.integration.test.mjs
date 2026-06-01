@@ -276,6 +276,11 @@ async function expectEditorModeOff(page) {
       { timeout: uiInteractionTimeoutMs },
     )
     .toBe(0);
+  await graphCard
+    .getByRole("button", {
+      name: "Open hide or show node classes menu",
+    })
+    .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 }
 
 async function runSessionSwitchClearsDirtyEditorScenario(preview) {

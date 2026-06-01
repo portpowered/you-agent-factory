@@ -82,4 +82,60 @@ describe("DashboardMutationDialog", () => {
     expect(importDialog.className).toContain("border-af-border");
     expect(importDialog.className).toContain("bg-af-surface-raised");
   });
+
+  it("retains panel surface classes on the dialog section", () => {
+    render(
+      <DashboardMutationDialog description="Export the current factory." title="Export factory">
+        <p>Export body</p>
+      </DashboardMutationDialog>,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Export factory" });
+    expect(dialog.className).toContain("border-af-border");
+    expect(dialog.className).toContain("bg-af-surface-raised");
+    expect(dialog.className).toContain("shadow-af-panel");
+  });
+
+  it("renders header close button with locale-backed label and focus or hover styling", () => {
+    const messages = getWorkflowActivityGraphImportMessages("en");
+    render(
+      <DashboardMutationDialog
+        description="Review the dropped factory."
+        onClose={vi.fn()}
+        showCloseButton
+        title="Review factory import"
+      >
+        <p>Import body</p>
+      </DashboardMutationDialog>,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Review factory import" });
+    const headerClose = within(dialog).getByRole("button", {
+      name: messages.dialogCloseLabel,
+    });
+
+    expect(headerClose.className).toContain("rounded-full");
+    expect(headerClose.className).toContain("hover:bg-af-overlay");
+    expect(headerClose.className).toContain("focus-visible:outline-2");
+    expect(headerClose.className).toContain("outline-af-focus-ring");
+  });
+
+  it("renders footer actions in an end-aligned flex wrapper", () => {
+    render(
+      <DashboardMutationDialog
+        description="Review the dropped factory."
+        footer={<button type="button">Confirm import</button>}
+        title="Review factory import"
+      >
+        <p>Import body</p>
+      </DashboardMutationDialog>,
+    );
+
+    const footerAction = screen.getByRole("button", { name: "Confirm import" });
+    const footerWrapper = footerAction.parentElement;
+
+    expect(footerWrapper?.className).toContain("flex");
+    expect(footerWrapper?.className).toContain("justify-end");
+    expect(footerWrapper?.className).toContain("gap-3");
+  });
 });
