@@ -24,6 +24,7 @@ import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
+  EditableWorkstationValidationErrors,
 } from "../lib/detail-card-types";
 import {
   hasEditableWorkstationValidationErrors,
