@@ -4,6 +4,7 @@ import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-
 import {
   baseFactoryDefinitionDocument,
   createMockGraphEditorDraftState,
+  divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
 import { currentActivityCardFactoryDefinition } from "./react-flow-current-activity-card-graph-view-model";
 
@@ -11,6 +12,7 @@ function createEditorStub(
   overrides: {
     draftState?: ReturnType<typeof createMockGraphEditorDraftState>;
     editableDefinitionQuery?: {
+      data?: typeof baseFactoryDefinitionDocument;
       status: "error" | "pending" | "success";
     };
     editorMode?: boolean;
@@ -19,6 +21,9 @@ function createEditorStub(
   return {
     draftState: overrides.draftState ?? createMockGraphEditorDraftState(),
     editableDefinitionQuery: {
+      data:
+        overrides.editableDefinitionQuery?.data ??
+        baseFactoryDefinitionDocument,
       status: overrides.editableDefinitionQuery?.status ?? "success",
     },
     editorMode: overrides.editorMode ?? false,
@@ -40,18 +45,21 @@ describe("currentActivityCardFactoryDefinition", () => {
     ).toBeNull();
   });
 
-  it("returns undefined in observe mode once the scoped factory document succeeds", () => {
+  it("returns the saved factory document in observe mode once the scoped factory document succeeds", () => {
     const snapshot = structuredClone(singleNodeDashboardSnapshot);
 
     expect(
       currentActivityCardFactoryDefinition(
         createEditorStub({
-          editableDefinitionQuery: { status: "success" },
+          editableDefinitionQuery: {
+            data: divergentDocumentPlaneFactoryDocument,
+            status: "success",
+          },
           editorMode: false,
         }),
         snapshot,
       ),
-    ).toBeUndefined();
+    ).toEqual(divergentDocumentPlaneFactoryDocument);
   });
 
   it("returns null in editor mode while the scoped factory document is pending", () => {

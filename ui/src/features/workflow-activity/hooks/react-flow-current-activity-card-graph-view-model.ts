@@ -207,10 +207,16 @@ export function currentActivityCardFactoryDefinition(
   }
 
   if (!editor.editorMode) {
-    return undefined;
+    return observeModeFactoryDefinition(editor);
   }
 
   return editorModeFactoryDefinition(editor) ?? null;
+}
+
+function observeModeFactoryDefinition(
+  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+): DashboardSnapshot["factory"] | undefined {
+  return editor.editableDefinitionQuery?.data ?? undefined;
 }
 
 function editorModeFactoryDefinition(

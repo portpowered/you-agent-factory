@@ -1330,7 +1330,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     ).toBeNull();
   });
 
-  it("renders snapshot-only workstations in observe mode when the document plane diverges", async () => {
+  it("renders saved document workstations in observe mode when the document plane diverges from the snapshot", async () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: divergentDocumentPlaneFactoryDocument,
@@ -1357,12 +1357,12 @@ function registerCurrentActivityCardEditorChromeTests(): void {
           name: "Select Document Only workstation",
         }),
       ).toBeTruthy();
-      expect(
-        screen.getByRole("button", {
-          name: "Select Snapshot Only workstation",
-        }),
-      ).toBeTruthy();
     });
+    expect(
+      screen.queryByRole("button", {
+        name: "Select Snapshot Only workstation",
+      }),
+    ).toBeNull();
   });
 
   it("renders document-only workstations in edit mode when the snapshot plane diverges", async () => {
